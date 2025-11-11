@@ -26,26 +26,64 @@ ybb-platform/
 │   │   ├── src/
 │   │   │   ├── main.ts
 │   │   │   ├── app.module.ts
-│   │   │   ├── common/               # Shared utilities
-│   │   │   │   ├── guards/
+│   │   │   │
+│   │   │   ├── core/                 # Domain Layer (Clean Architecture)
+│   │   │   │   ├── entities/         # Domain entities
+│   │   │   │   ├── interfaces/       # Repository & service interfaces
+│   │   │   │   │   ├── repositories/
+│   │   │   │   │   └── services/
+│   │   │   │   ├── exceptions/       # Domain exceptions
+│   │   │   │   └── value-objects/    # Value objects
+│   │   │   │
+│   │   │   ├── modules/              # Feature Modules (Modular Design)
+│   │   │   │   ├── auth/
+│   │   │   │   │   ├── auth.module.ts
+│   │   │   │   │   ├── application/  # Use Cases (Commands & Queries)
+│   │   │   │   │   │   ├── commands/
+│   │   │   │   │   │   │   └── handlers/
+│   │   │   │   │   │   ├── queries/
+│   │   │   │   │   │   │   └── handlers/
+│   │   │   │   │   │   └── dto/
+│   │   │   │   │   ├── infrastructure/  # Technical implementation
+│   │   │   │   │   │   ├── persistence/
+│   │   │   │   │   │   ├── services/
+│   │   │   │   │   │   └── guards/
+│   │   │   │   │   └── presentation/    # API layer
+│   │   │   │   │       ├── auth.controller.ts
+│   │   │   │   │       └── dto/
+│   │   │   │   │
+│   │   │   │   ├── users/            # Users module (same structure)
+│   │   │   │   │   ├── users.module.ts
+│   │   │   │   │   ├── application/
+│   │   │   │   │   ├── infrastructure/
+│   │   │   │   │   └── presentation/
+│   │   │   │   │
+│   │   │   │   ├── programs/         # Programs module
+│   │   │   │   │   ├── programs.module.ts
+│   │   │   │   │   ├── application/
+│   │   │   │   │   ├── infrastructure/
+│   │   │   │   │   └── presentation/
+│   │   │   │   │
+│   │   │   │   ├── applications/     # Applications module
+│   │   │   │   │   ├── applications.module.ts
+│   │   │   │   │   ├── application/
+│   │   │   │   │   ├── infrastructure/
+│   │   │   │   │   └── presentation/
+│   │   │   │   │
+│   │   │   │   └── health/           # Health check module
+│   │   │   │       └── health.controller.ts
+│   │   │   │
+│   │   │   ├── shared/               # Shared utilities
 │   │   │   │   ├── decorators/
 │   │   │   │   ├── interceptors/
 │   │   │   │   ├── filters/
-│   │   │   │   └── pipes/
-│   │   │   ├── config/               # Configuration
-│   │   │   │   ├── database.config.ts
-│   │   │   │   ├── redis.config.ts
-│   │   │   │   └── app.config.ts
-│   │   │   ├── auth/                 # Authentication module
-│   │   │   │   ├── auth.module.ts
-│   │   │   │   ├── auth.service.ts
-│   │   │   │   ├── auth.controller.ts
-│   │   │   │   ├── strategies/
-│   │   │   │   └── dto/
-│   │   │   ├── users/                # Users module
-│   │   │   ├── programs/             # YBB Programs module
-│   │   │   ├── applications/         # Applications module
-│   │   │   └── health/               # Health check module
+│   │   │   │   ├── pipes/
+│   │   │   │   └── utils/
+│   │   │   │
+│   │   │   └── config/               # Configuration
+│   │   │       ├── database.config.ts
+│   │   │       ├── redis.config.ts
+│   │   │       └── app.config.ts
 │   │   └── test/
 │   │
 │   ├── payment-service/               # Golang Payment Service
@@ -57,25 +95,25 @@ ybb-platform/
 │   │   ├── .env.example
 │   │   ├── cmd/
 │   │   │   └── server/
-│   │   │       └── main.go
+│   │   │       └── main.go           # Entry point
 │   │   ├── internal/
-│   │   │   ├── config/               # Configuration
-│   │   │   ├── handler/              # HTTP handlers
-│   │   │   │   ├── payment.go
-│   │   │   │   └── webhook.go
-│   │   │   ├── service/              # Business logic
-│   │   │   │   ├── payment.go
-│   │   │   │   └── stripe.go
-│   │   │   ├── repository/           # Database layer
-│   │   │   ├── model/                # Data models
-│   │   │   ├── middleware/           # Middleware
-│   │   │   └── grpc/                 # gRPC server
-│   │   ├── pkg/                      # Shared packages
-│   │   │   ├── logger/
-│   │   │   └── validator/
-│   │   └── api/
-│   │       └── proto/                # Protocol buffer definitions
-│   │
+│   │   │   ├── domain/               # Domain Layer (Clean Architecture)
+│   │   │   │   ├── entities/         # Business entities
+│   │   │   │   │   ├── payment.go
+│   │   │   │   │   └── refund.go
+│   │   │   │   ├── repositories/     # Repository interfaces
+│   │   │   │   │   └── payment_repository.go
+│   │   │   │   ├── services/         # Domain service interfaces
+│   │   │   │   │   └── payment_processor.go
+│   │   │   │   └── errors/           # Domain errors
+│   │   │   │       └── payment_errors.go
+│   │   │   │
+│   │   │   ├── application/          # Application Layer (Use Cases)
+│   │   │   │   ├── commands/         # Write operations
+│   │   │   │   │   ├── create_payment.go
+│   │   │   │   │   ├── process_refund.go
+│   │   │   │   │   └── handlers/
+│   │   │   │   ├── queries/          # Read operations
 │   ├── file-service/                  # Python File Management Service
 │   │   ├── Dockerfile
 │   │   ├── Dockerfile.prod
@@ -84,28 +122,121 @@ ybb-platform/
 │   │   ├── requirements-dev.txt
 │   │   ├── .env.example
 │   │   ├── app/
-│   │   │   ├── main.py
+│   │   │   ├── main.py               # Entry point
 │   │   │   ├── config.py
-│   │   │   ├── api/
+│   │   │   │
+│   │   │   ├── domain/               # Domain Layer (Clean Architecture)
 │   │   │   │   ├── __init__.py
-│   │   │   │   ├── routes/
-│   │   │   │   │   ├── upload.py
-│   │   │   │   │   ├── download.py
-│   │   │   │   │   └── process.py
+│   │   │   │   ├── entities/         # Domain entities
+│   │   │   │   │   ├── file.py
+│   │   │   │   │   └── file_metadata.py
+│   │   │   │   ├── repositories/     # Repository interfaces
+│   │   │   │   │   └── file_repository.py
+│   │   │   │   ├── services/         # Domain service interfaces
+│   │   │   │   │   ├── storage_service.py
+│   │   │   │   │   └── processor_service.py
+│   │   │   │   └── exceptions/       # Domain exceptions
+│   │   │   │       └── file_exceptions.py
+│   │   │   │
+│   │   │   ├── application/          # Application Layer (Use Cases)
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── commands/         # Write operations
+│   │   │   │   │   ├── upload_file.py
+│   │   │   │   │   ├── delete_file.py
+│   │   │   │   │   └── handlers/
+│   │   │   │   ├── queries/          # Read operations
+│   │   │   │   │   ├── get_file.py
+│   │   │   │   │   ├── list_files.py
+│   │   │   │   │   └── handlers/
+│   │   │   │   └── dto/              # Data transfer objects
+│   │   │   │       ├── file_upload_dto.py
+│   │   │   │       └── file_response_dto.py
+│   │   │   │
+│   │   │   ├── infrastructure/       # Infrastructure Layer
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── persistence/
+│   │   │   │   │   └── postgres/
+│   │   │   │   │       └── file_repository.py
+│   │   │   │   ├── storage/
+│   │   │   │   │   ├── minio_storage.py
+│   │   │   │   │   └── s3_storage.py
+│   │   │   │   ├── processors/
+│   │   │   │   │   ├── image_processor.py
+│   │   │   │   │   └── document_processor.py
+│   │   │   │   └── mappers/
+│   │   │   │       └── file_mapper.py
+│   │   │   │
+│   │   │   ├── presentation/         # Presentation Layer
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── api/
+│   │   │   │   │   ├── routes/
+│   │   │   │   │   │   ├── upload.py
+│   │   │   │   │   │   ├── download.py
+│   │   │   │   │   │   └── files.py
+│   │   │   │   │   └── dto/
+│   │   │   │   │       └── file_dto.py
 │   │   │   │   └── dependencies.py
-│   │   │   ├── core/
-│   │   │   │   ├── __init__.py
-│   │   │   │   ├── storage.py       # S3/MinIO integration
-│   │   │   │   ├── processor.py     # Image/file processing
-│   │   │   │   └── security.py
-│   │   │   ├── models/
-│   │   │   │   └── file.py
-│   │   │   ├── schemas/
-│   │   │   │   └── file.py
-│   │   │   └── utils/
-│   │   └── tests/
-│   │
+│   │   │   │
+│   │   │   └── utils/                # Shared utilities
 │   └── admin-dashboard/               # Next.js Admin Dashboard
+│       ├── Dockerfile
+│       ├── Dockerfile.prod
+│       ├── .dockerignore
+│       ├── package.json
+│       ├── tsconfig.json
+│       ├── next.config.js
+│       ├── tailwind.config.ts
+│       ├── .env.example
+│       ├── public/
+│       ├── src/
+│       │   ├── app/                  # App Router (Next.js)
+│       │   │   ├── layout.tsx
+│       │   │   ├── page.tsx
+│       │   │   ├── (auth)/          # Auth routes
+│       │   │   │   ├── login/
+│       │   │   │   └── register/
+│       │   │   ├── (dashboard)/     # Dashboard routes
+│       │   │   │   ├── layout.tsx
+│       │   │   │   ├── dashboard/
+│       │   │   │   ├── programs/
+│       │   │   │   ├── applications/
+│       │   │   │   ├── users/
+│       │   │   │   ├── payments/
+│       │   │   │   └── settings/
+│       │   │   └── api/             # API routes
+│       │   │
+│       │   ├── modules/              # Feature Modules (Clean Architecture)
+│       │   │   ├── auth/
+│       │   │   │   ├── domain/      # Entities & interfaces
+│       │   │   │   ├── application/ # Use cases
+│       │   │   │   ├── infrastructure/ # API clients
+│       │   │   │   └── presentation/ # Components & hooks
+│       │   │   ├── users/
+│       │   │   │   ├── domain/
+│       │   │   │   ├── application/
+│       │   │   │   ├── infrastructure/
+│       │   │   │   └── presentation/
+│       │   │   ├── programs/
+│       │   │   └── applications/
+│       │   │
+│       │   ├── shared/              # Shared utilities
+│       │   │   ├── components/      # Reusable components
+│       │   │   │   ├── ui/          # shadcn/ui components
+│       │   │   │   ├── layout/
+│       │   │   │   └── forms/
+│       │   │   ├── hooks/           # Reusable hooks
+│       │   │   ├── utils/           # Utility functions
+│       │   │   └── types/           # Shared types
+│       │   │
+│       │   ├── lib/                 # Core libraries
+│       │   │   ├── api-client.ts    # API communication
+│       │   │   ├── auth.ts
+│       │   │   └── utils.ts
+│       │   │
+│       │   └── store/               # State management (Zustand)
+│       │       ├── auth.store.ts
+│       │       └── ui.store.ts
+│       └── tests/board/               # Next.js Admin Dashboard
 │       ├── Dockerfile
 │       ├── Dockerfile.prod
 │       ├── .dockerignore
