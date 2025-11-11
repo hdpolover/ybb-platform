@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package payment;
+
+option go_package = "github.com/hdpolover/ybb-platform/services/payment-service/api/proto";
+
+// Payment service definition
+service PaymentService {
+  rpc CreatePayment(CreatePaymentRequest) returns (PaymentResponse);
+  rpc GetPayment(GetPaymentRequest) returns (PaymentResponse);
+  rpc ListPayments(ListPaymentsRequest) returns (ListPaymentsResponse);
+  rpc UpdatePaymentStatus(UpdatePaymentStatusRequest) returns (PaymentResponse);
+  rpc ProcessRefund(ProcessRefundRequest) returns (RefundResponse);
+}
+
+// Messages
+message CreatePaymentRequest {
+  string user_id = 1;
+  string application_id = 2;
+  int64 amount = 3;
+  string currency = 4;
+  string payment_method = 5;
+  map<string, string> metadata = 6;
+}
+
+message GetPaymentRequest {
+  string payment_id = 1;
+}
+
+message ListPaymentsRequest {
+  string user_id = 1;
+  int32 page = 2;
+  int32 page_size = 3;
+}
+
+message UpdatePaymentStatusRequest {
+  string payment_id = 1;
+  string status = 2;
+}
+
+message ProcessRefundRequest {
+  string payment_id = 1;
+  int64 amount = 2;
+  string reason = 3;
+}
+
+message PaymentResponse {
+  string id = 1;
+  string user_id = 2;
+  string application_id = 3;
+  int64 amount = 4;
+  string currency = 5;
+  string status = 6;
+  string payment_method = 7;
+  string stripe_payment_intent_id = 8;
+  map<string, string> metadata = 9;
+  string created_at = 10;
+  string updated_at = 11;
+}
+
+message ListPaymentsResponse {
+  repeated PaymentResponse payments = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+message RefundResponse {
+  string id = 1;
+  string payment_id = 2;
+  int64 amount = 3;
+  string status = 4;
+  string reason = 5;
+  string created_at = 6;
+}
