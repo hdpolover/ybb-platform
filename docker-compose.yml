@@ -118,26 +118,29 @@ services:
   payment-service:
     build:
       context: ./services/payment-service
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     container_name: ybb-payment-service
     environment:
-      GO_ENV: ${GO_ENV}
-      DATABASE_URL: ${DATABASE_URL}
-      REDIS_URL: ${REDIS_URL}
-      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
-      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      PORT: 8080
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres:5432/ybb_payments_db
+      MIDTRANS_SERVER_KEY: ${MIDTRANS_SERVER_KEY}
+      MIDTRANS_CLIENT_KEY: ${MIDTRANS_CLIENT_KEY}
+      MIDTRANS_IS_PRODUCTION: ${MIDTRANS_IS_PRODUCTION:-false}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
     ports:
       - "8080:8080"
     volumes:
       - ./services/payment-service:/app
+      - /app/tmp
     networks:
       - ybb-network
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
+      rabbitmq:
         condition: service_healthy
-    command: air
+    command: air -c .air.toml
 
   # Python File Service
   file-service:
