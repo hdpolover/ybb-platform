@@ -77,10 +77,11 @@ docker exec ybb-postgres psql -U ybb_user -d ybb_payments_db -c "\dt"
 
 You should see:
 ```
- payments
- payment_events
- refunds
- gateway_configs
+ payment_methods    (Admin-configurable payment options)
+ payments           (Transaction records)
+ payment_events     (Audit trail)
+ refunds            (Refund transactions)
+ gateway_configs    (Gateway settings)
 ```
 
 ### 4. Start Payment Service
@@ -107,6 +108,37 @@ DATABASE_URL=postgresql://ybb_user:ybb_pass@postgres:5432/ybb_payments_db
 
 ## 📊 Database Schema
 
+### Payment Methods Table (Admin Configuration)
+```sql
+CREATE TABLE payment_methods (
+    id UUID PRIMARY KEY,
+    name VARCHAR(100) UNIQUE,
+    type VARCHAR(20),              -- 'automatic' | 'manual'
+    code VARCHAR(50) UNIQUE,
+    is_active BOOLEAN DEFAULT true,
+    display_name VARCHAR(100),
+    description TEXT,
+    
+    -- For automatic methods
+    gateway_name VARCHAR(50),
+    gateway_type VARCHAR(50),
+    
+    -- For manual methods
+    account_number VARCHAR(100),
+    account_name VARCHAR(255),
+    bank_name VARCHAR(100),
+    instructions TEXT,
+    requires_proof BOOLEAN DEFAULT false,
+    admin_instructions TEXT,
+    
+    sort_order INTEGER,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
+);
+
+-- Pre-configured methods (Midtrans, BCA, Mandiri, etc.)
+```
+
 ### Payments Table
 ```sql
 CREATE TABLE payments (
@@ -116,10 +148,23 @@ CREATE TABLE payments (
     amount DECIMAL(12,2),
     currency VARCHAR(3),
     status VARCHAR(50),
+    payment_type VARCHAR(20),      -- 'automatic' | 'manual'
     payment_method VARCHAR(50),
+    payment_method_id UUID,        -- References payment_methods
+    
+    -- Automatic payment fields
     gateway_name VARCHAR(50),
     gateway_order_id VARCHAR(255),
     gateway_response JSONB,
+    redirect_url TEXT,
+    
+    -- Manual payment fields
+    proof_file_id UUID,            -- Reference to file service
+    proof_file_url TEXT,
+    verified_by_id VARCHAR(255),   -- Admin who verified
+    verified_at TIMESTAMP,
+    rejected_reason TEXT,
+    
     customer_name VARCHAR(255),
     customer_email VARCHAR(255),
     customer_phone VARCHAR(50),
@@ -258,22 +303,62 @@ docker logs ybb-postgres  # Check logs
 
 ---
 
+## � Payment Types
+
+### Automatic Payments (Gateway-based)
+- User selects method (e.g., "Midtrans Credit Card")
+- System creates payment → Gateway processes → Webhook updates status
+- Fields: `gateway_name`, `gateway_order_id`, `redirect_url`
+
+### Manual Payments (Admin verification)
+- User selects method (e.g., "Bank BCA Transfer")
+- User uploads payment proof
+- Admin reviews and approves/rejects
+- Fields: `proof_file_id`, `verified_by_id`, `verified_at`, `rejected_reason`
+
+## 🛠️ ORM: GORM
+
+This service uses **GORM** (Go ORM) instead of raw SQL:
+
+```go
+// Auto-migration
+db.AutoMigrate(&entities.Payment{}, &entities.PaymentMethodEntity{})
+
+// Create payment
+db.Create(&payment)
+
+// Query
+var payments []entities.Payment
+db.Where("user_id = ?", userID).Find(&payments)
+
+// Update
+db.Model(&payment).Updates(map[string]interface{}{
+    "status": "success",
+    "verified_at": time.Now(),
+})
+```
+
+GORM handles schema creation, so migrations are optional for basic setup.
+
 ## 📝 For Interns
 
 The payment service now has its own database. When implementing features:
 
 1. **Only write to `ybb_payments_db`**
-2. **Publish events for status changes**
-3. **Never directly query API service database**
-4. **Store application_id and user_id as strings** (references to API service)
+2. **Use GORM for all database operations**
+3. **Publish events for status changes**
+4. **Never directly query API service database**
+5. **Store application_id and user_id as strings** (references to API service)
 
 Example:
 ```go
 // ✅ CORRECT: Store reference to external entity
-payment := &Payment{
+payment := &entities.Payment{
     ApplicationID: "uuid-from-api-service",
     UserID: "uuid-from-api-service",
+    PaymentType: entities.PaymentTypeManual,
 }
+db.Create(&payment)
 
 // ❌ WRONG: Don't try to join with API service tables
 // You can't do: SELECT * FROM payments JOIN applications
