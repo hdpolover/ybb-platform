@@ -1,0 +1,660 @@
+// Prisma Schema for YBB Platform
+// This schema is designed for PostgreSQL and supports migration from MySQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum UserRole {
+  admin
+  staff
+  user
+}
+
+enum UserStatus {
+  active
+  inactive
+  suspended
+  pending
+}
+
+enum ProgramType {
+  conference
+  competition
+  workshop
+  bootcamp
+}
+
+enum ProgramStatus {
+  draft
+  published
+  archived
+}
+
+enum ApplicationStatus {
+  draft
+  submitted
+  under_review
+  accepted
+  rejected
+  withdrawn
+}
+
+enum PaymentStatus {
+  pending
+  processing
+  completed
+  failed
+  refunded
+  cancelled
+}
+
+enum AnnouncementType {
+  info
+  warning
+  urgent
+}
+
+enum SponsorTier {
+  platinum
+  gold
+  silver
+  bronze
+}
+
+// ============================================================================
+// CORE ENTITIES
+// ============================================================================
+
+model User {
+  id                      String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  email                   String    @unique @db.VarChar(255)
+  passwordHash            String    @map("password_hash") @db.VarChar(255)
+  firstName               String    @map("first_name") @db.VarChar(100)
+  lastName                String    @map("last_name") @db.VarChar(100)
+  role                    UserRole  @default(user)
+  status                  UserStatus @default(pending)
+  phoneNumber             String?   @map("phone_number") @db.VarChar(20)
+  avatar                  String?   @db.Text
+  bio                     String?   @db.Text
+  emailVerified           Boolean   @default(false) @map("email_verified")
+  emailVerificationToken  String?   @map("email_verification_token") @db.VarChar(255)
+  passwordResetToken      String?   @map("password_reset_token") @db.VarChar(255)
+  passwordResetExpires    DateTime? @map("password_reset_expires") @db.Timestamptz
+  lastLogin               DateTime? @map("last_login") @db.Timestamptz
+  createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt               DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt               DateTime? @map("deleted_at") @db.Timestamptz
+  deletedBy               String?   @map("deleted_by") @db.Uuid
+  legacyId                Int?      @unique @map("legacy_id")
+
+  // Relations
+  createdPrograms         Program[] @relation("ProgramCreator")
+  applications            Application[]
+  payments                Payment[]
+  files                   File[]
+  auditLogs               AuditLog[]
+  sessions                Session[]
+  admin                   Admin?
+  passwordResets          PasswordReset[]
+  deletedUser             User?     @relation("UserDeleter", fields: [deletedBy], references: [id])
+  deletedUsers            User[]    @relation("UserDeleter")
+
+  @@index([email])
+  @@index([role])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+model Program {
+  id                  String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  title               String        @db.VarChar(255)
+  description         String        @db.Text
+  type                ProgramType
+  status              ProgramStatus @default(draft)
+  slug                String?       @unique @db.VarChar(255)
+  isFeatured          Boolean       @default(false) @map("is_featured")
+  theme               String?       @db.VarChar(255)
+  tags                Json?         @default("[]")
+  startDate           DateTime      @map("start_date") @db.Timestamptz
+  endDate             DateTime      @map("end_date") @db.Timestamptz
+  applicationDeadline DateTime      @map("application_deadline") @db.Timestamptz
+  location            String        @db.VarChar(255)
+  capacity            Int
+  registeredCount     Int           @default(0) @map("registered_count")
+  fee                 Decimal       @default(0) @db.Decimal(10, 2)
+  currency            String        @default("USD") @db.VarChar(3)
+  coverImage          String?       @map("cover_image") @db.Text
+  requirements        Json?
+  benefits            Json?
+  programCategoryId   String?       @map("program_category_id") @db.Uuid
+  createdBy           String?       @map("created_by") @db.Uuid
+  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt           DateTime?     @map("deleted_at") @db.Timestamptz
+  deletedBy           String?       @map("deleted_by") @db.Uuid
+  legacyId            Int?          @unique @map("legacy_id")
+
+  // Relations
+  category            ProgramCategory? @relation(fields: [programCategoryId], references: [id])
+  creator             User?         @relation("ProgramCreator", fields: [createdBy], references: [id])
+  applications        Application[]
+  subthemes           ProgramSubtheme[]
+  documents           ProgramDocument[]
+  essays              ProgramEssay[]
+  faqs                ProgramFaq[]
+  schedules           ProgramSchedule[]
+  speakers            ProgramSpeaker[]
+  sponsors            ProgramSponsor[]
+  announcements       ProgramAnnouncement[]
+  adminPrograms       AdminProgram[]
+
+  @@index([status])
+  @@index([type])
+  @@index([startDate])
+  @@index([programCategoryId])
+  @@index([slug])
+  @@index([deletedAt])
+  @@map("programs")
+}
+
+model Application {
+  id            String            @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId        String            @map("user_id") @db.Uuid
+  programId     String            @map("program_id") @db.Uuid
+  status        ApplicationStatus @default(draft)
+  answers       Json              @default("[]")
+  documents     Json?             @default("[]")
+  paymentId     String?           @map("payment_id") @db.Uuid
+  paymentStatus String?           @map("payment_status") @db.VarChar(50)
+  submittedAt   DateTime?         @map("submitted_at") @db.Timestamptz
+  reviewedAt    DateTime?         @map("reviewed_at") @db.Timestamptz
+  reviewedBy    String?           @map("reviewed_by") @db.Uuid
+  reviewNotes   String?           @map("review_notes") @db.Text
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime          @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt     DateTime?         @map("deleted_at") @db.Timestamptz
+  legacyId      Int?              @unique @map("legacy_id")
+
+  // Relations
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  program       Program           @relation(fields: [programId], references: [id], onDelete: Cascade)
+  payments      Payment[]
+
+  @@unique([userId, programId])
+  @@index([userId])
+  @@index([programId])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("applications")
+}
+
+model Payment {
+  id                   String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId               String        @map("user_id") @db.Uuid
+  applicationId        String        @map("application_id") @db.Uuid
+  amount               Decimal       @db.Decimal(10, 2)
+  currency             String        @default("USD") @db.VarChar(3)
+  status               PaymentStatus @default(pending)
+  paymentMethod        String        @map("payment_method") @db.VarChar(50)
+  stripePaymentIntentId String?      @unique @map("stripe_payment_intent_id") @db.VarChar(255)
+  metadata             Json?
+  paidAt               DateTime?     @map("paid_at") @db.Timestamptz
+  refundedAt           DateTime?     @map("refunded_at") @db.Timestamptz
+  refundAmount         Decimal?      @map("refund_amount") @db.Decimal(10, 2)
+  refundReason         String?       @map("refund_reason") @db.Text
+  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+  legacyId             Int?          @unique @map("legacy_id")
+
+  // Relations
+  user                 User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application          Application   @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([applicationId])
+  @@index([status])
+  @@index([stripePaymentIntentId])
+  @@map("payments")
+}
+
+model File {
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  filename    String    @db.VarChar(255)
+  contentType String    @map("content_type") @db.VarChar(100)
+  size        BigInt
+  url         String    @db.Text
+  storagePath String    @map("storage_path") @db.Text
+  userId      String    @map("user_id") @db.Uuid
+  entityType  String?   @map("entity_type") @db.VarChar(50)
+  entityId    String?   @map("entity_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  legacyId    Int?      @unique @map("legacy_id")
+
+  // Relations
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@map("files")
+}
+
+// ============================================================================
+// RBAC SYSTEM
+// ============================================================================
+
+model AdminRole {
+  id            String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name          String      @unique @db.VarChar(100)
+  description   String?     @db.Text
+  isSystemRole  Boolean     @default(false) @map("is_system_role")
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime    @updatedAt @map("updated_at") @db.Timestamptz
+  legacyId      Int?        @unique @map("legacy_id")
+
+  // Relations
+  admins        Admin[]
+  permissions   AdminRolePermission[]
+
+  @@index([name])
+  @@map("admin_roles")
+}
+
+model Permission {
+  id          String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name        String      @unique @db.VarChar(100)
+  description String?     @db.Text
+  resource    String      @db.VarChar(100)
+  action      String      @db.VarChar(50)
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz
+  legacyId    Int?        @unique @map("legacy_id")
+
+  // Relations
+  roles       AdminRolePermission[]
+
+  @@unique([resource, action])
+  @@index([resource])
+  @@index([action])
+  @@map("permissions")
+}
+
+model AdminRolePermission {
+  id           String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  roleId       String      @map("role_id") @db.Uuid
+  permissionId String      @map("permission_id") @db.Uuid
+  grantedBy    String?     @map("granted_by") @db.Uuid
+  grantedAt    DateTime    @default(now()) @map("granted_at") @db.Timestamptz
+  legacyId     Int?        @unique @map("legacy_id")
+
+  // Relations
+  role         AdminRole   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission  @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+  @@map("admin_role_permissions")
+}
+
+model Admin {
+  id                   String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId               String    @unique @map("user_id") @db.Uuid
+  roleId               String?   @map("role_id") @db.Uuid
+  employeeId           String?   @unique @map("employee_id") @db.VarChar(50)
+  department           String?   @db.VarChar(100)
+  isSuperAdmin         Boolean   @default(false) @map("is_super_admin")
+  canAssignRoles       Boolean   @default(false) @map("can_assign_roles")
+  lastPasswordChange   DateTime? @map("last_password_change") @db.Timestamptz
+  passwordExpiresAt    DateTime? @map("password_expires_at") @db.Timestamptz
+  twoFactorEnabled     Boolean   @default(false) @map("two_factor_enabled")
+  twoFactorSecret      String?   @map("two_factor_secret") @db.VarChar(255)
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt            DateTime? @map("deleted_at") @db.Timestamptz
+  deletedBy            String?   @map("deleted_by") @db.Uuid
+  legacyId             Int?      @unique @map("legacy_id")
+
+  // Relations
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role                 AdminRole? @relation(fields: [roleId], references: [id])
+  programs             AdminProgram[]
+
+  @@index([userId])
+  @@index([roleId])
+  @@index([deletedAt])
+  @@map("admins")
+}
+
+model AdminProgram {
+  id         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  adminId    String   @map("admin_id") @db.Uuid
+  programId  String   @map("program_id") @db.Uuid
+  assignedAt DateTime @default(now()) @map("assigned_at") @db.Timestamptz
+  assignedBy String?  @map("assigned_by") @db.Uuid
+  legacyId   Int?     @unique @map("legacy_id")
+
+  // Relations
+  admin      Admin    @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  program    Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@unique([adminId, programId])
+  @@index([adminId])
+  @@index([programId])
+  @@map("admin_programs")
+}
+
+// ============================================================================
+// PROGRAM TAXONOMY
+// ============================================================================
+
+model ProgramType {
+  id          String            @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name        String            @unique @db.VarChar(100)
+  description String?           @db.Text
+  slug        String            @unique @db.VarChar(100)
+  icon        String?           @db.VarChar(255)
+  isActive    Boolean           @default(true) @map("is_active")
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamptz
+  legacyId    Int?              @unique @map("legacy_id")
+
+  // Relations
+  categories  ProgramCategory[]
+
+  @@index([slug])
+  @@map("program_types")
+}
+
+model ProgramCategory {
+  id               String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programTypeId    String           @map("program_type_id") @db.Uuid
+  name             String           @db.VarChar(255)
+  description      String?          @db.Text
+  slug             String           @unique @db.VarChar(255)
+  displayOrder     Int              @default(0) @map("display_order")
+  isActive         Boolean          @default(true) @map("is_active")
+  parentCategoryId String?          @map("parent_category_id") @db.Uuid
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt        DateTime?        @map("deleted_at") @db.Timestamptz
+  legacyId         Int?             @unique @map("legacy_id")
+
+  // Relations
+  programType      ProgramType      @relation(fields: [programTypeId], references: [id])
+  parentCategory   ProgramCategory? @relation("CategoryHierarchy", fields: [parentCategoryId], references: [id])
+  childCategories  ProgramCategory[] @relation("CategoryHierarchy")
+  programs         Program[]
+
+  @@index([programTypeId])
+  @@index([slug])
+  @@index([parentCategoryId])
+  @@map("program_categories")
+}
+
+// ============================================================================
+// PROGRAM EXTENDED FEATURES
+// ============================================================================
+
+model ProgramSubtheme {
+  id           String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId    String    @map("program_id") @db.Uuid
+  name         String    @db.VarChar(255)
+  description  String?   @db.Text
+  displayOrder Int       @default(0) @map("display_order")
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz
+  legacyId     Int?      @unique @map("legacy_id")
+
+  // Relations
+  program      Program   @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@map("program_subthemes")
+}
+
+model ProgramDocument {
+  id                String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId         String    @map("program_id") @db.Uuid
+  name              String    @db.VarChar(255)
+  description       String?   @db.Text
+  documentType      String    @map("document_type") @db.VarChar(50)
+  isRequired        Boolean   @default(true) @map("is_required")
+  maxFileSize       Int?      @map("max_file_size")
+  allowedExtensions Json?     @default("[]") @map("allowed_extensions")
+  displayOrder      Int       @default(0) @map("display_order")
+  isActive          Boolean   @default(true) @map("is_active")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz
+  legacyId          Int?      @unique @map("legacy_id")
+
+  // Relations
+  program           Program   @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@map("program_documents")
+}
+
+model ProgramEssay {
+  id           String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId    String    @map("program_id") @db.Uuid
+  question     String    @db.Text
+  description  String?   @db.Text
+  minWords     Int?      @map("min_words")
+  maxWords     Int?      @map("max_words")
+  isRequired   Boolean   @default(true) @map("is_required")
+  displayOrder Int       @default(0) @map("display_order")
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz
+  legacyId     Int?      @unique @map("legacy_id")
+
+  // Relations
+  program      Program   @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@map("program_essays")
+}
+
+model ProgramFaq {
+  id           String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId    String    @map("program_id") @db.Uuid
+  question     String    @db.Text
+  answer       String    @db.Text
+  displayOrder Int       @default(0) @map("display_order")
+  isPublished  Boolean   @default(true) @map("is_published")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz
+  legacyId     Int?      @unique @map("legacy_id")
+
+  // Relations
+  program      Program   @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@map("program_faqs")
+}
+
+model ProgramSchedule {
+  id           String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId    String    @map("program_id") @db.Uuid
+  title        String    @db.VarChar(255)
+  description  String?   @db.Text
+  startTime    DateTime  @map("start_time") @db.Timestamptz
+  endTime      DateTime  @map("end_time") @db.Timestamptz
+  location     String?   @db.VarChar(255)
+  isMandatory  Boolean   @default(false) @map("is_mandatory")
+  displayOrder Int       @default(0) @map("display_order")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz
+  legacyId     Int?      @unique @map("legacy_id")
+
+  // Relations
+  program      Program   @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@map("program_schedules")
+}
+
+model ProgramSpeaker {
+  id           String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId    String    @map("program_id") @db.Uuid
+  name         String    @db.VarChar(255)
+  title        String?   @db.VarChar(255)
+  organization String?   @db.VarChar(255)
+  bio          String?   @db.Text
+  photoUrl     String?   @map("photo_url") @db.Text
+  email        String?   @db.VarChar(255)
+  linkedinUrl  String?   @map("linkedin_url") @db.Text
+  twitterUrl   String?   @map("twitter_url") @db.Text
+  displayOrder Int       @default(0) @map("display_order")
+  isFeatured   Boolean   @default(false) @map("is_featured")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz
+  legacyId     Int?      @unique @map("legacy_id")
+
+  // Relations
+  program      Program   @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@map("program_speakers")
+}
+
+model ProgramSponsor {
+  id           String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId    String      @map("program_id") @db.Uuid
+  name         String      @db.VarChar(255)
+  description  String?     @db.Text
+  logoUrl      String?     @map("logo_url") @db.Text
+  websiteUrl   String?     @map("website_url") @db.Text
+  sponsorTier  SponsorTier? @map("sponsor_tier")
+  displayOrder Int         @default(0) @map("display_order")
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime    @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt    DateTime?   @map("deleted_at") @db.Timestamptz
+  legacyId     Int?        @unique @map("legacy_id")
+
+  // Relations
+  program      Program     @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@map("program_sponsors")
+}
+
+model ProgramAnnouncement {
+  id             String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId      String           @map("program_id") @db.Uuid
+  title          String           @db.VarChar(255)
+  content        String           @db.Text
+  announcementType AnnouncementType @map("announcement_type")
+  targetAudience String           @default("all") @map("target_audience") @db.VarChar(50)
+  isPinned       Boolean          @default(false) @map("is_pinned")
+  publishedAt    DateTime?        @map("published_at") @db.Timestamptz
+  expiresAt      DateTime?        @map("expires_at") @db.Timestamptz
+  createdBy      String?          @map("created_by") @db.Uuid
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt      DateTime?        @map("deleted_at") @db.Timestamptz
+  legacyId       Int?             @unique @map("legacy_id")
+
+  // Relations
+  program        Program          @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@map("program_announcements")
+}
+
+// ============================================================================
+// AUDIT & SESSION
+// ============================================================================
+
+model AuditLog {
+  id         String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId     String?   @map("user_id") @db.Uuid
+  action     String    @db.VarChar(100)
+  entityType String    @map("entity_type") @db.VarChar(50)
+  entityId   String?   @map("entity_id") @db.Uuid
+  changes    Json?
+  ipAddress  String?   @map("ip_address") @db.Inet
+  userAgent  String?   @map("user_agent") @db.Text
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  user       User?     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Session {
+  id           String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  refreshToken String   @map("refresh_token") @db.VarChar(500)
+  expiresAt    DateTime @map("expires_at") @db.Timestamptz
+  ipAddress    String?  @map("ip_address") @db.Inet
+  userAgent    String?  @map("user_agent") @db.Text
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([refreshToken])
+  @@map("sessions")
+}
+
+model PasswordReset {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  token     String   @unique @db.VarChar(255)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz
+  usedAt    DateTime? @map("used_at") @db.Timestamptz
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  legacyId  Int?     @unique @map("legacy_id")
+
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("password_resets")
+}
+
+// ============================================================================
+// MIGRATION TRACKING
+// ============================================================================
+
+model MigrationTracking {
+  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tableName      String   @map("table_name") @db.VarChar(100)
+  mysqlId        Int      @map("mysql_id")
+  postgresId     String   @map("postgres_id") @db.Uuid
+  migratedAt     DateTime @default(now()) @map("migrated_at") @db.Timestamptz
+  migrationBatch String?  @map("migration_batch") @db.VarChar(50)
+
+  @@unique([tableName, mysqlId])
+  @@index([tableName])
+  @@index([mysqlId])
+  @@index([postgresId])
+  @@map("migration_tracking")
+}

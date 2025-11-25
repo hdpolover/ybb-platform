@@ -54,7 +54,10 @@ services:
       - "9000:9000"
       - "9001:9001"
     volumes:
-      - minio_data:/data
+      # VPS Production: Uncomment below and comment out Docker volume
+      - /var/ybb-storage:/data
+      # Local Development: Comment out above and use Docker volume
+      # - minio_data:/data
     networks:
       - ybb-network
     healthcheck:
@@ -87,26 +90,27 @@ services:
   api:
     build:
       context: ./services/api
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     container_name: ybb-api
     environment:
-      NODE_ENV: ${NODE_ENV}
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 3000
       DATABASE_URL: ${DATABASE_URL}
-      REDIS_URL: ${REDIS_URL}
       JWT_SECRET: ${JWT_SECRET}
-      PAYMENT_SERVICE_URL: ${PAYMENT_SERVICE_URL}
-      FILE_SERVICE_URL: ${FILE_SERVICE_URL}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3001}
+      FILE_SERVICE_URL: http://file-service:8001
+      PAYMENT_SERVICE_URL: http://payment-service:8080
     ports:
-      - "4000:4000"
+      - "3000:3000"
     volumes:
       - ./services/api:/app
       - /app/node_modules
+      - /app/dist
     networks:
       - ybb-network
     depends_on:
       postgres:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     command: npm run start:dev
 
@@ -143,26 +147,21 @@ services:
     container_name: ybb-file-service
     environment:
       PYTHON_ENV: ${PYTHON_ENV}
-      DATABASE_URL: ${DATABASE_URL}
-      REDIS_URL: ${REDIS_URL}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      MINIO_BUCKET: ${MINIO_BUCKET}
+      MINIO_SECURE: ${MINIO_SECURE:-false}
+      SERVICE_PORT: 8001
     ports:
-      - "8000:8000"
+      - "8001:8001"
     volumes:
       - ./services/file-service:/app
     networks:
       - ybb-network
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
       minio:
         condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 
   # Next.js Admin Dashboard
   admin-dashboard:

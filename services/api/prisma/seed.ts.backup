@@ -1,0 +1,148 @@
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+
+async function main() {
+  console.log('🌱 Starting database seeding...');
+
+  // Seed Admin Roles
+  console.log('📝 Seeding admin roles...');
+  const superAdminRole = await prisma.adminRole.upsert({
+    where: { name: 'super_admin' },
+    update: {},
+    create: {
+      name: 'super_admin',
+      description: 'Full system access',
+      isSystemRole: true,
+    },
+  });
+
+  const programManagerRole = await prisma.adminRole.upsert({
+    where: { name: 'program_manager' },
+    update: {},
+    create: {
+      name: 'program_manager',
+      description: 'Manage programs and applications',
+      isSystemRole: true,
+    },
+  });
+
+  const reviewerRole = await prisma.adminRole.upsert({
+    where: { name: 'reviewer' },
+    update: {},
+    create: {
+      name: 'reviewer',
+      description: 'Review and score applications',
+      isSystemRole: true,
+    },
+  });
+
+  const supportRole = await prisma.adminRole.upsert({
+    where: { name: 'support' },
+    update: {},
+    create: {
+      name: 'support',
+      description: 'Handle support tickets and queries',
+      isSystemRole: true,
+    },
+  });
+
+  console.log('✅ Admin roles seeded');
+
+  // Seed Permissions
+  console.log('📝 Seeding permissions...');
+  const permissions = [
+    // Users
+    { name: 'users.create', description: 'Create new users', resource: 'users', action: 'create' },
+    { name: 'users.read', description: 'View user information', resource: 'users', action: 'read' },
+    { name: 'users.update', description: 'Update user information', resource: 'users', action: 'update' },
+    { name: 'users.delete', description: 'Delete users', resource: 'users', action: 'delete' },
+    // Programs
+    { name: 'programs.create', description: 'Create new programs', resource: 'programs', action: 'create' },
+    { name: 'programs.read', description: 'View programs', resource: 'programs', action: 'read' },
+    { name: 'programs.update', description: 'Update programs', resource: 'programs', action: 'update' },
+    { name: 'programs.delete', description: 'Delete programs', resource: 'programs', action: 'delete' },
+    { name: 'programs.publish', description: 'Publish programs', resource: 'programs', action: 'publish' },
+    // Applications
+    { name: 'applications.create', description: 'Create applications', resource: 'applications', action: 'create' },
+    { name: 'applications.read', description: 'View applications', resource: 'applications', action: 'read' },
+    { name: 'applications.update', description: 'Update applications', resource: 'applications', action: 'update' },
+    { name: 'applications.delete', description: 'Delete applications', resource: 'applications', action: 'delete' },
+    { name: 'applications.review', description: 'Review applications', resource: 'applications', action: 'review' },
+    { name: 'applications.approve', description: 'Approve applications', resource: 'applications', action: 'approve' },
+    { name: 'applications.reject', description: 'Reject applications', resource: 'applications', action: 'reject' },
+    // Payments
+    { name: 'payments.read', description: 'View payments', resource: 'payments', action: 'read' },
+    { name: 'payments.refund', description: 'Process refunds', resource: 'payments', action: 'refund' },
+    // Admin
+    { name: 'admin.manage_roles', description: 'Manage admin roles', resource: 'admin', action: 'manage_roles' },
+    { name: 'admin.assign_permissions', description: 'Assign permissions', resource: 'admin', action: 'assign_permissions' },
+  ];
+
+  for (const permission of permissions) {
+    await prisma.permission.upsert({
+      where: {
+        resource_action: {
+          resource: permission.resource,
+          action: permission.action,
+        },
+      },
+      update: {},
+      create: permission,
+    });
+  }
+
+  console.log('✅ Permissions seeded');
+
+  // Assign all permissions to super_admin role
+  console.log('📝 Assigning permissions to super_admin...');
+  const allPermissions = await prisma.permission.findMany();
+  
+  for (const permission of allPermissions) {
+    await prisma.adminRolePermission.upsert({
+      where: {
+        roleId_permissionId: {
+          roleId: superAdminRole.id,
+          permissionId: permission.id,
+        },
+      },
+      update: {},
+      create: {
+        roleId: superAdminRole.id,
+        permissionId: permission.id,
+      },
+    });
+  }
+
+  console.log('✅ Permissions assigned');
+
+  // Seed Program Types
+  console.log('📝 Seeding program types...');
+  const programTypes = [
+    { name: 'Conference', description: 'Academic and professional conferences', slug: 'conference' },
+    { name: 'Competition', description: 'Competitive programs and contests', slug: 'competition' },
+    { name: 'Workshop', description: 'Hands-on training workshops', slug: 'workshop' },
+    { name: 'Bootcamp', description: 'Intensive training programs', slug: 'bootcamp' },
+  ];
+
+  for (const type of programTypes) {
+    await prisma.programType.upsert({
+      where: { slug: type.slug },
+      update: {},
+      create: type,
+    });
+  }
+
+  console.log('✅ Program types seeded');
+
+  console.log('🎉 Database seeding completed!');
+}
+
+main()
+  .catch((e) => {
+    console.error('❌ Error seeding database:', e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

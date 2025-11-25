@@ -1,0 +1,1041 @@
+// Prisma Schema for YBB Platform
+// Brand-Scoped Multi-Tenancy Architecture with Clean Architecture Principles
+// Database: PostgreSQL 14+
+// Last Updated: November 25, 2025
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum Gender {
+  male
+  female
+  other
+}
+
+enum ApplicationCategory {
+  fully_funded
+  self_funded
+  partial_funded
+}
+
+enum ApplicationStatus {
+  draft
+  submitted
+  under_review
+  interview_scheduled
+  accepted
+  rejected
+  waitlisted
+  withdrawn
+}
+
+enum ScoreStatus {
+  pending
+  scored
+  go_to_interview
+  rejected
+}
+
+enum ReferralStatus {
+  referred
+  registered
+  applied
+  accepted
+  completed
+}
+
+enum BlockType {
+  temporary
+  permanent
+}
+
+enum RiskLevel {
+  low
+  medium
+  high
+  critical
+}
+
+enum NotificationPriority {
+  low
+  normal
+  high
+  urgent
+}
+
+enum AnnouncementTarget {
+  all
+  participants
+  ambassadors
+  specific_program
+}
+
+enum AnnouncementPriority {
+  low
+  normal
+  high
+  urgent
+}
+
+enum AnnouncementType {
+  general
+  maintenance
+  deadline
+  feature
+  alert
+}
+
+enum DeletionStatus {
+  pending
+  approved
+  rejected
+  completed
+  cancelled
+}
+
+enum Theme {
+  light
+  dark
+  auto
+}
+
+enum ChangeType {
+  create
+  update
+  delete
+  status_change
+}
+
+enum ChangedByType {
+  participant
+  admin
+  system
+}
+
+// ============================================================================
+// CORE AUTHENTICATION (Brand-Scoped)
+// ============================================================================
+
+model User {
+  id                String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  email             String @db.VarChar(255)
+  programCategoryId String @map("program_category_id") @db.Uuid
+
+  // Authentication
+  passwordHash             String    @map("password_hash") @db.VarChar(255)
+  emailVerified            Boolean   @default(false) @map("email_verified")
+  emailVerificationToken   String?   @map("email_verification_token") @db.VarChar(255)
+  emailVerificationExpires DateTime? @map("email_verification_expires") @db.Timestamptz(6)
+  passwordResetToken       String?   @map("password_reset_token") @db.VarChar(255)
+  passwordResetExpires     DateTime? @map("password_reset_expires") @db.Timestamptz(6)
+
+  // Account Status
+  isActive Boolean @default(true) @map("is_active")
+
+  // Security (Basic)
+  failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
+  lastFailedLogin     DateTime? @map("last_failed_login") @db.Timestamptz(6)
+  lastLoginAt         DateTime? @map("last_login_at") @db.Timestamptz(6)
+  lastPasswordChange  DateTime? @map("last_password_change") @db.Timestamptz(6)
+
+  // Audit
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Migration Support
+  legacyId   Int?    @map("legacy_id")
+  legacyType String? @map("legacy_type") @db.VarChar(20)
+
+  // Relations
+  programCategory       ProgramCategory          @relation(fields: [programCategoryId], references: [id])
+  admin                 Admin?
+  participant           Participant?
+  ambassador            Ambassador?
+  preferences           UserPreference?
+  sessions              UserSession[]
+  securityLogs          UserSecurityLog[]
+  notifications         UserNotification[]
+  privacyConsents       UserPrivacyConsent[]
+  blockedAccounts       UserBlockedAccount[]
+  activityLogs          UserActivityLog[]
+  deletionRequests      AccountDeletionRequest[]
+  announcementReads     UserAnnouncementRead[]
+  editHistoryChangedBy  ApplicationEditHistory[] @relation("EditHistoryChangedBy")
+  deletedParticipants   Participant[]            @relation("ParticipantDeleter")
+  deletedApplications   ParticipantApplication[] @relation("ApplicationDeleter")
+  deletedAmbassadors    Ambassador[]             @relation("AmbassadorDeleter")
+  withdrawnApplications ParticipantApplication[] @relation("ApplicationWithdrawer")
+
+  @@unique([email, programCategoryId])
+  @@index([email])
+  @@index([programCategoryId])
+  @@index([emailVerified])
+  @@index([isActive, deletedAt])
+  @@index([passwordResetToken])
+  @@map("users")
+}
+
+model ProgramCategory {
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name        String    @unique @db.VarChar(100)
+  description String?   @db.Text
+  slug        String    @unique @db.VarChar(100)
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  legacyId    Int?      @unique @map("legacy_id")
+
+  // Relations
+  users               User[]
+  programs            Program[]
+  systemAnnouncements SystemAnnouncement[]
+
+  @@index([slug])
+  @@index([isActive])
+  @@map("program_categories")
+}
+
+// ============================================================================
+// USER PROFILES
+// ============================================================================
+
+model Admin {
+  id     String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId String @unique @map("user_id") @db.Uuid
+
+  // Profile
+  fullName    String  @map("full_name") @db.VarChar(255)
+  phoneNumber String? @map("phone_number") @db.VarChar(20)
+  bio         String? @db.Text
+  avatarUrl   String? @map("avatar_url") @db.VarChar(500)
+
+  // Employment
+  employeeId String? @unique @map("employee_id") @db.VarChar(50)
+  department String? @db.VarChar(100)
+  jobTitle   String? @map("job_title") @db.VarChar(100)
+
+  // Role & Permissions
+  roleId            String? @map("role_id") @db.Uuid
+  customPermissions Json    @default("[]") @map("custom_permissions")
+
+  // Access Control
+  accessLevel     Int     @default(1) @map("access_level")
+  canManageAdmins Boolean @default(false) @map("can_manage_admins")
+  canAssignRoles  Boolean @default(false) @map("can_assign_roles")
+
+  // Settings
+  timezone    String @default("UTC") @db.VarChar(50)
+  locale      String @default("en") @db.VarChar(10)
+  preferences Json   @default("{}") @db.Json
+
+  // Audit & Timeline
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  activatedAt   DateTime? @map("activated_at") @db.Timestamptz(6)
+  deactivatedAt DateTime? @map("deactivated_at") @db.Timestamptz(6)
+  lastActiveAt  DateTime? @map("last_active_at") @db.Timestamptz(6)
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdBy     String?   @map("created_by") @db.Uuid
+  deletedBy     String?   @map("deleted_by") @db.Uuid
+  legacyId      Int?      @unique @map("legacy_id")
+
+  // Relations
+  user                 User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role                 AdminRole?               @relation(fields: [roleId], references: [id])
+  adminPrograms        AdminProgram[]
+  reviewedApplications ParticipantApplication[]
+  verifiedReferrals    AmbassadorReferral[]
+  createdAnnouncements SystemAnnouncement[]     @relation("AnnouncementCreator")
+  updatedAnnouncements SystemAnnouncement[]     @relation("AnnouncementUpdater")
+  reviewedDeletions    AccountDeletionRequest[]
+  blockedAccounts      UserBlockedAccount[]     @relation("BlockedBy")
+  unblockedAccounts    UserBlockedAccount[]     @relation("UnblockedBy")
+  deletedParticipants  Participant[]            @relation("AdminParticipantDeleter")
+  deletedAmbassadors   Ambassador[]             @relation("AdminAmbassadorDeleter")
+
+  @@index([userId])
+  @@index([roleId])
+  @@index([employeeId])
+  @@index([department])
+  @@index([deletedAt])
+  @@map("admins")
+}
+
+model AdminRole {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name        String   @unique @db.VarChar(100)
+  description String?  @db.Text
+  permissions Json     @default("[]")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  legacyId    Int?     @unique @map("legacy_id")
+
+  // Relations
+  admins Admin[]
+
+  @@index([name])
+  @@map("admin_roles")
+}
+
+model AdminProgram {
+  id        String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  adminId   String @map("admin_id") @db.Uuid
+  programId String @map("program_id") @db.Uuid
+
+  // Access Control
+  roleInProgram String? @map("role_in_program") @db.VarChar(50)
+  permissions   Json    @default("[]")
+
+  // Audit
+  assignedAt DateTime  @default(now()) @map("assigned_at") @db.Timestamptz(6)
+  assignedBy String?   @map("assigned_by") @db.Uuid
+  removedAt  DateTime? @map("removed_at") @db.Timestamptz(6)
+  removedBy  String?   @map("removed_by") @db.Uuid
+  legacyId   Int?      @unique @map("legacy_id")
+
+  // Relations
+  admin   Admin   @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@unique([adminId, programId])
+  @@index([adminId])
+  @@index([programId])
+  @@index([removedAt])
+  @@map("admin_programs")
+}
+
+model Participant {
+  id     String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId String @unique @map("user_id") @db.Uuid
+
+  // Basic Profile
+  fullName    String    @map("full_name") @db.VarChar(255)
+  nickName    String?   @map("nick_name") @db.VarChar(100)
+  displayName String?   @map("display_name") @db.VarChar(100)
+  birthdate   DateTime? @db.Date
+  gender      Gender?
+
+  // Contact Information
+  phoneCountryCode String? @map("phone_country_code") @db.VarChar(10)
+  phoneNumber      String? @map("phone_number") @db.VarChar(25)
+  phoneVerified    Boolean @default(false) @map("phone_verified")
+
+  // Location
+  nationality     String? @db.VarChar(100)
+  nationalityCode String? @map("nationality_code") @db.VarChar(3)
+  originCountry   String? @map("origin_country") @db.VarChar(100)
+  originCity      String? @map("origin_city") @db.VarChar(100)
+  originAddress   String? @map("origin_address") @db.Text
+  currentCountry  String? @map("current_country") @db.VarChar(100)
+  currentCity     String? @map("current_city") @db.VarChar(100)
+  currentAddress  String? @map("current_address") @db.Text
+
+  // Education & Occupation
+  educationLevel String? @map("education_level") @db.VarChar(100)
+  institution    String? @db.VarChar(200)
+  major          String? @db.VarChar(200)
+  graduationYear Int?    @map("graduation_year")
+  occupation     String? @db.VarChar(100)
+
+  // Social & Professional
+  instagramUsername String? @map("instagram_username") @db.VarChar(50)
+  linkedinUrl       String? @map("linkedin_url") @db.VarChar(500)
+  portfolioUrl      String? @map("portfolio_url") @db.VarChar(500)
+  organizations     String? @db.Text
+
+  // Additional Info
+  tshirtSize          String? @map("tshirt_size") @db.VarChar(10)
+  dietaryRestrictions String? @map("dietary_restrictions") @db.Text
+  medicalConditions   String? @map("medical_conditions") @db.Text
+  specialNeeds        String? @map("special_needs") @db.Text
+
+  // Emergency Contact
+  emergencyContactName        String? @map("emergency_contact_name") @db.VarChar(255)
+  emergencyContactRelation    String? @map("emergency_contact_relation") @db.VarChar(50)
+  emergencyContactCountryCode String? @map("emergency_contact_country_code") @db.VarChar(10)
+  emergencyContactPhone       String? @map("emergency_contact_phone") @db.VarChar(25)
+  emergencyContactEmail       String? @map("emergency_contact_email") @db.VarChar(255)
+
+  // Profile Media
+  profilePictureUrl String? @map("profile_picture_url") @db.VarChar(500)
+  resumeUrl         String? @map("resume_url") @db.VarChar(500)
+
+  // Engagement
+  knowledgeSource String? @map("knowledge_source") @db.VarChar(100)
+  referralCode    String? @map("referral_code") @db.VarChar(20)
+  preferences     Json    @default("{}") @db.Json
+
+  // Audit & Analytics
+  createdAt                   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  profileCompletedAt          DateTime? @map("profile_completed_at") @db.Timestamptz(6)
+  profileCompletionPercentage Int       @default(0) @map("profile_completion_percentage")
+  lastProfileUpdate           DateTime? @map("last_profile_update") @db.Timestamptz(6)
+  emailVerifiedAt             DateTime? @map("email_verified_at") @db.Timestamptz(6)
+  phoneVerifiedAt             DateTime? @map("phone_verified_at") @db.Timestamptz(6)
+  deletedAt                   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedBy                   String?   @map("deleted_by") @db.Uuid
+  legacyId                    Int?      @unique @map("legacy_id")
+
+  // Relations
+  user                User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  applications        ParticipantApplication[]
+  ambassadorReferrals AmbassadorReferral[]
+  userDeleter         User?                    @relation("ParticipantDeleter", fields: [deletedBy], references: [id], map: "fk_participant_deleted_by_user")
+  adminDeleter        Admin?                   @relation("AdminParticipantDeleter", fields: [deletedBy], references: [id], map: "fk_participant_deleted_by_admin")
+
+  @@index([userId])
+  @@index([nationalityCode])
+  @@index([institution])
+  @@index([referralCode])
+  @@index([deletedAt])
+  @@map("participants")
+}
+
+model Ambassador {
+  id     String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId String @unique @map("user_id") @db.Uuid
+
+  // Profile
+  fullName    String  @map("full_name") @db.VarChar(255)
+  phoneNumber String? @map("phone_number") @db.VarChar(25)
+
+  // Ambassador Specific
+  referralCode String  @unique @map("referral_code") @db.VarChar(20)
+  programId    String  @map("program_id") @db.Uuid
+  institution  String? @db.VarChar(255)
+  gender       Gender?
+
+  // Performance Tracking
+  totalReferrals            Int       @default(0) @map("total_referrals")
+  successfulReferrals       Int       @default(0) @map("successful_referrals")
+  lastReferralAt            DateTime? @map("last_referral_at") @db.Timestamptz(6)
+  firstSuccessfulReferralAt DateTime? @map("first_successful_referral_at") @db.Timestamptz(6)
+
+  // Status
+  notes              String?   @db.Text
+  isActive           Boolean   @default(true) @map("is_active")
+  activatedAt        DateTime? @map("activated_at") @db.Timestamptz(6)
+  deactivatedAt      DateTime? @map("deactivated_at") @db.Timestamptz(6)
+  deactivationReason String?   @map("deactivation_reason") @db.Text
+
+  // Audit
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedBy String?   @map("deleted_by") @db.Uuid
+  legacyId  Int?      @unique @map("legacy_id")
+
+  // Relations
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  program      Program              @relation(fields: [programId], references: [id])
+  referrals    AmbassadorReferral[]
+  userDeleter  User?                @relation("AmbassadorDeleter", fields: [deletedBy], references: [id], map: "fk_ambassador_deleted_by_user")
+  adminDeleter Admin?               @relation("AdminAmbassadorDeleter", fields: [deletedBy], references: [id], map: "fk_ambassador_deleted_by_admin")
+
+  @@index([userId])
+  @@index([referralCode])
+  @@index([programId])
+  @@index([deletedAt])
+  @@map("ambassadors")
+}
+
+// ============================================================================
+// PROGRAMS & APPLICATIONS
+// ============================================================================
+
+model Program {
+  id                  String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programCategoryId   String    @map("program_category_id") @db.Uuid
+  name                String    @db.VarChar(255)
+  description         String?   @db.Text
+  year                Int
+  startDate           DateTime  @map("start_date") @db.Date
+  endDate             DateTime  @map("end_date") @db.Date
+  applicationDeadline DateTime  @map("application_deadline") @db.Timestamptz(6)
+  location            String?   @db.VarChar(255)
+  capacity            Int?
+  isPublished         Boolean   @default(false) @map("is_published")
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt           DateTime? @map("deleted_at") @db.Timestamptz(6)
+  legacyId            Int?      @unique @map("legacy_id")
+
+  // Relations
+  programCategory ProgramCategory          @relation(fields: [programCategoryId], references: [id])
+  applications    ParticipantApplication[]
+  ambassadors     Ambassador[]
+  adminPrograms   AdminProgram[]
+  announcements   SystemAnnouncement[]
+
+  @@index([programCategoryId])
+  @@index([year])
+  @@index([isPublished])
+  @@index([deletedAt])
+  @@map("programs")
+}
+
+model ParticipantApplication {
+  id            String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  participantId String @map("participant_id") @db.Uuid
+  programId     String @map("program_id") @db.Uuid
+
+  // Application Data
+  applicationCategory ApplicationCategory? @map("application_category")
+  motivationLetter    String?              @db.Text
+  achievements        String?              @db.Text
+  experiences         String?              @db.Text
+
+  // Snapshot
+  participantSnapshot Json? @map("participant_snapshot") @db.Json
+
+  // Documents
+  documents        Json    @default("{}") @db.Json
+  twibbonLink      String? @map("twibbon_link") @db.VarChar(500)
+  requirementFiles Json    @default("[]") @map("requirement_files") @db.Json
+
+  // Status & Scoring
+  status         ApplicationStatus @default(draft)
+  scoreTotal     Decimal?          @map("score_total") @db.Decimal(5, 2)
+  scoreBreakdown Json?             @map("score_breakdown") @db.Json
+  scoreStatus    ScoreStatus?      @map("score_status")
+
+  // Review
+  reviewedBy    String?   @map("reviewed_by") @db.Uuid
+  reviewedAt    DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  reviewerNotes String?   @map("reviewer_notes") @db.Text
+
+  // Timeline & Status Changes
+  draftCreatedAt       DateTime  @default(now()) @map("draft_created_at") @db.Timestamptz(6)
+  submittedAt          DateTime? @map("submitted_at") @db.Timestamptz(6)
+  lastEditedAt         DateTime? @map("last_edited_at") @db.Timestamptz(6)
+  underReviewAt        DateTime? @map("under_review_at") @db.Timestamptz(6)
+  interviewScheduledAt DateTime? @map("interview_scheduled_at") @db.Timestamptz(6)
+  acceptedAt           DateTime? @map("accepted_at") @db.Timestamptz(6)
+  rejectedAt           DateTime? @map("rejected_at") @db.Timestamptz(6)
+  waitlistedAt         DateTime? @map("waitlisted_at") @db.Timestamptz(6)
+  withdrawnAt          DateTime? @map("withdrawn_at") @db.Timestamptz(6)
+  withdrawnBy          String?   @map("withdrawn_by") @db.Uuid
+
+  // Payment Timeline
+  paymentRequestedAt DateTime? @map("payment_requested_at") @db.Timestamptz(6)
+  paymentCompletedAt DateTime? @map("payment_completed_at") @db.Timestamptz(6)
+
+  // Document Upload Tracking
+  allDocumentsUploadedAt DateTime? @map("all_documents_uploaded_at") @db.Timestamptz(6)
+
+  // Status History
+  statusHistory Json @default("[]") @map("status_history") @db.Json
+
+  // Audit
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt           DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedBy           String?   @map("deleted_by") @db.Uuid
+  legacyParticipantId Int?      @map("legacy_participant_id")
+
+  // Relations
+  participant Participant              @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  program     Program                  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  reviewer    Admin?                   @relation(fields: [reviewedBy], references: [id])
+  withdrawer  User?                    @relation("ApplicationWithdrawer", fields: [withdrawnBy], references: [id])
+  deleter     User?                    @relation("ApplicationDeleter", fields: [deletedBy], references: [id])
+  editHistory ApplicationEditHistory[]
+
+  @@unique([participantId, programId])
+  @@index([participantId])
+  @@index([programId])
+  @@index([status])
+  @@index([applicationCategory])
+  @@index([submittedAt])
+  @@index([deletedAt])
+  @@map("participant_applications")
+}
+
+model AmbassadorReferral {
+  id            String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  ambassadorId  String @map("ambassador_id") @db.Uuid
+  participantId String @map("participant_id") @db.Uuid
+
+  // Referral Status
+  status ReferralStatus @default(referred)
+
+  // Verification
+  verifiedAt DateTime? @map("verified_at") @db.Timestamptz(6)
+  verifiedBy String?   @map("verified_by") @db.Uuid
+
+  // Conversion Funnel Timestamps
+  referredAt         DateTime  @default(now()) @map("referred_at") @db.Timestamptz(6)
+  registeredAt       DateTime? @map("registered_at") @db.Timestamptz(6)
+  profileCompletedAt DateTime? @map("profile_completed_at") @db.Timestamptz(6)
+  appliedAt          DateTime? @map("applied_at") @db.Timestamptz(6)
+  acceptedAt         DateTime? @map("accepted_at") @db.Timestamptz(6)
+  completedAt        DateTime? @map("completed_at") @db.Timestamptz(6)
+
+  // Funnel Analytics (Calculated in application logic or database triggers)
+  daysToRegister      Int? @map("days_to_register")
+  daysToApply         Int? @map("days_to_apply")
+  daysToAccept        Int? @map("days_to_accept")
+  totalConversionDays Int? @map("total_conversion_days")
+
+  legacyId Int? @unique @map("legacy_id")
+
+  // Relations
+  ambassador  Ambassador  @relation(fields: [ambassadorId], references: [id], onDelete: Cascade)
+  participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  verifier    Admin?      @relation(fields: [verifiedBy], references: [id])
+
+  @@unique([ambassadorId, participantId])
+  @@index([ambassadorId])
+  @@index([participantId])
+  @@index([status])
+  @@index([referredAt, acceptedAt])
+  @@map("ambassador_referrals")
+}
+
+// ============================================================================
+// SUPPORTING TABLES (User Management)
+// ============================================================================
+
+model UserPreference {
+  id     String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId String @unique @map("user_id") @db.Uuid
+
+  // Display Preferences
+  theme      Theme  @default(light)
+  language   String @default("en") @db.VarChar(10)
+  timezone   String @default("UTC") @db.VarChar(50)
+  dateFormat String @default("YYYY-MM-DD") @map("date_format") @db.VarChar(20)
+
+  // Notification Preferences
+  emailNotifications Boolean @default(true) @map("email_notifications")
+  smsNotifications   Boolean @default(false) @map("sms_notifications")
+
+  // Communication Preferences
+  marketingEmails        Boolean @default(false) @map("marketing_emails")
+  newsletterSubscription Boolean @default(false) @map("newsletter_subscription")
+  programUpdates         Boolean @default(true) @map("program_updates")
+  applicationUpdates     Boolean @default(true) @map("application_updates")
+  reminderEmails         Boolean @default(true) @map("reminder_emails")
+
+  // Additional Settings
+  customSettings Json @default("{}") @map("custom_settings") @db.Json
+
+  // Audit
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_preferences")
+}
+
+model UserSession {
+  id     String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+
+  // Session Info
+  sessionToken String  @unique @map("session_token") @db.VarChar(255)
+  refreshToken String? @unique @map("refresh_token") @db.VarChar(255)
+
+  // Device Info
+  deviceType      String? @map("device_type") @db.VarChar(50)
+  deviceName      String? @map("device_name") @db.VarChar(100)
+  browser         String? @db.VarChar(100)
+  operatingSystem String? @map("operating_system") @db.VarChar(100)
+
+  // Location
+  ipAddress String? @map("ip_address") @db.Inet
+  country   String? @db.VarChar(100)
+  city      String? @db.VarChar(100)
+
+  // Session Status
+  isActive     Boolean  @default(true) @map("is_active")
+  lastActivity DateTime @default(now()) @map("last_activity") @db.Timestamptz(6)
+
+  // Timestamps
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  // Relations
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activityLogs UserActivityLog[]
+
+  @@index([userId])
+  @@index([sessionToken])
+  @@index([userId, isActive, revokedAt])
+  @@index([expiresAt])
+  @@map("user_sessions")
+}
+
+model UserSecurityLog {
+  id     String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId String? @map("user_id") @db.Uuid
+
+  // Event Details
+  eventType        String  @map("event_type") @db.VarChar(50)
+  eventStatus      String  @map("event_status") @db.VarChar(20)
+  eventDescription String? @map("event_description") @db.Text
+
+  // Context
+  ipAddress         String? @map("ip_address") @db.Inet
+  userAgent         String? @map("user_agent") @db.Text
+  deviceFingerprint String? @map("device_fingerprint") @db.VarChar(255)
+  location          String? @db.VarChar(255)
+
+  // Risk Assessment
+  riskLevel RiskLevel? @map("risk_level")
+  flagged   Boolean    @default(false)
+
+  // Timestamp
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@index([userId, flagged])
+  @@index([riskLevel])
+  @@map("user_security_logs")
+}
+
+model UserNotification {
+  id     String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+
+  // Notification Details
+  type    String @db.VarChar(50)
+  title   String @db.VarChar(255)
+  message String @db.Text
+
+  // Action
+  actionUrl   String? @map("action_url") @db.VarChar(500)
+  actionLabel String? @map("action_label") @db.VarChar(100)
+
+  // Metadata
+  relatedEntityType String? @map("related_entity_type") @db.VarChar(50)
+  relatedEntityId   String? @map("related_entity_id") @db.Uuid
+  metadata          Json    @default("{}") @db.Json
+
+  // Status
+  isRead Boolean   @default(false) @map("is_read")
+  readAt DateTime? @map("read_at") @db.Timestamptz(6)
+
+  // Priority
+  priority NotificationPriority @default(normal)
+
+  // Delivery
+  sentViaEmail Boolean   @default(false) @map("sent_via_email")
+  sentViaSms   Boolean   @default(false) @map("sent_via_sms")
+  emailSentAt  DateTime? @map("email_sent_at") @db.Timestamptz(6)
+  smsSentAt    DateTime? @map("sms_sent_at") @db.Timestamptz(6)
+
+  // Timestamps
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt DateTime? @map("expires_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, isRead, deletedAt])
+  @@index([userId, createdAt])
+  @@index([userId, priority])
+  @@index([type])
+  @@map("user_notifications")
+}
+
+model UserPrivacyConsent {
+  id     String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+
+  // Consent Details
+  consentType    String  @map("consent_type") @db.VarChar(100)
+  consentVersion String  @map("consent_version") @db.VarChar(50)
+  consentText    String? @map("consent_text") @db.Text
+
+  // Status
+  isGranted Boolean   @map("is_granted")
+  grantedAt DateTime? @map("granted_at") @db.Timestamptz(6)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  // Context
+  ipAddress String? @map("ip_address") @db.Inet
+  userAgent String? @map("user_agent") @db.Text
+
+  // Audit
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, consentType])
+  @@index([userId, consentType, isGranted, revokedAt])
+  @@map("user_privacy_consents")
+}
+
+model UserBlockedAccount {
+  id     String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+
+  // Block Details
+  blockReason      String    @map("block_reason") @db.VarChar(50)
+  blockDescription String    @map("block_description") @db.Text
+  blockType        BlockType @default(temporary) @map("block_type")
+
+  // Duration
+  blockedAt    DateTime  @default(now()) @map("blocked_at") @db.Timestamptz(6)
+  blockedUntil DateTime? @map("blocked_until") @db.Timestamptz(6)
+  unblockedAt  DateTime? @map("unblocked_at") @db.Timestamptz(6)
+
+  // Authority
+  blockedBy   String? @map("blocked_by") @db.Uuid
+  unblockedBy String? @map("unblocked_by") @db.Uuid
+
+  // Additional Info
+  violationsCount Int     @default(1) @map("violations_count")
+  notes           String? @db.Text
+
+  // Status
+  isActive Boolean @default(true) @map("is_active")
+
+  // Relations
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  blocker   Admin? @relation("BlockedBy", fields: [blockedBy], references: [id])
+  unblocker Admin? @relation("UnblockedBy", fields: [unblockedBy], references: [id])
+
+  @@index([userId])
+  @@index([userId, isActive])
+  @@index([blockedUntil])
+  @@map("user_blocked_accounts")
+}
+
+model UserActivityLog {
+  id     String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId String? @map("user_id") @db.Uuid
+
+  // Activity Details
+  activityType     String  @map("activity_type") @db.VarChar(100)
+  activityCategory String? @map("activity_category") @db.VarChar(50)
+  activityData     Json    @default("{}") @map("activity_data") @db.Json
+
+  // Context
+  pageUrl     String? @map("page_url") @db.VarChar(500)
+  referrerUrl String? @map("referrer_url") @db.VarChar(500)
+  sessionId   String? @map("session_id") @db.Uuid
+
+  // Device Info
+  ipAddress  String? @map("ip_address") @db.Inet
+  userAgent  String? @map("user_agent") @db.Text
+  deviceType String? @map("device_type") @db.VarChar(50)
+
+  // Timestamp
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  user    User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session UserSession? @relation(fields: [sessionId], references: [id])
+
+  @@index([userId])
+  @@index([activityType])
+  @@index([createdAt])
+  @@index([sessionId])
+  @@map("user_activity_logs")
+}
+
+model AccountDeletionRequest {
+  id     String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+
+  // Request Details
+  reason         String? @db.Text
+  reasonCategory String? @map("reason_category") @db.VarChar(50)
+
+  // Status
+  status DeletionStatus @default(pending)
+
+  // Processing
+  reviewedBy  String?   @map("reviewed_by") @db.Uuid
+  reviewedAt  DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  reviewNotes String?   @map("review_notes") @db.Text
+
+  // Retention Period
+  scheduledDeletionDate DateTime? @map("scheduled_deletion_date") @db.Timestamptz(6)
+  actualDeletionDate    DateTime? @map("actual_deletion_date") @db.Timestamptz(6)
+
+  // Audit Trail
+  dataSnapshot Json? @map("data_snapshot") @db.Json
+  deletionLog  Json  @default("{}") @map("deletion_log") @db.Json
+
+  // Metadata
+  ipAddress String? @map("ip_address") @db.Inet
+  userAgent String? @map("user_agent") @db.Text
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewer Admin? @relation(fields: [reviewedBy], references: [id])
+
+  @@index([userId])
+  @@index([status, createdAt])
+  @@index([scheduledDeletionDate])
+  @@map("account_deletion_requests")
+}
+
+model SystemAnnouncement {
+  id String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+
+  // Announcement Details
+  title   String  @db.VarChar(255)
+  content String  @db.Text
+  summary String? @db.Text
+
+  // Targeting
+  targetAudience    AnnouncementTarget @default(all) @map("target_audience")
+  programCategoryId String?            @map("program_category_id") @db.Uuid
+  programId         String?            @map("program_id") @db.Uuid
+
+  // Priority & Type
+  priority AnnouncementPriority @default(normal)
+  type     AnnouncementType     @default(general)
+
+  // Visibility
+  isPublished Boolean   @default(false) @map("is_published")
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(6)
+
+  // Display Settings
+  isDismissible Boolean @default(true) @map("is_dismissible")
+  showBanner    Boolean @default(false) @map("show_banner")
+
+  // Action
+  actionUrl   String? @map("action_url") @db.VarChar(500)
+  actionLabel String? @map("action_label") @db.VarChar(100)
+
+  // Scheduling
+  startDate DateTime? @map("start_date") @db.Timestamptz(6)
+  endDate   DateTime? @map("end_date") @db.Timestamptz(6)
+
+  // Author
+  createdBy String  @map("created_by") @db.Uuid
+  updatedBy String? @map("updated_by") @db.Uuid
+
+  // Metadata
+  metadata Json @default("{}") @db.Json
+
+  // Timestamps
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  programCategory ProgramCategory?       @relation(fields: [programCategoryId], references: [id])
+  program         Program?               @relation(fields: [programId], references: [id], onDelete: Cascade)
+  creator         Admin                  @relation("AnnouncementCreator", fields: [createdBy], references: [id])
+  updater         Admin?                 @relation("AnnouncementUpdater", fields: [updatedBy], references: [id])
+  reads           UserAnnouncementRead[]
+
+  @@index([isPublished, publishedAt, deletedAt])
+  @@index([startDate, endDate, isPublished, deletedAt])
+  @@index([targetAudience, programCategoryId])
+  @@index([showBanner, isPublished, deletedAt])
+  @@map("system_announcements")
+}
+
+model UserAnnouncementRead {
+  id             String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId         String @map("user_id") @db.Uuid
+  announcementId String @map("announcement_id") @db.Uuid
+
+  // Tracking
+  isDismissed Boolean   @default(false) @map("is_dismissed")
+  dismissedAt DateTime? @map("dismissed_at") @db.Timestamptz(6)
+
+  // Timestamps
+  firstSeenAt DateTime @default(now()) @map("first_seen_at") @db.Timestamptz(6)
+  lastSeenAt  DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+
+  // Relations
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  announcement SystemAnnouncement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, announcementId])
+  @@index([userId, announcementId])
+  @@index([announcementId])
+  @@map("user_announcement_reads")
+}
+
+model ApplicationEditHistory {
+  id            String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  applicationId String @map("application_id") @db.Uuid
+
+  // Change Details
+  fieldChanged String     @map("field_changed") @db.VarChar(100)
+  oldValue     String?    @map("old_value") @db.Text
+  newValue     String?    @map("new_value") @db.Text
+  changeType   ChangeType @map("change_type")
+
+  // Actor
+  changedBy     String        @map("changed_by") @db.Uuid
+  changedByType ChangedByType @map("changed_by_type")
+
+  // Context
+  ipAddress    String? @map("ip_address") @db.Inet
+  userAgent    String? @map("user_agent") @db.Text
+  changeReason String? @map("change_reason") @db.Text
+
+  // Timestamp
+  changedAt DateTime @default(now()) @map("changed_at") @db.Timestamptz(6)
+
+  // Relations
+  application ParticipantApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  changer     User                   @relation("EditHistoryChangedBy", fields: [changedBy], references: [id])
+
+  @@index([applicationId, changedAt])
+  @@index([changedBy])
+  @@index([fieldChanged])
+  @@index([changedAt])
+  @@map("application_edit_history")
+}
+
+// ============================================================================
+// MIGRATION TRACKING
+// ============================================================================
+
+model MigrationTracking {
+  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tableName      String   @map("table_name") @db.VarChar(100)
+  mysqlId        Int      @map("mysql_id")
+  postgresId     String   @map("postgres_id") @db.Uuid
+  migratedAt     DateTime @default(now()) @map("migrated_at") @db.Timestamptz(6)
+  migrationBatch String?  @map("migration_batch") @db.VarChar(50)
+
+  @@unique([tableName, mysqlId])
+  @@index([tableName])
+  @@index([mysqlId])
+  @@index([postgresId])
+  @@map("migration_tracking")
+}

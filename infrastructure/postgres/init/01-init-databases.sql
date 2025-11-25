@@ -20,7 +20,4 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- Log initialization
-INSERT INTO pg_catalog.pg_stat_statements_info (dealloc) VALUES (0) ON CONFLICT DO NOTHING;
-
 \echo 'Database initialization completed successfully!'
