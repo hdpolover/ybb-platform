@@ -23,37 +23,62 @@ const (
 type PaymentMethod string
 
 const (
+	// Automatic methods (via gateway)
 	PaymentMethodCreditCard   PaymentMethod = "credit_card"
 	PaymentMethodBankTransfer PaymentMethod = "bank_transfer"
 	PaymentMethodEWallet      PaymentMethod = "e_wallet"
 	PaymentMethodQRCode       PaymentMethod = "qr_code"
+
+	// Manual methods (requires proof upload)
+	PaymentMethodManualTransfer PaymentMethod = "manual_transfer"
+	PaymentMethodCash           PaymentMethod = "cash"
+)
+
+// PaymentType represents whether payment is automatic or manual
+type PaymentType string
+
+const (
+	PaymentTypeAutomatic PaymentType = "automatic" // Via payment gateway
+	PaymentTypeManual    PaymentType = "manual"    // Requires proof upload & admin verification
 )
 
 // Payment represents a payment transaction in the system
 type Payment struct {
-	ID              string                 `gorm:"type:uuid;primaryKey"`
-	ApplicationID   string                 `gorm:"type:varchar(255);not null;index:idx_payments_application_id"`
-	UserID          string                 `gorm:"type:varchar(255);not null;index:idx_payments_user_id,idx_payments_user_status"`
-	Amount          float64                `gorm:"type:decimal(12,2);not null;check:amount > 0"`
-	Currency        string                 `gorm:"type:varchar(3);not null;default:'IDR'"`
-	Status          PaymentStatus          `gorm:"type:varchar(50);not null;index:idx_payments_status,idx_payments_user_status"`
-	PaymentMethod   PaymentMethod          `gorm:"type:varchar(50)"`
-	GatewayName     string                 `gorm:"type:varchar(50);not null;index:idx_payments_gateway_name"`
+	ID              string        `gorm:"type:uuid;primaryKey"`
+	ApplicationID   string        `gorm:"type:varchar(255);not null;index:idx_payments_application_id"`
+	UserID          string        `gorm:"type:varchar(255);not null;index:idx_payments_user_id,idx_payments_user_status"`
+	Amount          float64       `gorm:"type:decimal(12,2);not null;check:amount > 0"`
+	Currency        string        `gorm:"type:varchar(3);not null;default:'IDR'"`
+	Status          PaymentStatus `gorm:"type:varchar(50);not null;index:idx_payments_status,idx_payments_user_status"`
+	PaymentType     PaymentType   `gorm:"type:varchar(20);not null;default:'automatic';index:idx_payments_type"`
+	PaymentMethod   PaymentMethod `gorm:"type:varchar(50)"`
+	PaymentMethodID *string       `gorm:"type:uuid;index:idx_payments_method_id"` // References payment_methods table
+
+	// Automatic payment fields (gateway-based)
+	GatewayName     string                 `gorm:"type:varchar(50);index:idx_payments_gateway_name"`
 	GatewayOrderID  string                 `gorm:"type:varchar(255);index:idx_payments_gateway_order_id"`
 	GatewayResponse map[string]interface{} `gorm:"type:jsonb"`
-	Description     string                 `gorm:"type:text"`
-	CustomerName    string                 `gorm:"type:varchar(255)"`
-	CustomerEmail   string                 `gorm:"type:varchar(255)"`
-	CustomerPhone   string                 `gorm:"type:varchar(50)"`
-	CallbackURL     string                 `gorm:"type:text"`
-	RedirectURL     string                 `gorm:"type:text"`
-	Metadata        map[string]interface{} `gorm:"type:jsonb"`
-	CreatedAt       time.Time              `gorm:"not null;default:CURRENT_TIMESTAMP;index:idx_payments_created_at,sort:desc"`
-	UpdatedAt       time.Time              `gorm:"not null;default:CURRENT_TIMESTAMP"`
-	PaidAt          *time.Time
-	FailedAt        *time.Time
-	CancelledAt     *time.Time
-	RefundedAt      *time.Time
+	RedirectURL     string                 `gorm:"type:text"` // For automatic payments
+
+	// Manual payment fields
+	ProofFileID    *string    `gorm:"type:uuid"`         // Reference to uploaded proof file
+	ProofFileURL   string     `gorm:"type:text"`         // URL to proof image
+	VerifiedByID   *string    `gorm:"type:varchar(255)"` // Admin who verified
+	VerifiedAt     *time.Time // When admin verified
+	RejectedReason string     `gorm:"type:text"` // If rejected, why
+
+	Description   string                 `gorm:"type:text"`
+	CustomerName  string                 `gorm:"type:varchar(255)"`
+	CustomerEmail string                 `gorm:"type:varchar(255)"`
+	CustomerPhone string                 `gorm:"type:varchar(50)"`
+	CallbackURL   string                 `gorm:"type:text"`
+	Metadata      map[string]interface{} `gorm:"type:jsonb"`
+	CreatedAt     time.Time              `gorm:"not null;default:CURRENT_TIMESTAMP;index:idx_payments_created_at,sort:desc"`
+	UpdatedAt     time.Time              `gorm:"not null;default:CURRENT_TIMESTAMP"`
+	PaidAt        *time.Time
+	FailedAt      *time.Time
+	CancelledAt   *time.Time
+	RefundedAt    *time.Time
 }
 
 // TableName specifies the table name for GORM
