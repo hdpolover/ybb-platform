@@ -179,6 +179,7 @@ model User {
   withdrawnApplications ParticipantApplication[] @relation("ApplicationWithdrawer")
   payments              Payment[]
   files                 File[]
+  waitlist              ProgramWaitlist[]
 
   @@unique([email, programCategoryId])
   @@index([email])
@@ -200,10 +201,44 @@ model ProgramCategory {
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   legacyId    Int?      @unique @map("legacy_id")
 
+  // Brand/Website Information
+  websiteUrl   String? @map("website_url") @db.VarChar(255)
+  about        String? @db.Text
+  vision       String? @db.Text
+  mission      String? @db.Text
+  logoUrl      String? @map("logo_url") @db.VarChar(500)
+  bannerUrl    String? @map("banner_url") @db.VarChar(500)
+  primaryColor String? @map("primary_color") @db.VarChar(7) // Hex color
+  
+  // Contact Information
+  contactEmail       String? @map("contact_email") @db.VarChar(255)
+  contactPhone       String? @map("contact_phone") @db.VarChar(50)
+  contactWhatsapp    String? @map("contact_whatsapp") @db.VarChar(50)
+  contactAddress     String? @map("contact_address") @db.Text
+  socialMediaLinks   Json?   @default("{}") @map("social_media_links") @db.Json // {instagram, facebook, linkedin, etc}
+  
+  // Location
+  defaultLocation    String? @map("default_location") @db.VarChar(255)
+  defaultCountry     String? @map("default_country") @db.VarChar(100)
+  defaultTimezone    String? @map("default_timezone") @db.VarChar(50)
+  
+  // Settings
+  requireEmailVerification Boolean @default(true) @map("require_email_verification")
+  defaultCurrency          String  @default("USD") @map("default_currency") @db.VarChar(3)
+  enableMultiCurrency      Boolean @default(false) @map("enable_multi_currency")
+  
+  // SEO
+  metaTitle       String? @map("meta_title") @db.VarChar(255)
+  metaDescription String? @map("meta_description") @db.Text
+  metaKeywords    String? @map("meta_keywords") @db.Text
+
   // Relations
   users               User[]
   programs            Program[]
   systemAnnouncements SystemAnnouncement[]
+  sponsors            Sponsor[]
+  emailTemplates      EmailTemplate[]
+  team                ProgramTeam[]
 
   @@index([slug])
   @@index([isActive])
@@ -521,31 +556,519 @@ model Program {
   id                  String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   programCategoryId   String    @map("program_category_id") @db.Uuid
   name                String    @db.VarChar(255)
+  slug                String    @db.VarChar(255)
   description         String?   @db.Text
+  shortDescription    String?   @map("short_description") @db.VarChar(500)
   year                Int
   startDate           DateTime  @map("start_date") @db.Date
   endDate             DateTime  @map("end_date") @db.Date
   applicationDeadline DateTime  @map("application_deadline") @db.Timestamptz(6)
   location            String?   @db.VarChar(255)
   capacity            Int?
-  isPublished         Boolean   @default(false) @map("is_published")
-  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt           DateTime? @map("deleted_at") @db.Timestamptz(6)
-  legacyId            Int?      @unique @map("legacy_id")
+  
+  // Visibility & Status
+  isPublished      Boolean @default(false) @map("is_published")
+  isVisibleToUsers Boolean @default(true) @map("is_visible_to_users") // Show on website
+  isActive         Boolean @default(true) @map("is_active") // Accept applications
+  status           String  @default("draft") @db.VarChar(50) // draft, published, ongoing, completed, cancelled
+  
+  // Media
+  thumbnailUrl String? @map("thumbnail_url") @db.VarChar(500)
+  bannerUrl    String? @map("banner_url") @db.VarChar(500)
+  videoUrl     String? @map("video_url") @db.VarChar(500)
+  
+  // Program Settings
+  requireEmailVerification Boolean @default(true) @map("require_email_verification")
+  currency                 String  @default("USD") @map("currency") @db.VarChar(3)
+  enableCurrencyConversion Boolean @default(false) @map("enable_currency_conversion")
+  logoUrl                  String? @map("logo_url") @db.VarChar(500)
+  
+  // Registration Settings
+  allowRegistration       Boolean   @default(true) @map("allow_registration")
+  registrationOpenDate    DateTime? @map("registration_open_date") @db.Timestamptz(6)
+  registrationCloseDate   DateTime? @map("registration_close_date") @db.Timestamptz(6)
+  requirePayment          Boolean   @default(false) @map("require_payment")
+  registrationFee         Decimal?  @map("registration_fee") @db.Decimal(10, 2)
+  
+  // Additional Info
+  requirementsDescription String? @map("requirements_description") @db.Text
+  benefitsDescription     String? @map("benefits_description") @db.Text
+  termsAndConditions      String? @map("terms_and_conditions") @db.Text
+  
+  // SEO
+  metaTitle       String? @map("meta_title") @db.VarChar(255)
+  metaDescription String? @map("meta_description") @db.Text
+  
+  // Timestamps
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  legacyId  Int?      @unique @map("legacy_id")
 
   // Relations
-  programCategory ProgramCategory          @relation(fields: [programCategoryId], references: [id])
-  applications    ParticipantApplication[]
-  ambassadors     Ambassador[]
-  adminPrograms   AdminProgram[]
-  announcements   SystemAnnouncement[]
+  programCategory     ProgramCategory          @relation(fields: [programCategoryId], references: [id])
+  applications        ParticipantApplication[]
+  ambassadors         Ambassador[]
+  adminPrograms       AdminProgram[]
+  announcements       SystemAnnouncement[]
+  faqs                ProgramFaq[]
+  timeline            ProgramTimeline[]
+  schedules           ProgramSchedule[]
+  speakers            ProgramSpeaker[]
+  gallery             ProgramGallery[]
+  testimonials        ProgramTestimonial[]
+  pricingTiers        ProgramPricingTier[]
+  requirements        ProgramRequirement[]
+  formFields          ApplicationFormField[]
+  emailTemplates      EmailTemplate[]
+  team                ProgramTeam[]
+  partners            ProgramPartner[]
+  resources           ProgramResource[]
+  programAnnouncements ProgramAnnouncement[]
+  tags                ProgramTagRelation[]
+  waitlist            ProgramWaitlist[]
+  certificateTemplates CertificateTemplate[]
 
+  @@unique([programCategoryId, slug])
   @@index([programCategoryId])
   @@index([year])
   @@index([isPublished])
+  @@index([isVisibleToUsers])
+  @@index([status])
   @@index([deletedAt])
   @@map("programs")
+}
+
+// ============================================================================
+// PROGRAM CONTENT TABLES
+// ============================================================================
+
+model ProgramFaq {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId String   @map("program_id") @db.Uuid
+  question  String   @db.Text
+  answer    String   @db.Text
+  order     Int      @default(0) // For sorting
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@index([order])
+  @@map("program_faqs")
+}
+
+model ProgramTimeline {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId   String   @map("program_id") @db.Uuid
+  date        DateTime @db.Timestamptz(6)
+  title       String   @db.VarChar(255)
+  description String?  @db.Text
+  icon        String?  @db.VarChar(100) // Icon name or emoji
+  order       Int      @default(0)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@index([date])
+  @@index([order])
+  @@map("program_timeline")
+}
+
+model ProgramSchedule {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId   String   @map("program_id") @db.Uuid
+  day         String   @db.VarChar(100) // e.g., "Day 1", "Monday", "March 15"
+  startTime   String?  @map("start_time") @db.VarChar(20) // e.g., "09:00"
+  endTime     String?  @map("end_time") @db.VarChar(20) // e.g., "17:00"
+  activity    String   @db.VarChar(255)
+  description String?  @db.Text
+  location    String?  @db.VarChar(255)
+  speaker     String?  @db.VarChar(255) // Speaker name if applicable
+  order       Int      @default(0)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@index([order])
+  @@map("program_schedules")
+}
+
+model ProgramSpeaker {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId   String   @map("program_id") @db.Uuid
+  name        String   @db.VarChar(255)
+  title       String?  @db.VarChar(255) // Job title or role
+  organization String? @db.VarChar(255)
+  bio         String?  @db.Text
+  photoUrl    String?  @map("photo_url") @db.VarChar(500)
+  email       String?  @db.VarChar(255)
+  linkedinUrl String?  @map("linkedin_url") @db.VarChar(500)
+  twitterUrl  String?  @map("twitter_url") @db.VarChar(500)
+  order       Int      @default(0)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@index([order])
+  @@map("program_speakers")
+}
+
+model ProgramGallery {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId   String   @map("program_id") @db.Uuid
+  imageUrl    String   @map("image_url") @db.VarChar(500)
+  title       String?  @db.VarChar(255)
+  description String?  @db.Text
+  type        String   @default("image") @db.VarChar(50) // image, video
+  order       Int      @default(0)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@index([type])
+  @@index([order])
+  @@map("program_gallery")
+}
+
+model ProgramTestimonial {
+  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId     String   @map("program_id") @db.Uuid
+  name          String   @db.VarChar(255)
+  role          String?  @db.VarChar(255) // e.g., "Participant 2024", "Alumni"
+  company       String?  @db.VarChar(255)
+  testimonial   String   @db.Text
+  type          String   @default("text") @db.VarChar(20) // text, video
+  videoUrl      String?  @map("video_url") @db.VarChar(500) // For video testimonials
+  thumbnailUrl  String?  @map("thumbnail_url") @db.VarChar(500) // Video thumbnail
+  avatarUrl     String?  @map("avatar_url") @db.VarChar(500)
+  rating        Int?     @db.SmallInt // Optional 1-5 rating
+  isFeatured    Boolean  @default(false) @map("is_featured") // Highlight on homepage
+  isActive      Boolean  @default(true) @map("is_active")
+  order         Int      @default(0)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@index([type])
+  @@index([isFeatured])
+  @@index([order])
+  @@map("program_testimonials")
+}
+
+model Sponsor {
+  id                String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programCategoryId String?   @map("program_category_id") @db.Uuid // Linked to brand
+  name              String    @db.VarChar(255)
+  type              String    @db.VarChar(50) // organization, individual, media_partner, etc.
+  logoUrl           String?   @map("logo_url") @db.VarChar(500)
+  websiteUrl        String?   @map("website_url") @db.VarChar(500)
+  description       String?   @db.Text
+  tier              String?   @db.VarChar(50) // platinum, gold, silver, bronze, partner
+  isActive          Boolean   @default(true) @map("is_active")
+  order             Int       @default(0)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  programCategory ProgramCategory? @relation(fields: [programCategoryId], references: [id], onDelete: Cascade)
+
+  @@index([programCategoryId])
+  @@index([type])
+  @@index([tier])
+  @@index([order])
+  @@map("sponsors")
+}
+
+// ============================================================================
+// PROGRAM CONFIGURATION & MANAGEMENT
+// ============================================================================
+
+model ProgramPricingTier {
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId   String    @map("program_id") @db.Uuid
+  name        String    @db.VarChar(100) // Early Bird, Regular, VIP, Group
+  description String?   @db.Text
+  price       Decimal   @db.Decimal(10, 2)
+  currency    String    @db.VarChar(3)
+  capacity    Int?      // Max slots for this tier
+  soldCount   Int       @default(0) @map("sold_count") // Track sales
+  validFrom   DateTime  @map("valid_from") @db.Timestamptz(6)
+  validUntil  DateTime  @map("valid_until") @db.Timestamptz(6)
+  benefits    Json?     @default("[]") @db.Json // ["Workshop access", "Certificate"]
+  isActive    Boolean   @default(true) @map("is_active")
+  order       Int       @default(0)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  program      Program                  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  applications ParticipantApplication[]
+
+  @@index([programId])
+  @@index([isActive])
+  @@index([validFrom, validUntil])
+  @@map("program_pricing_tiers")
+}
+
+model ProgramRequirement {
+  id               String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId        String   @map("program_id") @db.Uuid
+  name             String   @db.VarChar(255)
+  description      String?  @db.Text
+  type             String   @db.VarChar(50) // file, text, url, date, select
+  isRequired       Boolean  @default(true) @map("is_required")
+  fileMaxSize      Int?     @map("file_max_size") // In KB
+  fileAllowedTypes String?  @map("file_allowed_types") @db.VarChar(255) // pdf,jpg,png
+  options          Json?    @default("[]") @db.Json // For select type: ["Option 1", "Option 2"]
+  validationRules  Json?    @default("{}") @map("validation_rules") @db.Json // {minLength: 100, maxLength: 500}
+  order            Int      @default(0)
+  isActive         Boolean  @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@index([type])
+  @@index([order])
+  @@map("program_requirements")
+}
+
+model ApplicationFormField {
+  id              String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId       String   @map("program_id") @db.Uuid
+  fieldName       String   @map("field_name") @db.VarChar(100) // database_field_name
+  label           String   @db.VarChar(255)
+  placeholder     String?  @db.VarChar(255)
+  helpText        String?  @map("help_text") @db.Text
+  fieldType       String   @map("field_type") @db.VarChar(50) // text, textarea, select, radio, checkbox, file, date, email, phone, url
+  isRequired      Boolean  @default(false) @map("is_required")
+  options         Json?    @default("[]") @db.Json // For select/radio/checkbox
+  validationRules Json?    @default("{}") @map("validation_rules") @db.Json // {min, max, pattern, etc}
+  defaultValue    String?  @map("default_value") @db.Text
+  order           Int      @default(0)
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@index([fieldType])
+  @@index([order])
+  @@map("application_form_fields")
+}
+
+model EmailTemplate {
+  id                String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programCategoryId String?  @map("program_category_id") @db.Uuid
+  programId         String?  @map("program_id") @db.Uuid
+  name              String   @db.VarChar(100)
+  type              String   @db.VarChar(50) // welcome, application_received, accepted, rejected, payment_reminder, etc
+  subject           String   @db.VarChar(255)
+  body              String   @db.Text // HTML content
+  variables         Json?    @default("[]") @db.Json // ["{{name}}", "{{program_name}}", "{{deadline}}"]
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  programCategory ProgramCategory? @relation(fields: [programCategoryId], references: [id], onDelete: Cascade)
+  program         Program?         @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programCategoryId])
+  @@index([programId])
+  @@index([type])
+  @@map("email_templates")
+}
+
+model ProgramTeam {
+  id                String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programCategoryId String?  @map("program_category_id") @db.Uuid
+  programId         String?  @map("program_id") @db.Uuid
+  name              String   @db.VarChar(255)
+  role              String   @db.VarChar(100) // Program Director, Coordinator, Marketing Lead
+  bio               String?  @db.Text
+  photoUrl          String?  @map("photo_url") @db.VarChar(500)
+  email             String?  @db.VarChar(255)
+  phone             String?  @db.VarChar(50)
+  linkedinUrl       String?  @map("linkedin_url") @db.VarChar(500)
+  order             Int      @default(0)
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  programCategory ProgramCategory? @relation(fields: [programCategoryId], references: [id], onDelete: Cascade)
+  program         Program?         @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programCategoryId])
+  @@index([programId])
+  @@index([order])
+  @@map("program_team")
+}
+
+model ProgramPartner {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId   String   @map("program_id") @db.Uuid
+  name        String   @db.VarChar(255)
+  type        String   @db.VarChar(50) // university, ngo, government, venue, speaker_bureau
+  role        String?  @db.VarChar(255) // Venue Provider, Knowledge Partner
+  logoUrl     String?  @map("logo_url") @db.VarChar(500)
+  websiteUrl  String?  @map("website_url") @db.VarChar(500)
+  description String?  @db.Text
+  order       Int      @default(0)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@index([type])
+  @@index([order])
+  @@map("program_partners")
+}
+
+model ProgramResource {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId   String   @map("program_id") @db.Uuid
+  title       String   @db.VarChar(255)
+  description String?  @db.Text
+  fileUrl     String   @map("file_url") @db.VarChar(500)
+  fileSize    BigInt?  @map("file_size") // In bytes
+  fileType    String?  @map("file_type") @db.VarChar(50) // pdf, docx, pptx
+  type        String   @db.VarChar(50) // brochure, guide, presentation, handbook, media_kit
+  isPublic    Boolean  @default(true) @map("is_public") // Visible before login
+  downloads   Int      @default(0) // Track download count
+  order       Int      @default(0)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@index([type])
+  @@index([isPublic])
+  @@index([order])
+  @@map("program_resources")
+}
+
+model ProgramAnnouncement {
+  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId      String   @map("program_id") @db.Uuid
+  title          String   @db.VarChar(255)
+  content        String   @db.Text
+  targetAudience String   @default("all") @map("target_audience") @db.VarChar(50) // all, applicants, accepted, rejected, participants
+  sendEmail      Boolean  @default(false) @map("send_email")
+  isPinned       Boolean  @default(false) @map("is_pinned")
+  publishDate    DateTime @default(now()) @map("publish_date") @db.Timestamptz(6)
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@index([targetAudience])
+  @@index([isPinned])
+  @@index([publishDate])
+  @@map("program_announcements")
+}
+
+model ProgramTag {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name        String   @unique @db.VarChar(100)
+  slug        String   @unique @db.VarChar(100)
+  description String?  @db.Text
+  color       String?  @db.VarChar(7) // Hex color for UI
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  programs ProgramTagRelation[]
+
+  @@index([slug])
+  @@map("program_tags")
+}
+
+model ProgramTagRelation {
+  programId String @map("program_id") @db.Uuid
+  tagId     String @map("tag_id") @db.Uuid
+
+  program Program    @relation(fields: [programId], references: [id], onDelete: Cascade)
+  tag     ProgramTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([programId, tagId])
+  @@index([programId])
+  @@index([tagId])
+  @@map("program_tag_relations")
+}
+
+model ProgramWaitlist {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId String   @map("program_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  position  Int // Queue position
+  notified  Boolean  @default(false) // Notified when spot available
+  joinedAt  DateTime @default(now()) @map("joined_at") @db.Timestamptz(6)
+
+  // Relations
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([programId, userId])
+  @@index([programId])
+  @@index([userId])
+  @@index([position])
+  @@map("program_waitlist")
+}
+
+model CertificateTemplate {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId   String   @map("program_id") @db.Uuid
+  name        String   @db.VarChar(255)
+  templateUrl String   @map("template_url") @db.VarChar(500) // Background image/PDF
+  fields      Json     @default("[]") @db.Json // [{name: "participant_name", x: 100, y: 200, fontSize: 24}]
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@map("certificate_templates")
 }
 
 model ParticipantApplication {
@@ -568,8 +1091,10 @@ model ParticipantApplication {
   requirementFiles Json    @default("[]") @map("requirement_files") @db.Json
 
   // Payment (lightweight reference)
-  paymentId     String? @map("payment_id") @db.Uuid
-  paymentStatus String? @map("payment_status") @db.VarChar(50) // Cached from payments table
+  pricingTierId String?  @map("pricing_tier_id") @db.Uuid // Which tier they selected
+  paymentAmount Decimal? @map("payment_amount") @db.Decimal(10, 2) // Calculated from tier
+  paymentId     String?  @map("payment_id") @db.Uuid
+  paymentStatus String?  @map("payment_status") @db.VarChar(50) // Cached from payments table
 
   // Status & Scoring
   status         ApplicationStatus @default(draft)
@@ -612,12 +1137,13 @@ model ParticipantApplication {
   legacyParticipantId Int?      @map("legacy_participant_id")
 
   // Relations
-  participant Participant              @relation(fields: [participantId], references: [id], onDelete: Cascade)
-  program     Program                  @relation(fields: [programId], references: [id], onDelete: Cascade)
-  reviewer    Admin?                   @relation(fields: [reviewedBy], references: [id])
-  withdrawer  User?                    @relation("ApplicationWithdrawer", fields: [withdrawnBy], references: [id])
-  deleter     User?                    @relation("ApplicationDeleter", fields: [deletedBy], references: [id])
-  editHistory ApplicationEditHistory[]
+  participant  Participant              @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  program      Program                  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  pricingTier  ProgramPricingTier?      @relation(fields: [pricingTierId], references: [id])
+  reviewer     Admin?                   @relation(fields: [reviewedBy], references: [id])
+  withdrawer   User?                    @relation("ApplicationWithdrawer", fields: [withdrawnBy], references: [id])
+  deleter      User?                    @relation("ApplicationDeleter", fields: [deletedBy], references: [id])
+  editHistory  ApplicationEditHistory[]
 
   @@unique([participantId, programId])
   @@index([participantId])
