@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service
+  namespace: ybb-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: payment-service
+  template:
+    metadata:
+      labels:
+        app: payment-service
+    spec:
+      containers:
+      - name: payment-service
+        image: ybb-platform/payment-service:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: PORT
+          value: "8080"
+        - name: ENVIRONMENT
+          value: "production"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: ybb-secrets
+              key: PAYMENT_DATABASE_URL
+        - name: MIDTRANS_SERVER_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ybb-secrets
+              key: MIDTRANS_SERVER_KEY
+        - name: MIDTRANS_CLIENT_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ybb-secrets
+              key: MIDTRANS_CLIENT_KEY
+        - name: MIDTRANS_IS_PRODUCTION
+          value: "true"
+        - name: RABBITMQ_URL
+          valueFrom:
+            secretKeyRef:
+              name: ybb-secrets
+              key: RABBITMQ_URL
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5

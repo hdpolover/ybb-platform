@@ -1,59 +1,61 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: api-gateway
+  name: file-service
   namespace: ybb-platform
 spec:
-  replicas: 3
+  replicas: 2
   selector:
     matchLabels:
-      app: api-gateway
+      app: file-service
   template:
     metadata:
       labels:
-        app: api-gateway
+        app: file-service
     spec:
       containers:
-      - name: api-gateway
-        image: ybb-platform/api:latest
+      - name: file-service
+        image: ybb-platform/file-service:latest
         ports:
-        - containerPort: 3000
+        - containerPort: 8001
         env:
-        - name: NODE_ENV
+        - name: SERVICE_PORT
+          value: "8001"
+        - name: PYTHON_ENV
+          value: "production"
+        - name: MINIO_ENDPOINT
           valueFrom:
             configMapKeyRef:
               name: ybb-config
-              key: NODE_ENV
-        - name: DATABASE_URL
+              key: MINIO_ENDPOINT
+        - name: MINIO_ACCESS_KEY
           valueFrom:
             secretKeyRef:
               name: ybb-secrets
-              key: DATABASE_URL
-        - name: JWT_SECRET
+              key: MINIO_ACCESS_KEY
+        - name: MINIO_SECRET_KEY
           valueFrom:
             secretKeyRef:
               name: ybb-secrets
-              key: JWT_SECRET
+              key: MINIO_SECRET_KEY
+        - name: MINIO_SECURE
+          value: "true"
         resources:
           requests:
-            memory: "256Mi"
-            cpu: "250m"
+            memory: "128Mi"
+            cpu: "100m"
           limits:
-            memory: "512Mi"
-            cpu: "500m"
-        - name: PAYMENT_SERVICE_URL
-          value: "http://payment-service:8080"
-        - name: FILE_SERVICE_URL
-          value: "http://file-service:8001"
+            memory: "256Mi"
+            cpu: "200m"
         livenessProbe:
           httpGet:
             path: /health
-            port: 3000
+            port: 8001
           initialDelaySeconds: 30
           periodSeconds: 10
         readinessProbe:
           httpGet:
             path: /health
-            port: 3000
+            port: 8001
           initialDelaySeconds: 5
           periodSeconds: 5
