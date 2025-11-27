@@ -28,12 +28,11 @@ services:
   redis:
     image: redis:7-alpine
     container_name: ybb-redis
-    command: redis-server --requirepass ${REDIS_PASSWORD:-}
+    command: redis-server --appendonly yes
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
-      - ./infrastructure/redis/redis.conf:/usr/local/etc/redis/redis.conf
     networks:
       - ybb-network
     healthcheck:
@@ -99,6 +98,9 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3001}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       FILE_SERVICE_URL: http://file-service:8001
       PAYMENT_SERVICE_URL: http://payment-service:8080
     ports:
@@ -111,6 +113,8 @@ services:
       - ybb-network
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     command: npm run start:dev
 
