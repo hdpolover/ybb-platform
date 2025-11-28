@@ -44,7 +44,7 @@ export function AccountMenu() {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-[115%] z-20 w-60 rounded-md border border-zinc-200 bg-white py-2 text-xs shadow-lg">
+        <div className="absolute right-0 top-[115%] z-20 w-60 rounded-md border border-zinc-200 bg-white py-2 text-xs shadow-lg origin-top transform transition-all duration-200 ease-out animate-[fadeIn_0.18s_ease-out]">
           <div className="px-3 pb-2">
             <div className="text-[11px] font-semibold text-zinc-800">SA</div>
             <div className="text-[11px] text-zinc-500">

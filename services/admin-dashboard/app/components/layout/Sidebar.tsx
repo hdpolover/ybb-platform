@@ -16,7 +16,7 @@ const sidebarItems: SidebarItem[] = [
 ];
 
 function SidebarIcon({ label }: { label: string }) {
-  const baseClass = "h-4 w-4 flex-none text-blue-100";
+  const baseClass = "h-5 w-5 flex-none text-blue-100";
 
   if (label === "Dashboard") {
     return (
@@ -90,7 +90,7 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
       return;
     }
 
-    // TODO: nanti ganti dengan navigasi ke halaman sesuai menu
+    // TODO: nanti ganti sama navigasi ke halaman sesuai menunya
     console.info(
       "Sidebar menu clicked:",
       item.label,
@@ -123,12 +123,12 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
         )}
       </div>
 
-      <nav className="flex-1 space-y-1 px-2 py-4 text-[15px]">
+      <nav className="flex-1 space-y-1.5 px-2 py-4 text-[16px]">
         {sidebarItems.map((item) => (
           <button
             key={item.label}
             type="button"
-            className={`flex w-full items-center rounded-md px-3 py-2 text-left transition-colors ${
+            className={`flex w-full items-center rounded-md px-3 py-2.5 text-left transition-colors ${
               selectedProgramId && activeLabel === item.label
                 ? "bg-white text-blue-700 shadow-sm"
                 : "text-blue-100 hover:bg-blue-500/60 hover:text-white"
@@ -144,7 +144,7 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
       </nav>
 
       {showProgramAlert && !collapsed && (
-        <div className="mx-3 mb-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-[12px] text-amber-800 shadow-sm">
+        <div className="mx-3 mb-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-[12px] text-amber-800 shadow-sm transition-all duration-200 ease-out animate-[fadeIn_0.18s_ease-out]">
           <div className="flex items-start justify-between gap-2">
             <span>
               Pilih program terlebih dahulu di bagian atas sebelum mengakses menu
@@ -164,8 +164,8 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
       <div className="border-t border-blue-500 px-4 py-3 text-xs text-blue-100">
         {!collapsed && (
           <>
-            <div>Logged in as</div>
-            <div className="text-sm font-medium text-white">Admin</div>
+            <div>Made by</div>
+            <div className="text-sm font-medium text-white">Hilmi Farrel Firjatullah :D</div>
           </>
         )}
       </div>

@@ -64,7 +64,7 @@ const programGroups: ProgramGroup[] = [
         id: "jys-2025",
         name: "Japan Youth Summit 2025",
         shortName: "JYS 2025",
-        logoPath: "/img/jyss.webp",
+        logoPath: "/img/jys.webp",
         status: "inactive",
         dateRange: "Oct 12, 2025 - Oct 15, 2025",
       },
@@ -72,7 +72,7 @@ const programGroups: ProgramGroup[] = [
         id: "jys-2026",
         name: "Japan Youth Summit 2026",
         shortName: "JYS 2026",
-        logoPath: "/img/jyss.webp",
+        logoPath: "/img/jys.webp",
         status: "active",
         dateRange: "May 11, 2026 - May 19, 2026",
       },
@@ -184,19 +184,19 @@ function ProgramCard({ program }: { program: ProgramWithMeta }) {
   return (
     <button
       type="button"
-      className="flex w-full items-stretch gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-3 text-left shadow-sm transition hover:border-blue-400 hover:shadow-md"
+      className="flex w-full items-stretch gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-3 text-left shadow-sm transition hover:border-blue-400 hover:shadow-md bg-[url('/img/bgourprogram.webp')] bg-center bg-no-repeat bg-cover"
       onClick={() => {
-        // TODO: ganti dengan navigasi ke halaman detail program
+        // TODO: ganti sama navigasi buat ke halaman detail programnya
         // misalnya: router.push(`/programs/${program.id}`)
         console.info("Program clicked:", program.id);
       }}
     >
-      <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded bg-white">
+      <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded">
         <Image
           src={program.logoPath}
           alt={program.shortName}
-          width={56}
-          height={56}
+          width={64}
+          height={64}
           className="object-contain"
         />
       </div>
@@ -276,7 +276,7 @@ function ProgramGroupRow({
 
       {isOpen && inactivePrograms.length > 0 && (
         <div
-          className="absolute left-0 right-0 top-full z-20 mt-2 rounded-md border border-zinc-200 bg-white px-3 py-3 shadow-lg"
+          className="absolute left-0 right-0 top-full z-20 mt-2 origin-top transform rounded-md border border-zinc-200 bg-white px-3 py-3 shadow-lg transition-all duration-200 ease-out animate-[fadeIn_0.2s_ease-out]"
           data-inactive-dropdown
         >
           <div className="max-h-64 space-y-2 overflow-auto">

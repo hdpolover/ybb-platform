@@ -30,7 +30,7 @@ const programs: Program[] = [
     id: "jys-2026",
     name: "Japan Youth Summit 2026",
     shortName: "JYS 2026",
-    logoPath: "/img/jyss.webp",
+    logoPath: "/img/jys.webp",
     status: "active",
   },
   {
@@ -134,7 +134,7 @@ export function ProgramSelect({
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-[110%] z-20 w-72 rounded-md border border-zinc-200 bg-white py-2 text-xs shadow-lg">
+        <div className="absolute right-0 top-[110%] z-20 w-72 rounded-md border border-zinc-200 bg-white py-2 text-xs shadow-lg origin-top transform transition-all duration-200 ease-out animate-[fadeIn_0.18s_ease-out]">
           <div className="px-3 pb-2">
             <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500">
               Select Program
