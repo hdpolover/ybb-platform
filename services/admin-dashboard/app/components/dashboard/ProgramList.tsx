@@ -180,15 +180,19 @@ function StatusBadge({ status }: { status: ProgramStatus }) {
   );
 }
 
-function ProgramCard({ program }: { program: ProgramWithMeta }) {
+function ProgramCard({
+  program,
+  onSelect,
+}: {
+  program: ProgramWithMeta;
+  onSelect: (programId: string) => void;
+}) {
   return (
     <button
       type="button"
       className="flex w-full items-stretch gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-3 text-left shadow-sm transition hover:border-blue-400 hover:shadow-md bg-[url('/img/bgourprogram.webp')] bg-center bg-no-repeat bg-cover"
       onClick={() => {
-        // TODO: ganti sama navigasi buat ke halaman detail programnya
-        // misalnya: router.push(`/programs/${program.id}`)
-        console.info("Program clicked:", program.id);
+        onSelect(program.id);
       }}
     >
       <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded">
@@ -217,10 +221,12 @@ function ProgramGroupRow({
   group,
   isOpen,
   onToggle,
+  onSelectProgram,
 }: {
   group: ProgramGroup;
   isOpen: boolean;
   onToggle: () => void;
+  onSelectProgram: (programId: string) => void;
 }) {
   const activePrograms = group.items.filter((item) => item.status === "active");
   const inactivePrograms = group.items.filter(
@@ -255,7 +261,7 @@ function ProgramGroupRow({
         )}
       </div>
 
-      <ProgramCard program={primaryProgram} />
+      <ProgramCard program={primaryProgram} onSelect={onSelectProgram} />
 
       <div
         className="mt-2 flex items-center justify-between text-[11px] text-zinc-500"
@@ -281,7 +287,11 @@ function ProgramGroupRow({
         >
           <div className="max-h-64 space-y-2 overflow-auto">
             {inactivePrograms.map((program) => (
-              <ProgramCard key={program.id} program={program} />
+              <ProgramCard
+                key={program.id}
+                program={program}
+                onSelect={onSelectProgram}
+              />
             ))}
           </div>
         </div>
@@ -290,7 +300,11 @@ function ProgramGroupRow({
   );
 }
 
-export function ProgramList() {
+type ProgramListProps = {
+  onSelectProgram: (programId: string) => void;
+};
+
+export function ProgramList({ onSelectProgram }: ProgramListProps) {
   const [openGroupId, setOpenGroupId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -322,6 +336,7 @@ export function ProgramList() {
               previous === group.id ? null : group.id,
             )
           }
+          onSelectProgram={onSelectProgram}
         />
       ))}
     </div>
