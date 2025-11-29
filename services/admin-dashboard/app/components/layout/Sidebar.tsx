@@ -352,7 +352,7 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
   }
   return (
     <aside
-      className={`flex h-screen flex-col bg-blue-600 bg-[url('/img/bg3striplurus.webp')] bg-top bg-no-repeat bg-cover text-white transition-all duration-200 ${
+      className={`flex h-screen flex-col bg-blue-800 text-white transition-all duration-200 ${
         collapsed ? "w-16" : "w-64"
       }`}
     >
