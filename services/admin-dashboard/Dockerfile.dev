@@ -1,0 +1,18 @@
+# Development Dockerfile
+FROM node:20-alpine
+
+# Create app directory
+WORKDIR /app
+
+# Install dependencies
+COPY package*.json ./
+RUN npm install
+
+# Copy project files
+COPY . .
+
+# Expose port
+EXPOSE 4001
+
+# Run in development mode (no build needed)
+CMD ["npm", "run", "dev"]

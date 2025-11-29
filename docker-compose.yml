@@ -174,7 +174,7 @@ services:
   admin-dashboard:
     build:
       context: ./services/admin-dashboard
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     container_name: ybb-admin-dashboard
     environment:
       NODE_ENV: ${NODE_ENV}
