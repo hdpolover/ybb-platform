@@ -8,12 +8,14 @@ export type NavbarProps = {
   onToggleSidebar: () => void;
   selectedProgramId: string | null;
   onChangeProgram: (programId: string | null) => void;
+  onResetProgram: () => void;
 };
 
 export function Navbar({
   onToggleSidebar,
   selectedProgramId,
   onChangeProgram,
+  onResetProgram,
 }: NavbarProps) {
   return (
     <header className="flex h-16 items-center border-b bg-white px-6 shadow-sm">
@@ -34,6 +36,7 @@ export function Navbar({
         <ProgramSelect
           selectedProgramId={selectedProgramId}
           onChangeSelectedProgram={onChangeProgram}
+          onResetSelectedProgram={onResetProgram}
         />
         <AccountMenu />
       </div>

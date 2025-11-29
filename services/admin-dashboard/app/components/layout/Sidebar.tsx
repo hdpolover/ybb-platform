@@ -2,77 +2,323 @@
 
 import Image from "next/image";
 import React, { useState } from "react";
+import {
+  Squares2X2Icon,
+  UserGroupIcon,
+  UserIcon,
+  UserPlusIcon,
+  CreditCardIcon,
+  Cog6ToothIcon,
+  ChartBarIcon,
+  InboxStackIcon,
+  DocumentTextIcon,
+  DocumentDuplicateIcon,
+  DocumentCheckIcon,
+  PencilSquareIcon,
+  ClipboardDocumentListIcon,
+  BellAlertIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+} from "@heroicons/react/24/solid";
 
-export type SidebarItem = {
+type SidebarMenuItem = {
+  id: string;
   label: string;
-  active?: boolean;
+  isSubmenu?: boolean;
+  parentId?: string;
 };
 
-const sidebarItems: SidebarItem[] = [
-  { label: "Dashboard" },
-  { label: "Users" },
-  { label: "Payments" },
-  { label: "Settings" },
+type SidebarSection = {
+  id: string;
+  title?: string;
+  items: SidebarMenuItem[];
+};
+
+const sidebarSections: SidebarSection[] = [
+  {
+    id: "main",
+    items: [{ id: "dashboard", label: "Dashboard" }],
+  },
+  {
+    id: "financial",
+    title: "Financial",
+    items: [{ id: "payments", label: "Payments" }],
+  },
+  {
+    id: "scoring",
+    title: "Scoring",
+    items: [
+      { id: "scoring", label: "Scoring" },
+      {
+        id: "scoring-fully-funded",
+        label: "Fully Funded",
+        isSubmenu: true,
+        parentId: "scoring",
+      },
+      {
+        id: "scoring-interview",
+        label: "Interview",
+        isSubmenu: true,
+        parentId: "scoring",
+      },
+    ],
+  },
+  {
+    id: "user-management",
+    title: "User Management",
+    items: [
+      { id: "users", label: "Users" },
+      {
+        id: "participants",
+        label: "Participants",
+        isSubmenu: true,
+        parentId: "users",
+      },
+      {
+        id: "ambassadors",
+        label: "Ambassadors",
+        isSubmenu: true,
+        parentId: "users",
+      },
+    ],
+  },
+  {
+    id: "program-content",
+    title: "Program Content",
+    items: [
+      { id: "submissions", label: "Submissions" },
+      {
+        id: "submissions-essays",
+        label: "Essays",
+        isSubmenu: true,
+        parentId: "submissions",
+      },
+      {
+        id: "submissions-agreement-letters",
+        label: "Agreement Letters",
+        isSubmenu: true,
+        parentId: "submissions",
+      },
+      { id: "documents", label: "Documents" },
+      {
+        id: "documents-program-documents",
+        label: "Program Documents",
+        isSubmenu: true,
+        parentId: "documents",
+      },
+      {
+        id: "documents-certificates",
+        label: "Certificates",
+        isSubmenu: true,
+        parentId: "documents",
+      },
+      { id: "announcements", label: "Announcements" },
+    ],
+  },
+  {
+    id: "configuration",
+    title: "Configuration",
+    items: [
+      { id: "master-data", label: "Master Data" },
+      {
+        id: "program-details",
+        label: "Program Details",
+        isSubmenu: true,
+        parentId: "master-data",
+      },
+      {
+        id: "submission-form",
+        label: "Submission Form",
+        isSubmenu: true,
+        parentId: "master-data",
+      },
+      {
+        id: "program-payments",
+        label: "Program Payments",
+        isSubmenu: true,
+        parentId: "master-data",
+      },
+      {
+        id: "payment-methods",
+        label: "Payment Methods",
+        isSubmenu: true,
+        parentId: "master-data",
+      },
+      {
+        id: "timelines",
+        label: "Timelines",
+        isSubmenu: true,
+        parentId: "master-data",
+      },
+      {
+        id: "program-testimonies",
+        label: "Program Testimonies",
+        isSubmenu: true,
+        parentId: "master-data",
+      },
+      {
+        id: "video-testimonies",
+        label: "Video Testimonies",
+        isSubmenu: true,
+        parentId: "master-data",
+      },
+      {
+        id: "program-photos",
+        label: "Program Photos",
+        isSubmenu: true,
+        parentId: "master-data",
+      },
+      {
+        id: "program-rundowns",
+        label: "Program Rundowns",
+        isSubmenu: true,
+        parentId: "master-data",
+      },
+      {
+        id: "program-speakers",
+        label: "Program Speakers",
+        isSubmenu: true,
+        parentId: "master-data",
+      },
+      {
+        id: "program-awards",
+        label: "Program Awards",
+        isSubmenu: true,
+        parentId: "master-data",
+      },
+      {
+        id: "program-certificates",
+        label: "Program Certificates",
+        isSubmenu: true,
+        parentId: "master-data",
+      },
+      {
+        id: "faqs",
+        label: "FAQs",
+        isSubmenu: true,
+        parentId: "master-data",
+      },
+    ],
+  },
+  {
+    id: "settings",
+    title: "Settings",
+    items: [
+      { id: "settings", label: "Settings" },
+      {
+        id: "main-configuration",
+        label: "Main Configuration",
+        isSubmenu: true,
+        parentId: "settings",
+      },
+      {
+        id: "admin-management",
+        label: "Admin Management",
+        isSubmenu: true,
+        parentId: "settings",
+      },
+      {
+        id: "roles-permissions",
+        label: "Roles & Permissions",
+        isSubmenu: true,
+        parentId: "settings",
+      },
+      {
+        id: "menu-management",
+        label: "Menu Management",
+        isSubmenu: true,
+        parentId: "settings",
+      },
+    ],
+  },
 ];
 
 function SidebarIcon({ label }: { label: string }) {
-  const baseClass = "h-5 w-5 flex-none text-blue-100";
-
   if (label === "Dashboard") {
-    return (
-      <svg
-        aria-hidden="true"
-        className={baseClass}
-        viewBox="0 0 20 20"
-        fill="currentColor"
-      >
-        <path d="M3 9.5A1.5 1.5 0 0 1 4.5 8h3A1.5 1.5 0 0 1 9 9.5v6A1.5 1.5 0 0 1 7.5 17h-3A1.5 1.5 0 0 1 3 15.5v-6Z" />
-        <path d="M11 4.5A1.5 1.5 0 0 1 12.5 3h3A1.5 1.5 0 0 1 17 4.5v11A1.5 1.5 0 0 1 15.5 17h-3A1.5 1.5 0 0 1 11 15.5v-11Z" />
-      </svg>
-    );
+    return <Squares2X2Icon className="h-5 w-5 flex-none text-blue-100" />;
   }
 
   if (label === "Users") {
-    return (
-      <svg
-        aria-hidden="true"
-        className={baseClass}
-        viewBox="0 0 20 20"
-        fill="currentColor"
-      >
-        <path d="M10 10a3 3 0 1 0-3-3 3 3 0 0 0 3 3Z" />
-        <path d="M3 15.25A3.25 3.25 0 0 1 6.25 12h7.5A3.25 3.25 0 0 1 17 15.25 1.75 1.75 0 0 1 15.25 17h-10A1.75 1.75 0 0 1 3 15.25Z" />
-      </svg>
-    );
+    return <UserGroupIcon className="h-5 w-5 flex-none text-blue-100" />;
   }
 
-  if (label === "Payments") {
-    return (
-      <svg
-        aria-hidden="true"
-        className={baseClass}
-        viewBox="0 0 20 20"
-        fill="currentColor"
-      >
-        <path d="M3 5.75A2.75 2.75 0 0 1 5.75 3h8.5A2.75 2.75 0 0 1 17 5.75v8.5A2.75 2.75 0 0 1 14.25 17h-8.5A2.75 2.75 0 0 1 3 14.25Zm1.5 1v1.5h11V6.75a1.25 1.25 0 0 0-1.25-1.25h-8.5A1.25 1.25 0 0 0 4.5 6.75Zm0 4v3.5a1.25 1.25 0 0 0 1.25 1.25h8.5A1.25 1.25 0 0 0 15.5 14.25v-3.5Z" />
-      </svg>
-    );
+  if (label === "Participants") {
+    return <UserIcon className="h-5 w-5 flex-none text-blue-100" />;
   }
 
-  if (label === "Settings") {
-    return (
-      <svg
-        aria-hidden="true"
-        className={baseClass}
-        viewBox="0 0 20 20"
-        fill="currentColor"
-      >
-        <path d="M11.983 3.048a2 2 0 0 0-3.966 0l-.146.878a1 1 0 0 1-.595.76l-.82.328a2 2 0 0 0-1.048 2.727l.39.78a1 1 0 0 1 0 .894l-.39.78a2 2 0 0 0 1.048 2.727l.82.328a1 1 0 0 1 .595.76l.146.878a2 2 0 0 0 3.966 0l.146-.878a1 1 0 0 1 .595-.76l.82-.328a2 2 0 0 0 1.048-2.727l-.39-.78a1 1 0 0 1 0-.894l.39-.78a2 2 0 0 0-1.048-2.727l-.82-.328a1 1 0 0 1-.595-.76Zm-1.983 3.452a2.5 2.5 0 1 1-2.5 2.5 2.5 2.5 0 0 1 2.5-2.5Z" />
-      </svg>
-    );
+  if (label === "Ambassadors") {
+    return <UserPlusIcon className="h-5 w-5 flex-none text-blue-100" />;
   }
 
-  return null;
+  if (["Admin Management", "Roles & Permissions"].includes(label)) {
+    return <UserGroupIcon className="h-5 w-5 flex-none text-blue-100" />;
+  }
+
+  if (["Payments", "Program Payments", "Payment Methods"].includes(label)) {
+    return <CreditCardIcon className="h-5 w-5 flex-none text-blue-100" />;
+  }
+
+  if (["Scoring", "Fully Funded", "Interview"].includes(label)) {
+    if (label === "Scoring") {
+      return <ChartBarIcon className="h-5 w-5 flex-none text-blue-100" />;
+    }
+    if (label === "Fully Funded") {
+      return <DocumentCheckIcon className="h-5 w-5 flex-none text-blue-100" />;
+    }
+    // Interview
+    return <ClipboardDocumentListIcon className="h-5 w-5 flex-none text-blue-100" />;
+  }
+
+  if (["Submissions", "Essays", "Agreement Letters"].includes(label)) {
+    if (label === "Submissions") {
+      return <InboxStackIcon className="h-5 w-5 flex-none text-blue-100" />;
+    }
+    if (label === "Essays") {
+      return <PencilSquareIcon className="h-5 w-5 flex-none text-blue-100" />;
+    }
+    // Agreement Letters
+    return <ClipboardDocumentListIcon className="h-5 w-5 flex-none text-blue-100" />;
+  }
+
+  if (["Documents", "Program Documents", "Certificates", "Program Certificates"].includes(label)) {
+    if (label === "Documents") {
+      return <DocumentTextIcon className="h-5 w-5 flex-none text-blue-100" />;
+    }
+    if (label === "Program Documents") {
+      return <DocumentDuplicateIcon className="h-5 w-5 flex-none text-blue-100" />;
+    }
+    // Certificates / Program Certificates
+    return <DocumentCheckIcon className="h-5 w-5 flex-none text-blue-100" />;
+  }
+
+  if (["Announcements"].includes(label)) {
+    return <BellAlertIcon className="h-5 w-5 flex-none text-blue-100" />;
+  }
+
+  if (
+    [
+      "Settings",
+      "Master Data",
+      "Main Configuration",
+      "Menu Management",
+      "Program Details",
+      "Submission Form",
+      "Timelines",
+      "Program Testimonies",
+      "Video Testimonies",
+      "Program Photos",
+      "Program Rundowns",
+      "Program Speakers",
+      "Program Awards",
+      "Program Certificates",
+      "FAQs",
+    ].includes(label)
+  ) {
+    return <Cog6ToothIcon className="h-5 w-5 flex-none text-blue-100" />;
+  }
+
+  // Default icon untuk item lain (Scoring, Submissions, Documents, Announcements, dll.)
+  return <Squares2X2Icon className="h-5 w-5 flex-none text-blue-100" />;
 }
 
 export type SidebarProps = {
@@ -82,9 +328,10 @@ export type SidebarProps = {
 
 export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
   const [showProgramAlert, setShowProgramAlert] = useState(false);
-  const [activeLabel, setActiveLabel] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<string | null>("dashboard");
+  const [openParents, setOpenParents] = useState<Record<string, boolean>>({});
 
-  function handleClickItem(item: SidebarItem) {
+  function handleClickItem(item: SidebarMenuItem, options?: { setActive?: boolean }) {
     if (!selectedProgramId) {
       setShowProgramAlert(true);
       return;
@@ -93,11 +340,15 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
     // TODO: nanti ganti sama navigasi ke halaman sesuai menunya
     console.info(
       "Sidebar menu clicked:",
+      item.id,
+      "(",
       item.label,
-      "for program",
+      ") for program",
       selectedProgramId,
     );
-    setActiveLabel(item.label);
+    if (options?.setActive !== false) {
+      setActiveId(item.id);
+    }
   }
   return (
     <aside
@@ -123,23 +374,90 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
         )}
       </div>
 
-      <nav className="flex-1 space-y-1.5 px-2 py-4 text-[16px]">
-        {sidebarItems.map((item) => (
-          <button
-            key={item.label}
-            type="button"
-            className={`flex w-full items-center rounded-md px-3 py-2.5 text-left transition-colors ${
-              selectedProgramId && activeLabel === item.label
-                ? "bg-white text-blue-700 shadow-sm"
-                : "text-blue-100 hover:bg-blue-500/60 hover:text-white"
-            }`}
-            onClick={() => handleClickItem(item)}
-          >
-            <span className="mr-2">
-              <SidebarIcon label={item.label} />
-            </span>
-            <span className={collapsed ? "sr-only" : ""}>{item.label}</span>
-          </button>
+      <nav className="flex-1 space-y-4 overflow-y-auto px-2 py-4 text-[15px]">
+        {sidebarSections.map((section) => (
+          <div key={section.id} className="space-y-1.5">
+            {section.title && !collapsed && (
+              <div className="px-3 text-[11px] font-semibold uppercase tracking-wide text-blue-100/70">
+                {section.title}
+              </div>
+            )}
+
+            {section.items
+              .filter((item) => !item.isSubmenu)
+              .map((item) => {
+                const isActive = selectedProgramId && activeId === item.id;
+                const children = section.items.filter(
+                  (child) => child.isSubmenu && child.parentId === item.id,
+                );
+                const isOpen = openParents[item.id] ?? false;
+
+                const handleClickParent = () => {
+                  handleClickItem(item, { setActive: false });
+
+                  if (children.length > 0) {
+                    setOpenParents((previous) => ({
+                      ...previous,
+                      [item.id]: !previous[item.id],
+                    }));
+                  }
+                };
+
+                return (
+                  <div key={item.id} className="space-y-1">
+                    <button
+                      type="button"
+                      className={`flex w-full items-center rounded-md px-3 py-2.5 text-left transition-colors ${
+                        isActive
+                          ? "bg-blue-500 text-white shadow-sm"
+                          : "text-blue-100 hover:bg-blue-500/60 hover:text-white"
+                      }`}
+                      onClick={handleClickParent}
+                    >
+                      <span className="mr-2 flex-none">
+                        <SidebarIcon label={item.label} />
+                      </span>
+                      <span className={collapsed ? "sr-only" : ""}>{item.label}</span>
+                      {children.length > 0 && !collapsed && (
+                        <span className="ml-auto flex-none text-blue-100">
+                          {isOpen ? (
+                            <ChevronDownIcon className="h-4 w-4" />
+                          ) : (
+                            <ChevronRightIcon className="h-4 w-4" />
+                          )}
+                        </span>
+                      )}
+                    </button>
+
+                    {children.length > 0 && isOpen && (
+                      <div className="space-y-0.5">
+                        {children.map((child) => {
+                          const isChildActive = selectedProgramId && activeId === child.id;
+
+                          return (
+                            <button
+                              key={child.id}
+                              type="button"
+                              className={`flex w-full items-center rounded-md px-3 py-2 text-left text-[14px] transition-colors ${
+                                isChildActive
+                                  ? "bg-blue-500/80 text-white shadow-sm"
+                                  : "text-blue-100/90 hover:bg-blue-500/60 hover:text-white"
+                              }`}
+                              onClick={() => handleClickItem(child)}
+                            >
+                              <span className="mr-2 flex-none">
+                                <SidebarIcon label={child.label} />
+                              </span>
+                              <span className={collapsed ? "sr-only" : ""}>{child.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
         ))}
       </nav>
 

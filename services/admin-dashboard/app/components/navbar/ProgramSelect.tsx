@@ -11,7 +11,7 @@ export type Program = {
   status: "active" | "inactive";
 };
 
-const programs: Program[] = [
+export const programs: Program[] = [
   {
     id: "iys-2026",
     name: "Istanbul Youth Summit 2026",
@@ -66,11 +66,13 @@ const programs: Program[] = [
 type ProgramSelectProps = {
   selectedProgramId: string | null;
   onChangeSelectedProgram: (programId: string | null) => void;
+  onResetSelectedProgram: () => void;
 };
 
 export function ProgramSelect({
   selectedProgramId,
   onChangeSelectedProgram,
+  onResetSelectedProgram,
 }: ProgramSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showInactive, setShowInactive] = useState(false);
@@ -123,10 +125,12 @@ export function ProgramSelect({
           </div>
           <div className="flex flex-col leading-tight">
             <span className="text-[13px] font-semibold text-zinc-800">
-              Select Program
+              {currentProgram ? currentProgram.name : "Select Program"}
             </span>
             <span className="text-[12px] font-normal text-zinc-500">
-              Click to select a program
+              {currentProgram
+                ? currentProgram.shortName
+                : "Click to select a program"}
             </span>
           </div>
         </div>
@@ -239,6 +243,10 @@ export function ProgramSelect({
           <button
             type="button"
             className="mt-1 flex w-full items-center justify-center gap-2 border-t border-zinc-100 px-3 py-2 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50"
+            onClick={() => {
+              onResetSelectedProgram();
+              setIsOpen(false);
+            }}
           >
             <span>View All Programs</span>
           </button>
