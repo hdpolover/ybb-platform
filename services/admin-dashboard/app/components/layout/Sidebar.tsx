@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import React, { useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Squares2X2Icon,
   UserGroupIcon,
@@ -327,8 +328,16 @@ export type SidebarProps = {
 };
 
 export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [showProgramAlert, setShowProgramAlert] = useState(false);
-  const [activeId, setActiveId] = useState<string | null>("dashboard");
+  const [activeId, setActiveId] = useState<string | null>(() => {
+    if (pathname?.startsWith("/payments")) {
+      return "payments";
+    }
+    return "dashboard";
+  });
   const [openParents, setOpenParents] = useState<Record<string, boolean>>({});
 
   function handleClickItem(item: SidebarMenuItem, options?: { setActive?: boolean }) {
@@ -346,6 +355,21 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
       ") for program",
       selectedProgramId,
     );
+
+    // simple navigation based on item id
+    const params = new URLSearchParams(searchParams.toString());
+    if (selectedProgramId) {
+      params.set("program", selectedProgramId);
+    } else {
+      params.delete("program");
+    }
+    const query = params.toString();
+
+    if (item.id === "dashboard") {
+      router.push(query ? `/?${query}` : "/");
+    } else if (item.id === "payments") {
+      router.push(query ? `/payments?${query}` : "/payments");
+    }
     if (options?.setActive !== false) {
       setActiveId(item.id);
     }
