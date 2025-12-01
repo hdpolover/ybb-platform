@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Sidebar } from "./components/layout/Sidebar";
 import { Navbar } from "./components/layout/Navbar";
@@ -8,7 +8,7 @@ import { DashboardHeader } from "./components/dashboard/DashboardHeader";
 import { ProgramList } from "./components/dashboard/ProgramList";
 import { ProgramDashboard } from "./components/dashboard/ProgramDashboard";
 
-export default function Home() {
+function HomeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -65,5 +65,13 @@ export default function Home() {
         </main>
       </div>
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center">Loading...</div>}>
+      <HomeContent />
+    </Suspense>
   );
 }

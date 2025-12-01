@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Sidebar } from "../components/layout/Sidebar";
 import { Navbar } from "../components/layout/Navbar";
@@ -8,7 +8,7 @@ import { DashboardHeader } from "../components/dashboard/DashboardHeader";
 import { ProgramList } from "../components/dashboard/ProgramList";
 import { PaymentsSummary } from "../components/payments/PaymentsSummary";
 
-export default function PaymentsPage() {
+function PaymentsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -65,5 +65,13 @@ export default function PaymentsPage() {
         </main>
       </div>
     </div>
+  );
+}
+
+export default function PaymentsPage() {
+  return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center">Loading...</div>}>
+      <PaymentsContent />
+    </Suspense>
   );
 }

@@ -1,0 +1,22 @@
+{
+  "venvPath": ".",
+  "venv": "venv",
+  "pythonVersion": "3.14",
+  "typeCheckingMode": "off",
+  "reportMissingImports": "none",
+  "reportMissingTypeStubs": "none",
+  "reportGeneralTypeIssues": "none",
+  "reportOptionalMemberAccess": "none",
+  "reportOptionalSubscript": "none",
+  "reportUndefinedVariable": "none",
+  "reportUnknownVariableType": "none",
+  "reportUnknownMemberType": "none",
+  "stubPath": "",
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__"
+  ],
+  "ignore": [
+    "**/*"
+  ]
+}

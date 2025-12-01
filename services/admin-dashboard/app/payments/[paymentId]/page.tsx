@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams, useParams } from "next/navigation";
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { Navbar } from "../../components/layout/Navbar";
 import { PaymentDetailHeader } from "../../components/payments/details/PaymentDetailHeader";
@@ -12,7 +12,7 @@ import { PaymentNotesSection } from "../../components/payments/details/PaymentNo
 import { PaymentBreakdownSection } from "../../components/payments/details/PaymentBreakdownSection";
 import { UpdatePaymentStatusModal } from "../../components/payments/details/UpdatePaymentStatusModal";
 
-export default function PaymentDetailPage() {
+function PaymentDetailContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const params = useParams();
@@ -85,5 +85,13 @@ export default function PaymentDetailPage() {
         </main>
       </div>
     </div>
+  );
+}
+
+export default function PaymentDetailPage() {
+  return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center">Loading...</div>}>
+      <PaymentDetailContent />
+    </Suspense>
   );
 }
