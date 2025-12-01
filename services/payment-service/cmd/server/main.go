@@ -42,7 +42,7 @@ func main() {
 	}
 
 	// Auto-migrate database schema
-	if err := db.AutoMigrate(&entities.Payment{}); err != nil {
+	if err := db.AutoMigrate(&entities.Payment{}, &entities.PaymentMethodEntity{}	); err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
 
@@ -76,8 +76,17 @@ func main() {
 
 	log.Println("Registered payment gateways: Midtrans")
 
+	// Manual Payment Gateway
+    // Register Manual Gateway
+    manualGateway := infraGateways.NewManualGateway()
+    gatewayFactory.Register(manualGateway)
+    
+    log.Println("Registered payment gateways: Manual")
+
 	// Initialize repository with GORM
 	paymentRepo := persistence.NewGormPaymentRepository(db)
+	// (BARU) Inisialisasi Repo Payment Method
+	paymentMethodRepo := persistence.NewPaymentMethodRepository(db)
 
 	// Initialize handlers
 	createPaymentHandler := commandHandlers.NewCreatePaymentHandler(
@@ -91,10 +100,16 @@ func main() {
 	paymentHandler := handlers.NewPaymentHandler(
 		createPaymentHandler,
 		getPaymentHandler,
+
+		paymentRepo,
+		eventPublisher,
 	)
 
+	// (BARU) Inisialisasi Payment Method Handler
+	paymentMethodHandler := handlers.NewPaymentMethodHandler(paymentMethodRepo)
+
 	// Setup router
-	r := setupRouter(paymentHandler)
+	r := setupRouter(paymentHandler, paymentMethodHandler)
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -127,7 +142,7 @@ func main() {
 	log.Println("Server exited")
 }
 
-func setupRouter(paymentHandler *handlers.PaymentHandler) *gin.Engine {
+func setupRouter(paymentHandler *handlers.PaymentHandler, paymentMethodHandler *handlers.PaymentMethodHandler,		) *gin.Engine {
 	router := gin.Default()
 
 	// Health check
@@ -143,17 +158,23 @@ func setupRouter(paymentHandler *handlers.PaymentHandler) *gin.Engine {
 	{
 		payments := v1.Group("/payments")
 		{
-			// Create payment
 			payments.POST("", paymentHandler.CreatePayment)
-
-			// Get payment by ID
 			payments.GET("/:id", paymentHandler.GetPayment)
-
-			// Get payments by user
 			payments.GET("/user/:userId", paymentHandler.GetPaymentsByUser)
-
-			// Webhook endpoint for payment gateway callbacks
 			payments.POST("/webhook/:gateway", paymentHandler.HandleWebhook)
+			
+			// Manual Payment Features
+			payments.POST("/:id/proof", paymentHandler.UploadProof)
+			payments.POST("/:id/verify", paymentHandler.VerifyPayment)
+		}
+
+		// (BARU) Group Payment Methods (CRUD)
+		methods := v1.Group("/payment-methods")
+		{
+			methods.GET("", paymentMethodHandler.GetAll)
+			methods.POST("", paymentMethodHandler.Create)
+			methods.PUT("/:id", paymentMethodHandler.Update)
+			methods.DELETE("/:id", paymentMethodHandler.Delete)
 		}
 	}
 

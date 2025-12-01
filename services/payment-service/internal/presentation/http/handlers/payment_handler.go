@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -8,22 +10,35 @@ import (
 	commandHandlers "github.com/ybb-platform/payment-service/internal/application/commands/handlers"
 	"github.com/ybb-platform/payment-service/internal/application/queries"
 	queryHandlers "github.com/ybb-platform/payment-service/internal/application/queries/handlers"
+
+	"github.com/ybb-platform/payment-service/internal/domain/repositories"
+	"github.com/ybb-platform/payment-service/internal/infrastructure/messaging"
+	"github.com/ybb-platform/payment-service/internal/domain/events"
 )
 
 // PaymentHandler handles payment-related HTTP requests
 type PaymentHandler struct {
 	createPaymentHandler *commandHandlers.CreatePaymentHandler
 	getPaymentHandler    *queryHandlers.GetPaymentHandler
+
+	paymentRepo          repositories.PaymentRepository
+	eventPublisher       messaging.EventPublisher
 }
 
 // NewPaymentHandler creates a new PaymentHandler
 func NewPaymentHandler(
 	createPaymentHandler *commandHandlers.CreatePaymentHandler,
 	getPaymentHandler *queryHandlers.GetPaymentHandler,
+
+	paymentRepo repositories.PaymentRepository,
+	eventPublisher messaging.EventPublisher,
 ) *PaymentHandler {
 	return &PaymentHandler{
 		createPaymentHandler: createPaymentHandler,
 		getPaymentHandler:    getPaymentHandler,
+
+		paymentRepo:          paymentRepo,
+		eventPublisher:       eventPublisher,
 	}
 }
 
@@ -124,4 +139,126 @@ func (h *PaymentHandler) HandleWebhook(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status": "received",
 	})
+}
+
+// FITUR MANUAL PAYMENT
+func (h *PaymentHandler) UploadProof(c *gin.Context) {
+    transactionID := c.Param("id")
+
+    file, err := c.FormFile("file")
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "File bukti transfer wajib diupload"})
+        return
+    }
+
+    // --- KODE BARU: SIMPAN FILE KE FOLDER ---
+    // Pastikan folder "uploads" sudah dibuat manual di VS Code
+    filePath := "./uploads/" + file.Filename
+    
+    // Simpan file dari memori ke harddisk
+    if err := c.SaveUploadedFile(file, filePath); err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menyimpan file", "details": err.Error()})
+        return
+    }
+    // ----------------------------------------
+
+    fmt.Printf("[LOG] File Tersimpan di: %s\n", filePath)
+
+    c.JSON(http.StatusOK, gin.H{
+        "status":         "success",
+        "message":        "Bukti transfer berhasil disimpan",
+        "file_path":      filePath,
+        "transaction_id": transactionID,
+    })
+}
+
+// VerifyPaymentRequest represents the admin verification payload
+type VerifyPaymentRequest struct {
+    Action  string `json:"action"`   // "approve" or "reject"
+    Reason  string `json:"reason"`   // Required if rejected
+    AdminID string `json:"admin_id"` // Simulated Admin ID
+}
+
+// VerifyPayment handles the admin approval or rejection process
+func (h *PaymentHandler) VerifyPayment(c *gin.Context) {
+    paymentID := c.Param("id")
+
+    var req VerifyPaymentRequest
+    if err := c.ShouldBindJSON(&req); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+        return
+    }
+
+    payment, err := h.paymentRepo.FindByID(c.Request.Context(), paymentID)
+    if err != nil {
+        c.JSON(http.StatusNotFound, gin.H{"error": "Payment not found"})
+        return
+    }
+
+    status := string(payment.Status)
+    if status != "pending" && status != "processing" { 
+        c.JSON(http.StatusBadRequest, gin.H{
+            "error": "Payment status is not pending or processing. Current status: " + status,
+        })
+        return
+    }
+
+    switch req.Action {
+    case "approve":
+        payment.VerifyManual(req.AdminID)
+    case "reject":
+        if req.Reason == "" {
+            c.JSON(http.StatusBadRequest, gin.H{"error": "Reason is required for rejection"})
+            return
+        }
+        payment.RejectManual(req.AdminID, req.Reason)
+    default:
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid action. Use 'approve' or 'reject'"})
+        return
+    }
+
+    if err := h.paymentRepo.Update(c.Request.Context(), payment); err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update payment"})
+        return
+    }
+
+	// --- FITUR NOTIFIKASI (RABBITMQ) ---
+    go func() {
+        eventType := events.PaymentSucceededEvent
+        if string(payment.Status) == "failed" {
+            eventType = events.PaymentFailedEvent
+        }
+
+        event := events.NewPaymentEvent(
+            eventType,
+            payment.ID,
+            payment.ApplicationID,
+            payment.UserID,
+            payment.Amount,
+            payment.Currency,
+            string(payment.Status),
+            payment.GatewayName,
+        )
+
+        event.Metadata["customer_email"] = payment.CustomerEmail
+        event.Metadata["customer_name"] = payment.CustomerName
+        
+        if payment.RejectedReason != "" {
+            event.Metadata["reason"] = payment.RejectedReason
+        }
+
+        err := h.eventPublisher.Publish(context.Background(), event)
+        
+        if err != nil {
+            fmt.Printf("[RABBITMQ] ERROR sending event: %v\n", err)
+        } else {
+            fmt.Printf("[RABBITMQ] Success! Sent event type: %s for Payment ID: %s\n", eventType, payment.ID)
+        }
+    }()
+
+    c.JSON(http.StatusOK, gin.H{
+        "status":  "success",
+        "message": "Payment verification processed successfully",
+        "data":    payment,
+    })
 }

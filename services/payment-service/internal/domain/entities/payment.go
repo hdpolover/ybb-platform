@@ -139,3 +139,26 @@ func (p *Payment) MarkAsProcessing(gatewayOrderID string) {
 	p.GatewayOrderID = gatewayOrderID
 	p.UpdatedAt = time.Now()
 }
+
+// --- MANUAL VERIFICATION LOGIC
+
+// VerifyManual marks the manual payment as SUCCESS
+func (p *Payment) VerifyManual(adminID string) {
+    now := time.Now()
+    p.Status = PaymentStatusSuccess
+    p.VerifiedAt = &now
+    p.VerifiedByID = &adminID
+    p.PaidAt = &now
+    p.UpdatedAt = now
+}
+
+// RejectManual marks the manual payment as FAILED
+func (p *Payment) RejectManual(adminID, reason string) {
+    now := time.Now()
+    p.Status = PaymentStatusFailed
+    p.VerifiedAt = &now
+    p.VerifiedByID = &adminID
+    p.RejectedReason = reason
+    p.FailedAt = &now
+    p.UpdatedAt = now
+}

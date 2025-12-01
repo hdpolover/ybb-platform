@@ -3,6 +3,7 @@ package entities
 import (
 	"time"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -52,15 +53,23 @@ func (PaymentMethodEntity) TableName() string {
 	return "payment_methods"
 }
 
+// // BeforeCreate hook to generate UUID
+// func (pm *PaymentMethodEntity) BeforeCreate(tx *gorm.DB) error {
+// 	if pm.ID == "" {
+// 		pm.ID = generateUUID()
+// 	}
+// 	return nil
+// }
+
 // BeforeCreate hook to generate UUID
 func (pm *PaymentMethodEntity) BeforeCreate(tx *gorm.DB) error {
 	if pm.ID == "" {
-		pm.ID = generateUUID()
+		pm.ID = uuid.New().String()
 	}
 	return nil
 }
 
-func generateUUID() string {
-	// Simple UUID generation - in production use proper UUID library
-	return time.Now().Format("20060102150405")
-}
+// func generateUUID() string {
+// 	// Simple UUID generation - in production use proper UUID library
+// 	return time.Now().Format("20060102150405")
+// }
