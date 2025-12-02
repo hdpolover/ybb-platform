@@ -7,7 +7,7 @@ export function PaymentNotesSection() {
   return (
     <section className="rounded-md border border-zinc-200 bg-white px-6 py-5 text-sm shadow-sm">
       <div className="grid gap-8 md:grid-cols-2">
-        {/* Transaction Notes */}
+        {/* Notes Transaksinya*/}
         <div>
           <h2 className="mb-3 inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-600">
             <ClipboardDocumentListIcon className="h-4 w-4" />
@@ -33,7 +33,7 @@ export function PaymentNotesSection() {
           </div>
         </div>
 
-        {/* Status Timeline */}
+        {/* Timeline Statusnya */}
         <div>
           <h2 className="mb-3 inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-600">
             <ClockIcon className="h-4 w-4" />

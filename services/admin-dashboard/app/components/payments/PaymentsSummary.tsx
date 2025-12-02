@@ -1,8 +1,6 @@
 "use client";
 
 import React, { useState } from "react";
-import { programs } from "../navbar/ProgramSelect";
-import { SelectedProgramHeader } from "../program/SelectedProgramHeader";
 import { PaymentsOverviewSection } from "./sections/PaymentsOverviewSection";
 import { PaymentStatusSection } from "./sections/PaymentStatusSection";
 import { AllPaymentsSection } from "./sections/AllPaymentsSection";
@@ -12,19 +10,11 @@ type PaymentsSummaryProps = {
   selectedProgramId: string;
 };
 
-export function PaymentsSummary({ selectedProgramId }: PaymentsSummaryProps) {
+export function PaymentsSummary({}: PaymentsSummaryProps) {
   const [showMakePaymentModal, setShowMakePaymentModal] = useState(false);
-
-  const program = programs.find((p) => p.id === selectedProgramId) ?? null;
 
   return (
     <div className="space-y-4">
-      {program && (
-        <SelectedProgramHeader
-          program={program}
-          subtitle="Dashboard program terpilih."
-        />
-      )}
       <PaymentsOverviewSection />
       <PaymentStatusSection />
       <AllPaymentsSection onOpenMakePayment={() => setShowMakePaymentModal(true)} />

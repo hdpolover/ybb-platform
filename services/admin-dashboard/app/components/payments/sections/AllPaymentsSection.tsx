@@ -142,7 +142,7 @@ export function AllPaymentsSection({ onOpenMakePayment }: AllPaymentsSectionProp
             </tr>
           </thead>
           <tbody>
-            {/* Row 1 */}
+            {/* Contoh Row 1 */}
             <tr className="bg-white">
               <td className="align-top px-3 py-2 text-zinc-800">
                 <div className="font-medium">Nov 30, 2025 16:18</div>
@@ -182,7 +182,7 @@ export function AllPaymentsSection({ onOpenMakePayment }: AllPaymentsSectionProp
               </td>
             </tr>
 
-            {/* Row 2 */}
+            {/* Contoh Row 2 */}
             <tr className="bg-zinc-50/60">
               <td className="align-top px-3 py-2 text-zinc-800">
                 <div className="font-medium">Nov 29, 2025 10:42</div>
@@ -219,7 +219,7 @@ export function AllPaymentsSection({ onOpenMakePayment }: AllPaymentsSectionProp
               </td>
             </tr>
 
-            {/* Row 3 */}
+            {/* Contoh Row 3 */}
             <tr className="bg-white">
               <td className="align-top px-3 py-2 text-zinc-800">
                 <div className="font-medium">Nov 28, 2025 21:05</div>
