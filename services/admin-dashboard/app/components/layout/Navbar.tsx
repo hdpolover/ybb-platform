@@ -1,6 +1,8 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
+import { HomeIcon } from "@heroicons/react/24/outline";
 import { ProgramSelect } from "../navbar/ProgramSelect";
 import { AccountMenu } from "../navbar/AccountMenu";
 
@@ -33,6 +35,13 @@ export function Navbar({
       </button>
 
       <div className="ml-auto flex items-center gap-3">
+        <Link
+          href="/"
+          className="flex h-10 w-10 items-center justify-center rounded-md border border-zinc-200 bg-zinc-50 hover:bg-zinc-100"
+          aria-label="Go to home"
+        >
+          <HomeIcon className="h-5 w-5 text-zinc-700" />
+        </Link>
         <ProgramSelect
           selectedProgramId={selectedProgramId}
           onChangeSelectedProgram={onChangeProgram}

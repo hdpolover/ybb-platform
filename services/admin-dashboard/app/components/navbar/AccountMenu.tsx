@@ -1,10 +1,19 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { useAuth } from "../../contexts/AuthContext";
+import { useRouter } from "next/navigation";
 
 export function AccountMenu() {
+  const { adminProfile, logout } = useAuth();
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
+
+  const handleSignOut = () => {
+    logout();
+    router.push("/");
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -34,25 +43,27 @@ export function AccountMenu() {
       >
         <div className="flex flex-col items-end leading-tight">
           <span className="text-[12px] font-semibold text-zinc-800">
-            Super Administrator
+            {adminProfile?.fullName || "Admin User"}
           </span>
-          <span className="text-[12px] text-zinc-500">Super Admin</span>
+          <span className="text-[12px] text-zinc-500">{adminProfile?.roleName || "Administrator"}</span>
         </div>
         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-xs font-semibold text-white">
-          SA
+          {adminProfile?.fullName.split(' ').map(n => n[0]).join('').toUpperCase() || "AD"}
         </div>
       </button>
 
       {isOpen && (
         <div className="absolute right-0 top-[115%] z-20 w-60 rounded-md border border-zinc-200 bg-white py-2 text-xs shadow-lg origin-top transform transition-all duration-200 ease-out animate-[fadeIn_0.18s_ease-out]">
           <div className="px-3 pb-2">
-            <div className="text-[11px] font-semibold text-zinc-800">SA</div>
-            <div className="text-[11px] text-zinc-500">
-              Super Administrator
+            <div className="text-[11px] font-semibold text-zinc-800">
+              {adminProfile?.fullName.split(' ').map(n => n[0]).join('').toUpperCase() || "AD"}
             </div>
-            <div className="text-[11px] text-zinc-500">Super Admin</div>
+            <div className="text-[11px] text-zinc-500">
+              {adminProfile?.fullName || "Admin User"}
+            </div>
+            <div className="text-[11px] text-zinc-500">{adminProfile?.roleName || "Administrator"}</div>
             <div className="mt-1 text-[11px] text-zinc-500">
-              superadmin@ybb.org
+              {adminProfile?.email || "admin@ybb.com"}
             </div>
           </div>
 
@@ -109,6 +120,7 @@ export function AccountMenu() {
 
           <button
             type="button"
+            onClick={handleSignOut}
             className="flex w-full items-center justify-center gap-2 px-3 py-2 text-[11px] font-semibold text-red-600 hover:bg-red-50"
           >
             <svg

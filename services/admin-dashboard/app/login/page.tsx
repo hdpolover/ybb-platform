@@ -1,14 +1,26 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Image from "next/image";
-
-const ROLES = ["Admin", "Super Admin"];
+import { useRouter } from "next/navigation";
+import { useAuth } from "../contexts/AuthContext";
 
 export default function LoginPage() {
+  const router = useRouter();
+  const { switchMockAdmin } = useAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    // For now, automatically sign in as super admin
+    // In production, this would call an API to validate credentials
+    switchMockAdmin("super");
+    router.push("/");
+  };
   return (
     <div className="flex min-h-screen flex-col bg-zinc-50 text-zinc-900">
-      {/* Background section Hero */}
+      {/* Background section Heronya */}
       <div className="relative flex-1 bg-linear-gradient-to-b from-blue-700 to-blue-600">
         <Image
           src="/img/bg3striplurus.webp"
@@ -54,25 +66,14 @@ export default function LoginPage() {
                   </p>
                 </div>
 
-                <form className="space-y-4 text-sm">
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-medium text-zinc-700">
-                      Sign in as
-                    </label>
-                    <select className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
-                      {ROLES.map((role) => (
-                        <option key={role} value={role}>
-                          {role}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
+                <form onSubmit={handleSubmit} className="space-y-4 text-sm">
                   <div className="space-y-1.5">
                     <label className="block text-xs font-medium text-zinc-700">Email</label>
                     <input
                       type="email"
                       placeholder="Enter email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
                       className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                     />
                   </div>
@@ -82,6 +83,8 @@ export default function LoginPage() {
                     <input
                       type="password"
                       placeholder="Enter password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
                       className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                     />
                   </div>
@@ -90,7 +93,7 @@ export default function LoginPage() {
                     type="submit"
                     className="mt-2 inline-flex w-full items-center justify-center rounded-md bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
                   >
-                    Sign in as Admin
+                    Sign In
                   </button>
                 </form>
 

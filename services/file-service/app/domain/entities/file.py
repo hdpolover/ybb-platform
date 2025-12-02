@@ -11,28 +11,40 @@ class File:
     id: str
     filename: str
     original_filename: str
-    content_type: str
-    size: int
-    bucket: str
+    file_type: str  # e.g., 'image', 'document', 'video'
+    mime_type: str  # e.g., 'application/pdf', 'image/png'
+    file_size: int  # in bytes
     storage_path: str
+    bucket: str
     user_id: str
     brand_id: str
     uploaded_at: datetime
     metadata: Optional[dict] = None
     
+    # Backward compatibility aliases
+    @property
+    def content_type(self) -> str:
+        """Alias for mime_type."""
+        return self.mime_type
+    
+    @property
+    def size(self) -> int:
+        """Alias for file_size."""
+        return self.file_size
+    
     def is_image(self) -> bool:
         """Check if file is an image."""
-        return self.content_type.startswith('image/')
+        return self.mime_type.startswith('image/')
     
     def is_document(self) -> bool:
         """Check if file is a document."""
         document_types = ['application/pdf', 'application/msword', 
                          'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
-        return self.content_type in document_types
+        return self.mime_type in document_types
     
     def is_valid_size(self, max_size_bytes: int) -> bool:
         """Validate file size against maximum allowed."""
-        return self.size <= max_size_bytes
+        return self.file_size <= max_size_bytes
     
     def get_extension(self) -> str:
         """Get file extension from filename."""
