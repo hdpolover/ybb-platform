@@ -335,35 +335,39 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
   const [activeId, setActiveId] = useState<string | null>(() => {
     if (!pathname) return "dashboard";
 
-    if (pathname.startsWith("/users/participants")) {
+    // Match program-scoped routes
+    if (pathname.includes("/participants")) {
       return "participants";
     }
-    if (pathname.startsWith("/users/ambassadors")) {
+    if (pathname.includes("/users/ambassadors")) {
       return "ambassadors";
     }
-    if (pathname.startsWith("/users")) {
+    if (pathname.includes("/users")) {
       return "users";
     }
-    if (pathname.startsWith("/scoring/fully-funded")) {
+    if (pathname.includes("/scoring/fully-funded")) {
       return "scoring-fully-funded";
     }
-    if (pathname.startsWith("/scoring/interview")) {
+    if (pathname.includes("/scoring/interview")) {
       return "scoring-interview";
     }
-    if (pathname.startsWith("/scoring")) {
+    if (pathname.includes("/scoring")) {
       return "scoring";
     }
-    if (pathname.startsWith("/payments")) {
+    if (pathname.includes("/payments")) {
       return "payments";
+    }
+    if (pathname.includes("/programs/")) {
+      return "dashboard";
     }
     return "dashboard";
   });
   const [openParents, setOpenParents] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
-    if (pathname?.startsWith("/scoring")) {
+    if (pathname?.includes("/scoring")) {
       initial["scoring"] = true;
     }
-    if (pathname?.startsWith("/users")) {
+    if (pathname?.includes("/users")) {
       initial["users"] = true;
     }
     return initial;
@@ -385,31 +389,23 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
       selectedProgramId,
     );
 
-    // Navigasi Simple berdasarkan ID nya
-    const params = new URLSearchParams(searchParams.toString());
-    if (selectedProgramId) {
-      params.set("program", selectedProgramId);
-    } else {
-      params.delete("program");
-    }
-    const query = params.toString();
-
+    // Navigate to program-scoped routes
     if (item.id === "dashboard") {
-      router.push(query ? `/?${query}` : "/");
+      router.push(`/programs/${selectedProgramId}`);
     } else if (item.id === "payments") {
-      router.push(query ? `/payments?${query}` : "/payments");
+      router.push(`/programs/${selectedProgramId}/payments`);
     } else if (item.id === "scoring") {
-      router.push(query ? `/scoring?${query}` : "/scoring");
+      router.push(`/programs/${selectedProgramId}/scoring`);
     } else if (item.id === "scoring-fully-funded") {
-      router.push(query ? `/scoring/fully-funded?${query}` : "/scoring/fully-funded");
+      router.push(`/programs/${selectedProgramId}/scoring/fully-funded`);
     } else if (item.id === "scoring-interview") {
-      router.push(query ? `/scoring/interview?${query}` : "/scoring/interview");
+      router.push(`/programs/${selectedProgramId}/scoring/interview`);
     } else if (item.id === "users") {
-      router.push(query ? `/users?${query}` : "/users");
+      router.push(`/programs/${selectedProgramId}/users`);
     } else if (item.id === "participants") {
-      router.push(query ? `/users/participants?${query}` : "/users/participants");
+      router.push(`/programs/${selectedProgramId}/participants`);
     } else if (item.id === "ambassadors") {
-      router.push(query ? `/users/ambassadors?${query}` : "/users/ambassadors");
+      router.push(`/programs/${selectedProgramId}/users/ambassadors`);
     }
     if (options?.setActive !== false) {
       setActiveId(item.id);
