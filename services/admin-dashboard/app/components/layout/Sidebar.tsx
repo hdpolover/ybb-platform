@@ -338,6 +338,9 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
     if (pathname.startsWith("/users/participants")) {
       return "participants";
     }
+    if (pathname.startsWith("/users/ambassadors")) {
+      return "ambassadors";
+    }
     if (pathname.startsWith("/users")) {
       return "users";
     }
@@ -405,6 +408,8 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
       router.push(query ? `/users?${query}` : "/users");
     } else if (item.id === "participants") {
       router.push(query ? `/users/participants?${query}` : "/users/participants");
+    } else if (item.id === "ambassadors") {
+      router.push(query ? `/users/ambassadors?${query}` : "/users/ambassadors");
     }
     if (options?.setActive !== false) {
       setActiveId(item.id);
