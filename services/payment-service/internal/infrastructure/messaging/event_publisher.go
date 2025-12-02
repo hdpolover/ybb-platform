@@ -2,8 +2,10 @@ package messaging
 
 import (
 	"context"
+	"fmt"
 	"log"
 
+	amqp "github.com/rabbitmq/amqp091-go" // Driver RabbitMQ
 	"github.com/ybb-platform/payment-service/internal/domain/events"
 )
 
@@ -14,105 +16,111 @@ type EventPublisher interface {
 }
 
 // RabbitMQPublisher implements EventPublisher using RabbitMQ
-// TODO for intern: Implement RabbitMQ connection and publishing
 type RabbitMQPublisher struct {
-	// TODO: Add RabbitMQ connection fields
-	// connection *amqp.Connection
-	// channel    *amqp.Channel
-	exchange string
+	connection *amqp.Connection
+	channel    *amqp.Channel
+	exchange   string
 }
 
 // NewRabbitMQPublisher creates a new RabbitMQ event publisher
-// TODO for intern: Initialize RabbitMQ connection
 func NewRabbitMQPublisher(rabbitMQURL, exchange string) (*RabbitMQPublisher, error) {
-	// TODO: Connect to RabbitMQ
-	// conn, err := amqp.Dial(rabbitMQURL)
-	// if err != nil {
-	//     return nil, fmt.Errorf("failed to connect to RabbitMQ: %w", err)
-	// }
-	//
-	// ch, err := conn.Channel()
-	// if err != nil {
-	//     return nil, fmt.Errorf("failed to open channel: %w", err)
-	// }
-	//
-	// // Declare exchange
-	// err = ch.ExchangeDeclare(
-	//     exchange,
-	//     "topic",
-	//     true,
-	//     false,
-	//     false,
-	//     false,
-	//     nil,
-	// )
-	// if err != nil {
-	//     return nil, fmt.Errorf("failed to declare exchange: %w", err)
-	// }
+	// 1. Connect to RabbitMQ
+	conn, err := amqp.Dial(rabbitMQURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to RabbitMQ: %w", err)
+	}
+
+	// 2. Open Channel
+	ch, err := conn.Channel()
+	if err != nil {
+		conn.Close() // Close connection if channel fails
+		return nil, fmt.Errorf("failed to open channel: %w", err)
+	}
+
+	// 3. Declare Exchange (Topic Type)
+	// Exchange adalah "Kotak Surat" di RabbitMQ
+	err = ch.ExchangeDeclare(
+		exchange, // name
+		"topic",  // type
+		true,     // durable (tahan banting kalau server restart)
+		false,    // auto-deleted
+		false,    // internal
+		false,    // no-wait
+		nil,      // arguments
+	)
+	if err != nil {
+		ch.Close()
+		conn.Close()
+		return nil, fmt.Errorf("failed to declare exchange: %w", err)
+	}
 
 	return &RabbitMQPublisher{
-		exchange: exchange,
+		connection: conn,
+		channel:    ch,
+		exchange:   exchange,
 	}, nil
 }
 
 // Publish publishes an event to RabbitMQ
-// TODO for intern: Implement actual RabbitMQ publishing
 func (p *RabbitMQPublisher) Publish(ctx context.Context, event *events.PaymentEvent) error {
-	// For now, just log the event
-	log.Printf("Publishing event: %s for payment %s", event.Type, event.PaymentID)
+	// 1. Convert Event to JSON bytes
+	body, err := event.ToJSON()
+	if err != nil {
+		return fmt.Errorf("failed to marshal event: %w", err)
+	}
 
-	// TODO: Implement actual publishing
-	// body, err := event.ToJSON()
-	// if err != nil {
-	//     return fmt.Errorf("failed to marshal event: %w", err)
-	// }
-	//
-	// err = p.channel.PublishWithContext(
-	//     ctx,
-	//     p.exchange,
-	//     string(event.Type), // routing key
-	//     false,
-	//     false,
-	//     amqp.Publishing{
-	//         ContentType:  "application/json",
-	//         Body:         body,
-	//         DeliveryMode: amqp.Persistent,
-	//     },
-	// )
-	// if err != nil {
-	//     return fmt.Errorf("failed to publish event: %w", err)
-	// }
+	// 2. Determine Routing Key (Topik spesifik)
+	// Contoh: "payment.succeeded" atau "payment.failed"
+	routingKey := string(event.Type)
+
+	log.Printf("[RabbitMQ] Publishing event to exchange '%s' with key '%s'", p.exchange, routingKey)
+
+	// 3. Publish to RabbitMQ
+	err = p.channel.PublishWithContext(
+		ctx,
+		p.exchange,
+		routingKey,
+		false, // mandatory
+		false, // immediate
+		amqp.Publishing{
+			ContentType:  "application/json",
+			Body:         body,
+			DeliveryMode: amqp.Persistent, // Pesan disimpan ke disk (aman)
+			Timestamp:    event.Timestamp,
+			MessageId:    event.ID,
+		},
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to publish event: %w", err)
+	}
 
 	return nil
 }
 
 // Close closes the RabbitMQ connection
 func (p *RabbitMQPublisher) Close() error {
-	// TODO: Close RabbitMQ connection
-	// if p.channel != nil {
-	//     p.channel.Close()
-	// }
-	// if p.connection != nil {
-	//     p.connection.Close()
-	// }
+	if p.channel != nil {
+		p.channel.Close()
+	}
+	if p.connection != nil {
+		p.connection.Close()
+	}
 	return nil
 }
 
-// NoOpPublisher is a no-op implementation for testing
+// NoOpPublisher is a no-op implementation for testing (Backup kalau RabbitMQ mati)
 type NoOpPublisher struct{}
 
-// NewNoOpPublisher creates a new no-op publisher
 func NewNoOpPublisher() *NoOpPublisher {
 	return &NoOpPublisher{}
 }
 
-// Publish does nothing
 func (p *NoOpPublisher) Publish(ctx context.Context, event *events.PaymentEvent) error {
-	log.Printf("NoOp: Publishing event: %s for payment %s", event.Type, event.PaymentID)
+	log.Printf("[NoOp] Skipping publish: %s for payment %s", event.Type, event.PaymentID)
 	return nil
 }
 
-// Close does nothing
 func (p *NoOpPublisher) Close() error {
 	return nil
 }
