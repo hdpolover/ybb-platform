@@ -8,6 +8,7 @@ import { UsersModule } from '@modules/users/users.module';
 import { ProgramsModule } from '@modules/programs/programs.module';
 import { ApplicationsModule } from '@modules/applications/applications.module';
 import { HealthModule } from '@modules/health/health.module';
+import { FilesModule } from '@modules/files/files.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { HealthModule } from '@modules/health/health.module';
     ProgramsModule,
     ApplicationsModule,
     HealthModule,
+    FilesModule,
   ],
   controllers: [CacheController],
 })
