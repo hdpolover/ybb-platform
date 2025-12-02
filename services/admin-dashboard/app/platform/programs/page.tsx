@@ -1,6 +1,6 @@
 "use client";
 
-import { PlusIcon } from "@heroicons/react/24/outline";
+import { PlusIcon, RectangleStackIcon, UserGroupIcon, CheckCircleIcon, ArchiveBoxIcon } from "@heroicons/react/24/outline";
 import { useState, useMemo } from "react";
 import { ProgramsTable, type Program } from "../components/programs/ProgramsTable";
 import { ProgramFormModal, type ProgramFormData } from "../components/programs/ProgramFormModal";
@@ -192,21 +192,84 @@ export default function ProgramsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-zinc-900">Programs</h1>
-          <p className="mt-1 text-sm text-zinc-600">
-            Manage all programs across categories
-          </p>
+    <div className="space-y-4">
+      {/* Page Header */}
+      <div>
+        <h1 className="text-2xl font-bold text-zinc-900">Programs</h1>
+        <p className="mt-1 text-sm text-zinc-600">
+          Manage all programs across categories
+        </p>
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-zinc-600">Total Programs</p>
+              <p className="mt-1 text-2xl font-bold text-zinc-900">{programs.length}</p>
+              <p className="mt-1 text-[10px] text-zinc-600">All categories</p>
+            </div>
+            <div className="rounded-full bg-blue-100 p-2.5">
+              <RectangleStackIcon className="h-5 w-5 text-blue-600" />
+            </div>
+          </div>
         </div>
+
+        <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-zinc-600">Published</p>
+              <p className="mt-1 text-2xl font-bold text-zinc-900">
+                {programs.filter(p => p.status === 'published').length}
+              </p>
+              <p className="mt-1 text-[10px] text-emerald-600">Active programs</p>
+            </div>
+            <div className="rounded-full bg-emerald-100 p-2.5">
+              <CheckCircleIcon className="h-5 w-5 text-emerald-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-zinc-600">Total Participants</p>
+              <p className="mt-1 text-2xl font-bold text-zinc-900">
+                {programs.reduce((sum, p) => sum + p.participantCount, 0)}
+              </p>
+              <p className="mt-1 text-[10px] text-zinc-600">Registered users</p>
+            </div>
+            <div className="rounded-full bg-purple-100 p-2.5">
+              <UserGroupIcon className="h-5 w-5 text-purple-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-zinc-600">Archived</p>
+              <p className="mt-1 text-2xl font-bold text-zinc-900">
+                {programs.filter(p => p.status === 'archived').length}
+              </p>
+              <p className="mt-1 text-[10px] text-zinc-600">Past programs</p>
+            </div>
+            <div className="rounded-full bg-zinc-100 p-2.5">
+              <ArchiveBoxIcon className="h-5 w-5 text-zinc-600" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Action Button */}
+      <div className="flex justify-end">
         <button
           type="button"
           onClick={() => setIsFormModalOpen(true)}
-          className="flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-blue-600"
         >
-          <PlusIcon className="h-4 w-4" />
+          <PlusIcon className="h-3.5 w-3.5" />
           Create Program
         </button>
       </div>

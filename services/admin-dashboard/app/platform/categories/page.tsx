@@ -1,6 +1,6 @@
 "use client";
 
-import { PlusIcon } from "@heroicons/react/24/outline";
+import { PlusIcon, FolderIcon, RectangleStackIcon, TagIcon, CalendarIcon } from "@heroicons/react/24/outline";
 import { useState } from "react";
 import { CategoriesTable, type Category } from "../components/categories/CategoriesTable";
 import { CategoryFormModal, type CategoryFormData } from "../components/categories/CategoryFormModal";
@@ -103,21 +103,84 @@ export default function CategoriesPage() {
   };
 
   return (
-    <div>
-      {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-zinc-900">Program Categories</h1>
-          <p className="mt-1 text-sm text-zinc-600">
-            Organize programs into categories for better management
-          </p>
+    <div className="space-y-4">
+      {/* Page Header */}
+      <div>
+        <h1 className="text-2xl font-bold text-zinc-900">Program Categories</h1>
+        <p className="mt-1 text-sm text-zinc-600">
+          Organize programs into categories for better management
+        </p>
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-zinc-600">Total Categories</p>
+              <p className="mt-1 text-2xl font-bold text-zinc-900">{categories.length}</p>
+              <p className="mt-1 text-[10px] text-zinc-600">Active brands</p>
+            </div>
+            <div className="rounded-full bg-blue-100 p-2.5">
+              <FolderIcon className="h-5 w-5 text-blue-600" />
+            </div>
+          </div>
         </div>
+
+        <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-zinc-600">Total Programs</p>
+              <p className="mt-1 text-2xl font-bold text-zinc-900">
+                {categories.reduce((sum, cat) => sum + cat.programCount, 0)}
+              </p>
+              <p className="mt-1 text-[10px] text-zinc-600">Across all categories</p>
+            </div>
+            <div className="rounded-full bg-emerald-100 p-2.5">
+              <RectangleStackIcon className="h-5 w-5 text-emerald-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-zinc-600">Avg Programs</p>
+              <p className="mt-1 text-2xl font-bold text-zinc-900">
+                {categories.length > 0 
+                  ? Math.round(categories.reduce((sum, cat) => sum + cat.programCount, 0) / categories.length)
+                  : 0}
+              </p>
+              <p className="mt-1 text-[10px] text-zinc-600">Per category</p>
+            </div>
+            <div className="rounded-full bg-purple-100 p-2.5">
+              <TagIcon className="h-5 w-5 text-purple-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-zinc-600">Last Updated</p>
+              <p className="mt-1 text-2xl font-bold text-zinc-900">Today</p>
+              <p className="mt-1 text-[10px] text-emerald-600">Recent changes</p>
+            </div>
+            <div className="rounded-full bg-amber-100 p-2.5">
+              <CalendarIcon className="h-5 w-5 text-amber-600" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Action Button */}
+      <div className="flex justify-end">
         <button
           type="button"
           onClick={() => setIsFormModalOpen(true)}
-          className="flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-blue-600"
         >
-          <PlusIcon className="h-4 w-4" />
+          <PlusIcon className="h-3.5 w-3.5" />
           Create Category
         </button>
       </div>
