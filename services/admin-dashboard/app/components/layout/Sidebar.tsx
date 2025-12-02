@@ -266,7 +266,7 @@ function SidebarIcon({ label }: { label: string }) {
     if (label === "Fully Funded") {
       return <DocumentCheckIcon className="h-5 w-5 flex-none text-blue-100" />;
     }
-    // Interview
+    // Bagian Interview
     return <ClipboardDocumentListIcon className="h-5 w-5 flex-none text-blue-100" />;
   }
 
@@ -277,7 +277,7 @@ function SidebarIcon({ label }: { label: string }) {
     if (label === "Essays") {
       return <PencilSquareIcon className="h-5 w-5 flex-none text-blue-100" />;
     }
-    // Agreement Letters
+    // Bagian Agreement Letters
     return <ClipboardDocumentListIcon className="h-5 w-5 flex-none text-blue-100" />;
   }
 
@@ -288,7 +288,7 @@ function SidebarIcon({ label }: { label: string }) {
     if (label === "Program Documents") {
       return <DocumentDuplicateIcon className="h-5 w-5 flex-none text-blue-100" />;
     }
-    // Certificates / Program Certificates
+    // Bagian Certificate atau Program Certificate
     return <DocumentCheckIcon className="h-5 w-5 flex-none text-blue-100" />;
   }
 
@@ -318,7 +318,7 @@ function SidebarIcon({ label }: { label: string }) {
     return <Cog6ToothIcon className="h-5 w-5 flex-none text-blue-100" />;
   }
 
-  // Default icon untuk item lain (Scoring, Submissions, Documents, Announcements, dll.)
+  // Default Icon buat item lain (Scoring, Submissions, Documents, Announcements, dll.)
   return <Squares2X2Icon className="h-5 w-5 flex-none text-blue-100" />;
 }
 
@@ -333,12 +333,41 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
   const searchParams = useSearchParams();
   const [showProgramAlert, setShowProgramAlert] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(() => {
-    if (pathname?.startsWith("/payments")) {
+    if (!pathname) return "dashboard";
+
+    if (pathname.startsWith("/users/participants")) {
+      return "participants";
+    }
+    if (pathname.startsWith("/users/ambassadors")) {
+      return "ambassadors";
+    }
+    if (pathname.startsWith("/users")) {
+      return "users";
+    }
+    if (pathname.startsWith("/scoring/fully-funded")) {
+      return "scoring-fully-funded";
+    }
+    if (pathname.startsWith("/scoring/interview")) {
+      return "scoring-interview";
+    }
+    if (pathname.startsWith("/scoring")) {
+      return "scoring";
+    }
+    if (pathname.startsWith("/payments")) {
       return "payments";
     }
     return "dashboard";
   });
-  const [openParents, setOpenParents] = useState<Record<string, boolean>>({});
+  const [openParents, setOpenParents] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    if (pathname?.startsWith("/scoring")) {
+      initial["scoring"] = true;
+    }
+    if (pathname?.startsWith("/users")) {
+      initial["users"] = true;
+    }
+    return initial;
+  });
 
   function handleClickItem(item: SidebarMenuItem, options?: { setActive?: boolean }) {
     if (!selectedProgramId) {
@@ -356,7 +385,7 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
       selectedProgramId,
     );
 
-    // simple navigation based on item id
+    // Navigasi Simple berdasarkan ID nya
     const params = new URLSearchParams(searchParams.toString());
     if (selectedProgramId) {
       params.set("program", selectedProgramId);
@@ -369,6 +398,18 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
       router.push(query ? `/?${query}` : "/");
     } else if (item.id === "payments") {
       router.push(query ? `/payments?${query}` : "/payments");
+    } else if (item.id === "scoring") {
+      router.push(query ? `/scoring?${query}` : "/scoring");
+    } else if (item.id === "scoring-fully-funded") {
+      router.push(query ? `/scoring/fully-funded?${query}` : "/scoring/fully-funded");
+    } else if (item.id === "scoring-interview") {
+      router.push(query ? `/scoring/interview?${query}` : "/scoring/interview");
+    } else if (item.id === "users") {
+      router.push(query ? `/users?${query}` : "/users");
+    } else if (item.id === "participants") {
+      router.push(query ? `/users/participants?${query}` : "/users/participants");
+    } else if (item.id === "ambassadors") {
+      router.push(query ? `/users/ambassadors?${query}` : "/users/ambassadors");
     }
     if (options?.setActive !== false) {
       setActiveId(item.id);
@@ -417,13 +458,15 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
                 const isOpen = openParents[item.id] ?? false;
 
                 const handleClickParent = () => {
-                  handleClickItem(item, { setActive: false });
-
                   if (children.length > 0) {
+                    // Menu yang ada submenunya, cuma buat pembuka dropdown
                     setOpenParents((previous) => ({
                       ...previous,
                       [item.id]: !previous[item.id],
                     }));
+                  } else {
+                    // Menu yang gk ada submenu, kaya menu biasa aja
+                    handleClickItem(item);
                   }
                 };
 
@@ -454,7 +497,7 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
                     </button>
 
                     {children.length > 0 && isOpen && (
-                      <div className="space-y-0.5">
+                      <div className="space-y-0.5 border-l border-blue-500/40 pl-4">
                         {children.map((child) => {
                           const isChildActive = selectedProgramId && activeId === child.id;
 
@@ -462,16 +505,14 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
                             <button
                               key={child.id}
                               type="button"
-                              className={`flex w-full items-center rounded-md px-3 py-2 text-left text-[14px] transition-colors ${
+                              className={`flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[13px] transition-colors ${
                                 isChildActive
                                   ? "bg-blue-500/80 text-white shadow-sm"
                                   : "text-blue-100/90 hover:bg-blue-500/60 hover:text-white"
                               }`}
                               onClick={() => handleClickItem(child)}
                             >
-                              <span className="mr-2 flex-none">
-                                <SidebarIcon label={child.label} />
-                              </span>
+                              <span className="mr-2 h-1.5 w-1.5 flex-none rounded-full bg-blue-100" />
                               <span className={collapsed ? "sr-only" : ""}>{child.label}</span>
                             </button>
                           );

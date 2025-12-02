@@ -2,7 +2,6 @@
 
 import React, { useState } from "react";
 import { programs } from "../navbar/ProgramSelect";
-import { SelectedProgramHeader } from "../program/SelectedProgramHeader";
 import { KPISection } from "./sections/KPISection";
 import { TrendSection, TrendRange } from "./sections/TrendSection";
 import { GenderSection } from "./sections/GenderSection";
@@ -34,8 +33,6 @@ export function ProgramDashboard({ selectedProgramId }: ProgramDashboardProps) {
       </div>
     );
   }
-
-  const isJys2026 = program.id === "jys-2026";
 
   const dailyData = [
     { label: "1 Nov", registrations: 42 },
@@ -103,14 +100,6 @@ export function ProgramDashboard({ selectedProgramId }: ProgramDashboardProps) {
 
   return (
     <div className="space-y-4">
-      <SelectedProgramHeader
-        program={program}
-        subtitle={
-          isJys2026
-            ? "Dashboard Japan Youth Summit 2026."
-            : "Dashboard program terpilih."
-        }
-      />
       <KPISection />
 
       <section className="grid gap-4 md:grid-cols-2">

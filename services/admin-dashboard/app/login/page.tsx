@@ -8,7 +8,7 @@ const ROLES = ["Admin", "Super Admin"];
 export default function LoginPage() {
   return (
     <div className="flex min-h-screen flex-col bg-zinc-50 text-zinc-900">
-      {/* Background section Hero */}
+      {/* Background section Heronya */}
       <div className="relative flex-1 bg-linear-gradient-to-b from-blue-700 to-blue-600">
         <Image
           src="/img/bg3striplurus.webp"
