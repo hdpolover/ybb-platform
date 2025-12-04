@@ -22,30 +22,63 @@ This project is a comprehensive platform for managing YBB (Youth Break the Bound
 ### Prerequisites
 
 - Docker & Docker Compose
-- Node.js 18+
-- Go 1.21+
-- Python 3.11+
+- Node.js 18+ (for local development only)
+- Go 1.21+ (for local development only)
+- Python 3.11+ (for local development only)
 
-### Quick Start
+### Quick Start (One Command!)
 
 ```bash
-# Clone the repository
+# Clone and enter the project
 git clone https://github.com/hdpolover/ybb-platform.git
 cd ybb-platform
 
-# Copy environment files
-cp .env.example .env
+# Start everything with one command
+make start
+```
 
-# Run setup script
-./scripts/setup.sh
+That's it! 🚀 The command will:
+1. Create `.env` from template (if not exists)
+2. Build all Docker images
+3. Start PostgreSQL and wait for it to be ready
+4. Start all microservices
 
-# Start all services
-make dev
-# or
-docker-compose up -d
+### Access Points
 
-# Check service health
-./scripts/health-check.sh
+| Service | URL |
+|---------|-----|
+| Admin Dashboard | http://localhost:4001 |
+| API Gateway | http://localhost:4000 |
+| API Docs (Swagger) | http://localhost:4000/api/docs |
+| Payment Service | http://localhost:8002 |
+| File Service | http://localhost:8001 |
+| MinIO Console | http://localhost:9001 |
+
+### Common Commands
+
+```bash
+make start    # First-time setup + start everything
+make dev      # Start all services (after initial setup)
+make stop     # Stop all services
+make logs     # View logs from all services
+make health   # Check service health
+make db-reset # Reset database (WARNING: deletes data)
+```
+
+### Troubleshooting
+
+**Database connection error?**
+```bash
+# Check if PostgreSQL is running
+docker exec ybb-postgres pg_isready -U ybb_user -d postgres
+
+# View postgres logs
+docker logs ybb-postgres
+```
+
+**Need a fresh start?**
+```bash
+make db-reset  # Resets database and restarts everything
 ```
 
 ## Project Structure
@@ -54,17 +87,21 @@ See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for detailed project structure 
 
 ## Services
 
-- **API Gateway** (Port 4000): Main backend API
-- **Payment Service** (Port 8080): Payment processing and Stripe integration
-- **File Service** (Port 8000): File upload, storage, and processing
-- **Admin Dashboard** (Port 3000): Admin management interface
+| Service | Port | Description |
+|---------|------|-------------|
+| API Gateway | 4000 | Main backend API (NestJS) |
+| Payment Service | 8002 | Payment processing (Go/GORM) |
+| File Service | 8001 | File upload & storage (Python/FastAPI) |
+| Admin Dashboard | 4001 | Admin interface (Next.js) |
 
-All services are accessible through Nginx on ports 80/443.
+All services are also accessible through Nginx on ports 80/443.
 
 ## Documentation
 
 - Architecture: `docs/architecture.md`
+- Clean Architecture Guide: `docs/clean-architecture-guide.md`
 - Setup Guide: `docs/setup.md`
+- Caching & Performance: `docs/CACHING_GUIDE.md`
 - API Documentation: `docs/api-documentation.md`
 - Deployment: `docs/deployment.md`
 

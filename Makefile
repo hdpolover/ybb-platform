@@ -4,6 +4,9 @@
 help:
 	@echo "YBB Platform - Available Commands:"
 	@echo ""
+	@echo "Quick Start (for new developers):"
+	@echo "  make start        - One command to rule them all! Sets up & starts everything"
+	@echo ""
 	@echo "Development:"
 	@echo "  make dev          - Start all services in development mode"
 	@echo "  make stop         - Stop all services"
@@ -21,6 +24,7 @@ help:
 	@echo "  make seed-db      - Seed database with sample data"
 	@echo "  make backup       - Backup database"
 	@echo "  make restore      - Restore database from backup"
+	@echo "  make db-reset     - Reset database (DANGER: deletes all data)"
 	@echo ""
 	@echo "Maintenance:"
 	@echo "  make clean        - Remove all containers, volumes, and images"
@@ -31,16 +35,60 @@ help:
 	@echo "  make proto        - Generate protobuf files"
 	@echo ""
 
+# ===========================================
+# QUICK START - One command for new developers
+# ===========================================
+start:
+	@echo "🚀 YBB Platform - Quick Start"
+	@echo "=============================="
+	@if [ ! -f .env ]; then \
+		echo "📋 Creating .env file from template..."; \
+		cp .env.example .env; \
+		echo "✅ .env created (using defaults)"; \
+	fi
+	@echo "🔨 Building Docker images..."
+	@docker-compose build --quiet
+	@echo "🗄️  Starting PostgreSQL first..."
+	@docker-compose up -d postgres
+	@echo "⏳ Waiting for database to be ready..."
+	@sleep 5
+	@until docker exec ybb-postgres pg_isready -U ybb_user -d postgres > /dev/null 2>&1; do \
+		echo "   Still waiting for PostgreSQL..."; \
+		sleep 2; \
+	done
+	@echo "✅ PostgreSQL is ready!"
+	@echo "🚀 Starting all services..."
+	@docker-compose up -d
+	@echo ""
+	@echo "✅ YBB Platform is running!"
+	@echo ""
+	@echo "🌐 Access points:"
+	@echo "   Admin Dashboard: http://localhost:4001"
+	@echo "   API Gateway:     http://localhost:4000"
+	@echo "   API Docs:        http://localhost:4000/api/docs"
+	@echo "   Payment Service: http://localhost:8002"
+	@echo "   File Service:    http://localhost:8001"
+	@echo ""
+	@echo "📊 Database:"
+	@echo "   PostgreSQL:      localhost:5432"
+	@echo "   Redis:           localhost:6379"
+	@echo ""
+	@echo "💡 Useful commands:"
+	@echo "   make logs   - View all logs"
+	@echo "   make stop   - Stop everything"
+	@echo "   make health - Check service health"
+	@echo ""
+
 # Development
 dev:
 	@echo "Starting development environment..."
 	docker-compose up -d
 	@echo "Services are starting. Run 'make logs' to view logs."
 	@echo "Access points:"
-	@echo "  - Admin Dashboard: http://localhost:3000"
+	@echo "  - Admin Dashboard: http://localhost:4001"
 	@echo "  - API Gateway: http://localhost:4000"
-	@echo "  - Payment Service: http://localhost:8080"
-	@echo "  - File Service: http://localhost:8000"
+	@echo "  - Payment Service: http://localhost:8002"
+	@echo "  - File Service: http://localhost:8001"
 
 stop:
 	@echo "Stopping all services..."
@@ -91,6 +139,17 @@ restore:
 	@echo "Restoring database from backup..."
 	chmod +x ./scripts/restore.sh
 	./scripts/restore.sh
+
+# Database reset (for development only)
+db-reset:
+	@echo "⚠️  WARNING: This will DELETE all data!"
+	@read -p "Are you sure? Type 'yes' to continue: " confirm && [ "$$confirm" = "yes" ] || exit 1
+	@echo "🗑️  Stopping services and removing database volume..."
+	docker-compose down
+	docker volume rm ybb-platform_postgres_data 2>/dev/null || true
+	@echo "🔄 Restarting with fresh database..."
+	@$(MAKE) start
+	@echo "✅ Database reset complete!"
 
 # Maintenance
 clean:

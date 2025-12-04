@@ -25,7 +25,7 @@ func LoadConfig() (*Config, error) {
 	_ = godotenv.Load()
 
 	return &Config{
-		Port:                 getEnv("PORT", "8080"),
+		Port:                 getEnv("PORT", "8002"),
 		Environment:          getEnv("ENVIRONMENT", "development"),
 		DatabaseURL:          getEnv("DATABASE_URL", "postgresql://ybb_user:ybb_pass@localhost:5432/ybb_payments_db"),
 		RabbitMQURL:          getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),

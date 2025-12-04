@@ -65,8 +65,8 @@ The `postgres/init/` folder contains SQL scripts that run automatically when the
 The `nginx/conf.d/` folder contains reverse proxy configurations:
 
 - **api.conf** - Routes traffic to microservices:
-  - `/api/v1/` → API Service (port 3000)
-  - `/api/v1/payments/` → Payment Service (port 8080)
+  - `/api/v1/` → API Service (port 4000)
+  - `/api/v1/payments/` → Payment Service (port 8002)
   - `/api/v1/files/` → File Service (port 8001)
   - `/admin` → Admin Dashboard (port 3001)
 
@@ -77,10 +77,10 @@ The `nginx/conf.d/` folder contains reverse proxy configurations:
 
 | Service | Internal Port | Nginx Route |
 |---------|--------------|-------------|
-| API Service | 3000 | `/api/v1/` |
-| Payment Service | 8080 | `/api/v1/payments/` |
+| API Service | 4000 | `/api/v1/` |
+| Payment Service | 8002 | `/api/v1/payments/` |
 | File Service | 8001 | `/api/v1/files/` |
-| Admin Dashboard | 3001 | `/admin` |
+| Admin Dashboard | 4001 | `/admin` |
 
 ## RabbitMQ Configuration
 
@@ -166,10 +166,10 @@ Required environment variables are defined in `.env` file at the project root.
 
 ```bash
 # Check PostgreSQL is running
-docker exec ybb-postgres pg_isready -U ybb_user
+docker exec ybb-postgres pg_isready -U ybb_user -d postgres
 
 # List databases
-docker exec ybb-postgres psql -U ybb_user -l
+docker exec ybb-postgres psql -U ybb_user -d postgres -l
 
 # Connect to database
 docker exec -it ybb-postgres psql -U ybb_user -d ybb_platform

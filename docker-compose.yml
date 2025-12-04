@@ -1,4 +1,4 @@
-version: '3.9'
+version: "3.9"
 
 services:
   # PostgreSQL Database
@@ -102,7 +102,7 @@ services:
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       FILE_SERVICE_URL: http://file-service:8001
-      PAYMENT_SERVICE_URL: http://payment-service:8080
+      PAYMENT_SERVICE_URL: http://payment-service:8002
     ports:
       - "4000:4000"
     volumes:
@@ -125,7 +125,7 @@ services:
       dockerfile: Dockerfile.dev
     container_name: ybb-payment-service
     environment:
-      PORT: 8080
+      PORT: 8002
       ENVIRONMENT: development
       DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres:5432/ybb_payments_db
       MIDTRANS_SERVER_KEY: ${MIDTRANS_SERVER_KEY}
@@ -133,7 +133,7 @@ services:
       MIDTRANS_IS_PRODUCTION: ${MIDTRANS_IS_PRODUCTION:-false}
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
     ports:
-      - "8081:8080"
+      - "8002:8002"
     volumes:
       - ./services/payment-service:/app
       - /app/tmp
