@@ -51,7 +51,7 @@ export default function ParticipantDetailPage({
         </div>
       </section>
 
-      <FullyFundedDetailsTabsCard hideScores={false} />
+      <FullyFundedDetailsTabsCard hideScores />
     </div>
   );
 }

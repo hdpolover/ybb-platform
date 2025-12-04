@@ -12,9 +12,13 @@ export default function AmbassadorsPage({
   const { programId } = use(params);
 
   return (
-    <div className="space-y-4">
+    <div className="flex h-full flex-col gap-4">
       <AmbassadorsHeader />
-      <AmbassadorsTable />
+      <div className="flex-1 min-h-0">
+        <div className="h-full overflow-y-auto">
+          <AmbassadorsTable />
+        </div>
+      </div>
     </div>
   );
 }
