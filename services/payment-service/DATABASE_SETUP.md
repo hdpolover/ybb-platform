@@ -43,7 +43,7 @@ docker-compose down postgres
 docker-compose up -d postgres
 
 # Verify both databases exist
-docker exec ybb-postgres psql -U ybb_user -c "\l"
+docker exec ybb-postgres psql -U ybb_user -d postgres -c "\l"
 ```
 
 You should see:

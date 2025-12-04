@@ -28,7 +28,7 @@ RUN apk --no-cache add ca-certificates
 COPY --from=builder /app/payment-service .
 
 # Expose port
-EXPOSE 8080
+EXPOSE 8002
 
 # Run the application
 CMD ["./payment-service"]

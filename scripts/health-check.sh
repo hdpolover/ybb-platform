@@ -58,7 +58,7 @@ echo ""
 echo "HTTP Health Checks:"
 check_service "Admin Dashboard" "http://localhost:3000" || true
 check_service "API Gateway" "http://localhost:4000/health" || true
-check_service "Payment Service" "http://localhost:8080/health" || true
+check_service "Payment Service" "http://localhost:8002/health" || true
 check_service "File Service" "http://localhost:8000/health" || true
 
 echo ""

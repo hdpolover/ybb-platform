@@ -103,7 +103,7 @@ services:
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
     ports:
-      - "8080:8080"
+      - "8002:8002"
     networks:
       - ybb-network
     depends_on:

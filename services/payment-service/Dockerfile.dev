@@ -15,7 +15,7 @@ RUN go mod download
 COPY . .
 
 # Expose port
-EXPOSE 8080
+EXPOSE 8002
 
 # Run directly with go run (hot reload disabled for compatibility)
 CMD ["go", "run", "cmd/server/main.go"]
