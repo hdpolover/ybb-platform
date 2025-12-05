@@ -336,6 +336,9 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
     if (!pathname) return "dashboard";
 
     // Match program-scoped routes
+    if (pathname.includes("/master-data/program-details")) {
+      return "program-details";
+    }
     if (pathname.includes("/announcements")) {
       return "announcements";
     }
@@ -398,6 +401,9 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
     if (pathname?.includes("/documents")) {
       initial["documents"] = true;
     }
+    if (pathname?.includes("/master-data")) {
+      initial["master-data"] = true;
+    }
     if (pathname?.includes("/announcements")) {
       initial["announcements"] = true;
     }
@@ -451,6 +457,10 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
       router.push(`/programs/${selectedProgramId}/documents/certificates`);
     } else if (item.id === "announcements") {
       router.push(`/programs/${selectedProgramId}/announcements`);
+    } else if (item.id === "master-data") {
+      router.push(`/programs/${selectedProgramId}/master-data/program-details`);
+    } else if (item.id === "program-details") {
+      router.push(`/programs/${selectedProgramId}/master-data/program-details`);
     }
     if (options?.setActive !== false) {
       setActiveId(item.id);
