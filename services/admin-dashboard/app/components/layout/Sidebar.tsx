@@ -336,6 +336,9 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
     if (!pathname) return "dashboard";
 
     // Match program-scoped routes
+    if (pathname.includes("/announcements")) {
+      return "announcements";
+    }
     if (pathname.includes("/participants")) {
       return "participants";
     }
@@ -395,6 +398,9 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
     if (pathname?.includes("/documents")) {
       initial["documents"] = true;
     }
+    if (pathname?.includes("/announcements")) {
+      initial["announcements"] = true;
+    }
     return initial;
   });
 
@@ -443,6 +449,8 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
       router.push(`/programs/${selectedProgramId}/documents/program-documents`);
     } else if (item.id === "documents-certificates") {
       router.push(`/programs/${selectedProgramId}/documents/certificates`);
+    } else if (item.id === "announcements") {
+      router.push(`/programs/${selectedProgramId}/announcements`);
     }
     if (options?.setActive !== false) {
       setActiveId(item.id);
