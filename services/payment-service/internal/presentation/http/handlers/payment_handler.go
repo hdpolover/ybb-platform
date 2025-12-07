@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ybb-platform/payment-service/internal/application/commands"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/ybb-platform/payment-service/internal/domain/repositories"
 	"github.com/ybb-platform/payment-service/internal/infrastructure/messaging"
+	infraGateways "github.com/ybb-platform/payment-service/internal/infrastructure/gateways" // <--- TAMBAH INI
 	"github.com/ybb-platform/payment-service/internal/domain/events"
 )
 
@@ -23,6 +25,7 @@ type PaymentHandler struct {
 
 	paymentRepo          repositories.PaymentRepository
 	eventPublisher       messaging.EventPublisher
+	gatewayFactory *infraGateways.GatewayFactory
 }
 
 // NewPaymentHandler creates a new PaymentHandler
@@ -32,6 +35,7 @@ func NewPaymentHandler(
 
 	paymentRepo repositories.PaymentRepository,
 	eventPublisher messaging.EventPublisher,
+	gatewayFactory *infraGateways.GatewayFactory,
 ) *PaymentHandler {
 	return &PaymentHandler{
 		createPaymentHandler: createPaymentHandler,
@@ -39,6 +43,7 @@ func NewPaymentHandler(
 
 		paymentRepo:          paymentRepo,
 		eventPublisher:       eventPublisher,
+		gatewayFactory:       gatewayFactory,
 	}
 }
 
@@ -136,9 +141,101 @@ func (h *PaymentHandler) HandleWebhook(c *gin.Context) {
 	// TODO: Update payment status
 	// TODO: Publish event
 
-	c.JSON(http.StatusOK, gin.H{
-		"status": "received",
-	})
+	// c.JSON(http.StatusOK, gin.H{
+	// 	"status": "received",
+	// })
+
+	// 1. Ambil nama gateway dari URL (misal: /webhook/midtrans)
+	gatewayName := c.Param("gateway")
+
+	// 2. Baca Body Request (Payload dari Midtrans)
+	payload, err := c.GetRawData()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read request body"})
+		return
+	}
+
+	// 3. Ambil Gateway yang sesuai dari Factory
+	gateway, err := h.gatewayFactory.GetGateway(gatewayName)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported gateway"})
+		return
+	}
+
+	// 4. Suruh Gateway Memproses Data (Verifikasi Signature & Parsing Status)
+	updatedData, err := gateway.HandleWebhook(c.Request.Context(), payload)
+	if err != nil {
+		// Log error untuk debug, tapi jangan kasih detail ke user luar
+		fmt.Printf("[WEBHOOK ERROR] Gateway: %s, Error: %v\n", gatewayName, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Webhook processing failed", "details": err.Error()})
+		return
+	}
+
+	// 5. Cari Data Asli di Database
+	payment, err := h.paymentRepo.FindByID(c.Request.Context(), updatedData.ID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Order ID not found"})
+		return
+	}
+
+	// 6. Cek apakah status berubah? (Supaya tidak spam notifikasi)
+	if payment.Status != updatedData.Status {
+		// Update data di memori
+		payment.Status = updatedData.Status
+		payment.GatewayResponse = updatedData.GatewayResponse
+		payment.UpdatedAt = time.Now()
+
+		if payment.Status == "success" {
+			now := time.Now()
+			payment.PaidAt = &now
+		} else if payment.Status == "failed" {
+			now := time.Now()
+			payment.FailedAt = &now
+		}
+
+		// Simpan ke Database
+		if err := h.paymentRepo.Update(c.Request.Context(), payment); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update payment status"})
+			return
+		}
+
+		// 7. KIRIM NOTIFIKASI (RabbitMQ)
+		// Kita gunakan logic yang sama persis seperti di VerifyPayment
+		go func() {
+			eventType := events.PaymentSucceededEvent
+			if string(payment.Status) == "failed" {
+				eventType = events.PaymentFailedEvent
+			}
+
+			// Buat Event object
+			event := events.NewPaymentEvent(
+				eventType,
+				payment.ID,
+				payment.ApplicationID,
+				payment.UserID,
+				payment.Amount,
+				payment.Currency,
+				string(payment.Status),
+				payment.GatewayName,
+			)
+
+			// Tambahkan Metadata
+			event.Metadata["customer_email"] = payment.CustomerEmail
+			event.Metadata["customer_name"] = payment.CustomerName
+			event.Metadata["source"] = "webhook"
+
+			// Kirim ke RabbitMQ
+			err := h.eventPublisher.Publish(context.Background(), event)
+			if err != nil {
+				fmt.Printf("[RABBITMQ] ERROR sending webhook event: %v\n", err)
+			} else {
+				fmt.Printf("[RABBITMQ] Webhook Event Sent: %s -> %s\n", eventType, payment.ID)
+			}
+		}()
+	}
+
+	// Return 200 OK ke Midtrans agar tidak dikirim ulang
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
 // FITUR MANUAL PAYMENT

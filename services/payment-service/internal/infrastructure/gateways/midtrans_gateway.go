@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"crypto/sha512"
+	"encoding/hex" 
+	"encoding/json"
 
 	"github.com/midtrans/midtrans-go"
 	"github.com/midtrans/midtrans-go/snap"
@@ -98,8 +101,61 @@ func (g *MidtransGateway) HandleWebhook(ctx context.Context, payload []byte) (*e
 	// TODO: Verify signature
 	// TODO: Update payment status based on transaction_status
 
-	log.Printf("TODO: Handle Midtrans webhook")
-	return nil, fmt.Errorf("not implemented")
+	// log.Printf("TODO: Handle Midtrans webhook")
+	// return nil, fmt.Errorf("not implemented")
+	// 1. Parse JSON Payload
+	var notification map[string]interface{}
+	if err := json.Unmarshal(payload, &notification); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal notification: %w", err)
+	}
+
+	// 2. Ambil data penting
+	orderID, _ := notification["order_id"].(string)
+	statusCode, _ := notification["status_code"].(string)
+	grossAmount, _ := notification["gross_amount"].(string)
+	signatureKey, _ := notification["signature_key"].(string)
+	transactionStatus, _ := notification["transaction_status"].(string)
+	fraudStatus, _ := notification["fraud_status"].(string)
+
+	// 3. Verifikasi Signature (Security Check)
+	// Rumus Midtrans: SHA512(order_id + status_code + gross_amount + ServerKey)
+	rawString := orderID + statusCode + grossAmount + g.serverKey
+	hasher := sha512.New()
+	hasher.Write([]byte(rawString))
+	expectedSignature := hex.EncodeToString(hasher.Sum(nil))
+
+	// Jika signature tidak cocok, tolak request
+	if signatureKey != expectedSignature {
+		return nil, fmt.Errorf("invalid signature key")
+	}
+
+	// 4. Translate Status Midtrans ke Status Aplikasi
+	var paymentStatus entities.PaymentStatus
+
+	switch transactionStatus {
+	case "capture":
+		if fraudStatus == "challenge" {
+			paymentStatus = entities.PaymentStatusProcessing
+		} else if fraudStatus == "accept" {
+			paymentStatus = entities.PaymentStatusSuccess
+		}
+	case "settlement":
+		paymentStatus = entities.PaymentStatusSuccess
+	case "deny", "cancel", "expire":
+		paymentStatus = entities.PaymentStatusFailed
+	case "pending":
+		paymentStatus = entities.PaymentStatusPending
+	default:
+		paymentStatus = entities.PaymentStatusProcessing
+	}
+
+	// 5. Return struct payment yang berisi status baru
+	return &entities.Payment{
+		ID:              orderID,
+		Status:          paymentStatus,
+		GatewayOrderID:  orderID,
+		GatewayResponse: notification,
+	}, nil
 }
 
 // CancelPayment cancels a payment

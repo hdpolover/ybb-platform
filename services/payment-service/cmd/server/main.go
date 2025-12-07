@@ -15,6 +15,11 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+
+	_ "github.com/ybb-platform/payment-service/docs" 
+
 	commandHandlers "github.com/ybb-platform/payment-service/internal/application/commands/handlers"
 	queryHandlers "github.com/ybb-platform/payment-service/internal/application/queries/handlers"
 	"github.com/ybb-platform/payment-service/internal/domain/entities"
@@ -25,6 +30,25 @@ import (
 	"github.com/ybb-platform/payment-service/internal/presentation/http/handlers"
 )
 
+// @title           YBB Payment Service API
+// @version         1.0
+// @description     Ini adalah dokumentasi API untuk layanan pembayaran YBB Platform.
+// @termsOfService  http://swagger.io/terms/
+
+// @contact.name   API Support
+// @contact.url    http://www.swagger.io/support
+// @contact.email  support@swagger.io
+
+// @license.name  Apache 2.0
+// @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
+
+// @host      localhost:8081
+// @BasePath  /api/v1
+
+// @securityDefinitions.basic BasicAuth
+
+// @externalDocs.description  OpenAPI
+// @externalDocs.url          https://swagger.io/resources/open-api/
 func main() {
 	// Load configuration
 	cfg, err := config.LoadConfig()
@@ -42,14 +66,13 @@ func main() {
 	}
 
 	// Auto-migrate database schema
-	if err := db.AutoMigrate(&entities.Payment{}, &entities.PaymentMethodEntity{}	); err != nil {
+	if err := db.AutoMigrate(&entities.Payment{}, &entities.PaymentMethodEntity{}); err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
 
 	log.Println("Connected to database successfully")
 
 	// Initialize event publisher
-	// TODO for intern: Replace with actual RabbitMQ implementation
 	var eventPublisher messaging.EventPublisher
 	if cfg.RabbitMQURL != "" {
 		eventPublisher, err = messaging.NewRabbitMQPublisher(cfg.RabbitMQURL, cfg.RabbitMQExchange)
@@ -73,19 +96,15 @@ func main() {
 		cfg.Environment,
 	)
 	gatewayFactory.Register(midtransGateway)
-
 	log.Println("Registered payment gateways: Midtrans")
 
-	// Manual Payment Gateway
-    // Register Manual Gateway
-    manualGateway := infraGateways.NewManualGateway()
-    gatewayFactory.Register(manualGateway)
-    
-    log.Println("Registered payment gateways: Manual")
+	// Register Manual Gateway
+	manualGateway := infraGateways.NewManualGateway()
+	gatewayFactory.Register(manualGateway)
+	log.Println("Registered payment gateways: Manual")
 
-	// Initialize repository with GORM
+	// Initialize repositories
 	paymentRepo := persistence.NewGormPaymentRepository(db)
-	// (BARU) Inisialisasi Repo Payment Method
 	paymentMethodRepo := persistence.NewPaymentMethodRepository(db)
 
 	// Initialize handlers
@@ -96,16 +115,14 @@ func main() {
 	)
 	getPaymentHandler := queryHandlers.NewGetPaymentHandler(paymentRepo)
 
-	// Initialize HTTP handler
 	paymentHandler := handlers.NewPaymentHandler(
 		createPaymentHandler,
 		getPaymentHandler,
-
 		paymentRepo,
 		eventPublisher,
+		gatewayFactory,
 	)
 
-	// (BARU) Inisialisasi Payment Method Handler
 	paymentMethodHandler := handlers.NewPaymentMethodHandler(paymentMethodRepo)
 
 	// Setup router
@@ -125,13 +142,12 @@ func main() {
 		}
 	}()
 
-	// Wait for interrupt signal to gracefully shutdown the server
+	// Graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	log.Println("Shutting down server...")
 
-	// Graceful shutdown with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -142,11 +158,15 @@ func main() {
 	log.Println("Server exited")
 }
 
-func setupRouter(paymentHandler *handlers.PaymentHandler, paymentMethodHandler *handlers.PaymentMethodHandler,		) *gin.Engine {
+// setupRouter sekarang menerima handler dan mendaftarkan route Swagger
+func setupRouter(paymentHandler *handlers.PaymentHandler, paymentMethodHandler *handlers.PaymentMethodHandler) *gin.Engine {
 	router := gin.Default()
 
+	// Akses via browser: http://localhost:8002/swagger/index.html
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
 	// Health check
-	router.GET("/health", func(c *gin.Context) {
+	router.GET("/health", func(c *gin.Context) {	
 		c.JSON(200, gin.H{
 			"status":  "ok",
 			"service": "payment-service",
@@ -162,13 +182,13 @@ func setupRouter(paymentHandler *handlers.PaymentHandler, paymentMethodHandler *
 			payments.GET("/:id", paymentHandler.GetPayment)
 			payments.GET("/user/:userId", paymentHandler.GetPaymentsByUser)
 			payments.POST("/webhook/:gateway", paymentHandler.HandleWebhook)
-			
+
 			// Manual Payment Features
 			payments.POST("/:id/proof", paymentHandler.UploadProof)
 			payments.POST("/:id/verify", paymentHandler.VerifyPayment)
 		}
 
-		// (BARU) Group Payment Methods (CRUD)
+		// Payment Methods (CRUD)
 		methods := v1.Group("/payment-methods")
 		{
 			methods.GET("", paymentMethodHandler.GetAll)
@@ -182,32 +202,25 @@ func setupRouter(paymentHandler *handlers.PaymentHandler, paymentMethodHandler *
 }
 
 func connectDatabase(databaseURL string) (*gorm.DB, error) {
-	// Configure GORM logger
 	gormLogger := logger.Default.LogMode(logger.Info)
 
-	// Connect with GORM
 	db, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{
-		Logger: gormLogger,
-		NowFunc: func() time.Time {
-			return time.Now().UTC()
-		},
+		Logger:  gormLogger,
+		NowFunc: func() time.Time { return time.Now().UTC() },
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	// Get underlying SQL DB for connection pool settings
 	sqlDB, err := db.DB()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get database instance: %w", err)
 	}
 
-	// Set connection pool settings
 	sqlDB.SetMaxOpenConns(25)
 	sqlDB.SetMaxIdleConns(5)
 	sqlDB.SetConnMaxLifetime(5 * time.Minute)
 
-	// Test connection
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
