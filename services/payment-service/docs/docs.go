@@ -23,7 +23,220 @@ const docTemplate = `{
     },
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
-    "paths": {},
+    "paths": {
+        "/payment-methods": {
+            "get": {
+                "description": "Mendapatkan daftar semua metode pembayaran yang tersedia",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Payment Methods"
+                ],
+                "summary": "Lihat Semua Metode Pembayaran",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Menambahkan bank atau metode pembayaran baru ke database",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Payment Methods"
+                ],
+                "summary": "Tambah Metode Pembayaran Baru",
+                "parameters": [
+                    {
+                        "description": "Data Payment Method",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/entities.PaymentMethodEntity"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/payments/{id}/proof": {
+            "post": {
+                "description": "User mengupload foto bukti transfer untuk pembayaran manual",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Manual Payment"
+                ],
+                "summary": "Upload Bukti Transfer",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Transaction ID (UUID)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "File Gambar Bukti Transfer (JPG/PNG)",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/payments/{id}/verify": {
+            "post": {
+                "description": "Admin menyetujui (Approve) atau menolak (Reject) pembayaran manual",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Manual Payment"
+                ],
+                "summary": "Verifikasi Pembayaran (Admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Transaction ID (UUID)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Data Verifikasi (Action \u0026 Admin ID)",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.VerifyPaymentRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "entities.PaymentMethodEntity": {
+            "type": "object"
+        },
+        "entities.PaymentMethodType": {
+            "type": "string",
+            "enum": [
+                "automatic",
+                "manual"
+            ],
+            "x-enum-comments": {
+                "MethodTypeAutomatic": "Via payment gateway",
+                "MethodTypeManual": "Manual verification"
+            },
+            "x-enum-descriptions": [
+                "Via payment gateway",
+                "Manual verification"
+            ],
+            "x-enum-varnames": [
+                "MethodTypeAutomatic",
+                "MethodTypeManual"
+            ]
+        },
+        "handlers.VerifyPaymentRequest": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "description": "\"approve\" or \"reject\"",
+                    "type": "string"
+                },
+                "admin_id": {
+                    "description": "Simulated Admin ID",
+                    "type": "string"
+                },
+                "reason": {
+                    "description": "Required if rejected",
+                    "type": "string"
+                }
+            }
+        }
+    },
     "securityDefinitions": {
         "BasicAuth": {
             "type": "basic"

@@ -1,4 +1,33 @@
 basePath: /api/v1
+definitions:
+  entities.PaymentMethodEntity:
+    type: object
+  entities.PaymentMethodType:
+    enum:
+    - automatic
+    - manual
+    type: string
+    x-enum-comments:
+      MethodTypeAutomatic: Via payment gateway
+      MethodTypeManual: Manual verification
+    x-enum-descriptions:
+    - Via payment gateway
+    - Manual verification
+    x-enum-varnames:
+    - MethodTypeAutomatic
+    - MethodTypeManual
+  handlers.VerifyPaymentRequest:
+    properties:
+      action:
+        description: '"approve" or "reject"'
+        type: string
+      admin_id:
+        description: Simulated Admin ID
+        type: string
+      reason:
+        description: Required if rejected
+        type: string
+    type: object
 externalDocs:
   description: OpenAPI
   url: https://swagger.io/resources/open-api/
@@ -15,7 +44,123 @@ info:
   termsOfService: http://swagger.io/terms/
   title: YBB Payment Service API
   version: "1.0"
-paths: {}
+paths:
+  /payment-methods:
+    get:
+      description: Mendapatkan daftar semua metode pembayaran yang tersedia
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Lihat Semua Metode Pembayaran
+      tags:
+      - Payment Methods
+    post:
+      consumes:
+      - application/json
+      description: Menambahkan bank atau metode pembayaran baru ke database
+      parameters:
+      - description: Data Payment Method
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/entities.PaymentMethodEntity'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Tambah Metode Pembayaran Baru
+      tags:
+      - Payment Methods
+  /payments/{id}/proof:
+    post:
+      consumes:
+      - multipart/form-data
+      description: User mengupload foto bukti transfer untuk pembayaran manual
+      parameters:
+      - description: Transaction ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: File Gambar Bukti Transfer (JPG/PNG)
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Upload Bukti Transfer
+      tags:
+      - Manual Payment
+  /payments/{id}/verify:
+    post:
+      consumes:
+      - application/json
+      description: Admin menyetujui (Approve) atau menolak (Reject) pembayaran manual
+      parameters:
+      - description: Transaction ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Data Verifikasi (Action & Admin ID)
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.VerifyPaymentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Verifikasi Pembayaran (Admin)
+      tags:
+      - Manual Payment
 securityDefinitions:
   BasicAuth:
     type: basic

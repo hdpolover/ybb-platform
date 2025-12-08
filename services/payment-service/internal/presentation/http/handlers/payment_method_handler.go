@@ -16,7 +16,16 @@ func NewPaymentMethodHandler(repo *persistence.PaymentMethodRepository) *Payment
 	return &PaymentMethodHandler{repo: repo}
 }
 
-// Create Method
+// Create godoc
+// @Summary      Tambah Metode Pembayaran Baru
+// @Description  Menambahkan bank atau metode pembayaran baru ke database
+// @Tags         Payment Methods
+// @Accept       json
+// @Produce      json
+// @Param        request body entities.PaymentMethodEntity true "Data Payment Method"
+// @Success      201  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]interface{}
+// @Router       /payment-methods [post]
 func (h *PaymentMethodHandler) Create(c *gin.Context) {
 	var req entities.PaymentMethodEntity
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -32,7 +41,13 @@ func (h *PaymentMethodHandler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"status": "success", "data": req})
 }
 
-// Get All Method
+// GetAll godoc
+// @Summary      Lihat Semua Metode Pembayaran
+// @Description  Mendapatkan daftar semua metode pembayaran yang tersedia
+// @Tags         Payment Methods
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Router       /payment-methods [get]
 func (h *PaymentMethodHandler) GetAll(c *gin.Context) {
 	methods, err := h.repo.FindAll(c.Request.Context())
 	if err != nil {

@@ -12,10 +12,10 @@ import (
 	"github.com/ybb-platform/payment-service/internal/application/queries"
 	queryHandlers "github.com/ybb-platform/payment-service/internal/application/queries/handlers"
 
-	"github.com/ybb-platform/payment-service/internal/domain/repositories"
-	"github.com/ybb-platform/payment-service/internal/infrastructure/messaging"
-	infraGateways "github.com/ybb-platform/payment-service/internal/infrastructure/gateways" // <--- TAMBAH INI
 	"github.com/ybb-platform/payment-service/internal/domain/events"
+	"github.com/ybb-platform/payment-service/internal/domain/repositories"
+	infraGateways "github.com/ybb-platform/payment-service/internal/infrastructure/gateways" // <--- TAMBAH INI
+	"github.com/ybb-platform/payment-service/internal/infrastructure/messaging"
 )
 
 // PaymentHandler handles payment-related HTTP requests
@@ -238,7 +238,18 @@ func (h *PaymentHandler) HandleWebhook(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
-// FITUR MANUAL PAYMENT
+// UploadProof godoc
+// @Summary      Upload Bukti Transfer
+// @Description  User mengupload foto bukti transfer untuk pembayaran manual
+// @Tags         Manual Payment
+// @Accept       multipart/form-data
+// @Produce      json
+// @Param        id   path      string  true  "Transaction ID (UUID)"
+// @Param        file formData  file    true  "File Gambar Bukti Transfer (JPG/PNG)"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Router       /payments/{id}/proof [post]
 func (h *PaymentHandler) UploadProof(c *gin.Context) {
     transactionID := c.Param("id")
 
@@ -248,8 +259,7 @@ func (h *PaymentHandler) UploadProof(c *gin.Context) {
         return
     }
 
-    // --- KODE BARU: SIMPAN FILE KE FOLDER ---
-    // Pastikan folder "uploads" sudah dibuat manual di VS Code
+    // folder "uploads"
     filePath := "./uploads/" + file.Filename
     
     // Simpan file dari memori ke harddisk
@@ -257,7 +267,6 @@ func (h *PaymentHandler) UploadProof(c *gin.Context) {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menyimpan file", "details": err.Error()})
         return
     }
-    // ----------------------------------------
 
     fmt.Printf("[LOG] File Tersimpan di: %s\n", filePath)
 
@@ -276,7 +285,18 @@ type VerifyPaymentRequest struct {
     AdminID string `json:"admin_id"` // Simulated Admin ID
 }
 
-// VerifyPayment handles the admin approval or rejection process
+// VerifyPayment godoc
+// @Summary      Verifikasi Pembayaran (Admin)
+// @Description  Admin menyetujui (Approve) atau menolak (Reject) pembayaran manual
+// @Tags         Manual Payment
+// @Accept       json
+// @Produce      json
+// @Param        id      path  string                true  "Transaction ID (UUID)"
+// @Param        request body  VerifyPaymentRequest  true  "Data Verifikasi (Action & Admin ID)"
+// @Success      200     {object}  map[string]interface{}
+// @Failure      400     {object}  map[string]interface{}
+// @Failure      404     {object}  map[string]interface{}
+// @Router       /payments/{id}/verify [post]
 func (h *PaymentHandler) VerifyPayment(c *gin.Context) {
     paymentID := c.Param("id")
 
