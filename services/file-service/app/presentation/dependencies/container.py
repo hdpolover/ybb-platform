@@ -18,7 +18,11 @@ def get_storage_service() -> MinIOStorage:
         endpoint=os.getenv("MINIO_ENDPOINT", "localhost:9000"),
         access_key=os.getenv("MINIO_ACCESS_KEY", "minioadmin"),
         secret_key=os.getenv("MINIO_SECRET_KEY", "minioadmin"),
-        secure=os.getenv("MINIO_SECURE", "false").lower() == "true"
+        secure=os.getenv("MINIO_SECURE", "false").lower() == "true",
+        # Public endpoint for browser-accessible presigned URLs
+        # In dev: localhost:9000, in prod: files.yourdomain.com or CDN URL
+        public_endpoint=os.getenv("MINIO_PUBLIC_ENDPOINT", "localhost:9000"),
+        public_secure=os.getenv("MINIO_PUBLIC_SECURE", "false").lower() == "true"
     )
 
 

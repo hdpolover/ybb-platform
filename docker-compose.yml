@@ -178,6 +178,9 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MINIO_SECURE: ${MINIO_SECURE:-false}
+      # Public endpoint for browser-accessible presigned URLs
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-localhost:9000}
+      MINIO_PUBLIC_SECURE: ${MINIO_PUBLIC_SECURE:-false}
       DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres:5432/ybb_files_db
       CERTIFICATE_SIGNING_KEY: ${CERTIFICATE_SIGNING_KEY:-your-secret-signing-key}
       CERTIFICATE_VERIFICATION_URL: ${CERTIFICATE_VERIFICATION_URL:-https://verify.ybb.org}
