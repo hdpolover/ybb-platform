@@ -1,8 +1,78 @@
 basePath: /api/v1
 definitions:
-  entities.PaymentMethodEntity:
+  github_com_ybb-platform_payment-service_internal_domain_entities.PaymentMethodEntity:
+    properties:
+      account_name:
+        example: PT YBB Platform
+        type: string
+      account_number:
+        example: "1234567890"
+        type: string
+      admin_instructions:
+        example: Cek mutasi bank tanggal sekian
+        type: string
+      bank_name:
+        description: '--- Manual Payment Fields ---'
+        example: BCA
+        type: string
+      code:
+        example: bca_manual
+        type: string
+      config:
+        additionalProperties: true
+        description: |-
+          --- Configuration ---
+          swaggertype digunakan agar Swagger tidak bingung membaca map[string]interface{}
+        type: object
+      created_at:
+        description: '--- Timestamps ---'
+        example: "2025-12-01T10:00:00Z"
+        type: string
+      description:
+        example: Transfer manual ke rekening BCA
+        type: string
+      display_name:
+        example: Bank BCA
+        type: string
+      gateway_name:
+        description: '--- Automatic Payment Fields ---'
+        example: ""
+        type: string
+      gateway_type:
+        example: ""
+        type: string
+      icon:
+        example: https://logo.com/bca.png
+        type: string
+      id:
+        description: '--- Primary Key ---'
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      instructions:
+        example: Silakan transfer sesuai nominal unik
+        type: string
+      is_active:
+        example: true
+        type: boolean
+      name:
+        description: '--- Basic Info ---'
+        example: Transfer Bank BCA
+        type: string
+      requires_proof:
+        example: true
+        type: boolean
+      sort_order:
+        example: 1
+        type: integer
+      type:
+        allOf:
+        - $ref: '#/definitions/github_com_ybb-platform_payment-service_internal_domain_entities.PaymentMethodType'
+        example: manual
+      updated_at:
+        example: "2025-12-01T10:00:00Z"
+        type: string
     type: object
-  entities.PaymentMethodType:
+  github_com_ybb-platform_payment-service_internal_domain_entities.PaymentMethodType:
     enum:
     - automatic
     - manual
@@ -16,7 +86,7 @@ definitions:
     x-enum-varnames:
     - MethodTypeAutomatic
     - MethodTypeManual
-  handlers.VerifyPaymentRequest:
+  internal_presentation_http_handlers.VerifyPaymentRequest:
     properties:
       action:
         description: '"approve" or "reject"'
@@ -54,7 +124,10 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
+            additionalProperties:
+              items:
+                $ref: '#/definitions/github_com_ybb-platform_payment-service_internal_domain_entities.PaymentMethodEntity'
+              type: array
             type: object
       summary: Lihat Semua Metode Pembayaran
       tags:
@@ -69,14 +142,15 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/entities.PaymentMethodEntity'
+          $ref: '#/definitions/github_com_ybb-platform_payment-service_internal_domain_entities.PaymentMethodEntity'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            additionalProperties: true
+            additionalProperties:
+              $ref: '#/definitions/github_com_ybb-platform_payment-service_internal_domain_entities.PaymentMethodEntity'
             type: object
         "400":
           description: Bad Request
@@ -84,6 +158,70 @@ paths:
             additionalProperties: true
             type: object
       summary: Tambah Metode Pembayaran Baru
+      tags:
+      - Payment Methods
+  /payment-methods/{id}:
+    delete:
+      description: Menghapus (Soft Delete) metode pembayaran berdasarkan ID
+      parameters:
+      - description: Payment Method ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Hapus Metode Pembayaran
+      tags:
+      - Payment Methods
+    put:
+      consumes:
+      - application/json
+      description: Mengubah data bank atau metode pembayaran berdasarkan ID
+      parameters:
+      - description: Payment Method ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Data Update
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_ybb-platform_payment-service_internal_domain_entities.PaymentMethodEntity'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/github_com_ybb-platform_payment-service_internal_domain_entities.PaymentMethodEntity'
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update Metode Pembayaran
       tags:
       - Payment Methods
   /payments/{id}/proof:
@@ -139,7 +277,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/handlers.VerifyPaymentRequest'
+          $ref: '#/definitions/internal_presentation_http_handlers.VerifyPaymentRequest'
       produces:
       - application/json
       responses:

@@ -23,7 +23,7 @@ func NewPaymentMethodHandler(repo *persistence.PaymentMethodRepository) *Payment
 // @Accept       json
 // @Produce      json
 // @Param        request body entities.PaymentMethodEntity true "Data Payment Method"
-// @Success      201  {object}  map[string]interface{}
+// @Success      201  {object}  map[string]entities.PaymentMethodEntity
 // @Failure      400  {object}  map[string]interface{}
 // @Router       /payment-methods [post]
 func (h *PaymentMethodHandler) Create(c *gin.Context) {
@@ -46,7 +46,7 @@ func (h *PaymentMethodHandler) Create(c *gin.Context) {
 // @Description  Mendapatkan daftar semua metode pembayaran yang tersedia
 // @Tags         Payment Methods
 // @Produce      json
-// @Success      200  {object}  map[string]interface{}
+// @Success      200  {object}  map[string][]entities.PaymentMethodEntity
 // @Router       /payment-methods [get]
 func (h *PaymentMethodHandler) GetAll(c *gin.Context) {
 	methods, err := h.repo.FindAll(c.Request.Context())
@@ -57,7 +57,18 @@ func (h *PaymentMethodHandler) GetAll(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": methods})
 }
 
-// Update Method
+// Update godoc
+// @Summary      Update Metode Pembayaran
+// @Description  Mengubah data bank atau metode pembayaran berdasarkan ID
+// @Tags         Payment Methods
+// @Accept       json
+// @Produce      json
+// @Param        id       path  string                      true  "Payment Method ID (UUID)"
+// @Param        request  body  entities.PaymentMethodEntity true "Data Update"
+// @Success      200      {object}  map[string]entities.PaymentMethodEntity
+// @Failure      400      {object}  map[string]interface{}
+// @Failure      404      {object}  map[string]interface{}
+// @Router       /payment-methods/{id} [put]
 func (h *PaymentMethodHandler) Update(c *gin.Context) {
 	id := c.Param("id")
 	
@@ -103,7 +114,15 @@ func (h *PaymentMethodHandler) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success", "data": existing})
 }
 
-// Delete Method
+// Delete godoc
+// @Summary      Hapus Metode Pembayaran
+// @Description  Menghapus (Soft Delete) metode pembayaran berdasarkan ID
+// @Tags         Payment Methods
+// @Produce      json
+// @Param        id   path      string  true  "Payment Method ID (UUID)"
+// @Success      200  {object}  map[string]string
+// @Failure      500  {object}  map[string]interface{}
+// @Router       /payment-methods/{id} [delete]
 func (h *PaymentMethodHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.repo.Delete(c.Request.Context(), id); err != nil {

@@ -16,36 +16,40 @@ const (
 )
 
 // PaymentMethodEntity represents a configurable payment method
-// Admins can enable/disable methods and configure them
 type PaymentMethodEntity struct {
-	ID          string            `gorm:"type:uuid;primaryKey"`
-	Name        string            `gorm:"type:varchar(100);not null;uniqueIndex"` // e.g., "Bank BCA", "Midtrans", "GoPay"
-	Type        PaymentMethodType `gorm:"type:varchar(20);not null;index"`
-	Code        string            `gorm:"type:varchar(50);not null;uniqueIndex"` // e.g., "bank_bca", "midtrans", "gopay"
-	IsActive    bool              `gorm:"not null;default:true;index"`
-	DisplayName string            `gorm:"type:varchar(100);not null"` // User-facing name
-	Description string            `gorm:"type:text"`
-	Icon        string            `gorm:"type:varchar(255)"` // Icon URL or identifier
+	// --- Primary Key ---
+	ID string `gorm:"type:uuid;primaryKey" json:"id" example:"550e8400-e29b-41d4-a716-446655440000"`
 
-	// For automatic methods
-	GatewayName string `gorm:"type:varchar(50)"` // "midtrans", "xendit", etc.
-	GatewayType string `gorm:"type:varchar(50)"` // Payment type in gateway: "credit_card", "bank_transfer", etc.
+	// --- Basic Info ---
+	Name        string            `gorm:"type:varchar(100);not null;uniqueIndex" json:"name"         example:"Transfer Bank BCA"`
+	Type        PaymentMethodType `gorm:"type:varchar(20);not null;index"        json:"type"         example:"manual"`
+	Code        string            `gorm:"type:varchar(50);not null;uniqueIndex"  json:"code"         example:"bca_manual"`
+	IsActive    bool              `gorm:"not null;default:true;index"            json:"is_active"    example:"true"`
+	DisplayName string            `gorm:"type:varchar(100);not null"             json:"display_name" example:"Bank BCA"`
+	Description string            `gorm:"type:text"                              json:"description"  example:"Transfer manual ke rekening BCA"`
+	Icon        string            `gorm:"type:varchar(255)"                      json:"icon"         example:"https://logo.com/bca.png"`
 
-	// For manual methods
-	AccountNumber     string `gorm:"type:varchar(100)"`      // Bank account number
-	AccountName       string `gorm:"type:varchar(255)"`      // Account holder name
-	BankName          string `gorm:"type:varchar(100)"`      // Bank name (for transfers)
-	Instructions      string `gorm:"type:text"`              // Instructions for users
-	RequiresProof     bool   `gorm:"not null;default:false"` // Whether proof upload is required
-	AdminInstructions string `gorm:"type:text"`              // Instructions for admins verifying
+	// --- Automatic Payment Fields ---
+	GatewayName string `gorm:"type:varchar(50)" json:"gateway_name" example:""`
+	GatewayType string `gorm:"type:varchar(50)" json:"gateway_type" example:""`
 
-	// Configuration
-	Config    map[string]interface{} `gorm:"type:jsonb"` // Additional config
-	SortOrder int                    `gorm:"default:0"`  // Display order
+	// --- Manual Payment Fields ---
+	BankName          string `gorm:"type:varchar(100)"      json:"bank_name"          example:"BCA"`
+	AccountNumber     string `gorm:"type:varchar(100)"      json:"account_number"     example:"1234567890"`
+	AccountName       string `gorm:"type:varchar(255)"      json:"account_name"       example:"PT YBB Platform"`
+	Instructions      string `gorm:"type:text"              json:"instructions"       example:"Silakan transfer sesuai nominal unik"`
+	RequiresProof     bool   `gorm:"not null;default:false" json:"requires_proof"     example:"true"`
+	AdminInstructions string `gorm:"type:text"              json:"admin_instructions" example:"Cek mutasi bank tanggal sekian"`
 
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	DeletedAt gorm.DeletedAt `gorm:"index"`
+	// --- Configuration ---
+	// swaggertype digunakan agar Swagger tidak bingung membaca map[string]interface{}
+	Config map[string]interface{} `gorm:"type:jsonb;serializer:json" json:"config" 		swaggerignore:"true"`
+	SortOrder int                 `gorm:"default:0"                  json:"sort_order"  example:"1"`
+
+	// --- Timestamps ---
+	CreatedAt time.Time      `json:"created_at" example:"2025-12-01T10:00:00Z"`
+	UpdatedAt time.Time      `json:"updated_at" example:"2025-12-01T10:00:00Z"`
+	DeletedAt gorm.DeletedAt `gorm:"index"      json:"-" swaggerignore:"true"`
 }
 
 // TableName specifies the table name for GORM

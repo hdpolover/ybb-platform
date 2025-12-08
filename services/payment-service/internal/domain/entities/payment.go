@@ -23,13 +23,10 @@ const (
 type PaymentMethod string
 
 const (
-	// Automatic methods (via gateway)
-	PaymentMethodCreditCard   PaymentMethod = "credit_card"
-	PaymentMethodBankTransfer PaymentMethod = "bank_transfer"
-	PaymentMethodEWallet      PaymentMethod = "e_wallet"
-	PaymentMethodQRCode       PaymentMethod = "qr_code"
-
-	// Manual methods (requires proof upload)
+	PaymentMethodCreditCard     PaymentMethod = "credit_card"
+	PaymentMethodBankTransfer   PaymentMethod = "bank_transfer"
+	PaymentMethodEWallet        PaymentMethod = "e_wallet"
+	PaymentMethodQRCode         PaymentMethod = "qr_code"
 	PaymentMethodManualTransfer PaymentMethod = "manual_transfer"
 	PaymentMethodCash           PaymentMethod = "cash"
 )
@@ -38,55 +35,62 @@ const (
 type PaymentType string
 
 const (
-	PaymentTypeAutomatic PaymentType = "automatic" // Via payment gateway
-	PaymentTypeManual    PaymentType = "manual"    // Requires proof upload & admin verification
+	PaymentTypeAutomatic PaymentType = "automatic"
+	PaymentTypeManual    PaymentType = "manual"
 )
 
 // Payment represents a payment transaction in the system
+// @Description Data detail sebuah transaksi pembayaran
 type Payment struct {
-	ID              string        `gorm:"type:uuid;primaryKey"`
-	ApplicationID   string        `gorm:"type:varchar(255);not null;index:idx_payments_application_id"`
-	UserID          string        `gorm:"type:varchar(255);not null;index:idx_payments_user_id,idx_payments_user_status"`
-	Amount          float64       `gorm:"type:decimal(12,2);not null;check:amount > 0"`
-	Currency        string        `gorm:"type:varchar(3);not null;default:'IDR'"`
-	Status          PaymentStatus `gorm:"type:varchar(50);not null;index:idx_payments_status,idx_payments_user_status"`
-	PaymentType     PaymentType   `gorm:"type:varchar(20);not null;default:'automatic';index:idx_payments_type"`
-	PaymentMethod   PaymentMethod `gorm:"type:varchar(50)"`
-	PaymentMethodID *string       `gorm:"type:uuid;index:idx_payments_method_id"` // References payment_methods table
+	// --- Primary Key ---
+	ID string `gorm:"type:uuid;primaryKey" json:"id" example:"550e8400-e29b-41d4-a716-446655440000"`
 
-	// Automatic payment fields (gateway-based)
-	GatewayName     string                 `gorm:"type:varchar(50);index:idx_payments_gateway_name"`
-	GatewayOrderID  string                 `gorm:"type:varchar(255);index:idx_payments_gateway_order_id"`
-	GatewayResponse map[string]interface{} `gorm:"type:jsonb"`
-	RedirectURL     string                 `gorm:"type:text"` // For automatic payments
+	// --- References ---
+	ApplicationID   string  `gorm:"type:varchar(255);not null;index:idx_payments_application_id" json:"application_id"    example:"app-123"`
+	UserID          string  `gorm:"type:varchar(255);not null;index:idx_payments_user_id"        json:"user_id"           example:"user-456"`
+	PaymentMethodID *string `gorm:"type:uuid;index:idx_payments_method_id"                       json:"payment_method_id" example:"uuid-of-method"`
 
-	// Manual payment fields
-	ProofFileID    *string    `gorm:"type:uuid"`         // Reference to uploaded proof file
-	ProofFileURL   string     `gorm:"type:text"`         // URL to proof image
-	VerifiedByID   *string    `gorm:"type:varchar(255)"` // Admin who verified
-	VerifiedAt     *time.Time // When admin verified
-	RejectedReason string     `gorm:"type:text"` // If rejected, why
+	// --- Transaction Details ---
+	Amount        float64       `gorm:"type:decimal(12,2);not null;check:amount > 0"                 json:"amount"         example:"150000"`
+	Currency      string        `gorm:"type:varchar(3);not null;default:'IDR'"                       json:"currency"       example:"IDR"`
+	Status        PaymentStatus `gorm:"type:varchar(50);not null;index:idx_payments_status"          json:"status"         example:"pending"`
+	PaymentType   PaymentType   `gorm:"type:varchar(20);not null;default:'automatic';index"          json:"payment_type"   example:"manual"`
+	PaymentMethod PaymentMethod `gorm:"type:varchar(50)"                                             json:"payment_method" example:"manual_transfer"`
 
-	Description   string                 `gorm:"type:text"`
-	CustomerName  string                 `gorm:"type:varchar(255)"`
-	CustomerEmail string                 `gorm:"type:varchar(255)"`
-	CustomerPhone string                 `gorm:"type:varchar(50)"`
-	CallbackURL   string                 `gorm:"type:text"`
-	Metadata      map[string]interface{} `gorm:"type:jsonb"`
-	CreatedAt     time.Time              `gorm:"not null;default:CURRENT_TIMESTAMP;index:idx_payments_created_at,sort:desc"`
-	UpdatedAt     time.Time              `gorm:"not null;default:CURRENT_TIMESTAMP"`
-	PaidAt        *time.Time
-	FailedAt      *time.Time
-	CancelledAt   *time.Time
-	RefundedAt    *time.Time
+	// --- Customer Info ---
+	CustomerName  string `gorm:"type:varchar(255)" json:"customer_name"  example:"John Doe"`
+	CustomerEmail string `gorm:"type:varchar(255)" json:"customer_email" example:"john@example.com"`
+	CustomerPhone string `gorm:"type:varchar(50)"  json:"customer_phone" example:"08123456789"`
+	Description   string `gorm:"type:text"         json:"description"    example:"Pembayaran Invoice #1"`
+	CallbackURL   string `gorm:"type:text"         json:"callback_url"   example:"https://client.com/callback"`
+
+	// --- Automatic Gateway Fields ---
+	GatewayName     string                 `gorm:"type:varchar(50)" json:"gateway_name"     example:"manual"`
+	GatewayOrderID  string                 `gorm:"type:varchar(255)" json:"gateway_order_id" example:"order-123"`
+	GatewayResponse map[string]interface{} `gorm:"type:jsonb"       json:"gateway_response"  swaggerignore:"true"`
+	RedirectURL     string                 `gorm:"type:text"        json:"redirect_url"      example:"https://midtrans.com/redirect"`
+
+	// --- Manual Payment Fields ---
+	ProofFileID    *string    `gorm:"type:uuid"          json:"proof_file_id"    example:""`
+	ProofFileURL   string     `gorm:"type:text"          json:"proof_file_url"   example:"http://localhost:8081/uploads/bukti.jpg"`
+	VerifiedByID   *string    `gorm:"type:varchar(255)"  json:"verified_by_id"   example:"admin-magang"`
+	VerifiedAt     *time.Time `json:"verified_at"        example:"2025-12-01T10:00:00Z"`
+	RejectedReason string     `gorm:"type:text"          json:"rejected_reason"  example:"Foto buram"`
+
+	// --- Metadata & Timestamps ---
+	Metadata  map[string]interface{} `gorm:"type:jsonb" json:"metadata" swaggerignore:"true"`
+	CreatedAt time.Time              `gorm:"not null;default:CURRENT_TIMESTAMP" json:"created_at" example:"2025-12-01T10:00:00Z"`
+	UpdatedAt time.Time              `gorm:"not null;default:CURRENT_TIMESTAMP" json:"updated_at" example:"2025-12-01T10:00:00Z"`
+	PaidAt    *time.Time             `json:"paid_at"     example:"2025-12-01T10:00:00Z"`
+	FailedAt  *time.Time             `json:"failed_at"   example:""`
+	CancelledAt *time.Time           `json:"cancelled_at" example:""`
+	RefundedAt  *time.Time           `json:"refunded_at"  example:""`
 }
 
-// TableName specifies the table name for GORM
 func (Payment) TableName() string {
 	return "payments"
 }
 
-// BeforeCreate hook to generate UUID
 func (p *Payment) BeforeCreate(tx *gorm.DB) error {
 	if p.ID == "" {
 		p.ID = uuid.New().String()
@@ -94,7 +98,6 @@ func (p *Payment) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-// NewPayment creates a new payment instance
 func NewPayment(applicationID, userID string, amount float64, currency, description string) *Payment {
 	return &Payment{
 		ID:            uuid.New().String(),
@@ -140,25 +143,23 @@ func (p *Payment) MarkAsProcessing(gatewayOrderID string) {
 	p.UpdatedAt = time.Now()
 }
 
-// --- MANUAL VERIFICATION LOGIC
-
 // VerifyManual marks the manual payment as SUCCESS
 func (p *Payment) VerifyManual(adminID string) {
-    now := time.Now()
-    p.Status = PaymentStatusSuccess
-    p.VerifiedAt = &now
-    p.VerifiedByID = &adminID
-    p.PaidAt = &now
-    p.UpdatedAt = now
+	now := time.Now()
+	p.Status = PaymentStatusSuccess
+	p.VerifiedAt = &now
+	p.VerifiedByID = &adminID
+	p.PaidAt = &now
+	p.UpdatedAt = now
 }
 
 // RejectManual marks the manual payment as FAILED
 func (p *Payment) RejectManual(adminID, reason string) {
-    now := time.Now()
-    p.Status = PaymentStatusFailed
-    p.VerifiedAt = &now
-    p.VerifiedByID = &adminID
-    p.RejectedReason = reason
-    p.FailedAt = &now
-    p.UpdatedAt = now
+	now := time.Now()
+	p.Status = PaymentStatusFailed
+	p.VerifiedAt = &now
+	p.VerifiedByID = &adminID
+	p.RejectedReason = reason
+	p.FailedAt = &now
+	p.UpdatedAt = now
 }
