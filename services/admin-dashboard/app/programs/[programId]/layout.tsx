@@ -43,7 +43,7 @@ export default function ProgramLayout({
           onResetProgram={handleResetProgram}
         />
 
-        <main className="flex-1 overflow-y-auto bg-white px-8 py-6">
+        <main className="flex-1 overflow-y-auto bg-white px-8 py-4">
           {children}
         </main>
       </div>

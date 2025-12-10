@@ -336,11 +336,32 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
     if (!pathname) return "dashboard";
 
     // Match program-scoped routes
+    if (pathname.includes("/master-data/program-details")) {
+      return "program-details";
+    }
+    if (pathname.includes("/announcements")) {
+      return "announcements";
+    }
     if (pathname.includes("/participants")) {
       return "participants";
     }
-    if (pathname.includes("/users/ambassadors")) {
+    if (pathname.includes("/ambassadors")) {
       return "ambassadors";
+    }
+    if (pathname.includes("/submissions/essays")) {
+      return "submissions-essays";
+    }
+    if (pathname.includes("/submissions/agreement-letters")) {
+      return "submissions-agreement-letters";
+    }
+    if (pathname.includes("/submissions")) {
+      return "submissions";
+    }
+    if (pathname.includes("/documents/program-documents")) {
+      return "documents-program-documents";
+    }
+    if (pathname.includes("/documents")) {
+      return "documents";
     }
     if (pathname.includes("/users")) {
       return "users";
@@ -367,8 +388,24 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
     if (pathname?.includes("/scoring")) {
       initial["scoring"] = true;
     }
-    if (pathname?.includes("/users")) {
+    if (
+      pathname?.includes("/users") ||
+      pathname?.includes("/participants") ||
+      pathname?.includes("/ambassadors")
+    ) {
       initial["users"] = true;
+    }
+    if (pathname?.includes("/submissions")) {
+      initial["submissions"] = true;
+    }
+    if (pathname?.includes("/documents")) {
+      initial["documents"] = true;
+    }
+    if (pathname?.includes("/master-data")) {
+      initial["master-data"] = true;
+    }
+    if (pathname?.includes("/announcements")) {
+      initial["announcements"] = true;
     }
     return initial;
   });
@@ -405,7 +442,25 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
     } else if (item.id === "participants") {
       router.push(`/programs/${selectedProgramId}/participants`);
     } else if (item.id === "ambassadors") {
-      router.push(`/programs/${selectedProgramId}/users/ambassadors`);
+      router.push(`/programs/${selectedProgramId}/ambassadors`);
+    } else if (item.id === "submissions") {
+      router.push(`/programs/${selectedProgramId}/submissions`);
+    } else if (item.id === "submissions-essays") {
+      router.push(`/programs/${selectedProgramId}/submissions/essays`);
+    } else if (item.id === "submissions-agreement-letters") {
+      router.push(`/programs/${selectedProgramId}/submissions/agreement-letters`);
+    } else if (item.id === "documents") {
+      router.push(`/programs/${selectedProgramId}/documents`);
+    } else if (item.id === "documents-program-documents") {
+      router.push(`/programs/${selectedProgramId}/documents/program-documents`);
+    } else if (item.id === "documents-certificates") {
+      router.push(`/programs/${selectedProgramId}/documents/certificates`);
+    } else if (item.id === "announcements") {
+      router.push(`/programs/${selectedProgramId}/announcements`);
+    } else if (item.id === "master-data") {
+      router.push(`/programs/${selectedProgramId}/master-data/program-details`);
+    } else if (item.id === "program-details") {
+      router.push(`/programs/${selectedProgramId}/master-data/program-details`);
     }
     if (options?.setActive !== false) {
       setActiveId(item.id);
