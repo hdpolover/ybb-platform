@@ -13,9 +13,12 @@ type Config struct {
 	DatabaseURL          string
 	RabbitMQURL          string
 	RabbitMQExchange     string
+
 	MidtransServerKey    string
 	MidtransClientKey    string
 	MidtransIsProduction bool
+
+	XenditSecretKey      string
 }
 
 // LoadConfig loads configuration from environment variables
@@ -30,9 +33,12 @@ func LoadConfig() (*Config, error) {
 		DatabaseURL:          getEnv("DATABASE_URL", "postgresql://ybb_user:ybb_pass@localhost:5432/ybb_payments_db"),
 		RabbitMQURL:          getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
 		RabbitMQExchange:     getEnv("RABBITMQ_EXCHANGE", "payment-events"),
+		
 		MidtransServerKey:    getEnv("MIDTRANS_SERVER_KEY", ""),
 		MidtransClientKey:    getEnv("MIDTRANS_CLIENT_KEY", ""),
 		MidtransIsProduction: getEnv("MIDTRANS_IS_PRODUCTION", "false") == "true",
+
+		XenditSecretKey:      getEnv("XENDIT_SECRET_KEY", ""),
 	}, nil
 }
 

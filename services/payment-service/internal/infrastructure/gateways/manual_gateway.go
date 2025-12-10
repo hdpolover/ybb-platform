@@ -17,7 +17,6 @@ func NewManualGateway() *ManualGateway {
 
 // GetName returns the gateway identifier
 func (g *ManualGateway) GetName() string {
-    // INI KUNCINYA: String "manual" ini yang dicari oleh sistem
     return "manual"
 }
 
@@ -44,9 +43,11 @@ func (g *ManualGateway) HandleWebhook(ctx context.Context, payload []byte) (*ent
 }
 
 func (g *ManualGateway) CancelPayment(ctx context.Context, gatewayOrderID string) error {
+    fmt.Printf("[ManualGateway] Cancel request received for %s. No external action needed.\n", gatewayOrderID)
     return nil
 }
 
 func (g *ManualGateway) RefundPayment(ctx context.Context, gatewayOrderID string, amount float64) error {
+    fmt.Printf("[ManualGateway] Refund request received for %s. Admin must transfer manually.\n", gatewayOrderID)
     return nil
 }

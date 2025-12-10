@@ -103,6 +103,15 @@ func main() {
 	gatewayFactory.Register(manualGateway)
 	log.Println("Registered payment gateways: Manual")
 
+	// Register Xendit Gateway
+	if cfg.XenditSecretKey != "" {
+		xenditGateway := infraGateways.NewXenditGateway(cfg.XenditSecretKey)
+		gatewayFactory.Register(xenditGateway)
+		log.Println("Registered payment gateways: Xendit")
+	} else {
+		log.Println("Warning: Xendit Secret Key is empty, skipping registration")
+	}
+
 	// Initialize repositories
 	paymentRepo := persistence.NewGormPaymentRepository(db)
 	paymentMethodRepo := persistence.NewPaymentMethodRepository(db)

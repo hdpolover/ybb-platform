@@ -8,6 +8,7 @@ import (
 	"encoding/hex" 
 	"encoding/json"
 
+	// "github.com/midtrans/midtrans-go/coreapi"
 	"github.com/midtrans/midtrans-go"
 	"github.com/midtrans/midtrans-go/snap"
 	"github.com/ybb-platform/payment-service/internal/domain/entities"
@@ -97,12 +98,6 @@ func (g *MidtransGateway) VerifyPayment(ctx context.Context, gatewayOrderID stri
 // HandleWebhook processes Midtrans webhook notification
 // TODO for intern: Implement webhook handling with signature verification
 func (g *MidtransGateway) HandleWebhook(ctx context.Context, payload []byte) (*entities.Payment, error) {
-	// TODO: Parse webhook payload
-	// TODO: Verify signature
-	// TODO: Update payment status based on transaction_status
-
-	// log.Printf("TODO: Handle Midtrans webhook")
-	// return nil, fmt.Errorf("not implemented")
 	// 1. Parse JSON Payload
 	var notification map[string]interface{}
 	if err := json.Unmarshal(payload, &notification); err != nil {
