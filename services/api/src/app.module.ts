@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from '@shared/infrastructure/prisma/prisma.module';
 import { CacheModule } from '@shared/infrastructure/cache/cache.module';
+import { ThrottlerModule } from '@shared/infrastructure/throttler/throttler.module';
 import { CacheController } from '@shared/presentation/cache.controller';
 import { AuthModule } from '@modules/auth/auth.module';
 import { UsersModule } from '@modules/users/users.module';
@@ -21,6 +22,7 @@ import { FilesModule } from '@modules/files/files.module';
     // Infrastructure
     PrismaModule,
     CacheModule,
+    ThrottlerModule,
 
     // Feature modules
     AuthModule,
@@ -32,4 +34,4 @@ import { FilesModule } from '@modules/files/files.module';
   ],
   controllers: [CacheController],
 })
-export class AppModule {}
+export class AppModule { }

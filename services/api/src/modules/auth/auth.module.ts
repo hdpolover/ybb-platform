@@ -5,9 +5,11 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthController } from './presentation/auth.controller';
 import { LoginHandler } from './application/commands/handlers/login.handler';
 import { RegisterHandler } from './application/commands/handlers/register.handler';
+import { LogoutHandler } from './application/commands/handlers/logout.handler';
 import { JwtStrategy } from './infrastructure/strategies/jwt.strategy';
 import { JwtAuthGuard } from './infrastructure/guards/jwt-auth.guard';
-import { PrismaService } from '../../shared/infrastructure/prisma/prisma.service';
+import { TokenBlacklistService } from './infrastructure/services/token-blacklist.service';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 
 @Module({
   imports: [
@@ -28,9 +30,12 @@ import { PrismaService } from '../../shared/infrastructure/prisma/prisma.service
     PrismaService,
     LoginHandler,
     RegisterHandler,
+    LogoutHandler,
     JwtStrategy,
     JwtAuthGuard,
+    TokenBlacklistService,
   ],
-  exports: [JwtAuthGuard, JwtStrategy, PassportModule],
+  exports: [JwtAuthGuard, JwtStrategy, TokenBlacklistService, PassportModule],
 })
-export class AuthModule {}
+export class AuthModule { }
+
