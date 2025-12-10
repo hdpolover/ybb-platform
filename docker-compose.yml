@@ -17,7 +17,7 @@ services:
     networks:
       - ybb-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${DATABASE_USER}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -54,7 +54,7 @@ services:
     networks:
       - ybb-network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -78,7 +78,7 @@ services:
     networks:
       - ybb-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 30s
       timeout: 20s
       retries: 3
@@ -98,7 +98,7 @@ services:
     networks:
       - ybb-network
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      test: [ "CMD", "rabbitmq-diagnostics", "ping" ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -196,6 +196,33 @@ services:
         condition: service_healthy
     command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 
+  # NestJS Notification Service
+  notification-service:
+    build:
+      context: ./services/notification-service
+      dockerfile: Dockerfile.dev
+    container_name: ybb-notification-service
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 4002
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
+      # Database URL can be added later if needed, for now starting simple
+      # DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres:5432/ybb_notifications_db
+    ports:
+      - "4002:4002"
+    volumes:
+      - ./services/notification-service:/app
+      - /app/node_modules
+      - /app/dist
+    networks:
+      - ybb-network
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    command: npm run start:dev
+
   # Next.js Admin Dashboard
   admin-dashboard:
     build:
@@ -289,4 +316,5 @@ volumes:
   pgadmin_data:
   prometheus_data:
   grafana_data:
+
 
