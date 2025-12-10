@@ -1,0 +1,41 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          # passphrase: ${{ secrets.VPS_PASSPHRASE }} # Optional if key has passphrase
+          script: |
+            # Stop if any command fails
+            set -e
+            
+            echo "🚀 Starting deployment..."
+            
+            # Navigate to project directory
+            # Make sure this directory exists on your VPS!
+            cd ~/ybb-platform
+            
+            # Pull latest changes
+            echo "📥 Pulling latest code..."
+            git pull origin main
+            
+            # Rebuild and start services
+            echo "🔄 Rebuilding services..."
+            # Note: We use the prod config
+            docker-compose -f docker-compose.prod.yml up -d --build
+            
+            # Optional: Prune old images to save space
+            docker image prune -f
+            
+            echo "✅ Deployment complete!"
