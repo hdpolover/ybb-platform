@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AuthModule } from '@modules/auth/auth.module';
 import { ApplicationsController } from './presentation/applications.controller';
 
 // Command Handlers
@@ -19,7 +20,7 @@ import { PrismaModule } from '@shared/infrastructure/prisma/prisma.module';
 import { APPLICATION_REPOSITORY } from './infrastructure/tokens';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, AuthModule],
   controllers: [ApplicationsController],
   providers: [
     // Command Handlers
@@ -46,4 +47,4 @@ import { APPLICATION_REPOSITORY } from './infrastructure/tokens';
     ListApplicationsHandler,
   ],
 })
-export class ApplicationsModule {}
+export class ApplicationsModule { }

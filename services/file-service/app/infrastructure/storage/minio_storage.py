@@ -1,5 +1,6 @@
 """MinIO storage implementation."""
 import io
+import re
 from typing import BinaryIO
 from minio import Minio
 from minio.error import S3Error
@@ -15,23 +16,35 @@ class MinIOStorage(IStorageService):
         endpoint: str, 
         access_key: str, 
         secret_key: str,
-        secure: bool = False
+        secure: bool = False,
+        public_endpoint: str | None = None,
+        public_secure: bool | None = None
     ):
         """
         Initialize MinIO client.
         
         Args:
-            endpoint: MinIO server endpoint (e.g., 'localhost:9000')
+            endpoint: MinIO server endpoint for internal operations (e.g., 'minio:9000')
             access_key: Access key
             secret_key: Secret key
             secure: Use HTTPS (default: False for local)
+            public_endpoint: Public endpoint for presigned URLs (e.g., 'localhost:9000' or 'files.example.com')
+            public_secure: Use HTTPS for public URLs (defaults to secure if not set)
         """
+        self.endpoint = endpoint
+        self.secure = secure
+        
+        # Internal client for upload/download operations
         self.client = Minio(
             endpoint=endpoint,
             access_key=access_key,
             secret_key=secret_key,
             secure=secure
         )
+        
+        # Store public endpoint config for URL rewriting
+        self.public_endpoint = public_endpoint or endpoint
+        self.public_secure = public_secure if public_secure is not None else secure
     
     async def upload(
         self, 
@@ -94,14 +107,33 @@ class MinIOStorage(IStorageService):
         object_name: str, 
         expiry_seconds: int = 3600
     ) -> str:
-        """Get presigned URL for direct download."""
+        """
+        Get presigned URL for direct download.
+        
+        Generates URL using internal client, then rewrites the endpoint
+        to the public endpoint for browser accessibility.
+        """
         try:
             from datetime import timedelta
+            
+            # Generate presigned URL using internal client
             url = self.client.presigned_get_object(
                 bucket_name=bucket,
                 object_name=object_name,
                 expires=timedelta(seconds=expiry_seconds)
             )
+            
+            # Rewrite URL to use public endpoint if different
+            if self.public_endpoint != self.endpoint:
+                # Determine the protocols
+                internal_protocol = "https" if self.secure else "http"
+                public_protocol = "https" if self.public_secure else "http"
+                
+                # Replace the internal endpoint with public endpoint
+                internal_base = f"{internal_protocol}://{self.endpoint}"
+                public_base = f"{public_protocol}://{self.public_endpoint}"
+                url = url.replace(internal_base, public_base, 1)
+            
             return url
             
         except S3Error as e:

@@ -3,10 +3,14 @@ import { CacheModule as NestCacheModule } from '@nestjs/cache-manager';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { redisStore } from 'cache-manager-redis-yet';
 import { CacheService } from './cache.service';
+import { CacheMetricsService } from './cache-metrics.service';
+import { CacheWarmingService } from './cache-warming.service';
+import { PrismaModule } from '../prisma/prisma.module';
 
 @Global()
 @Module({
   imports: [
+    PrismaModule,
     NestCacheModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => {
@@ -29,7 +33,8 @@ import { CacheService } from './cache.service';
       isGlobal: true,
     }),
   ],
-  providers: [CacheService],
-  exports: [NestCacheModule, CacheService],
+  providers: [CacheService, CacheMetricsService, CacheWarmingService],
+  exports: [NestCacheModule, CacheService, CacheMetricsService, CacheWarmingService],
 })
-export class CacheModule {}
+export class CacheModule { }
+

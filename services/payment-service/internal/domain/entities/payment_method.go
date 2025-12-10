@@ -17,17 +17,14 @@ const (
 
 // PaymentMethodEntity represents a configurable payment method
 type PaymentMethodEntity struct {
-	// --- Primary Key ---
-	ID string `gorm:"type:uuid;primaryKey" json:"id" example:"550e8400-e29b-41d4-a716-446655440000"`
-
-	// --- Basic Info ---
-	Name        string            `gorm:"type:varchar(100);not null;uniqueIndex" json:"name"         example:"Transfer Bank BCA"`
-	Type        PaymentMethodType `gorm:"type:varchar(20);not null;index"        json:"type"         example:"manual"`
-	Code        string            `gorm:"type:varchar(50);not null;uniqueIndex"  json:"code"         example:"bca_manual"`
-	IsActive    bool              `gorm:"not null;default:true;index"            json:"is_active"    example:"true"`
-	DisplayName string            `gorm:"type:varchar(100);not null"             json:"display_name" example:"Bank BCA"`
-	Description string            `gorm:"type:text"                              json:"description"  example:"Transfer manual ke rekening BCA"`
-	Icon        string            `gorm:"type:varchar(255)"                      json:"icon"         example:"https://logo.com/bca.png"`
+	ID          string            `gorm:"type:uuid;primaryKey"`
+	Name        string            `gorm:"type:varchar(100);not null;uniqueIndex:idx_payment_methods_name"` // e.g., "Bank BCA", "Midtrans", "GoPay"
+	Type        PaymentMethodType `gorm:"type:varchar(20);not null;index"`
+	Code        string            `gorm:"type:varchar(50);not null;uniqueIndex:idx_payment_methods_code"` // e.g., "bank_bca", "midtrans", "gopay"
+	IsActive    bool              `gorm:"not null;default:true;index"`
+	DisplayName string            `gorm:"type:varchar(100);not null"` // User-facing name
+	Description string            `gorm:"type:text"`
+	Icon        string            `gorm:"type:varchar(255)"` // Icon URL or identifier
 
 	// --- Automatic Payment Fields ---
 	GatewayName string `gorm:"type:varchar(50)" json:"gateway_name" example:""`

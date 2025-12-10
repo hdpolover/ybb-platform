@@ -8,6 +8,8 @@ export interface JwtPayload {
   sub: string;
   email: string;
   programCategoryId: string;
+  jti?: string; // JWT unique token ID for blacklisting
+  exp?: number; // Token expiration timestamp
 }
 
 @Injectable()
@@ -34,10 +36,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     // Return user info to be attached to request object
+    // Include jti and exp for token blacklisting support
     return {
       userId: payload.sub,
       email: payload.email,
       programCategoryId: payload.programCategoryId,
+      jti: payload.jti,
+      exp: payload.exp,
     };
   }
 }
+

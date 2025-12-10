@@ -75,7 +75,7 @@ export default function LandingPage() {
           </div>
           <h1 className="mb-2 text-2xl font-bold text-zinc-900">No Access</h1>
           <p className="mb-6 text-zinc-600">
-            You don't have permission to access any dashboard. Please contact a super admin to assign you to programs.
+            You don&apos;t have permission to access any dashboard. Please contact a super admin to assign you to programs.
           </p>
           <button
             onClick={() => {
@@ -148,9 +148,9 @@ export default function LandingPage() {
       </header>
 
       {/* Main Content */}
-      <main className="mx-auto w-full max-w-7xl flex-1 px-8 py-8">
+      <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-8 py-8">
         {/* Welcome Section */}
-        <div className="mb-8">
+        <section>
           <h1 className="mb-2 text-2xl font-bold text-zinc-900">
             Welcome back, {adminProfile.fullName.split(' ')[0]}!
           </h1>
@@ -160,11 +160,11 @@ export default function LandingPage() {
               : `You have access to ${assignedPrograms.length} program${assignedPrograms.length !== 1 ? 's' : ''}`
             }
           </p>
-        </div>
+        </section>
 
         {/* Admin Mode Cards - Only show for Platform Admins */}
         {isPlatformAdmin && (
-          <div className="mb-8 grid gap-4 md:grid-cols-2">
+          <section className="grid gap-4 md:grid-cols-2">
             {/* Platform Admin Card */}
             <Link
               href="/platform"
@@ -181,7 +181,7 @@ export default function LandingPage() {
                   <p className="mb-3 text-sm text-zinc-600">
                     Manage categories, programs, users, admins, and platform-wide analytics
                   </p>
-                  <div className="flex items-center gap-1 text-sm font-medium text-blue-600 group-hover:gap-2 transition-all">
+                  <div className="flex items-center gap-1 text-sm font-medium text-blue-600 transition-all group-hover:gap-2">
                     <span>Go to Platform Admin</span>
                     <ArrowRightIcon className="h-4 w-4" />
                   </div>
@@ -203,16 +203,16 @@ export default function LandingPage() {
                     Manage specific program operations, applications, payments, and participants
                   </p>
                   <p className="mt-3 text-xs font-medium text-zinc-500">
-                    Select a program below to continue →
+                    Select a program below to continue a
                   </p>
                 </div>
               </div>
             </div>
-          </div>
+          </section>
         )}
 
         {/* Program Selection */}
-        <div>
+        <section className="flex flex-1 flex-col min-h-0">
           <div className="mb-4">
             <h2 className="text-lg font-semibold text-zinc-900">
               {isPlatformAdmin ? "Select a Program" : "Your Programs"}
@@ -225,40 +225,44 @@ export default function LandingPage() {
             </p>
           </div>
 
-          {/* Show filtered programs for program admins */}
-          {isPlatformAdmin ? (
-            <ProgramList onSelectProgram={handleSelectProgram} />
-          ) : (
-            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-              {assignedPrograms.map((program) => (
-                <button
-                  key={program.programId}
-                  onClick={() => handleSelectProgram(program.programId)}
-                  className="group rounded-lg border border-zinc-200 bg-white p-5 text-left shadow-sm transition-all hover:border-emerald-300 hover:shadow-md"
-                >
-                  <div className="mb-3 flex items-start justify-between">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-                      <RectangleStackIcon className="h-6 w-6" />
-                    </div>
-                    <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600">
-                      {program.programYear}
-                    </span>
-                  </div>
-                  
-                  <h3 className="mb-1 font-semibold text-zinc-900">{program.programName}</h3>
-                  <p className="mb-3 text-xs text-zinc-500">
-                    Role: <span className="font-medium capitalize text-zinc-700">{program.roleInProgram}</span>
-                  </p>
+          <div className="flex-1 min-h-0">
+            <div className="h-full overflow-y-auto pr-1">
+              {/* Show filtered programs for program admins */}
+              {isPlatformAdmin ? (
+                <ProgramList onSelectProgram={handleSelectProgram} />
+              ) : (
+                <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                  {assignedPrograms.map((program) => (
+                    <button
+                      key={program.programId}
+                      onClick={() => handleSelectProgram(program.programId)}
+                      className="group rounded-lg border border-zinc-200 bg-white p-5 text-left shadow-sm transition-all hover:border-emerald-300 hover:shadow-md"
+                    >
+                      <div className="mb-3 flex items-start justify-between">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                          <RectangleStackIcon className="h-6 w-6" />
+                        </div>
+                        <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600">
+                          {program.programYear}
+                        </span>
+                      </div>
+                      
+                      <h3 className="mb-1 font-semibold text-zinc-900">{program.programName}</h3>
+                      <p className="mb-3 text-xs text-zinc-500">
+                        Role: <span className="font-medium capitalize text-zinc-700">{program.roleInProgram}</span>
+                      </p>
 
-                  <div className="flex items-center gap-1 text-sm font-medium text-emerald-600 transition-all group-hover:gap-2">
-                    <span>Open Dashboard</span>
-                    <ArrowRightIcon className="h-4 w-4" />
-                  </div>
-                </button>
-              ))}
+                      <div className="flex items-center gap-1 text-sm font-medium text-emerald-600 transition-all group-hover:gap-2">
+                        <span>Open Dashboard</span>
+                        <ArrowRightIcon className="h-4 w-4" />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        </section>
       </main>
     </div>
   );

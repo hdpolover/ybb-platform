@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { EyeIcon } from "@heroicons/react/24/solid";
 
 interface FullyFundedParticipantRow {
@@ -82,6 +82,7 @@ export function FullyFundedParticipantsTable() {
   const rows = mockFullyFundedParticipants;
   const router = useRouter();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const [page, setPage] = useState(1);
   const pageSize = 3;
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
@@ -198,7 +199,11 @@ export function FullyFundedParticipantsTable() {
                           const params = new URLSearchParams(searchParams.toString());
                           params.set("source", "scoring");
                           const query = params.toString();
-                          const basePath = `/participants/${encodeURIComponent(row.accountId)}`;
+                          const match = pathname.match(/\/programs\/([^/]+)/);
+                          const programId = match?.[1];
+                          const basePath = programId
+                            ? `/programs/${encodeURIComponent(programId)}/participants/${encodeURIComponent(row.accountId)}`
+                            : `/participants/${encodeURIComponent(row.accountId)}`;
                           router.push(query ? `${basePath}?${query}` : basePath);
                         }}
                       >

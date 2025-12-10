@@ -17,6 +17,10 @@ WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'ybb_payments_db')\gex
 SELECT 'CREATE DATABASE ybb_files_db'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'ybb_files_db')\gexec
 
+-- Create user database (for backward compatibility/misconfiguration)
+SELECT 'CREATE DATABASE ybb_user'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'ybb_user')\gexec
+
 -- Setup main database (API Service - Prisma)
 \c ybb_platform;
 

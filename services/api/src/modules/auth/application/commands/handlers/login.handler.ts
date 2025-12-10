@@ -1,4 +1,5 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { LoginCommand } from '../login.command';
 import { AuthResponseDto } from '../../../presentation/dto/auth-response.dto';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
@@ -10,7 +11,7 @@ export class LoginHandler {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
-  ) {}
+  ) { }
 
   async execute(command: LoginCommand): Promise<AuthResponseDto> {
     // Find user by email and programCategoryId (brand-scoped)
@@ -60,18 +61,26 @@ export class LoginHandler {
       },
     });
 
-    // Generate JWT tokens
-    const payload = {
+    // Generate JWT tokens with unique JTI for blacklisting support
+    const accessTokenPayload = {
       sub: user.id,
       email: user.email,
       programCategoryId: user.programCategoryId,
+      jti: randomUUID(), // Unique token ID for blacklisting
     };
 
-    const accessToken = this.jwtService.sign(payload, {
+    const refreshTokenPayload = {
+      sub: user.id,
+      email: user.email,
+      programCategoryId: user.programCategoryId,
+      jti: randomUUID(), // Different JTI for refresh token
+    };
+
+    const accessToken = this.jwtService.sign(accessTokenPayload, {
       expiresIn: '1h',
     });
 
-    const refreshToken = this.jwtService.sign(payload, {
+    const refreshToken = this.jwtService.sign(refreshTokenPayload, {
       expiresIn: '7d',
     });
 

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { UserPlusIcon, EyeIcon, PencilSquareIcon, TrashIcon } from "@heroicons/react/24/solid";
 
 interface AmbassadorRow {
@@ -89,6 +89,7 @@ export function AmbassadorsTable() {
   const rows = mockAmbassadors;
   const router = useRouter();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const [page, setPage] = useState(1);
   const pageSize = 3;
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
@@ -238,7 +239,11 @@ export function AmbassadorsTable() {
                           const params = new URLSearchParams(searchParams.toString());
                           params.set("source", "users");
                           const query = params.toString();
-                          const basePath = `/participants/${encodeURIComponent(row.accountId)}`;
+                          const match = pathname.match(/\/programs\/([^/]+)/);
+                          const programId = match?.[1];
+                          const basePath = programId
+                            ? `/programs/${encodeURIComponent(programId)}/participants/${encodeURIComponent(row.accountId)}`
+                            : `/participants/${encodeURIComponent(row.accountId)}`;
                           router.push(query ? `${basePath}?${query}` : basePath);
                         }}
                       >

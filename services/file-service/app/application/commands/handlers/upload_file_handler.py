@@ -81,13 +81,26 @@ class UploadFileHandler:
             size=command.size
         )
         
+        # Determine file type from content type
+        if command.content_type.startswith('image/'):
+            file_type = 'image'
+        elif command.content_type == 'application/pdf':
+            file_type = 'document'
+        elif command.content_type in ['application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']:
+            file_type = 'document'
+        elif command.content_type in ['application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']:
+            file_type = 'spreadsheet'
+        else:
+            file_type = 'other'
+        
         # Create domain entity
         file_entity = File(
             id=file_id,
             filename=storage_filename,
             original_filename=command.filename,
-            content_type=command.content_type,
-            size=command.size,
+            file_type=file_type,
+            mime_type=command.content_type,
+            file_size=command.size,
             bucket=command.bucket,
             storage_path=storage_path,
             user_id=command.user_id,

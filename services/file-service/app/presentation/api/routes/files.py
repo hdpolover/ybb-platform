@@ -1,6 +1,8 @@
 """File upload/download API routes."""
 from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from typing import Annotated
+from io import BytesIO
 from app.application.commands.upload_file_command import UploadFileCommand
 from app.application.commands.handlers.upload_file_handler import UploadFileHandler
 from app.application.queries.get_file_query import GetFileQuery
@@ -12,7 +14,7 @@ from app.domain.exceptions.file_exceptions import (
     InvalidFileTypeException,
     FileSizeLimitException
 )
-from app.presentation.dependencies.container import get_upload_handler, get_get_file_handler
+from app.presentation.dependencies.container import get_upload_handler, get_get_file_handler, get_storage_service
 
 
 router = APIRouter(prefix="/files", tags=["files"])
@@ -82,9 +84,10 @@ async def get_file(
     get_file_handler: GetFileHandler = Depends(get_get_file_handler)
 ):
     """
-    Get file information and download URL.
+    Get file metadata and download URL.
     
-    Returns a presigned URL valid for 1 hour.
+    Note: The presigned URL works when the public endpoint matches where you access MinIO.
+    For reliable downloads across all environments, use GET /files/{file_id}/download instead.
     """
     try:
         query = GetFileQuery(
@@ -96,6 +99,58 @@ async def get_file(
         
         file_dto = await get_file_handler.execute(query)
         return file_dto
+        
+    except FileNotFoundException as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except FileDomainException as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.get("/{file_id}/download")
+async def download_file(
+    file_id: str,
+    user_id: str,
+    brand_id: str,
+    get_file_handler: GetFileHandler = Depends(get_get_file_handler),
+    storage_service = Depends(get_storage_service)
+):
+    """
+    Download file content directly (streams through API).
+    
+    This endpoint is more reliable than presigned URLs as it works
+    regardless of network configuration (Docker, production, etc).
+    """
+    try:
+        # Get file metadata
+        query = GetFileQuery(
+            file_id=file_id,
+            user_id=user_id,
+            brand_id=brand_id,
+            generate_download_url=False
+        )
+        file_dto = await get_file_handler.execute(query)
+        
+        # Download file content from MinIO
+        file_content = await storage_service.download(
+            bucket=file_dto.bucket,
+            object_name=file_dto.storage_path
+        )
+        
+        # Stream the file back to the client
+        return StreamingResponse(
+            BytesIO(file_content),
+            media_type=file_dto.content_type,
+            headers={
+                "Content-Disposition": f'attachment; filename="{file_dto.original_filename}"',
+                "Content-Length": str(file_dto.size)
+            }
+        )
         
     except FileNotFoundException as e:
         raise HTTPException(

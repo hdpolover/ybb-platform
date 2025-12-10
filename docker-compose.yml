@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   # PostgreSQL Database
   postgres:
@@ -19,7 +17,7 @@ services:
     networks:
       - ybb-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${DATABASE_USER}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -56,7 +54,7 @@ services:
     networks:
       - ybb-network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -80,7 +78,7 @@ services:
     networks:
       - ybb-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 30s
       timeout: 20s
       retries: 3
@@ -100,7 +98,7 @@ services:
     networks:
       - ybb-network
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      test: [ "CMD", "rabbitmq-diagnostics", "ping" ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -148,8 +146,8 @@ services:
       PORT: 8002
       ENVIRONMENT: development
       DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres:5432/ybb_payments_db
-      MIDTRANS_SERVER_KEY: ${MIDTRANS_SERVER_KEY}
-      MIDTRANS_CLIENT_KEY: ${MIDTRANS_CLIENT_KEY}
+      MIDTRANS_SERVER_KEY: ${MIDTRANS_SERVER_KEY:-}
+      MIDTRANS_CLIENT_KEY: ${MIDTRANS_CLIENT_KEY:-}
       MIDTRANS_IS_PRODUCTION: ${MIDTRANS_IS_PRODUCTION:-false}
       XENDIT_SECRET_KEY: ${XENDIT_SECRET_KEY}
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
@@ -179,6 +177,9 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MINIO_SECURE: ${MINIO_SECURE:-false}
+      # Public endpoint for browser-accessible presigned URLs
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-localhost:9000}
+      MINIO_PUBLIC_SECURE: ${MINIO_PUBLIC_SECURE:-false}
       DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres:5432/ybb_files_db
       CERTIFICATE_SIGNING_KEY: ${CERTIFICATE_SIGNING_KEY:-your-secret-signing-key}
       CERTIFICATE_VERIFICATION_URL: ${CERTIFICATE_VERIFICATION_URL:-https://verify.ybb.org}
@@ -195,6 +196,33 @@ services:
       minio:
         condition: service_healthy
     command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+
+  # NestJS Notification Service
+  notification-service:
+    build:
+      context: ./services/notification-service
+      dockerfile: Dockerfile.dev
+    container_name: ybb-notification-service
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 4002
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
+      # Database URL can be added later if needed, for now starting simple
+      # DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres:5432/ybb_notifications_db
+    ports:
+      - "4002:4002"
+    volumes:
+      - ./services/notification-service:/app
+      - /app/node_modules
+      - /app/dist
+    networks:
+      - ybb-network
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    command: npm run start:dev
 
   # Next.js Admin Dashboard
   admin-dashboard:
@@ -239,6 +267,44 @@ services:
       - file-service
       - admin-dashboard
 
+  # Prometheus Metrics Collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ybb-prometheus
+    ports:
+      - "49090:9090"
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - ybb-network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    depends_on:
+      - api
+
+  # Grafana Dashboard
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ybb-grafana
+    ports:
+      - "43000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infrastructure/grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin123}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    networks:
+      - ybb-network
+    depends_on:
+      - prometheus
+
 networks:
   ybb-network:
     driver: bridge
@@ -249,3 +315,7 @@ volumes:
   minio_data:
   rabbitmq_data:
   pgadmin_data:
+  prometheus_data:
+  grafana_data:
+
+
