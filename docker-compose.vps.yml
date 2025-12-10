@@ -104,6 +104,8 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MINIO_BUCKET: ${MINIO_BUCKET}
       MINIO_USE_SSL: "false"
+      MINIO_PUBLIC_ENDPOINT: s3.ybbhub.com
+      MINIO_PUBLIC_SECURE: "true"
     ports:
       - "8000:8000"
     networks:
