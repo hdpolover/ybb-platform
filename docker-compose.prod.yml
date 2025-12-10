@@ -56,7 +56,7 @@ services:
       - "9000:9000"
       - "9001:9001"
     volumes:
-      - minio_data:/data
+      - /var/ybb-storage:/data
     networks:
       - ybb-network
     restart: unless-stopped
@@ -196,4 +196,3 @@ networks:
 volumes:
   postgres_data:
   redis_data:
-  minio_data:
