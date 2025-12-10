@@ -2,15 +2,15 @@
 
 import { useRouter, useSearchParams, useParams } from "next/navigation";
 import { useState, Suspense } from "react";
-import { Sidebar } from "../../components/layout/Sidebar";
-import { Navbar } from "../../components/layout/Navbar";
-import { PaymentDetailHeader } from "../../components/payments/details/PaymentDetailHeader";
-import { ParticipantCard } from "../../components/payments/details/ParticipantCard";
-import { PaymentMethodCard } from "../../components/payments/details/PaymentMethodCard";
-import { ProgramPaymentCard } from "../../components/payments/details/ProgramPaymentCard";
-import { PaymentNotesSection } from "../../components/payments/details/PaymentNotesSection";
-import { PaymentBreakdownSection } from "../../components/payments/details/PaymentBreakdownSection";
-import { UpdatePaymentStatusModal } from "../../components/payments/details/UpdatePaymentStatusModal";
+import { Sidebar } from "@/app/components/layout/Sidebar";
+import { Navbar } from "@/app/components/layout/Navbar";
+import { PaymentDetailHeader } from "@/app/components/payments/details/PaymentDetailHeader";
+import { ParticipantCard } from "@/app/components/payments/details/ParticipantCard";
+import { PaymentMethodCard } from "@/app/components/payments/details/PaymentMethodCard";
+import { ProgramPaymentCard } from "@/app/components/payments/details/ProgramPaymentCard";
+import { PaymentNotesSection } from "@/app/components/payments/details/PaymentNotesSection";
+import { PaymentBreakdownSection } from "@/app/components/payments/details/PaymentBreakdownSection";
+import { UpdatePaymentStatusModal } from "@/app/components/payments/details/UpdatePaymentStatusModal";
 
 function PaymentDetailContent() {
   const router = useRouter();
@@ -35,8 +35,8 @@ function PaymentDetailContent() {
         <Navbar
           onToggleSidebar={() => setSidebarCollapsed((previous) => !previous)}
           selectedProgramId={selectedProgramId}
-          onChangeProgram={() => {}}
-          onResetProgram={() => {}}
+          onChangeProgram={() => { }}
+          onResetProgram={() => { }}
         />
 
         <main className="flex-1 overflow-y-auto bg-white px-8 py-6">
