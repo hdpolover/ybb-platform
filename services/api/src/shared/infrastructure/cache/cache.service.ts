@@ -1,21 +1,30 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, Optional } from '@nestjs/common';
 import { CACHE_MANAGER, Cache } from '@nestjs/cache-manager';
+import { CacheMetricsService } from './cache-metrics.service';
 
 @Injectable()
 export class CacheService {
-  constructor(@Inject(CACHE_MANAGER) private readonly cacheManager: Cache) {}
+  constructor(
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    @Optional() private readonly metricsService?: CacheMetricsService,
+  ) { }
 
   /**
    * Invalidate cache by pattern (supports wildcards)
    * Example: invalidateByPattern('program:*') clears all program-related cache
    */
   async invalidateByPattern(pattern: string): Promise<void> {
+    const startTime = Date.now();
     try {
-      // For cache-manager v7 with Redis, pattern matching is more limited
-      // We'll implement a simple wildcard approach
-      console.warn(`Pattern-based cache invalidation not fully supported in cache-manager v7. Pattern: ${pattern}`);
-      // For now, we'll clear the entire cache when a pattern is provided
-      // In production, consider using Redis directly for pattern-based deletions
+      // Get the underlying Redis client from the store
+      const store = (this.cacheManager as any).store;
+      if (store?.client) {
+        const keys = await store.client.keys(pattern);
+        if (keys.length > 0) {
+          await store.client.del(...keys);
+        }
+      }
+      this.metricsService?.recordLatency('invalidate_pattern', Date.now() - startTime);
     } catch (error) {
       console.error('Error invalidating cache by pattern:', error);
       // Don't throw - cache invalidation failures shouldn't break the app
@@ -33,7 +42,10 @@ export class CacheService {
    * Invalidate specific key
    */
   async invalidateKey(key: string): Promise<void> {
+    const startTime = Date.now();
     await this.cacheManager.del(key);
+    this.metricsService?.recordDelete();
+    this.metricsService?.recordLatency('delete', Date.now() - startTime);
   }
 
   /**
@@ -41,30 +53,53 @@ export class CacheService {
    */
   async invalidateKeys(keys: string[]): Promise<void> {
     await Promise.all(keys.map((key) => this.cacheManager.del(key)));
+    keys.forEach(() => this.metricsService?.recordDelete());
   }
 
   /**
-   * Get cached value
+   * Get cached value (with metrics tracking)
    */
   async get<T>(key: string): Promise<T | undefined> {
-    return this.cacheManager.get<T>(key);
+    const startTime = Date.now();
+    const result = await this.cacheManager.get<T>(key);
+
+    if (result !== undefined && result !== null) {
+      this.metricsService?.recordHit();
+    } else {
+      this.metricsService?.recordMiss();
+    }
+    this.metricsService?.recordLatency('get', Date.now() - startTime);
+
+    return result;
   }
 
   /**
-   * Set cached value
+   * Set cached value (with metrics tracking)
    */
   async set<T>(key: string, value: T, ttl?: number): Promise<void> {
+    const startTime = Date.now();
     await this.cacheManager.set(key, value, ttl);
+    this.metricsService?.recordSet();
+    this.metricsService?.recordLatency('set', Date.now() - startTime);
   }
 
   /**
    * Clear entire cache
    */
   async clearAll(): Promise<void> {
-    // cache-manager v7 doesn't have reset(), use store.clear() if available
-    const stores: any = (this.cacheManager as any).stores;
-    if (stores && stores.length > 0) {
-      await Promise.all(stores.map((store: any) => store.clear?.()));
+    const startTime = Date.now();
+    // Try to use Redis FLUSHDB via store
+    const store = (this.cacheManager as any).store;
+    if (store?.client) {
+      await store.client.flushdb?.();
+    } else {
+      // Fallback for cache-manager v7
+      const stores: any = (this.cacheManager as any).stores;
+      if (stores && stores.length > 0) {
+        await Promise.all(stores.map((s: any) => s.clear?.()));
+      }
     }
+    this.metricsService?.recordLatency('clear', Date.now() - startTime);
   }
 }
+
