@@ -294,6 +294,7 @@ export default function ProgramsPage() {
 
       {/* Form Modal */}
       <ProgramFormModal
+        key={selectedProgram ? selectedProgram.id : "new"}
         isOpen={isFormModalOpen}
         onClose={handleCloseFormModal}
         onSubmit={selectedProgram ? handleUpdateProgram : handleCreateProgram}
