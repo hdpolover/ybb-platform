@@ -3,9 +3,9 @@
 # Navigate to the project root directory (one level up from scripts)
 cd "$(dirname "$0")/.." || exit 1
 
-# Force Docker BuildKit for faster builds and to suppress legacy warnings
-export DOCKER_BUILDKIT=1
-export COMPOSE_DOCKER_CLI_BUILD=1
+# Force Legacy Builder (BuildKit is broken on VPS)
+export DOCKER_BUILDKIT=0
+export COMPOSE_DOCKER_CLI_BUILD=0
 
 echo "🚀 Starting Deployment with BuildKit..."
 
