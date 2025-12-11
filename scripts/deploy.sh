@@ -58,7 +58,7 @@ else
     echo -e "${RED}⚠️ API Gateway health check failed${NC}"
 fi
 
-if curl -sf http://localhost:3000 > /dev/null; then
+if curl -sf http://localhost:4001 > /dev/null; then
     echo -e "${GREEN}✅ Admin Dashboard is healthy${NC}"
 else
     echo -e "${RED}⚠️ Admin Dashboard health check failed${NC}"

@@ -331,10 +331,15 @@ ybb-platform/
 │   ├── setup.sh                     # Initial setup script
 │   ├── dev.sh                       # Start development environment
 │   ├── prod.sh                      # Production deployment
+│   ├── deploy.sh                    # Manual deployment script
+│   ├── vps-setup.sh                 # VPS initial setup
+│   ├── vps-deploy.sh                # VPS deployment with BuildKit
 │   ├── seed-db.sh                   # Seed database
 │   ├── backup.sh                    # Backup script
 │   ├── restore.sh                   # Restore script
 │   ├── generate-proto.sh            # Generate proto files
+│   ├── generate-local-certs.sh      # Generate local SSL certs
+│   ├── install-buildx.sh            # Install Docker Buildx
 │   └── health-check.sh              # Health check all services
 │
 ├── .github/
