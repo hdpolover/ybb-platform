@@ -1,7 +1,9 @@
 import { Module, Global } from '@nestjs/common';
 import { CacheModule as NestCacheModule } from '@nestjs/cache-manager';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { redisStore } from 'cache-manager-redis-yet';
+import Keyv from 'keyv';
+// @ts-ignore: Wrapper types might be missing locally
+import KeyvRedis from '@keyv/redis';
 import { CacheService } from './cache.service';
 import { CacheMetricsService } from './cache-metrics.service';
 import { CacheWarmingService } from './cache-warming.service';
@@ -18,14 +20,14 @@ import { PrismaModule } from '../prisma/prisma.module';
         const redisPort = configService.get<number>('REDIS_PORT', 6379);
         const redisPassword = configService.get<string>('REDIS_PASSWORD', '');
 
+        const redisUrl = redisPassword
+          ? `redis://:${redisPassword}@${redisHost}:${redisPort}`
+          : `redis://${redisHost}:${redisPort}`;
+
         return {
-          store: await redisStore({
-            socket: {
-              host: redisHost,
-              port: redisPort,
-            },
-            password: redisPassword || undefined,
-            ttl: 300000, // 5 minutes default (in milliseconds for redis-yet)
+          store: new Keyv({
+            store: new KeyvRedis(redisUrl),
+            ttl: 300000, // 5 minutes default
           }),
         };
       },
