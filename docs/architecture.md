@@ -41,7 +41,7 @@ The YBB Platform is built using a microservices architecture with the following 
 
 ### 1. Admin Dashboard (Next.js)
 - **Purpose**: Web-based administration interface
-- **Technology**: Next.js 14+ with App Router, TypeScript
+- **Technology**: Next.js 16+ with App Router, TypeScript, Tailwind CSS
 - **Communication**: REST API calls to API Gateway
 
 ### 2. API Gateway (NestJS)
@@ -204,14 +204,16 @@ users (1) ──── (N) files
 
 | Layer | Technology |
 |-------|------------|
-| Frontend | Next.js 14+, TypeScript, Tailwind CSS |
-| API Gateway | NestJS, TypeScript |
-| Payment Service | Go 1.21+, Fiber/Gin |
+| Frontend | Next.js 16+, TypeScript, Tailwind CSS |
+| API Gateway | NestJS 10+, TypeScript, Prisma |
+| Payment Service | Go 1.21+, Fiber, GORM |
 | File Service | Python 3.11+, FastAPI |
+| Notification Service | NestJS 10+, TypeScript |
 | Database | PostgreSQL 16 |
 | Cache | Redis 7+ |
 | Storage | MinIO (S3-compatible) |
-| Message Queue | RabbitMQ |
+| Message Queue | RabbitMQ 3+ |
+| Monitoring | Prometheus, Grafana |
 | Reverse Proxy | Nginx |
 | Containerization | Docker, Docker Compose |
 | Orchestration | Kubernetes |

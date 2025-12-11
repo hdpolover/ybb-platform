@@ -6,9 +6,12 @@ This folder contains infrastructure configuration files for Docker Compose and K
 
 ```
 infrastructure/
+├── grafana/        # Grafana monitoring dashboards
 ├── minio/          # MinIO object storage configuration
 ├── nginx/          # Nginx reverse proxy configuration
+├── pgadmin/        # pgAdmin PostgreSQL GUI
 ├── postgres/       # PostgreSQL database initialization scripts
+├── prometheus/     # Prometheus metrics collection
 ├── rabbitmq/       # RabbitMQ message queue configuration
 └── redis/          # Redis cache configuration
 ```
@@ -107,6 +110,31 @@ MinIO is used for object storage (file uploads, payment proofs, etc.).
 Redis is used for caching and session storage.
 
 **Default Port:** 6379
+
+## Monitoring Stack
+
+### Prometheus
+
+Prometheus collects metrics from all services.
+
+| Setting | Value |
+|---------|-------|
+| **URL** | http://localhost:49090 |
+| **Config** | `prometheus/prometheus.yml` |
+
+See [Prometheus README](./prometheus/README.md) for details.
+
+### Grafana
+
+Grafana provides visualization dashboards.
+
+| Setting | Value |
+|---------|-------|
+| **URL** | http://localhost:43000 |
+| **Username** | `admin` |
+| **Password** | `admin123` |
+
+See [Grafana README](./grafana/README.md) for details.
 
 ## Usage
 
