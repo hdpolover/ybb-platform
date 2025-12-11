@@ -117,4 +117,3 @@ check-indexes.js
 migration_data/
 database-export/
 *.csv
-
