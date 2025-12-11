@@ -2,16 +2,20 @@
 
 ## Overview
 
-This directory contains comprehensive documentation for the YBB Platform.
+Welcome to the YBB Platform documentation. This directory contains comprehensive guides for development, deployment, and architecture.
 
-## Documents
+## Quick Links
 
-- [Architecture](./architecture.md) - System architecture and design decisions
-- [Setup Guide](./setup.md) - Installation and setup instructions
-- [Service Credentials](./SERVICE_CREDENTIALS.md) - Default credentials and access info
-- [Clean Architecture Guide](./clean-architecture-guide.md) - Code organization principles
+| Document | Description |
+|----------|-------------|
+| [Platform Overview](./OVERVIEW.md) | What is YBB Platform and why it exists |
+| [Architecture](./architecture.md) | System design and service communication |
+| [Setup Guide](./setup.md) | Development environment setup |
+| [Deployment](./deployment.md) | Production deployment guide |
+| [Service Credentials](./SERVICE_CREDENTIALS.md) | Default logins and access info |
+| [Clean Architecture](./clean-architecture-guide.md) | Code organization principles |
 
-## Quick Links (Development)
+## Development URLs
 
 | Service | URL |
 |---------|-----|
@@ -25,8 +29,8 @@ This directory contains comprehensive documentation for the YBB Platform.
 | **MinIO Console** | http://localhost:9001 |
 | **RabbitMQ Console** | http://localhost:15672 |
 | **pgAdmin** | http://localhost:5050 |
-| **Grafana** | http://localhost:3001 |
-| **Prometheus** | http://localhost:9090 |
+| **Grafana** | http://localhost:43000 |
+| **Prometheus** | http://localhost:49090 |
 
 ## Production URLs
 

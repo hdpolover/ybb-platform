@@ -11,10 +11,13 @@ This project is a comprehensive platform for managing YBB (Youth Break the Bound
 - **API Gateway**: NestJS (TypeScript)
 - **Payment Service**: Golang
 - **File Service**: Python (FastAPI)
-- **Admin Dashboard**: Next.js 14+
+- **Notification Service**: NestJS (TypeScript)
+- **Admin Dashboard**: Next.js 16+
 - **Database**: PostgreSQL 16
 - **Cache**: Redis 7+
+- **Message Queue**: RabbitMQ
 - **Storage**: MinIO (S3-compatible)
+- **Monitoring**: Prometheus + Grafana
 - **Reverse Proxy**: Nginx
 
 ## Getting Started
@@ -52,7 +55,12 @@ That's it! 🚀 The command will:
 | API Docs (Swagger) | http://localhost:4000/api/docs |
 | Payment Service | http://localhost:8002 |
 | File Service | http://localhost:8001 |
+| Notification Service | http://localhost:4002 |
 | MinIO Console | http://localhost:9001 |
+| RabbitMQ Console | http://localhost:15672 |
+| Grafana | http://localhost:43000 |
+| Prometheus | http://localhost:49090 |
+| pgAdmin | http://localhost:5050 |
 
 ### Common Commands
 
@@ -92,18 +100,19 @@ See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for detailed project structure 
 | API Gateway | 4000 | Main backend API (NestJS) |
 | Payment Service | 8002 | Payment processing (Go/GORM) |
 | File Service | 8001 | File upload & storage (Python/FastAPI) |
+| Notification Service | 4002 | Email & notifications (NestJS) |
 | Admin Dashboard | 4001 | Admin interface (Next.js) |
 
 All services are also accessible through Nginx on ports 80/443.
 
 ## Documentation
 
-- Architecture: `docs/architecture.md`
-- Clean Architecture Guide: `docs/clean-architecture-guide.md`
-- Setup Guide: `docs/setup.md`
-- Caching & Performance: `docs/CACHING_GUIDE.md`
-- API Documentation: `docs/api-documentation.md`
-- Deployment: `docs/deployment.md`
+- [Platform Overview](docs/OVERVIEW.md)
+- [Architecture](docs/architecture.md)
+- [Setup Guide](docs/setup.md)
+- [Deployment Guide](docs/deployment.md)
+- [Service Credentials](docs/SERVICE_CREDENTIALS.md)
+- [Clean Architecture Guide](docs/clean-architecture-guide.md)
 
 ## License
 
