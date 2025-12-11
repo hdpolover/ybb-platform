@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import React, { useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Squares2X2Icon,
   UserGroupIcon,
@@ -330,14 +330,49 @@ export type SidebarProps = {
 export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [showProgramAlert, setShowProgramAlert] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(() => {
     if (!pathname) return "dashboard";
 
     // Match program-scoped routes
-    if (pathname.includes("/master-data/program-details")) {
+    if (pathname?.includes("/master-data/program-details")) {
       return "program-details";
+    }
+    if (pathname?.includes("/master-data/submission-form")) {
+      return "submission-form";
+    }
+    if (pathname?.includes("/master-data/program-payments")) {
+      return "program-payments";
+    }
+    if (pathname?.includes("/master-data/payment-methods")) {
+      return "payment-methods";
+    }
+    if (pathname?.includes("/master-data/timelines")) {
+      return "timelines";
+    }
+    if (pathname?.includes("/master-data/program-testimonies")) {
+      return "program-testimonies";
+    }
+    if (pathname?.includes("/master-data/video-testimonies")) {
+      return "video-testimonies";
+    }
+    if (pathname?.includes("/master-data/program-photos")) {
+      return "program-photos";
+    }
+    if (pathname?.includes("/master-data/program-rundowns")) {
+      return "program-rundowns";
+    }
+    if (pathname?.includes("/master-data/program-speakers")) {
+      return "program-speakers";
+    }
+    if (pathname?.includes("/master-data/program-awards")) {
+      return "program-awards";
+    }
+    if (pathname?.includes("/master-data/program-certificates")) {
+      return "program-certificates";
+    }
+    if (pathname?.includes("/master-data/faqs")) {
+      return "faqs";
     }
     if (pathname.includes("/announcements")) {
       return "announcements";
@@ -401,7 +436,21 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
     if (pathname?.includes("/documents")) {
       initial["documents"] = true;
     }
-    if (pathname?.includes("/master-data")) {
+    if (
+      pathname?.includes("/master-data/program-details") ||
+      pathname?.includes("/master-data/submission-form") ||
+      pathname?.includes("/master-data/program-payments") ||
+      pathname?.includes("/master-data/payment-methods") ||
+      pathname?.includes("/master-data/timelines") ||
+      pathname?.includes("/master-data/program-testimonies") ||
+      pathname?.includes("/master-data/video-testimonies") ||
+      pathname?.includes("/master-data/program-photos") ||
+      pathname?.includes("/master-data/program-rundowns") ||
+      pathname?.includes("/master-data/program-speakers") ||
+      pathname?.includes("/master-data/program-awards") ||
+      pathname?.includes("/master-data/program-certificates") ||
+      pathname?.includes("/master-data/faqs")
+    ) {
       initial["master-data"] = true;
     }
     if (pathname?.includes("/announcements")) {
@@ -461,6 +510,30 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
       router.push(`/programs/${selectedProgramId}/master-data/program-details`);
     } else if (item.id === "program-details") {
       router.push(`/programs/${selectedProgramId}/master-data/program-details`);
+    } else if (item.id === "submission-form") {
+      router.push(`/programs/${selectedProgramId}/master-data/submission-form`);
+    } else if (item.id === "program-payments") {
+      router.push(`/programs/${selectedProgramId}/master-data/program-payments`);
+    } else if (item.id === "payment-methods") {
+      router.push(`/programs/${selectedProgramId}/master-data/payment-methods`);
+    } else if (item.id === "timelines") {
+      router.push(`/programs/${selectedProgramId}/master-data/timelines`);
+    } else if (item.id === "program-testimonies") {
+      router.push(`/programs/${selectedProgramId}/master-data/program-testimonies`);
+    } else if (item.id === "video-testimonies") {
+      router.push(`/programs/${selectedProgramId}/master-data/video-testimonies`);
+    } else if (item.id === "program-photos") {
+      router.push(`/programs/${selectedProgramId}/master-data/program-photos`);
+    } else if (item.id === "program-rundowns") {
+      router.push(`/programs/${selectedProgramId}/master-data/program-rundowns`);
+    } else if (item.id === "program-speakers") {
+      router.push(`/programs/${selectedProgramId}/master-data/program-speakers`);
+    } else if (item.id === "program-awards") {
+      router.push(`/programs/${selectedProgramId}/master-data/program-awards`);
+    } else if (item.id === "program-certificates") {
+      router.push(`/programs/${selectedProgramId}/master-data/program-certificates`);
+    } else if (item.id === "faqs") {
+      router.push(`/programs/${selectedProgramId}/master-data/faqs`);
     }
     if (options?.setActive !== false) {
       setActiveId(item.id);

@@ -1,7 +1,7 @@
 "use client";
 
 import { XMarkIcon } from "@heroicons/react/24/outline";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import type { Category } from "./CategoriesTable";
 
 type CategoryFormModalProps = {
@@ -23,26 +23,12 @@ export function CategoryFormModal({
   onSubmit,
   category,
 }: CategoryFormModalProps) {
-  const [formData, setFormData] = useState<CategoryFormData>({
-    name: "",
-    description: "",
-    slug: "",
-  });
-  const [autoGenerateSlug, setAutoGenerateSlug] = useState(true);
-
-  useEffect(() => {
-    if (category) {
-      setFormData({
-        name: category.name,
-        description: category.description || "",
-        slug: category.slug,
-      });
-      setAutoGenerateSlug(false);
-    } else {
-      setFormData({ name: "", description: "", slug: "" });
-      setAutoGenerateSlug(true);
-    }
-  }, [category, isOpen]);
+  const [formData, setFormData] = useState<CategoryFormData>(() => ({
+    name: category?.name ?? "",
+    description: category?.description ?? "",
+    slug: category?.slug ?? "",
+  }));
+  const [autoGenerateSlug, setAutoGenerateSlug] = useState(() => !category);
 
   const generateSlug = (name: string): string => {
     return name

@@ -1,7 +1,7 @@
 "use client";
 
 import { XMarkIcon } from "@heroicons/react/24/outline";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import type { Program } from "./ProgramsTable";
 
 type ProgramFormModalProps = {
@@ -33,54 +33,22 @@ export function ProgramFormModal({
   program,
   categories,
 }: ProgramFormModalProps) {
-  const [formData, setFormData] = useState<ProgramFormData>({
-    name: "",
-    description: "",
-    categoryId: "",
-    slug: "",
-    status: "draft",
-    registrationStartDate: "",
-    registrationEndDate: "",
-    programStartDate: "",
-    programEndDate: "",
-    registrationFee: 0,
-    maxParticipants: null,
-  });
-  const [autoGenerateSlug, setAutoGenerateSlug] = useState(true);
+  const [formData, setFormData] = useState<ProgramFormData>(() => ({
+    name: program?.name ?? "",
+    description: program?.description ?? "",
+    categoryId: program?.categoryId ?? categories[0]?.id ?? "",
+    slug: program?.slug ?? "",
+    status: program?.status ?? "draft",
+    registrationStartDate: program?.registrationStartDate ?? "",
+    registrationEndDate: program?.registrationEndDate ?? "",
+    programStartDate: program?.programStartDate ?? "",
+    programEndDate: program?.programEndDate ?? "",
+    registrationFee: program?.registrationFee ?? 0,
+    maxParticipants: program?.maxParticipants ?? null,
+  }));
+  const [autoGenerateSlug, setAutoGenerateSlug] = useState(() => !program);
 
-  useEffect(() => {
-    if (program) {
-      setFormData({
-        name: program.name,
-        description: program.description || "",
-        categoryId: program.categoryId,
-        slug: program.slug,
-        status: program.status,
-        registrationStartDate: program.registrationStartDate || "",
-        registrationEndDate: program.registrationEndDate || "",
-        programStartDate: program.programStartDate || "",
-        programEndDate: program.programEndDate || "",
-        registrationFee: program.registrationFee,
-        maxParticipants: program.maxParticipants,
-      });
-      setAutoGenerateSlug(false);
-    } else {
-      setFormData({
-        name: "",
-        description: "",
-        categoryId: categories[0]?.id || "",
-        slug: "",
-        status: "draft",
-        registrationStartDate: "",
-        registrationEndDate: "",
-        programStartDate: "",
-        programEndDate: "",
-        registrationFee: 0,
-        maxParticipants: null,
-      });
-      setAutoGenerateSlug(true);
-    }
-  }, [program, categories, isOpen]);
+  if (!isOpen) return null;
 
   const generateSlug = (name: string): string => {
     return name
@@ -102,8 +70,6 @@ export function ProgramFormModal({
     onSubmit(formData);
     onClose();
   };
-
-  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

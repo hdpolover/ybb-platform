@@ -194,6 +194,7 @@ export default function CategoriesPage() {
 
       {/* Form Modal */}
       <CategoryFormModal
+        key={selectedCategory ? selectedCategory.id : "new"}
         isOpen={isFormModalOpen}
         onClose={handleCloseFormModal}
         onSubmit={selectedCategory ? handleUpdateCategory : handleCreateCategory}
