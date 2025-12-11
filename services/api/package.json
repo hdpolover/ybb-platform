@@ -99,5 +99,8 @@
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"
+  },
+  "prisma": {
+    "version": "5.19.1"
   }
 }
