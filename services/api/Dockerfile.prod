@@ -32,4 +32,4 @@ COPY --from=builder /app/prisma ./prisma
 # Generate Prisma Client (if needed at runtime, otherwise run in build)
 RUN npx prisma generate
 
-CMD ["node", "dist/main"]
+CMD ["node", "dist/src/main"]
