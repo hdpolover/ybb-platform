@@ -340,14 +340,6 @@ ybb-platform/
 │   ├── generate-proto.sh            # Generate proto files
 │   └── health-check.sh              # Health check all services
 │
-├── k8s/                             # Kubernetes manifests (for production)
-│   ├── namespaces/
-│   ├── deployments/
-│   ├── services/
-│   ├── ingress/
-│   ├── configmaps/
-│   └── secrets/
-│
 ├── .github/
 │   └── workflows/
 │       ├── ci.yml                   # CI pipeline
@@ -432,7 +424,6 @@ ybb-platform/
 
 ### DevOps & Monitoring
 - **Containerization**: Docker, Docker Compose
-- **Orchestration**: Kubernetes (production)
 - **CI/CD**: GitHub Actions
 - **Monitoring**: Prometheus + Grafana
 - **Logging**: Loki or ELK Stack
@@ -516,7 +507,7 @@ docker-compose up -d
 2. **Database Migrations**: Run migrations from API service
 3. **Testing**: Each service has its own test suite
 4. **Building**: Docker builds with multi-stage for production
-5. **Deployment**: Kubernetes manifests for production
+5. **Deployment**: Docker Compose for VPS production
 
 ## Database Schema
 

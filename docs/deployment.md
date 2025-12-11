@@ -6,8 +6,7 @@ This guide covers deploying the YBB Platform to production environments.
 
 | Method | Use Case |
 |--------|----------|
-| **Docker Compose** | Single VPS, development staging |
-| **Kubernetes** | Production, scalable deployment |
+| **Docker Compose** | VPS, development, staging, production |
 
 ---
 
@@ -208,19 +207,3 @@ sudo certbot certificates
 - [ ] Enable automatic security updates
 - [ ] Configure backup schedule
 - [ ] Set up monitoring alerts
-
----
-
-## Kubernetes Deployment
-
-See `/k8s/` directory for Kubernetes manifests:
-
-```bash
-# Apply all manifests
-kubectl apply -f k8s/namespaces/
-kubectl apply -f k8s/configmaps/
-kubectl apply -f k8s/secrets/
-kubectl apply -f k8s/deployments/
-kubectl apply -f k8s/services/
-kubectl apply -f k8s/ingress/
-```
