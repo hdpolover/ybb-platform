@@ -313,12 +313,9 @@ ybb-platform/
 │   │   ├── user.ts
 │   │   ├── program.ts
 │   │   ├── application.ts
-│   │   └── payment.ts
-│   ├── constants/                   # Shared constants
-│   └── docs/                        # API documentation
-│       ├── api-gateway.md
-│       ├── payment-service.md
-│       └── file-service.md
+│   │   ├── payment.ts
+│   │   └── notification.ts
+│   └── constants/                   # Shared constants
 │
 ├── database/
 │   ├── migrations/                  # Database migrations
