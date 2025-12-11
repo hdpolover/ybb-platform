@@ -80,12 +80,16 @@ ALTER TABLE "participant_applications"
 ADD COLUMN "funding_type" VARCHAR(50),
 ADD COLUMN "total_amount" DECIMAL(10,2),
 ADD COLUMN "total_paid" DECIMAL(10,2) DEFAULT 0,
-ADD COLUMN "payment_status" VARCHAR(50) DEFAULT 'pending',
+-- payment_status already exists, handled via ALTER below
 ADD COLUMN "reimbursement_status" VARCHAR(50) DEFAULT 'not_applicable',
 ADD COLUMN "reimbursed_at" TIMESTAMP(6) WITH TIME ZONE,
 ADD COLUMN "reimbursement_amount" DECIMAL(10,2),
 ADD COLUMN "reimbursement_method" VARCHAR(100),
 ADD COLUMN "reimbursement_notes" TEXT;
+
+-- Set default for existing payment_status column
+ALTER TABLE "participant_applications" ALTER COLUMN "payment_status" SET DEFAULT 'pending';
+
 
 -- ============================================================================
 -- CREATE INDEXES
