@@ -4,7 +4,9 @@ FROM python:3.11-slim AS builder
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --user --no-cache-dir -r requirements.txt
+ENV PIP_ROOT_USER_ACTION=ignore
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --user --no-cache-dir --no-warn-script-location -r requirements.txt
 
 # Production Stage
 FROM python:3.11-slim
