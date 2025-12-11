@@ -9,8 +9,17 @@ export COMPOSE_DOCKER_CLI_BUILD=1
 
 echo "🚀 Starting Deployment with BuildKit..."
 
+# Check if "docker compose" is available (v2)
+if docker compose version &>/dev/null; then
+    COMPOSE_CMD="docker compose"
+else
+    COMPOSE_CMD="docker-compose"
+fi
+
+echo "🐳 Using: $COMPOSE_CMD"
+
 # Build and start containers
-docker-compose -f docker-compose.prod.yml up -d --build
+$COMPOSE_CMD -f docker-compose.prod.yml up -d --build
 
 # Prune old images to save space (optional)
 docker image prune -f
@@ -18,4 +27,4 @@ docker image prune -f
 echo "✅ Services are running!"
 
 echo "📜 Tailing logs... (Press Ctrl+C to stop watching logs, services will keep running)"
-docker-compose -f docker-compose.prod.yml logs -f
+$COMPOSE_CMD -f docker-compose.prod.yml logs -f
