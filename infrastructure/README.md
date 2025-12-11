@@ -1,6 +1,6 @@
 # Infrastructure Configuration
 
-This folder contains infrastructure configuration files for Docker Compose and Kubernetes deployments.
+This folder contains infrastructure configuration files for Docker Compose deployments.
 
 ## Structure
 
@@ -154,26 +154,6 @@ docker-compose down
 docker-compose up -d --build
 ```
 
-### Kubernetes (Production)
-
-See `/k8s/` folder for Kubernetes deployment configurations.
-
-```bash
-# Apply namespace
-kubectl apply -f k8s/namespaces/
-
-# Apply configmaps and secrets
-kubectl apply -f k8s/configmaps/
-kubectl apply -f k8s/secrets/
-
-# Deploy services
-kubectl apply -f k8s/deployments/
-kubectl apply -f k8s/services/
-
-# Apply ingress
-kubectl apply -f k8s/ingress/
-```
-
 ## Environment Variables
 
 Required environment variables are defined in `.env` file at the project root.
@@ -228,7 +208,7 @@ open http://localhost:15672
 ⚠️ **Production Deployment:**
 1. Change all default passwords in `.env`
 2. Enable SSL/TLS in Nginx
-3. Use secrets management (Kubernetes Secrets, AWS Secrets Manager, etc.)
+3. Use secrets management (Docker secrets, AWS Secrets Manager, etc.)
 4. Restrict PostgreSQL access to internal network only
 5. Enable authentication for Redis
 6. Use private Docker registry for images

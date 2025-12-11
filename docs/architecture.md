@@ -161,7 +161,7 @@ users (1) ──── (N) files
 ### Horizontal Scaling
 - All services are stateless
 - Can scale independently
-- Load balancing via Nginx/K8s
+- Load balancing via Nginx
 
 ### Caching Strategy
 - Redis for session storage
@@ -216,7 +216,6 @@ users (1) ──── (N) files
 | Monitoring | Prometheus, Grafana |
 | Reverse Proxy | Nginx |
 | Containerization | Docker, Docker Compose |
-| Orchestration | Kubernetes |
 | CI/CD | GitHub Actions |
 
 ## Design Decisions
@@ -238,13 +237,6 @@ users (1) ──── (N) files
 - Easy deployment
 - Resource isolation
 - Version control for infrastructure
-
-### Why Kubernetes?
-- Production-grade orchestration
-- Auto-scaling
-- Self-healing
-- Service discovery
-- Load balancing
 
 ## Future Enhancements
 

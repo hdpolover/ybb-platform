@@ -88,7 +88,7 @@ Access Points:
 - **Frontend**: Next.js 16, React 19, TypeScript, Tailwind CSS
 - **Backend**: NestJS, Go, Python (FastAPI)
 - **Database**: PostgreSQL 16, Redis 7
-- **Infrastructure**: Docker, Kubernetes, Nginx
+- **Infrastructure**: Docker, Docker Compose, Nginx
 - **CI/CD**: GitHub Actions
 
 ## Repository Structure
@@ -103,8 +103,7 @@ ybb-platform/
 │   └── notification-service/ # NestJS Notifications
 ├── infrastructure/     # Docker, Nginx, PostgreSQL configs
 ├── docs/              # Documentation
-├── scripts/           # Automation scripts
-└── k8s/               # Kubernetes manifests
+└── scripts/           # Automation scripts
 ```
 
 ## License
