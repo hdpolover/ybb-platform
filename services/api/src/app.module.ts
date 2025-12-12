@@ -11,6 +11,12 @@ import { ProgramsModule } from '@modules/programs/programs.module';
 import { ApplicationsModule } from '@modules/applications/applications.module';
 import { HealthModule } from '@modules/health/health.module';
 import { FilesModule } from '@modules/files/files.module';
+import { ParticipantsModule } from '@modules/participants/participants.module';
+import { PaymentsModule } from '@modules/payments/payments.module';
+import { SystemModule } from '@modules/system/system.module';
+import { BrandsModule } from '@modules/brands/brands.module';
+import { SupportModule } from '@modules/support/support.module';
+import { AchievementsModule } from '@modules/achievements/achievements.module';
 
 @Module({
   imports: [
@@ -32,8 +38,13 @@ import { FilesModule } from '@modules/files/files.module';
     ApplicationsModule,
     HealthModule,
     FilesModule,
+    ParticipantsModule,
+    PaymentsModule,
+    SystemModule, // Added SystemModule to imports array
+    BrandsModule,
+    SupportModule,
+    AchievementsModule,
   ],
   controllers: [CacheController, MetricsController],
 })
 export class AppModule { }
-
