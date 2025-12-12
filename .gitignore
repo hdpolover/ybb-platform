@@ -84,6 +84,8 @@ infrastructure/nginx/ssl/*.pem
 infrastructure/postgres/backups/*.sql
 infrastructure/postgres/backups/*.dump
 
+
+
 # Compiled binaries
 services/payment-service/bin/
 *.exe
@@ -105,15 +107,4 @@ services/api/dist/
 services/admin-dashboard/.next/
 services/admin-dashboard/out/
 
-# Kubernetes secrets
-k8s/secrets/*.yaml
-!k8s/secrets/.gitkeep
 
-# Migration Scripts & Data (Private)
-scripts/import-from-csv.js
-scripts/migrate-via-csv.sh
-scripts/migrate-mysql-to-postgres.js
-check-indexes.js
-migration_data/
-database-export/
-*.csv
