@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { InboundMessageDeserializer } from './common/deserializers/inbound-message.deserializer';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -14,6 +15,7 @@ async function bootstrap() {
       queueOptions: {
         durable: true,
       },
+      deserializer: new InboundMessageDeserializer(),
     },
   });
 

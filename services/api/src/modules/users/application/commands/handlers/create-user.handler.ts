@@ -1,4 +1,5 @@
 import { Injectable, Inject, ConflictException } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
 import { CreateUserCommand } from '../create-user.command';
 import { UserResponseDto } from '@modules/users/presentation/dto/user-response.dto';
 import { IUserRepository } from '@core/interfaces/repositories/user.repository.interface';
@@ -10,7 +11,8 @@ export class CreateUserHandler {
   constructor(
     @Inject(IUserRepository)
     private readonly userRepository: IUserRepository,
-  ) {}
+    @Inject('NOTIFICATION_SERVICE') private readonly notificationClient: ClientProxy,
+  ) { }
 
   async execute(command: CreateUserCommand): Promise<UserResponseDto> {
     // Check if user already exists
@@ -37,6 +39,12 @@ export class CreateUserHandler {
 
     // Save to repository
     const createdUser = await this.userRepository.create(user, passwordHash);
+
+    // Emit event
+    this.notificationClient.emit('user.registered', {
+      email: createdUser.email,
+      name: 'User',
+    });
 
     // Return DTO
     return this.toDto(createdUser);

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from '@modules/auth/auth.module';
 import { PrismaModule } from '@shared/infrastructure/prisma/prisma.module';
 import { UsersController } from './presentation/users.controller';
+import { ClientsModule, Transport } from '@nestjs/microservices';
 import { CreateUserHandler } from './application/commands/handlers/create-user.handler';
 import { GetUserHandler } from './application/queries/handlers/get-user.handler';
 import { GetUsersHandler } from './application/queries/handlers/get-users.handler';
@@ -26,7 +27,23 @@ import { IAccountDeletionRequestRepository } from '@core/interfaces/repositories
 import { CreateDeletionRequestHandler } from './application/commands/handlers/create-deletion-request.handler';
 
 @Module({
-  imports: [PrismaModule, AuthModule],
+  imports: [
+    PrismaModule,
+    AuthModule,
+    ClientsModule.register([
+      {
+        name: 'NOTIFICATION_SERVICE',
+        transport: Transport.RMQ,
+        options: {
+          urls: [process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672/'],
+          queue: 'notification_queue',
+          queueOptions: {
+            durable: true,
+          },
+        },
+      },
+    ]),
+  ],
   controllers: [UsersController],
   providers: [
     // Handlers
