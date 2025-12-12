@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import { ConfigService } from '@nestjs/config';
+import * as hbs from 'handlebars';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class EmailService {
@@ -9,6 +12,17 @@ export class EmailService {
 
     constructor(private configService: ConfigService) {
         this.createTransporter();
+        this.registerPartials();
+    }
+
+    private registerPartials() {
+        try {
+            const layoutPath = path.join(process.cwd(), 'src/modules/email/templates/layout.hbs');
+            const layout = fs.readFileSync(layoutPath, 'utf8');
+            hbs.registerPartial('layout', layout);
+        } catch (error) {
+            this.logger.warn('Failed to load layout template', error);
+        }
     }
 
     private async createTransporter() {
@@ -44,7 +58,35 @@ export class EmailService {
         }
     }
 
+    private async compileTemplate(templateName: string, data: any): Promise<string> {
+        const filePath = path.join(process.cwd(), 'src/modules/email/templates', `${templateName}.hbs`);
+        const template = fs.readFileSync(filePath, 'utf8');
+
+        // Compile the template
+        const compiled = hbs.compile(template);
+
+        // If we have a layout, we might want to wrap it manually or use handlebars-layouts
+        // For simplicity here, we'll assume the template extends the layout or is standalone
+        // But to actually use the layout wrapper we defined earlier, we can do this:
+        const layoutPath = path.join(process.cwd(), 'src/modules/email/templates/layout.hbs');
+        if (fs.existsSync(layoutPath)) {
+            const layoutTemplate = fs.readFileSync(layoutPath, 'utf8');
+            const layoutCompiled = hbs.compile(layoutTemplate);
+            // Render the body first
+            const body = compiled(data);
+            // Then render the layout with the body
+            return layoutCompiled({ ...data, body, year: new Date().getFullYear() });
+        }
+
+        return compiled(data);
+    }
+
     async sendEmail(to: string, subject: string, html: string) {
+        // ... implementation below
+        return this.sendRawEmail(to, subject, html);
+    }
+
+    async sendRawEmail(to: string, subject: string, html: string) {
         if (!this.transporter) {
             await this.createTransporter();
         }
@@ -72,5 +114,26 @@ export class EmailService {
             this.logger.error(`Failed to send email to ${to}`, error);
             throw error;
         }
+    }
+
+    async sendWelcomeEmail(to: string, name: string) {
+        const html = await this.compileTemplate('welcome', {
+            name,
+            loginUrl: this.configService.get('FRONTEND_URL') || 'http://localhost:3000/login',
+        });
+        return this.sendRawEmail(to, 'Welcome to YBB Platform', html);
+    }
+
+    async sendPaymentSuccessEmail(to: string, paymentData: any) {
+        const html = await this.compileTemplate('payment-success', {
+            name: paymentData.name,
+            amount: paymentData.amount,
+            currency: paymentData.currency || 'IDR',
+            orderId: paymentData.orderId,
+            date: new Date().toLocaleDateString(),
+            description: paymentData.description,
+            invoiceUrl: paymentData.invoiceUrl || '#',
+        });
+        return this.sendRawEmail(to, 'Payment Confirmation', html);
     }
 }
