@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
+import { AuthModule } from '../auth/auth.module';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { SupportTicketsController } from './presentation/support-tickets.controller';
 import { SupportTicketRepository } from './infrastructure/persistence/support-ticket.repository';
@@ -10,7 +11,7 @@ import { GetSupportTicketHandler } from './application/queries/handlers/get-supp
 import { ReplySupportTicketHandler } from './application/commands/handlers/reply-support-ticket.handler';
 
 @Module({
-    imports: [CqrsModule],
+    imports: [CqrsModule, AuthModule],
     controllers: [SupportTicketsController],
     providers: [
         PrismaService,

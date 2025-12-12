@@ -121,6 +121,7 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       FILE_SERVICE_URL: http://file-service:8001
       PAYMENT_SERVICE_URL: http://payment-service:8002
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
     ports:
       - "4000:4000"
     volumes:
@@ -208,6 +209,7 @@ services:
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
       # Database URL can be added later if needed, for now starting simple
       # DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres:5432/ybb_notifications_db
+      RESEND_API_KEY: re_hKrCBbJ3_GyPbNv9GwxJutXcMW2uJiPmP
     ports:
       - "4002:4002"
     volumes:

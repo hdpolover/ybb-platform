@@ -35,4 +35,17 @@ export class EventsController {
             );
         }
     }
+
+    @EventPattern('user.forgot-password')
+    async handleForgotPassword(@Payload() data: any) {
+        this.logger.log(`Received user.forgot-password event: ${JSON.stringify(data)}`);
+
+        if (data.email) {
+            await this.emailService.sendForgotPasswordEmail(
+                data.email,
+                data.name || 'User',
+                data.token
+            );
+        }
+    }
 }

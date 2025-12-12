@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
+import { AuthModule } from '../auth/auth.module';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { AchievementsController } from './presentation/achievements.controller';
 import { AchievementsRepository } from './infrastructure/persistence/achievements.repository';
@@ -8,7 +9,7 @@ import { ListApplicationDocumentsHandler } from './application/queries/handlers/
 import { ListParticipantAwardsHandler } from './application/queries/handlers/list-participant-awards.handler';
 
 @Module({
-    imports: [CqrsModule],
+    imports: [CqrsModule, AuthModule],
     controllers: [AchievementsController],
     providers: [
         PrismaService,
