@@ -37,6 +37,13 @@ async function bootstrap() {
     .addTag('users', 'User management')
     .addTag('programs', 'Program management')
     .addTag('applications', 'Application management')
+    .addTag('participants', 'Participant management')
+    .addTag('payments', 'Payment management')
+    .addTag('system', 'System announcements & logs')
+    .addTag('brands', 'Brand & Sponsor management')
+    .addTag('support', 'Support ticket system')
+    .addTag('achievements', 'Documents & Awards')
+    .addTag('files', 'File operations')
     .addTag('health', 'Health check')
     .build();
 

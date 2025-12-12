@@ -9,10 +9,10 @@ export class GetProgramDetailHandler {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
-  ) {}
+  ) { }
 
   async execute(query: GetProgramDetailQuery) {
-    const {
+    let {
       identifier,
       include = 'all',
       testimonialsLimit = 10,
@@ -24,6 +24,13 @@ export class GetProgramDetailHandler {
     const cacheKey = CACHE_KEYS.PROGRAM_DETAIL(
       `${identifier}:${include}:${testimonialsLimit}:${announcementsLimit}:${resourcesLimit}`,
     );
+
+    // Sanitize limits (handle NaN)
+    if (isNaN(testimonialsLimit)) testimonialsLimit = 10;
+    if (isNaN(announcementsLimit)) announcementsLimit = 10;
+    if (isNaN(resourcesLimit)) resourcesLimit = 10;
+
+    console.log('DEBUG: GetProgramDetailHandler limits sanitized:', { testimonialsLimit, announcementsLimit, resourcesLimit });
 
     // Try to get from cache
     const cached = await this.cacheManager.get(cacheKey);
@@ -99,6 +106,7 @@ export class GetProgramDetailHandler {
     // Build full includes
     const includes: any = { ...basic };
 
+    /*
     if (include === 'all' || include === 'payments') {
       includes.payments = {
         where: { isActive: true },
@@ -111,6 +119,7 @@ export class GetProgramDetailHandler {
         orderBy: { order: 'asc' },
       };
     }
+    */
 
     if (include === 'all' || include === 'content') {
       includes.faqs = {
@@ -220,6 +229,7 @@ export class GetProgramDetailHandler {
       updatedAt: program.updatedAt,
     };
 
+    /*
     // Transform payments with current period info
     if (program.payments) {
       response.payments = program.payments.map((payment: any) => {
@@ -247,15 +257,15 @@ export class GetProgramDetailHandler {
           })),
           currentPeriod: currentPeriod
             ? {
-                id: currentPeriod.id,
-                name: currentPeriod.name,
-                startDate: currentPeriod.startDate,
-                endDate: currentPeriod.endDate,
-                amount: currentPeriod.amount
-                  ? Number(currentPeriod.amount)
-                  : Number(payment.amount),
-                isActive: currentPeriod.isActive,
-              }
+              id: currentPeriod.id,
+              name: currentPeriod.name,
+              startDate: currentPeriod.startDate,
+              endDate: currentPeriod.endDate,
+              amount: currentPeriod.amount
+                ? Number(currentPeriod.amount)
+                : Number(payment.amount),
+              isActive: currentPeriod.isActive,
+            }
             : null,
           isCurrentlyAvailable: !!currentPeriod,
         };
@@ -267,6 +277,7 @@ export class GetProgramDetailHandler {
         return sum + amount;
       }, 0);
     }
+    */
 
     // Transform other relations
     if (program.faqs) {
