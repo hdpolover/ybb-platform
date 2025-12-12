@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
+import { AuthModule } from '../auth/auth.module';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { SystemAnnouncementsController } from './presentation/system-announcements.controller';
 import { SystemAnnouncementRepository } from './infrastructure/persistence/system-announcement.repository';
@@ -9,7 +10,7 @@ import { GetSystemAnnouncementHandler } from './application/queries/handlers/get
 import { MarkAnnouncementReadHandler } from './application/commands/handlers/mark-announcement-read.handler';
 
 @Module({
-    imports: [CqrsModule],
+    imports: [CqrsModule, AuthModule],
     controllers: [SystemAnnouncementsController],
     providers: [
         PrismaService,

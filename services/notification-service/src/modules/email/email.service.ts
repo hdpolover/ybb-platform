@@ -4,14 +4,22 @@ import { ConfigService } from '@nestjs/config';
 import * as hbs from 'handlebars';
 import * as fs from 'fs';
 import * as path from 'path';
+import { Resend } from 'resend';
 
 @Injectable()
 export class EmailService {
     private transporter: nodemailer.Transporter;
+    private resend: Resend;
     private readonly logger = new Logger(EmailService.name);
 
     constructor(private configService: ConfigService) {
-        this.createTransporter();
+        const resendKey = this.configService.get('RESEND_API_KEY');
+        if (resendKey) {
+            this.resend = new Resend(resendKey);
+            this.logger.log('Resend client initialized');
+        } else {
+            this.createTransporter();
+        }
         this.registerPartials();
     }
 
@@ -82,16 +90,38 @@ export class EmailService {
     }
 
     async sendEmail(to: string, subject: string, html: string) {
-        // ... implementation below
         return this.sendRawEmail(to, subject, html);
     }
 
     async sendRawEmail(to: string, subject: string, html: string) {
+        // Option 1: Use Resend if available
+        if (this.resend) {
+            try {
+                const response = await this.resend.emails.send({
+                    from: 'onboarding@resend.dev',
+                    to: to,
+                    subject: subject,
+                    html: html,
+                });
+
+                if (response.error) {
+                    this.logger.error(`Resend API Error: ${JSON.stringify(response.error)}`);
+                    throw new Error(response.error.message);
+                }
+
+                this.logger.log(`Email sent via Resend. ID: ${response.data?.id} | Full Response: ${JSON.stringify(response)}`);
+                return response;
+            } catch (error) {
+                this.logger.error(`Failed to send email via Resend to ${to}`, error);
+                throw error;
+            }
+        }
+
+        // Option 2: Use Nodemailer (Fallback/Dev)
         if (!this.transporter) {
             await this.createTransporter();
         }
 
-        // Fallback if still no transporter (e.g. ethereal failed)
         if (!this.transporter) {
             this.logger.warn(`Email not sent (no transporter): ${subject} to ${to}`);
             return;
@@ -105,13 +135,13 @@ export class EmailService {
                 html,
             });
 
-            this.logger.log(`Email sent: ${info.messageId}`);
+            this.logger.log(`Email sent via SMTP: ${info.messageId}`);
             if (this.configService.get('NODE_ENV') !== 'production' && nodemailer.getTestMessageUrl(info)) {
-                this.logger.log(`Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
+                this.logger.log(`Ethereal Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
             }
             return info;
         } catch (error) {
-            this.logger.error(`Failed to send email to ${to}`, error);
+            this.logger.error(`Failed to send email via SMTP to ${to}`, error);
             throw error;
         }
     }
@@ -135,5 +165,13 @@ export class EmailService {
             invoiceUrl: paymentData.invoiceUrl || '#',
         });
         return this.sendRawEmail(to, 'Payment Confirmation', html);
+    }
+
+    async sendForgotPasswordEmail(to: string, name: string, token: string) {
+        const html = await this.compileTemplate('forgot-password', {
+            name,
+            token,
+        });
+        return this.sendRawEmail(to, 'Reset Your Password', html);
     }
 }

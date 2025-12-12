@@ -3,13 +3,16 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagg
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { LoginHandler } from '../application/commands/handlers/login.handler';
 import { RegisterHandler } from '../application/commands/handlers/register.handler';
 import { LogoutHandler } from '../application/commands/handlers/logout.handler';
+import { ForgotPasswordHandler } from '../application/commands/handlers/forgot-password.handler';
 import { LoginCommand } from '../application/commands/login.command';
 import { RegisterCommand } from '../application/commands/register.command';
 import { LogoutCommand } from '../application/commands/logout.command';
+import { ForgotPasswordCommand } from '../application/commands/forgot-password.command';
 import { Public } from '../../../shared/decorators/public.decorator';
 import { CurrentUser, CurrentUserData } from '../../../shared/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../infrastructure/guards/jwt-auth.guard';
@@ -21,6 +24,7 @@ export class AuthController {
     private readonly loginHandler: LoginHandler,
     private readonly registerHandler: RegisterHandler,
     private readonly logoutHandler: LogoutHandler,
+    private readonly forgotPasswordHandler: ForgotPasswordHandler,
   ) { }
 
   @Public()
@@ -47,6 +51,15 @@ export class AuthController {
       dto.programCategoryId,
     );
     return this.registerHandler.execute(command);
+  }
+
+  @Public()
+  @Post('forgot-password')
+  @Throttle({ default: { limit: 3, ttl: 3600000 } })
+  @ApiOperation({ summary: 'Request password reset' })
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    const command = new ForgotPasswordCommand(dto.email, dto.programCategoryId);
+    return this.forgotPasswordHandler.execute(command);
   }
 
   @Post('logout')

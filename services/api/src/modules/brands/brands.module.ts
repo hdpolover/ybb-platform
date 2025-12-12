@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
+import { AuthModule } from '../auth/auth.module';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { BrandsController } from './presentation/brands.controller';
 import { BrandRepository } from './infrastructure/persistence/brand.repository';
@@ -9,7 +10,7 @@ import { GetBrandDetailHandler } from './application/queries/handlers/get-brand-
 import { ListBrandSponsorsHandler } from './application/queries/handlers/list-brand-sponsors.handler';
 
 @Module({
-    imports: [CqrsModule],
+    imports: [CqrsModule, AuthModule],
     controllers: [BrandsController],
     providers: [
         PrismaService,
