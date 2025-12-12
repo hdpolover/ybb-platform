@@ -155,7 +155,7 @@ model User {
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Migration Support
-  legacyId   Int?    @map("legacy_id")
+  legacyId   Int?    @unique @map("legacy_id")
   legacyType String? @map("legacy_type") @db.VarChar(20)
 
   // Relations
@@ -233,6 +233,7 @@ model ProgramCategory {
   metaKeywords    String? @map("meta_keywords") @db.Text
 
   // Relations
+  testimonials ProgramTestimonial[]
   users               User[]
   programs            Program[]
   systemAnnouncements SystemAnnouncement[]
@@ -752,7 +753,8 @@ model ProgramGallery {
 
 model ProgramTestimonial {
   id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId     String   @map("program_id") @db.Uuid
+  programId     String?  @map("program_id") @db.Uuid
+  programCategoryId String? @map("program_category_id") @db.Uuid
   name          String   @db.VarChar(255)
   role          String?  @db.VarChar(255) // e.g., "Participant 2024", "Alumni"
   company       String?  @db.VarChar(255)
@@ -769,9 +771,11 @@ model ProgramTestimonial {
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   // Relations
-  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+  program Program? @relation(fields: [programId], references: [id], onDelete: Cascade)
+  programCategory ProgramCategory? @relation(fields: [programCategoryId], references: [id], onDelete: Cascade)
 
   @@index([programId])
+  @@index([programCategoryId])
   @@index([type])
   @@index([isFeatured])
   @@index([order])
@@ -987,6 +991,7 @@ model ProgramAnnouncement {
   programId      String   @map("program_id") @db.Uuid
   title          String   @db.VarChar(255)
   content        String   @db.Text
+  imageUrl       String?  @map("image_url") @db.VarChar(500)
   targetAudience String   @default("all") @map("target_audience") @db.VarChar(50) // all, applicants, accepted, rejected, participants
   sendEmail      Boolean  @default(false) @map("send_email")
   isPinned       Boolean  @default(false) @map("is_pinned")
