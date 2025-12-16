@@ -46,7 +46,7 @@ export default function PaymentPeriodsPage({
               ? {
                   periodName: editingPeriod.name,
                   description: editingPeriod.description,
-                  // For now we only distinguish base vs continuation; in real data this would map to actual parent period id.
+                  // Untuk sementara cuma bedain base period vs lanjutan, nanti kalau udah connect ke data beneran ini bakal nyambung ke parent period ID aslinya.
                   extendsFrom: editingPeriod.base ? "none" : "registration-period",
                   startDateTime: "",
                   endDateTime: "",
@@ -95,7 +95,7 @@ function AddPeriodModal({ onClose, mode = "add", initialValues }: AddPeriodModal
       startDateTime,
       endDateTime,
     };
-    // TODO: send to backend or lift state up when integrating
+    // TODO: Nanti dioper ke backend atau dinaikin ke parent pas udah mulai integrasi sebenernya
     console.log(isEditMode ? "Edit period:" : "Create period:", payload);
     onClose();
   };

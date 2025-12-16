@@ -88,7 +88,7 @@ export function ProgramDocumentsTable() {
             type="button"
             className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50"
             onClick={() => {
-              // TODO: integrate visibility setting logic
+              // TODO: Nanti disambungin ke logic pengaturan visibility dokumen beneran
               console.info("Visibility setting clicked");
             }}
           >
@@ -150,7 +150,7 @@ export function ProgramDocumentsTable() {
                         type="button"
                         className="flex h-7 w-7 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50"
                         onClick={() => {
-                          // TODO: open document preview or details
+                          // TODO: Nanti dibikin buka preview / detail dokumen
                           console.info("View document clicked", row.id);
                         }}
                       >
@@ -160,7 +160,7 @@ export function ProgramDocumentsTable() {
                         type="button"
                         className="flex h-7 w-7 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50"
                         onClick={() => {
-                          // TODO: integrate edit document
+                          // TODO: Nanti disambungin ke fitur edit dokumen beneran
                           console.info("Edit document clicked", row.id);
                         }}
                       >

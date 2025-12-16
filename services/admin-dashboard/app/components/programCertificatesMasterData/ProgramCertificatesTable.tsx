@@ -70,7 +70,7 @@ export function ProgramCertificatesTable() {
 
   return (
     <section className="space-y-3 text-xs text-zinc-700 md:text-sm">
-      {/* Toolbar */}
+      {/* Bagian toolbar atas */}
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div className="space-y-0.5">
           <h2 className="text-sm font-semibold text-zinc-900 md:text-base">Program Certificates</h2>
@@ -91,7 +91,7 @@ export function ProgramCertificatesTable() {
         </button>
       </div>
 
-      {/* Search */}
+      {/* Bagian search / filter */}
       <div className="flex flex-col gap-1.5 md:flex-row md:items-center md:justify-between">
         <div className="w-full md:max-w-xs">
           <label className="mb-1 block text-[11px] font-medium text-zinc-700">Search</label>
@@ -105,7 +105,7 @@ export function ProgramCertificatesTable() {
         </div>
       </div>
 
-      {/* Table */}
+      {/* Tabel utama sertifikat */}
       <div className="overflow-x-auto">
         <table className="min-w-full border-collapse text-left text-xs md:text-sm">
           <thead>

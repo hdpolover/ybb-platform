@@ -5,7 +5,7 @@ import { Cog6ToothIcon, ShieldCheckIcon, EnvelopeIcon, CreditCardIcon } from "@h
 export default function SettingsPage() {
   return (
     <div className="space-y-4">
-      {/* Header */}
+      {/* Bagian header halaman settings */}
       <div>
         <h1 className="text-2xl font-bold text-zinc-900">Platform Settings</h1>
         <p className="mt-1 text-sm text-zinc-600">
@@ -13,7 +13,7 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      {/* Stats Grid */}
+      {/* Grid kartu statistik singkat */}
       <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between">
@@ -68,9 +68,9 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Settings Grid */}
+      {/* Grid utama buat form setting-setting */}
       <div className="grid gap-4 lg:grid-cols-2">
-        {/* General Settings */}
+        {/* General Settings / pengaturan umum platform */}
         <div className="rounded-md border border-zinc-200 bg-white px-5 py-4 shadow-sm">
           <h2 className="mb-3 text-sm font-semibold text-zinc-900">General Settings</h2>
           <div className="space-y-3">
@@ -108,7 +108,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Email Settings */}
+        {/* Email Settings / pengaturan notifikasi email */}
         <div className="rounded-md border border-zinc-200 bg-white px-5 py-4 shadow-sm">
           <h2 className="mb-3 text-sm font-semibold text-zinc-900">Email Settings</h2>
           <div className="space-y-3">
@@ -136,7 +136,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Payment Settings */}
+        {/* Payment Settings / pengaturan pembayaran */}
         <div className="rounded-md border border-zinc-200 bg-white px-5 py-4 shadow-sm">
           <h2 className="mb-3 text-sm font-semibold text-zinc-900">Payment Settings</h2>
           <div className="space-y-3">
@@ -162,7 +162,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Security Settings */}
+        {/* Security Settings / pengaturan keamanan admin */}
         <div className="rounded-md border border-zinc-200 bg-white px-5 py-4 shadow-sm">
           <h2 className="mb-3 text-sm font-semibold text-zinc-900">Security Settings</h2>
           <div className="space-y-3">
@@ -188,7 +188,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Save Button */}
+      {/* Tombol aksi buat batal / simpan perubahan */}
       <div className="flex justify-end gap-2">
         <button
           type="button"

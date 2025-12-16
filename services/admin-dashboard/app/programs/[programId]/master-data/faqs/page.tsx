@@ -1,17 +1,13 @@
 "use client";
 
 import { use } from "react";
+import { programs } from "@/app/components/navbar/ProgramSelect";
 import { ProgramFaqsTable } from "@/app/components/programFaqsMasterData/ProgramFaqsTable";
 
-function formatProgramName(programId: string | null): string {
+function getProgramName(programId: string | null): string {
   if (!programId) return "Selected Program";
-  const cleaned = programId.replace(/[-_]+/g, " ");
-  const words = cleaned.split(" ").filter(Boolean);
-  if (words.length === 0) return "Selected Program";
-  const titled = words
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-  return titled;
+  const program = programs.find((item) => item.id === programId);
+  return program?.name ?? "Selected Program";
 }
 
 export default function ProgramFaqsPage({
@@ -20,7 +16,7 @@ export default function ProgramFaqsPage({
   params: Promise<{ programId: string }>;
 }) {
   const { programId } = use(params);
-  const programName = formatProgramName(programId);
+  const programName = getProgramName(programId);
 
   return (
     <main className="space-y-4 text-sm md:text-base">

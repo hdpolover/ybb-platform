@@ -42,7 +42,7 @@ export function EditProgramSpecificsModal({ programName, onClose }: EditProgramS
         </div>
 
         <div className="flex-1 space-y-4 overflow-y-auto px-4 py-3 text-xs md:text-sm">
-          {/* Basic Information */}
+          {/* bagian Informasi Biasa ( Basic Information ) */}
           <section className="space-y-2 rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-2.5">
             <div className="flex items-center gap-2">
               <IdentificationIcon className="h-5 w-5 text-blue-500" />
@@ -71,7 +71,7 @@ export function EditProgramSpecificsModal({ programName, onClose }: EditProgramS
             </div>
           </section>
 
-          {/* Description */}
+          {/* bagian Deskripsi */}
           <section className="space-y-2 rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-2.5">
             <div className="flex items-center gap-2">
               <DocumentTextIcon className="h-5 w-5 text-blue-500" />
@@ -89,7 +89,7 @@ export function EditProgramSpecificsModal({ programName, onClose }: EditProgramS
             </div>
           </section>
 
-          {/* Dates & Status */}
+          {/* Status dan Tanggal nya */}
           <section className="space-y-2 rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-2.5">
             <div className="flex items-center gap-2">
               <CalendarDaysIcon className="h-5 w-5 text-blue-500" />
@@ -132,7 +132,7 @@ export function EditProgramSpecificsModal({ programName, onClose }: EditProgramS
             </div>
           </section>
 
-          {/* Media & Assets */}
+          {/* bagian media sama asset nya */}
           <section className="space-y-2 rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-2.5">
             <div className="flex items-center gap-2">
               <PhotoIcon className="h-5 w-5 text-blue-500" />
@@ -203,7 +203,7 @@ export function EditProgramSpecificsModal({ programName, onClose }: EditProgramS
             </div>
           </section>
 
-          {/* Program Content */}
+          {/* bagian Program Contentnnya */}
           <section className="space-y-2 rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-2.5">
             <div className="flex items-center gap-2">
               <DocumentTextIcon className="h-5 w-5 text-blue-500" />

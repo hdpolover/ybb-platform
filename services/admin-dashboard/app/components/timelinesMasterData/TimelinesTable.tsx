@@ -13,10 +13,10 @@ export type TimelineRow = {
   id: number;
   name: string;
   order: number;
-  /** Human-readable date range shown in table/detail */
+  /** Rentang tanggal yang enak dibaca, ditampilin di tabel/detail */
   startDate: string;
   endDate: string;
-  /** ISO datetime values used in forms (datetime-local). */
+  /** Nilai datetime versi ISO yang dipakai di form (input datetime-local). */
   startDateIso: string;
   endDateIso: string;
   description: string;
@@ -282,7 +282,7 @@ function TimelineFormModal({ onClose, mode = "add", initialValues }: TimelineFor
       description,
       status,
     };
-    // TODO: integrate with backend / parent state
+    // TODO: Integrasi ama Backend
     console.log(isEditMode ? "Edit timeline:" : "Create timeline:", payload);
     onClose();
   };

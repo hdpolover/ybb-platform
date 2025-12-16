@@ -21,4 +21,4 @@ export default function ProgramSpeakersPage({
   );
 }
 
-// TODO: implement Program Speakers master data page
+// TODO: Nanti diisi logic beneran buat Program Speakers master data page

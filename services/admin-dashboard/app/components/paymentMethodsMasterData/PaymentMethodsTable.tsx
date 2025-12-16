@@ -302,7 +302,7 @@ function PaymentMethodFormModal({
       description,
       imageFileName: selectedImageName,
     };
-    // TODO: integrate with backend / parent state
+    // TODO: Nanti disambungin ke backend / state di parent pas udah siap
     console.log(isEditMode ? "Edit payment method:" : "Create payment method:", payload);
     onClose();
   };
@@ -465,7 +465,7 @@ function PaymentMethodDetailModal({ method, onClose }: PaymentMethodDetailModalP
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-3 md:px-4">
       <div className="w-full max-w-3xl rounded-md border border-zinc-200 bg-white text-xs text-zinc-700 shadow-lg md:text-sm">
-        {/* Header */}
+        {/* bagian Headernya */}
         <div className="flex items-center justify-between gap-2 border-b border-zinc-200 px-4 py-3">
           <div>
             <h3 className="text-sm font-semibold text-zinc-900 md:text-base">Payment Method Details</h3>
@@ -484,7 +484,7 @@ function PaymentMethodDetailModal({ method, onClose }: PaymentMethodDetailModalP
         </div>
 
         <div className="space-y-3 px-4 py-3">
-          {/* Top card: logo + summary */}
+          {/* bagian Top Card : Logo + Summarynya */}
           <section className="grid gap-3 rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-3 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
             <div className="flex flex-col items-center justify-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-4">
               <div className="flex h-16 w-full items-center justify-center overflow-hidden rounded bg-white">
@@ -546,7 +546,7 @@ function PaymentMethodDetailModal({ method, onClose }: PaymentMethodDetailModalP
             </div>
           </section>
 
-          {/* Description card */}
+          {/* Card bagian Deskripsi */}
           <section className="space-y-2 rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-3">
             <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
               Description
