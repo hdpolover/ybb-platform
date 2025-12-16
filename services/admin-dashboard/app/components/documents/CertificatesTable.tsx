@@ -121,14 +121,14 @@ export function CertificatesTable() {
 
   return (
     <section className="rounded-md border border-zinc-200 bg-white px-4 py-3 text-xs text-zinc-700 shadow-sm md:text-sm">
-      {/* Toolbar */}
+      {/* Buat bagian Toolbar */}
       <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 text-[11px] text-zinc-500">
         <div className="flex items-center gap-1.5">
           <button
             type="button"
             className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 font-medium text-zinc-700 shadow-sm hover:bg-zinc-50"
             onClick={() => {
-              // TODO: integrate real refresh
+              // TODO: Nanti disambungin ke action refresh data yang beneran
               console.info("Certificates refresh clicked");
             }}
           >
@@ -155,7 +155,7 @@ export function CertificatesTable() {
         </div>
       </div>
 
-      {/* Table */}
+      {/* bagian Table */}
       <div className="overflow-x-auto">
         <table className="min-w-full border-collapse text-left">
           <thead>
@@ -219,7 +219,7 @@ export function CertificatesTable() {
                         type="button"
                         className="flex h-7 w-7 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50"
                         onClick={() => {
-                          // TODO: view certificate configuration
+                          // TODO: Nanti buka detail konfigurasi sertifikat
                           console.info("View certificate config", row.id);
                         }}
                       >
@@ -229,7 +229,7 @@ export function CertificatesTable() {
                         type="button"
                         className="flex h-7 w-7 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50"
                         onClick={() => {
-                          // TODO: manage recipients
+                          // TODO: Nanti disambungin ke fitur manage penerima sertifikat
                           console.info("Manage recipients", row.id);
                         }}
                       >
@@ -239,7 +239,7 @@ export function CertificatesTable() {
                         type="button"
                         className="flex h-7 w-7 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50"
                         onClick={() => {
-                          // TODO: edit template
+                          // TODO: Nanti dibikin halaman / modal edit template sertifikat
                           console.info("Edit certificate template", row.id);
                         }}
                       >
@@ -254,7 +254,7 @@ export function CertificatesTable() {
         </table>
       </div>
 
-      {/* Pagination */}
+      {/* Buat Paginationnya */}
       <div className="mt-2.5 flex items-center justify-between text-[11px] text-zinc-500">
         <span>
           Showing {filteredRows.length === 0 ? 0 : startIndex + 1} to {endIndex} of {filteredRows.length} entries

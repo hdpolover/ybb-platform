@@ -2,20 +2,16 @@
 
 import { use, useState } from "react";
 import { InformationCircleIcon, PencilSquareIcon } from "@heroicons/react/24/solid";
+import { programs } from "@/app/components/navbar/ProgramSelect";
 import { GeneralInformationTab } from "@/app/components/program-details/GeneralInformationTab";
 import { ProgramSpecificsTab } from "@/app/components/program-details/ProgramSpecificsTab";
 import { EditGeneralInformationModal } from "@/app/components/program-details/EditGeneralInformationModal";
 import { EditProgramSpecificsModal } from "@/app/components/program-details/EditProgramSpecificsModal";
 
-function formatProgramName(programId: string | null): string {
+function getProgramName(programId: string | null): string {
   if (!programId) return "Selected Program";
-  const cleaned = programId.replace(/[-_]+/g, " ");
-  const words = cleaned.split(" ").filter(Boolean);
-  if (words.length === 0) return "Selected Program";
-  const titled = words
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-  return titled;
+  const program = programs.find((item) => item.id === programId);
+  return program?.name ?? "Selected Program";
 }
 
 export default function ProgramDetailsPage({
@@ -24,7 +20,7 @@ export default function ProgramDetailsPage({
   params: Promise<{ programId: string }>;
 }) {
   const { programId } = use(params);
-  const programName = formatProgramName(programId);
+  const programName = getProgramName(programId);
 
   const [activeTab, setActiveTab] = useState<"general" | "specifics">("general");
   const [showEditModal, setShowEditModal] = useState(false);

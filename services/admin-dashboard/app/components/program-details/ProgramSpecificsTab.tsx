@@ -8,7 +8,7 @@ import {
 export function ProgramSpecificsTab() {
   return (
     <div className="space-y-3 pt-1">
-      {/* 1. Basic Information */}
+      {/* 1. Identitas Program */}
       <section className="rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-3">
         <div className="mb-2 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -40,7 +40,7 @@ export function ProgramSpecificsTab() {
         </dl>
       </section>
 
-      {/* 2. Description */}
+      {/* 2. bagian Deskripsinya */}
       <section className="rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-3">
         <div className="mb-2 flex items-center gap-2">
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700 md:text-sm">
@@ -58,7 +58,7 @@ export function ProgramSpecificsTab() {
         </div>
       </section>
 
-      {/* 3. Dates & Status */}
+      {/* 3. Status sama Tanggalnya */}
       <section className="rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-3">
         <div className="mb-2 flex items-center gap-2">
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700 md:text-sm">
@@ -90,7 +90,7 @@ export function ProgramSpecificsTab() {
         </dl>
       </section>
 
-      {/* 4. Media & Assets */}
+      {/* 4. Asset Media */}
       <section className="rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-3">
         <div className="mb-2 flex items-center gap-2">
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700 md:text-sm">
@@ -136,7 +136,7 @@ export function ProgramSpecificsTab() {
         </dl>
       </section>
 
-      {/* 5. Program Content */}
+      {/* 5. Content Programnya */}
       <section className="rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-3">
         <div className="mb-2 flex items-center gap-2">
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700 md:text-sm">

@@ -14,10 +14,10 @@ export type AwardStatus = "Active" | "Inactive";
 
 export type ProgramAward = {
   id: number;
-  award: string; // e.g., "Best Delegate"
-  title: string; // e.g., "Best Delegate - Asia Pacific Track"
-  type: "Winner" | "Runner Up" | "Honorable Mention" | "Other"; // Award Type
-  order: number; // display order
+  award: string; // contoh: "Best Delegate"
+  title: string; // contoh: "Best Delegate - Asia Pacific Track"
+  type: "Winner" | "Runner Up" | "Honorable Mention" | "Other"; // Tipe award
+  order: number; // urutan tampil di list
   description: string;
   status: AwardStatus;
 };
@@ -91,7 +91,7 @@ export function ProgramAwardsTable() {
 
   return (
     <section className="space-y-3 text-xs text-zinc-700 md:text-sm">
-      {/* Toolbar */}
+      {/* Bagian toolbar atas */}
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div className="space-y-0.5">
           <h2 className="text-sm font-semibold text-zinc-900 md:text-base">Program Awards</h2>
@@ -112,7 +112,7 @@ export function ProgramAwardsTable() {
         </button>
       </div>
 
-      {/* Search */}
+      {/* Bagian search / filter */}
       <div className="flex flex-col gap-1.5 md:flex-row md:items-center md:justify-between">
         <div className="w-full md:max-w-xs">
           <label className="mb-1 block text-[11px] font-medium text-zinc-700">Search</label>
@@ -298,7 +298,7 @@ function ProgramAwardFormModal({
       description,
       status,
     };
-    // TODO: integrate with backend / parent state
+    // TODO: Nanti disambungin ke backend / state di parent pas udah ada API beneran
     console.log(isEditMode ? "Edit program award:" : "Create program award:", payload);
     onClose();
   };

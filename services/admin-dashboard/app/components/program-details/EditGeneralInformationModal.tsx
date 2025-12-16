@@ -66,7 +66,7 @@ export function EditGeneralInformationModal({
         </div>
 
         <div className="flex-1 space-y-4 overflow-y-auto px-4 py-3 text-xs md:text-sm">
-          {/* Program Identity */}
+          {/* Identitas Programnya */}
           <section className="space-y-2 rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-2.5">
             <div className="flex items-center gap-2">
               <IdentificationIcon className="h-5 w-5 text-blue-500" />
@@ -115,7 +115,7 @@ export function EditGeneralInformationModal({
             </div>
           </section>
 
-          {/* Media Assets */}
+          {/* Asset Medianya */}
           <section className="space-y-2 rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-2.5">
             <div className="flex items-center gap-2">
               <PhotoIcon className="h-5 w-5 text-blue-500" />
@@ -190,7 +190,7 @@ export function EditGeneralInformationModal({
             </div>
           </section>
 
-          {/* Program Description */}
+          {/* Deskripsi Programnya */}
           <section className="space-y-2 rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-2.5">
             <div className="flex items-center gap-2">
               <GlobeAltIcon className="h-5 w-5 text-blue-500" />
@@ -208,7 +208,7 @@ export function EditGeneralInformationModal({
             </div>
           </section>
 
-          {/* Contact Information */}
+          {/* Informasi Kontaknya */}
           <section className="space-y-2 rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-2.5">
             <div className="flex items-center gap-2">
               <PhoneIcon className="h-5 w-5 text-blue-500" />
@@ -245,7 +245,7 @@ export function EditGeneralInformationModal({
             </div>
           </section>
 
-          {/* Social Media */}
+          {/* bagian Sosmednya */}
           <section className="space-y-2 rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-2.5">
             <div className="flex items-center gap-2">
               <AtSymbolIcon className="h-5 w-5 text-blue-500" />
@@ -298,7 +298,7 @@ export function EditGeneralInformationModal({
             </div>
           </section>
 
-          {/* Additional Information */}
+          {/* bagian Informasi Tambahan */}
           <section className="space-y-2 rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-2.5">
             <div className="flex items-center gap-2">
               <HeartIcon className="h-5 w-5 text-blue-500" />
@@ -316,7 +316,7 @@ export function EditGeneralInformationModal({
             </div>
           </section>
 
-          {/* Core Values */}
+          {/* Values utama ( Core Values ) */}
           <section className="space-y-2 rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-2.5">
             <div className="flex items-center gap-2">
               <FlagIcon className="h-5 w-5 text-blue-500" />
@@ -345,7 +345,7 @@ export function EditGeneralInformationModal({
             </div>
           </section>
 
-          {/* Objectives */}
+          {/* bagian Objektif ( Objectives ) */}
           <section className="space-y-2 rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-2.5">
             <div className="flex items-center gap-2">
               <PlayCircleIcon className="h-5 w-5 text-blue-500" />
@@ -365,7 +365,7 @@ export function EditGeneralInformationModal({
             </div>
           </section>
 
-          {/* Benefits */}
+          {/* bagian Benefits */}
           <section className="space-y-2 rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-2.5">
             <div className="flex items-center gap-2">
               <GiftTopIcon className="h-5 w-5 text-blue-500" />

@@ -249,7 +249,7 @@ function VideoTestimonyFormModal({
       description,
       status,
     };
-    // TODO: integrate with backend / parent state
+    // TODO: Nanti disambungin ke backend / state di parent pas udah siap
     console.log(isEditMode ? "Edit video testimony:" : "Create video testimony:", payload);
     onClose();
   };
@@ -459,4 +459,4 @@ function VideoTestimonyViewModal({ row, onClose }: VideoTestimonyViewModalProps)
   );
 }
 
-// TODO: implement VideoTestimonialsTable following ProgramTestimoniesTable pattern
+// TODO: Nanti implement VideoTestimonialsTable lengkap ngikutin pattern ProgramTestimoniesTable

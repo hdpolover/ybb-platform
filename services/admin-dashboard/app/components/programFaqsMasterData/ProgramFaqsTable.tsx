@@ -264,7 +264,7 @@ export function ProgramFaqsTable() {
                         type="button"
                         className="flex h-7 w-7 items-center justify-center rounded-md border border-rose-200 bg-rose-50 text-rose-700 shadow-sm hover:bg-rose-100"
                         onClick={() => {
-                          // TODO: integrate delete behavior
+                          // TODO: Nanti dihook-in ke behavior hapus beneran (API / state)
                           // eslint-disable-next-line no-console
                           console.log("Delete FAQ", faq.id);
                         }}
@@ -341,7 +341,7 @@ function ProgramFaqFormModal({
       category,
       status,
     };
-    // TODO: integrate with backend / parent state
+    // TODO: Nanti disambungin ke backend / state di parent pas udah mulai implement real data
     // eslint-disable-next-line no-console
     console.log(isEditMode ? "Edit FAQ:" : "Create FAQ:", payload);
     onClose();
