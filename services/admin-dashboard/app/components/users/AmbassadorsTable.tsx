@@ -386,8 +386,8 @@ function EditAmbassadorModal({ isOpen, onClose, ambassador }: EditAmbassadorModa
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    // TODO: Integrate with backend once API is available
-    // For now, we simply log and close the modal
+    // TODO: Nanti dihook-in ke backend begitu API-nya udah siap
+    // Untuk sekarang cuma log dulu terus tutup modal
     console.log("Submitted ambassador form:", formData);
     onClose();
   };

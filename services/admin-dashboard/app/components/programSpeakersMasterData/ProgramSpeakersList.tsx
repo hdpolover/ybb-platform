@@ -129,7 +129,7 @@ export function ProgramSpeakersList() {
 
   return (
     <section className="space-y-3">
-      {/* Toolbar */}
+      {/* Toolbar utama di atas list speaker */}
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div className="space-y-0.5">
           <h2 className="text-sm font-semibold text-zinc-900 md:text-base">Program Speakers</h2>
@@ -150,7 +150,7 @@ export function ProgramSpeakersList() {
         </button>
       </div>
 
-      {/* Search */}
+      {/* Kolom search / filter speaker */}
       <div className="flex flex-col gap-1.5 md:flex-row md:items-center md:justify-between">
         <div className="w-full md:max-w-xs">
           <label className="mb-1 block text-[11px] font-medium text-zinc-700">Search</label>
@@ -164,7 +164,7 @@ export function ProgramSpeakersList() {
         </div>
       </div>
 
-      {/* Speakers grid - layout mengikuti Program Photos gallery */}
+      {/* Grid kartu speaker - layout ngikutin gallery Program Photos */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {filtered.length === 0 ? (
           <div className="col-span-full flex flex-col items-center justify-center rounded-md border border-dashed border-zinc-200 bg-zinc-50 px-4 py-10 text-center text-xs text-zinc-500 md:text-sm">
@@ -179,7 +179,7 @@ export function ProgramSpeakersList() {
               key={speaker.id}
               className="flex h-full flex-col overflow-hidden rounded-md border border-zinc-200 bg-white text-xs text-zinc-700 shadow-sm md:text-sm"
             >
-              {/* Top: photo / avatar with index badge */}
+              {/* Bagian atas: foto / avatar plus badge nomor urut */}
               <div className="relative h-32 w-full bg-zinc-100">
                 {speaker.photoUrl ? (
                   <Image
@@ -199,7 +199,7 @@ export function ProgramSpeakersList() {
                 </div>
               </div>
 
-              {/* Body */}
+              {/* Isi konten utama di kartu speaker */}
               <div className="flex flex-1 flex-col justify-between gap-2 px-3 py-2.5">
                 <div className="space-y-1">
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -235,7 +235,7 @@ export function ProgramSpeakersList() {
                     <div className="text-[11px] text-zinc-500 md:text-[11px]">{speaker.sessionTime}</div>
                   )}
 
-                  {/* Status & email */}
+                  {/* Status & email speaker */}
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
                     <span
                       className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
@@ -260,7 +260,7 @@ export function ProgramSpeakersList() {
                   </div>
                 </div>
 
-                {/* Actions */}
+                {/* Tombol aksi di tiap kartu speaker */}
                 <div className="mt-2 flex items-center justify-end gap-1.5">
                   <button
                     type="button"
@@ -388,7 +388,7 @@ function ProgramSpeakerFormModal({
       sessionTime,
       sessionDescription,
     };
-    // TODO: integrate with backend / parent state
+    // TODO: Nanti disambungin ke backend / state di parent pas udah siap
     console.log(isEditMode ? "Edit program speaker:" : "Create program speaker:", payload);
     onClose();
   };
@@ -419,9 +419,9 @@ function ProgramSpeakerFormModal({
 
         <form onSubmit={handleSubmit} className="space-y-4 px-4 py-3">
           <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(260px,1fr)]">
-            {/* Left: basic info + session */}
+            {/* Kolom kiri: info basic speaker + data sesi */}
             <div className="space-y-3">
-              {/* Basic Information */}
+              {/* Bagian informasi dasar speaker */}
               <div className="space-y-2 rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-2.5">
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
                   Basic Information
@@ -539,7 +539,7 @@ function ProgramSpeakerFormModal({
                 </div>
               </div>
 
-              {/* Session Information */}
+              {/* Bagian informasi sesi / jadwal talk */}
               <div className="space-y-2 rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-2.5">
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
                   Session Information
@@ -585,7 +585,7 @@ function ProgramSpeakerFormModal({
               </div>
             </div>
 
-            {/* Right: Photo + Social links */}
+            {/* Kolom kanan: upload foto + link sosmed */}
             <div className="space-y-3">
               <div className="space-y-2 rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-2.5">
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">

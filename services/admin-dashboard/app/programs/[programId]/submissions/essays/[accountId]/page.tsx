@@ -20,7 +20,7 @@ export default function EssayDetailPage({
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // TODO: replace static dummy data with real data from API
+  // TODO: Nanti ganti dummy data statis ini pakai data beneran dari API
   const name = "ARMANDO MATIAS BUENGA";
   const email = "armandombuenga@gmail.com";
   const participantId = "174031";

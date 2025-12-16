@@ -219,7 +219,7 @@ function ProgramPhotoFormModal({
       description,
       imageFileName: selectedImageName,
     };
-    // TODO: integrate with backend / parent state
+    // TODO: Integrasi ama backend nanti
     console.log(isEditMode ? "Edit program photo:" : "Add program photo:", payload);
     onClose();
   };
@@ -349,4 +349,4 @@ function ProgramPhotoFormModal({
   );
 }
 
-// TODO: implement ProgramPhotosGallery component
+// TODO: Nanti disambungin ke implementasi ProgramPhotosGallery beneran (nyatu sama data asli)

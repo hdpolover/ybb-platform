@@ -47,4 +47,4 @@ export default function VideoTestimonialsPage({
   );
 }
 
-// TODO: implement Video Testimonials page following program-testimonies page pattern
+// TODO: Nanti implement halaman Video Testimonials lengkap ngikutin pattern halaman program-testimonies

@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
-// Types
+// Tipe-tipe data yang dipake buat context otentikasi admin
 export type AdminAccessLevel = "super_admin" | "platform_admin" | "program_admin" | "no_access";
 
 export type AdminProgram = {
@@ -41,7 +41,7 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Mock data for different admin types
+// Data dummy buat macem-macem tipe admin (super, multi-program, single, dll.)
 const MOCK_ADMINS = {
   super: {
     id: "admin-super-1",
@@ -120,9 +120,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [adminProfile, setAdminProfile] = useState<AdminProfile | null>(null);
 
-  // Initialize authentication state
+  // Inisialisasi state autentikasi pas pertama kali load
   useEffect(() => {
-    // Simulate loading
+    // Simulasi loading dikit biar kerasa ada prosesnya
     const timer = setTimeout(() => {
       const isAuth = localStorage.getItem("isAuthenticated") === "true";
       const savedAdminType = localStorage.getItem("mockAdminType") as keyof typeof MOCK_ADMINS;
@@ -141,7 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(timer);
   }, []);
 
-  // Determine access level
+  // untuk Akses Levelnya
   const adminAccessLevel: AdminAccessLevel = (() => {
     if (!adminProfile) return "no_access";
     
@@ -161,10 +161,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     setIsLoading(true);
-    // Simulate API call
+    // Simulasi manggil API login
     await new Promise(resolve => setTimeout(resolve, 1000));
     
-    // Mock login - determine admin type based on email
+    // Login dummy - nentuin tipe admin berdasarkan email yang dipake
     const mockAdmin = email.includes("super") 
       ? MOCK_ADMINS.super 
       : email.includes("coordinator")

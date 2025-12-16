@@ -5,7 +5,7 @@ import { ChartBarIcon, ArrowTrendingUpIcon, UsersIcon, RectangleStackIcon, Arrow
 export default function AnalyticsPage() {
   return (
     <div className="space-y-4">
-      {/* Header */}
+      {/* Bagian header halaman analytics */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">Platform Analytics</h1>
@@ -29,7 +29,7 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* Stats Grid */}
+      {/* Grid statistik utama platform */}
       <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between">
@@ -84,7 +84,7 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* Analytics Section */}
+      {/* Section detail analytics / chart */}
       <section className="rounded-md border border-zinc-200 bg-white px-5 py-4 text-sm shadow-sm">
         <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
