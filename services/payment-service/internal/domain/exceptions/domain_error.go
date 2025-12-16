@@ -26,4 +26,7 @@ var (
 	ErrPaymentAlreadyPaid   = NewDomainError("PAYMENT_ALREADY_PAID", "Payment has already been paid")
 	ErrPaymentGatewayFailed = NewDomainError("GATEWAY_FAILED", "Payment gateway processing failed")
 	ErrUnsupportedGateway   = NewDomainError("UNSUPPORTED_GATEWAY", "Payment gateway not supported")
+
+	ErrPaymentNotRefundable = NewDomainError("PAYMENT_NOT_REFUNDABLE", "Payment cannot be refunded (status must be success)")
+	ErrGatewayError         = NewDomainError("GATEWAY_PROVIDER_ERROR", "Error from upstream payment provider")
 )

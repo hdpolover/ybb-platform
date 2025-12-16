@@ -155,7 +155,7 @@ services:
       PAYPAL_CLIENT_ID: ${PAYPAL_CLIENT_ID}
       PAYPAL_SECRET: ${PAYPAL_SECRET}
       PAYPAL_MODE: ${PAYPAL_MODE}
-      RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/   
     ports:
       - "8002:8002"
     volumes:

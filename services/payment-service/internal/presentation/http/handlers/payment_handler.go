@@ -25,6 +25,8 @@ type PaymentHandler struct {
 	createPaymentHandler *commandHandlers.CreatePaymentHandler
 	getPaymentHandler    *queryHandlers.GetPaymentHandler
 
+	refundPaymentHandler *commandHandlers.RefundPaymentHandler
+
 	paymentRepo          repositories.PaymentRepository
 	eventPublisher       messaging.EventPublisher
 	gatewayFactory *infraGateways.GatewayFactory
@@ -35,6 +37,8 @@ func NewPaymentHandler(
 	createPaymentHandler *commandHandlers.CreatePaymentHandler,
 	getPaymentHandler *queryHandlers.GetPaymentHandler,
 
+	refundPaymentHandler *commandHandlers.RefundPaymentHandler,
+
 	paymentRepo repositories.PaymentRepository,
 	eventPublisher messaging.EventPublisher,
 	gatewayFactory *infraGateways.GatewayFactory,
@@ -42,6 +46,8 @@ func NewPaymentHandler(
 	return &PaymentHandler{
 		createPaymentHandler: createPaymentHandler,
 		getPaymentHandler:    getPaymentHandler,
+
+		refundPaymentHandler: refundPaymentHandler,
 
 		paymentRepo:          paymentRepo,
 		eventPublisher:       eventPublisher,
@@ -398,5 +404,36 @@ func (h *PaymentHandler) VerifyPayment(c *gin.Context) {
         "status":  "success",
         "message": "Payment verification processed successfully",
         "data":    payment,
+    })
+}
+
+// RefundPayment handles payment refund requests
+// @Summary      Refund Payment
+// @Description  Refunds a successful payment
+// @Tags         Payments
+// @Param        id   path      string  true  "Payment ID"
+// @Success      200  {object}  dto.PaymentResponseDTO
+// @Router       /payments/{id}/refund [post]
+func (h *PaymentHandler) RefundPayment(c *gin.Context) {
+    paymentID := c.Param("id")
+    if paymentID == "" {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Payment ID is required"})
+        return
+    }
+
+    // Panggil Logic Refund yang sudah kita buat sebelumnya
+    response, err := h.refundPaymentHandler.Handle(c.Request.Context(), paymentID)
+    if err != nil {
+        // Simple error handling dulu (nanti bisa dipercantik)
+        c.JSON(http.StatusInternalServerError, gin.H{
+            "error":   "Failed to refund payment",
+            "details": err.Error(),
+        })
+        return
+    }
+
+    c.JSON(http.StatusOK, gin.H{
+        "message": "Payment refunded successfully",
+        "data":    response,
     })
 }
