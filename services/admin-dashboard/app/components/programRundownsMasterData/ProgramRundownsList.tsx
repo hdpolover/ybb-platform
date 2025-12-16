@@ -285,7 +285,7 @@ function ProgramRundownFormModal({
       description,
       status,
     };
-    // TODO: integrate with backend / parent state
+    // TODO: Nanti disambungin ke backend / state di parent pas udah mulai integrasi beneran
     console.log(isEditMode ? "Edit program rundown:" : "Create program rundown:", payload);
     onClose();
   };
@@ -490,4 +490,4 @@ function ProgramRundownDetailModal({ rundown, onClose }: ProgramRundownDetailMod
   );
 }
 
-// TODO: implement ProgramRundownsList component
+// TODO: Nanti implement ProgramRundownsList beneran (nyambung ke data rundown asli)

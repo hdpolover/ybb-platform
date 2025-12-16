@@ -12,7 +12,7 @@ interface AgreementLetterRow {
   participantId: string;
   fundingPath: "Fully Funded" | "Self Funded";
   status: "Not Generated" | "Pending Signature" | "Signed" | "Overdue";
-  createdAt: string; // formatted date string
+  createdAt: string; // string tanggal yang udah diformat rapi
 }
 
 const mockAgreementLetters: AgreementLetterRow[] = [

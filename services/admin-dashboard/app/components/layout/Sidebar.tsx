@@ -334,7 +334,7 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
   const [activeId, setActiveId] = useState<string | null>(() => {
     if (!pathname) return "dashboard";
 
-    // Match program-scoped routes
+    // Cek route yang lagi kebuka, terus samain sama menu yang nyangkut ke program
     if (pathname?.includes("/master-data/program-details")) {
       return "program-details";
     }
@@ -413,6 +413,15 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
     if (pathname.includes("/payments")) {
       return "payments";
     }
+    if (pathname.includes("/settings/main-configuration")) {
+      return "main-configuration";
+    }
+    if (pathname.includes("/settings/admin-management")) {
+      return "admin-management";
+    }
+    if (pathname.includes("/settings/roles-permissions")) {
+      return "roles-permissions";
+    }
     if (pathname.includes("/programs/")) {
       return "dashboard";
     }
@@ -435,6 +444,9 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
     }
     if (pathname?.includes("/documents")) {
       initial["documents"] = true;
+    }
+    if (pathname?.includes("/settings")) {
+      initial["settings"] = true;
     }
     if (
       pathname?.includes("/master-data/program-details") ||
@@ -475,7 +487,7 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
       selectedProgramId,
     );
 
-    // Navigate to program-scoped routes
+    // Navigasi ke halaman yang udah di-scope ke program yang lagi dipilih
     if (item.id === "dashboard") {
       router.push(`/programs/${selectedProgramId}`);
     } else if (item.id === "payments") {
@@ -534,6 +546,14 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
       router.push(`/programs/${selectedProgramId}/master-data/program-certificates`);
     } else if (item.id === "faqs") {
       router.push(`/programs/${selectedProgramId}/master-data/faqs`);
+    } else if (item.id === "main-configuration") {
+      router.push(`/programs/${selectedProgramId}/settings/main-configuration`);
+    } else if (item.id === "admin-management") {
+      router.push(`/programs/${selectedProgramId}/settings/admin-management`);
+    } else if (item.id === "roles-permissions") {
+      router.push(`/programs/${selectedProgramId}/settings/roles-permissions`);
+    } else if (item.id === "menu-management") {
+      router.push(`/programs/${selectedProgramId}/settings/menu-management`);
     }
     if (options?.setActive !== false) {
       setActiveId(item.id);

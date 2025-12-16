@@ -7,14 +7,14 @@ import { ProgramFormModal, type ProgramFormData } from "../components/programs/P
 import { ProgramFilters } from "../components/programs/ProgramFilters";
 import { DeleteConfirmModal } from "../components/shared/DeleteConfirmModal";
 
-// Mock categories data
+// Data kategori dummy, nanti ujung-ujungnya bakal diganti manggil API beneran
 const mockCategories = [
   { id: "1", name: "Youth Leadership" },
   { id: "2", name: "Community Service" },
   { id: "3", name: "Education & Skills" },
 ];
 
-// Mock programs data
+// Data program dummy, sementara masih hardcoded di sini
 const mockPrograms: Program[] = [
   {
     id: "1",
@@ -96,12 +96,12 @@ export default function ProgramsPage() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
   
-  // Filter states
+  // State buat filter-filter di atas tabel
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("");
 
-  // Filtered programs
+  // List program yang udah difilter sesuai query & pilihan user
   const filteredPrograms = useMemo(() => {
     return programs.filter((program) => {
       const matchesSearch =
@@ -193,7 +193,7 @@ export default function ProgramsPage() {
 
   return (
     <div className="space-y-4">
-      {/* Page Header */}
+      {/* Bagian header halaman program */}
       <div>
         <h1 className="text-2xl font-bold text-zinc-900">Programs</h1>
         <p className="mt-1 text-sm text-zinc-600">
@@ -201,7 +201,7 @@ export default function ProgramsPage() {
         </p>
       </div>
 
-      {/* Stats Grid */}
+      {/* Grid statistik ringkas buat program */}
       <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between">
@@ -262,7 +262,7 @@ export default function ProgramsPage() {
         </div>
       </div>
 
-      {/* Action Button */}
+      {/* Tombol aksi utama buat bikin program baru */}
       <div className="flex justify-end">
         <button
           type="button"
@@ -274,7 +274,7 @@ export default function ProgramsPage() {
         </button>
       </div>
 
-      {/* Filters */}
+      {/* Komponen filter program (search, kategori, status) */}
       <ProgramFilters
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
@@ -285,14 +285,14 @@ export default function ProgramsPage() {
         categories={mockCategories}
       />
 
-      {/* Programs Table */}
+      {/* Tabel utama yang nampilin list program */}
       <ProgramsTable
         programs={filteredPrograms}
         onEdit={handleEdit}
         onDelete={handleDelete}
       />
 
-      {/* Form Modal */}
+      {/* Modal form buat create / edit program */}
       <ProgramFormModal
         key={selectedProgram ? selectedProgram.id : "new"}
         isOpen={isFormModalOpen}
@@ -302,7 +302,7 @@ export default function ProgramsPage() {
         categories={mockCategories}
       />
 
-      {/* Delete Confirmation Modal */}
+      {/* Modal konfirmasi sebelum hapus program */}
       <DeleteConfirmModal
         isOpen={isDeleteModalOpen}
         onClose={handleCloseDeleteModal}

@@ -91,7 +91,7 @@ export function AnnouncementsTable() {
 
   return (
     <section className="rounded-md border border-zinc-200 bg-white px-4 py-3 text-xs text-zinc-700 shadow-sm md:text-sm">
-      {/* Toolbar */}
+      {/* Buat bagian Toolbar */}
       <div className="mb-2.5 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
           <button
@@ -130,7 +130,7 @@ export function AnnouncementsTable() {
         </div>
       </div>
 
-      {/* Table */}
+      {/* Bagian Table */}
       <div className="overflow-x-auto">
         <table className="min-w-full border-collapse text-left">
           <thead>
@@ -508,7 +508,7 @@ function EditAnnouncementModal({
       imageUrl: selectedImageName || undefined,
     };
 
-    // TODO: Integrate with backend or parent state when available
+    // TODO: Nanti disambungin ke backend / state di parent pas API nya udah ready
     console.log("Updated announcement:", updated);
     onClose();
   };

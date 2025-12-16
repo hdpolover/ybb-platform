@@ -92,13 +92,13 @@ export default function PlatformLayout({
 
   return (
     <div className="flex h-screen overflow-hidden bg-white text-zinc-900">
-      {/* Sidebar */}
+      {/* Sidebar utama buat navigasi platform */}
       <aside
         className={`flex h-screen flex-col bg-blue-800 text-white transition-all duration-200 ${
           sidebarCollapsed ? "w-16" : "w-64"
         }`}
       >
-        {/* Logo */}
+        {/* Logo YBB di sidebar */}
         <div className="flex items-center gap-2 border-b border-blue-500 px-4 py-4">
           <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded">
             <Image
@@ -117,7 +117,7 @@ export default function PlatformLayout({
           )}
         </div>
 
-        {/* Navigation */}
+        {/* Menu navigasi ke halaman-halaman platform */}
         <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-4">
           {menuItems.map((item) => {
             const Icon = item.icon;
@@ -140,7 +140,7 @@ export default function PlatformLayout({
           })}
         </nav>
 
-        {/* Footer */}
+        {/* Footer kecil di bawah sidebar */}
         <div className="border-t border-blue-500 px-4 py-3 text-xs text-blue-100">
           {!sidebarCollapsed && (
             <>
@@ -151,9 +151,9 @@ export default function PlatformLayout({
         </div>
       </aside>
 
-      {/* Main Content */}
+      {/* Area konten utama */}
       <div className="flex h-screen flex-1 flex-col">
-        {/* Navbar */}
+        {/* Navbar atas buat tombol toggle + info admin */}
         <header className="flex h-16 items-center justify-between border-b bg-white px-6 shadow-sm">
           <button
             type="button"
@@ -169,7 +169,7 @@ export default function PlatformLayout({
           </button>
 
           <div className="flex items-center gap-3">
-            {/* Back to Programs Link */}
+            {/* Tombol balik ke halaman awal / programs */}
             <Link
               href="/"
               className="hidden h-9 items-center rounded-md border border-zinc-200 px-3 text-xs font-medium text-zinc-700 hover:bg-zinc-50 sm:flex"
@@ -177,7 +177,7 @@ export default function PlatformLayout({
               Back to Programs
             </Link>
 
-            {/* Notifications */}
+            {/* Tombol notifikasi di navbar */}
             <div className="relative">
               <button
                 type="button"
@@ -191,7 +191,7 @@ export default function PlatformLayout({
                 </span>
               </button>
 
-              {/* Notifications Dropdown */}
+              {/* Dropdown list notifikasi */}
               {showNotifications && (
                 <div className="absolute right-0 top-12 z-50 w-80 rounded-lg border border-zinc-200 bg-white shadow-lg">
                   <div className="border-b border-zinc-200 px-4 py-3">
@@ -252,7 +252,7 @@ export default function PlatformLayout({
               )}
             </div>
 
-            {/* Profile Menu */}
+            {/* Menu profile admin + dropdown */}
             <div className="relative">
               <button
                 type="button"
@@ -282,7 +282,7 @@ export default function PlatformLayout({
                 </div>
               </button>
 
-              {/* Profile Dropdown */}
+              {/* Dropdown detail profile & action akun */}
               {showProfileMenu && (
                 <div className="absolute right-0 top-12 z-50 w-64 rounded-lg border border-zinc-200 bg-white shadow-lg">
                   <div className="border-b border-zinc-200 px-4 py-3">
@@ -324,7 +324,7 @@ export default function PlatformLayout({
           </div>
         </header>
 
-        {/* Page Content */}
+        {/* Isi halaman yang lagi kebuka */}
         <main className="flex-1 overflow-y-auto bg-white px-8 py-6">
           {children}
         </main>

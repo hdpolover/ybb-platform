@@ -74,7 +74,7 @@ export function ProgramFormModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-white shadow-xl">
-        {/* Header */}
+        {/* Bagian header modal */}
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-200 bg-white px-6 py-4">
           <h2 className="text-lg font-semibold text-zinc-900">
             {program ? "Edit Program" : "Create Program"}
@@ -88,17 +88,17 @@ export function ProgramFormModal({
           </button>
         </div>
 
-        {/* Form */}
+        {/* Isi form utama */}
         <form onSubmit={handleSubmit} className="p-6">
           <div className="space-y-6">
-            {/* Basic Information */}
+            {/* Bagian informasi dasar program */}
             <div>
               <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-zinc-500">
                 Basic Information
               </h3>
               <div className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
-                  {/* Name */}
+                  {/* Input nama program */}
                   <div className="sm:col-span-2">
                     <label
                       htmlFor="name"
@@ -117,7 +117,7 @@ export function ProgramFormModal({
                     />
                   </div>
 
-                  {/* Category */}
+                  {/* Dropdown kategori program */}
                   <div>
                     <label
                       htmlFor="categoryId"
@@ -143,7 +143,7 @@ export function ProgramFormModal({
                     </select>
                   </div>
 
-                  {/* Status */}
+                  {/* Dropdown status program */}
                   <div>
                     <label
                       htmlFor="status"
@@ -169,7 +169,7 @@ export function ProgramFormModal({
                     </select>
                   </div>
 
-                  {/* Slug */}
+                  {/* Input slug buat URL program */}
                   <div className="sm:col-span-2">
                     <label
                       htmlFor="slug"
@@ -234,7 +234,7 @@ export function ProgramFormModal({
               </div>
             </div>
 
-            {/* Registration Dates */}
+            {/* Bagian tanggal registrasi dibuka & ditutup */}
             <div>
               <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-zinc-500">
                 Registration Period
@@ -283,7 +283,7 @@ export function ProgramFormModal({
               </div>
             </div>
 
-            {/* Program Dates */}
+            {/* Bagian tanggal pelaksanaan program */}
             <div>
               <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-zinc-500">
                 Program Duration
@@ -332,7 +332,7 @@ export function ProgramFormModal({
               </div>
             </div>
 
-            {/* Fees & Capacity */}
+            {/* Bagian biaya registrasi & kuota peserta */}
             <div>
               <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-zinc-500">
                 Fees & Capacity
@@ -390,7 +390,7 @@ export function ProgramFormModal({
             </div>
           </div>
 
-          {/* Actions */}
+            {/* Tombol aksi di bagian bawah form */}
           <div className="mt-6 flex justify-end gap-3 border-t border-zinc-200 pt-6">
             <button
               type="button"
