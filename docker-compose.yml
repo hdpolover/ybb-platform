@@ -209,7 +209,7 @@ services:
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
       # Database URL can be added later if needed, for now starting simple
       # DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres:5432/ybb_notifications_db
-      RESEND_API_KEY: re_hKrCBbJ3_GyPbNv9GwxJutXcMW2uJiPmP
+      RESEND_API_KEY: ${RESEND_API_KEY}
     ports:
       - "4002:4002"
     volumes:
