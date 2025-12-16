@@ -25,7 +25,7 @@ async function bootstrap() {
   });
 
   // Global prefix
-  app.setGlobalPrefix('api/v1');
+  app.setGlobalPrefix('v1');
 
   // Swagger documentation
   const config = new DocumentBuilder()
@@ -48,13 +48,13 @@ async function bootstrap() {
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  SwaggerModule.setup('docs', app, document);
 
   const port = process.env.PORT || 3000;
   await app.listen(port);
 
   console.log(`\n🚀 Application is running on: http://localhost:${port}`);
-  console.log(`📚 API Documentation: http://localhost:${port}/api/docs\n`);
+  console.log(`📚 API Documentation: http://localhost:${port}/docs\n`);
 }
 
 bootstrap();
