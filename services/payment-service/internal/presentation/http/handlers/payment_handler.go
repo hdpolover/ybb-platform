@@ -12,6 +12,8 @@ import (
 	"github.com/ybb-platform/payment-service/internal/application/queries"
 	queryHandlers "github.com/ybb-platform/payment-service/internal/application/queries/handlers"
 
+	"github.com/ybb-platform/payment-service/internal/application/dto"
+
 	"github.com/ybb-platform/payment-service/internal/domain/events"
 	"github.com/ybb-platform/payment-service/internal/domain/repositories"
 	infraGateways "github.com/ybb-platform/payment-service/internal/infrastructure/gateways" // <--- TAMBAH INI
@@ -49,8 +51,9 @@ func NewPaymentHandler(
 
 // CreatePayment handles payment creation requests
 func (h *PaymentHandler) CreatePayment(c *gin.Context) {
-	var cmd commands.CreatePaymentCommand
-	if err := c.ShouldBindJSON(&cmd); err != nil {
+	// 1. Gunakan DTO untuk menangkap JSON (Pastikan import dto sudah ada)
+	var req dto.CreatePaymentDTO
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error":   "Invalid request body",
 			"details": err.Error(),
@@ -58,7 +61,24 @@ func (h *PaymentHandler) CreatePayment(c *gin.Context) {
 		return
 	}
 
-	// Execute command
+	// 2. MAPPING DARI DTO KE COMMAND (Ini langkah krusial yang sebelumnya hilang/salah)
+	cmd := commands.CreatePaymentCommand{
+		ApplicationID: req.ApplicationID,
+		UserID:        req.UserID,
+		Amount:        req.Amount,
+		Currency:      req.Currency,
+		PaymentMethod: req.PaymentMethod,
+		GatewayName:   req.GatewayName,
+		
+		// Data yang kemarin kosong, sekarang kita isi manual:
+		Description:   req.Description,   // Sekarang Command sudah punya field ini
+		CustomerName:  req.CustomerName,  // Pindahkan dari req ke cmd
+		CustomerEmail: req.CustomerEmail, // Pindahkan dari req ke cmd
+		CustomerPhone: req.CustomerPhone, // Pindahkan dari req ke cmd
+		CallbackURL:   req.CallbackURL,   // Pindahkan dari req ke cmd
+	}
+
+	// 3. Eksekusi Command
 	response, err := h.createPaymentHandler.Handle(c.Request.Context(), &cmd)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -185,10 +205,11 @@ func (h *PaymentHandler) HandleWebhook(c *gin.Context) {
 		payment.GatewayResponse = updatedData.GatewayResponse
 		payment.UpdatedAt = time.Now()
 
-		if payment.Status == "success" {
+		switch payment.Status {
+		case "success":
 			now := time.Now()
 			payment.PaidAt = &now
-		} else if payment.Status == "failed" {
+		case "failed":
 			now := time.Now()
 			payment.FailedAt = &now
 		}

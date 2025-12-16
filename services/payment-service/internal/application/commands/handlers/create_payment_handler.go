@@ -54,24 +54,41 @@ func (h *CreatePaymentHandler) Handle(ctx context.Context, cmd *commands.CreateP
 		return nil, exceptions.ErrUnsupportedGateway
 	}
 
-	// 3. Create payment entity
+	// 3. TENTUKAN PAYMENT TYPE (Automatic vs Manual)
+	// Defaultnya "automatic", tapi jika gatewaynya "manual", kita ubah.
+	determinedPaymentType := "automatic"
+	if cmd.GatewayName == "manual" {
+		determinedPaymentType = "manual"
+	}
+
+	// 4. Create payment entity
+	// PERBAIKAN: Masukkan Description di sini (bukan string kosong)
 	payment := entities.NewPayment(
 		cmd.ApplicationID,
 		cmd.UserID,
 		cmd.Amount,
 		cmd.Currency,
-		"", // description - can be added later
+		cmd.Description, // Menggunakan deskripsi dari request
 	)
+
+	// Set Type & Method
+	payment.PaymentType = entities.PaymentType(determinedPaymentType) // Set Manual/Automatic
 	payment.PaymentMethod = entities.PaymentMethod(cmd.PaymentMethod)
 	payment.GatewayName = cmd.GatewayName
 
-	// 4. Save payment to database (status: pending)
+	// PERBAIKAN: Mapping data Customer & URL agar tersimpan di Database (Tidak NULL)
+	payment.CustomerName = cmd.CustomerName
+	payment.CustomerEmail = cmd.CustomerEmail
+	payment.CustomerPhone = cmd.CustomerPhone
+	payment.CallbackURL = cmd.CallbackURL
+
+	// 5. Save payment to database (status: pending)
 	if err := h.paymentRepo.Create(ctx, payment); err != nil {
 		log.Printf("Failed to create payment: %v", err)
 		return nil, fmt.Errorf("failed to create payment: %w", err)
 	}
 
-	// 5. Create payment with gateway
+	// 6. Create payment with gateway
 	gatewayReq := &gateways.CreatePaymentRequest{
 		Payment:       payment,
 		PaymentMethod: entities.PaymentMethod(cmd.PaymentMethod),
@@ -102,6 +119,8 @@ func (h *CreatePaymentHandler) Handle(ctx context.Context, cmd *commands.CreateP
 			string(payment.Status),
 			payment.GatewayName,
 		)
+		event.Metadata["error"] = err.Error()
+
 		if pubErr := h.eventPublisher.Publish(ctx, event); pubErr != nil {
 			log.Printf("Failed to publish payment failed event: %v", pubErr)
 		}
@@ -109,7 +128,7 @@ func (h *CreatePaymentHandler) Handle(ctx context.Context, cmd *commands.CreateP
 		return nil, fmt.Errorf("gateway payment creation failed: %w", err)
 	}
 
-	// 6. Update payment with gateway order ID
+	// 7. Update payment with gateway order ID (dan status jika perlu)
 	payment.MarkAsProcessing(gatewayResp.GatewayOrderID)
 
 	if err := h.paymentRepo.Update(ctx, payment); err != nil {
@@ -117,8 +136,7 @@ func (h *CreatePaymentHandler) Handle(ctx context.Context, cmd *commands.CreateP
 		return nil, fmt.Errorf("failed to update payment: %w", err)
 	}
 
-	// 7. Publish payment created event
-	// TODO for intern: Implement RabbitMQ event publishing
+	// 8. Publish payment created event
 	event := events.NewPaymentEvent(
 		events.PaymentCreatedEvent,
 		payment.ID,
@@ -129,13 +147,18 @@ func (h *CreatePaymentHandler) Handle(ctx context.Context, cmd *commands.CreateP
 		string(payment.Status),
 		payment.GatewayName,
 	)
+	
+	// Tambahkan metadata lengkap untuk kebutuhan notifikasi/log
+	event.Metadata["payment_type"] = string(payment.PaymentType)
+	event.Metadata["customer_email"] = payment.CustomerEmail
+	event.Metadata["customer_name"] = payment.CustomerName
+	event.Metadata["description"] = payment.Description
 
 	if err := h.eventPublisher.Publish(ctx, event); err != nil {
 		log.Printf("Failed to publish payment created event: %v", err)
-		// Don't fail the request, just log the error
 	}
 
-	// 8. Return response
+	// 9. Return response (Mapping Entity ke DTO)
 	return &dto.PaymentResponseDTO{
 		ID:             payment.ID,
 		ApplicationID:  payment.ApplicationID,
@@ -143,9 +166,14 @@ func (h *CreatePaymentHandler) Handle(ctx context.Context, cmd *commands.CreateP
 		Amount:         payment.Amount,
 		Currency:       payment.Currency,
 		Status:         string(payment.Status),
+		
+		// PERBAIKAN: Kembalikan payment_type dari entity (manual/automatic)
+		PaymentType:    string(payment.PaymentType), 
+		
 		PaymentMethod:  string(payment.PaymentMethod),
 		GatewayName:    payment.GatewayName,
 		GatewayOrderID: payment.GatewayOrderID,
+		Description:    payment.Description, // Deskripsi sudah tidak kosong
 		RedirectURL:    gatewayResp.RedirectURL,
 		CreatedAt:      payment.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:      payment.UpdatedAt.Format(time.RFC3339),

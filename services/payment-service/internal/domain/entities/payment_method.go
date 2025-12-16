@@ -40,8 +40,8 @@ type PaymentMethodEntity struct {
 
 	// --- Configuration ---
 	// swaggertype digunakan agar Swagger tidak bingung membaca map[string]interface{}
-	Config map[string]interface{} `gorm:"type:jsonb;serializer:json" json:"config" 		swaggerignore:"true"`
-	SortOrder int                 `gorm:"default:0"                  json:"sort_order"  example:"1"`
+	Config map[string]any `gorm:"type:jsonb;serializer:json" json:"config" swaggerignore:"true"`
+	SortOrder int         `gorm:"default:0" json:"sort_order" example:"1"`
 
 	// --- Timestamps ---
 	CreatedAt time.Time      `json:"created_at" example:"2025-12-01T10:00:00Z"`

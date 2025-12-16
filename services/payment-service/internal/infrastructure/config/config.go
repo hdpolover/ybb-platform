@@ -19,6 +19,13 @@ type Config struct {
 	MidtransIsProduction bool
 
 	XenditSecretKey      string
+
+	StripeSecretKey		string
+    StripeWebhookSecret string
+
+	PayPalClientID  string
+    PayPalSecret    string
+    PayPalMode      string
 }
 
 // LoadConfig loads configuration from environment variables
@@ -39,6 +46,13 @@ func LoadConfig() (*Config, error) {
 		MidtransIsProduction: getEnv("MIDTRANS_IS_PRODUCTION", "false") == "true",
 
 		XenditSecretKey:      getEnv("XENDIT_SECRET_KEY", ""),
+
+		StripeSecretKey:     getEnv("STRIPE_SECRET_KEY", ""),
+        StripeWebhookSecret: getEnv("STRIPE_WEBHOOK_SECRET", ""),
+
+		PayPalClientID: 	getEnv("PAYPAL_CLIENT_ID", ""),
+        PayPalSecret:   getEnv("PAYPAL_SECRET", ""),
+        PayPalMode:     getEnv("PAYPAL_MODE", "sandbox"),
 	}, nil
 }
 

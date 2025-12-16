@@ -129,9 +129,10 @@ func (g *MidtransGateway) HandleWebhook(ctx context.Context, payload []byte) (*e
 
 	switch transactionStatus {
 	case "capture":
-		if fraudStatus == "challenge" {
+		switch fraudStatus {
+		case "challenge":
 			paymentStatus = entities.PaymentStatusProcessing
-		} else if fraudStatus == "accept" {
+		case "accept":
 			paymentStatus = entities.PaymentStatusSuccess
 		}
 	case "settlement":
