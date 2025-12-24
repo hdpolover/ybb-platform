@@ -1,6 +1,19 @@
 -- Create database users with appropriate permissions
 -- Updated: 2025-11-25 - All three databases
 
+-- Create ybb_prod_user if it doesn't exist
+DO
+$$
+BEGIN
+   IF NOT EXISTS (
+      SELECT FROM pg_catalog.pg_roles
+      WHERE  rolname = 'ybb_prod_user') THEN
+
+      CREATE ROLE ybb_prod_user WITH LOGIN PASSWORD 'ybb_prod_password';
+   END IF;
+END
+$$;
+
 -- Main database permissions (ybb_platform_db)
 \c ybb_platform_db;
 
