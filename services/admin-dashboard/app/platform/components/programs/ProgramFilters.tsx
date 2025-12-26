@@ -24,7 +24,7 @@ export function ProgramFilters({
   return (
     <div className="rounded-lg border border-zinc-200 bg-white p-4">
       <div className="flex flex-wrap items-center gap-4">
-        {/* Search */}
+        {/* Kolom search program */}
         <div className="flex-1 min-w-[240px]">
           <div className="relative">
             <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
@@ -38,7 +38,7 @@ export function ProgramFilters({
           </div>
         </div>
 
-        {/* Category Filter */}
+        {/* Filter kategori program */}
         <div className="flex items-center gap-2">
           <FunnelIcon className="h-4 w-4 text-zinc-500" />
           <select
@@ -55,7 +55,7 @@ export function ProgramFilters({
           </select>
         </div>
 
-        {/* Status Filter */}
+        {/* Filter status program */}
         <select
           value={selectedStatus}
           onChange={(e) => onStatusChange(e.target.value)}
@@ -67,7 +67,7 @@ export function ProgramFilters({
           <option value="archived">Archived</option>
         </select>
 
-        {/* Clear Filters */}
+        {/* Tombol buat clear semua filter */}
         {(searchQuery || selectedCategory || selectedStatus) && (
           <button
             type="button"

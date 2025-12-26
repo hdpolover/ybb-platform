@@ -25,7 +25,7 @@ export default function LandingPage() {
     logout,
   } = useAuth();
 
-  // Auto-redirect logic for single program admin
+  // Logic auto-redirect kalau adminnya cuma pegang satu program doang
   useEffect(() => {
     if (!isLoading && adminProfile && !isPlatformAdmin && assignedPrograms.length === 1) {
       // Single program admin - redirect immediately
@@ -39,14 +39,14 @@ export default function LandingPage() {
     }
   };
 
-  // Redirect to login if not authenticated
+  // Kalau belum ke-auth, arahin dulu ke halaman login
   useEffect(() => {
     if (!isLoading && !adminProfile) {
       router.push("/login");
     }
   }, [isLoading, adminProfile, router]);
 
-  // Loading state
+  // State pas lagi loading data admin / permission
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-zinc-50">
@@ -58,12 +58,12 @@ export default function LandingPage() {
     );
   }
 
-  // Not authenticated - redirect to login (this is just a fallback while redirecting)
+  // Kalau belum ke-auth, fallback-nya ya kosong aja karena udah di-redirect ke login di atas
   if (!adminProfile) {
     return null;
   }
 
-  // No access state
+  // State kalau admin ini nggak punya akses ke program atau platform sama sekali
   if (adminAccessLevel === "no_access") {
     return (
       <div className="flex min-h-screen items-center justify-center bg-zinc-50">
@@ -112,7 +112,7 @@ export default function LandingPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Admin Info */}
+            {/* Info Adminnya */}
             <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
               <UserCircleIcon className="h-5 w-5 text-zinc-500" />
               <div className="flex flex-col">
@@ -121,7 +121,7 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* Mock Admin Switcher - For Testing Only */}
+            {/* Switcher buat Admin ( ini baru test aja, blm ada fungsinya ) */}
             <div className="flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2 py-1">
               <span className="text-[10px] font-medium text-amber-700">TEST:</span>
               <select
@@ -136,7 +136,7 @@ export default function LandingPage() {
               </select>
             </div>
 
-            {/* Sign Out Button */}
+            {/* Tombol Sign Out*/}
             <button
               onClick={() => logout()}
               className="rounded-lg border border-zinc-200 bg-white px-4 py-2 text-xs font-medium text-zinc-700 shadow-sm hover:bg-zinc-50"
@@ -147,9 +147,9 @@ export default function LandingPage() {
         </div>
       </header>
 
-      {/* Main Content */}
+      {/* Content Utama ( Main Content ) */}
       <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-8 py-8">
-        {/* Welcome Section */}
+        {/* Section Welcome */}
         <section>
           <h1 className="mb-2 text-2xl font-bold text-zinc-900">
             Welcome back, {adminProfile.fullName.split(' ')[0]}!
@@ -162,10 +162,10 @@ export default function LandingPage() {
           </p>
         </section>
 
-        {/* Admin Mode Cards - Only show for Platform Admins */}
+        {/* mode Admin Card ( Khusus buat Admin ) */}
         {isPlatformAdmin && (
           <section className="grid gap-4 md:grid-cols-2">
-            {/* Platform Admin Card */}
+            {/* Admin Cardnya ( Platformnya ) */}
             <Link
               href="/platform"
               className="group rounded-lg border border-zinc-200 bg-white p-6 shadow-sm transition-all hover:border-blue-300 hover:shadow-md"
@@ -189,7 +189,7 @@ export default function LandingPage() {
               </div>
             </Link>
 
-            {/* Program Admin Card */}
+            {/* Program Card Admin */}
             <div className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
               <div className="flex items-start gap-4">
                 <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
@@ -211,7 +211,7 @@ export default function LandingPage() {
           </section>
         )}
 
-        {/* Program Selection */}
+        {/* Pemilihan Program Programnya */}
         <section className="flex flex-1 flex-col min-h-0">
           <div className="mb-4">
             <h2 className="text-lg font-semibold text-zinc-900">
@@ -227,7 +227,7 @@ export default function LandingPage() {
 
           <div className="flex-1 min-h-0">
             <div className="h-full overflow-y-auto pr-1">
-              {/* Show filtered programs for program admins */}
+              {/* Nunjukin program yang ke filter buat admin */}
               {isPlatformAdmin ? (
                 <ProgramList onSelectProgram={handleSelectProgram} />
               ) : (

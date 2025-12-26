@@ -11,24 +11,40 @@ export class EventsController {
     @EventPattern('payment.succeeded')
     async handlePaymentSucceeded(@Payload() data: any, @Ctx() context: RmqContext) {
         this.logger.log(`Received payment.succeeded event: ${JSON.stringify(data)}`);
-        // Ideally use a template service here
+
         if (data.email) {
-            await this.emailService.sendEmail(
-                data.email,
-                'Payment Confirmation',
-                `<h1>Payment Successful</h1><p>Amount: ${data.amount}</p>`
-            );
+            await this.emailService.sendPaymentSuccessEmail(data.email, {
+                name: data.customer_name || 'Customer',
+                amount: data.amount,
+                currency: data.currency,
+                orderId: data.order_id,
+                description: 'Payment for services',
+                invoiceUrl: '#', // TODO: Add real invoice URL
+            });
         }
     }
 
     @EventPattern('user.registered')
     async handleUserRegistered(@Payload() data: any) {
         this.logger.log(`Received user.registered event: ${JSON.stringify(data)}`);
+
         if (data.email) {
-            await this.emailService.sendEmail(
+            await this.emailService.sendWelcomeEmail(
                 data.email,
-                'Welcome to YBB Platform',
-                `<p>Hi ${data.name || 'User'}, welcome to our platform!</p>`
+                data.first_name || data.name || 'User'
+            );
+        }
+    }
+
+    @EventPattern('user.forgot-password')
+    async handleForgotPassword(@Payload() data: any) {
+        this.logger.log(`Received user.forgot-password event: ${JSON.stringify(data)}`);
+
+        if (data.email) {
+            await this.emailService.sendForgotPasswordEmail(
+                data.email,
+                data.name || 'User',
+                data.token
             );
         }
     }

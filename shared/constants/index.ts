@@ -30,8 +30,8 @@ export const CACHE_TTL_MEDIUM = 300; // 5 minutes
 export const CACHE_TTL_LONG = 3600; // 1 hour
 
 // Email
-export const SUPPORT_EMAIL = 'support@ybb-platform.com';
-export const NO_REPLY_EMAIL = 'noreply@ybb-platform.com';
+export const SUPPORT_EMAIL = 'support@ybbhub.com';
+export const NO_REPLY_EMAIL = 'noreply@ybbhub.com';
 
 // Date Formats
 export const DATE_FORMAT = 'YYYY-MM-DD';

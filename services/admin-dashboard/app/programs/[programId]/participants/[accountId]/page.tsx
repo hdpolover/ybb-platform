@@ -10,9 +10,8 @@ export default function ParticipantDetailPage({
 }: {
   params: Promise<{ programId: string; accountId: string }>;
 }) {
-  const { accountId, programId } = use(params);
-
-  // NOTE: For now we use static dummy data for the participant detail.
+  const { accountId } = use(params);
+  // NOTE: Untuk sekarang masih pake data dummy dulu buat detail pesertanya.
 
   return (
     <div className="space-y-6">
@@ -40,11 +39,11 @@ export default function ParticipantDetailPage({
             gender="Female"
             institution="ABC International School"
             onEditProfile={() => {
-              // TODO: integrate with edit profile flow
+              // TODO: Nanti dihubungin ke flow edit profile benerannya
               console.info("Edit profile clicked");
             }}
             onExportData={() => {
-              // TODO: integrate with export data flow
+              // TODO: Nanti dihubungin ke flow export data aselinya
               console.info("Export data clicked");
             }}
           />

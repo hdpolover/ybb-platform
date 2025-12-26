@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { UserPlusIcon, EyeIcon, PencilSquareIcon, TrashIcon } from "@heroicons/react/24/solid";
+import { XMarkIcon } from "@heroicons/react/24/outline";
 
 interface AmbassadorRow {
   id: number;
@@ -10,10 +11,13 @@ interface AmbassadorRow {
   name: string;
   email: string;
   institution: string;
+  gender: "Male" | "Female" | "Other";
+  phoneNumber: string;
   status: "Active" | "Inactive" | "Suspended";
   joinedOn: string;
   referralCode: string;
   referralCount: number;
+  notes?: string;
 }
 
 const mockAmbassadors: AmbassadorRow[] = [
@@ -23,10 +27,13 @@ const mockAmbassadors: AmbassadorRow[] = [
     name: "Jalwa Nawab",
     email: "g4264107@gmail.com",
     institution: "Some University",
+    gender: "Female",
+    phoneNumber: "+62 812-3456-7890",
     status: "Active",
     joinedOn: "21 Nov 2025",
     referralCode: "JALW645",
     referralCount: 1,
+    notes: "Top performer in Q4.",
   },
   {
     id: 2,
@@ -34,10 +41,13 @@ const mockAmbassadors: AmbassadorRow[] = [
     name: "Alya Putri Nirmala",
     email: "alya.putri@example.com",
     institution: "Institut Teknologi Bandung",
+    gender: "Female",
+    phoneNumber: "+62 811-2345-6789",
     status: "Active",
     joinedOn: "19 Nov 2025",
     referralCode: "ALYA221",
     referralCount: 3,
+    notes: "Strong campus network.",
   },
   {
     id: 3,
@@ -45,10 +55,13 @@ const mockAmbassadors: AmbassadorRow[] = [
     name: "Kenji Sato",
     email: "kenji.sato@example.jp",
     institution: "Tokyo International College",
+    gender: "Male",
+    phoneNumber: "+81 90-1234-5678",
     status: "Inactive",
     joinedOn: "15 Nov 2025",
     referralCode: "KENJ903",
     referralCount: 0,
+    notes: "On temporary break.",
   },
   {
     id: 4,
@@ -56,10 +69,13 @@ const mockAmbassadors: AmbassadorRow[] = [
     name: "Nurul Huda",
     email: "nurul.huda@example.my",
     institution: "Universiti Malaya",
+    gender: "Female",
+    phoneNumber: "+60 12-345 6789",
     status: "Active",
     joinedOn: "10 Nov 2025",
     referralCode: "NURL732",
     referralCount: 5,
+    notes: "Frequently hosts info sessions.",
   },
   {
     id: 5,
@@ -67,10 +83,13 @@ const mockAmbassadors: AmbassadorRow[] = [
     name: "Ashwini Vaibhav Pol",
     email: "ash.jawale16@gmail.com",
     institution: "ABC International School",
+    gender: "Other",
+    phoneNumber: "+91 98765 43210",
     status: "Suspended",
     joinedOn: "01 Nov 2025",
     referralCode: "ASHW120",
     referralCount: 2,
+    notes: "Pending compliance review.",
   },
   {
     id: 6,
@@ -78,10 +97,13 @@ const mockAmbassadors: AmbassadorRow[] = [
     name: "Aya Gamal",
     email: "ayagamal453@gmail.com",
     institution: "Cairo Youth Institute",
+    gender: "Female",
+    phoneNumber: "+20 100 123 4567",
     status: "Active",
     joinedOn: "28 Oct 2025",
     referralCode: "AYAG554",
     referralCount: 4,
+    notes: "Leads Middle East outreach.",
   },
 ];
 
@@ -99,6 +121,17 @@ export function AmbassadorsTable() {
   const visibleRows = rows.slice(startIndex, endIndex);
 
   const maxReferrals = rows.reduce((max, row) => Math.max(max, row.referralCount), 0) || 1;
+  const [selectedAmbassador, setSelectedAmbassador] = useState<AmbassadorRow | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+  const handleOpenEditModal = (row: AmbassadorRow | null) => {
+    setSelectedAmbassador(row);
+    setIsEditModalOpen(true);
+  };
+
+  const handleCloseEditModal = () => {
+    setIsEditModalOpen(false);
+  };
 
   return (
     <section className="rounded-md border border-zinc-200 bg-white px-4 py-3 text-xs text-zinc-700 shadow-sm md:text-sm">
@@ -107,6 +140,7 @@ export function AmbassadorsTable() {
           <button
             type="button"
             className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 bg-blue-500 px-3 py-1.5 font-semibold text-white shadow-sm transition hover:bg-blue-600"
+            onClick={() => handleOpenEditModal(null)}
           >
             <UserPlusIcon className="h-3.5 w-3.5" />
             <span>Add New Ambassador</span>
@@ -252,6 +286,7 @@ export function AmbassadorsTable() {
                       <button
                         type="button"
                         className="flex h-7 w-7 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50"
+                        onClick={() => handleOpenEditModal(row)}
                       >
                         <PencilSquareIcon className="h-4 w-4" />
                       </button>
@@ -292,6 +327,12 @@ export function AmbassadorsTable() {
           </button>
         </div>
       </div>
+      <EditAmbassadorModal
+        key={selectedAmbassador ? selectedAmbassador.id : "new"}
+        isOpen={isEditModalOpen}
+        onClose={handleCloseEditModal}
+        ambassador={selectedAmbassador}
+      />
     </section>
   );
 }
@@ -309,5 +350,186 @@ function StatusBadge({ status }: { status: AmbassadorRow["status"] }) {
     >
       {status}
     </span>
+  );
+}
+
+type EditAmbassadorModalProps = {
+  isOpen: boolean;
+  onClose: () => void;
+  ambassador: AmbassadorRow | null;
+};
+
+type AmbassadorFormData = {
+  fullName: string;
+  email: string;
+  gender: "Male" | "Female" | "Other";
+  phoneNumber: string;
+  institution: string;
+  referralCode: string;
+  status: AmbassadorRow["status"];
+  notes: string;
+};
+
+function EditAmbassadorModal({ isOpen, onClose, ambassador }: EditAmbassadorModalProps) {
+  const [formData, setFormData] = useState<AmbassadorFormData>(() => ({
+    fullName: ambassador?.name ?? "",
+    email: ambassador?.email ?? "",
+    gender: ambassador?.gender ?? "Male",
+    phoneNumber: ambassador?.phoneNumber ?? "",
+    institution: ambassador?.institution ?? "",
+    referralCode: ambassador?.referralCode ?? "",
+    status: ambassador?.status ?? "Active",
+    notes: ambassador?.notes ?? "",
+  }));
+
+  if (!isOpen) return null;
+
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    // TODO: Nanti dihook-in ke backend begitu API-nya udah siap
+    // Untuk sekarang cuma log dulu terus tutup modal
+    console.log("Submitted ambassador form:", formData);
+    onClose();
+  };
+
+  const isEditMode = Boolean(ambassador);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-white shadow-xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-200 bg-white px-6 py-4">
+          <h2 className="text-sm font-semibold text-zinc-900 md:text-base">
+            {isEditMode ? "Edit Ambassador" : "Add Ambassador"}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600"
+          >
+            <XMarkIcon className="h-5 w-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="px-6 pb-6 pt-4 text-xs md:text-sm">
+          <div className="space-y-6">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-zinc-700">
+                  Full Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.fullName}
+                  onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                  className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  required
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-zinc-700">
+                  Email Address <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-4">
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-zinc-700">Gender</label>
+                <select
+                  value={formData.gender}
+                  onChange={(e) =>
+                    setFormData({ ...formData, gender: e.target.value as AmbassadorFormData["gender"] })
+                  }
+                  className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                >
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-zinc-700">Phone Number</label>
+                <input
+                  type="tel"
+                  value={formData.phoneNumber}
+                  onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
+                  className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-[11px] font-medium text-zinc-700">Institution/Company</label>
+                <input
+                  type="text"
+                  value={formData.institution}
+                  onChange={(e) => setFormData({ ...formData, institution: e.target.value })}
+                  className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-zinc-700">Referral Code</label>
+                <input
+                  type="text"
+                  value={formData.referralCode}
+                  readOnly
+                  className="block w-full rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none"
+                />
+                <p className="mt-1 text-[10px] text-zinc-400">Referral code cannot be changed</p>
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-zinc-700">Status</label>
+                <select
+                  value={formData.status}
+                  onChange={(e) =>
+                    setFormData({ ...formData, status: e.target.value as AmbassadorRow["status"] })
+                  }
+                  className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                >
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                  <option value="Suspended">Suspended</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Notes</label>
+              <textarea
+                rows={4}
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                placeholder="Add internal notes about this ambassador (optional)"
+              />
+            </div>
+          </div>
+
+          <div className="mt-6 flex justify-end gap-2 border-t border-zinc-200 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex items-center justify-center rounded-md border border-zinc-200 bg-white px-4 py-2 text-xs font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50 md:text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700 md:text-sm"
+            >
+              {isEditMode ? "Save Changes" : "Create Ambassador"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }

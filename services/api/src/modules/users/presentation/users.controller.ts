@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, UseGuards, Patch, Ip, Headers } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { CreateUserHandler } from '../application/commands/handlers/create-user.handler';
 import { GetUserHandler } from '../application/queries/handlers/get-user.handler';
@@ -8,6 +8,25 @@ import { UserResponseDto } from './dto/user-response.dto';
 import { CreateUserCommand } from '../application/commands/create-user.command';
 import { GetUserQuery } from '../application/queries/get-user.query';
 import { GetUsersQuery } from '../application/queries/get-users.query';
+import { GetUserPreferencesQuery } from '../application/queries/get-user-preferences.query';
+import { GetUserPreferencesHandler } from '../application/queries/handlers/get-user-preferences.handler';
+import { UpdateUserPreferencesCommand } from '../application/commands/update-user-preferences.command';
+import { UpdateUserPreferencesHandler } from '../application/commands/handlers/update-user-preferences.handler';
+import { UpdateUserPreferenceDto, UserPreferenceResponseDto } from './dto/user-preference.dto';
+import { ListUserNotificationsQuery } from '../application/queries/list-user-notifications.query';
+import { ListUserNotificationsHandler } from '../application/queries/handlers/list-user-notifications.handler';
+import { MarkNotificationReadCommand } from '../application/commands/mark-notification-read.command';
+import { MarkNotificationReadHandler } from '../application/commands/handlers/mark-notification-read.handler';
+import { UserNotificationResponseDto } from './dto/user-notification.dto';
+import { ListUserActivityLogsQuery, ListUserSecurityLogsQuery } from '../application/queries/list-user-logs.query';
+import { ListUserActivityLogsHandler } from '../application/queries/handlers/list-user-activity-logs.handler';
+import { ListUserSecurityLogsHandler } from '../application/queries/handlers/list-user-security-logs.handler';
+import { UserActivityLogResponseDto, UserSecurityLogResponseDto } from './dto/user-logs.dto';
+import { CreateDeletionRequestDto, DeletionRequestResponseDto } from './dto/deletion-request.dto';
+import { CreateDeletionRequestCommand } from '../application/commands/create-deletion-request.command';
+import { CreateDeletionRequestHandler } from '../application/commands/handlers/create-deletion-request.handler';
+import { CurrentUser } from '../../../shared/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../../auth/infrastructure/guards/jwt-auth.guard';
 
 @ApiTags('users')
 @Controller('users')
@@ -18,7 +37,114 @@ export class UsersController {
     private readonly createUserHandler: CreateUserHandler,
     private readonly getUserHandler: GetUserHandler,
     private readonly getUsersHandler: GetUsersHandler,
-  ) {}
+    private readonly getUserPreferencesHandler: GetUserPreferencesHandler,
+    private readonly updateUserPreferencesHandler: UpdateUserPreferencesHandler,
+    private readonly listUserNotificationsHandler: ListUserNotificationsHandler,
+    private readonly markNotificationReadHandler: MarkNotificationReadHandler,
+    private readonly listUserActivityLogsHandler: ListUserActivityLogsHandler,
+    private readonly listUserSecurityLogsHandler: ListUserSecurityLogsHandler,
+    private readonly createDeletionRequestHandler: CreateDeletionRequestHandler,
+  ) { }
+
+  @Get('me/preferences')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get current user preferences' })
+  async getMyPreferences(@CurrentUser() user: any): Promise<UserPreferenceResponseDto> {
+    const query = new GetUserPreferencesQuery(user.userId);
+    return this.getUserPreferencesHandler.execute(query);
+  }
+
+  @Post('me/preferences') // Using Post or Put? REST says PUT for update/replace or PATCH. Plan said PUT.
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update current user preferences' })
+  async updateMyPreferences(
+    @CurrentUser() user: any,
+    @Body() dto: UpdateUserPreferenceDto,
+  ): Promise<UserPreferenceResponseDto> {
+    const command = new UpdateUserPreferencesCommand(user.userId, dto);
+    return this.updateUserPreferencesHandler.execute(command);
+  }
+
+  @Get('me/notifications')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get current user notifications' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'type', required: false, type: String })
+  @ApiQuery({ name: 'isRead', required: false, type: Boolean })
+  async getMyNotifications(
+    @CurrentUser() user: any,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+    @Query('type') type?: string,
+    @Query('isRead') isRead?: boolean,
+  ): Promise<{ data: UserNotificationResponseDto[], total: number }> {
+    const query = new ListUserNotificationsQuery(user.userId, page ?? 1, limit ?? 10, type, isRead);
+    return this.listUserNotificationsHandler.execute(query);
+  }
+
+  @Post('me/notifications/:id/read') // PATCH or POST? Convention says PATCH for partial update, but POST for action. Method says Mark as read (action). Let's use PATCH.
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Mark notification as read' })
+  async markNotificationRead(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+  ): Promise<UserNotificationResponseDto> {
+    const command = new MarkNotificationReadCommand(user.userId, id);
+    return this.markNotificationReadHandler.execute(command);
+  }
+
+  @Get('me/activity-logs')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get current user activity logs' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async getMyActivityLogs(
+    @CurrentUser() user: any,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ): Promise<{ data: UserActivityLogResponseDto[], total: number }> {
+    const pageNum = page ? Number(page) : 1;
+    const limitNum = limit ? Number(limit) : 20;
+    const query = new ListUserActivityLogsQuery(user.userId, isNaN(pageNum) ? 1 : pageNum, isNaN(limitNum) ? 20 : limitNum);
+    return this.listUserActivityLogsHandler.execute(query);
+  }
+
+  @Get('me/security-logs')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get current user security logs' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async getMySecurityLogs(
+    @CurrentUser() user: any,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ): Promise<{ data: UserSecurityLogResponseDto[], total: number }> {
+    const pageNum = page ? Number(page) : 1;
+    const limitNum = limit ? Number(limit) : 20;
+    const query = new ListUserSecurityLogsQuery(user.userId, isNaN(pageNum) ? 1 : pageNum, isNaN(limitNum) ? 20 : limitNum);
+    return this.listUserSecurityLogsHandler.execute(query);
+  }
+
+  @Post('me/deletion-request')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Request account deletion' })
+  async requestDeletion(
+    @CurrentUser() user: any,
+    @Body() dto: CreateDeletionRequestDto,
+    @Ip() ipAddress?: string,
+    @Headers('user-agent') userAgent?: string,
+  ): Promise<DeletionRequestResponseDto> {
+    const command = new CreateDeletionRequestCommand(user.userId, dto, ipAddress, userAgent);
+    return this.createDeletionRequestHandler.execute(command);
+  }
 
   @Post()
   @ApiOperation({ summary: 'Create a new user' })

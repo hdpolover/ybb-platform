@@ -313,12 +313,9 @@ ybb-platform/
 │   │   ├── user.ts
 │   │   ├── program.ts
 │   │   ├── application.ts
-│   │   └── payment.ts
-│   ├── constants/                   # Shared constants
-│   └── docs/                        # API documentation
-│       ├── api-gateway.md
-│       ├── payment-service.md
-│       └── file-service.md
+│   │   ├── payment.ts
+│   │   └── notification.ts
+│   └── constants/                   # Shared constants
 │
 ├── database/
 │   ├── migrations/                  # Database migrations
@@ -334,19 +331,16 @@ ybb-platform/
 │   ├── setup.sh                     # Initial setup script
 │   ├── dev.sh                       # Start development environment
 │   ├── prod.sh                      # Production deployment
+│   ├── deploy.sh                    # Manual deployment script
+│   ├── vps-setup.sh                 # VPS initial setup
+│   ├── vps-deploy.sh                # VPS deployment with BuildKit
 │   ├── seed-db.sh                   # Seed database
 │   ├── backup.sh                    # Backup script
 │   ├── restore.sh                   # Restore script
 │   ├── generate-proto.sh            # Generate proto files
+│   ├── generate-local-certs.sh      # Generate local SSL certs
+│   ├── install-buildx.sh            # Install Docker Buildx
 │   └── health-check.sh              # Health check all services
-│
-├── k8s/                             # Kubernetes manifests (for production)
-│   ├── namespaces/
-│   ├── deployments/
-│   ├── services/
-│   ├── ingress/
-│   ├── configmaps/
-│   └── secrets/
 │
 ├── .github/
 │   └── workflows/
@@ -367,14 +361,17 @@ ybb-platform/
 | Service | Development Port | Production Port | Protocol |
 |---------|-----------------|-----------------|----------|
 | Nginx | 80, 443 | 80, 443 | HTTP/HTTPS |
-| Admin Dashboard | 3000 | - | HTTP (internal) |
+| Admin Dashboard | 4001 | - | HTTP (internal) |
 | API Gateway | 4000 | - | HTTP (internal) |
-| Payment Service | 8080 | - | HTTP/gRPC (internal) |
-| File Service | 8000 | - | HTTP (internal) |
+| Notification Service | 4002 | - | HTTP (internal) |
+| Payment Service | 8002 | - | HTTP/gRPC (internal) |
+| File Service | 8001 | - | HTTP (internal) |
 | PostgreSQL | 5432 | 5432 | TCP |
 | Redis | 6379 | 6379 | TCP |
 | MinIO | 9000, 9001 | 9000, 9001 | HTTP |
 | RabbitMQ | 5672, 15672 | 5672, 15672 | AMQP/HTTP |
+| Grafana | 43000 | 3000 | HTTP |
+| Prometheus | 49090 | 9090 | HTTP |
 
 ## Service Communication
 
@@ -414,12 +411,11 @@ ybb-platform/
   - Validation: Pydantic
 
 ### Frontend
-- **Admin Dashboard**: Next.js 14+ (App Router)
-  - UI: shadcn/ui + Tailwind CSS
-  - State: Zustand or Redux Toolkit
-  - Forms: React Hook Form + Zod
-  - Charts: Recharts or Chart.js
-  - Tables: TanStack Table
+- **Admin Dashboard**: Next.js 16+ (App Router)
+  - UI: Tailwind CSS
+  - State: React Contexts
+  - Charts: Recharts
+  - Icons: Heroicons
 
 ### Infrastructure
 - **Database**: PostgreSQL 16 + pgvector
@@ -430,7 +426,6 @@ ybb-platform/
 
 ### DevOps & Monitoring
 - **Containerization**: Docker, Docker Compose
-- **Orchestration**: Kubernetes (production)
 - **CI/CD**: GitHub Actions
 - **Monitoring**: Prometheus + Grafana
 - **Logging**: Loki or ELK Stack
@@ -514,7 +509,7 @@ docker-compose up -d
 2. **Database Migrations**: Run migrations from API service
 3. **Testing**: Each service has its own test suite
 4. **Building**: Docker builds with multi-stage for production
-5. **Deployment**: Kubernetes manifests for production
+5. **Deployment**: Docker Compose for VPS production
 
 ## Database Schema
 
@@ -535,8 +530,9 @@ docker-compose up -d
 ## API Documentation
 
 - **API Gateway**: http://localhost:4000/api/docs (Swagger)
-- **Payment Service**: http://localhost:8080/swagger/
-- **File Service**: http://localhost:8000/docs (FastAPI auto-docs)
+- **Payment Service**: http://localhost:8002/health
+- **File Service**: http://localhost:8001/docs (FastAPI auto-docs)
+- **Notification Service**: http://localhost:4002/health
 
 ## Security Considerations
 

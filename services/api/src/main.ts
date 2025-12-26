@@ -25,7 +25,7 @@ async function bootstrap() {
   });
 
   // Global prefix
-  app.setGlobalPrefix('api/v1');
+  app.setGlobalPrefix('v1');
 
   // Swagger documentation
   const config = new DocumentBuilder()
@@ -37,17 +37,24 @@ async function bootstrap() {
     .addTag('users', 'User management')
     .addTag('programs', 'Program management')
     .addTag('applications', 'Application management')
+    .addTag('participants', 'Participant management')
+    .addTag('payments', 'Payment management')
+    .addTag('system', 'System announcements & logs')
+    .addTag('brands', 'Brand & Sponsor management')
+    .addTag('support', 'Support ticket system')
+    .addTag('achievements', 'Documents & Awards')
+    .addTag('files', 'File operations')
     .addTag('health', 'Health check')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  SwaggerModule.setup('docs', app, document);
 
   const port = process.env.PORT || 3000;
   await app.listen(port);
 
   console.log(`\n🚀 Application is running on: http://localhost:${port}`);
-  console.log(`📚 API Documentation: http://localhost:${port}/api/docs\n`);
+  console.log(`📚 API Documentation: http://localhost:${port}/docs\n`);
 }
 
 bootstrap();

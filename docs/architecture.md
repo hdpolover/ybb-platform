@@ -15,33 +15,33 @@ The YBB Platform is built using a microservices architecture with the following 
         ┌───────▼────────┐        ┌───────▼────────┐
         │ Admin Dashboard│        │  API Gateway    │
         │   (Next.js)    │        │   (NestJS)      │
-        │   Port 3000    │        │   Port 4000     │
+        │   Port 4001    │        │   Port 4000     │
         └────────────────┘        └───────┬─────────┘
                                           │
                 ┌─────────────────────────┼─────────────────────────┐
                 │                         │                         │
         ┌───────▼────────┐      ┌────────▼────────┐      ┌────────▼────────┐
-        │Payment Service │      │  File Service   │      │                 │
-        │    (Golang)    │      │    (Python)     │      │  Other Services │
-        │   Port 8080    │      │   Port 8000     │      │                 │
-        └───────┬────────┘      └────────┬────────┘      └─────────────────┘
-                │                        │
-                └────────────┬───────────┘
+        │Payment Service │      │  File Service   │      │ Notification    │
+        │    (Golang)    │      │    (Python)     │      │    Service      │
+        │   Port 8002    │      │   Port 8001     │      │   Port 4002     │
+        └───────┬────────┘      └────────┬────────┘      └────────┬────────┘
+                │                        │                        │
+                └────────────┬───────────┴────────────────────────┘
                              │
-        ┌────────────────────┼────────────────────┐
-        │                    │                    │
-┌───────▼────────┐  ┌───────▼────────┐  ┌───────▼────────┐
-│   PostgreSQL   │  │     Redis      │  │     MinIO      │
-│   (Database)   │  │    (Cache)     │  │   (Storage)    │
-│   Port 5432    │  │   Port 6379    │  │  Port 9000/1   │
-└────────────────┘  └────────────────┘  └────────────────┘
+        ┌────────────────────┼────────────────────┬───────────────────┐
+        │                    │                    │                   │
+┌───────▼────────┐  ┌───────▼────────┐  ┌───────▼────────┐  ┌───────▼────────┐
+│   PostgreSQL   │  │     Redis      │  │     MinIO      │  │   RabbitMQ     │
+│   (Database)   │  │    (Cache)     │  │   (Storage)    │  │  (Messages)    │
+│   Port 5432    │  │   Port 6379    │  │  Port 9000/1   │  │  Port 5672     │
+└────────────────┘  └────────────────┘  └────────────────┘  └────────────────┘
 ```
 
 ## Service Communication
 
 ### 1. Admin Dashboard (Next.js)
 - **Purpose**: Web-based administration interface
-- **Technology**: Next.js 14+ with App Router, TypeScript
+- **Technology**: Next.js 16+ with App Router, TypeScript, Tailwind CSS
 - **Communication**: REST API calls to API Gateway
 
 ### 2. API Gateway (NestJS)
@@ -161,7 +161,7 @@ users (1) ──── (N) files
 ### Horizontal Scaling
 - All services are stateless
 - Can scale independently
-- Load balancing via Nginx/K8s
+- Load balancing via Nginx
 
 ### Caching Strategy
 - Redis for session storage
@@ -204,17 +204,18 @@ users (1) ──── (N) files
 
 | Layer | Technology |
 |-------|------------|
-| Frontend | Next.js 14+, TypeScript, Tailwind CSS |
-| API Gateway | NestJS, TypeScript |
-| Payment Service | Go 1.21+, Fiber/Gin |
+| Frontend | Next.js 16+, TypeScript, Tailwind CSS |
+| API Gateway | NestJS 10+, TypeScript, Prisma |
+| Payment Service | Go 1.21+, Fiber, GORM |
 | File Service | Python 3.11+, FastAPI |
+| Notification Service | NestJS 10+, TypeScript |
 | Database | PostgreSQL 16 |
 | Cache | Redis 7+ |
 | Storage | MinIO (S3-compatible) |
-| Message Queue | RabbitMQ |
+| Message Queue | RabbitMQ 3+ |
+| Monitoring | Prometheus, Grafana |
 | Reverse Proxy | Nginx |
 | Containerization | Docker, Docker Compose |
-| Orchestration | Kubernetes |
 | CI/CD | GitHub Actions |
 
 ## Design Decisions
@@ -236,13 +237,6 @@ users (1) ──── (N) files
 - Easy deployment
 - Resource isolation
 - Version control for infrastructure
-
-### Why Kubernetes?
-- Production-grade orchestration
-- Auto-scaling
-- Self-healing
-- Service discovery
-- Load balancing
 
 ## Future Enhancements
 

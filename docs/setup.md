@@ -58,14 +58,16 @@ make seed-db
 
 ### 6. Access the Platform
 
-- **Admin Dashboard**: http://localhost:3000
+- **Admin Dashboard**: http://localhost:4001
 - **API Gateway**: http://localhost:4000
 - **API Documentation**: http://localhost:4000/api/docs
-- **Payment Service**: http://localhost:8080
-- **File Service**: http://localhost:8000
-- **File Service Docs**: http://localhost:8000/docs
+- **Payment Service**: http://localhost:8002
+- **File Service**: http://localhost:8001
+- **File Service Docs**: http://localhost:8001/docs
+- **Notification Service**: http://localhost:4002
 - **MinIO Console**: http://localhost:9001
 - **RabbitMQ Console**: http://localhost:15672
+- **pgAdmin**: http://localhost:5050
 
 ## Default Credentials
 
@@ -129,7 +131,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # Run
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
 ```
 
 ### Admin Dashboard (Next.js)
@@ -320,9 +322,8 @@ openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
 ## Next Steps
 
 - Read the [Architecture Documentation](./architecture.md)
-- Review [API Documentation](./api-documentation.md)
-- Check [Deployment Guide](./deployment.md) for production
-- Review [Contributing Guidelines](./contributing.md)
+- Review [Service Credentials](./SERVICE_CREDENTIALS.md)
+- Check [Clean Architecture Guide](./clean-architecture-guide.md)
 
 ## Getting Help
 

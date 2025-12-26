@@ -81,7 +81,7 @@ const quickActions = [
 export default function PlatformDashboard() {
   return (
     <div className="space-y-6">
-      {/* Page Header */}
+      {/* Bagian header halaman dashboard platform */}
       <div>
         <h1 className="text-2xl font-bold text-zinc-900">Platform Dashboard</h1>
         <p className="mt-1 text-sm text-zinc-600">
@@ -89,7 +89,7 @@ export default function PlatformDashboard() {
         </p>
       </div>
 
-      {/* Stats Grid */}
+      {/* Grid statistik utama */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => {
           const Icon = stat.icon;
@@ -114,7 +114,7 @@ export default function PlatformDashboard() {
         })}
       </div>
 
-      {/* Quick Actions */}
+      {/* Aksi cepat yang sering dipake admin */}
       <div>
         <h2 className="text-lg font-semibold text-zinc-900">Quick Actions</h2>
         <div className="mt-3 grid gap-3 md:grid-cols-3">
@@ -131,7 +131,7 @@ export default function PlatformDashboard() {
         </div>
       </div>
 
-      {/* Recent Activity Placeholder */}
+      {/* Placeholder buat activity log terbaru */}
       <div className="rounded-lg border border-zinc-200 bg-white p-6">
         <h2 className="text-lg font-semibold text-zinc-900">Recent Activity</h2>
         <div className="mt-4 text-center text-zinc-500">

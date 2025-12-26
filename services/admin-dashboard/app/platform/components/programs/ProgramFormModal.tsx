@@ -1,7 +1,7 @@
 "use client";
 
 import { XMarkIcon } from "@heroicons/react/24/outline";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import type { Program } from "./ProgramsTable";
 
 type ProgramFormModalProps = {
@@ -33,54 +33,22 @@ export function ProgramFormModal({
   program,
   categories,
 }: ProgramFormModalProps) {
-  const [formData, setFormData] = useState<ProgramFormData>({
-    name: "",
-    description: "",
-    categoryId: "",
-    slug: "",
-    status: "draft",
-    registrationStartDate: "",
-    registrationEndDate: "",
-    programStartDate: "",
-    programEndDate: "",
-    registrationFee: 0,
-    maxParticipants: null,
-  });
-  const [autoGenerateSlug, setAutoGenerateSlug] = useState(true);
+  const [formData, setFormData] = useState<ProgramFormData>(() => ({
+    name: program?.name ?? "",
+    description: program?.description ?? "",
+    categoryId: program?.categoryId ?? categories[0]?.id ?? "",
+    slug: program?.slug ?? "",
+    status: program?.status ?? "draft",
+    registrationStartDate: program?.registrationStartDate ?? "",
+    registrationEndDate: program?.registrationEndDate ?? "",
+    programStartDate: program?.programStartDate ?? "",
+    programEndDate: program?.programEndDate ?? "",
+    registrationFee: program?.registrationFee ?? 0,
+    maxParticipants: program?.maxParticipants ?? null,
+  }));
+  const [autoGenerateSlug, setAutoGenerateSlug] = useState(() => !program);
 
-  useEffect(() => {
-    if (program) {
-      setFormData({
-        name: program.name,
-        description: program.description || "",
-        categoryId: program.categoryId,
-        slug: program.slug,
-        status: program.status,
-        registrationStartDate: program.registrationStartDate || "",
-        registrationEndDate: program.registrationEndDate || "",
-        programStartDate: program.programStartDate || "",
-        programEndDate: program.programEndDate || "",
-        registrationFee: program.registrationFee,
-        maxParticipants: program.maxParticipants,
-      });
-      setAutoGenerateSlug(false);
-    } else {
-      setFormData({
-        name: "",
-        description: "",
-        categoryId: categories[0]?.id || "",
-        slug: "",
-        status: "draft",
-        registrationStartDate: "",
-        registrationEndDate: "",
-        programStartDate: "",
-        programEndDate: "",
-        registrationFee: 0,
-        maxParticipants: null,
-      });
-      setAutoGenerateSlug(true);
-    }
-  }, [program, categories, isOpen]);
+  if (!isOpen) return null;
 
   const generateSlug = (name: string): string => {
     return name
@@ -103,12 +71,10 @@ export function ProgramFormModal({
     onClose();
   };
 
-  if (!isOpen) return null;
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-white shadow-xl">
-        {/* Header */}
+        {/* Bagian header modal */}
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-200 bg-white px-6 py-4">
           <h2 className="text-lg font-semibold text-zinc-900">
             {program ? "Edit Program" : "Create Program"}
@@ -122,17 +88,17 @@ export function ProgramFormModal({
           </button>
         </div>
 
-        {/* Form */}
+        {/* Isi form utama */}
         <form onSubmit={handleSubmit} className="p-6">
           <div className="space-y-6">
-            {/* Basic Information */}
+            {/* Bagian informasi dasar program */}
             <div>
               <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-zinc-500">
                 Basic Information
               </h3>
               <div className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
-                  {/* Name */}
+                  {/* Input nama program */}
                   <div className="sm:col-span-2">
                     <label
                       htmlFor="name"
@@ -151,7 +117,7 @@ export function ProgramFormModal({
                     />
                   </div>
 
-                  {/* Category */}
+                  {/* Dropdown kategori program */}
                   <div>
                     <label
                       htmlFor="categoryId"
@@ -177,7 +143,7 @@ export function ProgramFormModal({
                     </select>
                   </div>
 
-                  {/* Status */}
+                  {/* Dropdown status program */}
                   <div>
                     <label
                       htmlFor="status"
@@ -203,7 +169,7 @@ export function ProgramFormModal({
                     </select>
                   </div>
 
-                  {/* Slug */}
+                  {/* Input slug buat URL program */}
                   <div className="sm:col-span-2">
                     <label
                       htmlFor="slug"
@@ -268,7 +234,7 @@ export function ProgramFormModal({
               </div>
             </div>
 
-            {/* Registration Dates */}
+            {/* Bagian tanggal registrasi dibuka & ditutup */}
             <div>
               <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-zinc-500">
                 Registration Period
@@ -317,7 +283,7 @@ export function ProgramFormModal({
               </div>
             </div>
 
-            {/* Program Dates */}
+            {/* Bagian tanggal pelaksanaan program */}
             <div>
               <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-zinc-500">
                 Program Duration
@@ -366,7 +332,7 @@ export function ProgramFormModal({
               </div>
             </div>
 
-            {/* Fees & Capacity */}
+            {/* Bagian biaya registrasi & kuota peserta */}
             <div>
               <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-zinc-500">
                 Fees & Capacity
@@ -424,7 +390,7 @@ export function ProgramFormModal({
             </div>
           </div>
 
-          {/* Actions */}
+            {/* Tombol aksi di bagian bawah form */}
           <div className="mt-6 flex justify-end gap-3 border-t border-zinc-200 pt-6">
             <button
               type="button"
