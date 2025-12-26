@@ -13,7 +13,7 @@ import {
 export function GeneralInformationTab() {
   return (
     <div className="space-y-3 pt-1">
-      {/* 1. Program Identity */}
+      {/* 1. Identitas Program */}
       <section className="rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-3">
         <div className="mb-2 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -59,7 +59,7 @@ export function GeneralInformationTab() {
         </dl>
       </section>
 
-      {/* 2. Media Assets */}
+      {/* 2. Asset Media */}
       <section className="rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-3">
         <div className="mb-2 flex items-center gap-2">
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700 md:text-sm">
@@ -95,7 +95,7 @@ export function GeneralInformationTab() {
         </dl>
       </section>
 
-      {/* 3. Program Description */}
+      {/* 3. Deskripsi Program nya */}
       <section className="rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-3">
         <div className="mb-2 flex items-center gap-2">
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700 md:text-sm">
@@ -114,7 +114,7 @@ export function GeneralInformationTab() {
         </div>
       </section>
 
-      {/* 4. Contact Information */}
+      {/* 4. Informasi Kontak */}
       <section className="rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-3">
         <div className="mb-2 flex items-center gap-2">
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700 md:text-sm">
@@ -146,7 +146,7 @@ export function GeneralInformationTab() {
         </dl>
       </section>
 
-      {/* 5. Social Media */}
+      {/* 5. bagian Sosmed*/}
       <section className="rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-3">
         <div className="mb-2 flex items-center gap-2">
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700 md:text-sm">
@@ -192,7 +192,7 @@ export function GeneralInformationTab() {
         </dl>
       </section>
 
-      {/* 6. Additional Information */}
+      {/* 6. Informasi Tambahan */}
       <section className="rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-3">
         <div className="mb-2 flex items-center gap-2">
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700 md:text-sm">
@@ -211,7 +211,7 @@ export function GeneralInformationTab() {
         </div>
       </section>
 
-      {/* 7. Core Values */}
+      {/* 7. Inti nya ( Core Values ) */}
       <section className="rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-3">
         <div className="mb-2 flex items-center gap-2">
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700 md:text-sm">
@@ -242,7 +242,7 @@ export function GeneralInformationTab() {
         </div>
       </section>
 
-      {/* 8. Objective */}
+      {/* 8. Objektifnya ( Objective ) */}
       <section className="rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-3">
         <div className="mb-2 flex items-center gap-2">
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700 md:text-sm">
@@ -264,7 +264,7 @@ export function GeneralInformationTab() {
         </ul>
       </section>
 
-      {/* 9. Benefits */}
+      {/* 9. Benefitnya */}
       <section className="rounded-md border border-zinc-200 bg-zinc-50/70 px-3 py-3">
         <div className="mb-2 flex items-center gap-2">
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700 md:text-sm">

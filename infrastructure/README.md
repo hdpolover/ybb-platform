@@ -1,14 +1,17 @@
 # Infrastructure Configuration
 
-This folder contains infrastructure configuration files for Docker Compose and Kubernetes deployments.
+This folder contains infrastructure configuration files for Docker Compose deployments.
 
 ## Structure
 
 ```
 infrastructure/
+├── grafana/        # Grafana monitoring dashboards
 ├── minio/          # MinIO object storage configuration
 ├── nginx/          # Nginx reverse proxy configuration
+├── pgadmin/        # pgAdmin PostgreSQL GUI
 ├── postgres/       # PostgreSQL database initialization scripts
+├── prometheus/     # Prometheus metrics collection
 ├── rabbitmq/       # RabbitMQ message queue configuration
 └── redis/          # Redis cache configuration
 ```
@@ -108,6 +111,31 @@ Redis is used for caching and session storage.
 
 **Default Port:** 6379
 
+## Monitoring Stack
+
+### Prometheus
+
+Prometheus collects metrics from all services.
+
+| Setting | Value |
+|---------|-------|
+| **URL** | http://localhost:49090 |
+| **Config** | `prometheus/prometheus.yml` |
+
+See [Prometheus README](./prometheus/README.md) for details.
+
+### Grafana
+
+Grafana provides visualization dashboards.
+
+| Setting | Value |
+|---------|-------|
+| **URL** | http://localhost:43000 |
+| **Username** | `admin` |
+| **Password** | `admin123` |
+
+See [Grafana README](./grafana/README.md) for details.
+
 ## Usage
 
 ### Docker Compose (Development)
@@ -124,26 +152,6 @@ docker-compose down
 
 # Rebuild after changes
 docker-compose up -d --build
-```
-
-### Kubernetes (Production)
-
-See `/k8s/` folder for Kubernetes deployment configurations.
-
-```bash
-# Apply namespace
-kubectl apply -f k8s/namespaces/
-
-# Apply configmaps and secrets
-kubectl apply -f k8s/configmaps/
-kubectl apply -f k8s/secrets/
-
-# Deploy services
-kubectl apply -f k8s/deployments/
-kubectl apply -f k8s/services/
-
-# Apply ingress
-kubectl apply -f k8s/ingress/
 ```
 
 ## Environment Variables
@@ -200,7 +208,7 @@ open http://localhost:15672
 ⚠️ **Production Deployment:**
 1. Change all default passwords in `.env`
 2. Enable SSL/TLS in Nginx
-3. Use secrets management (Kubernetes Secrets, AWS Secrets Manager, etc.)
+3. Use secrets management (Docker secrets, AWS Secrets Manager, etc.)
 4. Restrict PostgreSQL access to internal network only
 5. Enable authentication for Redis
 6. Use private Docker registry for images

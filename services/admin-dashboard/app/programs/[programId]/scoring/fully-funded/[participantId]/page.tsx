@@ -2,11 +2,11 @@
 
 import { useRouter, useSearchParams, useParams } from "next/navigation";
 import { useState } from "react";
-import { Sidebar } from "../../../components/layout/Sidebar";
-import { Navbar } from "../../../components/layout/Navbar";
-import { FullyFundedParticipantProfileCard } from "../../../components/scoring/FullyFundedParticipantProfileCard";
-import { FullyFundedContactInformationCard } from "../../../components/scoring/FullyFundedContactInformationCard";
-import { FullyFundedDetailsTabsCard } from "../../../components/scoring/FullyFundedDetailsTabsCard";
+import { Sidebar } from "@/app/components/layout/Sidebar";
+import { Navbar } from "@/app/components/layout/Navbar";
+import { FullyFundedParticipantProfileCard } from "@/app/components/scoring/FullyFundedParticipantProfileCard";
+import { FullyFundedContactInformationCard } from "@/app/components/scoring/FullyFundedContactInformationCard";
+import { FullyFundedDetailsTabsCard } from "@/app/components/scoring/FullyFundedDetailsTabsCard";
 
 export default function FullyFundedParticipantDetailPage() {
   const router = useRouter();

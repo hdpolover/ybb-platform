@@ -1,98 +1,124 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# YBB Notification Service
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+NestJS-based microservice for handling platform notifications via RabbitMQ message queue.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Overview
 
-## Description
+The Notification Service listens for events from other services via RabbitMQ and sends notifications:
+- **Email** - Transactional and notification emails
+- **In-App** - Real-time notifications (planned)
+- **Push** - Mobile push notifications (planned)
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Technology Stack
 
-## Project setup
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| NestJS | 10.x | Node.js framework |
+| TypeScript | 5.x | Type safety |
+| RabbitMQ | 3.x | Message queue for events |
 
-```bash
-$ npm install
+## Architecture
+
+```
+notification-service/
+├── src/
+│   ├── main.ts                  # Application bootstrap
+│   ├── app.module.ts            # Root module
+│   ├── app.controller.ts        # Health check endpoint
+│   ├── app.service.ts           # Base service
+│   └── modules/
+│       ├── email/               # Email sending module
+│       └── notifications/       # Core notification handling
+├── Dockerfile.dev              # Development with hot reload
+└── package.json
 ```
 
-## Compile and run the project
+## Event Types
+
+The service listens for RabbitMQ events:
+
+| Event | Description | Action |
+|-------|-------------|--------|
+| `payment.succeeded` | Payment completed | Send confirmation email |
+| `payment.failed` | Payment failed | Send failure notification |
+| `application.submitted` | New application | Send confirmation |
+| `application.approved` | Application approved | Send approval email |
+| `application.rejected` | Application rejected | Send rejection email |
+
+## Getting Started
+
+### Prerequisites
+- Node.js 18+
+- RabbitMQ (or Docker Compose)
+
+### Development
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+npm install
+npm run start:dev
 ```
 
-## Run tests
+### With Docker
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+# From project root
+docker-compose up notification-service
 ```
 
-## Deployment
+## Environment Variables
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PORT` | Service port | `4002` |
+| `NODE_ENV` | Environment | `development` |
+| `RABBITMQ_URL` | RabbitMQ connection | `amqp://guest:guest@rabbitmq:5672/` |
+| `SMTP_HOST` | Email server host | - |
+| `SMTP_PORT` | Email server port | `587` |
+| `SMTP_USER` | Email username | - |
+| `SMTP_PASS` | Email password | - |
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+## Available Scripts
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+npm run start:dev    # Development with hot reload
+npm run start:prod   # Production mode
+npm run build        # Compile TypeScript
+npm run test         # Run tests
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## RabbitMQ Integration
 
-## Resources
+```typescript
+@RabbitSubscribe({
+  exchange: 'payment-events',
+  routingKey: 'payment.succeeded',
+  queue: 'notification-payment-queue',
+})
+async handlePaymentSuccess(data: PaymentSuccessDto) {
+  await this.emailService.sendPaymentConfirmation(data);
+}
+```
 
-Check out a few resources that may come in handy when working with NestJS:
+## Health Check
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+```bash
+curl http://localhost:4002/health
+# {"status": "ok"}
+```
 
-## Support
+## Future Enhancements
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+- [ ] Email templates with Handlebars
+- [ ] In-app notification storage
+- [ ] Push notifications (Firebase/APNs)
+- [ ] Notification preferences per user
+- [ ] Retry mechanism for failed deliveries
 
-## Stay in touch
+## Related Documentation
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+- [Architecture](../../docs/architecture.md)
+- [Infrastructure - RabbitMQ](../../infrastructure/README.md)
 
 ## License
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+Private - YBB Platform

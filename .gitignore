@@ -28,6 +28,7 @@ out/
 .env.development.local
 .env.test.local
 .env.production.local
+.env.prod
 *.env
 !.env.example
 
@@ -83,6 +84,8 @@ infrastructure/nginx/ssl/*.pem
 infrastructure/postgres/backups/*.sql
 infrastructure/postgres/backups/*.dump
 
+
+
 # Compiled binaries
 services/payment-service/bin/
 *.exe
@@ -104,6 +107,10 @@ services/api/dist/
 services/admin-dashboard/.next/
 services/admin-dashboard/out/
 
-# Kubernetes secrets
-k8s/secrets/*.yaml
-!k8s/secrets/.gitkeep
+
+
+# Migration Data
+migration_data/
+migration_temp_data/
+*.sql
+*.sql.gz

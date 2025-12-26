@@ -6,8 +6,8 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- Create main database (API service)
-SELECT 'CREATE DATABASE ybb_platform'
-WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'ybb_platform')\gexec
+SELECT 'CREATE DATABASE ybb_platform_db'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'ybb_platform_db')\gexec
 
 -- Create payment service database
 SELECT 'CREATE DATABASE ybb_payments_db'
@@ -18,11 +18,12 @@ SELECT 'CREATE DATABASE ybb_files_db'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'ybb_files_db')\gexec
 
 -- Create user database (for backward compatibility/misconfiguration)
-SELECT 'CREATE DATABASE ybb_user'
-WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'ybb_user')\gexec
+-- Create user database (for backward compatibility/misconfiguration)
+-- SELECT 'CREATE DATABASE ybb_user'
+-- WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'ybb_user')\gexec
 
 -- Setup main database (API Service - Prisma)
-\c ybb_platform;
+\c ybb_platform_db;
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
@@ -36,7 +37,7 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
-\echo 'Main database (ybb_platform) initialized successfully!';
+\echo 'Main database (ybb_platform_db) initialized successfully!';
 
 -- Setup payment service database (GORM)
 \c ybb_payments_db;

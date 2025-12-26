@@ -51,15 +51,17 @@ echo "Application Services:"
 check_docker_service api
 check_docker_service payment-service
 check_docker_service file-service
+check_docker_service notification-service
 check_docker_service admin-dashboard
 check_docker_service nginx
 
 echo ""
 echo "HTTP Health Checks:"
-check_service "Admin Dashboard" "http://localhost:3000" || true
+check_service "Admin Dashboard" "http://localhost:4001" || true
 check_service "API Gateway" "http://localhost:4000/health" || true
 check_service "Payment Service" "http://localhost:8002/health" || true
-check_service "File Service" "http://localhost:8000/health" || true
+check_service "File Service" "http://localhost:8001/health" || true
+check_service "Notification Service" "http://localhost:4002/health" || true
 
 echo ""
 echo "=================================="

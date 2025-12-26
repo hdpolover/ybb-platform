@@ -155,7 +155,7 @@ model User {
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Migration Support
-  legacyId   Int?    @map("legacy_id")
+  legacyId   Int?    @unique @map("legacy_id")
   legacyType String? @map("legacy_type") @db.VarChar(20)
 
   // Relations
@@ -233,6 +233,7 @@ model ProgramCategory {
   metaKeywords    String? @map("meta_keywords") @db.Text
 
   // Relations
+  testimonials ProgramTestimonial[]
   users               User[]
   programs            Program[]
   systemAnnouncements SystemAnnouncement[]
@@ -752,7 +753,8 @@ model ProgramGallery {
 
 model ProgramTestimonial {
   id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId     String   @map("program_id") @db.Uuid
+  programId     String?  @map("program_id") @db.Uuid
+  programCategoryId String? @map("program_category_id") @db.Uuid
   name          String   @db.VarChar(255)
   role          String?  @db.VarChar(255) // e.g., "Participant 2024", "Alumni"
   company       String?  @db.VarChar(255)
@@ -769,9 +771,11 @@ model ProgramTestimonial {
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   // Relations
-  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+  program Program? @relation(fields: [programId], references: [id], onDelete: Cascade)
+  programCategory ProgramCategory? @relation(fields: [programCategoryId], references: [id], onDelete: Cascade)
 
   @@index([programId])
+  @@index([programCategoryId])
   @@index([type])
   @@index([isFeatured])
   @@index([order])
@@ -987,6 +991,7 @@ model ProgramAnnouncement {
   programId      String   @map("program_id") @db.Uuid
   title          String   @db.VarChar(255)
   content        String   @db.Text
+  imageUrl       String?  @map("image_url") @db.VarChar(500)
   targetAudience String   @default("all") @map("target_audience") @db.VarChar(50) // all, applicants, accepted, rejected, participants
   sendEmail      Boolean  @default(false) @map("send_email")
   isPinned       Boolean  @default(false) @map("is_pinned")
@@ -1627,4 +1632,269 @@ model MigrationTracking {
   @@index([mysqlId])
   @@index([postgresId])
   @@map("migration_tracking")
+}
+
+// ============================================================================
+// SUPPORT TICKET SYSTEM
+// ============================================================================
+
+enum TicketStatus {
+  open
+  in_progress
+  waiting_response
+  resolved
+  closed
+}
+
+enum TicketPriority {
+  low
+  normal
+  high
+  urgent
+}
+
+model SupportTicket {
+  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  participantId String   @map("participant_id") @db.Uuid
+  assignedTo    String?  @map("assigned_to") @db.Uuid
+  programId     String?  @map("program_id") @db.Uuid
+
+  // Ticket Details
+  ticketNumber String  @unique @map("ticket_number") @db.VarChar(20) // e.g., TKT-2024-001234
+  category     String  @db.VarChar(100)
+  subCategory  String? @map("sub_category") @db.VarChar(100)
+  subject      String  @db.VarChar(255)
+  description  String  @db.Text
+
+  // Status & Priority
+  status   TicketStatus   @default(open)
+  priority TicketPriority @default(normal)
+
+  // Resolution
+  resolution   String?   @db.Text
+  resolvedAt   DateTime? @map("resolved_at") @db.Timestamptz(6)
+  resolvedBy   String?   @map("resolved_by") @db.Uuid
+  closedAt     DateTime? @map("closed_at") @db.Timestamptz(6)
+  closedBy     String?   @map("closed_by") @db.Uuid
+  closedReason String?   @map("closed_reason") @db.Text
+
+  // Feedback
+  satisfactionRating Int?    @map("satisfaction_rating") @db.SmallInt // 1-5
+  feedback           String? @db.Text
+
+  // Audit
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  legacyId  Int?      @unique @map("legacy_id")
+
+  // Relations
+  messages SupportTicketMessage[]
+
+  @@index([participantId])
+  @@index([assignedTo])
+  @@index([status])
+  @@index([priority])
+  @@index([ticketNumber])
+  @@index([createdAt])
+  @@map("support_tickets")
+}
+
+model SupportTicketMessage {
+  id       String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  ticketId String @map("ticket_id") @db.Uuid
+
+  // Message Details
+  message     String  @db.Text
+  isFromAdmin Boolean @default(false) @map("is_from_admin")
+  senderId    String  @map("sender_id") @db.Uuid // User ID (participant or admin)
+  senderName  String  @map("sender_name") @db.VarChar(255)
+
+  // Attachments
+  attachments Json @default("[]") @db.Json // [{filename, url, size, type}]
+
+  // Status
+  isRead Boolean   @default(false) @map("is_read")
+  readAt DateTime? @map("read_at") @db.Timestamptz(6)
+
+  // Internal Note (only visible to admins)
+  isInternalNote Boolean @default(false) @map("is_internal_note")
+
+  // Audit
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  legacyId  Int?      @unique @map("legacy_id")
+
+  // Relations
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([senderId])
+  @@index([createdAt])
+  @@map("support_ticket_messages")
+}
+
+// ============================================================================
+// LOA (LETTER OF ACCEPTANCE) & DOCUMENT TEMPLATES
+// ============================================================================
+
+enum DocumentTemplateType {
+  letter_of_acceptance
+  letter_of_invitation
+  certificate_participation
+  certificate_achievement
+  certificate_speaker
+  letter_recommendation
+  agreement_letter
+  custom
+}
+
+model DocumentTemplate {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId String   @map("program_id") @db.Uuid
+
+  // Template Info
+  name        String               @db.VarChar(255)
+  type        DocumentTemplateType @default(custom)
+  description String?              @db.Text
+
+  // Template Content
+  templateUrl String? @map("template_url") @db.VarChar(500) // Background image/PDF
+  htmlContent String? @map("html_content") @db.Text // HTML template
+
+  // Placeholders/Fields Configuration
+  placeholders Json @default("[]") @db.Json
+  // Example: [
+  //   {key: "{{participant_name}}", label: "Participant Name", source: "participant.fullName"},
+  //   {key: "{{program_name}}", label: "Program Name", source: "program.name"},
+  //   {key: "{{date}}", label: "Date", source: "generated_date"}
+  // ]
+
+  // Layout Configuration
+  layoutConfig Json @default("{}") @map("layout_config") @db.Json
+  // Example: {
+  //   pageSize: "A4",
+  //   orientation: "portrait",
+  //   margins: {top: 20, right: 20, bottom: 20, left: 20}
+  // }
+
+  // Status
+  isActive  Boolean  @default(true) @map("is_active")
+  order     Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  legacyId  Int?     @unique @map("legacy_id")
+
+  // Relations
+  generatedDocuments ParticipantDocument[]
+
+  @@index([programId])
+  @@index([type])
+  @@index([isActive])
+  @@map("document_templates")
+}
+
+model ParticipantDocument {
+  id            String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  applicationId String @map("application_id") @db.Uuid
+  templateId    String @map("template_id") @db.Uuid
+
+  // Document Details
+  documentNumber String? @unique @map("document_number") @db.VarChar(50) // e.g., LOA/YBB/2024/12345
+  documentUrl    String  @map("document_url") @db.VarChar(500)
+  generatedData  Json    @default("{}") @map("generated_data") @db.Json // Snapshot of data used
+
+  // Status
+  generatedAt DateTime  @default(now()) @map("generated_at") @db.Timestamptz(6)
+  expiresAt   DateTime? @map("expires_at") @db.Timestamptz(6)
+  revokedAt   DateTime? @map("revoked_at") @db.Timestamptz(6)
+  revokedBy   String?   @map("revoked_by") @db.Uuid
+  revokeReason String?  @map("revoke_reason") @db.Text
+
+  // Download Tracking
+  downloadCount Int       @default(0) @map("download_count")
+  lastDownloadAt DateTime? @map("last_download_at") @db.Timestamptz(6)
+
+  // Audit
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  legacyId  Int?      @unique @map("legacy_id")
+
+  // Relations
+  template DocumentTemplate @relation(fields: [templateId], references: [id])
+
+  @@index([applicationId])
+  @@index([templateId])
+  @@index([documentNumber])
+  @@index([generatedAt])
+  @@map("participant_documents")
+}
+
+// ============================================================================
+// PARTICIPANT AWARDS & ACHIEVEMENTS
+// ============================================================================
+
+model ProgramAward {
+  id        String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId String @map("program_id") @db.Uuid
+
+  // Award Details
+  name        String  @db.VarChar(255)
+  description String? @db.Text
+  category    String? @db.VarChar(100) // e.g., "Best Presentation", "1st Place", "Most Innovative"
+  tier        String? @db.VarChar(50) // gold, silver, bronze, honorable_mention
+
+  // Visual
+  badgeUrl String? @map("badge_url") @db.VarChar(500)
+  iconUrl  String? @map("icon_url") @db.VarChar(500)
+
+  // Certificate Link
+  certificateTemplateId String? @map("certificate_template_id") @db.Uuid
+
+  // Status
+  isActive  Boolean  @default(true) @map("is_active")
+  order     Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  legacyId  Int?     @unique @map("legacy_id")
+
+  // Relations
+  recipients ParticipantAward[]
+
+  @@index([programId])
+  @@index([category])
+  @@index([isActive])
+  @@map("program_awards")
+}
+
+model ParticipantAward {
+  id            String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  applicationId String @map("application_id") @db.Uuid
+  awardId       String @map("award_id") @db.Uuid
+
+  // Award Details
+  awardedAt   DateTime @default(now()) @map("awarded_at") @db.Timestamptz(6)
+  awardedBy   String?  @map("awarded_by") @db.Uuid
+  notes       String?  @db.Text
+  isPublic    Boolean  @default(true) @map("is_public") // Show on public profile
+
+  // Certificate
+  certificateUrl String? @map("certificate_url") @db.VarChar(500)
+  certificateGeneratedAt DateTime? @map("certificate_generated_at") @db.Timestamptz(6)
+
+  // Audit
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  legacyId  Int?      @unique @map("legacy_id")
+
+  // Relations
+  award ProgramAward @relation(fields: [awardId], references: [id])
+
+  @@unique([applicationId, awardId])
+  @@index([applicationId])
+  @@index([awardId])
+  @@index([awardedAt])
+  @@map("participant_awards")
 }

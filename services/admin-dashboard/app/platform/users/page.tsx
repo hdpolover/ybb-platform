@@ -5,7 +5,7 @@ import { PlusIcon, MagnifyingGlassIcon, FunnelIcon, ArrowPathIcon, ArrowDownTray
 export default function UsersPage() {
   return (
     <div className="space-y-4">
-      {/* Page Header */}
+      {/* Bagian header halaman users */}
       <div>
         <h1 className="text-2xl font-bold text-zinc-900">Platform Users</h1>
         <p className="mt-1 text-sm text-zinc-600">
@@ -13,7 +13,7 @@ export default function UsersPage() {
         </p>
       </div>
 
-      {/* Stats Grid */}
+      {/* Grid statistik singkat soal user */}
       <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between">

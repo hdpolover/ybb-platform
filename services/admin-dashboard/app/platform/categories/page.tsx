@@ -6,7 +6,7 @@ import { CategoriesTable, type Category } from "../components/categories/Categor
 import { CategoryFormModal, type CategoryFormData } from "../components/categories/CategoryFormModal";
 import { DeleteConfirmModal } from "../components/shared/DeleteConfirmModal";
 
-// Mock data - will be replaced with API calls
+// Data dummy dulu, nanti kedepannya bakal diganti manggil API beneran
 const mockCategories: Category[] = [
   {
     id: "1",
@@ -44,7 +44,7 @@ export default function CategoriesPage() {
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
 
   const handleCreateCategory = (data: CategoryFormData) => {
-    // TODO: Replace with API call
+    // TODO: Nanti diganti jadi manggil API beneran
     const newCategory: Category = {
       id: String(Date.now()),
       name: data.name,
@@ -61,7 +61,7 @@ export default function CategoriesPage() {
   const handleUpdateCategory = (data: CategoryFormData) => {
     if (!selectedCategory) return;
     
-    // TODO: Replace with API call
+    // TODO: Nanti diganti jadi manggil API beneran
     setCategories(
       categories.map((cat) =>
         cat.id === selectedCategory.id
@@ -76,7 +76,7 @@ export default function CategoriesPage() {
   const handleDeleteCategory = () => {
     if (!selectedCategory) return;
     
-    // TODO: Replace with API call
+    // TODO: Nanti diganti jadi manggil API beneran
     setCategories(categories.filter((cat) => cat.id !== selectedCategory.id));
     setSelectedCategory(null);
     setIsDeleteModalOpen(false);
@@ -104,7 +104,7 @@ export default function CategoriesPage() {
 
   return (
     <div className="space-y-4">
-      {/* Page Header */}
+      {/* Bagian header halaman kategori */}
       <div>
         <h1 className="text-2xl font-bold text-zinc-900">Program Categories</h1>
         <p className="mt-1 text-sm text-zinc-600">
@@ -112,7 +112,7 @@ export default function CategoriesPage() {
         </p>
       </div>
 
-      {/* Stats Grid */}
+      {/* Grid statistik kategori */}
       <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between">
@@ -173,7 +173,7 @@ export default function CategoriesPage() {
         </div>
       </div>
 
-      {/* Action Button */}
+      {/* Tombol aksi buat bikin kategori baru */}
       <div className="flex justify-end">
         <button
           type="button"
@@ -185,22 +185,23 @@ export default function CategoriesPage() {
         </button>
       </div>
 
-      {/* Categories Table */}
+      {/* Tabel daftar kategori */}
       <CategoriesTable
         categories={categories}
         onEdit={handleEdit}
         onDelete={handleDelete}
       />
 
-      {/* Form Modal */}
+      {/* Modal form kategori (buat tambah / edit) */}
       <CategoryFormModal
+        key={selectedCategory ? selectedCategory.id : "new"}
         isOpen={isFormModalOpen}
         onClose={handleCloseFormModal}
         onSubmit={selectedCategory ? handleUpdateCategory : handleCreateCategory}
         category={selectedCategory}
       />
 
-      {/* Delete Confirmation Modal */}
+      {/* Modal konfirmasi hapus kategori */}
       <DeleteConfirmModal
         isOpen={isDeleteModalOpen}
         onClose={handleCloseDeleteModal}

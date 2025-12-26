@@ -31,7 +31,7 @@ export function DeleteConfirmModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
-        {/* Header */}
+        {/* Bagian header modal konfirmasi */}
         <div className="flex items-center justify-between border-b border-zinc-200 px-6 py-4">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100">
@@ -48,7 +48,7 @@ export function DeleteConfirmModal({
           </button>
         </div>
 
-        {/* Content */}
+        {/* Isi konten penjelasan dan warning */}
         <div className="px-6 py-4">
           <p className="mb-3 text-sm text-zinc-700">{message}</p>
 
@@ -65,7 +65,7 @@ export function DeleteConfirmModal({
           )}
         </div>
 
-        {/* Actions */}
+        {/* Tombol aksi buat batal atau lanjut hapus */}
         <div className="flex justify-end gap-3 border-t border-zinc-200 px-6 py-4">
           <button
             type="button"

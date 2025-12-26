@@ -152,7 +152,7 @@ export function EssaysTable() {
 
   return (
     <section className="rounded-md border border-zinc-200 bg-white px-4 py-2.5 text-xs text-zinc-700 shadow-sm md:text-sm">
-      {/* Filters */}
+      {/* Bagian filter kategori essay */}
       <div className="mb-2.5 space-y-1.5">
         <div className="grid gap-2.5 md:grid-cols-3 lg:grid-cols-4">
           <div>
@@ -186,7 +186,7 @@ export function EssaysTable() {
         </div>
       </div>
 
-      {/* Table */}
+      {/* Tabel daftar essay submissions */}
       <div className="overflow-x-auto">
         <table className="min-w-full border-collapse text-left">
           <thead>

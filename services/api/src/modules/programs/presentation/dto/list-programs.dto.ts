@@ -3,12 +3,13 @@ import { IsUUID, IsOptional, IsInt, Min, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ListProgramsDto {
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Program category (brand) ID',
     example: '005b17ba-b481-45f5-a945-7723248b6415',
   })
+  @IsOptional()
   @IsUUID()
-  programCategoryId: string;
+  programCategoryId?: string;
 
   @ApiPropertyOptional({
     description: 'Filter by year',
