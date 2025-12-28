@@ -143,6 +143,16 @@ func main() {
 		eventPublisher,
 	)
 
+	verifyStatusHandler := commandHandlers.NewVerifyStatusHandler(
+        paymentRepo,
+        gatewayFactory,
+    )
+
+	cancelPaymentHandler := commandHandlers.NewCancelPaymentHandler(
+		paymentRepo,
+		gatewayFactory,
+	)
+
 	// Refund Handler
     refundPaymentHandler := commandHandlers.NewRefundPaymentHandler(
         paymentRepo,
@@ -155,7 +165,11 @@ func main() {
 	paymentHandler := handlers.NewPaymentHandler(
 		createPaymentHandler,
 		getPaymentHandler,
+
+		verifyStatusHandler,
+		cancelPaymentHandler,
 		refundPaymentHandler,
+
 		paymentRepo,
 		eventPublisher,
 		gatewayFactory,
@@ -221,8 +235,10 @@ func setupRouter(paymentHandler *handlers.PaymentHandler, paymentMethodHandler *
 			payments.GET("/user/:userId", paymentHandler.GetPaymentsByUser)
 			payments.POST("/webhook/:gateway", paymentHandler.HandleWebhook)
 
+			payments.POST("/:id/verify-status", paymentHandler.VerifyPaymentStatus)
 			payments.POST("/:id/refund", paymentHandler.RefundPayment)
-			
+			payments.POST("/:id/cancel", paymentHandler.CancelPayment)
+
 			// Manual Payment Features
 			payments.POST("/:id/proof", paymentHandler.UploadProof)
 			payments.POST("/:id/verify", paymentHandler.VerifyPayment)

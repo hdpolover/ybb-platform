@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/midtrans/midtrans-go"
 	"github.com/midtrans/midtrans-go/coreapi" // WAJIB: Import ini untuk Verify/Cancel/Refund
@@ -55,86 +56,113 @@ func (g *MidtransGateway) GetName() string {
 
 // CreatePayment creates a payment with Midtrans Snap
 func (g *MidtransGateway) CreatePayment(ctx context.Context, req *domainGateways.CreatePaymentRequest) (*domainGateways.CreatePaymentResponse, error) {
-	// Build Snap request
-	snapReq := &snap.Request{
-		TransactionDetails: midtrans.TransactionDetails{
-			OrderID:  req.Payment.ID,
-			GrossAmt: int64(req.Payment.Amount),
-		},
-		CustomerDetail: &midtrans.CustomerDetails{
-			FName: req.CustomerName,
-			Email: req.CustomerEmail,
-			Phone: req.CustomerPhone,
-		},
-		EnabledPayments: []snap.SnapPaymentType{
-			snap.SnapPaymentType(req.PaymentMethod),
-		},
-		Callbacks: &snap.Callbacks{
-			Finish: req.CallbackURL,
-		},
-	}
+    
+    // 1. Tentukan Payment Method (Logic diperbaiki)
+    // Default-nya nil (kosong/null), agar Midtrans menampilkan SEMUA.
+    var enabledPayments []snap.SnapPaymentType
 
-	// Create transaction
-	snapResp, err := g.snapClient.CreateTransaction(snapReq)
-	if err != nil {
-		log.Printf("Midtrans CreateTransaction failed: %v", err)
-		return nil, fmt.Errorf("midtrans create transaction failed: %w", err)
-	}
+    // Jika user minta SPESIFIK (bukan automatic), baru kita isi list-nya.
+    if req.PaymentMethod != "" && req.PaymentMethod != "automatic" {
+        enabledPayments = []snap.SnapPaymentType{
+            snap.SnapPaymentType(req.PaymentMethod),
+        }
+    }
 
-	return &domainGateways.CreatePaymentResponse{
-		RedirectURL:    snapResp.RedirectURL,
-		Token:          snapResp.Token,
-		GatewayOrderID: req.Payment.ID,
-		Raw:            snapResp,
-	}, nil
+    // 2. Build Snap request
+    snapReq := &snap.Request{
+        TransactionDetails: midtrans.TransactionDetails{
+            OrderID:  req.Payment.ID,
+            GrossAmt: int64(req.Payment.Amount),
+        },
+        CustomerDetail: &midtrans.CustomerDetails{
+            FName: req.CustomerName,
+            Email: req.CustomerEmail,
+            Phone: req.CustomerPhone,
+        },
+        
+        EnabledPayments: enabledPayments, 
+
+        Callbacks: &snap.Callbacks{
+            Finish: req.CallbackURL,
+        },
+    }
+
+    // Create transaction
+    snapResp, err := g.snapClient.CreateTransaction(snapReq)
+    if err != nil {
+        log.Printf("Midtrans CreateTransaction failed: %v", err)
+        return nil, fmt.Errorf("midtrans create transaction failed: %w", err)
+    }
+
+    return &domainGateways.CreatePaymentResponse{
+        RedirectURL:    snapResp.RedirectURL,
+        Token:          snapResp.Token,
+        GatewayOrderID: req.Payment.ID,
+        Raw:            snapResp,
+    }, nil
 }
 
 // VerifyPayment verifies payment status with Midtrans Core API
 func (g *MidtransGateway) VerifyPayment(ctx context.Context, gatewayOrderID string) (*entities.Payment, error) {
-	// 1. Panggil Core API CheckTransaction
-	resp, err := g.coreApiClient.CheckTransaction(gatewayOrderID)
-	if err != nil {
-		return nil, fmt.Errorf("midtrans check transaction failed: %w", err)
-	}
+    // 1. Panggil Core API CheckTransaction
+    resp, err := g.coreApiClient.CheckTransaction(gatewayOrderID)
+    
+    // --- BAGIAN PERBAIKAN DIMULAI DARI SINI ---
+    if err != nil {
+        // Kita cek pesan errornya. Jika isinya "404" atau "Transaction doesn't exist",
+        // Itu artinya user belum memilih metode pembayaran di halaman Snap.
+        // KITA JANGAN RETURN ERROR, tapi return status PENDING.
+        errMessage := err.Error()
+        if strings.Contains(errMessage, "404") || strings.Contains(errMessage, "Transaction doesn't exist") {
+            return &entities.Payment{
+                ID:              gatewayOrderID,
+                Status:          entities.PaymentStatusPending, // Paksa jadi Pending
+                GatewayOrderID:  gatewayOrderID,
+                GatewayResponse: map[string]interface{}{"status_message": "Transaction not found in Midtrans (Not started yet)"},
+            }, nil
+        }
 
-	// 2. Mapping Status dari Midtrans ke Entity Aplikasi
-	var status entities.PaymentStatus
-	
-	transactionStatus := resp.TransactionStatus
-	fraudStatus := resp.FraudStatus
+        // Jika errornya BUKAN 404 (misal: koneksi putus), baru kita return error beneran
+        return nil, fmt.Errorf("midtrans check transaction failed: %w", err)
+    }
+    // --- BAGIAN PERBAIKAN SELESAI ---
 
-	switch transactionStatus {
-	case "capture":
-		switch fraudStatus {
-		case "challenge":
-			status = entities.PaymentStatusProcessing
-		case "accept":
-			status = entities.PaymentStatusSuccess
-		}
-	case "settlement":
-		status = entities.PaymentStatusSuccess
-	case "deny", "cancel", "expire":
-		status = entities.PaymentStatusFailed
-	case "pending":
-		status = entities.PaymentStatusPending
-	default:
-		status = entities.PaymentStatusProcessing
-	}
+    // 2. Mapping Status dari Midtrans ke Entity Aplikasi (Kode lama tetap sama)
+    var status entities.PaymentStatus
+    
+    transactionStatus := resp.TransactionStatus
+    fraudStatus := resp.FraudStatus
 
-	// --- PERBAIKAN DI SINI ---
-	// Konversi Struct Response Midtrans ke map[string]interface{}
-	var rawResponse map[string]interface{}
-	if data, err := json.Marshal(resp); err == nil {
-		_ = json.Unmarshal(data, &rawResponse)
-	}
+    switch transactionStatus {
+    case "capture":
+        switch fraudStatus {
+        case "challenge":
+            status = entities.PaymentStatusProcessing
+        case "accept":
+            status = entities.PaymentStatusSuccess
+        }
+    case "settlement":
+        status = entities.PaymentStatusSuccess
+    case "deny", "cancel", "expire":
+        status = entities.PaymentStatusFailed
+    case "pending":
+        status = entities.PaymentStatusPending
+    default:
+        status = entities.PaymentStatusProcessing
+    }
 
-	// 3. Return Payment Entity dengan status terbaru
-	return &entities.Payment{
-		ID:              gatewayOrderID,
-		Status:          status,
-		GatewayOrderID:  gatewayOrderID,
-		GatewayResponse: rawResponse, // Gunakan variabel 'rawResponse' yang sudah jadi map
-	}, nil
+    // Konversi Struct Response Midtrans ke map
+    var rawResponse map[string]interface{}
+    if data, err := json.Marshal(resp); err == nil {
+        _ = json.Unmarshal(data, &rawResponse)
+    }
+
+    return &entities.Payment{
+        ID:              gatewayOrderID,
+        Status:          status,
+        GatewayOrderID:  gatewayOrderID,
+        GatewayResponse: rawResponse,
+    }, nil
 }
 
 // HandleWebhook processes Midtrans webhook notification

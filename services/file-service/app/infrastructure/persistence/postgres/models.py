@@ -20,7 +20,10 @@ class FileModel(Base):
     bucket = Column(String(100), nullable=False)
     user_id = Column(String(36), nullable=False, index=True)
     brand_id = Column(String(50), nullable=False, index=True)
-    metadata = Column(JSON, nullable=True)
+    
+    # metadata = Column(JSON, nullable=True)
+    file_metadata = Column("metadata", JSON, default={})
+
     uploaded_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     deleted_at = Column(DateTime(timezone=True), nullable=True)
