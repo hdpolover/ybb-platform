@@ -9,6 +9,7 @@ pydantic-settings>=2.6.0
 # Database
 asyncpg>=0.29.0
 sqlalchemy>=2.0.23
+greenlet>=2.0.0
 
 # Excel/Reporting
 openpyxl>=3.1.2

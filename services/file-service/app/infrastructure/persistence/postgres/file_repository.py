@@ -1,13 +1,12 @@
 """PostgreSQL implementation of file repository."""
 # type: ignore
 from typing import Optional, List
-from sqlalchemy import select, and_  # type: ignore
-from sqlalchemy.ext.asyncio import AsyncSession  # type: ignore
+from sqlalchemy import select, and_
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain.entities.file import File
 from app.domain.repositories.file_repository import IFileRepository
 from .models import FileModel
 from datetime import datetime
-
 
 class PostgresFileRepository(IFileRepository):
     """PostgreSQL implementation of file repository."""
@@ -17,7 +16,6 @@ class PostgresFileRepository(IFileRepository):
         self._session = session
     
     async def find_by_id(self, file_id: str) -> Optional[File]:
-        """Find file by ID."""
         stmt = select(FileModel).where(
             and_(
                 FileModel.id == file_id,
@@ -48,13 +46,11 @@ class PostgresFileRepository(IFileRepository):
     
     async def save(self, file: File) -> File:
         """Save file metadata."""
-        # Check if exists
         stmt = select(FileModel).where(FileModel.id == file.id)
         result = await self._session.execute(stmt)
         existing = result.scalar_one_or_none()
         
         if existing:
-            # Update existing
             existing.filename = file.filename
             existing.original_filename = file.original_filename
             existing.file_type = file.file_type
@@ -62,9 +58,10 @@ class PostgresFileRepository(IFileRepository):
             existing.file_size = file.file_size
             existing.storage_path = file.storage_path
             existing.bucket = file.bucket
+            # --- UPDATE: Pakai file_metadata ---
+            existing.file_metadata = file.metadata 
             existing.updated_at = datetime.utcnow()
         else:
-            # Create new
             model = FileModel(
                 id=file.id,
                 filename=file.filename,
@@ -76,12 +73,15 @@ class PostgresFileRepository(IFileRepository):
                 bucket=file.bucket,
                 user_id=file.user_id,
                 brand_id=file.brand_id,
-                metadata={},
-                is_deleted=False
+                # --- UPDATE: Pakai file_metadata ---
+                file_metadata=file.metadata, 
+                is_deleted=False,
+                uploaded_at=file.uploaded_at
             )
             self._session.add(model)
         
         await self._session.flush()
+        await self._session.commit()
         return file
     
     async def delete(self, file_id: str) -> bool:
@@ -94,6 +94,7 @@ class PostgresFileRepository(IFileRepository):
             model.is_deleted = True
             model.deleted_at = datetime.utcnow()
             await self._session.flush()
+            await self._session.commit()
             return True
         return False
     
@@ -121,5 +122,7 @@ class PostgresFileRepository(IFileRepository):
             bucket=model.bucket,
             user_id=model.user_id,
             brand_id=model.brand_id,
-            uploaded_at=model.uploaded_at
+            uploaded_at=model.uploaded_at,
+            # --- UPDATE: Pakai file_metadata ---
+            metadata=model.file_metadata or {} 
         )

@@ -130,6 +130,10 @@ func (r *PostgresPaymentRepository) Update(ctx context.Context, payment *entitie
 	return nil
 }
 
+func (r *PostgresPaymentRepository) UpdateProof(ctx context.Context, id string, fileID string, fileURL string) error {
+    return nil
+}
+
 // FindByGatewayOrderID finds a payment by the gateway's order ID
 func (r *PostgresPaymentRepository) FindByGatewayOrderID(ctx context.Context, gatewayOrderID string) (*entities.Payment, error) {
 	query := `

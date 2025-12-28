@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -53,6 +54,18 @@ func (r *GormPaymentRepository) Update(ctx context.Context, payment *entities.Pa
 		return fmt.Errorf("failed to update payment: %w", err)
 	}
 	return nil
+}
+
+func (r *GormPaymentRepository) UpdateProof(ctx context.Context, id string, fileID string, fileURL string) error {
+    return r.db.WithContext(ctx).
+        Model(&entities.Payment{}).
+        Where("id = ?", id).
+        Updates(map[string]interface{}{
+            "proof_file_id":  fileID,
+            "proof_file_url": fileURL,
+            "status":         "processing", // Opsional: Ubah status jadi processing agar Admin tahu ada yg perlu dicek
+            "updated_at":     time.Now(),
+        }).Error
 }
 
 // FindByGatewayOrderID finds a payment by the gateway's order ID
