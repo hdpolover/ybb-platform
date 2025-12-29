@@ -179,6 +179,7 @@ func (h *CreatePaymentHandler) Handle(ctx context.Context, cmd *commands.CreateP
 		GatewayOrderID: payment.GatewayOrderID,
 		Description:    payment.Description,
 		RedirectURL:    gatewayResp.RedirectURL,
+		Token:          gatewayResp.Token,
 		CreatedAt:      payment.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:      payment.UpdatedAt.Format(time.RFC3339),
 	}, nil
