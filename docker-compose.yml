@@ -37,7 +37,9 @@ services:
       - pgadmin_data:/var/lib/pgadmin
       - ./infrastructure/pgadmin/servers.json:/pgadmin4/servers.json:ro
     networks:
-      - ybb-network
+      ybb-network:
+        aliases:
+          - ybb-pgadmin-prod
     depends_on:
       postgres:
         condition: service_healthy
@@ -76,7 +78,9 @@ services:
       # Local Development: Comment out above and use Docker volume
       # - minio_data:/data
     networks:
-      - ybb-network
+      ybb-network:
+        aliases:
+          - ybb-minio-prod
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 30s
@@ -96,7 +100,9 @@ services:
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     networks:
-      - ybb-network
+      ybb-network:
+        aliases:
+          - ybb-rabbitmq-prod
     healthcheck:
       test: [ "CMD", "rabbitmq-diagnostics", "ping" ]
       interval: 30s
@@ -129,7 +135,9 @@ services:
       - /app/node_modules
       - /app/dist
     networks:
-      - ybb-network
+      ybb-network:
+        aliases:
+          - ybb-api-prod
     depends_on:
       postgres:
         condition: service_healthy
@@ -157,7 +165,9 @@ services:
       - ./services/payment-service:/app
       - /app/tmp
     networks:
-      - ybb-network
+      ybb-network:
+        aliases:
+          - ybb-payment-service-prod
     depends_on:
       postgres:
         condition: service_healthy
@@ -189,7 +199,9 @@ services:
     volumes:
       - ./services/file-service:/app
     networks:
-      - ybb-network
+      ybb-network:
+        aliases:
+          - ybb-file-service-prod
     depends_on:
       postgres:
         condition: service_healthy
@@ -217,7 +229,9 @@ services:
       - /app/node_modules
       - /app/dist
     networks:
-      - ybb-network
+      ybb-network:
+        aliases:
+          - ybb-notification-service-prod
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -242,7 +256,9 @@ services:
       - /app/node_modules
       - /app/.next
     networks:
-      - ybb-network
+      ybb-network:
+        aliases:
+          - ybb-admin-dashboard-prod
     depends_on:
       - api
     command: npm run dev
@@ -253,20 +269,22 @@ services:
       context: ./infrastructure/nginx
       dockerfile: Dockerfile
     container_name: ybb-nginx
-    ports:
-      - "80:80"
-      - "443:443"
+    # ports:
+    #   - "8001:80" # No longer needed, Traefik talks directly to container
     volumes:
       - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./infrastructure/nginx/conf.d:/etc/nginx/conf.d:ro
       - ./infrastructure/nginx/ssl:/etc/nginx/ssl:ro
     networks:
       - ybb-network
-    depends_on:
-      - api
-      - payment-service
-      - file-service
-      - admin-dashboard
+      - web_gateway
+    labels:
+      - "traefik.enable=true"
+      # Route ybbhub.com, api.ybbhub.com, and s3.ybbhub.com to this container
+      - "traefik.http.routers.ybb-platform.rule=Host(`ybbhub.com`) || Host(`api.ybbhub.com`) || Host(`s3.ybbhub.com`)"
+      - "traefik.http.routers.ybb-platform.entrypoints=websecure"
+      - "traefik.http.routers.ybb-platform.tls.certresolver=myresolver"
+      - "traefik.http.services.ybb-platform.loadbalancer.server.port=80"
 
   # Prometheus Metrics Collection
   prometheus:
@@ -278,7 +296,9 @@ services:
       - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     networks:
-      - ybb-network
+      ybb-network:
+        aliases:
+          - ybb-prometheus-prod
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
@@ -302,13 +322,17 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin123}
       GF_USERS_ALLOW_SIGN_UP: "false"
     networks:
-      - ybb-network
+      ybb-network:
+        aliases:
+          - ybb-grafana-prod
     depends_on:
       - prometheus
 
 networks:
   ybb-network:
     driver: bridge
+  web_gateway:
+    external: true
 
 volumes:
   postgres_data:

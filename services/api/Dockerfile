@@ -1,4 +1,4 @@
-FROM node:20-alpine
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -22,8 +22,31 @@ COPY src ./src
 # Build the application
 RUN npm run build
 
+# Production Stage
+FROM node:20-alpine AS production
+
+WORKDIR /app
+
+# Install OpenSSL for Prisma (needed for runtime)
+RUN apk add --no-cache openssl
+
+ENV NODE_ENV=production
+
+# Copy package files
+COPY package*.json ./
+COPY prisma ./prisma/
+
+# Install only production dependencies
+RUN npm ci --only=production
+
+# Generate Prisma Client (needed for runtime)
+RUN npx prisma generate
+
+# Copy built assets from builder
+COPY --from=builder /app/dist ./dist
+
 # Expose port
-EXPOSE 3000
+EXPOSE 4000
 
 # Start the application
-CMD ["npm", "run", "start:prod"]
+CMD ["node", "dist/main"]
