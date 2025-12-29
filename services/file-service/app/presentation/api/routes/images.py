@@ -12,6 +12,7 @@ from app.domain.exceptions.file_exceptions import (
     FileSizeLimitException
 )
 from app.presentation.dependencies.container import get_storage_service
+from app.utils.concurrency import run_in_threadpool
 
 
 router = APIRouter(prefix="/images", tags=["Images"])
@@ -131,7 +132,8 @@ async def upload_avatar(
     try:
         contents = validate_image(file, MAX_AVATAR_SIZE)
         
-        # Process avatar (square crop)
+        # Process avawait run_in_threadpool(
+            process_image,rop)
         processed = process_image(
             contents,
             AVATAR_SIZE,
@@ -189,7 +191,8 @@ async def upload_program_logo(
     """
     try:
         contents = validate_image(file, MAX_IMAGE_SIZE)
-        
+        await run_in_threadpool(
+            process_image,
         # Process logo (fit, no crop)
         processed = process_image(
             contents,
@@ -244,7 +247,8 @@ async def upload_program_banner(
     - Resized to 1200x400 (cropped to fit)
     """
     try:
-        contents = validate_image(file, MAX_BANNER_SIZE)
+        contents = vawait run_in_threadpool(
+            process_image,file, MAX_BANNER_SIZE)
         
         # Process banner (crop to fit)
         processed = process_image(
@@ -300,7 +304,8 @@ async def upload_program_thumbnail(
     - Max size: 5MB
     - Resized to 600x400 (cropped to fit)
     """
-    try:
+    try:await run_in_threadpool(
+            process_image,
         contents = validate_image(file, MAX_IMAGE_SIZE)
         
         # Process thumbnail
@@ -360,18 +365,20 @@ async def upload_program_gallery_image(
     - Also generates a thumbnail
     """
     try:
-        contents = validate_image(file, MAX_BANNER_SIZE)
-        
-        file_id = str(uuid.uuid4())
-        
-        # Process main image
-        main_image = process_image(
+        contents = vaawait run_in_threadpool(
+            process_image,
             contents,
             (1920, 1920),
             output_format='JPEG',
             quality=85,
             crop_to_fit=False
         )
+        main_filename = f"{file_id}.jpg"
+        main_path = f"programs/{brand_id}/{program_id}/gallery/{main_filename}"
+        
+        # Process thumbnail
+        thumbnail = await run_in_threadpool(
+            process_image,
         main_filename = f"{file_id}.jpg"
         main_path = f"programs/{brand_id}/{program_id}/gallery/{main_filename}"
         
@@ -442,7 +449,8 @@ async def upload_sponsor_logo(
     
     - Accepts: JPEG, PNG, WebP
     - Max size: 5MB
-    - Resized to fit within 400x200 (maintains aspect ratio)
+    - Resized to fitawait run_in_threadpool(
+            process_image,0 (maintains aspect ratio)
     - Preserves transparency for PNG
     """
     try:
@@ -498,7 +506,8 @@ async def upload_testimonial_avatar(
     Upload testimonial person avatar.
     
     - Accepts: JPEG, PNG, WebP
-    - Max size: 2MB
+    - Max size: 2MBawait run_in_threadpool(
+            process_image,
     - Resized to 200x200 (square crop)
     """
     try:
@@ -553,7 +562,8 @@ async def upload_brand_logo(
     """
     Upload brand logo.
     
-    - Accepts: PNG (recommended for transparency), JPEG, WebP
+    - Accepts: PNG (await run_in_threadpool(
+            process_image,r transparency), JPEG, WebP
     - Max size: 5MB
     - Resized to fit within 500x200
     """
@@ -607,7 +617,8 @@ async def upload_brand_banner(
 ):
     """
     Upload brand banner image.
-    
+    await run_in_threadpool(
+            process_image,
     - Accepts: JPEG, PNG, WebP
     - Max size: 10MB
     - Resized to 1920x400 (cropped to fit)

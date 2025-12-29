@@ -6,6 +6,7 @@ from io import BytesIO
 import qrcode  # type: ignore
 import hashlib
 from datetime import datetime
+from app.utils.concurrency import run_in_threadpool
 
 
 class CertificateGeneratorService:
@@ -51,7 +52,21 @@ class CertificateGeneratorService:
         participant_data: Dict[str, Any],
         program_data: Dict[str, Any],
         template_path: Optional[str] = None
+    ) -> BytesIO: asynchronously."""
+        return await run_in_threadpool(
+            self._generate_completion_certificate_sync,
+            participant_data,
+            program_data,
+            template_path
+        )
+
+    def _generate_completion_certificate_sync(
+        self,
+        participant_data: Dict[str, Any],
+        program_data: Dict[str, Any],
+        template_path: Optional[str] = None
     ) -> BytesIO:
+        """Generate completion certificate (synchronous implementation)
         """Generate completion certificate.
         
         Args:

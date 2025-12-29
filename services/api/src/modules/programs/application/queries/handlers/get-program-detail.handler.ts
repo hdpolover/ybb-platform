@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Inject } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, Logger } from '@nestjs/common';
 import { CACHE_MANAGER, Cache } from '@nestjs/cache-manager';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
 import { GetProgramDetailQuery } from '../get-program-detail.query';
@@ -6,6 +6,8 @@ import { CACHE_KEYS, CACHE_TTL } from '../../../../../shared/constants/cache-key
 
 @Injectable()
 export class GetProgramDetailHandler {
+  private readonly logger = new Logger(GetProgramDetailHandler.name);
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
@@ -28,7 +30,7 @@ export class GetProgramDetailHandler {
     // Sanitize limits (handle NaN)
     if (isNaN(testimonialsLimit)) testimonialsLimit = 10;
     if (isNaN(announcementsLimit)) announcementsLimit = 10;
-    if (isNaN(resourcesLimit)) resourcesLimit = 10;
+    this.logger.debug(`GetProgramDetailHandler limits sanitized: ${JSON.stringify({ testimonialsLimit, announcementsLimit, resourcesLimit })}`);
 
     console.log('DEBUG: GetProgramDetailHandler limits sanitized:', { testimonialsLimit, announcementsLimit, resourcesLimit });
 

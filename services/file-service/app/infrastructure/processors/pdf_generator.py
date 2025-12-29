@@ -10,6 +10,7 @@ from reportlab.lib import colors  # type: ignore
 from io import BytesIO
 from datetime import datetime
 from jinja2 import Template  # type: ignore
+from app.utils.concurrency import run_in_threadpool
 
 
 class PDFGeneratorService:
@@ -42,7 +43,14 @@ class PDFGeneratorService:
     async def generate_receipt(
         self,
         transaction_data: Dict[str, Any]
+    ) -> BytesIO: asynchronously."""
+        return await run_in_threadpool(self._generate_receipt_sync, transaction_data)
+
+    def _generate_receipt_sync(
+        self,
+        transaction_data: Dict[str, Any]
     ) -> BytesIO:
+        """Generate payment receipt PDF (synchronous implementation)
         """Generate payment receipt PDF."""
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=letter)
@@ -89,7 +97,19 @@ class PDFGeneratorService:
         
         # Build PDF
         doc.build(story)
-        buffer.seek(0)
+        buffer.seek(0) asynchronously."""
+        return await run_in_threadpool(
+            self._generate_offer_letter_sync,
+            participant_data,
+            program_data
+        )
+
+    def _generate_offer_letter_sync(
+        self,
+        participant_data: Dict[str, Any],
+        program_data: Dict[str, Any]
+    ) -> BytesIO:
+        """Generate offer letter PDF (synchronous implementation)
         return buffer
     
     async def generate_offer_letter(
@@ -146,7 +166,19 @@ class PDFGeneratorService:
         Congratulations once again on this achievement. We look forward to welcoming you to our program.
         """
         
-        story.append(Paragraph(body_text, self.styles['Normal']))
+        story.append(Paragraph(body_text, self.styles[' asynchronously."""
+        return await run_in_threadpool(
+            self._generate_from_template_sync,
+            template_html,
+            data
+        )
+
+    def _generate_from_template_sync(
+        self,
+        template_html: str,
+        data: Dict[str, Any]
+    ) -> BytesIO:
+        """Generate PDF from HTML template using Jinja2 (synchronous implementation)Normal']))
         story.append(Spacer(1, 0.3 * inch))
         
         # Signature

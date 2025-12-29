@@ -11,6 +11,7 @@ export class EmailService {
     private transporter: nodemailer.Transporter;
     private resend: Resend;
     private readonly logger = new Logger(EmailService.name);
+    private readonly templateCache = new Map<string, HandlebarsTemplateDelegate>();
 
     constructor(private configService: ConfigService) {
         const resendKey = this.configService.get('RESEND_API_KEY');
@@ -66,26 +67,47 @@ export class EmailService {
         }
     }
 
-    private async compileTemplate(templateName: string, data: any): Promise<string> {
+    priv// Check cache first
+        if (this.templateCache.has(templateName)) {
+            const compiled = this.templateCache.get(templateName);
+            return this.renderWithLayout(compiled, data);
+        }
+
         const filePath = path.join(process.cwd(), 'src/modules/email/templates', `${templateName}.hbs`);
-        const template = fs.readFileSync(filePath, 'utf8');
+        
+        try {
+            // Read file asynchronously
+            const template = await fs.promises.readFile(filePath, 'utf8');
+            
+            // Compile the template
+            const compiled = hbs.compile(template);
+            
+            // Cache the compiled template
+            this.templateCache.set(templateName, compiled);
 
-        // Compile the template
-        const compiled = hbs.compile(template);
+            return this.renderWithLayout(compiled, data);
+        } catch (error) {
+            this.logger.error(`Failed to load template: ${templateName}`, error);
+            throw error;
+        }
+    }
 
+    private renderWithLayout(compiledTemplate: HandlebarsTemplateDelegate, data: any): string {
         // If we have a layout, we might want to wrap it manually or use handlebars-layouts
         // For simplicity here, we'll assume the template extends the layout or is standalone
         // But to actually use the layout wrapper we defined earlier, we can do this:
         const layoutPath = path.join(process.cwd(), 'src/modules/email/templates/layout.hbs');
         if (fs.existsSync(layoutPath)) {
+            // Note: Layout caching could also be implemented for further optimization
             const layoutTemplate = fs.readFileSync(layoutPath, 'utf8');
             const layoutCompiled = hbs.compile(layoutTemplate);
             // Render the body first
-            const body = compiled(data);
+            const body = compiledTemplate(data);
             // Then render the layout with the body
             return layoutCompiled({ ...data, body, year: new Date().getFullYear() });
         }
 
+        return compiledTemplate
         return compiled(data);
     }
 
