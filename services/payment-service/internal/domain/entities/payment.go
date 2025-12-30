@@ -70,6 +70,8 @@ type Payment struct {
 	GatewayResponse map[string]interface{} `gorm:"type:jsonb"       json:"gateway_response"  swaggerignore:"true"`
 	RedirectURL     string                 `gorm:"type:text"        json:"redirect_url"      example:"https://midtrans.com/redirect"`
 
+	Token       string `gorm:"type:varchar(255)" json:"token"`
+	
 	// --- Manual Payment Fields ---
 	ProofFileID    *string    `gorm:"type:uuid"          json:"proof_file_id"    example:""`
 	ProofFileURL   string     `gorm:"type:text"          json:"proof_file_url"   example:"http://localhost:8081/uploads/bukti.jpg"`

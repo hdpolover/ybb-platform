@@ -153,6 +153,11 @@ func main() {
 		gatewayFactory,
 	)
 
+	retryPaymentHandler := commandHandlers.NewRetryPaymentHandler(
+		paymentRepo, 
+		gatewayFactory,
+	)
+
 	// Refund Handler
     refundPaymentHandler := commandHandlers.NewRefundPaymentHandler(
         paymentRepo,
@@ -169,6 +174,7 @@ func main() {
 		verifyStatusHandler,
 		cancelPaymentHandler,
 		refundPaymentHandler,
+		retryPaymentHandler,
 
 		paymentRepo,
 		eventPublisher,
@@ -238,6 +244,7 @@ func setupRouter(paymentHandler *handlers.PaymentHandler, paymentMethodHandler *
 			payments.POST("/:id/verify-status", paymentHandler.VerifyPaymentStatus)
 			payments.POST("/:id/refund", paymentHandler.RefundPayment)
 			payments.POST("/:id/cancel", paymentHandler.CancelPayment)
+			payments.POST("/:id/retry", paymentHandler.RetryPayment)
 
 			// Manual Payment Features
 			payments.POST("/:id/proof", paymentHandler.UploadProof)

@@ -43,6 +43,7 @@ type PaymentHandler struct {
 	verifyStatusHandler  *commandHandlers.VerifyStatusHandler
 	cancelPaymentHandler *commandHandlers.CancelPaymentHandler
 	refundPaymentHandler *commandHandlers.RefundPaymentHandler
+	retryPaymentHandler  *commandHandlers.RetryPaymentHandler
 
 	paymentRepo          repositories.PaymentRepository
 	eventPublisher       messaging.EventPublisher
@@ -57,6 +58,7 @@ func NewPaymentHandler(
 	verifyStatusHandler *commandHandlers.VerifyStatusHandler,
 	cancelHandler *commandHandlers.CancelPaymentHandler,
 	refundPaymentHandler *commandHandlers.RefundPaymentHandler,
+	retryHandler *commandHandlers.RetryPaymentHandler,
 
 	paymentRepo repositories.PaymentRepository,
 	eventPublisher messaging.EventPublisher,
@@ -69,6 +71,7 @@ func NewPaymentHandler(
 		verifyStatusHandler:  verifyStatusHandler,
 		cancelPaymentHandler: cancelHandler,
 		refundPaymentHandler: refundPaymentHandler,
+		retryPaymentHandler:  retryHandler,
 
 		paymentRepo:          paymentRepo,
 		eventPublisher:       eventPublisher,
@@ -428,6 +431,13 @@ func (h *PaymentHandler) VerifyPayment(c *gin.Context) {
         return
     }
 
+	// if payment.PaymentType != "manual" {
+    //     c.JSON(http.StatusBadRequest, gin.H{
+    //         "error": "This endpoint is for manual payment verification only. For automatic gateways, use verify-status.",
+    //     })
+    //     return
+    // }
+
     switch req.Action {
     case "approve":
         payment.VerifyManual(req.AdminID)
@@ -525,4 +535,30 @@ func (h *PaymentHandler) VerifyPaymentStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
         "message": "Fitur verify status otomatis dinonaktifkan (Silakan cek Dashboard Midtrans)",
     })
+}
+
+// RetryPayment godoc
+// @Summary      Retry Payment
+// @Description  Create a new transaction based on failed/expired payment
+// @Tags         Payments
+// @Accept       json
+// @Produce      json
+// @Param        id   path      string  true  "Old Transaction ID"
+// @Success      200  {object}  dto.PaymentResponseDTO
+// @Failure      400  {object}  map[string]interface{}
+// @Router       /payments/{id}/retry [post]
+func (h *PaymentHandler) RetryPayment(c *gin.Context) {
+	id := c.Param("id")
+
+	// Panggil Application Layer
+	resp, err := h.retryPaymentHandler.Handle(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Payment retried successfully",
+		"data":    resp,
+	})
 }
