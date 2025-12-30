@@ -1,276 +1,304 @@
 services:
-  # PostgreSQL Database
+  # =========================================
+  # Database (PostgreSQL)
+  # =========================================
   postgres:
     build:
       context: ./infrastructure/postgres
       dockerfile: Dockerfile
     container_name: ybb-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${DATABASE_USER}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
       POSTGRES_DB: ${DATABASE_NAME}
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d
     networks:
       - ybb-network
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d postgres" ]
+      test: [ "CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}" ]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # pgAdmin - PostgreSQL GUI
+  # =========================================
+  # Database GUI (PgAdmin) -> db.ybbhub.com
+  # =========================================
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: ybb-pgadmin
+    restart: unless-stopped
     environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@admin.com}
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@ybbhub.com}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
       PGADMIN_CONFIG_SERVER_MODE: "False"
-      PGADMIN_CONFIG_CHECK_EMAIL_DELIVERABILITY: "False"
-    ports:
-      - "5050:80"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
       - ./infrastructure/pgadmin/servers.json:/pgadmin4/servers.json:ro
     networks:
-      ybb-network:
-        aliases:
-          - ybb-pgadmin-prod
-    depends_on:
-      postgres:
-        condition: service_healthy
+      - ybb-network
+      - web_gateway
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pgadmin.rule=Host(`db.ybbhub.com`)"
+      - "traefik.http.routers.pgadmin.entrypoints=websecure"
+      - "traefik.http.routers.pgadmin.tls.certresolver=myresolver"
+      - "traefik.http.services.pgadmin.loadbalancer.server.port=80"
 
-  # Redis Cache
+  # =========================================
+  # Cache (Redis)
+  # =========================================
   redis:
     image: redis:7-alpine
     container_name: ybb-redis
-    command: redis-server --appendonly yes
-    ports:
-      - "6379:6379"
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD}
     volumes:
       - redis_data:/data
     networks:
       - ybb-network
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # MinIO Object Storage
+  # =========================================
+  # Storage (MinIO) -> s3.ybbhub.com & console.ybbhub.com
+  # =========================================
   minio:
     image: minio/minio:latest
     container_name: ybb-minio
+    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
-    ports:
-      - "9000:9000"
-      - "9001:9001"
     volumes:
-      # VPS Production: Uncomment below and comment out Docker volume
       - /var/ybb-storage:/data
-      # Local Development: Comment out above and use Docker volume
-      # - minio_data:/data
     networks:
-      ybb-network:
-        aliases:
-          - ybb-minio-prod
+      - ybb-network
+      - web_gateway
+    labels:
+      - "traefik.enable=true"
+      # API (S3)
+      - "traefik.http.routers.minio-api.rule=Host(`s3.ybbhub.com`)"
+      - "traefik.http.routers.minio-api.entrypoints=websecure"
+      - "traefik.http.routers.minio-api.tls.certresolver=myresolver"
+      - "traefik.http.services.minio-api.loadbalancer.server.port=9000"
+      # Console (Dashboard)
+      - "traefik.http.routers.minio-console.rule=Host(`console.ybbhub.com`)"
+      - "traefik.http.routers.minio-console.entrypoints=websecure"
+      - "traefik.http.routers.minio-console.tls.certresolver=myresolver"
+      - "traefik.http.services.minio-console.loadbalancer.server.port=9001"
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 30s
       timeout: 20s
       retries: 3
 
-  # RabbitMQ Message Queue (Optional)
+  # =========================================
+  # Message Queue (RabbitMQ) -> queue.ybbhub.com
+  # =========================================
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: ybb-rabbitmq
+    restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
-    ports:
-      - "5672:5672"
-      - "15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     networks:
-      ybb-network:
-        aliases:
-          - ybb-rabbitmq-prod
+      - ybb-network
+      - web_gateway
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rabbitmq.rule=Host(`queue.ybbhub.com`)"
+      - "traefik.http.routers.rabbitmq.entrypoints=websecure"
+      - "traefik.http.routers.rabbitmq.tls.certresolver=myresolver"
+      - "traefik.http.services.rabbitmq.loadbalancer.server.port=15672"
     healthcheck:
       test: [ "CMD", "rabbitmq-diagnostics", "ping" ]
       interval: 30s
       timeout: 10s
       retries: 5
 
-  # NestJS API Gateway
+  # =========================================
+  # API Gateway (NestJS) -> api.ybbhub.com
+  # =========================================
   api:
     build:
       context: ./services/api
       dockerfile: Dockerfile.dev
     container_name: ybb-api
+    restart: unless-stopped
     environment:
-      NODE_ENV: ${NODE_ENV:-development}
+      NODE_ENV: ${NODE_ENV:-production}
       PORT: 4000
       DATABASE_URL: ${DATABASE_URL}
       JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:4001}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      FILE_SERVICE_URL: http://file-service:8001
-      PAYMENT_SERVICE_URL: http://payment-service:8002
-      RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
-    ports:
-      - "4000:4000"
+      JWT_EXPIRES_IN: ${JWT_EXPIRATION}
+      REDIS_URL: ${REDIS_URL}
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      FILE_SERVICE_URL: ${FILE_SERVICE_URL}
+      PAYMENT_SERVICE_URL: ${PAYMENT_SERVICE_URL}
+      CORS_ORIGINS: ${CORS_ORIGINS}
     volumes:
       - ./services/api:/app
       - /app/node_modules
       - /app/dist
     networks:
-      ybb-network:
-        aliases:
-          - ybb-api-prod
+      - ybb-network
+      - web_gateway
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: npm run start:dev
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.rule=Host(`api.ybbhub.com`)"
+      - "traefik.http.routers.api.entrypoints=websecure"
+      - "traefik.http.routers.api.tls.certresolver=myresolver"
+      - "traefik.http.services.api.loadbalancer.server.port=4000"
 
-  # Golang Payment Service
+  # =========================================
+  # Payment Service (Go) -> payment.ybbhub.com
+  # =========================================
   payment-service:
     build:
       context: ./services/payment-service
       dockerfile: Dockerfile.dev
     container_name: ybb-payment-service
+    restart: unless-stopped
     environment:
       PORT: 8002
-      ENVIRONMENT: development
-      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres:5432/ybb_payments_db
-      MIDTRANS_SERVER_KEY: ${MIDTRANS_SERVER_KEY:-}
-      MIDTRANS_CLIENT_KEY: ${MIDTRANS_CLIENT_KEY:-}
-      MIDTRANS_IS_PRODUCTION: ${MIDTRANS_IS_PRODUCTION:-false}
-      RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
-    ports:
-      - "8002:8002"
+      DATABASE_URL: ${DATABASE_URL}
+      RABBITMQ_URL: ${RABBITMQ_URL}
     volumes:
       - ./services/payment-service:/app
-      - /app/tmp
     networks:
-      ybb-network:
-        aliases:
-          - ybb-payment-service-prod
+      - ybb-network
+      - web_gateway
     depends_on:
       postgres:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-    command: go run cmd/server/main.go
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.payment.rule=Host(`payment.ybbhub.com`)"
+      - "traefik.http.routers.payment.entrypoints=websecure"
+      - "traefik.http.routers.payment.tls.certresolver=myresolver"
+      - "traefik.http.services.payment.loadbalancer.server.port=8002"
 
-  # Python File Service
+  # =========================================
+  # File Service (Python) -> files.ybbhub.com
+  # =========================================
   file-service:
     build:
       context: ./services/file-service
       dockerfile: Dockerfile
     container_name: ybb-file-service
+    restart: unless-stopped
     environment:
-      PYTHON_ENV: ${PYTHON_ENV}
-      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      PYTHON_ENV: ${NODE_ENV}
+      MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      MINIO_SECURE: ${MINIO_SECURE:-false}
-      # Public endpoint for browser-accessible presigned URLs
-      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-localhost:9000}
-      MINIO_PUBLIC_SECURE: ${MINIO_PUBLIC_SECURE:-false}
-      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres:5432/ybb_files_db
-      CERTIFICATE_SIGNING_KEY: ${CERTIFICATE_SIGNING_KEY:-your-secret-signing-key}
-      CERTIFICATE_VERIFICATION_URL: ${CERTIFICATE_VERIFICATION_URL:-https://verify.ybb.org}
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
+      MINIO_PUBLIC_SECURE: ${MINIO_PUBLIC_SECURE}
+      DATABASE_URL: ${DATABASE_URL}
       SERVICE_PORT: 8001
-    ports:
-      - "8001:8001"
     volumes:
       - ./services/file-service:/app
     networks:
-      ybb-network:
-        aliases:
-          - ybb-file-service-prod
+      - ybb-network
+      - web_gateway
     depends_on:
       postgres:
         condition: service_healthy
       minio:
         condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.files.rule=Host(`files.ybbhub.com`)"
+      - "traefik.http.routers.files.entrypoints=websecure"
+      - "traefik.http.routers.files.tls.certresolver=myresolver"
+      - "traefik.http.services.files.loadbalancer.server.port=8001"
 
-  # NestJS Notification Service
+  # =========================================
+  # Notification Service (NestJS) -> notification.ybbhub.com
+  # =========================================
   notification-service:
     build:
       context: ./services/notification-service
       dockerfile: Dockerfile.dev
     container_name: ybb-notification-service
+    restart: unless-stopped
     environment:
-      NODE_ENV: ${NODE_ENV:-development}
+      NODE_ENV: ${NODE_ENV:-production}
       PORT: 4002
-      RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
-      # Database URL can be added later if needed, for now starting simple
-      # DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres:5432/ybb_notifications_db
+      RABBITMQ_URL: ${RABBITMQ_URL}
       RESEND_API_KEY: ${RESEND_API_KEY}
-    ports:
-      - "4002:4002"
     volumes:
       - ./services/notification-service:/app
       - /app/node_modules
       - /app/dist
     networks:
-      ybb-network:
-        aliases:
-          - ybb-notification-service-prod
+      - ybb-network
+      - web_gateway
     depends_on:
       rabbitmq:
         condition: service_healthy
-      postgres:
-        condition: service_healthy
-    command: npm run start:dev
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.notification.rule=Host(`notification.ybbhub.com`)"
+      - "traefik.http.routers.notification.entrypoints=websecure"
+      - "traefik.http.routers.notification.tls.certresolver=myresolver"
+      - "traefik.http.services.notification.loadbalancer.server.port=4002"
 
-  # Next.js Admin Dashboard
+  # =========================================
+  # Admin Dashboard (Next.js) -> admin.ybbhub.com
+  # =========================================
   admin-dashboard:
     build:
       context: ./services/admin-dashboard
       dockerfile: Dockerfile.dev
     container_name: ybb-admin-dashboard
+    restart: unless-stopped
     environment:
       NODE_ENV: ${NODE_ENV}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
       PORT: 4001
-    ports:
-      - "4001:4001"
     volumes:
       - ./services/admin-dashboard:/app
       - /app/node_modules
       - /app/.next
     networks:
-      ybb-network:
-        aliases:
-          - ybb-admin-dashboard-prod
+      - ybb-network
+      - web_gateway
     depends_on:
       - api
-    command: npm run dev
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.admin.rule=Host(`admin.ybbhub.com`)"
+      - "traefik.http.routers.admin.entrypoints=websecure"
+      - "traefik.http.routers.admin.tls.certresolver=myresolver"
+      - "traefik.http.services.admin.loadbalancer.server.port=4001"
 
-  # Nginx Reverse Proxy
+  # =========================================
+  # Landing Page / Static (Nginx) -> ybbhub.com
+  # =========================================
   nginx:
     build:
       context: ./infrastructure/nginx
       dockerfile: Dockerfile
     container_name: ybb-nginx
-    # ports:
-    #   - "8001:80" # No longer needed, Traefik talks directly to container
+    restart: unless-stopped
     volumes:
       - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./infrastructure/nginx/conf.d:/etc/nginx/conf.d:ro
@@ -280,40 +308,31 @@ services:
       - web_gateway
     labels:
       - "traefik.enable=true"
-      # Route ybbhub.com, api.ybbhub.com, and s3.ybbhub.com to this container
-      - "traefik.http.routers.ybb-platform.rule=Host(`ybbhub.com`) || Host(`api.ybbhub.com`) || Host(`s3.ybbhub.com`)"
-      - "traefik.http.routers.ybb-platform.entrypoints=websecure"
-      - "traefik.http.routers.ybb-platform.tls.certresolver=myresolver"
-      - "traefik.http.services.ybb-platform.loadbalancer.server.port=80"
+      - "traefik.http.routers.landing.rule=Host(`ybbhub.com`)"
+      - "traefik.http.routers.landing.entrypoints=websecure"
+      - "traefik.http.routers.landing.tls.certresolver=myresolver"
+      - "traefik.http.services.landing.loadbalancer.server.port=80"
 
-  # Prometheus Metrics Collection
+  # =========================================
+  # Monitoring (Prometheus)
+  # =========================================
   prometheus:
     image: prom/prometheus:latest
     container_name: ybb-prometheus
-    ports:
-      - "49090:9090"
+    restart: unless-stopped
     volumes:
       - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     networks:
-      ybb-network:
-        aliases:
-          - ybb-prometheus-prod
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
-      - '--web.enable-lifecycle'
-    depends_on:
-      - api
+      - ybb-network
 
-  # Grafana Dashboard
+  # =========================================
+  # Monitoring (Grafana) -> monitor.ybbhub.com
+  # =========================================
   grafana:
     image: grafana/grafana:latest
     container_name: ybb-grafana
-    ports:
-      - "43000:3000"
+    restart: unless-stopped
     volumes:
       - grafana_data:/var/lib/grafana
       - ./infrastructure/grafana/provisioning:/etc/grafana/provisioning:ro
@@ -322,11 +341,16 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin123}
       GF_USERS_ALLOW_SIGN_UP: "false"
     networks:
-      ybb-network:
-        aliases:
-          - ybb-grafana-prod
+      - ybb-network
+      - web_gateway
     depends_on:
       - prometheus
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`monitor.ybbhub.com`)"
+      - "traefik.http.routers.grafana.entrypoints=websecure"
+      - "traefik.http.routers.grafana.tls.certresolver=myresolver"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
 
 networks:
   ybb-network:
@@ -337,7 +361,6 @@ networks:
 volumes:
   postgres_data:
   redis_data:
-  minio_data:
   rabbitmq_data:
   pgadmin_data:
   prometheus_data:
