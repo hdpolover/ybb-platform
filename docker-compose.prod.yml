@@ -92,6 +92,9 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+      # Essential for running behind a reverse proxy (Traefik)
+      MINIO_BROWSER_REDIRECT_URL: "https://console.ybbhub.com"
+      MINIO_SERVER_URL: "https://s3.ybbhub.com"
     volumes:
       - /var/ybb-storage:/data
     networks:
@@ -346,6 +349,8 @@ services:
     build:
       context: ./services/admin-dashboard
       dockerfile: Dockerfile.prod
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
     container_name: ybb-admin-dashboard-prod
     restart: unless-stopped
     environment:
@@ -465,6 +470,9 @@ services:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin123}
       GF_USERS_ALLOW_SIGN_UP: "false"
+      # Ensure Grafana knows its public URL for correct redirects
+      GF_SERVER_ROOT_URL: "https://monitor.ybbhub.com"
+      GF_SERVER_DOMAIN: "monitor.ybbhub.com"
     networks:
       - ybb-network
       - web_gateway
