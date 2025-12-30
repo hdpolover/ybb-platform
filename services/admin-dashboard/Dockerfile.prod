@@ -6,8 +6,9 @@ WORKDIR /app
 # Install dependencies only when needed
 COPY package*.json ./
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci && \
-    npm cache clean --force
+    npm config set fetch-retry-maxtimeout 600000 && \
+    npm config set fetch-retries 5 && \
+    npm ci
 
 # Copy source code
 COPY . .
