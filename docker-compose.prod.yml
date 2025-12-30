@@ -20,6 +20,14 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
 
   # =========================================
   # Database GUI (PgAdmin) -> db.ybbhub.com
@@ -64,6 +72,14 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
 
   # =========================================
   # Storage (MinIO) -> s3.ybbhub.com & console.ybbhub.com
@@ -98,6 +114,14 @@ services:
       interval: 30s
       timeout: 20s
       retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
 
   # =========================================
   # Message Queue (RabbitMQ) -> queue.ybbhub.com
@@ -125,6 +149,14 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
 
   # =========================================
   # API Gateway (NestJS) -> api.ybbhub.com
@@ -165,6 +197,14 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
 
   # =========================================
   # Payment Service (Go) -> payment.ybbhub.com
@@ -195,6 +235,14 @@ services:
       - "traefik.http.routers.payment.entrypoints=websecure"
       - "traefik.http.routers.payment.tls.certresolver=myresolver"
       - "traefik.http.services.payment.loadbalancer.server.port=8002"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
 
   # =========================================
   # File Service (Python) -> files.ybbhub.com
@@ -233,6 +281,14 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
 
   # =========================================
   # Notification Service (NestJS) -> notification.ybbhub.com
@@ -270,6 +326,14 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
 
   # =========================================
   # Admin Dashboard (Next.js) -> admin.ybbhub.com
@@ -299,7 +363,7 @@ services:
       resources:
         limits:
           cpus: '1.0'
-          memory: 512M
+          memory: 1G
         reservations:
           cpus: '0.25'
           memory: 256M
@@ -334,6 +398,14 @@ services:
       - "traefik.http.routers.landing.entrypoints=websecure"
       - "traefik.http.routers.landing.tls.certresolver=myresolver"
       - "traefik.http.services.landing.loadbalancer.server.port=80"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
 
   # =========================================
   # Certbot for SSL
@@ -366,6 +438,14 @@ services:
       - '--web.console.libraries=/etc/prometheus/console_libraries'
       - '--web.console.templates=/etc/prometheus/consoles'
       - '--web.enable-lifecycle'
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.1'
+          memory: 256M
 
   # =========================================
   # Monitoring (Grafana) -> monitor.ybbhub.com
@@ -392,6 +472,14 @@ services:
       - "traefik.http.routers.grafana.entrypoints=websecure"
       - "traefik.http.routers.grafana.tls.certresolver=myresolver"
       - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
 
 networks:
   ybb-network:
