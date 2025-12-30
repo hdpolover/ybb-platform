@@ -32,11 +32,11 @@ fi
 echo -e "${GREEN}✓ Docker is running${NC}"
 
 # Check Docker Compose
-if ! command -v docker-compose &> /dev/null; then
-    echo -e "${RED}Error: docker-compose is not installed.${NC}"
+if ! docker compose version &> /dev/null; then
+    echo -e "${RED}Error: docker compose is not installed.${NC}"
     exit 1
 fi
-echo -e "${GREEN}✓ docker-compose is available${NC}"
+echo -e "${GREEN}✓ docker compose is available${NC}"
 
 # Check .env
 if [ ! -f .env ]; then
@@ -56,16 +56,16 @@ fi
 # 2. Build Images
 echo -e "${YELLOW}[2/6] Building Docker images...${NC}"
 echo "This may take a while..."
-docker-compose build
+docker compose build
 echo -e "${GREEN}✓ Build complete${NC}"
 
 # 3. Start Infrastructure
 echo -e "${YELLOW}[3/6] Starting infrastructure services...${NC}"
-docker-compose up -d postgres redis rabbitmq minio
+docker compose up -d postgres redis rabbitmq minio
 
 echo "Waiting for database to be ready..."
 RETRIES=30
-until docker-compose exec -T postgres pg_isready -U ${DATABASE_USER:-ybb_user} > /dev/null 2>&1 || [ $RETRIES -eq 0 ]; do
+until docker compose exec -T postgres pg_isready -U ${DATABASE_USER:-ybb_user} > /dev/null 2>&1 || [ $RETRIES -eq 0 ]; do
     echo -n "."
     sleep 2
     RETRIES=$((RETRIES-1))
@@ -74,7 +74,7 @@ echo ""
 
 if [ $RETRIES -eq 0 ]; then
     echo -e "${RED}Error: Database failed to start.${NC}"
-    docker-compose logs postgres
+    docker compose logs postgres
     exit 1
 fi
 echo -e "${GREEN}✓ Infrastructure is ready${NC}"
@@ -84,7 +84,7 @@ echo -e "${YELLOW}[4/6] Running database migrations...${NC}"
 
 # API Service Migrations (Prisma)
 echo "Running API migrations (Prisma)..."
-if docker-compose run --rm api npx prisma migrate deploy; then
+if docker compose run --rm api npx prisma migrate deploy; then
     echo -e "${GREEN}✓ API migrations applied${NC}"
 else
     echo -e "${RED}Error: API migrations failed.${NC}"
@@ -96,12 +96,12 @@ fi
 
 # 5. Start Application Services
 echo -e "${YELLOW}[5/6] Starting application services...${NC}"
-docker-compose up -d
+docker compose up -d
 
 # 6. Health Check & Status
 echo -e "${YELLOW}[6/6] Verifying services...${NC}"
 sleep 5
-docker-compose ps
+docker compose ps
 
 echo ""
 echo -e "${GREEN}======================================${NC}"
