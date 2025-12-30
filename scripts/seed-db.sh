@@ -15,17 +15,17 @@ if [ -f .env ]; then
 fi
 
 # Check if PostgreSQL is running
-if ! docker-compose ps postgres | grep "Up" > /dev/null; then
+if ! docker compose ps postgres | grep "Up" > /dev/null; then
     echo "ERROR: PostgreSQL is not running"
     echo "Run 'make dev' first to start services"
     exit 1
 fi
 
 echo "Seeding users..."
-docker-compose exec -T postgres psql -U ${DATABASE_USER} -d ${DATABASE_NAME} < database/seeds/users.sql
+docker compose exec -T postgres psql -U ${DATABASE_USER} -d ${DATABASE_NAME} < database/seeds/users.sql
 
 echo "Seeding programs..."
-docker-compose exec -T postgres psql -U ${DATABASE_USER} -d ${DATABASE_NAME} < database/seeds/programs.sql
+docker compose exec -T postgres psql -U ${DATABASE_USER} -d ${DATABASE_NAME} < database/seeds/programs.sql
 
 echo ""
 echo "=================================="

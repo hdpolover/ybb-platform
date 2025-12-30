@@ -88,6 +88,10 @@ migrate:
 	@echo "Running database migrations..."
 	docker compose exec api npm run migration:run
 
+prod-migrate:
+	@echo "Running production database migrations..."
+	docker compose -f docker-compose.prod.yml exec api npm run migration:run
+
 seed-db:
 	@echo "Seeding database..."
 	chmod +x ./scripts/seed-db.sh
