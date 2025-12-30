@@ -19,6 +19,10 @@ ENV NODE_ENV=production
 # Limit memory during build to prevent OOM
 ENV NODE_OPTIONS="--max-old-space-size=2048"
 
+# Accept build arguments for client-side env vars
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 RUN npm run build
 
 # Production Stage
