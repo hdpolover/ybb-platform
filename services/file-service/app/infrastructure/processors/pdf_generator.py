@@ -43,15 +43,15 @@ class PDFGeneratorService:
     async def generate_receipt(
         self,
         transaction_data: Dict[str, Any]
-    ) -> BytesIO: asynchronously."""
+    ) -> BytesIO:
+        """Generate payment receipt PDF."""
         return await run_in_threadpool(self._generate_receipt_sync, transaction_data)
 
     def _generate_receipt_sync(
         self,
         transaction_data: Dict[str, Any]
     ) -> BytesIO:
-        """Generate payment receipt PDF (synchronous implementation)
-        """Generate payment receipt PDF."""
+        """Generate payment receipt PDF (synchronous implementation)."""
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=letter)
         story = []
@@ -97,7 +97,15 @@ class PDFGeneratorService:
         
         # Build PDF
         doc.build(story)
-        buffer.seek(0) asynchronously."""
+        buffer.seek(0)
+        return buffer
+    
+    async def generate_offer_letter(
+        self,
+        participant_data: Dict[str, Any],
+        program_data: Dict[str, Any]
+    ) -> BytesIO:
+        """Generate offer letter PDF."""
         return await run_in_threadpool(
             self._generate_offer_letter_sync,
             participant_data,
@@ -109,15 +117,7 @@ class PDFGeneratorService:
         participant_data: Dict[str, Any],
         program_data: Dict[str, Any]
     ) -> BytesIO:
-        """Generate offer letter PDF (synchronous implementation)
-        return buffer
-    
-    async def generate_offer_letter(
-        self,
-        participant_data: Dict[str, Any],
-        program_data: Dict[str, Any]
-    ) -> BytesIO:
-        """Generate offer letter PDF."""
+        """Generate offer letter PDF (synchronous implementation)."""
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=1*inch)
         story = []
@@ -166,19 +166,7 @@ class PDFGeneratorService:
         Congratulations once again on this achievement. We look forward to welcoming you to our program.
         """
         
-        story.append(Paragraph(body_text, self.styles[' asynchronously."""
-        return await run_in_threadpool(
-            self._generate_from_template_sync,
-            template_html,
-            data
-        )
-
-    def _generate_from_template_sync(
-        self,
-        template_html: str,
-        data: Dict[str, Any]
-    ) -> BytesIO:
-        """Generate PDF from HTML template using Jinja2 (synchronous implementation)Normal']))
+        story.append(Paragraph(body_text, self.styles['Normal']))
         story.append(Spacer(1, 0.3 * inch))
         
         # Signature
@@ -198,6 +186,18 @@ class PDFGeneratorService:
         data: Dict[str, Any]
     ) -> BytesIO:
         """Generate PDF from HTML template using Jinja2."""
+        return await run_in_threadpool(
+            self._generate_from_template_sync,
+            template_html,
+            data
+        )
+
+    def _generate_from_template_sync(
+        self,
+        template_html: str,
+        data: Dict[str, Any]
+    ) -> BytesIO:
+        """Generate PDF from HTML template using Jinja2 (synchronous implementation)."""
         # Render template with data
         template = Template(template_html)
         rendered_html = template.render(**data)

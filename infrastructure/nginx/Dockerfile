@@ -2,7 +2,6 @@ FROM nginx:alpine
 
 # Copy custom nginx config
 COPY nginx.conf /etc/nginx/nginx.conf
-COPY conf.d/ /etc/nginx/conf.d/
 
 # Create SSL directory
 RUN mkdir -p /etc/nginx/ssl

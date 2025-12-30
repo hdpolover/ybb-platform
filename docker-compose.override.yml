@@ -1,6 +1,4 @@
-version: '3.8'
-
 services:
   nginx:
     ports:
-      - "8080:80" # Expose Nginx on port 8080 for local dev
+      - "8888:80" # Expose Nginx on port 8888 for local dev (avoiding 8080 conflict with Traefik)

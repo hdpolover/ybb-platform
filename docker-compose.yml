@@ -176,7 +176,7 @@ services:
     restart: unless-stopped
     environment:
       PORT: 8002
-      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_URL: ${DATABASE_URL_PAYMENT}
       RABBITMQ_URL: ${RABBITMQ_URL}
     volumes:
       - ./services/payment-service:/app
@@ -211,7 +211,7 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
       MINIO_PUBLIC_SECURE: ${MINIO_PUBLIC_SECURE}
-      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_URL: ${DATABASE_URL_FILE}
       SERVICE_PORT: 8001
     volumes:
       - ./services/file-service:/app
@@ -301,11 +301,22 @@ services:
     restart: unless-stopped
     volumes:
       - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./infrastructure/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./infrastructure/nginx/conf.d/default.dev.conf:/etc/nginx/conf.d/default.conf:ro
       - ./infrastructure/nginx/ssl:/etc/nginx/ssl:ro
     networks:
       - ybb-network
       - web_gateway
+    depends_on:
+      - api
+      - admin-dashboard
+      - minio
+      - payment-service
+      - notification-service
+      - file-service
+      - rabbitmq
+      - grafana
+      - prometheus
+      - pgadmin
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.landing.rule=Host(`ybbhub.com`)"
