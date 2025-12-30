@@ -27,10 +27,28 @@ func (h *CancelPaymentHandler) Handle(ctx context.Context, paymentID string) (*d
 		return nil, exceptions.ErrPaymentNotFound
 	}
 
-	// Validasi: Hanya status Pending yang bisa di-cancel
-	if payment.Status != entities.PaymentStatusPending {
-		return nil, fmt.Errorf("only pending payments can be cancelled")
-	}
+	// Cek jika sudah selesai (Success/Failed/Cancelled)
+    if payment.Status == entities.PaymentStatusSuccess || 
+       payment.Status == entities.PaymentStatusFailed || 
+       payment.Status == entities.PaymentStatusCancelled {
+        return nil, fmt.Errorf("payment is already finished with status %s", payment.Status)
+    }
+
+    // Validasi Khusus MANUAL
+    if payment.PaymentType == entities.PaymentTypeManual {
+        // Manual hanya boleh cancel jika masih PENDING (Belum upload bukti)
+        if payment.Status != entities.PaymentStatusPending {
+            return nil, fmt.Errorf("cannot cancel manual payment that is being processed (proof uploaded). please contact admin")
+        }
+    }
+
+    // Validasi Khusus AUTOMATIC
+    if payment.PaymentType == entities.PaymentTypeAutomatic {
+        // Automatic boleh cancel selama belum final (Pending/Processing oke)
+        if payment.Status != entities.PaymentStatusPending && payment.Status != entities.PaymentStatusProcessing {
+             return nil, fmt.Errorf("cannot cancel automatic payment with status %s", payment.Status)
+        }
+    }
 
 	gateway, err := h.gatewayFactory.GetGateway(payment.GatewayName)
 	if err != nil {
@@ -44,7 +62,7 @@ func (h *CancelPaymentHandler) Handle(ctx context.Context, paymentID string) (*d
 	}
 
 	// Update DB
-	payment.Status = entities.PaymentStatusFailed
+	payment.Status = entities.PaymentStatusCancelled
 	payment.UpdatedAt = time.Now()
 	
 	if err := h.paymentRepo.Update(ctx, payment); err != nil {
@@ -52,7 +70,19 @@ func (h *CancelPaymentHandler) Handle(ctx context.Context, paymentID string) (*d
 	}
 
 	return &dto.PaymentResponseDTO{
-		ID:     payment.ID,
-		Status: string(payment.Status),
+		ID:             payment.ID,
+		ApplicationID:  payment.ApplicationID,
+		UserID:         payment.UserID,
+		Amount:         payment.Amount,
+		Currency:       payment.Currency,
+		Status:         string(payment.Status),
+		PaymentType:    string(payment.PaymentType),
+		PaymentMethod:  string(payment.PaymentMethod),
+		GatewayName:    payment.GatewayName,
+		GatewayOrderID: payment.GatewayOrderID,
+		Description:    payment.Description,
+		RedirectURL:    payment.RedirectURL, // Jika ada
+		CreatedAt:      payment.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:      payment.UpdatedAt.Format(time.RFC3339),
 	}, nil
 }
