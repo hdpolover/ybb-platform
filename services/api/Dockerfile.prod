@@ -23,7 +23,10 @@ ENV NODE_ENV=production
 RUN apk add --no-cache openssl curl
 
 COPY package*.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci --only=production
+RUN --mount=type=cache,target=/root/.npm \
+    npm config set fetch-retry-maxtimeout 600000 && \
+    npm config set fetch-retries 5 && \
+    npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
 # Copy prisma schema if it exists in expected location for generating client
