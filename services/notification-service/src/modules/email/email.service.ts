@@ -11,7 +11,7 @@ export class EmailService {
     private transporter: nodemailer.Transporter;
     private resend: Resend;
     private readonly logger = new Logger(EmailService.name);
-    private readonly templateCache = new Map<string, HandlebarsTemplateDelegate>();
+    private readonly templateCache = new Map<string, hbs.TemplateDelegate>();
 
     constructor(private configService: ConfigService) {
         const resendKey = this.configService.get('RESEND_API_KEY');
@@ -67,10 +67,11 @@ export class EmailService {
         }
     }
 
-    priv// Check cache first
-        if (this.templateCache.has(templateName)) {
-            const compiled = this.templateCache.get(templateName);
-            return this.renderWithLayout(compiled, data);
+    private async compileTemplate(templateName: string, data: any): Promise<string> {
+        // Check cache first
+        const cached = this.templateCache.get(templateName);
+        if (cached) {
+            return this.renderWithLayout(cached, data);
         }
 
         const filePath = path.join(process.cwd(), 'src/modules/email/templates', `${templateName}.hbs`);
@@ -92,7 +93,7 @@ export class EmailService {
         }
     }
 
-    private renderWithLayout(compiledTemplate: HandlebarsTemplateDelegate, data: any): string {
+    private renderWithLayout(compiledTemplate: hbs.TemplateDelegate, data: any): string {
         // If we have a layout, we might want to wrap it manually or use handlebars-layouts
         // For simplicity here, we'll assume the template extends the layout or is standalone
         // But to actually use the layout wrapper we defined earlier, we can do this:
@@ -107,8 +108,7 @@ export class EmailService {
             return layoutCompiled({ ...data, body, year: new Date().getFullYear() });
         }
 
-        return compiledTemplate
-        return compiled(data);
+        return compiledTemplate(data);
     }
 
     async sendEmail(to: string, subject: string, html: string) {
