@@ -39,45 +39,8 @@ help:
 # QUICK START - One command for new developers
 # ===========================================
 start:
-	@echo "🚀 YBB Platform - Quick Start"
-	@echo "=============================="
-	@if [ ! -f .env ]; then \
-		echo "📋 Creating .env file from template..."; \
-		cp .env.example .env; \
-		echo "✅ .env created (using defaults)"; \
-	fi
-	@echo "🔨 Building Docker images..."
-	@docker-compose build --quiet
-	@echo "🗄️  Starting PostgreSQL first..."
-	@docker-compose up -d postgres
-	@echo "⏳ Waiting for database to be ready..."
-	@sleep 5
-	@until docker exec ybb-postgres pg_isready -U ybb_user -d postgres > /dev/null 2>&1; do \
-		echo "   Still waiting for PostgreSQL..."; \
-		sleep 2; \
-	done
-	@echo "✅ PostgreSQL is ready!"
-	@echo "🚀 Starting all services..."
-	@docker-compose up -d
-	@echo ""
-	@echo "✅ YBB Platform is running!"
-	@echo ""
-	@echo "🌐 Access points:"
-	@echo "   Admin Dashboard: http://localhost:4001"
-	@echo "   API Gateway:     http://localhost:4000"
-	@echo "   API Docs:        http://localhost:4000/api/docs"
-	@echo "   Payment Service: http://localhost:8002"
-	@echo "   File Service:    http://localhost:8001"
-	@echo ""
-	@echo "📊 Database:"
-	@echo "   PostgreSQL:      localhost:5432"
-	@echo "   Redis:           localhost:6379"
-	@echo ""
-	@echo "💡 Useful commands:"
-	@echo "   make logs   - View all logs"
-	@echo "   make stop   - Stop everything"
-	@echo "   make health - Check service health"
-	@echo ""
+	@chmod +x ./scripts/start-safe.sh
+	@./scripts/start-safe.sh
 
 # Development
 dev:

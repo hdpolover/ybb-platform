@@ -25,6 +25,14 @@ app.include_router(documents.router, prefix="/api/v1")
 app.include_router(images.router, prefix="/api/v1")
 
 
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database on startup."""
+    from app.infrastructure.persistence.postgres.database import engine, Base
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+
 @app.get("/")
 async def root():
     """Root endpoint."""

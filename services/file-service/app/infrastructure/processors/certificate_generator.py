@@ -52,7 +52,8 @@ class CertificateGeneratorService:
         participant_data: Dict[str, Any],
         program_data: Dict[str, Any],
         template_path: Optional[str] = None
-    ) -> BytesIO: asynchronously."""
+    ) -> BytesIO:
+        """Generate completion certificate."""
         return await run_in_threadpool(
             self._generate_completion_certificate_sync,
             participant_data,
@@ -66,8 +67,7 @@ class CertificateGeneratorService:
         program_data: Dict[str, Any],
         template_path: Optional[str] = None
     ) -> BytesIO:
-        """Generate completion certificate (synchronous implementation)
-        """Generate completion certificate.
+        """Generate completion certificate (synchronous implementation).
         
         Args:
             participant_data: Dict with name, email, etc.
