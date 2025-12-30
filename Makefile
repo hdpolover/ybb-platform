@@ -45,7 +45,7 @@ start:
 # Development
 dev:
 	@echo "Starting development environment..."
-	docker-compose up -d
+	docker compose up -d
 	@echo "Services are starting. Run 'make logs' to view logs."
 	@echo "Access points:"
 	@echo "  - Admin Dashboard: http://localhost:4001"
@@ -55,28 +55,28 @@ dev:
 
 stop:
 	@echo "Stopping all services..."
-	docker-compose down
+	docker compose down
 
 restart:
 	@echo "Restarting all services..."
-	docker-compose restart
+	docker compose restart
 
 logs:
-	docker-compose logs -f
+	docker compose logs -f
 
 build:
 	@echo "Building all Docker images..."
-	docker-compose build
+	docker compose build
 
 # Production
 prod:
 	@echo "Starting production environment..."
-	docker-compose -f docker-compose.prod.yml up -d
+	docker compose -f docker compose.prod.yml up -d
 	@echo "Production services are running."
 
 prod-build:
 	@echo "Building production images..."
-	docker-compose -f docker-compose.prod.yml build
+	docker compose -f docker compose.prod.yml build
 
 # Database operations
 setup:
@@ -86,7 +86,7 @@ setup:
 
 migrate:
 	@echo "Running database migrations..."
-	docker-compose exec api npm run migration:run
+	docker compose exec api npm run migration:run
 
 seed-db:
 	@echo "Seeding database..."
@@ -108,7 +108,7 @@ db-reset:
 	@echo "⚠️  WARNING: This will DELETE all data!"
 	@read -p "Are you sure? Type 'yes' to continue: " confirm && [ "$$confirm" = "yes" ] || exit 1
 	@echo "🗑️  Stopping services and removing database volume..."
-	docker-compose down
+	docker compose down
 	docker volume rm ybb-platform_postgres_data 2>/dev/null || true
 	@echo "🔄 Restarting with fresh database..."
 	@$(MAKE) start
@@ -117,7 +117,7 @@ db-reset:
 # Maintenance
 clean:
 	@echo "Cleaning up all containers, volumes, and images..."
-	docker-compose down -v --rmi all
+	docker compose down -v --rmi all
 	@echo "Cleanup complete."
 
 health:
@@ -126,7 +126,7 @@ health:
 	./scripts/health-check.sh
 
 ps:
-	docker-compose ps
+	docker compose ps
 
 # Code generation
 proto:
@@ -136,29 +136,29 @@ proto:
 
 # Individual service operations
 api-logs:
-	docker-compose logs -f api
+	docker compose logs -f api
 
 payment-logs:
-	docker-compose logs -f payment-service
+	docker compose logs -f payment-service
 
 file-logs:
-	docker-compose logs -f file-service
+	docker compose logs -f file-service
 
 dashboard-logs:
-	docker-compose logs -f admin-dashboard
+	docker compose logs -f admin-dashboard
 
 # Shell access
 api-shell:
-	docker-compose exec api sh
+	docker compose exec api sh
 
 payment-shell:
-	docker-compose exec payment-service sh
+	docker compose exec payment-service sh
 
 file-shell:
-	docker-compose exec file-service sh
+	docker compose exec file-service sh
 
 db-shell:
-	docker-compose exec postgres psql -U ${DATABASE_USER} -d ${DATABASE_NAME}
+	docker compose exec postgres psql -U ${DATABASE_USER} -d ${DATABASE_NAME}
 
 redis-shell:
-	docker-compose exec redis redis-cli
+	docker compose exec redis redis-cli
