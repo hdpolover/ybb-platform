@@ -71,12 +71,12 @@ build:
 # Production
 prod:
 	@echo "Starting production environment..."
-	docker compose -f docker compose.prod.yml up -d
+	docker compose -f docker-compose.prod.yml up -d
 	@echo "Production services are running."
 
 prod-build:
 	@echo "Building production images..."
-	docker compose -f docker compose.prod.yml build
+	docker compose -f docker-compose.prod.yml build
 
 # Database operations
 setup:
