@@ -6,7 +6,7 @@ WORKDIR /app
 RUN apk add --no-cache openssl
 
 COPY package*.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci
 
 COPY . .
 COPY . .
@@ -23,7 +23,7 @@ ENV NODE_ENV=production
 RUN apk add --no-cache openssl curl
 
 COPY package*.json ./
-RUN npm ci --only=production
+RUN --mount=type=cache,target=/root/.npm npm ci --only=production
 
 COPY --from=builder /app/dist ./dist
 # Copy prisma schema if it exists in expected location for generating client
