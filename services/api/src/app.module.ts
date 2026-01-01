@@ -17,6 +17,7 @@ import { SystemModule } from '@modules/system/system.module';
 import { BrandsModule } from '@modules/brands/brands.module';
 import { SupportModule } from '@modules/support/support.module';
 import { AchievementsModule } from '@modules/achievements/achievements.module';
+import { LandingModule } from '@modules/landing/landing.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { AchievementsModule } from '@modules/achievements/achievements.module';
     BrandsModule,
     SupportModule,
     AchievementsModule,
+    LandingModule,
   ],
   controllers: [CacheController, MetricsController],
 })
