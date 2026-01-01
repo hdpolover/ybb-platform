@@ -2,13 +2,15 @@ package gateways
 
 import (
 	"context"
+	"crypto/sha512"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log"
-	"crypto/sha512"
-	"encoding/hex" 
-	"encoding/json"
+	"strings"
 
 	"github.com/midtrans/midtrans-go"
+	"github.com/midtrans/midtrans-go/coreapi" // WAJIB: Import ini untuk Verify/Cancel/Refund
 	"github.com/midtrans/midtrans-go/snap"
 	"github.com/ybb-platform/payment-service/internal/domain/entities"
 	domainGateways "github.com/ybb-platform/payment-service/internal/domain/gateways"
@@ -16,9 +18,10 @@ import (
 
 // MidtransGateway implements PaymentGateway for Midtrans
 type MidtransGateway struct {
-	client    snap.Client
-	serverKey string
-	env       string
+	snapClient    snap.Client    // Client untuk Create Payment (Frontend)
+	coreApiClient coreapi.Client // Client untuk Verify, Cancel, Refund (Backend)
+	serverKey     string
+	env           string
 }
 
 // NewMidtransGateway creates a new Midtrans payment gateway
@@ -30,13 +33,19 @@ func NewMidtransGateway(serverKey, clientKey, env string) *MidtransGateway {
 		midtransEnv = midtrans.Sandbox
 	}
 
-	client := snap.Client{}
-	client.New(serverKey, midtransEnv)
+	// 1. Init Snap Client
+	sClient := snap.Client{}
+	sClient.New(serverKey, midtransEnv)
+
+	// 2. Init Core API Client (Untuk Verify/Refund/Cancel)
+	cClient := coreapi.Client{}
+	cClient.New(serverKey, midtransEnv)
 
 	return &MidtransGateway{
-		client:    client,
-		serverKey: serverKey,
-		env:       env,
+		snapClient:    sClient,
+		coreApiClient: cClient,
+		serverKey:     serverKey,
+		env:           env,
 	}
 }
 
@@ -47,62 +56,117 @@ func (g *MidtransGateway) GetName() string {
 
 // CreatePayment creates a payment with Midtrans Snap
 func (g *MidtransGateway) CreatePayment(ctx context.Context, req *domainGateways.CreatePaymentRequest) (*domainGateways.CreatePaymentResponse, error) {
-	// Build Snap request
-	snapReq := &snap.Request{
-		TransactionDetails: midtrans.TransactionDetails{
-			OrderID:  req.Payment.ID,
-			GrossAmt: int64(req.Payment.Amount),
-		},
-		CustomerDetail: &midtrans.CustomerDetails{
-			FName: req.CustomerName,
-			Email: req.CustomerEmail,
-			Phone: req.CustomerPhone,
-		},
-		EnabledPayments: []snap.SnapPaymentType{
-			snap.SnapPaymentType(req.PaymentMethod),
-		},
-		Callbacks: &snap.Callbacks{
-			Finish: req.CallbackURL,
-		},
-	}
+    
+    // 1. Tentukan Payment Method (Logic diperbaiki)
+    // Default-nya nil (kosong/null), agar Midtrans menampilkan SEMUA.
+    var enabledPayments []snap.SnapPaymentType
 
-	// Create transaction
-	// TODO for intern: Handle this properly with error handling
-	snapResp, err := g.client.CreateTransaction(snapReq)
-	if err != nil {
-		log.Printf("Midtrans CreateTransaction failed: %v", err)
-		return nil, fmt.Errorf("midtrans create transaction failed: %w", err)
-	}
+    // Jika user minta SPESIFIK (bukan automatic), baru kita isi list-nya.
+    if req.PaymentMethod != "" && req.PaymentMethod != "automatic" {
+        enabledPayments = []snap.SnapPaymentType{
+            snap.SnapPaymentType(req.PaymentMethod),
+        }
+    }
 
-	return &domainGateways.CreatePaymentResponse{
-		RedirectURL:    snapResp.RedirectURL,
-		Token:          snapResp.Token,
-		GatewayOrderID: req.Payment.ID, // Midtrans uses our order ID
-		Raw:            snapResp,
-	}, nil
+    // 2. Build Snap request
+    snapReq := &snap.Request{
+        TransactionDetails: midtrans.TransactionDetails{
+            OrderID:  req.Payment.ID,
+            GrossAmt: int64(req.Payment.Amount),
+        },
+        CustomerDetail: &midtrans.CustomerDetails{
+            FName: req.CustomerName,
+            Email: req.CustomerEmail,
+            Phone: req.CustomerPhone,
+        },
+        
+        EnabledPayments: enabledPayments, 
+
+        Callbacks: &snap.Callbacks{
+            Finish: req.CallbackURL,
+        },
+    }
+
+    // Create transaction
+    snapResp, err := g.snapClient.CreateTransaction(snapReq)
+    if err != nil {
+        log.Printf("Midtrans CreateTransaction failed: %v", err)
+        return nil, fmt.Errorf("midtrans create transaction failed: %w", err)
+    }
+
+    return &domainGateways.CreatePaymentResponse{
+        RedirectURL:    snapResp.RedirectURL,
+        Token:          snapResp.Token,
+        GatewayOrderID: req.Payment.ID,
+        Raw:            snapResp,
+    }, nil
 }
 
-// VerifyPayment verifies payment status with Midtrans
-// TODO for intern: Implement this using Midtrans Core API
+// VerifyPayment verifies payment status with Midtrans Core API
 func (g *MidtransGateway) VerifyPayment(ctx context.Context, gatewayOrderID string) (*entities.Payment, error) {
-	// TODO: Use Midtrans Core API to get transaction status
-	// coreapi := coreapi.Client{}
-	// coreapi.New(g.serverKey, midtransEnv)
-	// transactionStatusResp, err := coreapi.CheckTransaction(gatewayOrderID)
+    // 1. Panggil Core API CheckTransaction
+    resp, err := g.coreApiClient.CheckTransaction(gatewayOrderID)
+    
+    // --- BAGIAN PERBAIKAN DIMULAI DARI SINI ---
+    if err != nil {
+        // Kita cek pesan errornya. Jika isinya "404" atau "Transaction doesn't exist",
+        // Itu artinya user belum memilih metode pembayaran di halaman Snap.
+        // KITA JANGAN RETURN ERROR, tapi return status PENDING.
+        errMessage := err.Error()
+        if strings.Contains(errMessage, "404") || strings.Contains(errMessage, "Transaction doesn't exist") {
+            return &entities.Payment{
+                ID:              gatewayOrderID,
+                Status:          entities.PaymentStatusPending, // Paksa jadi Pending
+                GatewayOrderID:  gatewayOrderID,
+                GatewayResponse: map[string]interface{}{"status_message": "Transaction not found in Midtrans (Not started yet)"},
+            }, nil
+        }
 
-	log.Printf("TODO: Verify payment with Midtrans for order ID: %s", gatewayOrderID)
-	return nil, fmt.Errorf("not implemented")
+        // Jika errornya BUKAN 404 (misal: koneksi putus), baru kita return error beneran
+        return nil, fmt.Errorf("midtrans check transaction failed: %w", err)
+    }
+    // --- BAGIAN PERBAIKAN SELESAI ---
+
+    // 2. Mapping Status dari Midtrans ke Entity Aplikasi (Kode lama tetap sama)
+    var status entities.PaymentStatus
+    
+    transactionStatus := resp.TransactionStatus
+    fraudStatus := resp.FraudStatus
+
+    switch transactionStatus {
+    case "capture":
+        switch fraudStatus {
+        case "challenge":
+            status = entities.PaymentStatusProcessing
+        case "accept":
+            status = entities.PaymentStatusSuccess
+        }
+    case "settlement":
+        status = entities.PaymentStatusSuccess
+    case "deny", "cancel", "expire":
+        status = entities.PaymentStatusFailed
+    case "pending":
+        status = entities.PaymentStatusPending
+    default:
+        status = entities.PaymentStatusProcessing
+    }
+
+    // Konversi Struct Response Midtrans ke map
+    var rawResponse map[string]interface{}
+    if data, err := json.Marshal(resp); err == nil {
+        _ = json.Unmarshal(data, &rawResponse)
+    }
+
+    return &entities.Payment{
+        ID:              gatewayOrderID,
+        Status:          status,
+        GatewayOrderID:  gatewayOrderID,
+        GatewayResponse: rawResponse,
+    }, nil
 }
 
 // HandleWebhook processes Midtrans webhook notification
-// TODO for intern: Implement webhook handling with signature verification
 func (g *MidtransGateway) HandleWebhook(ctx context.Context, payload []byte) (*entities.Payment, error) {
-	// TODO: Parse webhook payload
-	// TODO: Verify signature
-	// TODO: Update payment status based on transaction_status
-
-	// log.Printf("TODO: Handle Midtrans webhook")
-	// return nil, fmt.Errorf("not implemented")
 	// 1. Parse JSON Payload
 	var notification map[string]interface{}
 	if err := json.Unmarshal(payload, &notification); err != nil {
@@ -118,25 +182,24 @@ func (g *MidtransGateway) HandleWebhook(ctx context.Context, payload []byte) (*e
 	fraudStatus, _ := notification["fraud_status"].(string)
 
 	// 3. Verifikasi Signature (Security Check)
-	// Rumus Midtrans: SHA512(order_id + status_code + gross_amount + ServerKey)
 	rawString := orderID + statusCode + grossAmount + g.serverKey
 	hasher := sha512.New()
 	hasher.Write([]byte(rawString))
 	expectedSignature := hex.EncodeToString(hasher.Sum(nil))
 
-	// Jika signature tidak cocok, tolak request
 	if signatureKey != expectedSignature {
 		return nil, fmt.Errorf("invalid signature key")
 	}
 
-	// 4. Translate Status Midtrans ke Status Aplikasi
+	// 4. Translate Status
 	var paymentStatus entities.PaymentStatus
 
 	switch transactionStatus {
 	case "capture":
-		if fraudStatus == "challenge" {
+		switch fraudStatus {
+		case "challenge":
 			paymentStatus = entities.PaymentStatusProcessing
-		} else if fraudStatus == "accept" {
+		case "accept":
 			paymentStatus = entities.PaymentStatusSuccess
 		}
 	case "settlement":
@@ -149,7 +212,6 @@ func (g *MidtransGateway) HandleWebhook(ctx context.Context, payload []byte) (*e
 		paymentStatus = entities.PaymentStatusProcessing
 	}
 
-	// 5. Return struct payment yang berisi status baru
 	return &entities.Payment{
 		ID:              orderID,
 		Status:          paymentStatus,
@@ -158,16 +220,32 @@ func (g *MidtransGateway) HandleWebhook(ctx context.Context, payload []byte) (*e
 	}, nil
 }
 
-// CancelPayment cancels a payment
-// TODO for intern: Implement cancellation
+// CancelPayment cancels a payment (Only works for Pending transactions)
 func (g *MidtransGateway) CancelPayment(ctx context.Context, gatewayOrderID string) error {
-	log.Printf("TODO: Cancel payment with Midtrans for order ID: %s", gatewayOrderID)
-	return fmt.Errorf("not implemented")
+	// Panggil Core API CancelTransaction
+	// Note: Midtrans hanya mengizinkan cancel untuk transaksi yang statusnya masih Pending
+	// atau Fraud Challenge.
+	_, err := g.coreApiClient.CancelTransaction(gatewayOrderID)
+	if err != nil {
+		return fmt.Errorf("midtrans cancel transaction failed: %w", err)
+	}
+	return nil
 }
 
 // RefundPayment refunds a payment
-// TODO for intern: Implement refund
 func (g *MidtransGateway) RefundPayment(ctx context.Context, gatewayOrderID string, amount float64) error {
-	log.Printf("TODO: Refund payment with Midtrans for order ID: %s, amount: %.2f", gatewayOrderID, amount)
-	return fmt.Errorf("not implemented")
+	// Siapkan Request Refund
+	req := &coreapi.RefundReq{
+		Amount: int64(amount),
+		Reason: "Refund requested by system/admin",
+	}
+
+	// Panggil Core API DirectRefundTransaction
+	// Note: Fitur Direct Refund di Midtrans biasanya perlu diaktifkan by request ke support Midtrans
+	_, err := g.coreApiClient.DirectRefundTransaction(gatewayOrderID, req)
+	if err != nil {
+		return fmt.Errorf("midtrans refund transaction failed: %w", err)
+	}
+	
+	return nil
 }

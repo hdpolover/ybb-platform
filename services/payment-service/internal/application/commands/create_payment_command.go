@@ -8,6 +8,7 @@ type CreatePaymentCommand struct {
 	Currency      string  `json:"currency" validate:"required,len=3"`
 	PaymentMethod string  `json:"payment_method" validate:"required"`
 	GatewayName   string  `json:"gateway_name" validate:"required"`
+	Description   string  `json:"description"`
 	CustomerName  string  `json:"customer_name" validate:"required"`
 	CustomerEmail string  `json:"customer_email" validate:"required,email"`
 	CustomerPhone string  `json:"customer_phone" validate:"required"`
@@ -16,7 +17,7 @@ type CreatePaymentCommand struct {
 }
 
 // NewCreatePaymentCommand creates a new CreatePaymentCommand
-func NewCreatePaymentCommand(applicationID, userID string, amount float64, currency, paymentMethod, gatewayName, customerName, customerEmail, customerPhone, callbackURL, returnURL string) *CreatePaymentCommand {
+func NewCreatePaymentCommand(applicationID, userID string, amount float64, currency, paymentMethod, gatewayName, description, customerName, customerEmail, customerPhone, callbackURL, returnURL string) *CreatePaymentCommand {
 	return &CreatePaymentCommand{
 		ApplicationID: applicationID,
 		UserID:        userID,
@@ -24,6 +25,7 @@ func NewCreatePaymentCommand(applicationID, userID string, amount float64, curre
 		Currency:      currency,
 		PaymentMethod: paymentMethod,
 		GatewayName:   gatewayName,
+		Description:   description,
 		CustomerName:  customerName,
 		CustomerEmail: customerEmail,
 		CustomerPhone: customerPhone,

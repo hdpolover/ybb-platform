@@ -24,6 +24,9 @@ type PaymentRepository interface {
 	// Update updates an existing payment
 	Update(ctx context.Context, payment *entities.Payment) error
 
+	// UpdateProof for manual gateway payments
+	UpdateProof(ctx context.Context, id string, fileID string, fileURL string) error
+
 	// FindByGatewayOrderID finds a payment by the gateway's order ID
 	FindByGatewayOrderID(ctx context.Context, gatewayOrderID string) (*entities.Payment, error)
 }

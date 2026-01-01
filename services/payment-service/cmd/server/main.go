@@ -42,7 +42,7 @@ import (
 // @license.name  Apache 2.0
 // @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
 
-// @host      localhost:8081
+// @host      localhost:8002
 // @BasePath  /api/v1
 
 // @securityDefinitions.basic BasicAuth
@@ -103,6 +103,35 @@ func main() {
 	gatewayFactory.Register(manualGateway)
 	log.Println("Registered payment gateways: Manual")
 
+	// Register Xendit Gateway
+	if cfg.XenditSecretKey != "" {
+		xenditGateway := infraGateways.NewXenditGateway(cfg.XenditSecretKey)
+		gatewayFactory.Register(xenditGateway)
+		log.Println("Registered payment gateways: Xendit")
+	} else {
+		log.Println("Warning: Xendit Secret Key is empty, skipping registration")
+	}
+
+	if cfg.StripeSecretKey != "" {
+        stripeGateway := infraGateways.NewStripeGateway(cfg.StripeSecretKey)
+        gatewayFactory.Register(stripeGateway)
+        log.Println("Registered payment gateways: Stripe")
+    } else {
+        log.Println("Warning: Stripe Secret Key is empty, skipping registration")
+    }
+
+	if cfg.PayPalClientID != "" {
+        paypalGateway := infraGateways.NewPayPalGateway(
+            cfg.PayPalClientID,
+            cfg.PayPalSecret,
+            cfg.PayPalMode,
+        )
+        gatewayFactory.Register(paypalGateway)
+        log.Println("Registered payment gateways: PayPal")
+    } else {
+        log.Println("Warning: PayPal Client ID is empty, skipping registration")
+    }
+
 	// Initialize repositories
 	paymentRepo := persistence.NewGormPaymentRepository(db)
 	paymentMethodRepo := persistence.NewPaymentMethodRepository(db)
@@ -113,11 +142,40 @@ func main() {
 		gatewayFactory,
 		eventPublisher,
 	)
+
+	verifyStatusHandler := commandHandlers.NewVerifyStatusHandler(
+        paymentRepo,
+        gatewayFactory,
+    )
+
+	cancelPaymentHandler := commandHandlers.NewCancelPaymentHandler(
+		paymentRepo,
+		gatewayFactory,
+	)
+
+	retryPaymentHandler := commandHandlers.NewRetryPaymentHandler(
+		paymentRepo, 
+		gatewayFactory,
+	)
+
+	// Refund Handler
+    refundPaymentHandler := commandHandlers.NewRefundPaymentHandler(
+        paymentRepo,
+        gatewayFactory,
+        eventPublisher,
+    )
+
 	getPaymentHandler := queryHandlers.NewGetPaymentHandler(paymentRepo)
 
 	paymentHandler := handlers.NewPaymentHandler(
 		createPaymentHandler,
 		getPaymentHandler,
+
+		verifyStatusHandler,
+		cancelPaymentHandler,
+		refundPaymentHandler,
+		retryPaymentHandler,
+
 		paymentRepo,
 		eventPublisher,
 		gatewayFactory,
@@ -182,6 +240,11 @@ func setupRouter(paymentHandler *handlers.PaymentHandler, paymentMethodHandler *
 			payments.GET("/:id", paymentHandler.GetPayment)
 			payments.GET("/user/:userId", paymentHandler.GetPaymentsByUser)
 			payments.POST("/webhook/:gateway", paymentHandler.HandleWebhook)
+
+			payments.POST("/:id/verify-status", paymentHandler.VerifyPaymentStatus)
+			payments.POST("/:id/refund", paymentHandler.RefundPayment)
+			payments.POST("/:id/cancel", paymentHandler.CancelPayment)
+			payments.POST("/:id/retry", paymentHandler.RetryPayment)
 
 			// Manual Payment Features
 			payments.POST("/:id/proof", paymentHandler.UploadProof)
