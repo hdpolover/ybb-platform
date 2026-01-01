@@ -1,13 +1,22 @@
 """Dependency injection container."""
 from functools import lru_cache
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+import os
+
+# --- IMPORT INFRASTRUCTURE ---
 from app.infrastructure.storage.minio_storage import MinIOStorage
+from app.infrastructure.persistence.postgres.database import get_db
+from app.infrastructure.persistence.postgres.file_repository import PostgresFileRepository
+
+# --- IMPORT HANDLERS ---
 from app.application.commands.handlers.upload_file_handler import UploadFileHandler
 from app.application.queries.handlers.get_file_handler import GetFileHandler
-from app.infrastructure.persistence.in_memory_file_repository import InMemoryFileRepository
+
+# --- IMPORT PROCESSORS ---
 from app.infrastructure.processors.excel_export import ExcelExportService
 from app.infrastructure.processors.pdf_generator import PDFGeneratorService
 from app.infrastructure.processors.certificate_generator import CertificateGeneratorService
-import os
 
 
 # Singleton storage service
@@ -19,19 +28,15 @@ def get_storage_service() -> MinIOStorage:
         access_key=os.getenv("MINIO_ACCESS_KEY", "minioadmin"),
         secret_key=os.getenv("MINIO_SECRET_KEY", "minioadmin"),
         secure=os.getenv("MINIO_SECURE", "false").lower() == "true",
-        # Public endpoint for browser-accessible presigned URLs
-        # In dev: localhost:9000, in prod: files.yourdomain.com or CDN URL
         public_endpoint=os.getenv("MINIO_PUBLIC_ENDPOINT", "localhost:9000"),
         public_secure=os.getenv("MINIO_PUBLIC_SECURE", "false").lower() == "true"
     )
 
 
-# Singleton repository (in-memory for now)
-# TODO: Replace with PostgreSQL repository
-@lru_cache()
-def get_file_repository() -> InMemoryFileRepository:
-    """Get file repository instance."""
-    return InMemoryFileRepository()
+# Ganti InMemory jadi Postgres
+def get_file_repository(session: AsyncSession = Depends(get_db)) -> PostgresFileRepository:
+    """Get PostgreSQL file repository instance."""
+    return PostgresFileRepository(session)
 
 
 # Document generation services
@@ -56,17 +61,22 @@ def get_certificate_generator_service() -> CertificateGeneratorService:
     )
 
 
-def get_upload_handler() -> UploadFileHandler:
+# Inject Repository via Depends
+def get_upload_handler(
+    file_repository: PostgresFileRepository = Depends(get_file_repository)
+) -> UploadFileHandler:
     """Get upload file handler."""
     return UploadFileHandler(
         storage_service=get_storage_service(),
-        file_repository=get_file_repository()
+        file_repository=file_repository
     )
 
 
-def get_get_file_handler() -> GetFileHandler:
+def get_get_file_handler(
+    file_repository: PostgresFileRepository = Depends(get_file_repository)
+) -> GetFileHandler:
     """Get file handler."""
     return GetFileHandler(
-        file_repository=get_file_repository(),
+        file_repository=file_repository,
         storage_service=get_storage_service()
     )

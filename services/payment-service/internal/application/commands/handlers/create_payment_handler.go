@@ -38,7 +38,7 @@ func NewCreatePaymentHandler(
 
 // Handle executes the CreatePaymentCommand
 func (h *CreatePaymentHandler) Handle(ctx context.Context, cmd *commands.CreatePaymentCommand) (*dto.PaymentResponseDTO, error) {
-	// 1. Validate amount and currency
+	// Validate amount and currency
 	if cmd.Amount <= 0 {
 		return nil, exceptions.ErrInvalidAmount
 	}
@@ -47,31 +47,45 @@ func (h *CreatePaymentHandler) Handle(ctx context.Context, cmd *commands.CreateP
 		return nil, exceptions.ErrInvalidCurrency
 	}
 
-	// 2. Get payment gateway
+	// Get payment gateway
 	gateway, err := h.gatewayFactory.GetGateway(cmd.GatewayName)
 	if err != nil {
 		log.Printf("Failed to get gateway: %v", err)
 		return nil, exceptions.ErrUnsupportedGateway
 	}
 
-	// 3. Create payment entity
+	// TENTUKAN PAYMENT TYPE
+	determinedPaymentType := "automatic"
+	if cmd.GatewayName == "manual" {
+		determinedPaymentType = "manual"
+	}
+
+	// Create payment entity
 	payment := entities.NewPayment(
 		cmd.ApplicationID,
 		cmd.UserID,
 		cmd.Amount,
 		cmd.Currency,
-		"", // description - can be added later
+		cmd.Description,
 	)
+
+	// Set Type & Method
+	payment.PaymentType = entities.PaymentType(determinedPaymentType) // Set Manual/Automatic
 	payment.PaymentMethod = entities.PaymentMethod(cmd.PaymentMethod)
 	payment.GatewayName = cmd.GatewayName
 
-	// 4. Save payment to database (status: pending)
+	payment.CustomerName = cmd.CustomerName
+	payment.CustomerEmail = cmd.CustomerEmail
+	payment.CustomerPhone = cmd.CustomerPhone
+	payment.CallbackURL = cmd.CallbackURL
+
+	// 5. Save payment to database (status: pending)
 	if err := h.paymentRepo.Create(ctx, payment); err != nil {
 		log.Printf("Failed to create payment: %v", err)
 		return nil, fmt.Errorf("failed to create payment: %w", err)
 	}
 
-	// 5. Create payment with gateway
+	// Create payment with gateway
 	gatewayReq := &gateways.CreatePaymentRequest{
 		Payment:       payment,
 		PaymentMethod: entities.PaymentMethod(cmd.PaymentMethod),
@@ -102,6 +116,8 @@ func (h *CreatePaymentHandler) Handle(ctx context.Context, cmd *commands.CreateP
 			string(payment.Status),
 			payment.GatewayName,
 		)
+		event.Metadata["error"] = err.Error()
+
 		if pubErr := h.eventPublisher.Publish(ctx, event); pubErr != nil {
 			log.Printf("Failed to publish payment failed event: %v", pubErr)
 		}
@@ -109,16 +125,23 @@ func (h *CreatePaymentHandler) Handle(ctx context.Context, cmd *commands.CreateP
 		return nil, fmt.Errorf("gateway payment creation failed: %w", err)
 	}
 
-	// 6. Update payment with gateway order ID
-	payment.MarkAsProcessing(gatewayResp.GatewayOrderID)
+	// Update payment with gateway order ID (dan status jika perlu)
+	if payment.PaymentType == "manual" {
+		payment.GatewayOrderID = gatewayResp.GatewayOrderID
+		
+		payment.Status = entities.PaymentStatusPending 
+	} else {
+		// OTOMATIS (Midtrans/Xendit):
+		// Biasanya langsung dianggap "Processing" (menunggu callback) atau tetap "Pending".
+		payment.MarkAsProcessing(gatewayResp.GatewayOrderID)
+	}
 
 	if err := h.paymentRepo.Update(ctx, payment); err != nil {
 		log.Printf("Failed to update payment: %v", err)
 		return nil, fmt.Errorf("failed to update payment: %w", err)
 	}
 
-	// 7. Publish payment created event
-	// TODO for intern: Implement RabbitMQ event publishing
+	// Publish payment created event
 	event := events.NewPaymentEvent(
 		events.PaymentCreatedEvent,
 		payment.ID,
@@ -129,13 +152,18 @@ func (h *CreatePaymentHandler) Handle(ctx context.Context, cmd *commands.CreateP
 		string(payment.Status),
 		payment.GatewayName,
 	)
+	
+	// Tambahkan metadata lengkap untuk kebutuhan notifikasi/log
+	event.Metadata["payment_type"] = string(payment.PaymentType)
+	event.Metadata["customer_email"] = payment.CustomerEmail
+	event.Metadata["customer_name"] = payment.CustomerName
+	event.Metadata["description"] = payment.Description
 
 	if err := h.eventPublisher.Publish(ctx, event); err != nil {
 		log.Printf("Failed to publish payment created event: %v", err)
-		// Don't fail the request, just log the error
 	}
 
-	// 8. Return response
+	// Return response (Mapping Entity ke DTO)
 	return &dto.PaymentResponseDTO{
 		ID:             payment.ID,
 		ApplicationID:  payment.ApplicationID,
@@ -143,10 +171,15 @@ func (h *CreatePaymentHandler) Handle(ctx context.Context, cmd *commands.CreateP
 		Amount:         payment.Amount,
 		Currency:       payment.Currency,
 		Status:         string(payment.Status),
+		
+		PaymentType:    string(payment.PaymentType), 
+		
 		PaymentMethod:  string(payment.PaymentMethod),
 		GatewayName:    payment.GatewayName,
 		GatewayOrderID: payment.GatewayOrderID,
+		Description:    payment.Description,
 		RedirectURL:    gatewayResp.RedirectURL,
+		Token:          gatewayResp.Token,
 		CreatedAt:      payment.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:      payment.UpdatedAt.Format(time.RFC3339),
 	}, nil

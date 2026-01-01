@@ -27,6 +27,7 @@ type PaymentResponseDTO struct {
 	Amount         float64 `json:"amount"`
 	Currency       string  `json:"currency"`
 	Status         string  `json:"status"`
+	PaymentType    string  `json:"payment_type"`
 	PaymentMethod  string  `json:"payment_method"`
 	GatewayName    string  `json:"gateway_name"`
 	GatewayOrderID string  `json:"gateway_order_id,omitempty"`

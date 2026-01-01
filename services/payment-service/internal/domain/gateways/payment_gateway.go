@@ -24,6 +24,12 @@ type CreatePaymentResponse struct {
 	Raw            interface{} // Raw response from gateway
 }
 
+type PaymentStatusResponse struct {
+	Status         string // "success", "failed", "pending"
+	GatewayOrderID string
+	OriginalStatus string // Status asli dari Midtrans (misal: "settlement")
+}
+
 // PaymentGateway defines the interface that all payment gateways must implement
 // This allows easy addition of new payment gateways (Stripe, PayPal, etc.)
 // TODO for intern: Implement this interface for each payment gateway
