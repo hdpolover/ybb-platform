@@ -7,83 +7,114 @@ export class HomeStrategy implements ILandingPageStrategy {
   constructor(private readonly prisma: PrismaService) {}
 
   async getData() {
-    const [programs, testimonials, sponsors, stats] = await Promise.all([
-      // Fetch active programs
-      this.prisma.program.findMany({
+    const [mainCategory, latestProgram, sponsors] = await Promise.all([
+      // Fetch main program category (brand info)
+      this.prisma.programCategory.findFirst({
+        where: { isActive: true },
+      }),
+      // Fetch the next upcoming active program
+      this.prisma.program.findFirst({
         where: {
           isPublished: true,
-          isVisibleToUsers: true,
           isActive: true,
         },
-        take: 3,
-        orderBy: {
-          startDate: 'asc',
-        },
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          shortDescription: true,
-          thumbnailUrl: true,
-          startDate: true,
-          endDate: true,
-          location: true,
-        },
-      }),
-      // Fetch featured testimonials
-      this.prisma.programTestimonial.findMany({
-        where: {
-          isFeatured: true,
-          isActive: true,
-        },
-        take: 5,
-        orderBy: {
-          order: 'asc',
+        orderBy: { startDate: 'asc' },
+        include: {
+          gallery: {
+            where: { isActive: true },
+            take: 6,
+            orderBy: { order: 'asc' },
+          },
+          pricingTiers: {
+            where: { isActive: true },
+            orderBy: { order: 'asc' },
+          },
+          resources: {
+            where: { isActive: true, isPublic: true },
+            take: 5,
+            orderBy: { order: 'asc' },
+          },
         },
       }),
       // Fetch active sponsors
       this.prisma.sponsor.findMany({
-        where: {
-          isActive: true,
-        },
-        orderBy: {
-          order: 'asc',
-        },
+        where: { isActive: true },
+        orderBy: { order: 'asc' },
       }),
-      // Fetch basic stats
-      this.getStats(),
     ]);
 
     return {
       slug: 'home',
-      title: 'Welcome to YBB',
+      title: mainCategory?.name || 'Youth Break the Boundaries',
       sections: [
         {
-          type: 'hero',
+          type: 'main_banner',
           content: {
-            headline: 'Empowering Youth Beyond Borders',
-            subheadline: 'Join our global programs and make a difference.',
-            cta: { text: 'Explore Programs', link: '/programs' },
+            imageUrl: mainCategory?.bannerUrl || '',
+            link: mainCategory?.websiteUrl || '',
+            title: mainCategory?.name || '',
+            subtitle: mainCategory?.description || '',
           },
         },
         {
-          type: 'stats',
-          data: stats,
+          type: 'registration_overview',
+          content: {
+            ig_feed: [], // Placeholder: Integration with IG API would go here
+            registration_types: latestProgram?.pricingTiers.map((tier) => ({
+              id: tier.id,
+              name: tier.name,
+              price: tier.price,
+              currency: tier.currency,
+              benefits: tier.benefits,
+            })) || [],
+            guidelines: latestProgram?.resources.map((res) => ({
+              id: res.id,
+              title: res.title,
+              type: res.type,
+              url: res.fileUrl,
+            })) || [],
+          },
         },
         {
-          type: 'featured_programs',
-          title: 'Upcoming Programs',
-          data: programs,
+          type: 'program_overview',
+          content: {
+            about_us: mainCategory?.about || '',
+            vision_mission: {
+              vision: mainCategory?.vision || '',
+              mission: mainCategory?.mission || '',
+            },
+          },
         },
         {
-          type: 'testimonials',
-          title: 'What Our Alumni Say',
-          data: testimonials,
+          type: 'program_highlights',
+          content: {
+            image_gallery: latestProgram?.gallery.map((img) => ({
+              url: img.imageUrl,
+              caption: img.title,
+              type: img.type,
+            })) || [],
+            content: {
+              title: 'Program Highlights',
+              // TODO: Add a specific field for highlights in DB or parse from description
+              items: [
+                'International Networking',
+                'Cultural Exchange',
+                'Leadership Workshops',
+                'Global Project Collaboration',
+              ],
+            },
+          },
         },
         {
-          type: 'sponsors',
-          title: 'Our Partners & Sponsors',
-          data: sponsors,
+          type: 'supported_by',
+          data: sponsors.map((s) => ({
+            id: s.id,
+            name: s.name,
+            logoUrl: s.logoUrl,
+            websiteUrl: s.websiteUrl,
+            type: s.type,
+            tier: s.tier,
+          })),
         },
       ],
     };
