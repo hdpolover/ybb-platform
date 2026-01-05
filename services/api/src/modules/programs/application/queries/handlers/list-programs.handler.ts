@@ -1,76 +1,52 @@
-import { Injectable } from '@nestjs/common';
+import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
+import { Inject } from '@nestjs/common';
 import { ListProgramsQuery } from '../list-programs.query';
 import { ProgramListResponseDto, ProgramResponseDto } from '../../../presentation/dto/program-response.dto';
-import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
+import { IProgramRepository } from '@core/interfaces/repositories/program.repository.interface';
 
-@Injectable()
-export class ListProgramsHandler {
-  constructor(private readonly prisma: PrismaService) {}
+@QueryHandler(ListProgramsQuery)
+export class ListProgramsHandler implements IQueryHandler<ListProgramsQuery> {
+    constructor(
+        @Inject('IProgramRepository')
+        private readonly programRepository: IProgramRepository,
+    ) {}
 
-  async execute(query: ListProgramsQuery): Promise<ProgramListResponseDto> {
-    const { programCategoryId, year, isPublished, page, limit } = query;
+    async execute(query: ListProgramsQuery): Promise<ProgramListResponseDto> {
+        const { programCategoryId, year, isPublished, page, limit } = query;
 
-    // Build where clause
-    const where: any = {
-      programCategoryId,
-      deletedAt: null,
-    };
+        const { programs, total } = await this.programRepository.findAll({
+            programCategoryId,
+            year,
+            isPublished,
+            page,
+            limit,
+        });
 
-    if (year !== undefined) {
-      where.year = year;
+        const data: ProgramResponseDto[] = programs.map((program) => ({
+            id: program.id,
+            programCategoryId: program.programCategoryId,
+            name: program.name,
+            slug: program.slug,
+            description: program.description,
+            year: program.year,
+            startDate: program.startDate,
+            endDate: program.endDate,
+            applicationDeadline: program.applicationDeadline,
+            location: program.location,
+            capacity: program.capacity,
+            isPublished: program.isPublished,
+            createdAt: program.createdAt,
+            updatedAt: program.updatedAt,
+        }));
+
+        const totalPages = Math.ceil(total / limit);
+
+        return {
+            data,
+            total,
+            page,
+            limit,
+            totalPages,
+        };
     }
-
-    if (isPublished !== undefined) {
-      where.isPublished = isPublished;
-    }
-
-    // Get total count
-    const total = await this.prisma.program.count({ where });
-
-    // Get paginated data
-    const skip = (page - 1) * limit;
-    const programs = await this.prisma.program.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: [
-        { year: 'desc' },
-        { createdAt: 'desc' },
-      ],
-      include: {
-        programCategory: {
-          select: {
-            name: true,
-            slug: true,
-          },
-        },
-      },
-    });
-
-    const data: ProgramResponseDto[] = programs.map((program) => ({
-      id: program.id,
-      programCategoryId: program.programCategoryId,
-      name: program.name,
-      description: program.description,
-      year: program.year,
-      startDate: program.startDate,
-      endDate: program.endDate,
-      applicationDeadline: program.applicationDeadline,
-      location: program.location,
-      capacity: program.capacity,
-      isPublished: program.isPublished,
-      createdAt: program.createdAt,
-      updatedAt: program.updatedAt,
-    }));
-
-    const totalPages = Math.ceil(total / limit);
-
-    return {
-      data,
-      total,
-      page,
-      limit,
-      totalPages,
-    };
-  }
 }

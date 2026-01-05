@@ -1,0 +1,995 @@
+import { IsString, IsNotEmpty, IsOptional, IsDateString, IsNumber, IsBoolean, IsUUID, IsArray } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+
+// Timeline DTOs
+export class CreateProgramTimelineDto {
+    @ApiProperty()
+    @IsUUID()
+    @IsNotEmpty()
+    programId: string;
+
+    @ApiProperty()
+    @IsDateString()
+    @IsNotEmpty()
+    date: string;
+
+    @ApiProperty()
+    @IsString()
+    @IsNotEmpty()
+    title: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    description?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    icon?: string;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    order?: number;
+}
+
+export class UpdateProgramTimelineDto {
+    @ApiProperty({ required: false })
+    @IsDateString()
+    @IsOptional()
+    date?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    title?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    description?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    icon?: string;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    order?: number;
+
+    @ApiProperty({ required: false })
+    @IsBoolean()
+    @IsOptional()
+    isActive?: boolean;
+}
+
+// Schedule DTOs
+export class CreateProgramScheduleDto {
+    @ApiProperty()
+    @IsUUID()
+    @IsNotEmpty()
+    programId: string;
+
+    @ApiProperty()
+    @IsString()
+    @IsNotEmpty()
+    day: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    startTime?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    endTime?: string;
+
+    @ApiProperty()
+    @IsString()
+    @IsNotEmpty()
+    activity: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    description?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    location?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    speaker?: string;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    order?: number;
+}
+
+export class UpdateProgramScheduleDto {
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    day?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    startTime?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    endTime?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    activity?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    description?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    location?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    speaker?: string;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    order?: number;
+
+    @ApiProperty({ required: false })
+    @IsBoolean()
+    @IsOptional()
+    isActive?: boolean;
+}
+
+// Speaker DTOs
+export class CreateProgramSpeakerDto {
+    @ApiProperty()
+    @IsUUID()
+    @IsNotEmpty()
+    programId: string;
+
+    @ApiProperty()
+    @IsString()
+    @IsNotEmpty()
+    name: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    title?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    organization?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    bio?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    photoUrl?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    email?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    linkedinUrl?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    twitterUrl?: string;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    order?: number;
+}
+
+export class UpdateProgramSpeakerDto {
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    name?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    title?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    organization?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    bio?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    photoUrl?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    email?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    linkedinUrl?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    twitterUrl?: string;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    order?: number;
+
+    @ApiProperty({ required: false })
+    @IsBoolean()
+    @IsOptional()
+    isActive?: boolean;
+}
+
+// Gallery DTOs
+export class CreateProgramGalleryDto {
+    @ApiProperty()
+    @IsUUID()
+    @IsNotEmpty()
+    programId: string;
+
+    @ApiProperty()
+    @IsString()
+    @IsNotEmpty()
+    imageUrl: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    title?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    description?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    type?: string;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    order?: number;
+}
+
+export class UpdateProgramGalleryDto {
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    imageUrl?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    title?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    description?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    type?: string;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    order?: number;
+
+    @ApiProperty({ required: false })
+    @IsBoolean()
+    @IsOptional()
+    isActive?: boolean;
+}
+
+// Testimonial DTOs
+export class CreateProgramTestimonialDto {
+    @ApiProperty({ required: false })
+    @IsUUID()
+    @IsOptional()
+    programId?: string;
+
+    @ApiProperty({ required: false })
+    @IsUUID()
+    @IsOptional()
+    programCategoryId?: string;
+
+    @ApiProperty()
+    @IsString()
+    @IsNotEmpty()
+    name: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    role?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    company?: string;
+
+    @ApiProperty()
+    @IsString()
+    @IsNotEmpty()
+    testimonial: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    type?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    videoUrl?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    thumbnailUrl?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    avatarUrl?: string;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    rating?: number;
+
+    @ApiProperty({ required: false })
+    @IsBoolean()
+    @IsOptional()
+    isFeatured?: boolean;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    order?: number;
+}
+
+export class UpdateProgramTestimonialDto {
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    name?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    role?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    company?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    testimonial?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    type?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    videoUrl?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    thumbnailUrl?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    avatarUrl?: string;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    rating?: number;
+
+    @ApiProperty({ required: false })
+    @IsBoolean()
+    @IsOptional()
+    isFeatured?: boolean;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    order?: number;
+
+    @ApiProperty({ required: false })
+    @IsBoolean()
+    @IsOptional()
+    isActive?: boolean;
+}
+
+// FAQ DTOs
+export class CreateProgramFaqDto {
+    @ApiProperty()
+    @IsUUID()
+    @IsNotEmpty()
+    programId: string;
+
+    @ApiProperty()
+    @IsString()
+    @IsNotEmpty()
+    question: string;
+
+    @ApiProperty()
+    @IsString()
+    @IsNotEmpty()
+    answer: string;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    order?: number;
+}
+
+export class UpdateProgramFaqDto {
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    question?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    answer?: string;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    order?: number;
+
+    @ApiProperty({ required: false })
+    @IsBoolean()
+    @IsOptional()
+    isActive?: boolean;
+}
+
+// Team DTOs
+export class CreateProgramTeamDto {
+    @ApiProperty({ required: false })
+    @IsUUID()
+    @IsOptional()
+    programId?: string;
+
+    @ApiProperty({ required: false })
+    @IsUUID()
+    @IsOptional()
+    programCategoryId?: string;
+
+    @ApiProperty()
+    @IsString()
+    @IsNotEmpty()
+    name: string;
+
+    @ApiProperty()
+    @IsString()
+    @IsNotEmpty()
+    role: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    bio?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    photoUrl?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    email?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    phone?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    linkedinUrl?: string;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    order?: number;
+}
+
+export class UpdateProgramTeamDto {
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    name?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    role?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    bio?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    photoUrl?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    email?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    phone?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    linkedinUrl?: string;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    order?: number;
+
+    @ApiProperty({ required: false })
+    @IsBoolean()
+    @IsOptional()
+    isActive?: boolean;
+}
+
+// Partner DTOs
+export class CreateProgramPartnerDto {
+    @ApiProperty()
+    @IsUUID()
+    @IsNotEmpty()
+    programId: string;
+
+    @ApiProperty()
+    @IsString()
+    @IsNotEmpty()
+    name: string;
+
+    @ApiProperty()
+    @IsString()
+    @IsNotEmpty()
+    type: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    role?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    logoUrl?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    websiteUrl?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    description?: string;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    order?: number;
+}
+
+export class UpdateProgramPartnerDto {
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    name?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    type?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    role?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    logoUrl?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    websiteUrl?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    description?: string;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    order?: number;
+
+    @ApiProperty({ required: false })
+    @IsBoolean()
+    @IsOptional()
+    isActive?: boolean;
+}
+
+// Resource DTOs
+export class CreateProgramResourceDto {
+    @ApiProperty()
+    @IsUUID()
+    @IsNotEmpty()
+    programId: string;
+
+    @ApiProperty()
+    @IsString()
+    @IsNotEmpty()
+    title: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    description?: string;
+
+    @ApiProperty()
+    @IsString()
+    @IsNotEmpty()
+    fileUrl: string;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    fileSize?: number;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    fileType?: string;
+
+    @ApiProperty()
+    @IsString()
+    @IsNotEmpty()
+    type: string;
+
+    @ApiProperty({ required: false })
+    @IsBoolean()
+    @IsOptional()
+    isPublic?: boolean;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    order?: number;
+}
+
+export class UpdateProgramResourceDto {
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    title?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    description?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    fileUrl?: string;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    fileSize?: number;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    fileType?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    type?: string;
+
+    @ApiProperty({ required: false })
+    @IsBoolean()
+    @IsOptional()
+    isPublic?: boolean;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    order?: number;
+
+    @ApiProperty({ required: false })
+    @IsBoolean()
+    @IsOptional()
+    isActive?: boolean;
+}
+
+// Pricing Tier DTOs
+export class CreateProgramPricingTierDto {
+    @ApiProperty()
+    @IsUUID()
+    @IsNotEmpty()
+    programId: string;
+
+    @ApiProperty()
+    @IsString()
+    @IsNotEmpty()
+    name: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    description?: string;
+
+    @ApiProperty()
+    @IsNumber()
+    @IsNotEmpty()
+    price: number;
+
+    @ApiProperty()
+    @IsString()
+    @IsNotEmpty()
+    currency: string;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    capacity?: number;
+
+    @ApiProperty()
+    @IsDateString()
+    @IsNotEmpty()
+    validFrom: string;
+
+    @ApiProperty()
+    @IsDateString()
+    @IsNotEmpty()
+    validUntil: string;
+
+    @ApiProperty({ required: false })
+    @IsArray()
+    @IsOptional()
+    benefits?: any[];
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    order?: number;
+}
+
+export class UpdateProgramPricingTierDto {
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    name?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    description?: string;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    price?: number;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    currency?: string;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    capacity?: number;
+
+    @ApiProperty({ required: false })
+    @IsDateString()
+    @IsOptional()
+    validFrom?: string;
+
+    @ApiProperty({ required: false })
+    @IsDateString()
+    @IsOptional()
+    validUntil?: string;
+
+    @ApiProperty({ required: false })
+    @IsArray()
+    @IsOptional()
+    benefits?: any[];
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    order?: number;
+
+    @ApiProperty({ required: false })
+    @IsBoolean()
+    @IsOptional()
+    isActive?: boolean;
+}
+
+// Requirement DTOs
+export class CreateProgramRequirementDto {
+    @ApiProperty()
+    @IsUUID()
+    @IsNotEmpty()
+    programId: string;
+
+    @ApiProperty()
+    @IsString()
+    @IsNotEmpty()
+    name: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    description?: string;
+
+    @ApiProperty()
+    @IsString()
+    @IsNotEmpty()
+    type: string;
+
+    @ApiProperty({ required: false })
+    @IsBoolean()
+    @IsOptional()
+    isRequired?: boolean;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    fileMaxSize?: number;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    fileAllowedTypes?: string;
+
+    @ApiProperty({ required: false })
+    @IsArray()
+    @IsOptional()
+    options?: any[];
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    validationRules?: any;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    order?: number;
+}
+
+export class UpdateProgramRequirementDto {
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    name?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    description?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    type?: string;
+
+    @ApiProperty({ required: false })
+    @IsBoolean()
+    @IsOptional()
+    isRequired?: boolean;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    fileMaxSize?: number;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    fileAllowedTypes?: string;
+
+    @ApiProperty({ required: false })
+    @IsArray()
+    @IsOptional()
+    options?: any[];
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    validationRules?: any;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    order?: number;
+
+    @ApiProperty({ required: false })
+    @IsBoolean()
+    @IsOptional()
+    isActive?: boolean;
+}
