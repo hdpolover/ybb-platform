@@ -3,7 +3,7 @@ import { LandingService } from './landing.service';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { LandingPageResponseDto } from './dto/landing-page.dto';
 
-@ApiTags('Landing')
+@ApiTags('landing')
 @Controller('landing')
 export class LandingController {
   constructor(private readonly landingService: LandingService) {}

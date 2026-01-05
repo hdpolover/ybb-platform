@@ -45,12 +45,22 @@ export class UserRepository implements IUserRepository {
     return user ? UserMapper.toDomain(user) : null;
   }
 
-  async findAll(brandId: string, skip?: number, take?: number): Promise<User[]> {
+  async findAll(brandId: string, skip?: number, take?: number, role?: string): Promise<User[]> {
+    const where: any = {
+      programCategoryId: brandId,
+      deletedAt: null,
+    };
+
+    if (role === 'admin') {
+      where.admin = { isNot: null };
+    } else if (role === 'participant') {
+      where.participant = { isNot: null };
+    } else if (role === 'ambassador') {
+      where.ambassador = { isNot: null };
+    }
+
     const users = await this.prisma.user.findMany({
-      where: {
-        programCategoryId: brandId,
-        deletedAt: null,
-      },
+      where,
       skip,
       take,
       orderBy: { createdAt: 'desc' },

@@ -17,7 +17,8 @@ export class GetUsersHandler {
   async execute(query: GetUsersQuery): Promise<UserResponseDto[]> {
     const skip = query.skip ?? 0;
     const take = query.take ?? 10;
-    const cacheKey = CACHE_KEYS.USER_LIST(query.brandId, skip, take);
+    const role = query.role || 'all';
+    const cacheKey = CACHE_KEYS.USER_LIST(query.brandId, skip, take) + `:${role}`;
 
     // Check cache first
     const cached = await this.cacheService.get<UserResponseDto[]>(cacheKey);
@@ -30,6 +31,7 @@ export class GetUsersHandler {
       query.brandId,
       skip,
       take,
+      query.role,
     );
 
     const dtos = users.map(user => this.toDto(user));

@@ -1,15 +1,21 @@
 import { QueryHandler, IQueryHandler } from '@nestjs/cqrs';
 import { Inject } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ListBrandSponsorsQuery } from '../list-brand-sponsors.query';
 import { ISponsorRepository } from '@core/interfaces/repositories/sponsor.repository.interface';
 import { SponsorResponseDto } from '@modules/brands/presentation/dto/brand.dto';
 
 @QueryHandler(ListBrandSponsorsQuery)
 export class ListBrandSponsorsHandler implements IQueryHandler<ListBrandSponsorsQuery> {
+    private readonly storageUrl: string;
+
     constructor(
         @Inject('ISponsorRepository')
         private readonly repository: ISponsorRepository,
-    ) { }
+        private readonly configService: ConfigService,
+    ) { 
+        this.storageUrl = this.configService.get('STORAGE_PUBLIC_URL', 'http://localhost:9000');
+    }
 
     async execute(query: ListBrandSponsorsQuery): Promise<SponsorResponseDto[]> {
         const sponsors = await this.repository.findByBrandId(query.brandId);
@@ -18,7 +24,7 @@ export class ListBrandSponsorsHandler implements IQueryHandler<ListBrandSponsors
             id: sponsor.id,
             name: sponsor.name,
             type: sponsor.type,
-            logoUrl: sponsor.logoUrl || undefined,
+            logoUrl: sponsor.logoUrl ? `${this.storageUrl}/${sponsor.logoUrl}` : undefined,
             websiteUrl: sponsor.websiteUrl || undefined,
             tier: sponsor.tier || undefined,
             order: sponsor.order,

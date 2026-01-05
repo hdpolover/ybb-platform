@@ -146,9 +146,11 @@ services:
       REDIS_PORT: ${REDIS_PORT}
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       RABBITMQ_URL: ${RABBITMQ_URL}
-      FILE_SERVICE_URL: ${FILE_SERVICE_URL}
+      FILE_SERVICE_URL: http://file-service:8001
       PAYMENT_SERVICE_URL: ${PAYMENT_SERVICE_URL}
       CORS_ORIGINS: ${CORS_ORIGINS}
+    ports:
+      - "4000:4000"
     volumes:
       - ./services/api:/app
       - /app/node_modules

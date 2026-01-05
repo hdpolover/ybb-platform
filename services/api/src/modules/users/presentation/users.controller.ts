@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Body, Param, Query, UseGuards, Patch, Ip, Headers } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { CreateUserHandler } from '../application/commands/handlers/create-user.handler';
 import { GetUserHandler } from '../application/queries/handlers/get-user.handler';
 import { GetUsersHandler } from '../application/queries/handlers/get-users.handler';
@@ -50,6 +50,7 @@ export class UsersController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user preferences' })
+  @ApiResponse({ status: 200, description: 'Return user preferences', type: UserPreferenceResponseDto })
   async getMyPreferences(@CurrentUser() user: any): Promise<UserPreferenceResponseDto> {
     const query = new GetUserPreferencesQuery(user.userId);
     return this.getUserPreferencesHandler.execute(query);
@@ -59,6 +60,7 @@ export class UsersController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update current user preferences' })
+  @ApiResponse({ status: 200, description: 'User preferences updated', type: UserPreferenceResponseDto })
   async updateMyPreferences(
     @CurrentUser() user: any,
     @Body() dto: UpdateUserPreferenceDto,
@@ -71,6 +73,7 @@ export class UsersController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user notifications' })
+  @ApiResponse({ status: 200, description: 'Return user notifications' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'type', required: false, type: String })
@@ -90,6 +93,7 @@ export class UsersController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Mark notification as read' })
+  @ApiResponse({ status: 200, description: 'Notification marked as read', type: UserNotificationResponseDto })
   async markNotificationRead(
     @CurrentUser() user: any,
     @Param('id') id: string,
@@ -102,6 +106,7 @@ export class UsersController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user activity logs' })
+  @ApiResponse({ status: 200, description: 'Return activity logs' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async getMyActivityLogs(
@@ -119,6 +124,7 @@ export class UsersController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user security logs' })
+  @ApiResponse({ status: 200, description: 'Return security logs' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async getMySecurityLogs(
@@ -136,6 +142,7 @@ export class UsersController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Request account deletion' })
+  @ApiResponse({ status: 201, description: 'Deletion request created', type: DeletionRequestResponseDto })
   async requestDeletion(
     @CurrentUser() user: any,
     @Body() dto: CreateDeletionRequestDto,
@@ -148,6 +155,7 @@ export class UsersController {
 
   @Post()
   @ApiOperation({ summary: 'Create a new user' })
+  @ApiResponse({ status: 201, description: 'User created successfully', type: UserResponseDto })
   async create(@Body() dto: CreateUserDto): Promise<UserResponseDto> {
     const command = new CreateUserCommand(
       dto.brandId,
@@ -160,6 +168,7 @@ export class UsersController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get user by ID' })
+  @ApiResponse({ status: 200, description: 'Return user details', type: UserResponseDto })
   async findOne(
     @Param('id') id: string,
     @Query('brandId') brandId: string,
@@ -170,18 +179,22 @@ export class UsersController {
 
   @Get()
   @ApiOperation({ summary: 'Get all users for a brand' })
+  @ApiResponse({ status: 200, description: 'Return list of users', type: [UserResponseDto] })
   @ApiQuery({ name: 'brandId', required: true })
   @ApiQuery({ name: 'skip', required: false, type: Number })
   @ApiQuery({ name: 'take', required: false, type: Number })
+  @ApiQuery({ name: 'role', required: false, enum: ['admin', 'participant', 'ambassador'], description: 'Filter users by role' })
   async findAll(
     @Query('brandId') brandId: string,
     @Query('skip') skip?: string,
     @Query('take') take?: string,
+    @Query('role') role?: string,
   ): Promise<UserResponseDto[]> {
     const query = new GetUsersQuery(
       brandId,
       skip ? parseInt(skip, 10) : undefined,
       take ? parseInt(take, 10) : undefined,
+      role,
     );
     return this.getUsersHandler.execute(query);
   }

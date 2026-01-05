@@ -12,7 +12,7 @@ export interface IUserRepository {
   
   findByEmail(email: string, brandId: string): Promise<User | null>;
   
-  findAll(brandId: string, skip?: number, take?: number): Promise<User[]>;
+  findAll(brandId: string, skip?: number, take?: number, role?: string): Promise<User[]>;
   
   create(user: User, passwordHash: string): Promise<User>;
   
