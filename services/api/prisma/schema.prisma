@@ -1845,6 +1845,11 @@ model ProgramAward {
   category    String? @db.VarChar(100) // e.g., "Best Presentation", "1st Place", "Most Innovative"
   tier        String? @db.VarChar(50) // gold, silver, bronze, honorable_mention
 
+  // UI Display Fields
+  tags        String[] @default([])
+  winnerCount Int?     @map("winner_count")
+  color       String?  @db.VarChar(7)
+
   // Visual
   badgeUrl String? @map("badge_url") @db.VarChar(500)
   iconUrl  String? @map("icon_url") @db.VarChar(500)

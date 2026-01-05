@@ -13,7 +13,7 @@ import { ListUserPaymentsQuery } from '../application/queries/list-user-payments
 import { GetPaymentDetailQuery } from '../application/queries/get-payment-detail.query';
 import { PaymentResponseDto } from './dto/payment.dto';
 
-@ApiTags('Payments')
+@ApiTags('payments')
 @Controller('payments')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()

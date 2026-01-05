@@ -9,6 +9,8 @@ export class Brand {
         public readonly primaryColor: string | null,
         public readonly contactEmail: string | null,
         public readonly createdAt: Date,
+        public readonly updatedAt: Date,
+        public readonly deletedAt: Date | null,
         public readonly isActive: boolean,
     ) { }
 }

@@ -74,6 +74,12 @@ npm run prisma:migrate
 npm run prisma:seed
 ```
 
+### Default Credentials (from Seed)
+
+- **Email**: `admin@ybbhub.com`
+- **Password**: `admin123`
+- **Brand**: `Youth Break the Boundaries` (slug: `ybb`)
+
 ### 4. Start Development Server
 
 ```bash

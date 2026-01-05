@@ -23,7 +23,7 @@ import { ApplyAmbassadorCommand } from '../application/commands/apply-ambassador
 import { GetAmbassadorDashboardQuery } from '../application/queries/get-ambassador-dashboard.query';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 
-@ApiTags('Participants')
+@ApiTags('participants')
 @Controller('participants')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()

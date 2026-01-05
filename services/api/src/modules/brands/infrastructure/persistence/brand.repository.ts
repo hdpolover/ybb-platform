@@ -29,6 +29,50 @@ export class BrandRepository implements IBrandRepository {
         return category ? this.mapToEntity(category) : null;
     }
 
+    async create(data: Partial<Brand>): Promise<Brand> {
+        const category = await this.prisma.programCategory.create({
+            data: {
+                name: data.name!,
+                slug: data.slug!,
+                description: data.description,
+                logoUrl: data.logoUrl,
+                websiteUrl: data.websiteUrl,
+                primaryColor: data.primaryColor,
+                contactEmail: data.contactEmail,
+                isActive: data.isActive ?? true,
+            },
+        });
+        return this.mapToEntity(category);
+    }
+
+    async update(id: string, data: Partial<Brand>): Promise<Brand> {
+        const category = await this.prisma.programCategory.update({
+            where: { id },
+            data: {
+                name: data.name,
+                slug: data.slug,
+                description: data.description,
+                logoUrl: data.logoUrl,
+                websiteUrl: data.websiteUrl,
+                primaryColor: data.primaryColor,
+                contactEmail: data.contactEmail,
+                isActive: data.isActive,
+            },
+        });
+        return this.mapToEntity(category);
+    }
+
+    async delete(id: string): Promise<void> {
+        // Soft delete
+        await this.prisma.programCategory.update({
+            where: { id },
+            data: {
+                deletedAt: new Date(),
+                isActive: false,
+            },
+        });
+    }
+
     private mapToEntity(prismaEntity: any): Brand {
         return new Brand(
             prismaEntity.id,
@@ -40,6 +84,8 @@ export class BrandRepository implements IBrandRepository {
             prismaEntity.primaryColor,
             prismaEntity.contactEmail,
             prismaEntity.createdAt,
+            prismaEntity.updatedAt,
+            prismaEntity.deletedAt,
             prismaEntity.isActive,
         );
     }

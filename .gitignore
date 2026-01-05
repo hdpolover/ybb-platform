@@ -114,3 +114,4 @@ migration_data/
 migration_temp_data/
 *.sql
 *.sql.gz
+!**/prisma/migrations/*/migration.sql

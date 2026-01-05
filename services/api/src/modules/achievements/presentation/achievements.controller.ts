@@ -7,7 +7,7 @@ import { ParticipantDocumentResponseDto, ParticipantAwardResponseDto } from './d
 import { ListApplicationDocumentsQuery } from '../application/queries/list-application-documents.query';
 import { ListParticipantAwardsQuery } from '../application/queries/list-participant-awards.query';
 
-@ApiTags('Achievements')
+@ApiTags('achievements')
 @Controller('achievements')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
