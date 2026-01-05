@@ -30,6 +30,13 @@ export class GetProgramDetailHandler {
     // Sanitize limits (handle NaN)
     if (isNaN(testimonialsLimit)) testimonialsLimit = 10;
     if (isNaN(announcementsLimit)) announcementsLimit = 10;
+    if (isNaN(resourcesLimit)) resourcesLimit = 10;
+    
+    // Ensure they are numbers
+    testimonialsLimit = Number(testimonialsLimit);
+    announcementsLimit = Number(announcementsLimit);
+    resourcesLimit = Number(resourcesLimit);
+
     this.logger.debug(`GetProgramDetailHandler limits sanitized: ${JSON.stringify({ testimonialsLimit, announcementsLimit, resourcesLimit })}`);
 
     console.log('DEBUG: GetProgramDetailHandler limits sanitized:', { testimonialsLimit, announcementsLimit, resourcesLimit });

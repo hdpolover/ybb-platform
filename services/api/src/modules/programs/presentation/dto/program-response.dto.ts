@@ -10,6 +10,9 @@ export class ProgramResponseDto {
   @ApiProperty({ example: 'Young Entrepreneur Program 2025' })
   name: string;
 
+  @ApiProperty({ example: 'young-entrepreneur-program-2025' })
+  slug: string;
+
   @ApiProperty({ example: 'A comprehensive program for young entrepreneurs' })
   description: string | null;
 

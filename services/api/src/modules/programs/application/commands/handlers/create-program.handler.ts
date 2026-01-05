@@ -1,12 +1,12 @@
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { Inject, NotFoundException } from '@nestjs/common';
-import { UpdateProgramCommand } from '../update-program.command';
+import { Inject } from '@nestjs/common';
+import { CreateProgramCommand } from '../create-program.command';
 import { IProgramRepository } from '@core/interfaces/repositories/program.repository.interface';
 import { Program } from '@core/entities/program.entity';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
 
-@CommandHandler(UpdateProgramCommand)
-export class UpdateProgramHandler implements ICommandHandler<UpdateProgramCommand> {
+@CommandHandler(CreateProgramCommand)
+export class CreateProgramHandler implements ICommandHandler<CreateProgramCommand> {
     constructor(
         @Inject('IProgramRepository')
         private readonly programRepository: IProgramRepository,
@@ -14,37 +14,31 @@ export class UpdateProgramHandler implements ICommandHandler<UpdateProgramComman
         private readonly activityLogRepository: IUserActivityLogRepository,
     ) {}
 
-    async execute(command: UpdateProgramCommand): Promise<Program> {
-        const { programId, updateProgramDto, userId } = command;
-
-        const existingProgram = await this.programRepository.findById(programId);
-        if (!existingProgram) {
-            throw new NotFoundException(`Program with ID ${programId} not found`);
+    async execute(command: CreateProgramCommand): Promise<Program> {
+        const { createProgramDto, userId } = command;
+        
+        if (!createProgramDto.slug) {
+            createProgramDto.slug = this.generateSlug(createProgramDto.name);
         }
 
-        if (updateProgramDto.name && !updateProgramDto.slug) {
-            updateProgramDto.slug = this.generateSlug(updateProgramDto.name);
-        }
-
-        const programData: any = { ...updateProgramDto };
+        const programData: any = { ...createProgramDto };
         if (programData.startDate) programData.startDate = new Date(programData.startDate);
         if (programData.endDate) programData.endDate = new Date(programData.endDate);
         if (programData.applicationDeadline) programData.applicationDeadline = new Date(programData.applicationDeadline);
         if (programData.registrationOpenDate) programData.registrationOpenDate = new Date(programData.registrationOpenDate);
         if (programData.registrationCloseDate) programData.registrationCloseDate = new Date(programData.registrationCloseDate);
 
-        const updatedProgram = await this.programRepository.update(programId, programData);
+        const program = await this.programRepository.create(programData);
 
         // Log activity
         await this.activityLogRepository.create({
-            id: undefined,
+            id: undefined, // Let DB generate ID
             userId: userId,
-            activityType: 'UPDATE_PROGRAM',
+            activityType: 'CREATE_PROGRAM',
             activityCategory: 'PROGRAM',
             activityData: {
-                programId: updatedProgram.id,
-                programName: updatedProgram.name,
-                changes: updateProgramDto,
+                programId: program.id,
+                programName: program.name,
             },
             pageUrl: null,
             referrerUrl: null,
@@ -55,7 +49,7 @@ export class UpdateProgramHandler implements ICommandHandler<UpdateProgramComman
             createdAt: new Date(),
         } as any);
 
-        return updatedProgram;
+        return program;
     }
 
     private generateSlug(text: string): string {
