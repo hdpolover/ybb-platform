@@ -78,6 +78,9 @@ export class ProgramsStrategy implements ILandingPageStrategy {
         pricingTiers: {
           where: { isActive: true },
           orderBy: { order: 'asc' },
+          include: {
+              validityPeriods: true
+          }
         },
         schedules: {
           where: { isActive: true },
@@ -146,8 +149,14 @@ export class ProgramsStrategy implements ILandingPageStrategy {
         benefits: tier.benefits,
         capacity: tier.capacity,
         sold_count: tier.soldCount,
-        valid_from: tier.validFrom,
-        valid_until: tier.validUntil,
+        validity_periods: tier.validityPeriods.map(vp => ({
+            start_date: vp.startDate,
+            end_date: vp.endDate
+        })),
+        fee_type: tier.feeType,
+        target: tier.target,
+        icon: tier.icon,
+        requirements: tier.requirements
       })),
     };
 

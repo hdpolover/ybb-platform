@@ -10,7 +10,10 @@ import {
     ProgramResource,
     ProgramPricingTier,
     ProgramRequirement,
+    PricingTierValidityPeriod,
 } from '@prisma/client';
+
+export type ProgramPricingTierWithPeriods = ProgramPricingTier & { validityPeriods: PricingTierValidityPeriod[] };
 
 export interface IProgramContentRepository {
     findTimelineByProgramId(programId: string): Promise<ProgramTimeline[]>;
@@ -22,7 +25,7 @@ export interface IProgramContentRepository {
     findTeamByProgramId(programId: string): Promise<ProgramTeam[]>;
     findPartnersByProgramId(programId: string): Promise<ProgramPartner[]>;
     findResourcesByProgramId(programId: string, limit?: number): Promise<ProgramResource[]>;
-    findPricingTiersByProgramId(programId: string): Promise<ProgramPricingTier[]>;
+    findPricingTiersByProgramId(programId: string): Promise<ProgramPricingTierWithPeriods[]>;
     findRequirementsByProgramId(programId: string): Promise<ProgramRequirement[]>;
 
     // CRUD for Timeline

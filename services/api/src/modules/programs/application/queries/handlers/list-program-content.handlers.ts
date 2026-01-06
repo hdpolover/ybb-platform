@@ -190,6 +190,17 @@ export class ListProgramPricingTiersHandler {
             price: Number(item.price),
             capacity: item.capacity ?? undefined,
             benefits: item.benefits ?? undefined,
+            feeType: item.feeType ?? undefined,
+            target: item.target ?? undefined,
+            icon: item.icon ?? undefined,
+            requirements: item.requirements ?? undefined,
+            validityPeriods: item.validityPeriods.map(vp => ({
+                startDate: vp.startDate,
+                endDate: vp.endDate
+            })),
+            // Explicitly remove old fields if they still exist in the spread but not in type
+            validFrom: undefined,
+            validUntil: undefined
         }));
     }
 }
