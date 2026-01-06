@@ -1,20 +1,26 @@
 import { Injectable } from '@nestjs/common';
 import { ILandingPageStrategy } from './landing-page.strategy';
 import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
+import { ProgramCategory } from '@prisma/client';
 
 @Injectable()
 export class HomeStrategy implements ILandingPageStrategy {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getData() {
-    const [mainCategory, latestProgram, sponsors] = await Promise.all([
-      // Fetch main program category (brand info)
-      this.prisma.programCategory.findFirst({
-        where: { isActive: true },
-      }),
-      // Fetch the next upcoming active program
+  async getData(category: ProgramCategory | null) {
+    if (!category) {
+       // Return default or throw? returning empty structure for now
+       return {
+         slug: 'home',
+         title: 'Youth Break the Boundaries', // Default fallback
+         sections: [],
+       };
+    }
+
+    const [program, brandSponsors] = await Promise.all([
       this.prisma.program.findFirst({
         where: {
+          programCategoryId: category.id, // Scoped to brand
           isPublished: true,
           isActive: true,
         },
@@ -36,38 +42,40 @@ export class HomeStrategy implements ILandingPageStrategy {
           },
         },
       }),
-      // Fetch active sponsors
       this.prisma.sponsor.findMany({
-        where: { isActive: true },
+        where: { 
+            programCategoryId: category.id, // Scoped to brand
+            isActive: true 
+        },
         orderBy: { order: 'asc' },
       }),
     ]);
 
     return {
       slug: 'home',
-      title: mainCategory?.name || 'Youth Break the Boundaries',
+      title: category.name,
       sections: [
         {
           type: 'main_banner',
           content: {
-            imageUrl: mainCategory?.bannerUrl || '',
-            link: mainCategory?.websiteUrl || '',
-            title: mainCategory?.name || '',
-            subtitle: mainCategory?.description || '',
+            imageUrl: category.bannerUrl || '',
+            link: category.websiteUrl || '',
+            title: category.name || '',
+            subtitle: category.description || '',
           },
         },
         {
           type: 'registration_overview',
           content: {
-            ig_feed: [], // Placeholder: Integration with IG API would go here
-            registration_types: latestProgram?.pricingTiers.map((tier) => ({
+            ig_feed: [], // Placeholder
+            registration_types: program?.pricingTiers.map((tier) => ({
               id: tier.id,
               name: tier.name,
               price: tier.price,
               currency: tier.currency,
               benefits: tier.benefits,
             })) || [],
-            guidelines: latestProgram?.resources.map((res) => ({
+            guidelines: program?.resources.map((res) => ({
               id: res.id,
               title: res.title,
               type: res.type,
@@ -78,24 +86,23 @@ export class HomeStrategy implements ILandingPageStrategy {
         {
           type: 'program_overview',
           content: {
-            about_us: mainCategory?.about || '',
+            about_us: category.about || '',
             vision_mission: {
-              vision: mainCategory?.vision || '',
-              mission: mainCategory?.mission || '',
+              vision: category.vision || '',
+              mission: category.mission || '',
             },
           },
         },
         {
           type: 'program_highlights',
           content: {
-            image_gallery: latestProgram?.gallery.map((img) => ({
+            image_gallery: program?.gallery.map((img) => ({
               url: img.imageUrl,
               caption: img.title,
               type: img.type,
             })) || [],
             content: {
               title: 'Program Highlights',
-              // TODO: Add a specific field for highlights in DB or parse from description
               items: [
                 'International Networking',
                 'Cultural Exchange',
@@ -107,7 +114,7 @@ export class HomeStrategy implements ILandingPageStrategy {
         },
         {
           type: 'supported_by',
-          data: sponsors.map((s) => ({
+          data: brandSponsors.map((s) => ({
             id: s.id,
             name: s.name,
             logoUrl: s.logoUrl,

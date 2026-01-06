@@ -1,3 +1,5 @@
+import { ProgramCategory } from '@prisma/client';
+
 export interface ILandingPageStrategy {
-  getData(): Promise<any>;
+  getData(programCategory: ProgramCategory | null): Promise<any>;
 }

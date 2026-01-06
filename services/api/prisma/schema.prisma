@@ -96,6 +96,16 @@ enum AnnouncementType {
   alert
 }
 
+enum FaqCategory {
+  general
+  registration
+  payment
+  event_details
+  accommodation
+  visa
+  other
+}
+
 enum DeletionStatus {
   pending
   approved
@@ -645,19 +655,21 @@ model Program {
 // ============================================================================
 
 model ProgramFaq {
-  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId String   @map("program_id") @db.Uuid
-  question  String   @db.Text
-  answer    String   @db.Text
-  order     Int      @default(0) // For sorting
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id        String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId String      @map("program_id") @db.Uuid
+  question  String      @db.Text
+  answer    String      @db.Text
+  category  FaqCategory @default(general)
+  order     Int         @default(0) // For sorting
+  isActive  Boolean     @default(true) @map("is_active")
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   // Relations
   program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
 
   @@index([programId])
+  @@index([category])
   @@index([order])
   @@map("program_faqs")
 }

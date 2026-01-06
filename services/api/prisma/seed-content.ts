@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, FaqCategory } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 
 const prisma = new PrismaClient();
@@ -227,19 +227,36 @@ async function main() {
         programId,
         question: 'Is accommodation included?',
         answer: 'Yes, accommodation is included in the full-board package at a 4-star hotel.',
+        category: FaqCategory.accommodation,
         order: 1,
       },
       {
         programId,
         question: 'Do I need a visa?',
         answer: 'It depends on your nationality. We will provide an invitation letter to support your visa application.',
+        category: FaqCategory.visa,
         order: 2,
       },
       {
         programId,
         question: 'Is there an age limit?',
         answer: 'The program is open to youth aged 17-30 years old.',
+        category: FaqCategory.registration,
         order: 3,
+      },
+      {
+        programId,
+        question: 'Can I bring a guest?',
+        answer: 'Guests are allowed but must register separately as observers.',
+        category: FaqCategory.general,
+        order: 4,
+      },
+      {
+        programId,
+        question: 'Is flight ticket included?',
+        answer: 'No, flight tickets are not included in the registration fee.',
+        category: FaqCategory.payment,
+        order: 5,
       },
     ],
   });
