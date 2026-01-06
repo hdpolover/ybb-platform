@@ -133,6 +133,20 @@ enum ChangedByType {
   system
 }
 
+enum PricingFeeType {
+  registration_fee
+  program_fee_1
+  program_fee_2
+  full_fee
+  custom_fee
+}
+
+enum PricingTarget {
+  self_funded
+  fully_funded
+  all
+}
+
 // ============================================================================
 // CORE AUTHENTICATION (Brand-Scoped)
 // ============================================================================
@@ -831,9 +845,14 @@ model ProgramPricingTier {
   currency    String    @db.VarChar(3)
   capacity    Int?      // Max slots for this tier
   soldCount   Int       @default(0) @map("sold_count") // Track sales
-  validFrom   DateTime  @map("valid_from") @db.Timestamptz(6)
-  validUntil  DateTime  @map("valid_until") @db.Timestamptz(6)
   benefits    Json?     @default("[]") @db.Json // ["Workshop access", "Certificate"]
+  requirements Json?    @default("[]") @db.Json // Display requirements list
+  icon        String?   @db.VarChar(100) // Icon identifier
+  
+  // Refined fields base on new requirements
+  feeType     PricingFeeType @default(registration_fee) @map("fee_type")
+  target      PricingTarget  @default(all)
+
   isActive    Boolean   @default(true) @map("is_active")
   order       Int       @default(0)
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -842,11 +861,24 @@ model ProgramPricingTier {
   // Relations
   program      Program                  @relation(fields: [programId], references: [id], onDelete: Cascade)
   applications ParticipantApplication[]
+  validityPeriods PricingTierValidityPeriod[]
 
   @@index([programId])
   @@index([isActive])
-  @@index([validFrom, validUntil])
   @@map("program_pricing_tiers")
+}
+
+model PricingTierValidityPeriod {
+  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  pricingTierId String   @map("pricing_tier_id") @db.Uuid
+  startDate     DateTime @map("start_date") @db.Timestamptz(6)
+  endDate       DateTime @map("end_date") @db.Timestamptz(6)
+  
+  pricingTier   ProgramPricingTier @relation(fields: [pricingTierId], references: [id], onDelete: Cascade)
+  
+  @@map("pricing_tier_validity_periods")
+  @@index([pricingTierId])
+  @@index([startDate, endDate])
 }
 
 model ProgramRequirement {

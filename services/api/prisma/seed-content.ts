@@ -1,4 +1,4 @@
-import { PrismaClient, FaqCategory } from '@prisma/client';
+import { PrismaClient, FaqCategory, ApplicationCategory, PricingFeeType, PricingTarget } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 
 const prisma = new PrismaClient();
@@ -264,32 +264,75 @@ async function main() {
 
   // --- 8. Seed Pricing Tiers ---
   await prisma.programPricingTier.deleteMany({ where: { programId } });
-  await prisma.programPricingTier.createMany({
-    data: [
-      {
+  
+  // Tier 1: Self Funded Registration
+  await prisma.programPricingTier.create({
+    data: {
         programId,
-        name: 'Early Bird - Full Delegate',
-        price: 350.00,
+        name: 'Self Funded',
+        price: 15.00,
         currency: 'USD',
-        description: 'Includes accommodation, meals, and kit.',
-        validFrom: new Date('2024-11-01'),
-        validUntil: new Date('2024-12-31'),
-        benefits: ["Hotel Accommodation", "3 Meals/Day", "Conference Kit", "Certificate"],
+        description: 'Registration',
+        benefits: ["Guaranteed program participation", "Faster application processing", "You pay all scheduled fee batches yourself"],
+        requirements: ["Complete registration form and documentation", "Submit required documents on time", "Pay fees according to scheduled payment batches"],
+        icon: 'credit-card',
+        target: PricingTarget.self_funded,
+        feeType: PricingFeeType.registration_fee,
         order: 1,
-      },
-      {
-        programId,
-        name: 'Regular - Full Delegate',
-        price: 450.00,
-        currency: 'USD',
-        description: 'Standard rate including accommodation.',
-        validFrom: new Date('2025-01-01'),
-        validUntil: new Date('2025-03-31'),
-        benefits: ["Hotel Accommodation", "3 Meals/Day", "Conference Kit", "Certificate"],
-        order: 2,
-      },
-    ],
+        validityPeriods: {
+          create: [
+            { startDate: new Date('2026-01-10'), endDate: new Date('2026-01-30') },
+            { startDate: new Date('2026-02-10'), endDate: new Date('2026-02-20') }
+          ]
+        }
+    }
   });
+
+  // Tier 2: Fully Funded Registration
+  await prisma.programPricingTier.create({
+    data: {
+        programId,
+        name: 'Fully Funded',
+        price: 10.00,
+        currency: 'USD',
+        description: 'Reimbursement System',
+        benefits: ["Full reimbursement of all payments", "Enhanced program recognition", "Access to exclusive fully funded activities"],
+        requirements: ["Complete registration form and documentation", "Submit detailed essays and applications", "Participate in interviews and evaluations"],
+        icon: 'award',
+        target: PricingTarget.fully_funded,
+        feeType: PricingFeeType.registration_fee,
+        order: 2,
+        validityPeriods: {
+          create: [
+             // Set this to a past date to match "Not Available" in valid scenarios, or user provided dates.
+             // User example: Aug 01 - Sep 30, 2025
+            { startDate: new Date('2025-08-01'), endDate: new Date('2025-09-30') }
+          ]
+        }
+    }
+  });
+
+  // Tier 3: Program Fee Batch 1 (Example of different fee type)
+  await prisma.programPricingTier.create({
+    data: {
+        programId,
+        name: 'Program Fee - Batch 1',
+        price: 150.00,
+        currency: 'USD',
+        description: 'First installment of program fee.',
+        benefits: ["Secures your seat", "Access to pre-event materials"],
+        icon: 'briefcase',
+        target: PricingTarget.self_funded,
+        feeType: PricingFeeType.program_fee_1,
+        order: 3,
+        validityPeriods: {
+          create: [
+            { startDate: new Date('2026-03-01'), endDate: new Date('2026-03-31') }
+          ]
+        }
+    }
+  });
+
   console.log('- Seeded Pricing Tiers');
   
   // --- 9. Seed Requirements ---
