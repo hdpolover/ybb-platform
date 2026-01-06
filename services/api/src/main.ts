@@ -1,7 +1,8 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { setupSwagger } from './config/swagger.config';
+import { TransformInterceptor } from './shared/interceptors/transform.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -18,14 +19,23 @@ async function bootstrap() {
     }),
   );
 
+  // Global Interceptor for standard response format
+  app.useGlobalInterceptors(new TransformInterceptor());
+
+  // API Versioning
+  app.enableVersioning({
+    type: VersioningType.URI,
+    defaultVersion: '1',
+  });
+
   // CORS
   app.enableCors({
     origin: process.env.CORS_ORIGIN || 'http://localhost:3001',
     credentials: true,
   });
 
-  // Global prefix
-  app.setGlobalPrefix('v1');
+  // Global prefix removed in favor of versioning
+  // app.setGlobalPrefix('v1');
 
   // Swagger documentation
   setupSwagger(app);
