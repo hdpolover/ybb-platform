@@ -186,6 +186,15 @@ export class ProgramResourceResponseDto {
     type: string;
 }
 
+
+export class ProgramPricingTierValidityPeriodDto {
+    @ApiProperty()
+    startDate: Date;
+
+    @ApiProperty()
+    endDate: Date;
+}
+
 export class ProgramPricingTierResponseDto {
     @ApiProperty()
     id: string;
@@ -201,6 +210,12 @@ export class ProgramPricingTierResponseDto {
 
     @ApiProperty()
     currency: string;
+    
+    @ApiProperty({ required: false })
+    feeType?: string;
+
+    @ApiProperty({ required: false })
+    target?: string;
 
     @ApiProperty({ required: false })
     capacity?: number;
@@ -208,15 +223,19 @@ export class ProgramPricingTierResponseDto {
     @ApiProperty()
     soldCount: number;
 
-    @ApiProperty()
-    validFrom: Date;
-
-    @ApiProperty()
-    validUntil: Date;
+    @ApiProperty({ type: [ProgramPricingTierValidityPeriodDto], required: false })
+    validityPeriods?: ProgramPricingTierValidityPeriodDto[];
 
     @ApiProperty({ required: false })
     benefits?: any;
+    
+    @ApiProperty({ required: false })
+    icon?: string;
+    
+    @ApiProperty({ required: false })
+    requirements?: any;
 }
+
 
 export class ProgramRequirementResponseDto {
     @ApiProperty()

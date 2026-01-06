@@ -13,7 +13,7 @@ import {
     ProgramRequirement,
 } from '@prisma/client';
 import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service';
-import { IProgramContentRepository } from '../../../../core/interfaces/repositories/program-content.repository.interface';
+import { IProgramContentRepository, ProgramPricingTierWithPeriods } from '../../../../core/interfaces/repositories/program-content.repository.interface';
 
 @Injectable()
 export class ProgramContentRepository implements IProgramContentRepository {
@@ -84,10 +84,13 @@ export class ProgramContentRepository implements IProgramContentRepository {
         });
     }
 
-    async findPricingTiersByProgramId(programId: string): Promise<ProgramPricingTier[]> {
+    async findPricingTiersByProgramId(programId: string): Promise<ProgramPricingTierWithPeriods[]> {
         return this.prisma.programPricingTier.findMany({
             where: { programId, isActive: true },
             orderBy: { order: 'asc' },
+            include: {
+                validityPeriods: true
+            }
         });
     }
 

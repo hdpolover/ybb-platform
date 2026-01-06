@@ -22,15 +22,7 @@ export function setupSwagger(app: INestApplication): void {
   // Base builder for application
   const builder = new DocumentBuilder()
     .setTitle('YBB Platform API')
-    .setDescription(`
-      YBB Platform API Gateway - Brand-Scoped Multi-Tenant System.
-
-      Key Features:
-      - **Program Management**: Create and manage global programs and events.
-      - **User & Participant System**: Handles registration, essays, and status tracking.
-      - **Payment Processing**: Integrated support for Midtrans and Xendit.
-      - **Content Delivery**: CMS capabilities for landing pages and announcements.
-    `)
+    .setDescription('YBB Platform API Gateway - Brand-Scoped Multi-Tenant System.')
     .setVersion('1.0')
     .addBearerAuth();
 
