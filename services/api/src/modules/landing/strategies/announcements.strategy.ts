@@ -1,9 +1,26 @@
 import { Injectable } from '@nestjs/common';
 import { ILandingPageStrategy } from './landing-page.strategy';
+import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
+import { ProgramCategory } from '@prisma/client';
 
 @Injectable()
 export class AnnouncementsStrategy implements ILandingPageStrategy {
-  async getData() {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async getData(category: ProgramCategory | null) {
+    const announcements = category ? await this.prisma.systemAnnouncement.findMany({
+        where: {
+            programCategoryId: category.id,
+            isPublished: true,
+            OR: [
+                { targetAudience: 'all' },
+                // Add other public audiences if applicable
+            ]
+        },
+        orderBy: { publishedAt: 'desc' },
+        take: 10
+    }) : [];
+
     return {
       slug: 'announcements',
       title: 'Announcements',
@@ -17,8 +34,14 @@ export class AnnouncementsStrategy implements ILandingPageStrategy {
         },
         {
           type: 'announcement_list',
-          // Placeholder
-          data: [],
+          data: announcements.map(a => ({
+              id: a.id,
+              title: a.title,
+              summary: a.summary,
+              date: a.publishedAt,
+              type: a.type,
+              url: a.actionUrl
+          })),
         },
       ],
     };
