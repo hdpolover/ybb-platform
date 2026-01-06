@@ -1,5 +1,5 @@
 import { Controller, Get, Query, Param, Put, Post, Delete, Body, UseGuards, Request } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { ListProgramsDto } from './dto/list-programs.dto';
 import { ProgramListResponseDto } from './dto/program-response.dto';
 import { ListProgramsQuery } from '../application/queries/list-programs.query';
@@ -189,6 +189,10 @@ export class ProgramsController {
   @Get(':identifier')
   @Public()
   @ApiOperation({ summary: 'Get program detail by ID or slug' })
+  @ApiQuery({ name: 'include', required: false, description: 'Comma-separated relations to include (timeline, schedules, speakers, gallery, testimonials, faqs, partners, resources, pricing-tiers, requirements)' })
+  @ApiQuery({ name: 'testimonialsLimit', required: false, type: Number, description: 'Limit the number of testimonials returned' })
+  @ApiQuery({ name: 'announcementsLimit', required: false, type: Number, description: 'Limit the number of announcements returned' })
+  @ApiQuery({ name: 'resourcesLimit', required: false, type: Number, description: 'Limit the number of resources returned' })
   @ApiResponse({ status: 200, type: ProgramDetailResponseDto })
   @ApiResponse({ status: 404, description: 'Program not found' })
   async findOne(
