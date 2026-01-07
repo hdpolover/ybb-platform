@@ -393,9 +393,6 @@ services:
     volumes:
       - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./infrastructure/nginx/conf.d/default.prod.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./infrastructure/nginx/ssl:/etc/nginx/ssl:ro
-      - ./certbot/conf:/etc/letsencrypt:ro
-      - ./certbot/www:/var/www/certbot:ro
     networks:
       - ybb-network
       - web_gateway
@@ -413,19 +410,6 @@ services:
         reservations:
           cpus: '0.1'
           memory: 128M
-
-  # =========================================
-  # Certbot for SSL
-  # =========================================
-  certbot:
-    image: certbot/certbot
-    container_name: ybb-certbot-prod
-    volumes:
-      - ./certbot/conf:/etc/letsencrypt
-      - ./certbot/www:/var/www/certbot
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
-    networks:
-      - ybb-network
 
   # =========================================
   # Monitoring (Prometheus)
