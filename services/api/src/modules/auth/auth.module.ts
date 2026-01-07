@@ -6,6 +6,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthController } from './presentation/auth.controller';
 import { LoginHandler } from './application/commands/handlers/login.handler';
 import { RegisterHandler } from './application/commands/handlers/register.handler';
+import { RegisterAdminHandler } from './application/commands/handlers/register-admin.handler';
 import { LogoutHandler } from './application/commands/handlers/logout.handler';
 import { ForgotPasswordHandler } from './application/commands/handlers/forgot-password.handler';
 import { JwtStrategy } from './infrastructure/strategies/jwt.strategy';
@@ -45,6 +46,7 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
     PrismaService,
     LoginHandler,
     RegisterHandler,
+    RegisterAdminHandler,
     LogoutHandler,
     ForgotPasswordHandler,
     JwtStrategy,
