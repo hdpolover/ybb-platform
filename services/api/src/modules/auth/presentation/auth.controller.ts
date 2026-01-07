@@ -3,14 +3,17 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagg
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { RegisterAdminDto } from './dto/register-admin.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { LoginHandler } from '../application/commands/handlers/login.handler';
 import { RegisterHandler } from '../application/commands/handlers/register.handler';
+import { RegisterAdminHandler } from '../application/commands/handlers/register-admin.handler';
 import { LogoutHandler } from '../application/commands/handlers/logout.handler';
 import { ForgotPasswordHandler } from '../application/commands/handlers/forgot-password.handler';
 import { LoginCommand } from '../application/commands/login.command';
 import { RegisterCommand } from '../application/commands/register.command';
+import { RegisterAdminCommand } from '../application/commands/register-admin.command';
 import { LogoutCommand } from '../application/commands/logout.command';
 import { ForgotPasswordCommand } from '../application/commands/forgot-password.command';
 import { Public } from '../../../shared/decorators/public.decorator';
@@ -23,6 +26,7 @@ export class AuthController {
   constructor(
     private readonly loginHandler: LoginHandler,
     private readonly registerHandler: RegisterHandler,
+    private readonly registerAdminHandler: RegisterAdminHandler,
     private readonly logoutHandler: LogoutHandler,
     private readonly forgotPasswordHandler: ForgotPasswordHandler,
   ) { }
@@ -51,6 +55,22 @@ export class AuthController {
       dto.programCategoryId,
     );
     return this.registerHandler.execute(command);
+  }
+
+  @Public()
+  @Post('register-admin')
+  @Throttle({ default: { limit: 3, ttl: 3600000 } }) // 3 attempts per hour
+  @ApiOperation({ summary: 'Admin registration (Requires Secret Key)' })
+  async registerAdmin(@Body() dto: RegisterAdminDto): Promise<AuthResponseDto> {
+    const command = new RegisterAdminCommand(
+      dto.email,
+      dto.password,
+      dto.fullName,
+      dto.secretKey,
+      dto.programCategoryId,
+      dto.role,
+    );
+    return this.registerAdminHandler.execute(command);
   }
 
   @Public()
