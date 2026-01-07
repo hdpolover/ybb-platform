@@ -1,10 +1,12 @@
-import { Controller, Post, Body, Get, UseGuards, HttpCode, HttpStatus, Headers, Query } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, HttpCode, HttpStatus, Headers, Query, Ip, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse, ApiHeader, ApiQuery } from '@nestjs/swagger';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
+import { Request } from 'express';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RegisterAdminDto } from './dto/register-admin.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { UserProfileDto } from './dto/user-profile.dto';
@@ -13,12 +15,14 @@ import { RegisterHandler } from '../application/commands/handlers/register.handl
 import { RegisterAdminHandler } from '../application/commands/handlers/register-admin.handler';
 import { LogoutHandler } from '../application/commands/handlers/logout.handler';
 import { ForgotPasswordHandler } from '../application/commands/handlers/forgot-password.handler';
+import { ResetPasswordHandler } from '../application/commands/handlers/reset-password.handler';
 import { VerifyEmailHandler } from '../application/commands/handlers/verify-email.handler';
 import { LoginCommand } from '../application/commands/login.command';
 import { RegisterCommand } from '../application/commands/register.command';
 import { RegisterAdminCommand } from '../application/commands/register-admin.command';
 import { LogoutCommand } from '../application/commands/logout.command';
 import { ForgotPasswordCommand } from '../application/commands/forgot-password.command';
+import { ResetPasswordCommand } from '../application/commands/reset-password.command';
 import { VerifyEmailCommand } from '../application/commands/verify-email.command';
 import { Public } from '../../../shared/decorators/public.decorator';
 import { CurrentUser, CurrentUserData } from '../../../shared/decorators/current-user.decorator';
@@ -39,6 +43,7 @@ export class AuthController {
     private readonly registerAdminHandler: RegisterAdminHandler,
     private readonly logoutHandler: LogoutHandler,
     private readonly forgotPasswordHandler: ForgotPasswordHandler,
+    private readonly resetPasswordHandler: ResetPasswordHandler,
     private readonly verifyEmailHandler: VerifyEmailHandler,
     private readonly prisma: PrismaService,
   ) { }
@@ -52,10 +57,15 @@ export class AuthController {
     @Body() dto: LoginDto,
     @Query('url') url?: string,
     @Headers('x-brand-domain') brandDomain?: string,
+    @Ip() ip?: string,
+    @Req() req?: Request,
   ): Promise<AuthResponseDto> {
+    const userAgent = req?.headers['user-agent'] || 'unknown';
     const command = new LoginCommand(
       dto.email,
       dto.password,
+      ip || '0.0.0.0',
+      userAgent,
       dto.programCategoryId,
     );
     return this.loginHandler.execute(command, url || brandDomain);
@@ -111,6 +121,15 @@ export class AuthController {
   ) {
     const command = new ForgotPasswordCommand(dto.email, dto.programCategoryId);
     return this.forgotPasswordHandler.execute(command, url || brandDomain);
+  }
+
+  @Public()
+  @Post('reset-password')
+  @Throttle({ default: { limit: 3, ttl: 900000 } })
+  @ApiOperation({ summary: 'Reset password using token' })
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    const command = new ResetPasswordCommand(dto.token, dto.password);
+    return this.resetPasswordHandler.execute(command);
   }
 
   @Public()

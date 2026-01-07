@@ -66,6 +66,28 @@ export class LoginHandler {
     return category.id;
   }
 
+  private parseUserAgent(ua: string) {
+    let browser = 'Unknown';
+    let os = 'Unknown';
+    let deviceType = 'Desktop';
+
+    if (/mobile/i.test(ua)) deviceType = 'Mobile';
+    if (/tablet/i.test(ua)) deviceType = 'Tablet';
+
+    if (/windows/i.test(ua)) os = 'Windows';
+    else if (/mac os/i.test(ua)) os = 'macOS';
+    else if (/android/i.test(ua)) os = 'Android';
+    else if (/ios|iphone|ipad/i.test(ua)) os = 'iOS';
+    else if (/linux/i.test(ua)) os = 'Linux';
+
+    if (/chrome/i.test(ua)) browser = 'Chrome';
+    else if (/firefox/i.test(ua)) browser = 'Firefox';
+    else if (/safari/i.test(ua) && !/chrome/i.test(ua)) browser = 'Safari';
+    else if (/edge/i.test(ua)) browser = 'Edge';
+
+    return { browser, os, deviceType };
+  }
+
   async execute(command: LoginCommand, domain?: string): Promise<AuthResponseDto> {
     // Resolve programCategoryId from command or domain
     const programCategoryId = await this.resolveProgramCategoryId(command.programCategoryId, domain);
@@ -79,6 +101,7 @@ export class LoginHandler {
         },
       },
       include: {
+        programCategory: true,
         identities: {
           include: {
             provider: true,
@@ -94,6 +117,11 @@ export class LoginHandler {
     // Check if user is active
     if (!user.isActive) {
       throw new UnauthorizedException('Account is not active');
+    }
+
+    // Check if email is verified (if required by program category)
+    if (user.programCategory.requireEmailVerification && !user.emailVerified) {
+      throw new UnauthorizedException('Email not verified. Please verify your email before logging in.');
     }
 
     // Check if user has local auth identity
@@ -160,6 +188,28 @@ export class LoginHandler {
 
     const refreshToken = this.jwtService.sign(refreshTokenPayload, {
       expiresIn: '7d',
+    });
+
+    // Create User Session
+    const agentInfo = this.parseUserAgent(command.userAgent);
+    const sessionToken = randomUUID();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days expiration
+
+    await this.prisma.userSession.create({
+      data: {
+        userId: user.id,
+        sessionToken,
+        refreshToken,
+        deviceType: agentInfo.deviceType,
+        deviceName: `${agentInfo.browser} on ${agentInfo.os}`,
+        browser: agentInfo.browser,
+        operatingSystem: agentInfo.os,
+        ipAddress: command.ipAddress,
+        expiresAt,
+        country: 'XX', // GeoIP could be added later
+        city: 'Unknown',
+      }
     });
 
     return {
