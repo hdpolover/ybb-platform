@@ -72,6 +72,8 @@ import {
   CreateProgramPricingTierDto, UpdateProgramPricingTierDto,
   CreateProgramRequirementDto, UpdateProgramRequirementDto,
 } from './dto/create-update-program-content.dto';
+import { CreateApplicationFormFieldDto } from '../application/dto/application-form-field/create-application-form-field.dto';
+import { UpdateApplicationFormFieldDto } from '../application/dto/application-form-field/update-application-form-field.dto';
 
 // Import Commands for Content Management
 import {
@@ -87,6 +89,12 @@ import {
   CreateProgramPricingTierCommand, UpdateProgramPricingTierCommand, DeleteProgramPricingTierCommand,
   CreateProgramRequirementCommand, UpdateProgramRequirementCommand, DeleteProgramRequirementCommand,
 } from '../application/commands/program-content.commands';
+import {
+  CreateApplicationFormFieldCommand,
+  UpdateApplicationFormFieldCommand,
+  DeleteApplicationFormFieldCommand,
+} from '../application/commands/application-form-field.commands';
+import { GetApplicationFormFieldsQuery } from '../application/queries/get-application-form-fields.query';
 
 // Import Handlers for Content Management
 import {
@@ -102,6 +110,12 @@ import {
   CreateProgramPricingTierHandler, UpdateProgramPricingTierHandler, DeleteProgramPricingTierHandler,
   CreateProgramRequirementHandler, UpdateProgramRequirementHandler, DeleteProgramRequirementHandler,
 } from '../application/commands/handlers/manage-program-content.handlers';
+import {
+  CreateApplicationFormFieldHandler,
+  UpdateApplicationFormFieldHandler,
+  DeleteApplicationFormFieldHandler,
+} from '../application/commands/handlers/application-form-field.handler';
+import { GetApplicationFormFieldsHandler } from '../application/queries/handlers/get-application-form-fields.handler';
 
 @ApiTags('programs')
 @Controller('programs')
@@ -169,6 +183,11 @@ export class ProgramsController {
     private readonly createProgramRequirementHandler: CreateProgramRequirementHandler,
     private readonly updateProgramRequirementHandler: UpdateProgramRequirementHandler,
     private readonly deleteProgramRequirementHandler: DeleteProgramRequirementHandler,
+    // Content Management Handlers
+    private readonly createApplicationFormFieldHandler: CreateApplicationFormFieldHandler,
+    private readonly updateApplicationFormFieldHandler: UpdateApplicationFormFieldHandler,
+    private readonly deleteApplicationFormFieldHandler: DeleteApplicationFormFieldHandler,
+    private readonly getApplicationFormFieldsHandler: GetApplicationFormFieldsHandler,
   ) { }
 
   @Get()
@@ -632,6 +651,38 @@ export class ProgramsController {
   @ApiOperation({ summary: 'Delete requirement' })
   async deleteRequirement(@Param('itemId') itemId: string, @Request() req: any) {
     return this.deleteProgramRequirementHandler.execute(new DeleteProgramRequirementCommand(itemId, req.user.id));
+  }
+
+  // --- Form Field Endpoints ---
+  @Get(':id/form-fields')
+  @Public()
+  @ApiOperation({ summary: 'Get application form fields' })
+  async getFormFields(@Param('id') id: string) {
+    return this.getApplicationFormFieldsHandler.execute(new GetApplicationFormFieldsQuery(id));
+  }
+
+  @Post(':id/form-fields')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Add application form field' })
+  async addFormField(@Param('id') programId: string, @Body() dto: CreateApplicationFormFieldDto, @Request() req: any) {
+    return this.createApplicationFormFieldHandler.execute(new CreateApplicationFormFieldCommand(programId, dto, req.user.id));
+  }
+
+  @Put('form-fields/:itemId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update application form field' })
+  async updateFormField(@Param('itemId') itemId: string, @Body() dto: UpdateApplicationFormFieldDto, @Request() req: any) {
+    return this.updateApplicationFormFieldHandler.execute(new UpdateApplicationFormFieldCommand(itemId, dto, req.user.id));
+  }
+
+  @Delete('form-fields/:itemId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete application form field' })
+  async deleteFormField(@Param('itemId') itemId: string, @Request() req: any) {
+    return this.deleteApplicationFormFieldHandler.execute(new DeleteApplicationFormFieldCommand(itemId, req.user.id));
   }
 }
 

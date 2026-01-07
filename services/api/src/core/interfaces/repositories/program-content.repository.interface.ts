@@ -11,6 +11,7 @@ import {
     ProgramPricingTier,
     ProgramRequirement,
     PricingTierValidityPeriod,
+    ApplicationFormField,
 } from '@prisma/client';
 
 export type ProgramPricingTierWithPeriods = ProgramPricingTier & { validityPeriods: PricingTierValidityPeriod[] };
@@ -27,6 +28,7 @@ export interface IProgramContentRepository {
     findResourcesByProgramId(programId: string, limit?: number): Promise<ProgramResource[]>;
     findPricingTiersByProgramId(programId: string): Promise<ProgramPricingTierWithPeriods[]>;
     findRequirementsByProgramId(programId: string): Promise<ProgramRequirement[]>;
+    findFormFieldsByProgramId(programId: string): Promise<ApplicationFormField[]>;
 
     // CRUD for Timeline
     createTimeline(data: Partial<ProgramTimeline>): Promise<ProgramTimeline>;
@@ -93,4 +95,10 @@ export interface IProgramContentRepository {
     updateRequirement(id: string, data: Partial<ProgramRequirement>): Promise<ProgramRequirement>;
     deleteRequirement(id: string): Promise<void>;
     findRequirementById(id: string): Promise<ProgramRequirement | null>;
+
+    // CRUD for Application Form Fields
+    createFormField(data: Partial<ApplicationFormField>): Promise<ApplicationFormField>;
+    updateFormField(id: string, data: Partial<ApplicationFormField>): Promise<ApplicationFormField>;
+    deleteFormField(id: string): Promise<void>;
+    findFormFieldById(id: string): Promise<ApplicationFormField | null>;
 }
