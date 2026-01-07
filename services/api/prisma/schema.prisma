@@ -156,8 +156,8 @@ model User {
   email             String @db.VarChar(255)
   programCategoryId String @map("program_category_id") @db.Uuid
 
-  // Authentication
-  passwordHash             String    @map("password_hash") @db.VarChar(255)
+  // Authentication - passwordHash kept for backward compatibility
+  passwordHash             String?   @map("password_hash") @db.VarChar(255)
   emailVerified            Boolean   @default(false) @map("email_verified")
   emailVerificationToken   String?   @map("email_verification_token") @db.VarChar(255)
   emailVerificationExpires DateTime? @map("email_verification_expires") @db.Timestamptz(6)
@@ -184,6 +184,7 @@ model User {
 
   // Relations
   programCategory       ProgramCategory          @relation(fields: [programCategoryId], references: [id])
+  identities            UserIdentity[]           // Multiple auth providers
   admin                 Admin?
   participant           Participant?
   ambassador            Ambassador?
@@ -212,6 +213,38 @@ model User {
   @@index([isActive, deletedAt])
   @@index([passwordResetToken])
   @@map("users")
+}
+
+// User Authentication Identities - Supports multiple auth providers per user
+model UserIdentity {
+  id            String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  provider      String    @db.VarChar(50) // local, google, facebook, apple, etc.
+  providerId    String?   @map("provider_id") @db.VarChar(255) // Provider's user ID (null for local)
+  providerEmail String?   @map("provider_email") @db.VarChar(255) // Email from provider
+  
+  // OAuth tokens (optional, for future use)
+  accessToken   String?   @map("access_token") @db.Text
+  refreshToken  String?   @map("refresh_token") @db.Text
+  tokenExpiry   DateTime? @map("token_expiry") @db.Timestamptz(6)
+  
+  // Metadata
+  isPrimary     Boolean   @default(false) @map("is_primary") // Primary login method
+  lastUsedAt    DateTime? @map("last_used_at") @db.Timestamptz(6)
+  
+  // Timestamps
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, provider]) // One provider per user
+  @@unique([provider, providerId]) // Unique provider-providerId combination
+  @@index([userId])
+  @@index([provider])
+  @@index([providerId])
+  @@map("user_identities")
 }
 
 model ProgramCategory {

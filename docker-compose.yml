@@ -302,38 +302,9 @@ services:
       - "traefik.http.services.admin.loadbalancer.server.port=4001"
 
   # =========================================
-  # Landing Page / Static (Nginx) -> ybbhub.com
+  # Nginx removed for local development
+  # Access services directly on their ports
   # =========================================
-  nginx:
-    build:
-      context: ./infrastructure/nginx
-      dockerfile: Dockerfile
-    container_name: ybb-nginx
-    restart: unless-stopped
-    volumes:
-      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./infrastructure/nginx/conf.d/default.dev.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./infrastructure/nginx/ssl:/etc/nginx/ssl:ro
-    networks:
-      - ybb-network
-      - web_gateway
-    depends_on:
-      - api
-      - admin-dashboard
-      - minio
-      - payment-service
-      - notification-service
-      - file-service
-      - rabbitmq
-      - grafana
-      - prometheus
-      - pgadmin
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.landing.rule=Host(`ybbhub.com`)"
-      - "traefik.http.routers.landing.entrypoints=websecure"
-      - "traefik.http.routers.landing.tls.certresolver=myresolver"
-      - "traefik.http.services.landing.loadbalancer.server.port=80"
 
   # =========================================
   # Monitoring (Prometheus)

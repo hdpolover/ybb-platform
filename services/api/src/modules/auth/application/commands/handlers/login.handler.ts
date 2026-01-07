@@ -69,6 +69,7 @@ export class LoginHandler {
   async execute(command: LoginCommand, domain?: string): Promise<AuthResponseDto> {
     // Resolve programCategoryId from command or domain
     const programCategoryId = await this.resolveProgramCategoryId(command.programCategoryId, domain);
+    
     // Find user by email and programCategoryId (brand-scoped)
     const user = await this.prisma.user.findUnique({
       where: {
@@ -76,6 +77,9 @@ export class LoginHandler {
           email: command.email,
           programCategoryId: programCategoryId,
         },
+      },
+      include: {
+        identities: true,
       },
     });
 
@@ -88,10 +92,17 @@ export class LoginHandler {
       throw new UnauthorizedException('Account is not active');
     }
 
+    // Check if user has local auth identity
+    const localIdentity = user.identities.find(i => i.provider === 'local');
+    
+    if (!localIdentity && !user.passwordHash) {
+      throw new UnauthorizedException('Local authentication not configured. Please use OAuth provider.');
+    }
+
     // Verify password
     const isPasswordValid = await bcrypt.compare(
       command.password,
-      user.passwordHash,
+      user.passwordHash || '',
     );
 
     if (!isPasswordValid) {
@@ -115,6 +126,14 @@ export class LoginHandler {
         lastLoginAt: new Date(),
       },
     });
+
+    // Update identity last used
+    if (localIdentity) {
+      await this.prisma.userIdentity.update({
+        where: { id: localIdentity.id },
+        data: { lastUsedAt: new Date() },
+      });
+    }
 
     // Generate JWT tokens with unique JTI for blacklisting support
     const accessTokenPayload = {

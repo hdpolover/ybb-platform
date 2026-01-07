@@ -78,31 +78,143 @@ export class RegisterHandler {
       throw new BadRequestException('Invalid program category');
     }
 
-    // Check if user already exists (email + programCategoryId combination)
-    const existingUser = await this.prisma.user.findUnique({
+    // Check if user already exists by email + programCategoryId
+    let user = await this.prisma.user.findUnique({
       where: {
         email_programCategoryId: {
           email: command.email,
           programCategoryId: programCategoryId,
         },
       },
+      include: {
+        identities: true,
+      },
     });
 
-    if (existingUser) {
-      throw new ConflictException('User already exists for this brand');
+    // For OAuth providers, check if identity already exists
+    if (command.provider !== 'local' && command.providerId) {
+      const existingIdentity = await this.prisma.userIdentity.findUnique({
+        where: {
+          provider_providerId: {
+            provider: command.provider,
+            providerId: command.providerId,
+          },
+        },
+        include: {
+          user: true,
+        },
+      });
+
+      if (existingIdentity) {
+        // User with this provider already exists, return login tokens
+        const payload = {
+          sub: existingIdentity.user.id,
+          email: existingIdentity.user.email,
+          programCategoryId: existingIdentity.user.programCategoryId,
+        };
+
+        const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
+        const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+
+        // Update last used
+        await this.prisma.userIdentity.update({
+          where: { id: existingIdentity.id },
+          data: { lastUsedAt: new Date() },
+        });
+
+        return {
+          accessToken,
+          refreshToken,
+          user: {
+            id: existingIdentity.user.id,
+            email: existingIdentity.user.email,
+            programCategoryId: existingIdentity.user.programCategoryId,
+            isActive: existingIdentity.user.isActive,
+          },
+        };
+      }
     }
 
-    // Hash password
-    const passwordHash = await bcrypt.hash(command.password, 10);
+    if (user) {
+      // User exists, check if they can add this provider
+      const existingIdentity = user.identities.find(i => i.provider === command.provider);
+      
+      if (existingIdentity) {
+        throw new ConflictException(`User already has ${command.provider} authentication configured`);
+      }
 
-    // Create user
-    const user = await this.prisma.user.create({
+      // Add new identity to existing user
+      await this.prisma.userIdentity.create({
+        data: {
+          userId: user.id,
+          provider: command.provider,
+          providerId: command.providerId,
+          providerEmail: command.email,
+          isPrimary: user.identities.length === 0, // First identity is primary
+          lastUsedAt: new Date(),
+        },
+      });
+
+      // If adding local auth, update password hash
+      if (command.provider === 'local' && command.password) {
+        const passwordHash = await bcrypt.hash(command.password, 10);
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: { passwordHash },
+        });
+      }
+
+      // Return login tokens
+      const payload = {
+        sub: user.id,
+        email: user.email,
+        programCategoryId: user.programCategoryId,
+      };
+
+      const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
+      const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+
+      return {
+        accessToken,
+        refreshToken,
+        user: {
+          id: user.id,
+          email: user.email,
+          programCategoryId: user.programCategoryId,
+          isActive: user.isActive,
+        },
+      };
+    }
+
+    // New user registration
+    // Validate password for local authentication
+    if (command.provider === 'local' && !command.password) {
+      throw new BadRequestException('Password is required for local authentication');
+    }
+
+    // Hash password only for local authentication
+    const passwordHash = command.provider === 'local' && command.password
+      ? await bcrypt.hash(command.password, 10)
+      : null;
+
+    // Create user with identity
+    user = await this.prisma.user.create({
       data: {
         email: command.email,
         passwordHash,
         programCategoryId: programCategoryId,
         isActive: true,
-        emailVerified: false,
+        // OAuth providers usually verify email automatically
+        emailVerified: command.provider !== 'local',
+        identities: {
+          create: {
+            provider: command.provider,
+            providerId: command.providerId,
+            providerEmail: command.email,
+            isPrimary: true,
+            lastUsedAt: new Date(),
+          },
+        },
       },
     });
 

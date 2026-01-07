@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, IsUUID, MinLength, IsIn } from 'class-validator';
 
 export class RegisterDto {
   @ApiProperty({ example: 'user@example.com' })
@@ -7,11 +7,11 @@ export class RegisterDto {
   @IsNotEmpty()
   email: string;
 
-  @ApiProperty({ example: 'password123', minLength: 8 })
+  @ApiProperty({ example: 'password123', minLength: 8, required: false })
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   @MinLength(8)
-  password: string;
+  password?: string;
 
   @ApiProperty({ 
     example: '123e4567-e89b-12d3-a456-426614174000',
@@ -21,4 +21,25 @@ export class RegisterDto {
   @IsUUID()
   @IsOptional()
   programCategoryId?: string;
+
+  @ApiProperty({
+    example: 'local',
+    description: 'Authentication provider: local (email/password), google, facebook, etc.',
+    required: false,
+    default: 'local',
+    enum: ['local', 'google', 'facebook', 'apple']
+  })
+  @IsString()
+  @IsOptional()
+  @IsIn(['local', 'google', 'facebook', 'apple'])
+  provider?: string;
+
+  @ApiProperty({
+    example: '123456789',
+    description: 'Provider user ID (for OAuth providers)',
+    required: false
+  })
+  @IsString()
+  @IsOptional()
+  providerId?: string;
 }
