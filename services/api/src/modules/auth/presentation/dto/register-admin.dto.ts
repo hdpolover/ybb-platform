@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsString, IsUUID, MinLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, IsUUID, MinLength, IsArray, IsOptional } from 'class-validator';
 
 export class RegisterAdminDto {
   @ApiProperty({ example: 'admin@example.com' })
@@ -38,4 +38,15 @@ export class RegisterAdminDto {
   @IsString()
   @IsNotEmpty()
   role: string;
+
+  @ApiProperty({ 
+    example: ['123e4567-e89b-12d3-a456-426614174000'],
+    description: 'Additional Program Category IDs to grant access to (Multi-Tenant Access)',
+    required: false,
+    type: [String]
+  })
+  @IsArray()
+  @IsUUID('4', { each: true })
+  @IsOptional()
+  additionalCategoryIds?: string[];
 }

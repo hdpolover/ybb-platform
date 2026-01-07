@@ -266,6 +266,7 @@ model ProgramCategory {
   team                ProgramTeam[]
   settings            ProgramCategorySetting?
   socialFeeds         ProgramSocialFeed[]
+  activeAdmins        AdminProgramCategory[]
 
   @@index([slug])
   @@index([isActive])
@@ -369,6 +370,7 @@ model Admin {
   user                 User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   role                 AdminRole?               @relation(fields: [roleId], references: [id])
   adminPrograms        AdminProgram[]
+  adminProgramCategories AdminProgramCategory[]
   reviewedApplications ParticipantApplication[]
   verifiedReferrals    AmbassadorReferral[]
   createdAnnouncements SystemAnnouncement[]     @relation("AnnouncementCreator")
@@ -429,6 +431,30 @@ model AdminProgram {
   @@index([programId])
   @@index([removedAt])
   @@map("admin_programs")
+}
+
+model AdminProgramCategory {
+  id                String          @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  adminId           String          @map("admin_id") @db.Uuid
+  programCategoryId String          @map("program_category_id") @db.Uuid
+
+  // Access Control
+  roleInBrand       String?         @map("role_in_brand") @db.VarChar(50)
+  permissions       Json            @default("[]")
+
+  // Audit
+  assignedAt        DateTime        @default(now()) @map("assigned_at") @db.Timestamptz(6)
+  assignedBy        String?         @map("assigned_by") @db.Uuid
+  legacyId          Int?            @unique @map("legacy_id")
+
+  // Relations
+  admin             Admin           @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  programCategory   ProgramCategory @relation(fields: [programCategoryId], references: [id], onDelete: Cascade)
+
+  @@unique([adminId, programCategoryId])
+  @@index([adminId])
+  @@index([programCategoryId])
+  @@map("admin_program_categories")
 }
 
 model Participant {

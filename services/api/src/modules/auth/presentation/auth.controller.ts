@@ -69,6 +69,7 @@ export class AuthController {
       dto.secretKey,
       dto.programCategoryId,
       dto.role,
+      dto.additionalCategoryIds,
     );
     return this.registerAdminHandler.execute(command);
   }
