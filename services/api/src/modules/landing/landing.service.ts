@@ -6,6 +6,7 @@ import { AboutStrategy } from './strategies/about.strategy';
 import { ProgramsStrategy } from './strategies/programs.strategy';
 import { PartnersSponsorsStrategy } from './strategies/partners-sponsors.strategy';
 import { AnnouncementsStrategy } from './strategies/announcements.strategy';
+import { SettingsStrategy } from './strategies/settings.strategy';
 import { ProgramCategory } from '@prisma/client';
 
 @Injectable()
@@ -19,6 +20,7 @@ export class LandingService {
     private readonly programsStrategy: ProgramsStrategy,
     private readonly partnersSponsorsStrategy: PartnersSponsorsStrategy,
     private readonly announcementsStrategy: AnnouncementsStrategy,
+    private readonly settingsStrategy: SettingsStrategy,
   ) {}
 
   private async resolveCategory(url?: string): Promise<ProgramCategory | null> {
@@ -85,5 +87,10 @@ export class LandingService {
   async getAnnouncements(url?: string) {
     const category = await this.resolveCategory(url);
     return this.announcementsStrategy.getData(category);
+  }
+
+  async getSettings(url?: string) {
+    const category = await this.resolveCategory(url);
+    return this.settingsStrategy.getData(category);
   }
 }

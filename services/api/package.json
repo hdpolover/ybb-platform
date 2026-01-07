@@ -111,6 +111,7 @@
     "testEnvironment": "node"
   },
   "prisma": {
-    "version": "5.19.1"
+    "version": "5.19.1",
+    "seed": "ts-node prisma/seed.ts"
   }
 }

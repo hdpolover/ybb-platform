@@ -17,7 +17,7 @@ export class HomeStrategy implements ILandingPageStrategy {
        };
     }
 
-    const [program, brandSponsors] = await Promise.all([
+    const [program, brandSponsors, socialFeeds, videoPrograms, testimonials, latestProgramWithAwards] = await Promise.all([
       this.prisma.program.findFirst({
         where: {
           programCategoryId: category.id, // Scoped to brand
@@ -49,7 +49,70 @@ export class HomeStrategy implements ILandingPageStrategy {
         },
         orderBy: { order: 'asc' },
       }),
+      this.prisma.programSocialFeed.findMany({
+        where: {
+            programCategoryId: category.id,
+            isActive: true
+        },
+        orderBy: { postedAt: 'desc' },
+        take: 6
+      }),
+      this.prisma.program.findMany({
+        where: {
+          programCategoryId: category.id,
+          isPublished: true,
+        },
+        orderBy: { year: 'desc' },
+        take: 5,
+        select: {
+            id: true,
+            name: true,
+            year: true,
+            gallery: {
+                where: { type: 'video', isActive: true },
+                orderBy: { order: 'asc' },
+                select: {
+                    id: true,
+                    title: true,
+                    description: true,
+                    imageUrl: true,
+                    videoUrl: true,
+                }
+            }
+        }
+      }),
+      this.prisma.programTestimonial.findMany({
+        where: {
+            programCategoryId: category.id,
+            category: 'alumni',
+            isActive: true
+        },
+        orderBy: [
+            { isFeatured: 'desc' }, // Featured first
+            { order: 'asc' }
+        ],
+        take: 10
+      }),
+      // For Awards - Fetch the latest published program and its awards
+      this.prisma.program.findFirst({
+        where: {
+            programCategoryId: category.id,
+            isPublished: true,
+            isActive: true
+        },
+        orderBy: { startDate: 'desc' }, // Latest program first
+        select: {
+            name: true,
+            awards: {
+                where: { isActive: true },
+                orderBy: { order: 'asc' }
+            }
+        }
+      })
     ]);
+
+    // Filter out programs that don't have any videos
+    const programsWithVideos = videoPrograms.filter(p => p.gallery && p.gallery.length > 0);
 
     return {
       slug: 'home',
@@ -67,7 +130,12 @@ export class HomeStrategy implements ILandingPageStrategy {
         {
           type: 'registration_overview',
           content: {
-            ig_feed: [], // Placeholder
+            ig_feed: socialFeeds.map(feed => ({
+              id: feed.id,
+              permalink: feed.permalink,
+              imageUrl: feed.imageUrl,
+              caption: feed.caption
+            })),
             registration_types: program?.pricingTiers.map((tier) => ({
               id: tier.id,
               name: tier.name,
@@ -111,6 +179,58 @@ export class HomeStrategy implements ILandingPageStrategy {
               ],
             },
           },
+        },
+        {
+          type: 'program_highlight_videos',
+          content: {
+            title: 'Experience Our Program in Action',
+            subtitle: `Watch the journey of ${category.name} delegates – from keynote sessions and cultural experiences to collaboration and real impact projects.`,
+            tabs: programsWithVideos.map(p => ({
+              year: p.year,
+              program_name: p.name,
+              videos: p.gallery.map(v => ({
+                id: v.id,
+                title: v.title,
+                description: v.description,
+                thumbnail: v.imageUrl,
+                video_url: v.videoUrl
+              }))
+            }))
+          }
+        },
+        {
+          type: 'alumni_stories',
+          content: {
+             title: 'What our Alumni says...',
+             subtitle: 'MORE ALUMNI MOMENTS',
+             items: testimonials.map(t => ({
+                 id: t.id,
+                 name: t.name,
+                 role: t.role,
+                 testimonial: t.testimonial,
+                 type: t.type, // video or text
+                 video_url: t.videoUrl,
+                 thumbnail_url: t.thumbnailUrl,
+                 avatar_url: t.avatarUrl,
+                 is_featured: t.isFeatured
+             }))
+          }
+        },
+        {
+          type: 'program_awards',
+          content: {
+            title: `Awards at ${latestProgramWithAwards?.name || category.name}`,
+            subtitle: 'At JYS, we recognize students who lead, speak up, and make an impact. Your teen could be one of them!',
+            items: latestProgramWithAwards?.awards.map(a => ({
+              id: a.id,
+              name: a.name,
+              description: a.description,
+              winner_count: a.winnerCount,
+              tags: a.tags,
+              color: a.color,
+              icon_url: a.iconUrl // e.g., trophy icon
+            })) || []
+          }
         },
         {
           type: 'supported_by',

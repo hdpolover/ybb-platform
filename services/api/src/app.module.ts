@@ -5,19 +5,20 @@ import { CacheModule } from '@shared/infrastructure/cache/cache.module';
 import { ThrottlerModule } from '@shared/infrastructure/throttler/throttler.module';
 import { CacheController } from '@shared/presentation/cache.controller';
 import { MetricsController } from '@shared/presentation/metrics.controller';
-import { AuthModule } from '@modules/auth/auth.module';
-import { UsersModule } from '@modules/users/users.module';
-import { ProgramsModule } from '@modules/programs/programs.module';
+import { AchievementsModule } from '@modules/achievements/achievements.module';
 import { ApplicationsModule } from '@modules/applications/applications.module';
-import { HealthModule } from '@modules/health/health.module';
+import { AuthModule } from '@modules/auth/auth.module';
+import { BrandsModule } from '@modules/brands/brands.module';
 import { FilesModule } from '@modules/files/files.module';
+import { HealthModule } from '@modules/health/health.module';
+import { LandingModule } from '@modules/landing/landing.module';
 import { ParticipantsModule } from '@modules/participants/participants.module';
 import { PaymentsModule } from '@modules/payments/payments.module';
-import { SystemModule } from '@modules/system/system.module';
-import { BrandsModule } from '@modules/brands/brands.module';
+import { ProgramsModule } from '@modules/programs/programs.module';
+import { StatsModule } from '@modules/stats/stats.module';
 import { SupportModule } from '@modules/support/support.module';
-import { AchievementsModule } from '@modules/achievements/achievements.module';
-import { LandingModule } from '@modules/landing/landing.module';
+import { SystemModule } from '@modules/system/system.module';
+import { UsersModule } from '@modules/users/users.module';
 
 @Module({
   imports: [
@@ -33,19 +34,20 @@ import { LandingModule } from '@modules/landing/landing.module';
     ThrottlerModule,
 
     // Feature modules
-    AuthModule,
-    UsersModule,
-    ProgramsModule,
+    AchievementsModule,
     ApplicationsModule,
-    HealthModule,
+    AuthModule,
+    BrandsModule,
     FilesModule,
+    HealthModule,
+    LandingModule,
     ParticipantsModule,
     PaymentsModule,
-    SystemModule, // Added SystemModule to imports array
-    BrandsModule,
+    ProgramsModule,
+    StatsModule,
     SupportModule,
-    AchievementsModule,
-    LandingModule,
+    SystemModule,
+    UsersModule,
   ],
   controllers: [CacheController, MetricsController],
 })

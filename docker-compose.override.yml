@@ -2,3 +2,7 @@ services:
   nginx:
     ports:
       - "8888:80" # Expose Nginx on port 8888 for local dev (avoiding 8080 conflict with Traefik)
+
+  postgres:
+    ports:
+      - "5432:5432"
