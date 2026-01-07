@@ -68,6 +68,8 @@ export class AuthController {
       dto.email,
       dto.password,
       dto.programCategoryId,
+      dto.provider || 'local',
+      dto.providerId,
     );
     return this.registerHandler.execute(command, url || brandDomain);
   }
