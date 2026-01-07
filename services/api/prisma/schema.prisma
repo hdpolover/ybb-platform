@@ -1441,7 +1441,7 @@ model UserSession {
 
   // Session Info
   sessionToken String  @unique @map("session_token") @db.VarChar(255)
-  refreshToken String? @unique @map("refresh_token") @db.VarChar(255)
+  refreshToken String? @unique @map("refresh_token") @db.Text
 
   // Device Info
   deviceType      String? @map("device_type") @db.VarChar(50)

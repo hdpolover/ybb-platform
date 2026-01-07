@@ -83,6 +83,17 @@ export class ForgotPasswordHandler {
         if (user) {
             // Generate a fake reset token for simulation
             const token = randomBytes(32).toString('hex');
+            const expires = new Date();
+            expires.setHours(expires.getHours() + 1); // Token valid for 1 hour
+
+            // Save token to database
+            await this.prisma.user.update({
+                where: { id: user.id },
+                data: {
+                    passwordResetToken: token,
+                    passwordResetExpires: expires,
+                },
+            });
 
             this.logger.log(`Emitting user.forgot-password for ${command.email}`);
             await lastValueFrom(
@@ -90,6 +101,7 @@ export class ForgotPasswordHandler {
                     email: user.email,
                     name: user.email.split('@')[0], // Fallback name
                     token,
+                    programCategoryId, // Pass category ID for email customization
                 })
             );
         } else {
