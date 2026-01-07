@@ -19,6 +19,7 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "migration:run": "npx prisma migrate deploy",
+    "seed:prod": "node dist/prisma/seed.js",
     "build:seed": "tsc prisma/seed.ts prisma/seed-content.ts --outDir dist/prisma --skipLibCheck --module commonjs --target es2021 --esModuleInterop",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
