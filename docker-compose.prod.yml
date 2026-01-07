@@ -102,16 +102,18 @@ services:
       - web_gateway
     labels:
       - "traefik.enable=true"
-      # API (S3)
+      # API (S3) - Explicitly load balanced to port 9000
       - "traefik.http.routers.minio-api.rule=Host(`s3.ybbhub.com`)"
       - "traefik.http.routers.minio-api.entrypoints=websecure"
       - "traefik.http.routers.minio-api.tls.certresolver=myresolver"
-      - "traefik.http.services.minio-api.loadbalancer.server.port=9000"
-      # Console (Dashboard)
+      - "traefik.http.routers.minio-api.service=minio-api-service"
+      - "traefik.http.services.minio-api-service.loadbalancer.server.port=9000"
+      # Console (Dashboard) - Explicitly load balanced to port 9001
       - "traefik.http.routers.minio-console.rule=Host(`console.ybbhub.com`)"
       - "traefik.http.routers.minio-console.entrypoints=websecure"
       - "traefik.http.routers.minio-console.tls.certresolver=myresolver"
-      - "traefik.http.services.minio-console.loadbalancer.server.port=9001"
+      - "traefik.http.routers.minio-console.service=minio-console-service"
+      - "traefik.http.services.minio-console-service.loadbalancer.server.port=9001"
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 30s
