@@ -119,8 +119,13 @@ export class EmailService {
         // Option 1: Use Resend if available
         if (this.resend) {
             try {
+                // If using Resend, we must use a verified sender or the onboarding one
+                // For development, we might use onboarding@resend.dev
+                // For production, we should use the configured sender
+                const fromAddress = this.configService.get('RESEND_FROM') || 'onboarding@resend.dev';
+                
                 const response = await this.resend.emails.send({
-                    from: 'onboarding@resend.dev',
+                    from: fromAddress,
                     to: to,
                     subject: subject,
                     html: html,
@@ -168,12 +173,14 @@ export class EmailService {
         }
     }
 
-    async sendWelcomeEmail(to: string, name: string) {
+    async sendWelcomeEmail(to: string, name: string, programCategory?: any) {
         const html = await this.compileTemplate('welcome', {
             name,
             loginUrl: this.configService.get('FRONTEND_URL') || 'http://localhost:3000/login',
+            programCategory,
         });
-        return this.sendRawEmail(to, 'Welcome to YBB Platform', html);
+        const subject = programCategory ? `Welcome to ${programCategory.name}` : 'Welcome to YBB Platform';
+        return this.sendRawEmail(to, subject, html);
     }
 
     async sendPaymentSuccessEmail(to: string, paymentData: any) {
@@ -195,5 +202,23 @@ export class EmailService {
             token,
         });
         return this.sendRawEmail(to, 'Reset Your Password', html);
+    }
+
+    async sendVerificationEmail(to: string, name: string, token: string, programCategory?: any) {
+        // Determine base URL: modify logic to prioritize programCategory.websiteUrl
+        let baseUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
+        
+        if (programCategory?.websiteUrl) {
+            // Remove trailing slash if present
+            baseUrl = programCategory.websiteUrl.replace(/\/$/, '');
+        }
+
+        const html = await this.compileTemplate('verify-email', {
+            name,
+            verificationUrl: `${baseUrl}/auth/verify-email?token=${token}`,
+            programCategory,
+        });
+        const subject = programCategory ? `Verify Your Email for ${programCategory.name}` : 'Verify Your Email Address';
+        return this.sendRawEmail(to, subject, html);
     }
 }

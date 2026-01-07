@@ -195,6 +195,7 @@ model User {
   // Authentication - passwordHash kept for backward compatibility
   passwordHash             String?   @map("password_hash") @db.VarChar(255)
   emailVerified            Boolean   @default(false) @map("email_verified")
+  emailVerifiedAt          DateTime? @map("email_verified_at") @db.Timestamptz(6)
   emailVerificationToken   String?   @map("email_verification_token") @db.VarChar(255)
   emailVerificationExpires DateTime? @map("email_verification_expires") @db.Timestamptz(6)
   passwordResetToken       String?   @map("password_reset_token") @db.VarChar(255)

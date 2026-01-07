@@ -5,17 +5,21 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RegisterAdminDto } from './dto/register-admin.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
+import { UserProfileDto } from './dto/user-profile.dto';
 import { LoginHandler } from '../application/commands/handlers/login.handler';
 import { RegisterHandler } from '../application/commands/handlers/register.handler';
 import { RegisterAdminHandler } from '../application/commands/handlers/register-admin.handler';
 import { LogoutHandler } from '../application/commands/handlers/logout.handler';
 import { ForgotPasswordHandler } from '../application/commands/handlers/forgot-password.handler';
+import { VerifyEmailHandler } from '../application/commands/handlers/verify-email.handler';
 import { LoginCommand } from '../application/commands/login.command';
 import { RegisterCommand } from '../application/commands/register.command';
 import { RegisterAdminCommand } from '../application/commands/register-admin.command';
 import { LogoutCommand } from '../application/commands/logout.command';
 import { ForgotPasswordCommand } from '../application/commands/forgot-password.command';
+import { VerifyEmailCommand } from '../application/commands/verify-email.command';
 import { Public } from '../../../shared/decorators/public.decorator';
 import { CurrentUser, CurrentUserData } from '../../../shared/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../infrastructure/guards/jwt-auth.guard';
@@ -35,6 +39,7 @@ export class AuthController {
     private readonly registerAdminHandler: RegisterAdminHandler,
     private readonly logoutHandler: LogoutHandler,
     private readonly forgotPasswordHandler: ForgotPasswordHandler,
+    private readonly verifyEmailHandler: VerifyEmailHandler,
     private readonly prisma: PrismaService,
   ) { }
 
@@ -72,6 +77,7 @@ export class AuthController {
       dto.programCategoryId,
       dto.provider || 'local',
       dto.providerId,
+      dto.programId,
     );
     return this.registerHandler.execute(command, url || brandDomain);
   }
@@ -107,6 +113,15 @@ export class AuthController {
     return this.forgotPasswordHandler.execute(command, url || brandDomain);
   }
 
+  @Public()
+  @Post('verify-email')
+  @Throttle({ default: { limit: 5, ttl: 900000 } })
+  @ApiOperation({ summary: 'Verify email address with token' })
+  async verifyEmail(@Body() dto: VerifyEmailDto) {
+    const command = new VerifyEmailCommand(dto.token);
+    return this.verifyEmailHandler.execute(command);
+  }
+
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @SkipThrottle()
@@ -131,33 +146,30 @@ export class AuthController {
   @ApiResponse({
     status: 200,
     description: 'Current user profile information',
-    schema: {
-      type: 'object',
-      properties: {
-        userId: { type: 'string', format: 'uuid' },
-        email: { type: 'string', format: 'email' },
-        programCategoryId: { type: 'string', format: 'uuid' },
-        identities: { 
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              provider: { type: 'string' },
-              lastUsedAt: { type: 'string', format: 'date-time' }
-            }
-          }
-        }
-      },
-    },
+    type: UserProfileDto,
   })
   async getProfile(@CurrentUser() user: CurrentUserData) {
-    // Fetch fresh user data with identities
+    // Fetch fresh user data with identities and participant info
     const userData = await this.prisma.user.findUnique({
       where: { id: user.userId },
       include: {
         identities: {
           include: {
             provider: true
+          }
+        },
+        participant: {
+          include: {
+            applications: {
+              where: {
+                program: {
+                  programCategoryId: user.programCategoryId
+                }
+              },
+              include: {
+                program: true
+              }
+            }
           }
         }
       }
@@ -168,9 +180,20 @@ export class AuthController {
         userId: user.userId,
         email: user.email,
         programCategoryId: user.programCategoryId,
-        identities: []
+        identities: [],
+        participantId: null,
+        registeredPrograms: []
       };
     }
+
+    const registeredPrograms = userData.participant?.applications.map(app => ({
+      programId: app.programId,
+      programName: app.program.name,
+      programSlug: app.program.slug,
+      year: app.program.year,
+      applicationId: app.id,
+      applicationStatus: app.status
+    })) || [];
 
     return {
       userId: userData.id,
@@ -179,7 +202,9 @@ export class AuthController {
       identities: userData.identities.map(i => ({
         provider: i.provider.name,
         lastUsedAt: i.lastUsedAt
-      }))
+      })),
+      participantId: userData.participant?.id,
+      registeredPrograms
     };
   }
 

@@ -1,0 +1,31 @@
+
+<div style="text-align: center;">
+    <h2 style="font-size: 24px; font-weight: 700; color: #111827; margin: 0 0 16px;">
+        Verify Your Email Address
+    </h2>
+    
+    <p style="font-size: 16px; color: #4b5563; margin-bottom: 8px;">
+        Hi {{name}},
+    </p>
+
+    <p style="font-size: 16px; color: #4b5563; margin-bottom: 32px; line-height: 1.6; max-width: 480px; margin-left: auto; margin-right: auto;">
+        Thanks for joining <strong>{{#if programCategory.name}}{{programCategory.name}}{{else}}YBB Platform{{/if}}</strong>! 
+        We're excited to have you on board. Please verify your email address to complete your registration.
+    </p>
+
+    <a href="{{verificationUrl}}" class="cta-button">
+        Verify Email Address
+    </a>
+
+    <p style="margin-top: 32px; font-size: 14px; color: #6b7280;">
+        If you didn't create an account, you can safely ignore this email.
+    </p>
+    
+    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;">
+    
+    <p style="font-size: 13px; color: #9ca3af; line-height: 1.5;">
+        Button not working? Copy and paste this link into your browser:<br>
+        <a href="{{verificationUrl}}" class="link break-word">{{verificationUrl}}</a>
+    </p>
+</div>
+

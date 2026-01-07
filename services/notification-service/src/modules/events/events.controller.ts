@@ -31,7 +31,8 @@ export class EventsController {
         if (data.email) {
             await this.emailService.sendWelcomeEmail(
                 data.email,
-                data.first_name || data.name || 'User'
+                data.first_name || data.name || 'User',
+                data.programCategory
             );
         }
     }
@@ -45,6 +46,20 @@ export class EventsController {
                 data.email,
                 data.name || 'User',
                 data.token
+            );
+        }
+    }
+
+    @EventPattern('user.verify-email')
+    async handleVerifyEmail(@Payload() data: any) {
+        this.logger.log(`Received user.verify-email event: ${JSON.stringify(data)}`);
+
+        if (data.email && data.token) {
+            await this.emailService.sendVerificationEmail(
+                data.email,
+                data.name || 'User',
+                data.token,
+                data.programCategory
             );
         }
     }

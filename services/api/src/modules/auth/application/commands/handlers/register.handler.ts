@@ -1,15 +1,18 @@
-import { Injectable, ConflictException, BadRequestException } from '@nestjs/common';
+import { Inject, Injectable, ConflictException, BadRequestException } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
 import { RegisterCommand } from '../register.command';
 import { AuthResponseDto } from '../../../presentation/dto/auth-response.dto';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class RegisterHandler {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    @Inject('NOTIFICATION_SERVICE') private readonly notificationClient: ClientProxy,
   ) {}
 
   /**
@@ -87,6 +90,21 @@ export class RegisterHandler {
       throw new BadRequestException('Invalid program category');
     }
 
+    // If this is a registration for a specific program
+    if (command.programId) {
+      const program = await this.prisma.program.findUnique({
+        where: { id: command.programId },
+      });
+
+      if (!program) {
+        throw new BadRequestException('Invalid program ID');
+      }
+
+      if (program.programCategoryId !== programCategoryId) {
+        throw new BadRequestException('Program does not belong to the selected category');
+      }
+    }
+
     // Check if user already exists by email + programCategoryId
     let user = await this.prisma.user.findUnique({
       where: {
@@ -104,6 +122,45 @@ export class RegisterHandler {
       },
     });
 
+    // Function to handle program registration
+    const handleProgramRegistration = async (userId: string, email: string) => {
+      if (!command.programId) return;
+
+      // Check if participant profile exists
+      let participant = await this.prisma.participant.findUnique({
+        where: { userId },
+      });
+
+      // Create participant profile if not exists
+      if (!participant) {
+        participant = await this.prisma.participant.create({
+          data: {
+            userId,
+            fullName: email.split('@')[0], // Default name from email prefix
+          },
+        });
+      }
+
+      // Check if already registered for this program
+      const existingApplication = await this.prisma.participantApplication.findFirst({
+        where: {
+          participantId: participant.id,
+          programId: command.programId,
+        },
+      });
+
+      // Create application if not exists
+      if (!existingApplication) {
+        await this.prisma.participantApplication.create({
+          data: {
+            participantId: participant.id,
+            programId: command.programId,
+            status: 'draft',
+          },
+        });
+      }
+    };
+
     // For OAuth providers, check if identity already exists
     if (command.provider !== 'local' && command.providerId) {
       const existingIdentity = await this.prisma.userIdentity.findUnique({
@@ -119,6 +176,8 @@ export class RegisterHandler {
       });
 
       if (existingIdentity) {
+        await handleProgramRegistration(existingIdentity.user.id, existingIdentity.user.email);
+
         // User with this provider already exists, return login tokens
         const payload = {
           sub: existingIdentity.user.id,
@@ -149,6 +208,9 @@ export class RegisterHandler {
     }
 
     if (user) {
+      // User exists, handle program registration first just in case
+      await handleProgramRegistration(user.id, user.email);
+
       // User exists, check if they can add this provider
       const existingIdentity = user.identities.find(i => i.providerId === authProvider.id);
       
@@ -210,6 +272,15 @@ export class RegisterHandler {
       ? await bcrypt.hash(command.password, 10)
       : null;
 
+    // Generate verification token for local registration
+    let emailVerificationToken: string | null = null;
+    let emailVerificationExpires: Date | null = null;
+
+    if (authProvider.name === 'local') {
+      emailVerificationToken = crypto.randomBytes(32).toString('hex');
+      emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    }
+
     // Create user with identity
     const newUser = await this.prisma.user.create({
       data: {
@@ -219,6 +290,8 @@ export class RegisterHandler {
         isActive: true,
         // OAuth providers usually verify email automatically
         emailVerified: authProvider.isOAuth,
+        emailVerificationToken,
+        emailVerificationExpires,
         identities: {
           create: {
             providerId: authProvider.id,
@@ -230,6 +303,36 @@ export class RegisterHandler {
         },
       },
     });
+
+    await handleProgramRegistration(newUser.id, newUser.email);
+
+    // Send notifications
+    if (authProvider.name === 'local' && emailVerificationToken) {
+      this.notificationClient.emit('user.verify-email', {
+        email: newUser.email,
+        name: newUser.email.split('@')[0], // Use part of email as name since we don't have it yet
+        token: emailVerificationToken,
+        programCategory: {
+          name: programCategory.name,
+          logoUrl: programCategory.logoUrl,
+          primaryColor: programCategory.primaryColor,
+          websiteUrl: programCategory.websiteUrl,
+          socialMediaLinks: programCategory.socialMediaLinks,
+          contactEmail: programCategory.contactEmail,
+        },
+      });
+    } else if (authProvider.isOAuth) {
+      this.notificationClient.emit('user.registered', {
+        email: newUser.email,
+        name: newUser.email.split('@')[0],
+        programCategory: {
+          name: programCategory.name,
+          logoUrl: programCategory.logoUrl,
+          primaryColor: programCategory.primaryColor,
+          websiteUrl: programCategory.websiteUrl,
+        },
+      });
+    }
 
     // Generate JWT tokens
     const payload = {
