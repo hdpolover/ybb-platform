@@ -40,6 +40,12 @@ async function bootstrap() {
   // Swagger documentation
   setupSwagger(app);
 
+  // Redirect root URL to documentation
+  const expressApp = app.getHttpAdapter().getInstance();
+  expressApp.get('/', (_req, res) => {
+    res.redirect('/docs');
+  });
+
   const port = process.env.PORT || 3000;
   await app.listen(port);
 
