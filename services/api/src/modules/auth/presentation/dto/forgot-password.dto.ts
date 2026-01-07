@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsUUID } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsUUID } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class ForgotPasswordDto {
@@ -9,9 +9,10 @@ export class ForgotPasswordDto {
 
     @ApiProperty({
         example: '123e4567-e89b-12d3-a456-426614174000',
-        description: 'Program Category ID (brand scope)'
+        description: 'Program Category ID (brand scope) - Optional if domain is provided in request header',
+        required: false
     })
     @IsUUID()
-    @IsNotEmpty()
-    programCategoryId: string;
+    @IsOptional()
+    programCategoryId?: string;
 }

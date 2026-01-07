@@ -1,5 +1,5 @@
-import { Controller, Post, Body, Get, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
+import { Controller, Post, Body, Get, UseGuards, HttpCode, HttpStatus, Headers, Query } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse, ApiHeader, ApiQuery } from '@nestjs/swagger';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -22,6 +22,11 @@ import { JwtAuthGuard } from '../infrastructure/guards/jwt-auth.guard';
 
 @ApiTags('auth')
 @Controller('auth')
+@ApiHeader({
+  name: 'x-brand-domain',
+  description: 'Domain of the brand/program category (alternative to url query param)',
+  required: false,
+})
 export class AuthController {
   constructor(
     private readonly loginHandler: LoginHandler,
@@ -35,26 +40,36 @@ export class AuthController {
   @Post('login')
   @Throttle({ default: { limit: 5, ttl: 900000 } }) // 5 attempts per 15 minutes
   @ApiOperation({ summary: 'User login' })
-  async login(@Body() dto: LoginDto): Promise<AuthResponseDto> {
+  @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
+  async login(
+    @Body() dto: LoginDto,
+    @Query('url') url?: string,
+    @Headers('x-brand-domain') brandDomain?: string,
+  ): Promise<AuthResponseDto> {
     const command = new LoginCommand(
       dto.email,
       dto.password,
       dto.programCategoryId,
     );
-    return this.loginHandler.execute(command);
+    return this.loginHandler.execute(command, url || brandDomain);
   }
 
   @Public()
   @Post('register')
   @Throttle({ default: { limit: 3, ttl: 3600000 } }) // 3 attempts per hour
   @ApiOperation({ summary: 'User registration' })
-  async register(@Body() dto: RegisterDto): Promise<AuthResponseDto> {
+  @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
+  async register(
+    @Body() dto: RegisterDto,
+    @Query('url') url?: string,
+    @Headers('x-brand-domain') brandDomain?: string,
+  ): Promise<AuthResponseDto> {
     const command = new RegisterCommand(
       dto.email,
       dto.password,
       dto.programCategoryId,
     );
-    return this.registerHandler.execute(command);
+    return this.registerHandler.execute(command, url || brandDomain);
   }
 
   @Public()
@@ -78,9 +93,14 @@ export class AuthController {
   @Post('forgot-password')
   @Throttle({ default: { limit: 3, ttl: 3600000 } })
   @ApiOperation({ summary: 'Request password reset' })
-  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+  @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
+  async forgotPassword(
+    @Body() dto: ForgotPasswordDto,
+    @Query('url') url?: string,
+    @Headers('x-brand-domain') brandDomain?: string,
+  ) {
     const command = new ForgotPasswordCommand(dto.email, dto.programCategoryId);
-    return this.forgotPasswordHandler.execute(command);
+    return this.forgotPasswordHandler.execute(command, url || brandDomain);
   }
 
   @Post('logout')
