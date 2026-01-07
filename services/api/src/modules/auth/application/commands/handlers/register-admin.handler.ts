@@ -94,6 +94,26 @@ export class RegisterAdminHandler {
         },
       });
 
+      // NEW: Assign to Primary Category
+      await tx.adminProgramCategory.create({
+        data: {
+          adminId: newAdmin.id,
+          programCategoryId: command.programCategoryId,
+          roleInBrand: command.role,
+        },
+      });
+
+      // NEW: Assign to Additional Categories
+      if (command.additionalCategoryIds && command.additionalCategoryIds.length > 0) {
+        await tx.adminProgramCategory.createMany({
+          data: command.additionalCategoryIds.map((catId) => ({
+            adminId: newAdmin.id,
+            programCategoryId: catId,
+            roleInBrand: command.role,
+          })),
+        });
+      }
+
       return { user: newUser, admin: newAdmin };
     });
 
