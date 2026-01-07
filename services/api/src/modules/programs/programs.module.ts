@@ -34,6 +34,12 @@ import {
   CreateProgramPricingTierHandler, UpdateProgramPricingTierHandler, DeleteProgramPricingTierHandler,
   CreateProgramRequirementHandler, UpdateProgramRequirementHandler, DeleteProgramRequirementHandler
 } from './application/commands/handlers/manage-program-content.handlers';
+import {
+  CreateApplicationFormFieldHandler,
+  UpdateApplicationFormFieldHandler,
+  DeleteApplicationFormFieldHandler,
+} from './application/commands/handlers/application-form-field.handler';
+import { GetApplicationFormFieldsHandler } from './application/queries/handlers/get-application-form-fields.handler';
 import { ProgramContentRepository } from './infrastructure/persistence/program-content.repository';
 import { ProgramRepository } from './infrastructure/persistence/program.repository';
 import { PrismaService } from '../../shared/infrastructure/prisma/prisma.service';
@@ -72,6 +78,11 @@ import { CacheService } from '../../shared/infrastructure/cache/cache.service';
     CreateProgramResourceHandler, UpdateProgramResourceHandler, DeleteProgramResourceHandler,
     CreateProgramPricingTierHandler, UpdateProgramPricingTierHandler, DeleteProgramPricingTierHandler,
     CreateProgramRequirementHandler, UpdateProgramRequirementHandler, DeleteProgramRequirementHandler,
+    // Form Field Handlers
+    CreateApplicationFormFieldHandler,
+    UpdateApplicationFormFieldHandler,
+    DeleteApplicationFormFieldHandler,
+    GetApplicationFormFieldsHandler,
     PrismaService,
     CacheService,
     {

@@ -46,6 +46,10 @@ echo -e "${YELLOW}💾 Creating pre-deployment backup...${NC}"
 echo -e "${YELLOW}🔄 Deploying services...${NC}"
 docker-compose -f $COMPOSE_FILE up -d --remove-orphans
 
+# Run Database Migrations
+echo -e "${YELLOW}🗄️ Running Database Migrations...${NC}"
+docker-compose -f $COMPOSE_FILE exec -T api npm run migration:run
+
 # Wait for services to be healthy
 echo -e "${YELLOW}⏳ Waiting for services to be healthy...${NC}"
 sleep 15

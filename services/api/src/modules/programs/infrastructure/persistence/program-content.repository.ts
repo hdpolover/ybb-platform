@@ -11,6 +11,7 @@ import {
     ProgramResource,
     ProgramPricingTier,
     ProgramRequirement,
+    ApplicationFormField,
 } from '@prisma/client';
 import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service';
 import { IProgramContentRepository, ProgramPricingTierWithPeriods } from '../../../../core/interfaces/repositories/program-content.repository.interface';
@@ -253,5 +254,26 @@ export class ProgramContentRepository implements IProgramContentRepository {
     }
     async findRequirementById(id: string): Promise<ProgramRequirement | null> {
         return this.prisma.programRequirement.findUnique({ where: { id } });
+    }
+
+    async findFormFieldsByProgramId(programId: string): Promise<ApplicationFormField[]> {
+        return this.prisma.applicationFormField.findMany({
+            where: { programId, isActive: true },
+            orderBy: { order: 'asc' },
+        });
+    }
+
+    // CRUD for Application Form Fields
+    async createFormField(data: any): Promise<ApplicationFormField> {
+        return this.prisma.applicationFormField.create({ data });
+    }
+    async updateFormField(id: string, data: any): Promise<ApplicationFormField> {
+        return this.prisma.applicationFormField.update({ where: { id }, data });
+    }
+    async deleteFormField(id: string): Promise<void> {
+        await this.prisma.applicationFormField.delete({ where: { id } });
+    }
+    async findFormFieldById(id: string): Promise<ApplicationFormField | null> {
+        return this.prisma.applicationFormField.findUnique({ where: { id } });
     }
 }
