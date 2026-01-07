@@ -12,6 +12,7 @@ COPY . .
 COPY . .
 RUN npx prisma generate
 RUN npm run build
+RUN npm run build:seed
 
 # Production Stage
 FROM node:20-alpine AS production
