@@ -79,7 +79,11 @@ export class LoginHandler {
         },
       },
       include: {
-        identities: true,
+        identities: {
+          include: {
+            provider: true,
+          },
+        },
       },
     });
 
@@ -93,7 +97,7 @@ export class LoginHandler {
     }
 
     // Check if user has local auth identity
-    const localIdentity = user.identities.find(i => i.provider === 'local');
+    const localIdentity = user.identities.find(i => i.provider.name === 'local');
     
     if (!localIdentity && !user.passwordHash) {
       throw new UnauthorizedException('Local authentication not configured. Please use OAuth provider.');

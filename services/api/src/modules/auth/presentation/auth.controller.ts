@@ -19,6 +19,7 @@ import { ForgotPasswordCommand } from '../application/commands/forgot-password.c
 import { Public } from '../../../shared/decorators/public.decorator';
 import { CurrentUser, CurrentUserData } from '../../../shared/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../infrastructure/guards/jwt-auth.guard';
+import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -34,6 +35,7 @@ export class AuthController {
     private readonly registerAdminHandler: RegisterAdminHandler,
     private readonly logoutHandler: LogoutHandler,
     private readonly forgotPasswordHandler: ForgotPasswordHandler,
+    private readonly prisma: PrismaService,
   ) { }
 
   @Public()
@@ -126,11 +128,99 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user info' })
+  @ApiResponse({
+    status: 200,
+    description: 'Current user profile information',
+    schema: {
+      type: 'object',
+      properties: {
+        userId: { type: 'string', format: 'uuid' },
+        email: { type: 'string', format: 'email' },
+        programCategoryId: { type: 'string', format: 'uuid' },
+        identities: { 
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              provider: { type: 'string' },
+              lastUsedAt: { type: 'string', format: 'date-time' }
+            }
+          }
+        }
+      },
+    },
+  })
   async getProfile(@CurrentUser() user: CurrentUserData) {
+    // Fetch fresh user data with identities
+    const userData = await this.prisma.user.findUnique({
+      where: { id: user.userId },
+      include: {
+        identities: {
+          include: {
+            provider: true
+          }
+        }
+      }
+    });
+
+    if (!userData) {
+      return {
+        userId: user.userId,
+        email: user.email,
+        programCategoryId: user.programCategoryId,
+        identities: []
+      };
+    }
+
     return {
-      userId: user.userId,
-      email: user.email,
-      programCategoryId: user.programCategoryId,
+      userId: userData.id,
+      email: userData.email,
+      programCategoryId: userData.programCategoryId,
+      identities: userData.identities.map(i => ({
+        provider: i.provider.name,
+        lastUsedAt: i.lastUsedAt
+      }))
     };
+  }
+
+  @Public()
+  @Get('providers')
+  @SkipThrottle()
+  @ApiOperation({ summary: 'Get available authentication providers' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'List of active authentication providers configuration for frontend rendering',
+    schema: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          name: { type: 'string', example: 'google' },
+          displayName: { type: 'string', example: 'Google' },
+          description: { type: 'string', example: 'Sign in with Google account' },
+          isOAuth: { type: 'boolean', example: true },
+          icon: { type: 'string', example: 'google' },
+          buttonColor: { type: 'string', example: '#4285F4' },
+        },
+      },
+    },
+  })
+  async getProviders() {
+    const providers = await this.prisma.authProvider.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        name: true,
+        displayName: true,
+        description: true,
+        isOAuth: true,
+        icon: true,
+        buttonColor: true,
+      },
+      orderBy: { order: 'asc' },
+    });
+
+    return providers;
   }
 }

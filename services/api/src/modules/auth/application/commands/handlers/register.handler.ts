@@ -66,6 +66,15 @@ export class RegisterHandler {
   }
 
   async execute(command: RegisterCommand, domain?: string): Promise<AuthResponseDto> {
+    // Validate provider exists and is active
+    const authProvider = await this.prisma.authProvider.findUnique({
+      where: { name: command.provider || 'local' },
+    });
+
+    if (!authProvider || !authProvider.isActive) {
+      throw new BadRequestException(`Authentication provider '${command.provider}' is not available`);
+    }
+
     // Resolve programCategoryId from command or domain
     const programCategoryId = await this.resolveProgramCategoryId(command.programCategoryId, domain);
 
@@ -87,7 +96,11 @@ export class RegisterHandler {
         },
       },
       include: {
-        identities: true,
+        identities: {
+          include: {
+            provider: true,
+          },
+        },
       },
     });
 
@@ -95,9 +108,9 @@ export class RegisterHandler {
     if (command.provider !== 'local' && command.providerId) {
       const existingIdentity = await this.prisma.userIdentity.findUnique({
         where: {
-          provider_providerId: {
-            provider: command.provider,
-            providerId: command.providerId,
+          providerId_providerUserId: {
+            providerId: authProvider.id,
+            providerUserId: command.providerId,
           },
         },
         include: {
@@ -137,18 +150,18 @@ export class RegisterHandler {
 
     if (user) {
       // User exists, check if they can add this provider
-      const existingIdentity = user.identities.find(i => i.provider === command.provider);
+      const existingIdentity = user.identities.find(i => i.providerId === authProvider.id);
       
       if (existingIdentity) {
-        throw new ConflictException(`User already has ${command.provider} authentication configured`);
+        throw new ConflictException(`User already has ${authProvider.displayName} authentication configured`);
       }
 
       // Add new identity to existing user
       await this.prisma.userIdentity.create({
         data: {
           userId: user.id,
-          provider: command.provider,
-          providerId: command.providerId,
+          providerId: authProvider.id,
+          providerUserId: command.providerId,
           providerEmail: command.email,
           isPrimary: user.identities.length === 0, // First identity is primary
           lastUsedAt: new Date(),
@@ -156,7 +169,7 @@ export class RegisterHandler {
       });
 
       // If adding local auth, update password hash
-      if (command.provider === 'local' && command.password) {
+      if (authProvider.name === 'local' && command.password) {
         const passwordHash = await bcrypt.hash(command.password, 10);
         await this.prisma.user.update({
           where: { id: user.id },
@@ -188,28 +201,28 @@ export class RegisterHandler {
 
     // New user registration
     // Validate password for local authentication
-    if (command.provider === 'local' && !command.password) {
+    if (authProvider.name === 'local' && !command.password) {
       throw new BadRequestException('Password is required for local authentication');
     }
 
     // Hash password only for local authentication
-    const passwordHash = command.provider === 'local' && command.password
+    const passwordHash = authProvider.name === 'local' && command.password
       ? await bcrypt.hash(command.password, 10)
       : null;
 
     // Create user with identity
-    user = await this.prisma.user.create({
+    const newUser = await this.prisma.user.create({
       data: {
         email: command.email,
         passwordHash,
         programCategoryId: programCategoryId,
         isActive: true,
         // OAuth providers usually verify email automatically
-        emailVerified: command.provider !== 'local',
+        emailVerified: authProvider.isOAuth,
         identities: {
           create: {
-            provider: command.provider,
-            providerId: command.providerId,
+            providerId: authProvider.id,
+            providerUserId: command.providerId,
             providerEmail: command.email,
             isPrimary: true,
             lastUsedAt: new Date(),
@@ -220,9 +233,9 @@ export class RegisterHandler {
 
     // Generate JWT tokens
     const payload = {
-      sub: user.id,
-      email: user.email,
-      programCategoryId: user.programCategoryId,
+      sub: newUser.id,
+      email: newUser.email,
+      programCategoryId: newUser.programCategoryId,
     };
 
     const accessToken = this.jwtService.sign(payload, {
@@ -237,10 +250,10 @@ export class RegisterHandler {
       accessToken,
       refreshToken,
       user: {
-        id: user.id,
-        email: user.email,
-        programCategoryId: user.programCategoryId,
-        isActive: user.isActive,
+        id: newUser.id,
+        email: newUser.email,
+        programCategoryId: newUser.programCategoryId,
+        isActive: newUser.isActive,
       },
     };
   }

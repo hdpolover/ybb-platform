@@ -151,6 +151,42 @@ enum PricingTarget {
 // CORE AUTHENTICATION (Brand-Scoped)
 // ============================================================================
 
+// Authentication Providers - Configurable OAuth/Auth Providers
+model AuthProvider {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name        String   @unique @db.VarChar(50) // 'local', 'google', 'facebook', 'apple', etc.
+  displayName String   @map("display_name") @db.VarChar(100) // 'Email & Password', 'Google', 'Facebook'
+  description String?  @db.Text
+  
+  // OAuth Configuration (optional, for OAuth providers)
+  clientId     String? @map("client_id") @db.VarChar(255)
+  clientSecret String? @map("client_secret") @db.VarChar(255)
+  authUrl      String? @map("auth_url") @db.VarChar(500)
+  tokenUrl     String? @map("token_url") @db.VarChar(500)
+  scopes       Json?   @default("[]") @db.Json // ["email", "profile"]
+  
+  // Status
+  isActive     Boolean @default(true) @map("is_active")
+  isOAuth      Boolean @default(false) @map("is_oauth") // true for OAuth providers, false for local
+  
+  // UI
+  icon         String? @db.VarChar(100) // Icon identifier or URL
+  buttonColor  String? @map("button_color") @db.VarChar(7) // Hex color for button
+  order        Int     @default(0) // Display order
+  
+  // Audit
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  
+  // Relations
+  identities   UserIdentity[]
+  
+  @@index([name])
+  @@index([isActive])
+  @@index([order])
+  @@map("auth_providers")
+}
+
 model User {
   id                String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   email             String @db.VarChar(255)
@@ -219,8 +255,8 @@ model User {
 model UserIdentity {
   id            String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   userId        String    @map("user_id") @db.Uuid
-  provider      String    @db.VarChar(50) // local, google, facebook, apple, etc.
-  providerId    String?   @map("provider_id") @db.VarChar(255) // Provider's user ID (null for local)
+  providerId    String    @map("provider_id") @db.Uuid // Reference to AuthProvider
+  providerUserId String?  @map("provider_user_id") @db.VarChar(255) // Provider's user ID (null for local)
   providerEmail String?   @map("provider_email") @db.VarChar(255) // Email from provider
   
   // OAuth tokens (optional, for future use)
@@ -237,13 +273,14 @@ model UserIdentity {
   updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   
   // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider AuthProvider @relation(fields: [providerId], references: [id], onDelete: Restrict)
   
-  @@unique([userId, provider]) // One provider per user
-  @@unique([provider, providerId]) // Unique provider-providerId combination
+  @@unique([userId, providerId]) // One provider per user
+  @@unique([providerId, providerUserId]) // Unique provider-providerUserId combination
   @@index([userId])
-  @@index([provider])
   @@index([providerId])
+  @@index([providerUserId])
   @@map("user_identities")
 }
 
