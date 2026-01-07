@@ -42,4 +42,13 @@ export class RegisterDto {
   @IsString()
   @IsOptional()
   providerId?: string;
+
+  @ApiProperty({
+    example: '123e4567-e89b-12d3-a456-426614174000',
+    description: 'Program ID to immediately register for (e.g. IYS 2026)',
+    required: false
+  })
+  @IsUUID()
+  @IsOptional()
+  programId?: string;
 }

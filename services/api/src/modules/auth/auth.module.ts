@@ -9,6 +9,7 @@ import { RegisterHandler } from './application/commands/handlers/register.handle
 import { RegisterAdminHandler } from './application/commands/handlers/register-admin.handler';
 import { LogoutHandler } from './application/commands/handlers/logout.handler';
 import { ForgotPasswordHandler } from './application/commands/handlers/forgot-password.handler';
+import { VerifyEmailHandler } from './application/commands/handlers/verify-email.handler';
 import { JwtStrategy } from './infrastructure/strategies/jwt.strategy';
 import { JwtAuthGuard } from './infrastructure/guards/jwt-auth.guard';
 import { TokenBlacklistService } from './infrastructure/services/token-blacklist.service';
@@ -49,6 +50,7 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
     RegisterAdminHandler,
     LogoutHandler,
     ForgotPasswordHandler,
+    VerifyEmailHandler,
     JwtStrategy,
     JwtAuthGuard,
     TokenBlacklistService,

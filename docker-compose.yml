@@ -255,6 +255,7 @@ services:
       PORT: 4002
       RABBITMQ_URL: ${RABBITMQ_URL}
       RESEND_API_KEY: ${RESEND_API_KEY}
+      RESEND_FROM: ${RESEND_FROM}
     volumes:
       - ./services/notification-service:/app
       - /app/node_modules

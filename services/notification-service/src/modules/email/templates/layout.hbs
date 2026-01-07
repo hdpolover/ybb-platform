@@ -2,26 +2,189 @@
 <html>
 <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{#if programCategory.name}}{{programCategory.name}}{{else}}YBB Platform{{/if}}</title>
+    <!--[if mso]>
     <style>
-        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { border-bottom: 2px solid #eee; padding-bottom: 20px; margin-bottom: 20px; text-align: center; }
-        .footer { border-top: 1px solid #eee; margin-top: 30px; padding-top: 20px; font-size: 12px; color: #999; text-align: center; }
-        .button { display: inline-block; padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px; margin-top: 20px; }
-        .content { background: #ffffff; }
+        table {border-collapse:collapse;border-spacing:0;border:none;margin:0;}
+        div, td {padding:0;}
+        div {margin:0 !important;}
+        </style>
+        <noscript>
+        <xml>
+            <o:OfficeDocumentSettings>
+            <o:PixelsPerInch>96</o:PixelsPerInch>
+            </o:OfficeDocumentSettings>
+        </xml>
+        </noscript>
+    <![endif]-->
+    <style>
+        /* Base Reset */
+        body { 
+            font-family: 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif; 
+            background-color: #f3f4f6;
+            margin: 0; 
+            padding: 0; 
+            width: 100% !important;
+            -webkit-text-size-adjust: 100%;
+            -ms-text-size-adjust: 100%;
+        }
+        
+        /* Layout Containers */
+        .wrapper {
+            width: 100%;
+            table-layout: fixed;
+            background-color: #f3f4f6;
+            padding-top: 40px;
+            padding-bottom: 40px;
+        }
+        
+        .main-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            border: 1px solid #e5e7eb;
+        }
+
+        /* Elements */
+        .header {
+            padding: 30px 40px 10px;
+            text-align: center;
+        }
+        
+        .brand-logo {
+            max-height: 50px;
+            width: auto;
+            display: block;
+            margin: 0 auto;
+        }
+        
+        .brand-text {
+            color: #111827;
+            font-size: 24px;
+            font-weight: 700;
+            margin: 0;
+            letter-spacing: -0.025em;
+        }
+
+        .content {
+            padding: 10px 40px 40px;
+            color: #374151;
+            font-size: 16px;
+            line-height: 1.6;
+            text-align: left;
+        }
+
+        .cta-button {
+            display: inline-block;
+            background-color: {{#if programCategory.primaryColor}}{{programCategory.primaryColor}}{{else}}#000000{{/if}};
+            color: #ffffff !important;
+            padding: 14px 32px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 16px;
+            text-align: center;
+            margin-top: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        
+        .link {
+            color: {{#if programCategory.primaryColor}}{{programCategory.primaryColor}}{{else}}#2563eb{{/if}};
+            text-decoration: underline;
+        }
+        
+        .break-word {
+            word-break: break-all;
+        }
+
+        /* Footer */
+        .footer {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 24px 20px;
+            text-align: center;
+            color: #9ca3af;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .footer a {
+            color: #6b7280;
+            text-decoration: none;
+            margin: 0 8px;
+            transition: color 0.2s;
+        }
+        
+        .footer a:hover {
+            color: #374151;
+        }
+
+        /* Mobile */
+        @media screen and (max-width: 600px) {
+            .wrapper { padding-top: 20px; padding-bottom: 20px; }
+            .header { padding: 24px 24px 10px; }
+            .content { padding: 10px 24px 30px; }
+            .cta-button { display: block; width: 100%; box-sizing: border-box; }
+        }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h2>YBB Platform</h2>
-    </div>
-    
-    <div class="content">
-        {{{body}}}
-    </div>
+    <div class="wrapper">
+        <!-- Main Card -->
+        <div class="main-container">
+            <!-- Header -->
+            <div class="header">
+                {{#if programCategory.logoUrl}}
+                    <img src="{{programCategory.logoUrl}}" alt="{{programCategory.name}}" class="brand-logo">
+                {{else}}
+                    <h1 class="brand-text">{{#if programCategory.name}}{{programCategory.name}}{{else}}YBB Platform{{/if}}</h1>
+                {{/if}}
+            </div>
 
-    <div class="footer">
-        <p>&copy; {{year}} YBB Platform. All rights reserved.</p>
-        <p>You are receiving this email because you are a registered user of YBB Platform.</p>
+            <!-- Body -->
+            <div class="content">
+                {{{body}}}
+            </div>
+        </div>
+
+        <!-- External Footer -->
+        <div class="footer">
+            <p style="margin-bottom: 12px; font-weight: 500;">
+                &copy; {{year}} {{#if programCategory.name}}{{programCategory.name}}{{else}}YBB Platform{{/if}}
+            </p>
+            
+            {{#if programCategory.socialMediaLinks}}
+            <p style="margin-bottom: 12px;">
+                {{#if programCategory.socialMediaLinks.instagram}}
+                    <a href="{{programCategory.socialMediaLinks.instagram}}">Instagram</a>
+                {{/if}}
+                {{#if programCategory.socialMediaLinks.facebook}}
+                    <a href="{{programCategory.socialMediaLinks.facebook}}">Facebook</a>
+                {{/if}}
+                {{#if programCategory.socialMediaLinks.linkedin}}
+                    <a href="{{programCategory.socialMediaLinks.linkedin}}">LinkedIn</a>
+                {{/if}}
+                {{#if programCategory.socialMediaLinks.website}}
+                    <a href="{{programCategory.socialMediaLinks.website}}">Website</a>
+                {{/if}}
+            </p>
+            {{/if}}
+
+            <p style="max-width: 400px; margin: 0 auto 8px;">
+                You received this email because you signed up for 
+                {{#if programCategory.name}}{{programCategory.name}}{{else}}YBB Platform{{/if}}.
+            </p>
+            
+            {{#if programCategory.contactEmail}}
+                <p style="margin: 0;">
+                    Questions? Email us at <a href="mailto:{{programCategory.contactEmail}}" style="text-decoration: underline;">{{programCategory.contactEmail}}</a>
+                </p>
+            {{/if}}
+        </div>
     </div>
 </body>
 </html>
