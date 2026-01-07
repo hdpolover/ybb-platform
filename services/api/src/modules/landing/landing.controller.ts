@@ -2,11 +2,20 @@ import { Controller, Get, Param, Query } from '@nestjs/common';
 import { LandingService } from './landing.service';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { LandingPageResponseDto } from './dto/landing-page.dto';
+import { LandingSettingsResponseDto } from './dto/landing-settings.dto';
 
 @ApiTags('landing')
 @Controller('landing')
 export class LandingController {
   constructor(private readonly landingService: LandingService) {}
+
+  @Get('settings')
+  @ApiOperation({ summary: 'Get global settings, branding, and navigation' })
+  @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
+  @ApiResponse({ status: 200, type: LandingSettingsResponseDto })
+  async getSettings(@Query('url') url?: string): Promise<LandingSettingsResponseDto> {
+    return this.landingService.getSettings(url);
+  }
 
   @Get('home')
   @ApiOperation({ summary: 'Get home page content' })

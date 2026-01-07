@@ -6,6 +6,7 @@ import { AboutStrategy } from './strategies/about.strategy';
 import { ProgramsStrategy } from './strategies/programs.strategy';
 import { PartnersSponsorsStrategy } from './strategies/partners-sponsors.strategy';
 import { AnnouncementsStrategy } from './strategies/announcements.strategy';
+import { SettingsStrategy } from './strategies/settings.strategy';
 
 @Module({
   controllers: [LandingController],
@@ -16,6 +17,7 @@ import { AnnouncementsStrategy } from './strategies/announcements.strategy';
     ProgramsStrategy,
     PartnersSponsorsStrategy,
     AnnouncementsStrategy,
+    SettingsStrategy,
   ],
   exports: [LandingService],
 })
