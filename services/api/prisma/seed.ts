@@ -7,6 +7,77 @@ async function main() {
   console.log('🌱 Starting database seeding...');
 
   // ==========================================
+  // 0. Create Auth Providers
+  // ==========================================
+  const localProvider = await prisma.authProvider.upsert({
+    where: { name: 'local' },
+    update: {},
+    create: {
+      name: 'local',
+      displayName: 'Email & Password',
+      description: 'Traditional email and password authentication',
+      isActive: true,
+      isOAuth: false,
+      icon: 'email',
+      buttonColor: '#4A5568',
+      order: 1,
+    },
+  });
+  console.log(`✅ Auth Provider created: ${localProvider.displayName}`);
+
+  const googleProvider = await prisma.authProvider.upsert({
+    where: { name: 'google' },
+    update: {},
+    create: {
+      name: 'google',
+      displayName: 'Google',
+      description: 'Sign in with Google account',
+      isActive: true,
+      isOAuth: true,
+      icon: 'google',
+      buttonColor: '#4285F4',
+      order: 2,
+      scopes: ['email', 'profile'],
+      // Note: clientId and clientSecret should be set via environment variables
+    },
+  });
+  console.log(`✅ Auth Provider created: ${googleProvider.displayName}`);
+
+  const facebookProvider = await prisma.authProvider.upsert({
+    where: { name: 'facebook' },
+    update: {},
+    create: {
+      name: 'facebook',
+      displayName: 'Facebook',
+      description: 'Sign in with Facebook account',
+      isActive: true,
+      isOAuth: true,
+      icon: 'facebook',
+      buttonColor: '#1877F2',
+      order: 3,
+      scopes: ['email', 'public_profile'],
+    },
+  });
+  console.log(`✅ Auth Provider created: ${facebookProvider.displayName}`);
+
+  const appleProvider = await prisma.authProvider.upsert({
+    where: { name: 'apple' },
+    update: {},
+    create: {
+      name: 'apple',
+      displayName: 'Apple',
+      description: 'Sign in with Apple account',
+      isActive: true,
+      isOAuth: true,
+      icon: 'apple',
+      buttonColor: '#000000',
+      order: 4,
+      scopes: ['email', 'name'],
+    },
+  });
+  console.log(`✅ Auth Provider created: ${appleProvider.displayName}`);
+
+  // ==========================================
   // 1. Create Brands (Program Categories)
   // ==========================================
 
