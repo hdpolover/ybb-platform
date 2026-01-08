@@ -20,8 +20,9 @@ export class LandingController {
   @ApiResponse({ status: 200, type: LandingSettingsResponseDto })
   async getSettings(
     @Query('url') url?: string,
-    @Headers('x-brand-domain') brandDomain?: string,
+    @Headers() headers?: Record<string, string>,
   ): Promise<LandingSettingsResponseDto> {
+    const brandDomain = headers?.['x-brand-domain'];
     return this.landingService.getSettings(url || brandDomain);
   }
 
@@ -31,8 +32,9 @@ export class LandingController {
   @ApiResponse({ status: 200, type: LandingPageResponseDto })
   async getHome(
     @Query('url') url?: string,
-    @Headers('x-brand-domain') brandDomain?: string,
+    @Headers() headers?: Record<string, string>,
   ): Promise<LandingPageResponseDto> {
+    const brandDomain = headers?.['x-brand-domain'];
     return this.landingService.getHome(url || brandDomain);
   }
 
@@ -42,8 +44,9 @@ export class LandingController {
   @ApiResponse({ status: 200, type: LandingPageResponseDto })
   async getAbout(
     @Query('url') url?: string,
-    @Headers('x-brand-domain') brandDomain?: string,
+    @Headers() headers?: Record<string, string>,
   ): Promise<LandingPageResponseDto> {
+    const brandDomain = headers?.['x-brand-domain'];
     return this.landingService.getAbout(url || brandDomain);
   }
 
@@ -53,8 +56,9 @@ export class LandingController {
   @ApiResponse({ status: 200, type: LandingPageResponseDto })
   async getPrograms(
     @Query('url') url?: string,
-    @Headers('x-brand-domain') brandDomain?: string,
+    @Headers() headers?: Record<string, string>,
   ): Promise<LandingPageResponseDto> {
+    const brandDomain = headers?.['x-brand-domain'];
     return this.landingService.getPrograms(url || brandDomain);
   }
 
@@ -66,8 +70,9 @@ export class LandingController {
   async getProgramDetail(
     @Param('slug') slug: string,
     @Query('url') url?: string,
-    @Headers('x-brand-domain') brandDomain?: string,
+    @Headers() headers?: Record<string, string>,
   ): Promise<LandingPageResponseDto> {
+    const brandDomain = headers?.['x-brand-domain'];
     return this.landingService.getProgramDetail(slug, url || brandDomain);
   }
 
@@ -77,8 +82,9 @@ export class LandingController {
   @ApiResponse({ status: 200, type: LandingPageResponseDto })
   async getPartnersSponsors(
     @Query('url') url?: string,
-    @Headers('x-brand-domain') brandDomain?: string,
+    @Headers() headers?: Record<string, string>,
   ): Promise<LandingPageResponseDto> {
+    const brandDomain = headers?.['x-brand-domain'];
     return this.landingService.getPartnersSponsors(url || brandDomain);
   }
 
@@ -88,8 +94,9 @@ export class LandingController {
   @ApiResponse({ status: 200, type: LandingPageResponseDto })
   async getAnnouncements(
     @Query('url') url?: string,
-    @Headers('x-brand-domain') brandDomain?: string,
+    @Headers() headers?: Record<string, string>,
   ): Promise<LandingPageResponseDto> {
+    const brandDomain = headers?.['x-brand-domain'];
     return this.landingService.getAnnouncements(url || brandDomain);
   }
 }

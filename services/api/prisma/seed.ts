@@ -113,21 +113,21 @@ async function main() {
   });
   console.log(`✅ Brand created/updated: ${iysBrand.name}`);
 
-  // 1.3 AYIMUN (Asia Youth International Model United Nations)
-  const ayimunBrand = await prisma.programCategory.upsert({
-    where: { slug: 'ayimun' },
+  // 1.3 Youth Academic Forum
+  const yafBrand = await prisma.programCategory.upsert({
+    where: { slug: 'youth-academic-forum' },
     update: {},
     create: {
-      name: 'Asia Youth International Model United Nations',
-      slug: 'ayimun',
-      description: 'Asia Youth International Model United Nations is a platform for youth to learn about diplomacy.',
-      websiteUrl: 'https://modelunitednations.org',
-      contactEmail: 'admin@modelunitednations.org',
+      name: 'Youth Academic Forum',
+      slug: 'youth-academic-forum',
+      description: 'Youth Academic Forum is a platform for youth to share their academic work.',
+      websiteUrl: 'https://youthacademicforum.com',
+      contactEmail: 'admin@youthacademicforum.com',
       primaryColor: '#0056B3', // Example blue
       isActive: true,
     },
   });
-  console.log(`✅ Brand created/updated: ${ayimunBrand.name}`);
+  console.log(`✅ Brand created/updated: ${yafBrand.name}`);
 
   // ==========================================
   // 1b. Create Brand Settings
@@ -196,12 +196,12 @@ async function main() {
   });
   console.log(`✅ Settings created for: ${iysBrand.name}`);
 
-  // AYIMUN Settings
+  // YAF Settings
   await prisma.programCategorySetting.upsert({
-    where: { programCategoryId: ayimunBrand.id },
+    where: { programCategoryId: yafBrand.id },
     update: {},
     create: {
-      programCategoryId: ayimunBrand.id,
+      programCategoryId: yafBrand.id,
       isMaintenanceMode: false,
       usdInIdr: 16050,
       footerNavigation: [
@@ -209,13 +209,13 @@ async function main() {
             title: "Navigation",
             items: [
                 { label: "Home", url: "/" },
-                { label: "Register", url: "/register" }
+                { label: "Programs", url: "/programs" }
             ]
         }
       ]
     }
   });
-  console.log(`✅ Settings created for: ${ayimunBrand.name}`);
+  console.log(`✅ Settings created for: ${yafBrand.name}`);
 
 
   // ==========================================
@@ -321,26 +321,26 @@ async function main() {
   });
   console.log(`✅ Program created/updated: ${iys2024.name}`);
 
-  // 2.3 AYIMUN Programs
-  const ayimun2025 = await prisma.program.upsert({
+  // 2.3 YAF Programs
+  const yaf2025 = await prisma.program.upsert({
     where: {
       programCategoryId_slug: {
-        programCategoryId: ayimunBrand.id,
-        slug: 'ayimun-2025',
+        programCategoryId: yafBrand.id,
+        slug: 'youth-academic-forum-2025',
       },
     },
     update: {},
     create: {
-      programCategoryId: ayimunBrand.id,
-      name: 'Asia Youth International MUN 2025',
-      slug: 'ayimun-2025',
-      description: 'Model United Nations conference in Malaysia.',
-      shortDescription: 'Experience diplomacy in action.',
+      programCategoryId: yafBrand.id,
+      name: 'Youth Academic Forum 2025',
+      slug: 'youth-academic-forum-2025',
+      description: 'International academic forum for youth.',
+      shortDescription: 'Share your research and ideas.',
       year: 2025,
       startDate: new Date('2025-05-15'),
       endDate: new Date('2025-05-18'),
       applicationDeadline: new Date('2025-03-31'),
-      location: 'Kuala Lumpur, Malaysia',
+      location: 'Global (Online)',
       capacity: 600,
       isPublished: true,
       isVisibleToUsers: true,
@@ -351,11 +351,11 @@ async function main() {
       registrationOpenDate: new Date('2024-12-01'),
       registrationCloseDate: new Date('2025-03-31'),
       requirePayment: true,
-      registrationFee: 200.00,
+      registrationFee: 50.00,
       currency: 'USD',
     },
   });
-  console.log(`✅ Program created/updated: ${ayimun2025.name}`);
+  console.log(`✅ Program created/updated: ${yaf2025.name}`);
 
 
   // ==========================================

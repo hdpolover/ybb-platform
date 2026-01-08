@@ -20,8 +20,9 @@ export class StatsController {
   @ApiResponse({ status: 200, type: StatsResponseDto })
   async getStats(
     @Query() query: GetStatsQueryDto,
-    @Headers('x-brand-domain') brandDomain?: string,
+    @Headers() headers?: Record<string, string>,
   ): Promise<StatsResponseDto> {
+    const brandDomain = headers?.['x-brand-domain'];
     if (!query.url && brandDomain) {
       query.url = brandDomain;
     }
