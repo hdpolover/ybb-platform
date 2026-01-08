@@ -253,3 +253,38 @@ export class ProgramRequirementResponseDto {
     @ApiProperty()
     isRequired: boolean;
 }
+
+export class ApplicationFormFieldResponseDto {
+    @ApiProperty()
+    id: string;
+
+    @ApiProperty()
+    fieldName: string;
+
+    @ApiProperty()
+    label: string;
+
+    @ApiProperty({ required: false })
+    placeholder?: string;
+
+    @ApiProperty({ required: false })
+    helpText?: string;
+
+    @ApiProperty()
+    fieldType: string;
+
+    @ApiProperty()
+    isRequired: boolean;
+
+    @ApiProperty({ required: false })
+    options?: any;
+
+    @ApiProperty({ required: false })
+    validationRules?: any;
+
+    @ApiProperty({ required: false })
+    defaultValue?: string;
+
+    @ApiProperty()
+    order: number;
+}

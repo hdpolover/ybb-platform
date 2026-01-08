@@ -28,6 +28,7 @@ import {
   ProgramResourceResponseDto,
   ProgramPricingTierResponseDto,
   ProgramRequirementResponseDto,
+  ApplicationFormFieldResponseDto,
 } from './dto/program-content.dto';
 import {
   ListProgramTimelineQuery,
@@ -657,6 +658,7 @@ export class ProgramsController {
   @Get(':id/form-fields')
   @Public()
   @ApiOperation({ summary: 'Get application form fields' })
+  @ApiResponse({ status: 200, type: [ApplicationFormFieldResponseDto] })
   async getFormFields(@Param('id') id: string) {
     return this.getApplicationFormFieldsHandler.execute(new GetApplicationFormFieldsQuery(id));
   }
@@ -665,6 +667,7 @@ export class ProgramsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add application form field' })
+  @ApiResponse({ status: 201, type: ApplicationFormFieldResponseDto })
   async addFormField(@Param('id') programId: string, @Body() dto: CreateApplicationFormFieldDto, @Request() req: any) {
     return this.createApplicationFormFieldHandler.execute(new CreateApplicationFormFieldCommand(programId, dto, req.user.id));
   }
@@ -673,6 +676,7 @@ export class ProgramsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update application form field' })
+  @ApiResponse({ status: 200, type: ApplicationFormFieldResponseDto })
   async updateFormField(@Param('itemId') itemId: string, @Body() dto: UpdateApplicationFormFieldDto, @Request() req: any) {
     return this.updateApplicationFormFieldHandler.execute(new UpdateApplicationFormFieldCommand(itemId, dto, req.user.id));
   }
@@ -681,6 +685,7 @@ export class ProgramsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete application form field' })
+  @ApiResponse({ status: 200, description: 'Application form field deleted successfully' })
   async deleteFormField(@Param('itemId') itemId: string, @Request() req: any) {
     return this.deleteApplicationFormFieldHandler.execute(new DeleteApplicationFormFieldCommand(itemId, req.user.id));
   }
