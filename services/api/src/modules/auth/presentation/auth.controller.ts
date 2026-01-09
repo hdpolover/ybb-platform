@@ -51,7 +51,8 @@ export class AuthController {
   @Public()
   @Post('login')
   @Throttle({ default: { limit: 5, ttl: 900000 } }) // 5 attempts per 15 minutes
-  @ApiOperation({ summary: 'User login' })
+  @ApiOperation({ summary: 'Login User' })
+  @ApiResponse({ status: 200, description: 'User successfully logged in', type: AuthResponseDto })
   @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
   async login(
     @Body() dto: LoginDto,
@@ -74,7 +75,8 @@ export class AuthController {
   @Public()
   @Post('register')
   @Throttle({ default: { limit: 3, ttl: 3600000 } }) // 3 attempts per hour
-  @ApiOperation({ summary: 'User registration' })
+  @ApiOperation({ summary: 'Register User' })
+  @ApiResponse({ status: 201, description: 'User successfully registered', type: AuthResponseDto })
   @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
   async register(
     @Body() dto: RegisterDto,
@@ -95,7 +97,8 @@ export class AuthController {
   @Public()
   @Post('register-admin')
   @Throttle({ default: { limit: 3, ttl: 3600000 } }) // 3 attempts per hour
-  @ApiOperation({ summary: 'Admin registration (Requires Secret Key)' })
+  @ApiOperation({ summary: 'Register Admin (Requires Secret Key)' })
+  @ApiResponse({ status: 201, description: 'Admin successfully registered', type: AuthResponseDto })
   async registerAdmin(@Body() dto: RegisterAdminDto): Promise<AuthResponseDto> {
     const command = new RegisterAdminCommand(
       dto.email,
@@ -112,7 +115,8 @@ export class AuthController {
   @Public()
   @Post('forgot-password')
   @Throttle({ default: { limit: 3, ttl: 3600000 } })
-  @ApiOperation({ summary: 'Request password reset' })
+  @ApiOperation({ summary: 'Request Password Reset' })
+  @ApiResponse({ status: 201, description: 'Password reset email sent' })
   @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
   async forgotPassword(
     @Body() dto: ForgotPasswordDto,
@@ -126,7 +130,8 @@ export class AuthController {
   @Public()
   @Post('reset-password')
   @Throttle({ default: { limit: 3, ttl: 900000 } })
-  @ApiOperation({ summary: 'Reset password using token' })
+  @ApiOperation({ summary: 'Reset Password' })
+  @ApiResponse({ status: 201, description: 'Password successfully reset' })
   async resetPassword(@Body() dto: ResetPasswordDto) {
     const command = new ResetPasswordCommand(dto.token, dto.password);
     return this.resetPasswordHandler.execute(command);
@@ -135,7 +140,8 @@ export class AuthController {
   @Public()
   @Post('verify-email')
   @Throttle({ default: { limit: 5, ttl: 900000 } })
-  @ApiOperation({ summary: 'Verify email address with token' })
+  @ApiOperation({ summary: 'Verify Email' })
+  @ApiResponse({ status: 201, description: 'Email successfully verified' })
   async verifyEmail(@Body() dto: VerifyEmailDto) {
     const command = new VerifyEmailCommand(dto.token);
     return this.verifyEmailHandler.execute(command);
@@ -146,7 +152,7 @@ export class AuthController {
   @SkipThrottle()
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'User logout - invalidates current token' })
+  @ApiOperation({ summary: 'Logout User' })
   @ApiResponse({ status: 200, description: 'Successfully logged out' })
   async logout(@CurrentUser() user: CurrentUserData) {
     if (!user.jti || !user.exp) {
@@ -161,7 +167,7 @@ export class AuthController {
   @SkipThrottle() // Skip throttling for authenticated user info
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get current user info' })
+  @ApiOperation({ summary: 'Get Current User Profile' })
   @ApiResponse({
     status: 200,
     description: 'Current user profile information',
@@ -230,9 +236,9 @@ export class AuthController {
   @Public()
   @Get('providers')
   @SkipThrottle()
-  @ApiOperation({ summary: 'Get available authentication providers' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiOperation({ summary: 'Get Authentication Providers' })
+  @ApiResponse({
+    status: 200,
     description: 'List of active authentication providers configuration for frontend rendering',
     schema: {
       type: 'array',
