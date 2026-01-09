@@ -49,8 +49,8 @@ export class UsersController {
   @Get('me/preferences')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get current user preferences' })
-  @ApiResponse({ status: 200, description: 'Return user preferences', type: UserPreferenceResponseDto })
+  @ApiOperation({ summary: 'Get Current User Preferences' })
+  @ApiResponse({ status: 200, description: 'Successfully retrieved user preferences', type: UserPreferenceResponseDto })
   async getMyPreferences(@CurrentUser() user: any): Promise<UserPreferenceResponseDto> {
     const query = new GetUserPreferencesQuery(user.userId);
     return this.getUserPreferencesHandler.execute(query);
@@ -59,8 +59,8 @@ export class UsersController {
   @Post('me/preferences') // Using Post or Put? REST says PUT for update/replace or PATCH. Plan said PUT.
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update current user preferences' })
-  @ApiResponse({ status: 200, description: 'User preferences updated', type: UserPreferenceResponseDto })
+  @ApiOperation({ summary: 'Update Current User Preferences' })
+  @ApiResponse({ status: 200, description: 'User preferences successfully updated', type: UserPreferenceResponseDto })
   async updateMyPreferences(
     @CurrentUser() user: any,
     @Body() dto: UpdateUserPreferenceDto,
@@ -72,8 +72,8 @@ export class UsersController {
   @Get('me/notifications')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get current user notifications' })
-  @ApiResponse({ status: 200, description: 'Return user notifications' })
+  @ApiOperation({ summary: 'Get Current User Notifications' })
+  @ApiResponse({ status: 200, description: 'Successfully retrieved user notifications', type: [UserNotificationResponseDto] })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'type', required: false, type: String })
@@ -92,8 +92,8 @@ export class UsersController {
   @Post('me/notifications/:id/read') // PATCH or POST? Convention says PATCH for partial update, but POST for action. Method says Mark as read (action). Let's use PATCH.
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Mark notification as read' })
-  @ApiResponse({ status: 200, description: 'Notification marked as read', type: UserNotificationResponseDto })
+  @ApiOperation({ summary: 'Mark Notification as Read' })
+  @ApiResponse({ status: 200, description: 'Notification successfully marked as read', type: UserNotificationResponseDto })
   async markNotificationRead(
     @CurrentUser() user: any,
     @Param('id') id: string,
@@ -105,8 +105,8 @@ export class UsersController {
   @Get('me/activity-logs')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get current user activity logs' })
-  @ApiResponse({ status: 200, description: 'Return activity logs' })
+  @ApiOperation({ summary: 'Get Current User Activity Logs' })
+  @ApiResponse({ status: 200, description: 'Successfully retrieved activity logs' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async getMyActivityLogs(
@@ -123,8 +123,8 @@ export class UsersController {
   @Get('me/security-logs')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get current user security logs' })
-  @ApiResponse({ status: 200, description: 'Return security logs' })
+  @ApiOperation({ summary: 'Get Current User Security Logs' })
+  @ApiResponse({ status: 200, description: 'Successfully retrieved security logs' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async getMySecurityLogs(
@@ -141,8 +141,8 @@ export class UsersController {
   @Post('me/deletion-request')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Request account deletion' })
-  @ApiResponse({ status: 201, description: 'Deletion request created', type: DeletionRequestResponseDto })
+  @ApiOperation({ summary: 'Request Account Deletion' })
+  @ApiResponse({ status: 201, description: 'Deletion request successfully created', type: DeletionRequestResponseDto })
   async requestDeletion(
     @CurrentUser() user: any,
     @Body() dto: CreateDeletionRequestDto,
@@ -154,8 +154,8 @@ export class UsersController {
   }
 
   @Post()
-  @ApiOperation({ summary: 'Create a new user' })
-  @ApiResponse({ status: 201, description: 'User created successfully', type: UserResponseDto })
+  @ApiOperation({ summary: 'Create New User' })
+  @ApiResponse({ status: 201, description: 'User successfully created', type: UserResponseDto })
   async create(@Body() dto: CreateUserDto): Promise<UserResponseDto> {
     const command = new CreateUserCommand(
       dto.brandId,
@@ -167,8 +167,8 @@ export class UsersController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get user by ID' })
-  @ApiResponse({ status: 200, description: 'Return user details', type: UserResponseDto })
+  @ApiOperation({ summary: 'Get User By ID' })
+  @ApiResponse({ status: 200, description: 'Successfully retrieved user details', type: UserResponseDto })
   async findOne(
     @Param('id') id: string,
     @Query('brandId') brandId: string,
@@ -178,8 +178,8 @@ export class UsersController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all users for a brand' })
-  @ApiResponse({ status: 200, description: 'Return list of users', type: [UserResponseDto] })
+  @ApiOperation({ summary: 'Get All Users' })
+  @ApiResponse({ status: 200, description: 'Successfully retrieved list of users', type: [UserResponseDto] })
   @ApiQuery({ name: 'brandId', required: true })
   @ApiQuery({ name: 'skip', required: false, type: Number })
   @ApiQuery({ name: 'take', required: false, type: Number })
