@@ -42,9 +42,9 @@ services:
     command: >
       /bin/sh -c "
       export PGPASSWORD=${DATABASE_PASSWORD};
-      until pg_isready -h postgres -U ${DATABASE_USER}; do echo waiting for postgres; sleep 2; done;
-      psql -h postgres -U ${DATABASE_USER} -tc \"SELECT 1 FROM pg_database WHERE datname = 'ybb_payments_db'\" | grep -q 1 || psql -h postgres -U ${DATABASE_USER} -c \"CREATE DATABASE ybb_payments_db\";
-      psql -h postgres -U ${DATABASE_USER} -tc \"SELECT 1 FROM pg_database WHERE datname = 'ybb_files_db'\" | grep -q 1 || psql -h postgres -U ${DATABASE_USER} -c \"CREATE DATABASE ybb_files_db\";
+      until pg_isready -h postgres -U ${DATABASE_USER} -d postgres; do echo waiting for postgres; sleep 2; done;
+      psql -h postgres -U ${DATABASE_USER} -d postgres -tc \"SELECT 1 FROM pg_database WHERE datname = 'ybb_payments_db'\" | grep -q 1 || psql -h postgres -U ${DATABASE_USER} -d postgres -c \"CREATE DATABASE ybb_payments_db\";
+      psql -h postgres -U ${DATABASE_USER} -d postgres -tc \"SELECT 1 FROM pg_database WHERE datname = 'ybb_files_db'\" | grep -q 1 || psql -h postgres -U ${DATABASE_USER} -d postgres -c \"CREATE DATABASE ybb_files_db\";
       echo 'Databases verified/created';
       "
 
