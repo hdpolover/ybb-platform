@@ -168,6 +168,9 @@ services:
     build:
       context: ./services/api
       dockerfile: Dockerfile.prod
+    # Run database migration (and cache warming, if needed) before starting the app
+    # 'npx prisma migrate deploy' ensures the DB schema is up to date
+    command: /bin/sh -c "npx prisma migrate deploy && node dist/src/main"
     restart: unless-stopped
     environment:
       NODE_ENV: ${NODE_ENV:-production}
