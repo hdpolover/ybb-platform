@@ -390,7 +390,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./infrastructure/nginx/conf.d/default.prod.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./infrastructure/nginx/conf.d/default.${APP_ENV:-prod}.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
       - ybb-network
       - dokploy-network
