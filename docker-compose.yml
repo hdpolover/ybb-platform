@@ -34,12 +34,13 @@ services:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@ybbhub.com}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
       PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
       - ./infrastructure/pgadmin/servers.json:/pgadmin4/servers.json:ro
     networks:
       - ybb-network
-      - web_gateway
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.pgadmin.rule=Host(`db.ybbhub.com`)"
@@ -76,11 +77,13 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
     volumes:
       - /var/ybb-storage:/data
     networks:
       - ybb-network
-      - web_gateway
     labels:
       - "traefik.enable=true"
       # API (S3)
@@ -113,7 +116,6 @@ services:
       - rabbitmq_data:/var/lib/rabbitmq
     networks:
       - ybb-network
-      - web_gateway
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.rabbitmq.rule=Host(`queue.ybbhub.com`)"
@@ -157,7 +159,6 @@ services:
       - /app/dist
     networks:
       - ybb-network
-      - web_gateway
     depends_on:
       postgres:
         condition: service_healthy
@@ -193,7 +194,6 @@ services:
       - ./services/payment-service:/app
     networks:
       - ybb-network
-      - web_gateway
     depends_on:
       postgres:
         condition: service_healthy
@@ -224,11 +224,12 @@ services:
       MINIO_PUBLIC_SECURE: ${MINIO_PUBLIC_SECURE}
       DATABASE_URL: ${DATABASE_URL_FILE}
       SERVICE_PORT: 8001
+    ports:
+      - "8001:8001"
     volumes:
       - ./services/file-service:/app
     networks:
       - ybb-network
-      - web_gateway
     depends_on:
       postgres:
         condition: service_healthy
@@ -262,7 +263,6 @@ services:
       - /app/dist
     networks:
       - ybb-network
-      - web_gateway
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -286,18 +286,18 @@ services:
       NODE_ENV: ${NODE_ENV}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
       PORT: 4001
+    ports:
+      - "4001:4001"
     volumes:
       - ./services/admin-dashboard:/app
       - /app/node_modules
       - /app/.next
     networks:
       - ybb-network
-      - web_gateway
     depends_on:
       - api
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.admin.rule=Host(`admin.ybbhub.com`)"
       - "traefik.http.routers.admin.entrypoints=websecure"
       - "traefik.http.routers.admin.tls.certresolver=myresolver"
       - "traefik.http.services.admin.loadbalancer.server.port=4001"
@@ -336,21 +336,16 @@ services:
       GF_USERS_ALLOW_SIGN_UP: "false"
     networks:
       - ybb-network
-      - web_gateway
     depends_on:
       - prometheus
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.grafana.rule=Host(`monitor.ybbhub.com`)"
-      - "traefik.http.routers.grafana.entrypoints=websecure"
       - "traefik.http.routers.grafana.tls.certresolver=myresolver"
       - "traefik.http.services.grafana.loadbalancer.server.port=3000"
 
 networks:
   ybb-network:
-    driver: bridge
-  web_gateway:
-    name: web_gateway
     driver: bridge
 
 volumes:
