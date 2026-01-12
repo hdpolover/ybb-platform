@@ -108,35 +108,6 @@ func main() {
 	gatewayFactory.Register(manualGateway)
 	log.Println("Registered payment gateways: Manual")
 
-	// Register Xendit Gateway
-	if cfg.XenditSecretKey != "" {
-		xenditGateway := infraGateways.NewXenditGateway(cfg.XenditSecretKey)
-		gatewayFactory.Register(xenditGateway)
-		log.Println("Registered payment gateways: Xendit")
-	} else {
-		log.Println("Warning: Xendit Secret Key is empty, skipping registration")
-	}
-
-	if cfg.StripeSecretKey != "" {
-        stripeGateway := infraGateways.NewStripeGateway(cfg.StripeSecretKey)
-        gatewayFactory.Register(stripeGateway)
-        log.Println("Registered payment gateways: Stripe")
-    } else {
-        log.Println("Warning: Stripe Secret Key is empty, skipping registration")
-    }
-
-	if cfg.PayPalClientID != "" {
-        paypalGateway := infraGateways.NewPayPalGateway(
-            cfg.PayPalClientID,
-            cfg.PayPalSecret,
-            cfg.PayPalMode,
-        )
-        gatewayFactory.Register(paypalGateway)
-        log.Println("Registered payment gateways: PayPal")
-    } else {
-        log.Println("Warning: PayPal Client ID is empty, skipping registration")
-    }
-
 	// Initialize repositories
 	paymentRepo := persistence.NewGormPaymentRepository(db)
 	paymentMethodRepo := persistence.NewPaymentMethodRepository(db)

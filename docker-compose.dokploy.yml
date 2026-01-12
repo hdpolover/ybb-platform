@@ -247,6 +247,9 @@ services:
       PORT: 8002
       DATABASE_URL: ${DATABASE_URL_PAYMENT}
       RABBITMQ_URL: ${RABBITMQ_URL}
+      MIDTRANS_SERVER_KEY: ${MIDTRANS_SERVER_KEY:-}
+      MIDTRANS_CLIENT_KEY: ${MIDTRANS_CLIENT_KEY:-}
+      MIDTRANS_IS_PRODUCTION: ${MIDTRANS_IS_PRODUCTION:-false}
     networks:
       - ybb-network
       - dokploy-network
