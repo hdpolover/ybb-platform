@@ -78,6 +78,16 @@ prod-build:
 	@echo "Building production images..."
 	docker compose -f docker-compose.prod.yml build
 
+# Staging
+staging:
+	@echo "Starting staging environment..."
+	docker compose -f docker-compose.staging.yml up -d
+	@echo "Staging services are running."
+
+staging-build:
+	@echo "Building staging images..."
+	docker compose -f docker-compose.staging.yml build
+
 # Database operations
 setup:
 	@echo "Running initial setup..."
@@ -91,6 +101,10 @@ migrate:
 prod-migrate:
 	@echo "Running production database migrations..."
 	docker compose -f docker-compose.prod.yml exec api npm run migration:run
+
+staging-migrate:
+	@echo "Running staging database migrations..."
+	docker compose -f docker-compose.staging.yml exec api npm run migration:run
 
 seed-db:
 	@echo "Seeding database..."
