@@ -83,6 +83,7 @@ type Payment struct {
 	Metadata  map[string]interface{} `gorm:"type:jsonb" json:"metadata" swaggerignore:"true"`
 	CreatedAt time.Time              `gorm:"not null;default:CURRENT_TIMESTAMP" json:"created_at" example:"2025-12-01T10:00:00Z"`
 	UpdatedAt time.Time              `gorm:"not null;default:CURRENT_TIMESTAMP" json:"updated_at" example:"2025-12-01T10:00:00Z"`
+	DeletedAt gorm.DeletedAt         `gorm:"index" json:"deleted_at,omitempty" swaggerignore:"true"`
 	PaidAt    *time.Time             `json:"paid_at"     example:"2025-12-01T10:00:00Z"`
 	FailedAt  *time.Time             `json:"failed_at"   example:""`
 	CancelledAt *time.Time           `json:"cancelled_at" example:""`

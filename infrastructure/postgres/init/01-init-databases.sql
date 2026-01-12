@@ -8,6 +8,8 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- Create main database (API service)
 SELECT 'CREATE DATABASE ybb_platform_db'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'ybb_platform_db')\gexec
+SELECT 'CREATE DATABASE ybb_staging_db'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'ybb_staging_db')\gexec
 
 -- Create payment service database
 SELECT 'CREATE DATABASE ybb_payments_db'

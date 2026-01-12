@@ -66,7 +66,12 @@ func main() {
 	}
 
 	// Auto-migrate database schema
-	if err := db.AutoMigrate(&entities.Payment{}, &entities.PaymentMethodEntity{}); err != nil {
+	if err := db.AutoMigrate(
+		&entities.Payment{}, 
+		&entities.PaymentMethodEntity{}, 
+		&entities.Refund{}, 
+		&entities.GatewayConfig{},
+	); err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
 
