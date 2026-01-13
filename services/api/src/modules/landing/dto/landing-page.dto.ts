@@ -13,8 +13,29 @@ export class LandingPageSectionContentDto {
   @ApiProperty({ description: 'Call to action URL', example: '/register', required: false })
   ctaUrl?: string;
 
-  @ApiProperty({ description: 'Image URL', example: 'https://example.com/banner.jpg', required: false })
-  image?: string;
+  @ApiProperty({ description: 'Image URL', example: 'https://example.com/banner.jpg', required: false, nullable: true })
+  image?: string | null;
+  
+  @ApiProperty({ description: 'Background Image URL', example: 'https://example.com/bg.jpg', required: false, nullable: true })
+  bg_image?: string | null;
+
+  @ApiProperty({ description: 'Title inside content', example: 'Section Title', required: false })
+  title?: string;
+
+  @ApiProperty({ description: 'Description text', example: 'Detailed description...', required: false, nullable: true })
+  description?: string | null;
+
+  @ApiProperty({ description: 'Name field', example: 'Program Name', required: false })
+  name?: string;
+
+  @ApiProperty({ description: 'Theme string', example: 'Innovation', required: false, nullable: true })
+  theme?: string | null;
+
+  @ApiProperty({ description: 'Subthemes list', example: ['Tech', 'Social'], required: false, isArray: true })
+  subthemes?: string[];
+
+  @ApiProperty({ description: 'Main poster image', example: 'https://example.com/poster.jpg', required: false, nullable: true })
+  main_poster?: string | null;
   
   @ApiProperty({ description: 'Video URL', example: 'https://youtube.com/...', required: false })
   video?: string;
