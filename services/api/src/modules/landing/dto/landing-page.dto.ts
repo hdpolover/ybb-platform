@@ -40,6 +40,12 @@ export class LandingPageSectionContentDto {
   @ApiProperty({ description: 'Video URL', example: 'https://youtube.com/...', required: false })
   video?: string;
 
+  @ApiProperty({ description: 'Vision statement', required: false, nullable: true })
+  vision?: string | null;
+
+  @ApiProperty({ description: 'Mission statement', required: false, nullable: true })
+  mission?: string | null;
+
   // Additional fields for complex sections
   @ApiProperty({ example: 'Some text about us', required: false })
   about_us?: string;
