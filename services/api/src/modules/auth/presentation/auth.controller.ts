@@ -33,7 +33,7 @@ import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.serv
 @Controller('auth')
 @ApiHeader({
   name: 'x-brand-domain',
-  description: 'Domain of the brand/program category (alternative to url query param)',
+  description: 'Domain of the brand/program category (e.g., istanyouthsummit.com). This helps the system identify which brand context the user is authenticating against.',
   required: false,
 })
 export class AuthController {

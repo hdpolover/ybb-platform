@@ -22,11 +22,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '4.0'
-          memory: 4G
+          cpus: '6.0'
+          memory: 8G
         reservations:
-          cpus: '1.0'
-          memory: 1G
+          cpus: '1.5'
+          memory: 2G
 
   # =========================================
   # Database Initialization
@@ -178,7 +178,7 @@ services:
           cpus: '2.0'
           memory: 2G
         reservations:
-          cpus: '0.5'
+          cpus: '0.25'
           memory: 512M
 
   # =========================================
@@ -229,11 +229,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2.0'
-          memory: 2G
+          cpus: '4.0'
+          memory: 4G
         reservations:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '1.0'
+          memory: 2G
 
   # =========================================
   # Payment Service (Go) -> payment.ybbhub.com
@@ -276,8 +276,8 @@ services:
           cpus: '1.0'
           memory: 1G
         reservations:
-          cpus: '0.25'
-          memory: 256M
+          cpus: '0.1'
+          memory: 128M
 
   # =========================================
   # File Service (Python) -> files.ybbhub.com
@@ -322,8 +322,8 @@ services:
           cpus: '1.0'
           memory: 1G
         reservations:
-          cpus: '0.25'
-          memory: 256M
+          cpus: '0.1'
+          memory: 128M
 
   # =========================================
   # Notification Service (NestJS) -> notification.ybbhub.com
@@ -367,8 +367,8 @@ services:
           cpus: '1.0'
           memory: 1G
         reservations:
-          cpus: '0.25'
-          memory: 256M
+          cpus: '0.1'
+          memory: 128M
 
   # =========================================
   # Admin Dashboard (Next.js) -> admin.ybbhub.com
@@ -399,11 +399,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.0'
-          memory: 1G
+          cpus: '4.0'
+          memory: 4G
         reservations:
-          cpus: '0.25'
-          memory: 256M
+          cpus: '0.5'
+          memory: 1G
     healthcheck:
       test: [ "CMD", "node", "-e", "require('http').get('http://localhost:4001/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" ]
       interval: 30s
