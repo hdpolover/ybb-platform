@@ -8,6 +8,7 @@ import { RegisterAdminDto } from './dto/register-admin.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { UserProfileDto } from './dto/user-profile.dto';
 import { LoginHandler } from '../application/commands/handlers/login.handler';
@@ -17,6 +18,7 @@ import { LogoutHandler } from '../application/commands/handlers/logout.handler';
 import { ForgotPasswordHandler } from '../application/commands/handlers/forgot-password.handler';
 import { ResetPasswordHandler } from '../application/commands/handlers/reset-password.handler';
 import { VerifyEmailHandler } from '../application/commands/handlers/verify-email.handler';
+import { ResendVerificationEmailHandler } from '../application/commands/handlers/resend-verification-email.handler';
 import { LoginCommand } from '../application/commands/login.command';
 import { RegisterCommand } from '../application/commands/register.command';
 import { RegisterAdminCommand } from '../application/commands/register-admin.command';
@@ -24,6 +26,7 @@ import { LogoutCommand } from '../application/commands/logout.command';
 import { ForgotPasswordCommand } from '../application/commands/forgot-password.command';
 import { ResetPasswordCommand } from '../application/commands/reset-password.command';
 import { VerifyEmailCommand } from '../application/commands/verify-email.command';
+import { ResendVerificationEmailCommand } from '../application/commands/resend-verification-email.command';
 import { Public } from '../../../shared/decorators/public.decorator';
 import { CurrentUser, CurrentUserData } from '../../../shared/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../infrastructure/guards/jwt-auth.guard';
@@ -45,6 +48,7 @@ export class AuthController {
     private readonly forgotPasswordHandler: ForgotPasswordHandler,
     private readonly resetPasswordHandler: ResetPasswordHandler,
     private readonly verifyEmailHandler: VerifyEmailHandler,
+    private readonly resendVerificationEmailHandler: ResendVerificationEmailHandler,
     private readonly prisma: PrismaService,
   ) { }
 
@@ -145,6 +149,21 @@ export class AuthController {
   async verifyEmail(@Body() dto: VerifyEmailDto) {
     const command = new VerifyEmailCommand(dto.token);
     return this.verifyEmailHandler.execute(command);
+  }
+
+  @Public()
+  @Post('resend-verification')
+  @Throttle({ default: { limit: 3, ttl: 3600000 } }) // Limit to prevent spam
+  @ApiOperation({ summary: 'Resend Verification Email' })
+  @ApiResponse({ status: 200, description: 'Verification email sent if user exists and is unverified' })
+  @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
+  async resendVerification(
+    @Body() dto: ResendVerificationDto,
+    @Query('url') url?: string,
+    @Headers('x-brand-domain') brandDomain?: string,
+  ) {
+    const command = new ResendVerificationEmailCommand(dto.email, dto.programCategoryId);
+    return this.resendVerificationEmailHandler.execute(command, url || brandDomain);
   }
 
   @Post('logout')
