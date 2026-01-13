@@ -26,12 +26,16 @@ export class AboutStrategy implements ILandingPageStrategy {
         },
         {
           type: 'text',
-          content: about,
+          content: {
+            description: about,
+          },
         },
         {
           type: 'vision_mission',
-          vision: vision,
-          mission: mission,
+          content: {
+            vision: vision,
+            mission: mission,
+          },
         },
       ],
     };
