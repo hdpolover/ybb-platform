@@ -26,7 +26,7 @@ export class EmailService {
 
     private registerPartials() {
         try {
-            const layoutPath = path.join(process.cwd(), 'src/modules/email/templates/layout.hbs');
+            const layoutPath = path.join(__dirname, 'templates/layout.hbs');
             const layout = fs.readFileSync(layoutPath, 'utf8');
             hbs.registerPartial('layout', layout);
         } catch (error) {
@@ -74,7 +74,7 @@ export class EmailService {
             return this.renderWithLayout(cached, data);
         }
 
-        const filePath = path.join(process.cwd(), 'src/modules/email/templates', `${templateName}.hbs`);
+        const filePath = path.join(__dirname, 'templates', `${templateName}.hbs`);
         
         try {
             // Read file asynchronously
@@ -88,7 +88,7 @@ export class EmailService {
 
             return this.renderWithLayout(compiled, data);
         } catch (error) {
-            this.logger.error(`Failed to load template: ${templateName}`, error);
+            this.logger.error(`Failed to load template: ${templateName} from ${filePath}`, error);
             throw error;
         }
     }
@@ -97,7 +97,7 @@ export class EmailService {
         // If we have a layout, we might want to wrap it manually or use handlebars-layouts
         // For simplicity here, we'll assume the template extends the layout or is standalone
         // But to actually use the layout wrapper we defined earlier, we can do this:
-        const layoutPath = path.join(process.cwd(), 'src/modules/email/templates/layout.hbs');
+        const layoutPath = path.join(__dirname, 'templates/layout.hbs');
         if (fs.existsSync(layoutPath)) {
             // Note: Layout caching could also be implemented for further optimization
             const layoutTemplate = fs.readFileSync(layoutPath, 'utf8');
