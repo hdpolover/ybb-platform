@@ -724,6 +724,239 @@ async function main() {
 
   console.log(`✅ Awards created for: ${iys2025.name}`);
 
+  // ==========================================
+  // 11. Create Program Pricing Tiers
+  // ==========================================
+  
+  // IYS 2025 Pricing
+  await prisma.programPricingTier.create({
+    data: {
+      programId: iys2025.id,
+      name: 'Early Bird - International',
+      description: 'Special price for early registrants from outside Turkey',
+      price: 450.00,
+      currency: 'USD',
+      capacity: 100,
+      feeType: 'full_fee',
+      target: 'self_funded',
+      benefits: ['Access to all sessions', 'Accommodation (3 nights)', 'Meals', 'Certificate', 'Airport Transfer'],
+      isActive: true,
+      order: 1
+    }
+  });
+
+  await prisma.programPricingTier.create({
+    data: {
+      programId: iys2025.id,
+      name: 'Regular - International',
+      description: 'Regular price for international participants',
+      price: 550.00,
+      currency: 'USD',
+      capacity: 200,
+      feeType: 'full_fee',
+      target: 'self_funded',
+      benefits: ['Access to all sessions', 'Accommodation (3 nights)', 'Meals', 'Certificate', 'Airport Transfer'],
+      isActive: true,
+      order: 2
+    }
+  });
+
+  console.log(`✅ Pricing Tiers created for: ${iys2025.name}`);
+
+  // ==========================================
+  // 12. Create Sponsors & Partners
+  // ==========================================
+
+  // IYS Sponsors
+  await prisma.sponsor.create({
+    data: {
+      programCategoryId: iysBrand.id,
+      name: 'Turkish Airlines',
+      type: 'corporate',
+      logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/Turkish_Airlines_logo_2010.svg/2560px-Turkish_Airlines_logo_2010.svg.png',
+      websiteUrl: 'https://www.turkishairlines.com',
+      tier: 'platinum',
+      isActive: true,
+      order: 1
+    }
+  });
+
+  await prisma.sponsor.create({
+    data: {
+      programCategoryId: iysBrand.id,
+      name: 'Ministry of Youth and Sports',
+      type: 'government', 
+      logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/e/e1/Ministry_of_Youth_and_Sports_%28Turkey%29.svg',
+      websiteUrl: 'https://gsb.gov.tr',
+      tier: 'gold',
+      isActive: true,
+      order: 2
+    }
+  });
+  console.log(`✅ Sponsors created for: ${iysBrand.name}`);
+
+  // ==========================================
+  // 13. Create Program Speakers
+  // ==========================================
+
+  await prisma.programSpeaker.create({
+    data: {
+      programId: iys2025.id,
+      name: 'John Doe',
+      title: 'CEO',
+      organization: 'Tech Innovations Inc.',
+      bio: 'Visionary leader with 20 years of experience in technology.',
+      photoUrl: 'https://randomuser.me/api/portraits/men/32.jpg',
+      isActive: true,
+      order: 1
+    }
+  });
+
+   await prisma.programSpeaker.create({
+    data: {
+      programId: iys2025.id,
+      name: 'Jane Smith',
+      title: 'Founder',
+      organization: 'Green Earth NGO',
+      bio: 'Environmental activist and social entrepreneur.',
+      photoUrl: 'https://randomuser.me/api/portraits/women/44.jpg',
+      isActive: true,
+      order: 2
+    }
+  });
+  console.log(`✅ Speakers created for: ${iys2025.name}`);
+
+  // ==========================================
+  // 14. Create Program Timeline
+  // ==========================================
+
+  await prisma.programTimeline.create({
+    data: {
+      programId: iys2025.id,
+      title: 'Registration Opens',
+      date: new Date('2024-08-01'),
+      description: 'Start submitting your applications.',
+      order: 1,
+      isActive: true
+    }
+  });
+
+  await prisma.programTimeline.create({
+    data: {
+      programId: iys2025.id,
+      title: 'Registration Closes',
+      date: new Date('2024-11-30'), 
+      description: 'Last day to submit applications.',
+      order: 2,
+      isActive: true
+    }
+  });
+
+  await prisma.programTimeline.create({
+    data: {
+      programId: iys2025.id,
+      title: 'Announcement of Delegates',
+      date: new Date('2024-12-15'),
+      description: 'Selected participants will be notified via email.',
+      order: 3,
+      isActive: true
+    }
+  });
+
+   await prisma.programTimeline.create({
+    data: {
+      programId: iys2025.id,
+      title: 'Summit Day',
+      date: new Date('2025-02-10'),
+      description: 'Welcome to Istanbul!',
+      order: 4,
+      isActive: true
+    }
+  });
+  console.log(`✅ Timeline created for: ${iys2025.name}`);
+
+  // ==========================================
+  // 15. Create Program FAQs
+  // ==========================================
+
+  const faqs = [
+    {
+        question: "Is this program fully funded?",
+        answer: "There are fully funded, partial funded, and self-funded categories available.",
+        category: "general" as const
+    },
+    {
+        question: "Do I need a visa to enter Turkey?",
+        answer: "It depends on your nationality. Please check with the Turkish embassy in your country or the e-visa website.",
+        category: "visa" as const
+    },
+    {
+        question: "Is there an age limit?",
+        answer: "Yes, the program is open for youth aged 17-35 years old.",
+        category: "registration" as const
+    }
+  ];
+
+  for (const f of faqs) {
+    await prisma.programFaq.create({
+        data: {
+            programId: iys2025.id,
+            question: f.question,
+            answer: f.answer,
+            category: f.category,
+            isActive: true
+        }
+    });
+  }
+  console.log(`✅ FAQs created for: ${iys2025.name}`);
+
+  // ==========================================
+  // 16. Create Program Schedule
+  // ==========================================
+  
+  await prisma.programSchedule.create({
+    data: {
+        programId: iys2025.id,
+        day: 'Day 1',
+        startTime: '09:00',
+        endTime: '12:00',
+        activity: 'Opening Ceremony',
+        description: 'Keynote speeches and cultural performances.',
+        location: 'Main Hall',
+        order: 1,
+        isActive: true
+    }
+  });
+
+  await prisma.programSchedule.create({
+    data: {
+        programId: iys2025.id,
+        day: 'Day 1',
+        startTime: '13:00',
+        endTime: '15:00',
+        activity: 'Panel Discussion: Future Leaders',
+        description: 'Discussion with industry experts.',
+        location: 'Main Hall',
+        order: 2,
+        isActive: true
+    }
+  });
+  
+  await prisma.programSchedule.create({
+    data: {
+        programId: iys2025.id,
+        day: 'Day 2',
+        startTime: '09:00',
+        endTime: '17:00',
+        activity: 'Project Presentations',
+        description: 'Delegates present their social projects.',
+        location: 'Meeting Rooms',
+        order: 3,
+        isActive: true
+    }
+  });
+  console.log(`✅ Schedule created for: ${iys2025.name}`);
+
   console.log('🎉 Seeding completed successfully!');
 }
 
