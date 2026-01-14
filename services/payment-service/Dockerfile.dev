@@ -11,7 +11,9 @@ RUN apk add --no-cache git && \
 COPY . .
 
 # Ensure dependencies are tidy and downloaded
-RUN go mod tidy && go mod download
+# Ensure dependencies are tidy and downloaded with retries
+RUN go env -w GOPROXY=https://proxy.golang.org,direct && \
+    (go mod tidy && go mod download || go mod tidy && go mod download || go mod tidy && go mod download)
 
 # Expose port
 EXPOSE 8002
