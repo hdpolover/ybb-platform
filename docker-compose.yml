@@ -187,7 +187,7 @@ services:
       MIDTRANS_SERVER_KEY: ${MIDTRANS_SERVER_KEY:-}
       MIDTRANS_CLIENT_KEY: ${MIDTRANS_CLIENT_KEY:-}
       MIDTRANS_IS_PRODUCTION: ${MIDTRANS_IS_PRODUCTION:-false}
-      RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/   
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
     ports:
       - "8002:8002"
     volumes:
@@ -301,6 +301,35 @@ services:
       - "traefik.http.routers.admin.entrypoints=websecure"
       - "traefik.http.routers.admin.tls.certresolver=myresolver"
       - "traefik.http.services.admin.loadbalancer.server.port=4001"
+
+  # =========================================
+  # Minimal Admin (Next.js) -> minimal-admin
+  # =========================================
+  minimal-admin:
+    build:
+      context: ./services/minimal-admin
+      dockerfile: Dockerfile.dev
+    container_name: ybb-minimal-admin
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      PORT: 4003
+    ports:
+      - "4003:4003"
+    volumes:
+      - ./services/minimal-admin:/app
+      - /app/node_modules
+      - /app/.next
+    networks:
+      - ybb-network
+    depends_on:
+      - api
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.minimal-admin.entrypoints=websecure"
+      - "traefik.http.routers.minimal-admin.tls.certresolver=myresolver"
+      - "traefik.http.services.minimal-admin.loadbalancer.server.port=4003"
 
   # =========================================
   # Nginx removed for local development

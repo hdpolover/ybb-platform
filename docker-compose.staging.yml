@@ -384,6 +384,47 @@ services:
       start_period: 40s
 
   # =========================================
+  # Minimal Admin (Next.js) -> staging-min-admin.ybbhub.com
+  # =========================================
+  minimal-admin:
+    build:
+      context: ./services/minimal-admin
+      dockerfile: Dockerfile.prod
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    container_name: ybb-minimal-admin-staging
+    restart: unless-stopped
+    environment:
+      NODE_ENV: staging
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      PORT: 4003
+    networks:
+      - ybb-network-staging
+      - web_gateway
+    depends_on:
+      - api
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.minimal-admin-staging.rule=Host(`staging-min-admin.ybbhub.com`)"
+      - "traefik.http.routers.minimal-admin-staging.entrypoints=websecure"
+      - "traefik.http.routers.minimal-admin-staging.tls.certresolver=myresolver"
+      - "traefik.http.services.minimal-admin-staging.loadbalancer.server.port=4003"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    healthcheck:
+      test: [ "CMD", "node", "-e", "require('http').get('http://localhost:4003/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # =========================================
   # Landing Page / Static (Nginx) -> staging.ybbhub.com
   # =========================================
   nginx:
