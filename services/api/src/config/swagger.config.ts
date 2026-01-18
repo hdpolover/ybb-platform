@@ -87,7 +87,10 @@ export function setupSwagger(app: INestApplication): void {
       body { height: 100vh; display: flex; flex-direction: column; overflow: hidden; margin: 0; } 
       #header { padding: 12px 20px; background: #fff; border-bottom: 1px solid #e1e4e8; display: flex; align-items: center; justify-content: space-between; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
       #header h1 { margin: 0; font-size: 18px; font-weight: 600; color: #111827; }
+      .header-actions { display: flex; align-items: center; gap: 16px; }
       .version-selector { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+      .classic-link { font-size: 14px; text-decoration: none; color: #2563eb; font-weight: 500; }
+      .classic-link:hover { text-decoration: underline; }
       select { padding: 4px 8px; border-radius: 4px; border: 1px solid #d1d5db; background-color: #fff; font-size: 14px; color: #374151; cursor: pointer; }
       select:focus { outline: 2px solid #2563eb; border-color: #2563eb; }
       elements-api { flex: 1; overflow: hidden; }
@@ -96,12 +99,15 @@ export function setupSwagger(app: INestApplication): void {
   <body>
     <div id="header">
         <h1>YBB Platform API</h1>
-        <div class="version-selector">
-            <label for="version-select">Version:</label>
-            <select id="version-select" onchange="updateDocs(this.value)">
-                <option value="/docs/v1-json">v1 (Current)</option>
-                <option value="/docs/v2-json">v2 (Beta)</option>
-            </select>
+        <div class="header-actions">
+            <a href="/docs/v1" class="classic-link" target="_blank">Classic Swagger UI &rarr;</a>
+            <div class="version-selector">
+                <label for="version-select">Version:</label>
+                <select id="version-select" onchange="updateDocs(this.value)">
+                    <option value="/docs/v1-json">v1 (Current)</option>
+                    <option value="/docs/v2-json">v2 (Beta)</option>
+                </select>
+            </div>
         </div>
     </div>
 
