@@ -66,7 +66,7 @@ services:
       # We'll stick to a generic Servers.json that we can override later 
       # OR just mount the specific staging one if we are in Staging.
       # For now, let's keep it simple (servers.json) but you might need to update the file on the server.
-      - ./infrastructure/pgadmin/servers.json:/pgadmin4/servers.json:ro
+      - ./infrastructure/pgadmin/servers.${APP_ENV:-prod}.json:/pgadmin4/servers.json:ro
     networks:
       - ybb-network
       - dokploy-network
