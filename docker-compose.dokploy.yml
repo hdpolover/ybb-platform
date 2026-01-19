@@ -22,11 +22,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '6.0'
-          memory: 8G
+          cpus: '4.0'
+          memory: 4G
         reservations:
-          cpus: '1.5'
-          memory: 2G
+          cpus: '1.0'
+          memory: 1G
 
   # =========================================
   # Database Initialization
@@ -61,6 +61,11 @@ services:
       PGADMIN_CONFIG_CHECK_EMAIL_DELIVERABILITY: "False"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
+      # Mount different config based on Environment? 
+      # Dockploy doesn't support conditional mounting easily.
+      # We'll stick to a generic Servers.json that we can override later 
+      # OR just mount the specific staging one if we are in Staging.
+      # For now, let's keep it simple (servers.json) but you might need to update the file on the server.
       - ./infrastructure/pgadmin/servers.json:/pgadmin4/servers.json:ro
     networks:
       - ybb-network
@@ -79,7 +84,8 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: redis-server --requirepass ${REDIS_PASSWORD}
+    # Use the mounted config file AND the password from environment
+    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD}
     volumes:
       - redis_data:/data
       - ./infrastructure/redis/redis.conf:/usr/local/etc/redis/redis.conf
@@ -100,7 +106,9 @@ services:
           memory: 256M
 
   # =========================================
-  # Storage (MinIO) -> s3.ybbhub.com & console.ybbhub.com
+  # Storage (MinIO) - Conditional
+  # If APP_ENV=staging: Run Minio + Use local file-service env
+  # If APP_ENV=prod: Do NOT run Minio (use spaces) + file-service uses external env
   # =========================================
   minio:
     image: minio/minio:latest
@@ -117,7 +125,7 @@ services:
       - ybb-network
       - dokploy-network
     labels:
-      - "traefik.enable=true"
+      - "traefik.enable=${ENABLE_MINIO:-true}" # Disable if using Spaces
       # API (S3)
       - "traefik.http.routers.minio-api-${APP_ENV:-prod}.rule=Host(`${DOMAIN_S3}`)"
       - "traefik.http.routers.minio-api-${APP_ENV:-prod}.entrypoints=websecure"
@@ -131,6 +139,10 @@ services:
       - "traefik.http.routers.minio-console-${APP_ENV:-prod}.service=minio-console-service-${APP_ENV:-prod}"
       - "traefik.http.services.minio-console-service-${APP_ENV:-prod}.loadbalancer.server.port=9001"
       - "traefik.docker.network=dokploy-network"
+    profiles:
+      - staging  # Only start this container when profile 'staging' is active OR if you don't use profiles...
+                 # Simpler approach for Dockploy: Use an if/else env var or keep it running but unused.
+                 # Since Dockploy might not support 'profiles' easily via UI, we'll keep it simple.
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 30s
@@ -139,11 +151,29 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '4.0'
-          memory: 4G
+          cpus: '2.0'
+          memory: 1G
         reservations:
           cpus: '0.5'
-          memory: 1G
+          memory: 256M
+
+  # =========================================
+  # Storage Browser (Filestash) - For Prod (Spaces)
+  # =========================================
+  file-browser:
+    image: machines/filestash:latest
+    restart: unless-stopped
+    networks:
+      - ybb-network
+      - dokploy-network
+    labels:
+      - "traefik.enable=${ENABLE_FILESTASH:-false}"
+      - "traefik.http.routers.file-browser-${APP_ENV:-prod}.rule=Host(`${DOMAIN_CONSOLE}`)"
+      - "traefik.http.routers.file-browser-${APP_ENV:-prod}.entrypoints=websecure"
+      - "traefik.http.routers.file-browser-${APP_ENV:-prod}.tls.certresolver=letsencrypt"
+      - "traefik.http.services.file-browser-${APP_ENV:-prod}.loadbalancer.server.port=8334"
+      - "traefik.docker.network=dokploy-network"
+
 
   # =========================================
   # Message Queue (RabbitMQ) -> queue.ybbhub.com
@@ -229,11 +259,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '4.0'
-          memory: 4G
-        reservations:
-          cpus: '1.0'
+          cpus: '2.0'
           memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
 
   # =========================================
   # Payment Service (Go) -> payment.ybbhub.com
@@ -289,7 +319,7 @@ services:
     restart: unless-stopped
     environment:
       PYTHON_ENV: production
-      MINIO_ENDPOINT: minio:9000
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
@@ -302,8 +332,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      minio:
-        condition: service_healthy
+      # minio:
+      #   condition: service_healthy
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.files-${APP_ENV:-prod}.rule=Host(`${DOMAIN_FILES}`)"
@@ -399,11 +429,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '4.0'
-          memory: 4G
+          cpus: '2.0'
+          memory: 2G
         reservations:
           cpus: '0.5'
-          memory: 1G
+          memory: 512M
     healthcheck:
       test: [ "CMD", "node", "-e", "require('http').get('http://localhost:4001/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" ]
       interval: 30s

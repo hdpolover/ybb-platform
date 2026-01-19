@@ -1,52 +1,54 @@
 services:
   # =========================================
-  # Database (PostgreSQL)
+  # Database (PostgreSQL) - REMOVED
+  # Connecting to Staging DB on VPS
   # =========================================
-  postgres:
-    build:
-      context: ./infrastructure/postgres
-      dockerfile: Dockerfile
-    container_name: ybb-postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${DATABASE_USER}
-      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
-      POSTGRES_DB: ${DATABASE_NAME}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d
-    networks:
-      - ybb-network
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+  # postgres:
+  #   build:
+  #     context: ./infrastructure/postgres
+  #     dockerfile: Dockerfile
+  #   container_name: ybb-postgres
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_USER: ${DATABASE_USER}
+  #     POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+  #     POSTGRES_DB: ${DATABASE_NAME}
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #     - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d
+  #   networks:
+  #     - ybb-network
+  #   healthcheck:
+  #     test: [ "CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}" ]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
 
   # =========================================
-  # Database GUI (PgAdmin) -> db.ybbhub.com
+  # Database GUI (PgAdmin) - REMOVED
+  # Use https://staging-db.ybbhub.com
   # =========================================
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: ybb-pgadmin
-    restart: unless-stopped
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@ybbhub.com}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
-      PGADMIN_CONFIG_SERVER_MODE: "False"
-    ports:
-      - "5050:80"
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-      - ./infrastructure/pgadmin/servers.json:/pgadmin4/servers.json:ro
-    networks:
-      - ybb-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.pgadmin.rule=Host(`db.ybbhub.com`)"
-      - "traefik.http.routers.pgadmin.entrypoints=websecure"
-      - "traefik.http.routers.pgadmin.tls.certresolver=myresolver"
-      - "traefik.http.services.pgadmin.loadbalancer.server.port=80"
+  # pgadmin:
+  #   image: dpage/pgadmin4:latest
+  #   container_name: ybb-pgadmin
+  #   restart: unless-stopped
+  #   environment:
+  #     PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@ybbhub.com}
+  #     PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
+  #     PGADMIN_CONFIG_SERVER_MODE: "False"
+  #   ports:
+  #     - "5050:80"
+  #   volumes:
+  #     - pgadmin_data:/var/lib/pgadmin
+  #     - ./infrastructure/pgadmin/servers.staging.json:/pgadmin4/servers.json:ro
+  #   networks:
+  #     - ybb-network
+  #   labels:
+  #     - "traefik.enable=true"
+  #     - "traefik.http.routers.pgadmin.rule=Host(`db.ybbhub.com`)"
+  #     - "traefik.http.routers.pgadmin.entrypoints=websecure"
+  #     - "traefik.http.routers.pgadmin.tls.certresolver=myresolver"
+  #     - "traefik.http.services.pgadmin.loadbalancer.server.port=80"
 
   # =========================================
   # Cache (Redis)
@@ -65,42 +67,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-  # =========================================
-  # Storage (MinIO) -> s3.ybbhub.com & console.ybbhub.com
-  # =========================================
-  minio:
-    image: minio/minio:latest
-    container_name: ybb-minio
-    restart: unless-stopped
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - /var/ybb-storage:/data
-    networks:
-      - ybb-network
-    labels:
-      - "traefik.enable=true"
-      # API (S3)
-      - "traefik.http.routers.minio-api.rule=Host(`s3.ybbhub.com`)"
-      - "traefik.http.routers.minio-api.entrypoints=websecure"
-      - "traefik.http.routers.minio-api.tls.certresolver=myresolver"
-      - "traefik.http.services.minio-api.loadbalancer.server.port=9000"
-      # Console (Dashboard)
-      - "traefik.http.routers.minio-console.rule=Host(`console.ybbhub.com`)"
-      - "traefik.http.routers.minio-console.entrypoints=websecure"
-      - "traefik.http.routers.minio-console.tls.certresolver=myresolver"
-      - "traefik.http.services.minio-console.loadbalancer.server.port=9001"
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
-      interval: 30s
-      timeout: 20s
-      retries: 3
 
   # =========================================
   # Message Queue (RabbitMQ) -> queue.ybbhub.com
@@ -138,7 +104,7 @@ services:
     container_name: ybb-api
     restart: unless-stopped
     environment:
-      NODE_ENV: ${NODE_ENV:-production}
+      NODE_ENV: ${NODE_ENV:-development}
       PORT: 4000
       DATABASE_URL: ${DATABASE_URL}
       JWT_SECRET: ${JWT_SECRET}
@@ -160,8 +126,8 @@ services:
     networks:
       - ybb-network
     depends_on:
-      postgres:
-        condition: service_healthy
+      # postgres:
+      #   condition: service_healthy
       redis:
         condition: service_healthy
     labels:
@@ -195,8 +161,8 @@ services:
     networks:
       - ybb-network
     depends_on:
-      postgres:
-        condition: service_healthy
+      # postgres:
+      #   condition: service_healthy
       rabbitmq:
         condition: service_healthy
     labels:
@@ -216,12 +182,14 @@ services:
     container_name: ybb-file-service
     restart: unless-stopped
     environment:
-      PYTHON_ENV: ${NODE_ENV}
-      MINIO_ENDPOINT: minio:9000
+      PYTHON_ENV: ${NODE_ENV:-development}
+      # Point to Staging MinIO by default
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_SECURE: ${MINIO_SECURE:-true}
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
-      MINIO_PUBLIC_SECURE: ${MINIO_PUBLIC_SECURE}
+      MINIO_PUBLIC_SECURE: ${MINIO_PUBLIC_SECURE:-true}
       DATABASE_URL: ${DATABASE_URL_FILE}
       SERVICE_PORT: 8001
     ports:
@@ -231,10 +199,8 @@ services:
     networks:
       - ybb-network
     depends_on:
-      postgres:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
+      # postgres:
+      #   condition: service_healthy
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.files.rule=Host(`files.ybbhub.com`)"
@@ -252,7 +218,7 @@ services:
     container_name: ybb-notification-service
     restart: unless-stopped
     environment:
-      NODE_ENV: ${NODE_ENV:-production}
+      NODE_ENV: ${NODE_ENV:-development}
       PORT: 4002
       RABBITMQ_URL: ${RABBITMQ_URL}
       RESEND_API_KEY: ${RESEND_API_KEY}
