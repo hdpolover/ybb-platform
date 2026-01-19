@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "YBB Staging Database",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "ybb_staging_db",
+      "Username": "ybb_staging_user",
+      "SSLMode": "prefer",
+      "PassFile": "/pgpass"
+    }
+  }
+}
