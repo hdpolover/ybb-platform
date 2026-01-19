@@ -61,7 +61,7 @@ services:
       PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
       PGADMIN_CONFIG_CHECK_EMAIL_DELIVERABILITY: "False"
     volumes:
-      - pgadmin_data:/var/lib/pgadmin
+      - pgadmin_data_v2:/var/lib/pgadmin
       # Mount different config based on Environment? 
       # Dockploy doesn't support conditional mounting easily.
       # We'll stick to a generic Servers.json that we can override later 
@@ -545,7 +545,7 @@ volumes:
   postgres_data:
   redis_data:
   rabbitmq_data:
-  pgadmin_data:
+  pgadmin_data_v2:
   prometheus_data:
   grafana_data:
 
