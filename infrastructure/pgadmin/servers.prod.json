@@ -1,6 +1,6 @@
 {
   "Servers": {
-    "1": {
+    "3": {
       "Name": "YBB Production Database",
       "Group": "Servers",
       "Host": "postgres",
