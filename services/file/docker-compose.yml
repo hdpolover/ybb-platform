@@ -1,0 +1,57 @@
+services:
+  # =========================================
+  # File Service (Python)
+  # =========================================
+  file:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ybb-file
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      SERVICE_PORT: 8001
+      PYTHON_ENV: development
+      # Database
+      DATABASE_URL: postgresql+asyncpg://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres-file:5432/${DATABASE_NAME}
+      # MinIO (Remote/Staging by default as per root config)
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_SECURE: ${MINIO_SECURE}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
+      MINIO_PUBLIC_SECURE: ${MINIO_PUBLIC_SECURE}
+    volumes:
+      - .:/app
+    depends_on:
+      postgres-file:
+        condition: service_healthy
+    networks:
+      - default
+
+  # =========================================
+  # Dedicated Postgres for File Service
+  # =========================================
+  postgres-file:
+    image: postgres:15-alpine
+    container_name: ybb-postgres-file
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
+    ports:
+      - "5434:5432" # Exposed on 5434 to avoid conflict
+    volumes:
+      - postgres_file_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_file_data:

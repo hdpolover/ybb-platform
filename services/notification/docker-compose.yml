@@ -1,0 +1,26 @@
+services:
+  # =========================================
+  # Notification Service
+  # =========================================
+  notification:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: ybb-notification
+    restart: unless-stopped
+    ports:
+      - "4002:4002"
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 4002
+      # Connects to shared RabbitMQ on host
+      RABBITMQ_URL: amqp://guest:guest@host.docker.internal:5672/
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      RESEND_FROM: ${RESEND_FROM}
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/dist
+    networks:
+      - default
+

@@ -1,0 +1,21 @@
+services:
+  # =========================================
+  # Minimal Admin (Production)
+  # =========================================
+  minimal-admin:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: ybb-minimal-admin
+    restart: always
+    ports:
+      - "4003:4003"
+    env_file:
+      - .env.prod
+    networks:
+      - ybb-network
+
+networks:
+  ybb-network:
+    name: ybb-network
+    external: true
