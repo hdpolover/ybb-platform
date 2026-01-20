@@ -1,0 +1,77 @@
+version: "3.8"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: ybb-api
+    restart: always
+    # No ports exposed to host, only via Traefik
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@ybb-postgres-api:5432/${DATABASE_NAME}
+      REDIS_URL: redis://:redis_password@ybb-redis-api:6379
+      # Links to other services (on same dokploy-network)
+      PAYMENT_SERVICE_URL: http://ybb-payment:8002
+      FILE_SERVICE_URL: http://ybb-file:8001
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@ybb-shared-rabbitmq:5672/
+      # Auth
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+    depends_on:
+      postgres-api:
+        condition: service_healthy
+      redis-api:
+        condition: service_healthy
+    networks:
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=dokploy-network"
+      - "traefik.http.routers.ybb-api.rule=${APP_DOMAINS_RULE:-Host(`api.ybbhub.com`)}"
+      - "traefik.http.routers.ybb-api.entrypoints=websecure"
+      - "traefik.http.routers.ybb-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ybb-api.loadbalancer.server.port=4000"
+      # CORS middleware? API handles it, but maybe needed for preflight
+
+  postgres-api:
+    image: postgres:15-alpine
+    container_name: ybb-postgres-api
+    restart: always
+    environment:
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
+    volumes:
+      - postgres_api_data_prod:/var/lib/postgresql/data
+    networks:
+      - dokploy-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-api:
+    image: redis:7-alpine
+    container_name: ybb-redis-api
+    restart: always
+    command: redis-server --requirepass redis_password
+    volumes:
+      - redis_api_data_prod:/data
+    networks:
+      - dokploy-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis_password", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  postgres_api_data_prod:
+  redis_api_data_prod:
