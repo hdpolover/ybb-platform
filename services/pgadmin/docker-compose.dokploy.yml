@@ -1,0 +1,35 @@
+version: "3.8"
+
+services:
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: ybb-pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+      # Inject servers.json if possible, or manual config.
+      # For Dockploy, mounting a file from repo is tricky if not in build context.
+      # We just mount the local one assuming it's copied or volume mounted.
+      # Ideally, you'd build a custom image with the config or use a volume.
+      # For simplicity here, we rely on manual setup or volume persistence.
+    volumes:
+      - pgadmin_data_prod:/var/lib/pgadmin
+      - ./servers.prod.json:/pgadmin4/servers.json:ro
+        # Note: server.prod.json must exist in repo
+    networks:
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=dokploy-network"
+      - "traefik.http.routers.ybb-pgadmin.rule=${APP_DOMAINS_RULE:-Host(`db-manager.ybbhub.com`)}"
+      - "traefik.http.routers.ybb-pgadmin.entrypoints=websecure"
+      - "traefik.http.routers.ybb-pgadmin.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ybb-pgadmin.loadbalancer.server.port=80"
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  pgadmin_data_prod:
