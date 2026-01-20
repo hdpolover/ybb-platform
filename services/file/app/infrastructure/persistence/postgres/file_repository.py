@@ -1,29 +1,28 @@
-"""PostgreSQL implementation of file repository."""
-# type: ignore
+"""PostgreSQL implementation of file repository using Prisma."""
 from typing import Optional, List
-from sqlalchemy import select, and_
-from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain.entities.file import File
 from app.domain.repositories.file_repository import IFileRepository
-from .models import FileModel
+from .database import db
 from datetime import datetime
+import json
 
 class PostgresFileRepository(IFileRepository):
-    """PostgreSQL implementation of file repository."""
+    """PostgreSQL implementation of file repository via Prisma."""
     
-    def __init__(self, session: AsyncSession):
-        """Initialize with database session."""
-        self._session = session
+    def __init__(self, session=None):
+        """
+        Initialize. Session is not used in Prisma implementation
+        as we use the global client, but kept for interface compatibility.
+        """
+        self.prisma = db.file
     
     async def find_by_id(self, file_id: str) -> Optional[File]:
-        stmt = select(FileModel).where(
-            and_(
-                FileModel.id == file_id,
-                FileModel.is_deleted == False
-            )
+        model = await self.prisma.find_first(
+            where={
+                "id": file_id,
+                "is_deleted": False
+            }
         )
-        result = await self._session.execute(stmt)
-        model = result.scalar_one_or_none()
         
         if model:
             return self._to_domain(model)
@@ -31,86 +30,97 @@ class PostgresFileRepository(IFileRepository):
     
     async def find_by_user(self, user_id: str, brand_id: str) -> List[File]:
         """Find all files for a user in a specific brand."""
-        stmt = select(FileModel).where(
-            and_(
-                FileModel.user_id == user_id,
-                FileModel.brand_id == brand_id,
-                FileModel.is_deleted == False
-            )
-        ).order_by(FileModel.uploaded_at.desc())
-        
-        result = await self._session.execute(stmt)
-        models = result.scalars().all()
+        models = await self.prisma.find_many(
+            where={
+                "user_id": user_id,
+                "brand_id": brand_id,
+                "is_deleted": False
+            },
+            order={
+                "uploaded_at": "desc"
+            }
+        )
         
         return [self._to_domain(model) for model in models]
     
     async def save(self, file: File) -> File:
         """Save file metadata."""
-        stmt = select(FileModel).where(FileModel.id == file.id)
-        result = await self._session.execute(stmt)
-        existing = result.scalar_one_or_none()
-        
-        if existing:
-            existing.filename = file.filename
-            existing.original_filename = file.original_filename
-            existing.file_type = file.file_type
-            existing.mime_type = file.mime_type
-            existing.file_size = file.file_size
-            existing.storage_path = file.storage_path
-            existing.bucket = file.bucket
-            # --- UPDATE: Pakai file_metadata ---
-            existing.file_metadata = file.metadata 
-            existing.updated_at = datetime.utcnow()
-        else:
-            model = FileModel(
-                id=file.id,
-                filename=file.filename,
-                original_filename=file.original_filename,
-                file_type=file.file_type,
-                mime_type=file.mime_type,
-                file_size=file.file_size,
-                storage_path=file.storage_path,
-                bucket=file.bucket,
-                user_id=file.user_id,
-                brand_id=file.brand_id,
-                # --- UPDATE: Pakai file_metadata ---
-                file_metadata=file.metadata, 
-                is_deleted=False,
-                uploaded_at=file.uploaded_at
-            )
-            self._session.add(model)
-        
-        await self._session.flush()
-        await self._session.commit()
+        # Convert dictionary metadata to JSON-compatible format if needed
+        metadata_json = json.loads(json.dumps(file.metadata)) if file.metadata else {}
+
+        # Prisma upsert
+        await self.prisma.upsert(
+            where={
+                "id": file.id
+            },
+            data={
+                "create": {
+                    "id": file.id,
+                    "filename": file.filename,
+                    "original_filename": file.original_filename,
+                    "file_type": file.file_type,
+                    "mime_type": file.mime_type,
+                    "file_size": file.file_size,
+                    "storage_path": file.storage_path,
+                    "bucket": file.bucket,
+                    "user_id": file.user_id,
+                    "brand_id": file.brand_id,
+                    "file_metadata": metadata_json,
+                    "uploaded_at": file.uploaded_at,
+                    "is_deleted": False
+                },
+                "update": {
+                    "filename": file.filename,
+                    "original_filename": file.original_filename,
+                    "file_type": file.file_type,
+                    "mime_type": file.mime_type,
+                    "file_size": file.file_size,
+                    "storage_path": file.storage_path,
+                    "bucket": file.bucket,
+                    "file_metadata": metadata_json,
+                    "updated_at": datetime.utcnow()
+                }
+            }
+        )
         return file
     
     async def delete(self, file_id: str) -> bool:
         """Soft delete file metadata."""
-        stmt = select(FileModel).where(FileModel.id == file_id)
-        result = await self._session.execute(stmt)
-        model = result.scalar_one_or_none()
-        
-        if model:
-            model.is_deleted = True
-            model.deleted_at = datetime.utcnow()
-            await self._session.flush()
-            await self._session.commit()
-            return True
-        return False
+        # Check if exists first to return correct boolean
+        exists = await self.exists(file_id)
+        if not exists:
+            return False
+
+        await self.prisma.update(
+            where={
+                "id": file_id
+            },
+            data={
+                "is_deleted": True,
+                "deleted_at": datetime.utcnow()
+            }
+        )
+        return True
     
     async def exists(self, file_id: str) -> bool:
         """Check if file exists."""
-        stmt = select(FileModel.id).where(
-            and_(
-                FileModel.id == file_id,
-                FileModel.is_deleted == False
-            )
+        count = await self.prisma.count(
+            where={
+                "id": file_id,
+                "is_deleted": False
+            }
         )
-        result = await self._session.execute(stmt)
-        return result.scalar_one_or_none() is not None
+        return count > 0
     
-    def _to_domain(self, model: FileModel) -> File:
+    def _to_domain(self, model) -> File:
         """Convert database model to domain entity."""
+        # Prisma returns None for null JSON, ensure dict
+        meta = model.file_metadata
+        if meta is None:
+            meta = {}
+        elif isinstance(meta, str):
+            meta = json.loads(meta)
+            
         return File(
             id=model.id,
             filename=model.filename,
@@ -123,6 +133,5 @@ class PostgresFileRepository(IFileRepository):
             user_id=model.user_id,
             brand_id=model.brand_id,
             uploaded_at=model.uploaded_at,
-            # --- UPDATE: Pakai file_metadata ---
-            metadata=model.file_metadata or {} 
+            metadata=meta
         )

@@ -27,4 +27,5 @@ EXPOSE 4000
 
 # Start in development mode with watch
 # Generate Prisma Client at runtime to ensure compatibility with the volume-mounted code
-CMD ["sh", "-c", "npx prisma generate && npm run start:dev"]
+# Also run migrations to ensure DB is up to date
+CMD ["sh", "-c", "npx prisma generate && npx prisma migrate deploy && npm run start:dev"]

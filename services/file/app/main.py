@@ -2,6 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.presentation.api.routes import files, documents, images
+from app.infrastructure.persistence.postgres.database import connect_db, disconnect_db
 
 
 app = FastAPI(
@@ -28,9 +29,13 @@ app.include_router(images.router, prefix="/api/v1")
 @app.on_event("startup")
 async def startup_event():
     """Initialize database on startup."""
-    from app.infrastructure.persistence.postgres.database import engine, Base
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    await connect_db()
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Disconnect database on shutdown."""
+    await disconnect_db()
 
 
 @app.get("/")
