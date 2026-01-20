@@ -24,6 +24,12 @@ services:
       - ybb-network-staging
     ports:
       - "3002:3000"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana-staging.rule=Host(`staging-monitor.ybbhub.com`)"
+      - "traefik.http.routers.grafana-staging.entrypoints=websecure"
+      - "traefik.http.routers.grafana-staging.tls.certresolver=myresolver"
+      - "traefik.http.services.grafana-staging.loadbalancer.server.port=3000"
 
 networks:
   ybb-network-staging:
