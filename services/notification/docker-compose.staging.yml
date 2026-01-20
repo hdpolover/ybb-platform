@@ -1,0 +1,21 @@
+services:
+  # =========================================
+  # Notification Service (Staging)
+  # =========================================
+  notification:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: ybb-notification-staging
+    restart: always
+    ports:
+      - "4002:4002"
+    env_file:
+      - .env.staging
+    networks:
+      - ybb-network-staging
+
+networks:
+  ybb-network-staging:
+    name: ybb-network-staging
+    external: true

@@ -1,0 +1,305 @@
+basePath: /api/v1
+definitions:
+  github_com_ybb-platform_payment_internal_domain_entities.PaymentMethodEntity:
+    properties:
+      account_name:
+        example: PT YBB Platform
+        type: string
+      account_number:
+        example: "1234567890"
+        type: string
+      admin_instructions:
+        example: Cek mutasi bank tanggal sekian
+        type: string
+      bank_name:
+        description: '--- Manual Payment Fields ---'
+        example: BCA
+        type: string
+      code:
+        example: bca_manual
+        type: string
+      config:
+        additionalProperties: true
+        description: |-
+          --- Configuration ---
+          swaggertype digunakan agar Swagger tidak bingung membaca map[string]interface{}
+        type: object
+      created_at:
+        description: '--- Timestamps ---'
+        example: "2025-12-01T10:00:00Z"
+        type: string
+      description:
+        example: Transfer manual ke rekening BCA
+        type: string
+      display_name:
+        example: Bank BCA
+        type: string
+      gateway_name:
+        description: '--- Automatic Payment Fields ---'
+        example: ""
+        type: string
+      gateway_type:
+        example: ""
+        type: string
+      icon:
+        example: https://logo.com/bca.png
+        type: string
+      id:
+        description: '--- Primary Key ---'
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      instructions:
+        example: Silakan transfer sesuai nominal unik
+        type: string
+      is_active:
+        example: true
+        type: boolean
+      name:
+        description: '--- Basic Info ---'
+        example: Transfer Bank BCA
+        type: string
+      requires_proof:
+        example: true
+        type: boolean
+      sort_order:
+        example: 1
+        type: integer
+      type:
+        allOf:
+        - $ref: '#/definitions/github_com_ybb-platform_payment_internal_domain_entities.PaymentMethodType'
+        example: manual
+      updated_at:
+        example: "2025-12-01T10:00:00Z"
+        type: string
+    type: object
+  github_com_ybb-platform_payment_internal_domain_entities.PaymentMethodType:
+    enum:
+    - automatic
+    - manual
+    type: string
+    x-enum-comments:
+      MethodTypeAutomatic: Via payment gateway
+      MethodTypeManual: Manual verification
+    x-enum-descriptions:
+    - Via payment gateway
+    - Manual verification
+    x-enum-varnames:
+    - MethodTypeAutomatic
+    - MethodTypeManual
+  internal_presentation_http_handlers.VerifyPaymentRequest:
+    properties:
+      action:
+        description: '"approve" or "reject"'
+        type: string
+      admin_id:
+        description: Simulated Admin ID
+        type: string
+      reason:
+        description: Required if rejected
+        type: string
+    type: object
+externalDocs:
+  description: OpenAPI
+  url: https://swagger.io/resources/open-api/
+host: localhost:8081
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: Ini adalah dokumentasi API untuk layanan pembayaran YBB Platform.
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: YBB Payment Service API
+  version: "1.0"
+paths:
+  /payment-methods:
+    get:
+      description: Mendapatkan daftar semua metode pembayaran yang tersedia
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              items:
+                $ref: '#/definitions/github_com_ybb-platform_payment_internal_domain_entities.PaymentMethodEntity'
+              type: array
+            type: object
+      summary: Lihat Semua Metode Pembayaran
+      tags:
+      - Payment Methods
+    post:
+      consumes:
+      - application/json
+      description: Menambahkan bank atau metode pembayaran baru ke database
+      parameters:
+      - description: Data Payment Method
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_ybb-platform_payment_internal_domain_entities.PaymentMethodEntity'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/github_com_ybb-platform_payment_internal_domain_entities.PaymentMethodEntity'
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Tambah Metode Pembayaran Baru
+      tags:
+      - Payment Methods
+  /payment-methods/{id}:
+    delete:
+      description: Menghapus (Soft Delete) metode pembayaran berdasarkan ID
+      parameters:
+      - description: Payment Method ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Hapus Metode Pembayaran
+      tags:
+      - Payment Methods
+    put:
+      consumes:
+      - application/json
+      description: Mengubah data bank atau metode pembayaran berdasarkan ID
+      parameters:
+      - description: Payment Method ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Data Update
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_ybb-platform_payment_internal_domain_entities.PaymentMethodEntity'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/github_com_ybb-platform_payment_internal_domain_entities.PaymentMethodEntity'
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update Metode Pembayaran
+      tags:
+      - Payment Methods
+  /payments/{id}/proof:
+    post:
+      consumes:
+      - multipart/form-data
+      description: User mengupload foto bukti transfer untuk pembayaran manual
+      parameters:
+      - description: Transaction ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: File Gambar Bukti Transfer (JPG/PNG)
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Upload Bukti Transfer
+      tags:
+      - Manual Payment
+  /payments/{id}/verify:
+    post:
+      consumes:
+      - application/json
+      description: Admin menyetujui (Approve) atau menolak (Reject) pembayaran manual
+      parameters:
+      - description: Transaction ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Data Verifikasi (Action & Admin ID)
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_presentation_http_handlers.VerifyPaymentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Verifikasi Pembayaran (Admin)
+      tags:
+      - Manual Payment
+securityDefinitions:
+  BasicAuth:
+    type: basic
+swagger: "2.0"

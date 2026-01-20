@@ -1,0 +1,37 @@
+# Binaries
+*.exe
+*.dll
+*.so
+*.dylib
+payment
+tmp/
+
+# Test binary
+*.test
+
+# Output of go coverage
+*.out
+
+# Vendor
+vendor/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+
+# Environment files
+.env
+.env.local
+
+# Logs
+*.log
+
+# Build artifacts
+dist/
+build/
