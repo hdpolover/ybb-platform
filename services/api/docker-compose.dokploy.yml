@@ -10,14 +10,16 @@ services:
     # No ports exposed to host, only via Traefik
     environment:
       NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-4000}
       DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@ybb-postgres-api:5432/${DATABASE_NAME}
       REDIS_URL: redis://:${REDIS_PASSWORD}@ybb-redis-api:6379
       REDIS_HOST: ybb-redis-api
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       # Links to other services (on same dokploy-network)
-      PAYMENT_SERVICE_URL: http://ybb-payment:8002
-      FILE_SERVICE_URL: http://ybb-file:8001
+      PAYMENT_SERVICE_URL: ${PAYMENT_SERVICE_URL}
+      FILE_SERVICE_URL: ${FILE_SERVICE_URL}
+      CORS_ORIGINS: ${CORS_ORIGINS}
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@ybb-shared-rabbitmq:5672/
       # Auth
       JWT_SECRET: ${JWT_SECRET}
