@@ -2,7 +2,7 @@ import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
 import { GetParticipantProgressQuery } from '../get-participant-progress.query';
 import { ProgressStepDto } from '../../../presentation/dto/participant-progress-response.dto';
-import { TimelineCompletionType, ApplicationStatus } from '@prisma/client';
+import { TimelineCompletionType, ApplicationStatus, TimelineType } from '@prisma/client';
 
 @QueryHandler(GetParticipantProgressQuery)
 export class GetParticipantProgressHandler implements IQueryHandler<GetParticipantProgressQuery> {
@@ -60,9 +60,9 @@ export class GetParticipantProgressHandler implements IQueryHandler<GetParticipa
       // ---------------------------------------------------------
       // 2. Override based on completionType logic
       // ---------------------------------------------------------
-      if (!application && step.completionType !== 'date_passed') {
+      if (!application && step.completionType !== TimelineCompletionType.date_passed) {
         // If no application exists, most things are strictly 'not_yet' or 'in_progress' (registration)
-        if (step.type === 'registration') {
+        if (step.type === TimelineType.registration) {
            status = 'in_progress';
         } else {
            status = 'locked'; // Cannot proceed without application
@@ -70,7 +70,7 @@ export class GetParticipantProgressHandler implements IQueryHandler<GetParticipa
       } else if (application) {
         // Check dynamic rules
         switch (step.completionType) {
-          case 'status_change':
+          case TimelineCompletionType.status_change:
             const statusConfig = step.completionConfig as { status: string };
             if (statusConfig?.status) {
               if (application.status === statusConfig.status) {
@@ -81,11 +81,11 @@ export class GetParticipantProgressHandler implements IQueryHandler<GetParticipa
                 // e.g. "Announcement" is technically "completed" in time, but maybe user didn't get accepted?
                 
                 // Specific Logic for LoA / Acceptance:
-                if (statusConfig.status === 'accepted' && application.status === 'rejected') {
+                if (statusConfig.status === ApplicationStatus.accepted && application.status === ApplicationStatus.rejected) {
                   status = 'failed';
-                } else if (['submitted', 'under_review'].includes(application.status)) {
+                } else if (application.status === ApplicationStatus.submitted || application.status === ApplicationStatus.under_review) {
                   status = 'in_progress';
-                } else if (index > 0 && timeline[index-1].type === 'registration') {
+                } else if (index > 0 && timeline[index-1].type === TimelineType.registration) {
                   // If prev step is done, this is likely next
                 }
               }
@@ -96,7 +96,7 @@ export class GetParticipantProgressHandler implements IQueryHandler<GetParticipa
             }
             break;
 
-          case 'payment_completed':
+          case TimelineCompletionType.payment_completed:
             const payConfig = step.completionConfig as { feeType: string };
             if (payConfig?.feeType) {
               const hasPaid = application.transactions.some(
@@ -118,7 +118,7 @@ export class GetParticipantProgressHandler implements IQueryHandler<GetParticipa
             }
             break;
             
-          case 'manual':
+          case TimelineCompletionType.manual:
             // Logic: Not implemented yet. 
             // Could check a "ParticipantTimelineStatus" table.
             break;
@@ -127,7 +127,7 @@ export class GetParticipantProgressHandler implements IQueryHandler<GetParticipa
 
       // ---------------------------------------------------------
       // 3. Specific Hardcoded Overrides for robustness
-      if (step.type === 'registration' && application) {
+      if (step.type === TimelineType.registration && application) {
         status = 'completed';
       }
 
