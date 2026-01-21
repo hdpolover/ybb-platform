@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ISupportTicketRepository } from '@core/interfaces/repositories/support-ticket.repository.interface';
 import { SupportTicket, SupportTicketMessage } from '@core/entities/support-ticket.entity';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
-import { TicketStatus, TicketPriority } from '@prisma/client';
+import { SupportTicketStatus, SupportTicketPriority } from '@prisma/client';
 
 @Injectable()
 export class SupportTicketRepository implements ISupportTicketRepository {
@@ -18,8 +18,8 @@ export class SupportTicketRepository implements ISupportTicketRepository {
                 subCategory: ticket.subCategory,
                 subject: ticket.subject,
                 description: ticket.description,
-                status: ticket.status as TicketStatus,
-                priority: ticket.priority as TicketPriority,
+                status: ticket.status as SupportTicketStatus,
+                priority: ticket.priority as SupportTicketPriority,
             },
         });
         return this.mapToEntity(created);
@@ -68,7 +68,7 @@ export class SupportTicketRepository implements ISupportTicketRepository {
     }
 
     async updateStatus(id: string, status: string, resolvedAt?: Date, closedAt?: Date): Promise<void> {
-        const data: any = { status: status as TicketStatus };
+        const data: any = { status: status as SupportTicketStatus };
         if (resolvedAt) data.resolvedAt = resolvedAt;
         if (closedAt) data.closedAt = closedAt;
 
