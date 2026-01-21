@@ -23,16 +23,28 @@ model ProgramFaq {
 }
 
 model ProgramTimeline {
-  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId   String   @map("program_id") @db.Uuid
-  date        DateTime @db.Timestamptz(6)
-  title       String   @db.VarChar(255)
-  description String?  @db.Text
-  icon        String?  @db.VarChar(100) // Icon name or emoji
-  order       Int      @default(0)
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id             String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId      String        @map("program_id") @db.Uuid
+  date           DateTime      @db.Timestamptz(6)
+  endDate        DateTime?     @map("end_date") @db.Timestamptz(6)
+  title          String        @db.VarChar(255)
+  description    String?       @db.Text
+  icon           String?       @db.VarChar(100)
+  type           TimelineType  @default(custom)
+  
+  // Dynamic Configuration
+  completionType   TimelineCompletionType @default(date_passed) @map("completion_type")
+  completionConfig Json                   @default("{}") @map("completion_config") @db.Json 
+  // Config Examples:
+  // status_change: { "status": "accepted" }
+  // payment_completed: { "feeType": "registration_fee" }
+  // document_uploaded: { "requirementId": "uuid..." }
+  
+  targetAudience PricingTarget @default(all) @map("target_audience")
+  order          Int           @default(0)
+  isActive       Boolean       @default(true) @map("is_active")
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   // Relations
   program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
