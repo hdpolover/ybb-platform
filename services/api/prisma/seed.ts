@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, ApplicationCategory } from '@prisma/client';
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import * as bcrypt from 'bcrypt';
@@ -1499,6 +1499,119 @@ async function main() {
   });
 
   console.log(`✅ Detailed Schedule created for: ${iys2025.name}`);
+
+  // ==========================================
+  // 16b. Create Program Participation Info (Landing Page Details)
+  // ==========================================
+
+  // Fully Funded Info
+  await prisma.programParticipationInfo.upsert({
+    where: {
+      programId_category: {
+        programId: iys2025.id,
+        category: ApplicationCategory.fully_funded,
+      },
+    },
+    update: {},
+    create: {
+      programId: iys2025.id,
+      category: ApplicationCategory.fully_funded,
+      heroTitle: 'Fully Funded Program',
+      heroDescription: 'The scholarship covers the program fee, such as program fees, accommodation, meals and provides a sponsorship for flight tickets up to 500 USD. Please note that visa fees and other personal expenses are not covered.',
+      benefits: [
+        {
+          title: "Full Reimbursement",
+          description: "Full reimbursement of all payment."
+        },
+        {
+          title: "Recognition",
+          description: "Enhanced program recognition"
+        },
+        {
+          title: "Exclusive Activities",
+          description: "Access to exclusive fully funded activities."
+        },
+        {
+          title: "Mentorship",
+          description: "Additional mentorship opportunities"
+        }
+      ],
+      requirements: [
+        {
+          title: "Registration",
+          items: ["Complete registration form and documentation"]
+        },
+        {
+          title: "Essay",
+          items: ["Submit detailed essays and applications"]
+        },
+        {
+          title: "Interview",
+          items: ["Participate in interviews and evaluations"]
+        },
+        {
+          title: "Payment",
+          items: ["Pay fees according to scheduled payment batches initially"]
+        },
+        {
+          title: "Criteria",
+          items: ["Meet selection criteria and deadlines"]
+        }
+      ],
+      sections: [
+        {
+          type: "timeline",
+          title: "Selection Process",
+          items: [
+             { label: "Registration", date: "Aug - Sept 2025" },
+             { label: "Interview", date: "Dec 2025" },
+             { label: "Announcement", date: "Jan 2026" }
+          ]
+        }
+      ],
+      isActive: true,
+    }
+  });
+
+  // Self Funded Info
+  await prisma.programParticipationInfo.upsert({
+    where: {
+      programId_category: {
+        programId: iys2025.id,
+        category: ApplicationCategory.self_funded,
+      },
+    },
+    update: {},
+    create: {
+      programId: iys2025.id,
+      category: ApplicationCategory.self_funded,
+      heroTitle: 'Self Funded Program',
+      heroDescription: 'For participants who want to guarantee their spot and enjoy independent travel arrangements while getting full access to the summit.',
+      benefits: [
+        {
+           title: "Guaranteed Spot",
+           description: "Direct entry without competitive interview selection (subject to basic screening)."
+        },
+        {
+           title: "Flexibility",
+           description: "Choose your own flight and extended stay options."
+        }
+      ],
+      requirements: [
+        {
+           title: "Registration",
+           items: ["Complete registration form"]
+        },
+        {
+           title: "Payment",
+           items: ["Pay registration fee and program fee full payment"]
+        }
+      ],
+      isActive: true
+    }
+  });
+
+  console.log(`✅ Participation Info created for: ${iys2025.name}`);
 
   // ==========================================
   // 17. Create Legal Documents
