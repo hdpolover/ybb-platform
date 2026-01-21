@@ -1,5 +1,5 @@
 import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
-import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { GetPublicPartnershipsQuery } from '../queries/get-public-partnerships.query';
 import { PartnershipResponseDto } from '../dto/partnership-response.dto';
 import { NotFoundException } from '@nestjs/common';
