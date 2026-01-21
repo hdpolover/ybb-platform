@@ -3,9 +3,9 @@
 // ============================================================================
 
 model PaymentTransaction {
-  id            String   @id @db.Uuid // Same UUID as Payment Service payment ID
-  userId        String   @map("user_id") @db.Uuid
-  applicationId String   @map("application_id") @db.Uuid
+  id                   String  @id @db.Uuid // Same UUID as Payment Service payment ID
+  userId               String  @map("user_id") @db.Uuid
+  applicationId        String  @map("application_id") @db.Uuid
   programPricingTierId String? @map("program_pricing_tier_id") @db.Uuid
 
   // Basic Payment Info
@@ -13,20 +13,21 @@ model PaymentTransaction {
   currency    String        @default("IDR") @db.VarChar(3)
   status      PaymentStatus @default(pending)
   paymentType String        @map("payment_type") @db.VarChar(20) // automatic | manual
-  
+
   // Display Info
   paymentMethod String? @map("payment_method") @db.VarChar(100) // User-friendly name (e.g., "Midtrans Credit Card", "Bank BCA Transfer")
-  
+
   // Timestamps
   paidAt    DateTime? @map("paid_at") @db.Timestamptz(6)
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
-  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   application ParticipantApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   pricingTier ProgramPricingTier?    @relation(fields: [programPricingTierId], references: [id])
-  
+
   // Note: For detailed payment info (gateway data, proof uploads, verification),
   // query Payment Service API using this payment.id
 

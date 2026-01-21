@@ -3,27 +3,28 @@
 // ============================================================================
 
 model ProgramPricingTier {
-  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId   String   @map("program_id") @db.Uuid
-  name        String   @db.VarChar(255) // e.g., "Early Bird", "Regular", "Group"
-  description String?  @db.Text
-  price       Decimal  @db.Decimal(10, 2)
-  currency    String   @default("IDR") @db.VarChar(3)
-  capacity    Int?     @default(0) // 0 or null = unlimited
+  id           String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId    String  @map("program_id") @db.Uuid
+  name         String  @db.VarChar(255) // e.g., "Early Bird", "Regular", "Group"
+  description  String? @db.Text
+  price        Decimal @db.Decimal(10, 2)
+  currency     String  @default("IDR") @db.VarChar(3)
+  capacity     Int?    @default(0) // 0 or null = unlimited
   currentCount Int     @default(0) @map("current_count") // Track usage
-  
-  // New/Restored Fields
-  benefits    String[] @default([])
-  requirements String[] @default([])
-  feeType     PricingFeeType @default(registration_fee) @map("fee_type")
-  target      PricingTarget @default(self_funded)
-  icon        String?  @db.VarChar(255)
-  soldCount   Int      @default(0) @map("sold_count")
 
-  isActive    Boolean  @default(true) @map("is_active")
-  order       Int      @default(0)
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  // New/Restored Fields
+  benefits     String[]       @default([])
+  requirements String[]       @default([])
+  feeType      PricingFeeType @default(registration_fee) @map("fee_type")
+  target       PricingTarget  @default(self_funded)
+  icon         String?        @db.VarChar(255)
+  soldCount    Int            @default(0) @map("sold_count")
+
+  isActive  Boolean   @default(true) @map("is_active")
+  order     Int       @default(0)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
   program         Program                     @relation(fields: [programId], references: [id], onDelete: Cascade)
@@ -53,22 +54,23 @@ model PricingTierValidityPeriod {
 }
 
 model ProgramRequirement {
-  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId   String   @map("program_id") @db.Uuid
-  name        String   @db.VarChar(255)
-  description String?  @db.Text
-  type        String   @default("document") @db.VarChar(50) // document, text, checkbox, link
-  
+  id          String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId   String  @map("program_id") @db.Uuid
+  name        String  @db.VarChar(255)
+  description String? @db.Text
+  type        String  @default("document") @db.VarChar(50) // document, text, checkbox, link
+
   // Extra Config
-  fileMaxSize Int?     @map("file_max_size") // in KB
+  fileMaxSize      Int?    @map("file_max_size") // in KB
   fileAllowedTypes String? @map("file_allowed_types") @db.VarChar(255)
-  options     Json?    @default("[]") @db.Json // For select/checkbox
-  
-  isRequired  Boolean  @default(true) @map("is_required")
-  order       Int      @default(0)
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  options          Json?   @default("[]") @db.Json // For select/checkbox
+
+  isRequired Boolean   @default(true) @map("is_required")
+  order      Int       @default(0)
+  isActive   Boolean   @default(true) @map("is_active")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt  DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
   program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
@@ -80,21 +82,22 @@ model ProgramRequirement {
 }
 
 model ApplicationFormField {
-  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId     String   @map("program_id") @db.Uuid
-  section       String   @default("personal_info") @db.VarChar(50) // personal_info, essay, documents, additional_info
-  label         String   @db.VarChar(255)
-  name          String   @db.VarChar(100) // form field name: full_name, essay_1, cv_upload
-  type          String   @db.VarChar(50) // text, email, number, date, textarea, file, select, checkbox, radio
-  placeholder   String?  @db.VarChar(255)
-  helpText      String?  @map("help_text") @db.Text
-  options       Json?    @default("[]") @db.Json // For select, radio, checkbox: ["Option 1", "Option 2"]
-  validationRules Json?  @map("validation_rules") @default("{}") @db.Json // { required: true, minLength: 10, maxFileSize: 5MB }
-  isRequired    Boolean  @default(true) @map("is_required")
-  order         Int      @default(0)
-  isActive      Boolean  @default(true) @map("is_active")
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id              String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId       String    @map("program_id") @db.Uuid
+  section         String    @default("personal_info") @db.VarChar(50) // personal_info, essay, documents, additional_info
+  label           String    @db.VarChar(255)
+  name            String    @db.VarChar(100) // form field name: full_name, essay_1, cv_upload
+  type            String    @db.VarChar(50) // text, email, number, date, textarea, file, select, checkbox, radio
+  placeholder     String?   @db.VarChar(255)
+  helpText        String?   @map("help_text") @db.Text
+  options         Json?     @default("[]") @db.Json // For select, radio, checkbox: ["Option 1", "Option 2"]
+  validationRules Json?     @default("{}") @map("validation_rules") @db.Json // { required: true, minLength: 10, maxFileSize: 5MB }
+  isRequired      Boolean   @default(true) @map("is_required")
+  order           Int       @default(0)
+  isActive        Boolean   @default(true) @map("is_active")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
   program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
@@ -106,28 +109,28 @@ model ApplicationFormField {
 }
 
 model ParticipantApplication {
-  id             String          @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId      String          @map("program_id") @db.Uuid
-  participantId  String          @map("participant_id") @db.Uuid
-  status         ApplicationStatus @default(draft)
-  paymentStatus  PaymentStatus     @default(unpaid) @map("payment_status")
-  ticketStatus   String            @default("regular") @map("ticket_status")
-  referralCode   String?           @map("referral_code") @db.VarChar(50)
-  submittedAt    DateTime?       @map("submission_date") @db.Timestamptz(6)
+  id            String            @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId     String            @map("program_id") @db.Uuid
+  participantId String            @map("participant_id") @db.Uuid
+  status        ApplicationStatus @default(draft)
+  paymentStatus PaymentStatus     @default(unpaid) @map("payment_status")
+  ticketStatus  String            @default("regular") @map("ticket_status")
+  referralCode  String?           @map("referral_code") @db.VarChar(50)
+  submittedAt   DateTime?         @map("submission_date") @db.Timestamptz(6)
 
   // Application Data (Flexible Store)
-  personalData   Json @default("{}") @map("personal_data") @db.Json
-  essayAnswers   Json @default("{}") @map("essay_answers") @db.Json
-  uploadedFiles  Json @default("{}") @map("uploaded_files") @db.Json // Links to uploaded requirements
+  personalData  Json @default("{}") @map("personal_data") @db.Json
+  essayAnswers  Json @default("{}") @map("essay_answers") @db.Json
+  uploadedFiles Json @default("{}") @map("uploaded_files") @db.Json // Links to uploaded requirements
 
   // Review & Scoring
-  reviewScore    Decimal? @map("review_score") @db.Decimal(5, 2)
-  adminNotes     String?  @map("admin_notes") @db.Text
-  reviewedBy     String?  @map("reviewed_by") @db.Uuid
-  reviewedAt     DateTime? @map("reviewed_at") @db.Timestamptz(6)
-  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
-  deletedBy      String?   @map("deleted_by") @db.Uuid
-  withdrawnBy    String?   @map("withdrawn_by") @db.Uuid
+  reviewScore Decimal?  @map("review_score") @db.Decimal(5, 2)
+  adminNotes  String?   @map("admin_notes") @db.Text
+  reviewedBy  String?   @map("reviewed_by") @db.Uuid
+  reviewedAt  DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedBy   String?   @map("deleted_by") @db.Uuid
+  withdrawnBy String?   @map("withdrawn_by") @db.Uuid
 
   // Interview
   interviewDate  DateTime? @map("interview_date") @db.Timestamptz(6)
@@ -140,11 +143,11 @@ model ParticipantApplication {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   // Relations
-  program      Program              @relation(fields: [programId], references: [id], onDelete: Cascade)
-  participant  Participant          @relation(fields: [participantId], references: [id], onDelete: Cascade)
-  reviewer     Admin?               @relation(fields: [reviewedBy], references: [id])
-  deleter      User?                @relation("ApplicationDeleter", fields: [deletedBy], references: [id])
-  withdrawer   User?                @relation("ApplicationWithdrawer", fields: [withdrawnBy], references: [id])
+  program      Program                  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  participant  Participant              @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  reviewer     Admin?                   @relation(fields: [reviewedBy], references: [id])
+  deleter      User?                    @relation("ApplicationDeleter", fields: [deletedBy], references: [id])
+  withdrawer   User?                    @relation("ApplicationWithdrawer", fields: [withdrawnBy], references: [id])
   transactions PaymentTransaction[]
   editHistory  ApplicationEditHistory[]
   awards       ParticipantAward[]
@@ -176,15 +179,16 @@ model ApplicationEditHistory {
 }
 
 model ParticipantAward {
-  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  applicationId  String   @map("application_id") @db.Uuid
-  programAwardId String   @map("program_award_id") @db.Uuid
-  awardedAt      DateTime @default(now()) @map("awarded_at") @db.Timestamptz(6)
-  awardedBy      String?  @map("awarded_by") @db.Uuid
+  id             String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  applicationId  String    @map("application_id") @db.Uuid
+  programAwardId String    @map("program_award_id") @db.Uuid
+  awardedAt      DateTime  @default(now()) @map("awarded_at") @db.Timestamptz(6)
+  awardedBy      String?   @map("awarded_by") @db.Uuid
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Added/Restored fields
-  notes          String?  @db.Text
-  certificateUrl String?  @map("certificate_url") @db.VarChar(500)
+  notes          String? @db.Text
+  certificateUrl String? @map("certificate_url") @db.VarChar(500)
 
   // Relations
   application  ParticipantApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
@@ -198,24 +202,25 @@ model ParticipantAward {
 }
 
 model ParticipantDocument {
-  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  applicationId String   @map("application_id") @db.Uuid
-  templateId    String?  @map("template_id") @db.Uuid // If generated from template
+  id            String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  applicationId String  @map("application_id") @db.Uuid
+  templateId    String? @map("template_id") @db.Uuid // If generated from template
 
   // Document Info
-  documentNumber String?  @map("document_number") @db.VarChar(50)
-  name        String   @db.VarChar(255) // e.g., "Certificate of Participation", "Letter of Acceptance"
-  type        String   @db.VarChar(50) // certificate, letter, invoice, agreement
-  fileUrl     String   @map("file_url") @db.VarChar(500)
-  fileType    String   @default("pdf") @map("file_type") @db.VarChar(10)
+  documentNumber String? @map("document_number") @db.VarChar(50)
+  name           String  @db.VarChar(255) // e.g., "Certificate of Participation", "Letter of Acceptance"
+  type           String  @db.VarChar(50) // certificate, letter, invoice, agreement
+  fileUrl        String  @map("file_url") @db.VarChar(500)
+  fileType       String  @default("pdf") @map("file_type") @db.VarChar(10)
 
   // Status
-  isPublic    Boolean  @default(false) @map("is_public")
-  downloadCount Int    @default(0) @map("download_count")
+  isPublic      Boolean @default(false) @map("is_public")
+  downloadCount Int     @default(0) @map("download_count")
 
   // Meta
   generatedAt DateTime  @default(now()) @map("generated_at") @db.Timestamptz(6)
   expiresAt   DateTime? @map("expires_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   legacyId    Int?      @unique @map("legacy_id")
 
   // Relations

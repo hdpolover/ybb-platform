@@ -3,15 +3,15 @@
 // ============================================================================
 
 model File {
-  id          String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  filename    String  @db.VarChar(255)
-  contentType String  @map("content_type") @db.VarChar(100)
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  filename    String   @db.VarChar(255)
+  contentType String   @map("content_type") @db.VarChar(100)
   size        BigInt
-  url         String  @db.Text
-  storagePath String  @map("storage_path") @db.Text
-  userId      String  @map("user_id") @db.Uuid
-  entityType  String? @map("entity_type") @db.VarChar(50)
-  entityId    String? @map("entity_id") @db.Uuid
+  url         String   @db.Text
+  storagePath String   @map("storage_path") @db.Text
+  userId      String   @map("user_id") @db.Uuid
+  entityType  String?  @map("entity_type") @db.VarChar(50)
+  entityId    String?  @map("entity_id") @db.Uuid
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 

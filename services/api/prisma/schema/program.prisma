@@ -21,31 +21,31 @@ model ProgramCategory {
   logoUrl      String? @map("logo_url") @db.VarChar(500)
   bannerUrl    String? @map("banner_url") @db.VarChar(500)
   primaryColor String? @map("primary_color") @db.VarChar(7) // Hex color
-  
+
   // Contact Information
-  contactEmail       String? @map("contact_email") @db.VarChar(255)
-  contactPhone       String? @map("contact_phone") @db.VarChar(50)
-  contactWhatsapp    String? @map("contact_whatsapp") @db.VarChar(50)
-  contactAddress     String? @map("contact_address") @db.Text
-  socialMediaLinks   Json?   @default("{}") @map("social_media_links") @db.Json // {instagram, facebook, linkedin, etc}
-  
+  contactEmail     String? @map("contact_email") @db.VarChar(255)
+  contactPhone     String? @map("contact_phone") @db.VarChar(50)
+  contactWhatsapp  String? @map("contact_whatsapp") @db.VarChar(50)
+  contactAddress   String? @map("contact_address") @db.Text
+  socialMediaLinks Json?   @default("{}") @map("social_media_links") @db.Json // {instagram, facebook, linkedin, etc}
+
   // Location
-  defaultLocation    String? @map("default_location") @db.VarChar(255)
-  defaultCountry     String? @map("default_country") @db.VarChar(100)
-  defaultTimezone    String? @map("default_timezone") @db.VarChar(50)
-  
+  defaultLocation String? @map("default_location") @db.VarChar(255)
+  defaultCountry  String? @map("default_country") @db.VarChar(100)
+  defaultTimezone String? @map("default_timezone") @db.VarChar(50)
+
   // Settings
   requireEmailVerification Boolean @default(true) @map("require_email_verification")
   defaultCurrency          String  @default("USD") @map("default_currency") @db.VarChar(3)
   enableMultiCurrency      Boolean @default(false) @map("enable_multi_currency")
-  
+
   // SEO
   metaTitle       String? @map("meta_title") @db.VarChar(255)
   metaDescription String? @map("meta_description") @db.Text
   metaKeywords    String? @map("meta_keywords") @db.Text
 
   // Relations
-  testimonials ProgramTestimonial[]
+  testimonials        ProgramTestimonial[]
   users               User[]
   programs            Program[]
   systemAnnouncements SystemAnnouncement[]
@@ -63,29 +63,30 @@ model ProgramCategory {
 }
 
 model ProgramCategorySetting {
-  id                String          @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programCategoryId String          @unique @map("program_category_id") @db.Uuid
-  
+  id                String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programCategoryId String @unique @map("program_category_id") @db.Uuid
+
   // Maintenance Control
-  isMaintenanceMode       Boolean     @default(false) @map("is_maintenance_mode")
-  maintenanceMessage      String?     @map("maintenance_message") @db.Text
-  maintenanceScheduledEnd DateTime?   @map("maintenance_scheduled_end") @db.Timestamptz(6)
-  
+  isMaintenanceMode       Boolean   @default(false) @map("is_maintenance_mode")
+  maintenanceMessage      String?   @map("maintenance_message") @db.Text
+  maintenanceScheduledEnd DateTime? @map("maintenance_scheduled_end") @db.Timestamptz(6)
+
   // Navigation & Content
-  footerNavigation  Json            @default("[]") @map("footer_navigation") @db.Json // Flexible array of columns/links
-  
+  footerNavigation Json @default("[]") @map("footer_navigation") @db.Json // Flexible array of columns/links
+
   // Currency Settings
-  usdInIdr          Decimal         @default(16000) @map("usd_in_idr") @db.Decimal(10, 2)
+  usdInIdr Decimal @default(16000) @map("usd_in_idr") @db.Decimal(10, 2)
 
   // Integrations / Analytics
-  googleAnalyticsId String?         @map("google_analytics_id") @db.VarChar(50)
-  pixelId           String?         @map("pixel_id") @db.VarChar(50)
-  supportEmail      String?         @map("support_email") @db.VarChar(255)
+  googleAnalyticsId String? @map("google_analytics_id") @db.VarChar(50)
+  pixelId           String? @map("pixel_id") @db.VarChar(50)
+  supportEmail      String? @map("support_email") @db.VarChar(255)
 
-  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  programCategory   ProgramCategory @relation(fields: [programCategoryId], references: [id], onDelete: Cascade)
+  programCategory ProgramCategory @relation(fields: [programCategoryId], references: [id], onDelete: Cascade)
 
   @@map("program_category_settings")
 }
@@ -94,17 +95,18 @@ model ProgramSocialFeed {
   id                String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   programCategoryId String   @map("program_category_id") @db.Uuid
   platform          String   @default("instagram") @db.VarChar(50) // instagram, tiktok
-  postId            String   @map("post_id") @db.VarChar(100)      // External ID
+  postId            String   @map("post_id") @db.VarChar(100) // External ID
   imageUrl          String   @map("image_url") @db.VarChar(500)
   permalink         String   @db.VarChar(500)
   caption           String?  @db.Text
   postedAt          DateTime @map("posted_at") @db.Timestamptz(6)
-  
-  isActive          Boolean  @default(true) @map("is_active")
-  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  
-  programCategory   ProgramCategory @relation(fields: [programCategoryId], references: [id], onDelete: Cascade)
-  
+
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  programCategory ProgramCategory @relation(fields: [programCategoryId], references: [id], onDelete: Cascade)
+
   @@index([programCategoryId])
   @@index([platform])
   @@index([postedAt])
@@ -112,53 +114,53 @@ model ProgramSocialFeed {
 }
 
 model Program {
-  id                  String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programCategoryId   String    @map("program_category_id") @db.Uuid
-  name                String    @db.VarChar(255)
-  slug                String    @db.VarChar(255)
-  description         String?   @db.Text
-  shortDescription    String?   @map("short_description") @db.VarChar(500)
-  theme               String?   @db.VarChar(255) // Main Program Theme
+  id                  String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programCategoryId   String   @map("program_category_id") @db.Uuid
+  name                String   @db.VarChar(255)
+  slug                String   @db.VarChar(255)
+  description         String?  @db.Text
+  shortDescription    String?  @map("short_description") @db.VarChar(500)
+  theme               String?  @db.VarChar(255) // Main Program Theme
   year                Int
-  startDate           DateTime  @map("start_date") @db.Date
-  endDate             DateTime  @map("end_date") @db.Date
-  applicationDeadline DateTime  @map("application_deadline") @db.Timestamptz(6)
-  location            String?   @db.VarChar(255)
+  startDate           DateTime @map("start_date") @db.Date
+  endDate             DateTime @map("end_date") @db.Date
+  applicationDeadline DateTime @map("application_deadline") @db.Timestamptz(6)
+  location            String?  @db.VarChar(255)
   capacity            Int?
-  
+
   // Visibility & Status
   isPublished      Boolean @default(false) @map("is_published")
   isVisibleToUsers Boolean @default(true) @map("is_visible_to_users") // Show on website
   isActive         Boolean @default(true) @map("is_active") // Accept applications
   status           String  @default("draft") @db.VarChar(50) // draft, published, ongoing, completed, cancelled
-  
+
   // Media
   thumbnailUrl String? @map("thumbnail_url") @db.VarChar(500)
   bannerUrl    String? @map("banner_url") @db.VarChar(500)
   videoUrl     String? @map("video_url") @db.VarChar(500)
-  
+
   // Program Settings
   requireEmailVerification Boolean @default(true) @map("require_email_verification")
   currency                 String  @default("USD") @map("currency") @db.VarChar(3)
   enableCurrencyConversion Boolean @default(false) @map("enable_currency_conversion")
   logoUrl                  String? @map("logo_url") @db.VarChar(500)
-  
+
   // Registration Settings
-  allowRegistration       Boolean   @default(true) @map("allow_registration")
-  registrationOpenDate    DateTime? @map("registration_open_date") @db.Timestamptz(6)
-  registrationCloseDate   DateTime? @map("registration_close_date") @db.Timestamptz(6)
-  requirePayment          Boolean   @default(false) @map("require_payment")
-  registrationFee         Decimal?  @map("registration_fee") @db.Decimal(10, 2)
-  
+  allowRegistration     Boolean   @default(true) @map("allow_registration")
+  registrationOpenDate  DateTime? @map("registration_open_date") @db.Timestamptz(6)
+  registrationCloseDate DateTime? @map("registration_close_date") @db.Timestamptz(6)
+  requirePayment        Boolean   @default(false) @map("require_payment")
+  registrationFee       Decimal?  @map("registration_fee") @db.Decimal(10, 2)
+
   // Additional Info
   requirementsDescription String? @map("requirements_description") @db.Text
   benefitsDescription     String? @map("benefits_description") @db.Text
   termsAndConditions      String? @map("terms_and_conditions") @db.Text
-  
+
   // SEO
   metaTitle       String? @map("meta_title") @db.VarChar(255)
   metaDescription String? @map("meta_description") @db.Text
-  
+
   // Timestamps
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -166,31 +168,31 @@ model Program {
   legacyId  Int?      @unique @map("legacy_id")
 
   // Relations
-  programCategory     ProgramCategory          @relation(fields: [programCategoryId], references: [id])
-  applications        ParticipantApplication[]
-  ambassadors         Ambassador[]
-  adminPrograms       AdminProgram[]
-  announcements       SystemAnnouncement[]
-  faqs                ProgramFaq[]
-  timeline            ProgramTimeline[]
-  schedules           ProgramSchedule[]
-  speakers            ProgramSpeaker[]
-  gallery             ProgramGallery[]
-  testimonials        ProgramTestimonial[]
-  pricingTiers        ProgramPricingTier[]
-  requirements        ProgramRequirement[]
-  formFields          ApplicationFormField[]
-  emailTemplates      EmailTemplate[]
-  team                ProgramTeam[]
-  partners            ProgramPartner[]
-  resources           ProgramResource[]
+  programCategory      ProgramCategory          @relation(fields: [programCategoryId], references: [id])
+  applications         ParticipantApplication[]
+  ambassadors          Ambassador[]
+  adminPrograms        AdminProgram[]
+  announcements        SystemAnnouncement[]
+  faqs                 ProgramFaq[]
+  timeline             ProgramTimeline[]
+  schedules            ProgramSchedule[]
+  speakers             ProgramSpeaker[]
+  gallery              ProgramGallery[]
+  testimonials         ProgramTestimonial[]
+  pricingTiers         ProgramPricingTier[]
+  requirements         ProgramRequirement[]
+  formFields           ApplicationFormField[]
+  emailTemplates       EmailTemplate[]
+  team                 ProgramTeam[]
+  partners             ProgramPartner[]
+  resources            ProgramResource[]
   programAnnouncements ProgramAnnouncement[]
-  tags                ProgramTagRelation[]
-  waitlist            ProgramWaitlist[]
-  objectives          ProgramObjective[]
-  subthemes           ProgramSubtheme[]
+  tags                 ProgramTagRelation[]
+  waitlist             ProgramWaitlist[]
+  objectives           ProgramObjective[]
+  subthemes            ProgramSubtheme[]
   certificateTemplates CertificateTemplate[]
-  awards              ProgramAward[]
+  awards               ProgramAward[]
 
   @@unique([programCategoryId, slug])
   @@index([programCategoryId])
@@ -203,14 +205,15 @@ model Program {
 }
 
 model ProgramTag {
-  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  name        String   @unique @db.VarChar(100)
-  slug        String   @unique @db.VarChar(100)
-  description String?  @db.Text
-  color       String?  @db.VarChar(7) // Hex color for UI
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name        String    @unique @db.VarChar(100)
+  slug        String    @unique @db.VarChar(100)
+  description String?   @db.Text
+  color       String?   @db.VarChar(7) // Hex color for UI
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
   programs ProgramTagRelation[]
