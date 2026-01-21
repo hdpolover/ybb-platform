@@ -14,7 +14,7 @@ services:
       SERVICE_PORT: 8001
       PYTHON_ENV: development
       # Database
-      DATABASE_URL: postgresql+asyncpg://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres-file:5432/${DATABASE_NAME}
+      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres-file:5432/${DATABASE_NAME}
       # MinIO (Remote/Staging by default as per root config)
       MINIO_ENDPOINT: ${MINIO_ENDPOINT}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}

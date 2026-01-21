@@ -1,12 +1,10 @@
 """Dependency injection container."""
 from functools import lru_cache
 from fastapi import Depends
-from sqlalchemy.ext.asyncio import AsyncSession
 import os
 
 # --- IMPORT INFRASTRUCTURE ---
 from app.infrastructure.storage.minio_storage import MinIOStorage
-from app.infrastructure.persistence.postgres.database import get_db
 from app.infrastructure.persistence.postgres.file_repository import PostgresFileRepository
 
 # --- IMPORT HANDLERS ---
@@ -34,9 +32,9 @@ def get_storage_service() -> MinIOStorage:
 
 
 # Ganti InMemory jadi Postgres
-def get_file_repository(session: AsyncSession = Depends(get_db)) -> PostgresFileRepository:
+def get_file_repository() -> PostgresFileRepository:
     """Get PostgreSQL file repository instance."""
-    return PostgresFileRepository(session)
+    return PostgresFileRepository()
 
 
 # Document generation services

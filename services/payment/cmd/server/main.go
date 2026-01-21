@@ -22,7 +22,6 @@ import (
 
 	commandHandlers "github.com/ybb-platform/payment/internal/application/commands/handlers"
 	queryHandlers "github.com/ybb-platform/payment/internal/application/queries/handlers"
-	"github.com/ybb-platform/payment/internal/domain/entities"
 	"github.com/ybb-platform/payment/internal/infrastructure/config"
 	infraGateways "github.com/ybb-platform/payment/internal/infrastructure/gateways"
 	"github.com/ybb-platform/payment/internal/infrastructure/messaging"
@@ -66,14 +65,14 @@ func main() {
 	}
 
 	// Auto-migrate database schema
-	if err := db.AutoMigrate(
-		&entities.Payment{}, 
-		&entities.PaymentMethodEntity{}, 
-		&entities.Refund{}, 
-		&entities.GatewayConfig{},
-	); err != nil {
-		log.Fatalf("Failed to migrate database: %v", err)
-	}
+	// if err := db.AutoMigrate(
+	// 	&entities.Payment{}, 
+	// 	&entities.PaymentMethodEntity{}, 
+	// 	&entities.Refund{}, 
+	// 	&entities.GatewayConfig{},
+	// ); err != nil {
+	// 	log.Fatalf("Failed to migrate database: %v", err)
+	// }
 
 	log.Println("Connected to database successfully")
 
