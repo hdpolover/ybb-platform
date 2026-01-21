@@ -11,8 +11,8 @@ services:
       PYTHON_ENV: production
       SERVICE_PORT: 8001
       # Database
-      DATABASE_URL: postgresql+asyncpg://${DATABASE_USER}:${DATABASE_PASSWORD}@ybb-postgres-file:5432/${DATABASE_NAME}
-      # MinIO (External or Staging) - Usually separate service in Dockploy or SaaS
+      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@ybb-postgres-file:5432/${DATABASE_NAME}
+      # MinIO (External or Staging)
       MINIO_ENDPOINT: ${MINIO_ENDPOINT}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
@@ -30,6 +30,7 @@ services:
       - "traefik.http.routers.ybb-file.entrypoints=websecure"
       - "traefik.http.routers.ybb-file.tls.certresolver=letsencrypt"
       - "traefik.http.services.ybb-file.loadbalancer.server.port=8001"
+      - "traefik.http.routers.ybb-file.service=ybb-file"
 
   postgres-file:
     image: postgres:15-alpine
