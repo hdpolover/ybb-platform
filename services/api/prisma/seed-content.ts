@@ -1,424 +1,389 @@
-import { PrismaClient, FaqCategory, ApplicationCategory, PricingFeeType, PricingTarget } from '@prisma/client';
-import { v4 as uuidv4 } from 'uuid';
+import { PrismaClient, TimelineCompletionType, TimelineType, PricingTarget, FaqCategory, PricingFeeType } from '@prisma/client';
+import { Pool } from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
+import 'dotenv/config';
 
-const prisma = new PrismaClient();
+// -------------------------------------------------------------
+// Fix for Prisma 7 + Postgres Adapter in Seed Script
+// -------------------------------------------------------------
+const connectionString = process.env.DATABASE_URL;
+const pool = new Pool({ connectionString });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
+// -------------------------------------------------------------
 
 async function main() {
-  console.log('Seeding program content...');
+  console.log('🌱 Starting Comprehensive Content Seeding...');
 
-  // 1. Get existing Program and Program Category
-  // We need at least one program to attach content to.
-  // If no program exists, we'll create a dummy hierarchy.
+  // ==========================================
+  // 1. DATA CONSTANTS
+  // ==========================================
   
-  let category = await prisma.programCategory.findFirst({ where: { slug: 'ayimun' } });
-  if (!category) {
-    category = await prisma.programCategory.create({
-      data: {
-        name: 'Asia Youth International Model United Nations',
-        slug: 'ayimun',
-        description: 'Mock UN conference',
-        websiteUrl: 'https://modelunitednations.org',
-        contactEmail: 'admin@modelunitednations.org',
-        primaryColor: '#0056B3',
+  const IYS_CATEGORY = {
+    slug: 'iys',
+    name: 'Istanbul Youth Summit',
+    website: 'https://istanbulyouthsummit.com',
+    color: '#E1306C',
+    banner: 'https://images.unsplash.com/photo-1543269865-cbf427effbad?q=80&w=2070&auto=format&fit=crop'
+  };
+  
+  const YAF_CATEGORY = {
+    slug: 'youth-academic-forum',
+    name: 'Youth Academic Forum',
+    website: 'https://youthacademicforum.com',
+    color: '#15803d', // Green
+    banner: 'https://images.unsplash.com/photo-1523580494863-6f3031224c94?q=80&w=2070&auto=format&fit=crop'
+  };
+
+  const AYIMUN_CATEGORY = {
+    slug: 'ayimun',
+    name: 'Asia Youth International MUN',
+    website: 'https://modelunitednations.org',
+    color: '#0056B3', // Blue
+    banner: 'https://images.unsplash.com/photo-1555529669-e69e7aa0ba9a?q=80&w=2070&auto=format&fit=crop'
+  };
+
+  // ==========================================
+  // 2. HELPER FUNCTIONS
+  // ==========================================
+  
+  const upsertCategory = async (data: any) => {
+    console.log(`Creating/Updating Category: ${data.name}...`);
+    return await prisma.programCategory.upsert({
+      where: { slug: data.slug },
+      update: {
+        name: data.name,
+        websiteUrl: data.website,
+        primaryColor: data.color,
+        bannerUrl: data.banner,
+        description: `${data.name} is a global platform for youth leadership and development.`
+      },
+      create: {
+        name: data.name,
+        slug: data.slug,
+        websiteUrl: data.website,
+        primaryColor: data.color,
+        bannerUrl: data.banner,
+        description: `${data.name} is a global platform for young leaders.`
       },
     });
-    console.log('Created dummy category: AYIMUN');
-  }
+  };
 
-  let program = await prisma.program.findFirst({ 
-    where: { 
-        programCategoryId: category.id,
-        year: 2025 
-    } 
-  });
-
-  if (!program) {
-    program = await prisma.program.create({
-      data: {
-        programCategoryId: category.id,
-        name: 'Asia Youth International MUN 2025',
-        slug: 'ayimun-2025',
-        description: 'Model United Nations conference in Malaysia.',
-        shortDescription: 'Join 500+ delegates in KL.',
-        year: 2025,
-        startDate: new Date('2025-05-15'),
-        endDate: new Date('2025-05-18'),
-        applicationDeadline: new Date('2025-03-31'),
-        location: 'Kuala Lumpur, Malaysia',
-        status: 'published',
+  const upsertProgram = async (categoryId: string, slug: string, name: string, year: number, deadlineMonth: number) => {
+    console.log(`Creating/Updating Program: ${name}...`);
+    return await prisma.program.upsert({
+      where: {
+        programCategoryId_slug: { programCategoryId: categoryId, slug },
+      },
+      update: {
+        name,
+        year,
+        startDate: new Date(`${year}-07-15`),
+        endDate: new Date(`${year}-07-18`),
         isPublished: true,
         isVisibleToUsers: true,
-        isActive: true,
+        status: 'published',
+      },
+      create: {
+        programCategoryId: categoryId,
+        name,
+        slug,
+        year,
+        startDate: new Date(`${year}-07-15`),
+        endDate: new Date(`${year}-07-18`),
+        applicationDeadline: new Date(`${year}-0${deadlineMonth}-30`),
+        isPublished: true,
+        isVisibleToUsers: true,
+        status: 'published',
+        description: `
+          <h2>Welcome to ${name}</h2>
+          <p>Join over 500 delegates from around the world for a transformative experience.</p>
+          <ul>
+            <li>Global Networking</li>
+            <li>Leadership Training</li>
+            <li>Cultural Exchange</li>
+          </ul>
+        `,
+        location: 'International Venue',
+        bannerUrl: 'https://images.unsplash.com/photo-1544928147-79a2dbc1f389?q=80&w=1974&auto=format&fit=crop',
       },
     });
-    console.log('Created dummy program: AYIMUN 2025');
-  }
+  };
 
-  const programId = program.id;
+  // ==========================================
+  // 3. EXECUTION
+  // ==========================================
 
-  // --- 2. Seed Timeline ---
-  await prisma.programTimeline.deleteMany({ where: { programId } });
-  await prisma.programTimeline.createMany({
-    data: [
-      {
-        programId,
-        title: 'Registration Opens',
-        date: new Date('2024-11-01'),
-        description: 'Early bird registration begins for all delegates.',
-        icon: 'check-circle',
-        order: 1,
-      },
-      {
-        programId,
-        title: 'Registration Closes',
-        date: new Date('2025-03-31'),
-        description: 'Last day to submit applications and payments.',
-        icon: 'clock',
-        order: 2,
-      },
-      {
-        programId,
-        title: 'Program Start',
-        date: new Date('2025-05-15'),
-        description: 'Arrival of delegates in Kuala Lumpur.',
-        icon: 'plane',
-        order: 3,
-      },
-    ],
-  });
-  console.log('- Seeded Timelines');
+  // --- IYS SETUP ---
+  const iysCat = await upsertCategory(IYS_CATEGORY);
+  const iysProgram = await upsertProgram(iysCat.id, 'istanbul-youth-summit-2025', 'Istanbul Youth Summit 2025', 2025, 3);
+  await seedTestimonials(iysCat.id, iysProgram.id);
+  await seedSponsors(iysCat.id);
+  await seedTeam(iysCat.id, iysProgram.id);
+  await seedFaqs(iysProgram.id);
+  await seedGallery(iysProgram.id);
+  await seedPartners(iysProgram.id);
+  await seedPricingTiers(iysProgram.id);
 
-  // --- 3. Seed Schedules ---
-  await prisma.programSchedule.deleteMany({ where: { programId } });
-  await prisma.programSchedule.createMany({
-    data: [
-      {
-        programId,
-        day: 'Day 1',
-        startTime: '09:00',
-        endTime: '12:00',
-        activity: 'Opening Ceremony',
-        location: 'Grand Ballroom',
-        description: 'Official opening speeches and cultural performances.',
-        order: 1,
-      },
-      {
-        programId,
-        day: 'Day 1',
-        startTime: '13:00',
-        endTime: '17:00',
-        activity: 'Committee Session I',
-        location: 'Breakout Rooms',
-        description: 'First session of council debates.',
-        order: 2,
-      },
-      {
-        programId,
-        day: 'Day 2',
-        startTime: '09:00',
-        endTime: '17:00',
-        activity: 'Committee Session II & III',
-        location: 'Breakout Rooms',
-        description: 'Full day of council sessions.',
-        order: 3,
-      },
-      {
-        programId,
-        day: 'Day 3',
-        startTime: '19:00',
-        endTime: '22:00',
-        activity: 'Gala Dinner',
-        location: 'Rooftop Garden',
-        description: 'Awarding night and farewell dinner.',
-        order: 4,
-      },
-    ],
-  });
-  console.log('- Seeded Schedules');
+  // --- YAF SETUP ---
+  const yafCat = await upsertCategory(YAF_CATEGORY);
+  const yafProgram = await upsertProgram(yafCat.id, 'youth-academic-forum-2025', 'Youth Academic Forum 2025', 2025, 6);
+  await seedTestimonials(yafCat.id, yafProgram.id);
+  await seedSponsors(yafCat.id);
+  await seedGallery(yafProgram.id);
+  await seedPartners(yafProgram.id);
+  await seedPricingTiers(yafProgram.id);
+  
+  // --- AYIMUN SETUP ---
+  const ayimunCat = await upsertCategory(AYIMUN_CATEGORY);
+  const ayimunProgram = await upsertProgram(ayimunCat.id, 'ayimun-2025', 'Asia Youth International MUN 2025', 2025, 5);
+  await seedTestimonials(ayimunCat.id, ayimunProgram.id);
+  await seedSponsors(ayimunCat.id);
+  await seedFaqs(ayimunProgram.id);
+  await seedPricingTiers(ayimunProgram.id);
 
-  // --- 4. Seed Speakers ---
-  await prisma.programSpeaker.deleteMany({ where: { programId } });
-  await prisma.programSpeaker.createMany({
-    data: [
-      {
-        programId,
-        name: 'Jane Doe',
-        title: 'UN Representative',
-        organization: 'United Nations',
-        bio: 'Jane has over 15 years of experience in diplomatic relations.',
-        photoUrl: 'https://randomuser.me/api/portraits/women/44.jpg',
-        order: 1,
-      },
-      {
-        programId,
-        name: 'Dr. John Smith',
-        title: 'Professor of International Relations',
-        organization: 'University of Malay',
-        bio: 'An expert in Southeast Asian politics and conflict resolution.',
-        photoUrl: 'https://randomuser.me/api/portraits/men/32.jpg',
-        order: 2,
-      },
-    ],
-  });
-  console.log('- Seeded Speakers');
+  console.log('✅ Content Seeding Completed Successfully!');
+}
 
-  // --- 5. Seed Gallery ---
-  await prisma.programGallery.deleteMany({ where: { programId } });
-  await prisma.programGallery.createMany({
-    data: [
-      {
-        programId,
-        title: 'Opening Ceremony 2024',
-        imageUrl: 'https://images.unsplash.com/photo-1544928147-79a794764548?q=80&w=2785&auto=format&fit=crop',
-        type: 'image',
-        order: 1,
-      },
-      {
-        programId,
-        title: 'Committee Sessions',
-        imageUrl: 'https://images.unsplash.com/photo-1551818255-e6e10975bc17?q=80&w=2873&auto=format&fit=crop',
-        type: 'image',
-        order: 2,
-      },
-      {
-        programId,
-        title: 'Cultural Night',
-        imageUrl: 'https://images.unsplash.com/photo-1514525253440-b39345208668?q=80&w=2787&auto=format&fit=crop',
-        type: 'image',
-        order: 3,
-      },
-    ],
-  });
-  console.log('- Seeded Gallery');
+// ==========================================
+// 4. CONTENT SEEDERS
+// ==========================================
 
-  // --- 6. Seed Testimonials ---
-  await prisma.programTestimonial.deleteMany({ where: { programId } });
+async function seedTestimonials(categoryId: string, programId: string) {
+  // console.log(`  - Seeding Testimonials for ${categoryId.substring(0,8)}...`);
+  await prisma.programTestimonial.deleteMany({ where: { programCategoryId: categoryId } });
+  
   await prisma.programTestimonial.createMany({
     data: [
       {
-        programId,
-        name: 'Sarah Lee',
-        role: 'Delegate from South Korea',
-        testimonial: 'This program changed my life! I met so many amazing people.',
-        avatarUrl: 'https://randomuser.me/api/portraits/women/68.jpg',
-        rating: 5,
+        programCategoryId: categoryId,
+        programId: programId,
+        name: 'Alice Johnson',
+        role: 'Best Delegate 2024',
+        company: 'Harvard University',
+        testimonial: 'An incredible experience that changed my perspective on global leadership. Highly recommended!',
+        avatarUrl: 'https://randomuser.me/api/portraits/women/44.jpg',
+        category: 'alumni',
         isFeatured: true,
-        order: 1,
+        order: 1
       },
       {
-        programId,
-        name: 'Ahmed Al-Fayed',
-        role: 'Delegate from Egypt',
-        testimonial: 'The debate quality was top-notch. Highly recommended.',
-        avatarUrl: 'https://randomuser.me/api/portraits/men/86.jpg',
-        rating: 5,
+        programCategoryId: categoryId,
+        programId: programId,
+        name: 'David Smith',
+        role: 'Participant',
+        company: 'University of Tokyo',
+        testimonial: 'The networking opportunities were unmatched. I met brilliant minds from all over the world.',
+        avatarUrl: 'https://randomuser.me/api/portraits/men/32.jpg',
+        category: 'alumni',
         isFeatured: true,
-        order: 2,
+        order: 2
       },
-    ],
+       {
+        programCategoryId: categoryId,
+        programId: programId,
+        name: 'Maria Rodriguez',
+        role: 'Speaker',
+        company: 'UN Women',
+        testimonial: 'Seeing so many passionate young leaders gives me hope for the future.',
+        avatarUrl: 'https://randomuser.me/api/portraits/women/65.jpg',
+        category: 'speaker',
+        isFeatured: false,
+        order: 3
+      }
+    ]
   });
-  console.log('- Seeded Testimonials');
+}
 
-  // --- 7. Seed FAQs ---
+async function seedSponsors(categoryId: string) {
+  // console.log(`  - Seeding Sponsors...`);
+  await prisma.sponsor.deleteMany({ where: { programCategoryId: categoryId } });
+
+  await prisma.sponsor.createMany({
+    data: [
+      {
+        programCategoryId: categoryId,
+        name: 'TechCorp',
+        type: 'organization',
+        tier: 'platinum',
+        logoUrl: 'https://placehold.co/400x200/2563eb/ffffff?text=TechCorp',
+        websiteUrl: 'https://example.com',
+        order: 1
+      },
+      {
+        programCategoryId: categoryId,
+        name: 'EduFoundation',
+        type: 'organization',
+        tier: 'gold',
+        logoUrl: 'https://placehold.co/400x200/ea580c/ffffff?text=EduFoundation',
+        websiteUrl: 'https://example.com',
+        order: 2
+      },
+      {
+        programCategoryId: categoryId,
+        name: 'Global News',
+        type: 'media_partner',
+        tier: 'media',
+        logoUrl: 'https://placehold.co/400x200/dc2626/ffffff?text=GlobalNews',
+        websiteUrl: 'https://example.com',
+        order: 3
+      }
+    ]
+  });
+}
+
+async function seedTeam(categoryId: string, programId: string) {
+  //  console.log(`  - Seeding Team...`);
+   await prisma.programTeam.deleteMany({ where: { programCategoryId: categoryId } });
+   
+   await prisma.programTeam.createMany({
+     data: [
+       {
+         programCategoryId: categoryId,
+         programId: programId,
+         name: 'Hendra Polover',
+         role: 'Program Director',
+         bio: 'Passionate about youth development and technology.',
+         photoUrl: 'https://randomuser.me/api/portraits/men/1.jpg',
+         linkedinUrl: 'https://linkedin.com',
+         order: 1
+       },
+       {
+         programCategoryId: categoryId,
+         programId: programId,
+         name: 'Sarah Lee',
+         role: 'Head of Operations',
+         bio: 'Ensuring everything runs smoothly.',
+         photoUrl: 'https://randomuser.me/api/portraits/women/2.jpg',
+         order: 2
+       }
+     ]
+   });
+}
+
+async function seedFaqs(programId: string) {
+  // console.log(`  - Seeding FAQs...`);
   await prisma.programFaq.deleteMany({ where: { programId } });
+  
   await prisma.programFaq.createMany({
     data: [
       {
         programId,
-        question: 'Is accommodation included?',
-        answer: 'Yes, accommodation is included in the full-board package at a 4-star hotel.',
-        category: FaqCategory.accommodation,
-        order: 1,
+        question: 'How do I apply?',
+        answer: 'Click the "Apply Now" button on the dashboard and fill out the form.',
+        category: FaqCategory.registration,
+        order: 1
+      },
+      {
+        programId,
+        question: 'Is there a registration fee?',
+        answer: 'Yes, there is a commitment fee. However, fully funded scholarships are available.',
+        category: FaqCategory.payment,
+        order: 2
       },
       {
         programId,
         question: 'Do I need a visa?',
-        answer: 'It depends on your nationality. We will provide an invitation letter to support your visa application.',
-        category: FaqCategory.visa,
-        order: 2,
-      },
-      {
-        programId,
-        question: 'Is there an age limit?',
-        answer: 'The program is open to youth aged 17-30 years old.',
-        category: FaqCategory.registration,
-        order: 3,
-      },
-      {
-        programId,
-        question: 'Can I bring a guest?',
-        answer: 'Guests are allowed but must register separately as observers.',
+        answer: 'Depends on your nationality. Please check with the Turkish embassy in your country.',
         category: FaqCategory.general,
-        order: 4,
+        order: 3
+      }
+    ]
+  });
+}
+
+async function seedGallery(programId: string) {
+  // console.log(`  - Seeding Gallery...`);
+  await prisma.programGallery.deleteMany({ where: { programId } });
+  
+  await prisma.programGallery.createMany({
+    data: [
+      {
+        programId,
+        imageUrl: 'https://images.unsplash.com/photo-1544531696-297afda3046e?q=80&w=2000&auto=format&fit=crop',
+        title: 'Opening Ceremony',
+        type: 'image',
+        order: 1
       },
       {
         programId,
-        question: 'Is flight ticket included?',
-        answer: 'No, flight tickets are not included in the registration fee.',
-        category: FaqCategory.payment,
-        order: 5,
+        imageUrl: 'https://images.unsplash.com/photo-1515168816969-950d6f543167?q=80&w=1974&auto=format&fit=crop',
+        title: 'Conference Hall',
+        type: 'image',
+        order: 2
       },
-    ],
-  });
-  console.log('- Seeded FAQs');
-
-  // --- 8. Seed Pricing Tiers ---
-  await prisma.programPricingTier.deleteMany({ where: { programId } });
-  
-  // Tier 1: Self Funded Registration
-  await prisma.programPricingTier.create({
-    data: {
+      {
         programId,
-        name: 'Self Funded',
-        price: 15.00,
-        currency: 'USD',
-        description: 'Registration',
-        benefits: ["Guaranteed program participation", "Faster application processing", "You pay all scheduled fee batches yourself"],
-        requirements: ["Complete registration form and documentation", "Submit required documents on time", "Pay fees according to scheduled payment batches"],
-        icon: 'credit-card',
-        target: PricingTarget.self_funded,
-        feeType: PricingFeeType.registration_fee,
-        order: 1,
-        validityPeriods: {
-          create: [
-            { startDate: new Date('2026-01-10'), endDate: new Date('2026-01-30') },
-            { startDate: new Date('2026-02-10'), endDate: new Date('2026-02-20') }
-          ]
-        }
-    }
+        imageUrl: 'https://images.unsplash.com/photo-1523580494863-6f3031224c94?q=80&w=2070&auto=format&fit=crop',
+        title: 'Workshops',
+        type: 'image',
+        order: 3
+      }
+    ]
   });
+}
 
-  // Tier 2: Fully Funded Registration
-  await prisma.programPricingTier.create({
-    data: {
+async function seedPartners(programId: string) {
+  // console.log(`  - Seeding Partners...`);
+  await prisma.programPartner.deleteMany({ where: { programId } });
+  
+  await prisma.programPartner.createMany({
+    data: [
+      {
+        programId,
+        name: 'Local University',
+        type: 'university',
+        role: 'Exclusive Knowledge Partner',
+        logoUrl: 'https://placehold.co/400x200/16a34a/ffffff?text=Univ',
+        description: 'Hosting venue and academic support.',
+        order: 1
+      },
+      {
+        programId,
+        name: 'Ministry of Youth',
+        type: 'government',
+        role: 'Official Supporter',
+        logoUrl: 'https://placehold.co/400x200/dc2626/ffffff?text=Ministry',
+        order: 2
+      }
+    ]
+  });
+}
+
+async function seedPricingTiers(programId: string) {
+  // console.log(`  - Seeding Pricing Tiers...`);
+  await prisma.programPricingTier.deleteMany({ where: { programId } });
+
+  await prisma.programPricingTier.createMany({
+    data: [
+      {
         programId,
         name: 'Fully Funded',
-        price: 10.00,
+        price: 15.00, // Commitment fee?
         currency: 'USD',
-        description: 'Reimbursement System',
-        benefits: ["Full reimbursement of all payments", "Enhanced program recognition", "Access to exclusive fully funded activities"],
-        requirements: ["Complete registration form and documentation", "Submit detailed essays and applications", "Participate in interviews and evaluations"],
+        description: 'Competition for Full Scholarship',
+        benefits: ["Flight Included", "Hotel Included", "Meals Included"],
         icon: 'award',
         target: PricingTarget.fully_funded,
         feeType: PricingFeeType.registration_fee,
-        order: 2,
-        validityPeriods: {
-          create: [
-             // Set this to a past date to match "Not Available" in valid scenarios, or user provided dates.
-             // User example: Aug 01 - Sep 30, 2025
-            { startDate: new Date('2025-08-01'), endDate: new Date('2025-09-30') }
-          ]
-        }
-    }
-  });
-
-  // Tier 3: Program Fee Batch 1 (Example of different fee type)
-  await prisma.programPricingTier.create({
-    data: {
+        order: 1
+      },
+      {
         programId,
-        name: 'Program Fee - Batch 1',
-        price: 150.00,
+        name: 'Self Funded',
+        price: 20.00,
         currency: 'USD',
-        description: 'First installment of program fee.',
-        benefits: ["Secures your seat", "Access to pre-event materials"],
-        icon: 'briefcase',
+        description: 'Direct Registration',
+        benefits: ["Hotel Included", "Meals Included"],
+        icon: 'user-check',
         target: PricingTarget.self_funded,
-        feeType: PricingFeeType.program_fee_1,
-        order: 3,
-        validityPeriods: {
-          create: [
-            { startDate: new Date('2026-03-01'), endDate: new Date('2026-03-31') }
-          ]
-        }
-    }
-  });
-
-  console.log('- Seeded Pricing Tiers');
-  
-  // --- 9. Seed Requirements ---
-   await prisma.programRequirement.deleteMany({ where: { programId } });
-   await prisma.programRequirement.createMany({
-    data: [
-      {
-        programId,
-        name: 'Passport Scan',
-        type: 'file',
-        isRequired: true,
-        fileMaxSize: 2048,
-        fileAllowedTypes: 'pdf,jpg,png',
-        description: 'Please upload a clear scan of your passport ID page.',
-        order: 1,
-      },
-      {
-        programId,
-        name: 'Motivation Letter',
-        type: 'text',
-        isRequired: true,
-        description: 'Why do you want to join this program? (Max 500 words)',
-        order: 2,
-      },
-      {
-        programId,
-        name: 'T-Shirt Size',
-        type: 'select',
-        isRequired: true,
-        options: ["XS", "S", "M", "L", "XL", "XXL"],
-        order: 3,
-      }
-    ]
-   });
-   console.log('- Seeded Requirements');
-
-  // --- 10. Seed Brand Sponsors ---
-  await prisma.sponsor.deleteMany({ where: { programCategoryId: category.id } });
-  await prisma.sponsor.createMany({
-    data: [
-      {
-        programCategoryId: category.id,
-        name: 'University of Malay',
-        type: 'organization',
-        tier: 'platinum',
-        logoUrl: 'https://upload.wikimedia.org/wikipedia/en/thumb/5/53/University_of_Malaya_coat_of_arms.svg/1200px-University_of_Malaya_coat_of_arms.svg.png',
-        websiteUrl: 'https://um.edu.my',
-        description: 'Leading research university in Malaysia.',
-        order: 1,
-      },
-      {
-        programCategoryId: category.id,
-        name: 'Malaysia Airlines',
-        type: 'organization',
-        tier: 'gold',
-        logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/ca/Malaysia_Airlines_Logo.svg/1200px-Malaysia_Airlines_Logo.svg.png',
-        websiteUrl: 'https://www.malaysiaairlines.com',
-        description: 'Official Airline Partner.',
-        order: 2,
-      },
-      {
-        programCategoryId: category.id,
-        name: 'CNN Indonesia',
-        type: 'media_partner',
-        tier: 'partner',
-        logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9f/CNN_Indonesia.svg/1200px-CNN_Indonesia.svg.png',
-        websiteUrl: 'https://www.cnnindonesia.com',
-        description: 'Official Media Partner.',
-        order: 3,
-      },
-      {
-        programCategoryId: category.id,
-        name: 'Bank Central Asia',
-        type: 'organization',
-        tier: 'silver',
-        logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5c/Bank_Central_Asia.svg/1200px-Bank_Central_Asia.svg.png',
-        websiteUrl: 'https://www.bca.co.id',
-        description: 'Financial Partner.',
-        order: 4,
+        feeType: PricingFeeType.registration_fee,
+        order: 2
       }
     ]
   });
-  console.log('- Seeded Brand Sponsors');
-
-  console.log('Seed completed successfully!');
 }
+
 
 main()
   .catch((e) => {
