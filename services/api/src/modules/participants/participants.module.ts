@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
+import { AuthModule } from '../auth/auth.module';
 import { PrismaService } from '../../shared/infrastructure/prisma/prisma.service';
 import { ParticipantRepository } from './infrastructure/persistence/participant.repository';
 import { GetMyParticipantProfileHandler } from './application/queries/handlers/get-my-participant-profile.handler';
@@ -13,7 +14,7 @@ import { ParticipantsController } from './presentation/participants.controller';
 import { CompleteOnboardingHandler } from './application/commands/handlers/complete-onboarding.handler';
 
 @Module({
-    imports: [CqrsModule],
+    imports: [CqrsModule, AuthModule],
     controllers: [ParticipantsController],
     providers: [
         PrismaService,

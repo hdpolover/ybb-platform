@@ -6,5 +6,7 @@ export class RegisterCommand {
     public readonly provider: string = 'local',
     public readonly providerId?: string,
     public readonly programId?: string,
+    public readonly ipAddress?: string,
+    public readonly userAgent?: string,
   ) {}
 }

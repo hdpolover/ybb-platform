@@ -86,7 +86,10 @@ export class AuthController {
     @Body() dto: RegisterDto,
     @Query('url') url?: string,
     @Headers('x-brand-domain') brandDomain?: string,
+    @Ip() ip?: string,
+    @Req() req?: Request,
   ): Promise<AuthResponseDto> {
+    const userAgent = req?.headers['user-agent'] || 'unknown';
     const command = new RegisterCommand(
       dto.email,
       dto.password,
@@ -94,6 +97,8 @@ export class AuthController {
       dto.provider || 'local',
       dto.providerId,
       dto.programId,
+      ip || '0.0.0.0',
+      userAgent,
     );
     return this.registerHandler.execute(command, url || brandDomain);
   }

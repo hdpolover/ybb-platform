@@ -5,12 +5,14 @@ import { AuthResponseDto } from '../../../presentation/dto/auth-response.dto';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { AuthLoggingService } from '../../services/auth-logging.service';
 
 @Injectable()
 export class LoginHandler {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly authLoggingService: AuthLoggingService,
   ) { }
 
   /**
@@ -147,6 +149,8 @@ export class LoginHandler {
         },
       });
 
+      await this.authLoggingService.logFailedLogin(user.email, command.ipAddress, command.userAgent, 'Invalid Password');
+
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -158,6 +162,9 @@ export class LoginHandler {
         lastLoginAt: new Date(),
       },
     });
+
+    // Log success
+    await this.authLoggingService.logSuccessfulLogin(user.id, command.ipAddress, command.userAgent);
 
     // Update identity last used
     if (localIdentity) {

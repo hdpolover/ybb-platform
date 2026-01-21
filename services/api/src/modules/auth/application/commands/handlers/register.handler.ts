@@ -6,6 +6,7 @@ import { RabbitMQProducerService } from '../../../../../shared/infrastructure/ra
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
+import { AuthLoggingService } from '../../services/auth-logging.service';
 
 @Injectable()
 export class RegisterHandler {
@@ -13,6 +14,7 @@ export class RegisterHandler {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly rabbitmqProducer: RabbitMQProducerService,
+    private readonly authLoggingService: AuthLoggingService,
   ) {}
 
   /**
@@ -334,20 +336,63 @@ export class RegisterHandler {
       });
     }
 
-    // Generate JWT tokens
+    // Generate JWT tokens with session tracking
+    const accessTokenJti = crypto.randomUUID();
+    const refreshTokenJti = crypto.randomUUID();
+
     const payload = {
       sub: newUser.id,
       email: newUser.email,
       programCategoryId: newUser.programCategoryId,
+      jti: accessTokenJti,
+    };
+
+    const refreshTokenPayload = {
+        ...payload,
+        jti: refreshTokenJti,
     };
 
     const accessToken = this.jwtService.sign(payload, {
       expiresIn: '1h',
     });
 
-    const refreshToken = this.jwtService.sign(payload, {
+    const refreshToken = this.jwtService.sign(refreshTokenPayload, {
       expiresIn: '7d',
     });
+
+    // Create initial user session
+    if (command.ipAddress && command.userAgent) {
+        const agentInfo = this.authLoggingService.parseUserAgent(command.userAgent);
+        const sessionToken = crypto.randomUUID();
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 7);
+
+        await this.prisma.userSession.create({
+            data: {
+                userId: newUser.id,
+                sessionToken,
+                refreshToken,
+                deviceType: agentInfo.deviceType,
+                deviceName: `${agentInfo.browser} on ${agentInfo.os}`,
+                browser: agentInfo.browser,
+                operatingSystem: agentInfo.os,
+                ipAddress: command.ipAddress,
+                expiresAt,
+                country: 'XX', // TODO: GeoIP
+                city: 'Unknown',
+            }
+        });
+    }
+
+    // Log Registration
+    if (command.ipAddress && command.userAgent) {
+        await this.authLoggingService.logRegistration(
+            newUser.id, 
+            authProvider.name, 
+            command.ipAddress, 
+            command.userAgent
+        );
+    }
 
     return {
       accessToken,
