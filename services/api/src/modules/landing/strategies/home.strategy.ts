@@ -28,7 +28,7 @@ export class HomeStrategy implements ILandingPageStrategy {
         include: {
           gallery: {
             where: { isActive: true },
-            take: 6,
+            take: 12,
             orderBy: { order: 'asc' },
           },
           pricingTiers: {
@@ -40,6 +40,10 @@ export class HomeStrategy implements ILandingPageStrategy {
             take: 5,
             orderBy: { order: 'asc' },
           },
+          objectives: {
+            where: { isActive: true },
+            orderBy: { order: 'asc' }
+          }
         },
       }),
       this.prisma.sponsor.findMany({
@@ -114,6 +118,16 @@ export class HomeStrategy implements ILandingPageStrategy {
     // Filter out programs that don't have any videos
     const programsWithVideos = videoPrograms.filter(p => p.gallery && p.gallery.length > 0);
 
+    // Get images for objectives (random 4 from gallery)
+    const galleryImages = program?.gallery.filter(g => g.type === 'image') || [];
+    const objectiveImages = galleryImages
+        .sort(() => 0.5 - Math.random())
+        .slice(0, 4)
+        .map(img => ({
+             url: img.imageUrl,
+             caption: img.title
+        }));
+
     return {
       slug: 'home',
       title: category.name,
@@ -160,6 +174,18 @@ export class HomeStrategy implements ILandingPageStrategy {
               mission: category.mission || '',
             },
           },
+        },
+        {
+          type: 'program_objectives',
+          content: {
+            title: 'Program Objectives',
+            items: (program as any)?.objectives?.map((obj) => ({
+              id: obj.id,
+              description: obj.description,
+              order: obj.order
+            })) || [],
+            images: objectiveImages
+          }
         },
         {
           type: 'program_highlights',

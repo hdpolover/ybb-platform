@@ -98,8 +98,8 @@ async function main() {
       about: "Youth Break the Boundaries Foundation (YBB) is a non-profit organization that focuses on youth development and empowerment. We believe that young people are the key to a better future, and we are dedicated to providing them with the tools, resources, and opportunities they need to succeed.",
       vision: "To create a generation of young leaders who are capable of making a positive impact on the world.",
       mission: "To empower youth through education, leadership development, and community engagement programs.",
-      logoUrl: "https://youthbreaktheboundaries.com/wp-content/uploads/2023/12/YBB-Logo-High-Res.png",
-      bannerUrl: "https://youthbreaktheboundaries.com/wp-content/uploads/2023/12/YBB-Banner.jpg",
+      logoUrl: "https://placehold.co/400x100/EEE/31343C?text=YBB+Logo",
+      bannerUrl: "https://placehold.co/1200x400/000/FFF?text=YBB+Banner",
     },
     create: {
       name: 'Youth Break the Boundaries',
@@ -112,8 +112,8 @@ async function main() {
       about: "Youth Break the Boundaries Foundation (YBB) is a non-profit organization that focuses on youth development and empowerment. We believe that young people are the key to a better future, and we are dedicated to providing them with the tools, resources, and opportunities they need to succeed.",
       vision: "To create a generation of young leaders who are capable of making a positive impact on the world.",
       mission: "To empower youth through education, leadership development, and community engagement programs.",
-      logoUrl: "https://youthbreaktheboundaries.com/wp-content/uploads/2023/12/YBB-Logo-High-Res.png",
-      bannerUrl: "https://youthbreaktheboundaries.com/wp-content/uploads/2023/12/YBB-Banner.jpg",
+      logoUrl: "https://placehold.co/400x100/EEE/31343C?text=YBB+Logo",
+      bannerUrl: "https://placehold.co/1200x400/000/FFF?text=YBB+Banner",
     },
   });
   console.log(`✅ Brand created/updated: ${ybbBrand.name}`);
@@ -125,22 +125,24 @@ async function main() {
       about: "Istanbul Youth Summit (IYS) is an international summit that brings together young leaders from around the world to discuss and find solutions to global challenges. Since its inception, IYS has been a platform for youth to share ideas, collaborate on projects, and build a network of change-makers.",
       vision: "To be the premier global platform for youth dialogue and action on sustainable development goals.",
       mission: "To foster cross-cultural understanding and empower youth to take leadership roles in their communities.",
-      logoUrl: "https://istanyouthsummit.com/images/logo-iys.png",
-      bannerUrl: "https://istanyouthsummit.com/images/banner-iys.jpg",
+      logoUrl: "https://placehold.co/400x100/E31E24/FFF?text=IYS+Logo",
+      bannerUrl: "https://placehold.co/1200x400/E31E24/FFF?text=IYS+Banner",
+      websiteUrl: 'https://istanbulyouthsummit.com',
+      contactEmail: 'admin@istanbulyouthsummit.com',
     },
     create: {
       name: 'Istanbul Youth Summit',
       slug: 'iys',
       description: 'Istanbul Youth Summit is an international summit for youth leaders.',
-      websiteUrl: 'https://istanyouthsummit.com',
-      contactEmail: 'admin@istanyouthsummit.com',
+      websiteUrl: 'https://istanbulyouthsummit.com',
+      contactEmail: 'admin@istanbulyouthsummit.com',
       primaryColor: '#E31E24', // Example red
       isActive: true,
       about: "Istanbul Youth Summit (IYS) is an international summit that brings together young leaders from around the world to discuss and find solutions to global challenges. Since its inception, IYS has been a platform for youth to share ideas, collaborate on projects, and build a network of change-makers.",
       vision: "To be the premier global platform for youth dialogue and action on sustainable development goals.",
       mission: "To foster cross-cultural understanding and empower youth to take leadership roles in their communities.",
-      logoUrl: "https://istanyouthsummit.com/images/logo-iys.png",
-      bannerUrl: "https://istanyouthsummit.com/images/banner-iys.jpg",
+      logoUrl: "https://placehold.co/400x100/E31E24/FFF?text=IYS+Logo",
+      bannerUrl: "https://placehold.co/1200x400/E31E24/FFF?text=IYS+Banner",
     },
   });
   console.log(`✅ Brand created/updated: ${iysBrand.name}`);
@@ -152,8 +154,8 @@ async function main() {
        about: "Youth Academic Forum (YAF) is a dedicated platform for young scholars, researchers, and students to present their academic work and engage in intellectual discourse. YAF aims to bridge the gap between academic research and practical application.",
        vision: "To cultivate a culture of academic excellence and critical thinking among youth.",
        mission: "To provide a supportive environment for young academics to share their research, receive feedback, and collaborate.",
-       logoUrl: "https://youthacademicforum.com/assets/img/logo.png",
-       bannerUrl: "https://youthacademicforum.com/assets/img/hero-bg.jpg",
+       logoUrl: "https://placehold.co/400x100/0056B3/FFF?text=YAF+Logo",
+       bannerUrl: "https://placehold.co/1200x400/0056B3/FFF?text=YAF+Banner",
     },
     create: {
       name: 'Youth Academic Forum',
@@ -166,8 +168,8 @@ async function main() {
       about: "Youth Academic Forum (YAF) is a dedicated platform for young scholars, researchers, and students to present their academic work and engage in intellectual discourse. YAF aims to bridge the gap between academic research and practical application.",
       vision: "To cultivate a culture of academic excellence and critical thinking among youth.",
       mission: "To provide a supportive environment for young academics to share their research, receive feedback, and collaborate.",
-      logoUrl: "https://youthacademicforum.com/assets/img/logo.png",
-      bannerUrl: "https://youthacademicforum.com/assets/img/hero-bg.jpg",
+      logoUrl: "https://placehold.co/400x100/0056B3/FFF?text=YAF+Logo",
+      bannerUrl: "https://placehold.co/1200x400/0056B3/FFF?text=YAF+Banner",
     },
   });
   console.log(`✅ Brand created/updated: ${yafBrand.name}`);
@@ -347,6 +349,39 @@ async function main() {
     },
   });
   console.log(`✅ Program created/updated: ${iys2025.name}`);
+
+  // 2.2a IYS Objectives
+  const iysObjectives = [
+    "Empowering youth to lead in sustainability and cultural innovation.",
+    "Strengthening leadership skills and character development.",
+    "Providing a platform for youth voices on global issues.",
+    "Equipping participants to contribute to national and global progress.",
+    "Building a global network of young leaders for ongoing collaboration, particularly among Youth Break the Boundaries alumni."
+  ];
+
+  // Clear existing objectives to avoid duplicates on re-seed (optional but good practice)
+  try {
+      // Logic to delete existing might count on relation cascade or just ignore for seed upsert if we used upsert
+      // Simple create for now as we don't have unique constraint on description+programId
+      // Ideally we should deleteMany first
+      await prisma.programObjective.deleteMany({
+          where: { programId: iys2025.id }
+      });
+      
+      for (let i = 0; i < iysObjectives.length; i++) {
+        await prisma.programObjective.create({
+          data: {
+            programId: iys2025.id,
+            description: iysObjectives[i],
+            order: i + 1,
+            isActive: true
+          }
+        });
+      }
+      console.log(`✅ Objectives created for: ${iys2025.name}`);
+  } catch (error) {
+      console.log('⚠️ Could not seed objectives (Model might not exist yet if schema not pushed):', error.message);
+  }
 
   const iys2024 = await prisma.program.upsert({
     where: {
@@ -569,7 +604,7 @@ async function main() {
       programId: ybbAmbassador2025.id,
       title: 'YBB Ambassador 2025 Guidelines',
       description: 'Complete guide for the ambassador program including roles, responsibilities, and benefits.',
-      fileUrl: 'https://cdn.youthbreaktheboundaries.com/guidelines/ybb-ambassador-2025-guide.pdf',
+      fileUrl: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
       fileType: 'pdf',
       type: 'guide',
       isPublic: true,
@@ -585,7 +620,7 @@ async function main() {
       programId: iys2025.id,
       title: 'Istanbul Youth Summit 2025 Guidelines',
       description: 'Everything you need to know about IYS 2025.',
-      fileUrl: 'https://cdn.youthbreaktheboundaries.com/guidelines/iys-2025-guide.pdf',
+      fileUrl: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
       fileType: 'pdf',
       type: 'guide',
       isPublic: true,
@@ -596,11 +631,17 @@ async function main() {
   console.log(`✅ Guidelines created for: ${iys2025.name}`);
 
   // ==========================================
-  // 8. Create Video Gallery (Highlights)
+  // 8. Create Video & Image Gallery (Highlights)
   // ==========================================
 
-  // 8.1 IYS 2025 Videos (Using placeholders since it's future/current)
-  // Assuming these are promo videos or similar
+  // Clear existing gallery items to avoid duplicates
+  const programsToClean = [iys2025.id, iys2024.id, ybbAmbassador2025.id];
+  await prisma.programGallery.deleteMany({
+      where: { programId: { in: programsToClean } }
+  });
+  console.log('🧹 Cleared existing gallery items for seeded programs.');
+
+  // 8.1 IYS 2025 Videos
   await prisma.programGallery.create({
     data: {
       programId: iys2025.id,
@@ -627,7 +668,7 @@ async function main() {
   });
   console.log(`✅ Videos created for: ${iys2025.name}`);
 
-  // 8.2 IYS 2024 Videos (Past event)
+  // 8.2 IYS 2024 Videos
   await prisma.programGallery.create({
     data: {
       programId: iys2024.id,
@@ -640,7 +681,7 @@ async function main() {
       isActive: true
     }
   });
-   await prisma.programGallery.create({
+  await prisma.programGallery.create({
     data: {
       programId: iys2024.id,
       type: 'video',
@@ -653,6 +694,64 @@ async function main() {
     }
   });
   console.log(`✅ Videos created for: ${iys2024.name}`);
+
+  // 8.3 Create Image Gallery
+  const galleryImages = [
+    { title: 'Opening Ceremony', text: 'Opening+Ceremony' },
+    { title: 'Group Photo', text: 'Group+Photo' },
+    { title: 'Networking Session', text: 'Networking' },
+    { title: 'Cultural Night', text: 'Cultural+Night' },
+    { title: 'Workshops', text: 'Workshops' },
+    { title: 'Awarding Night', text: 'Awarding' },
+  ];
+
+  // Seed images for IYS 2025
+  for (let i = 0; i < galleryImages.length; i++) {
+    await prisma.programGallery.create({
+      data: {
+        programId: iys2025.id,
+        type: 'image',
+        imageUrl: `https://placehold.co/800x600/E31E24/FFF?text=${galleryImages[i].text}`,
+        title: `${galleryImages[i].title} - IYS 2025`,
+        description: `Photo from ${galleryImages[i].title}`,
+        order: i + 3, // Start after videos (1, 2)
+        isActive: true
+      }
+    });
+  }
+  console.log(`✅ Gallery Images created for: ${iys2025.name}`);
+
+  // Seed images for IYS 2024
+  for (let i = 0; i < galleryImages.length; i++) {
+    await prisma.programGallery.create({
+      data: {
+        programId: iys2024.id,
+        type: 'image',
+        imageUrl: `https://placehold.co/800x600/E31E24/FFF?text=${galleryImages[i].text}+2024`,
+        title: `${galleryImages[i].title} - IYS 2024`,
+        description: `Throwback to ${galleryImages[i].title}`,
+        order: i + 3,
+        isActive: true
+      }
+    });
+  }
+  console.log(`✅ Gallery Images created for: ${iys2024.name}`);
+
+  // Seed images for YBB Ambassador 2025
+  for (let i = 0; i < galleryImages.length; i++) {
+    await prisma.programGallery.create({
+      data: {
+        programId: ybbAmbassador2025.id,
+        type: 'image',
+        imageUrl: `https://placehold.co/800x600/000000/FFF?text=${galleryImages[i].text}+Ambassador`,
+        title: `${galleryImages[i].title} - YBB Ambassador`,
+        description: `Ambassador Program ${galleryImages[i].title}`,
+        order: i + 1,
+        isActive: true
+      }
+    });
+  }
+  console.log(`✅ Gallery Images created for: ${ybbAmbassador2025.name}`);
 
   // ==========================================
   // 9. Create Alumni Stories (Testimonials)
@@ -837,7 +936,7 @@ async function main() {
       programCategoryId: iysBrand.id,
       name: 'Turkish Airlines',
       type: 'corporate',
-      logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/Turkish_Airlines_logo_2010.svg/2560px-Turkish_Airlines_logo_2010.svg.png',
+      logoUrl: 'https://placehold.co/200x100/EEE/31343C?text=Turkish+Airlines',
       websiteUrl: 'https://www.turkishairlines.com',
       tier: 'platinum',
       isActive: true,
@@ -850,7 +949,7 @@ async function main() {
       programCategoryId: iysBrand.id,
       name: 'Ministry of Youth and Sports',
       type: 'government', 
-      logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/e/e1/Ministry_of_Youth_and_Sports_%28Turkey%29.svg',
+      logoUrl: 'https://placehold.co/200x100/EEE/31343C?text=Ministry+of+Youth',
       websiteUrl: 'https://gsb.gov.tr',
       tier: 'gold',
       isActive: true,
