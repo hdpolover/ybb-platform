@@ -3,9 +3,11 @@ import { LandingService } from './landing.service';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiHeader, ApiNotFoundResponse, ApiBadRequestResponse } from '@nestjs/swagger';
 import { LandingPageResponseDto } from './dto/landing-page.dto';
 import { LandingSettingsResponseDto } from './dto/landing-settings.dto';
+import { Public } from '../../shared/decorators/public.decorator';
 
 @ApiTags('landing')
 @Controller('landing')
+@Public()
 @ApiHeader({
   name: 'x-brand-domain',
   description: 'Domain of the brand/program category (e.g., istanyouthsummit.com). This is an alternative to the "url" query parameter for multi-tenancy resolution.',
