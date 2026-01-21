@@ -6,8 +6,8 @@ services:
     container_name: ybb-pgadmin
     restart: always
     environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
       # Inject servers.json if possible, or manual config.
       # For Dockploy, mounting a file from repo is tricky if not in build context.
       # We just mount the local one assuming it's copied or volume mounted.
