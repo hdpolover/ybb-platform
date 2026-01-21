@@ -1,9 +1,9 @@
 import { Injectable, Inject, ConflictException } from '@nestjs/common';
-import { ClientProxy } from '@nestjs/microservices';
 import { CreateUserCommand } from '../create-user.command';
 import { UserResponseDto } from '@modules/users/presentation/dto/user-response.dto';
 import { IUserRepository } from '@core/interfaces/repositories/user.repository.interface';
 import { User } from '@core/entities/user.entity';
+import { RabbitMQProducerService } from '../../../../../shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -11,7 +11,7 @@ export class CreateUserHandler {
   constructor(
     @Inject(IUserRepository)
     private readonly userRepository: IUserRepository,
-    @Inject('NOTIFICATION_SERVICE') private readonly notificationClient: ClientProxy,
+    private readonly rabbitmqProducer: RabbitMQProducerService,
   ) { }
 
   async execute(command: CreateUserCommand): Promise<UserResponseDto> {
@@ -41,7 +41,7 @@ export class CreateUserHandler {
     const createdUser = await this.userRepository.create(user, passwordHash);
 
     // Emit event
-    this.notificationClient.emit('user.registered', {
+    this.rabbitmqProducer.emit('user.registered', {
       email: createdUser.email,
       name: 'User',
     });

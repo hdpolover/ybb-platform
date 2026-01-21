@@ -5,31 +5,46 @@ export class InboundMessageDeserializer implements ConsumerDeserializer {
     private readonly logger = new Logger(InboundMessageDeserializer.name);
 
     deserialize(value: any, options?: Record<string, any>): IncomingRequest {
+        // this.logger.log(`[Deserializer] RAW Message received`); // Commented out to reduce noise
+
         try {
             let parsedValue: any;
-
-            // 1. Handle RMQ Message Object (value.content is Buffer)
+            
+            // 1. Parse the JSON Content
             if (value && value.content && Buffer.isBuffer(value.content)) {
-                parsedValue = JSON.parse(value.content.toString());
-            }
-            // 2. Handle direct Buffer (unlikely for RMQ but good fallback)
-            else if (Buffer.isBuffer(value)) {
-                parsedValue = JSON.parse(value.toString());
-            }
-            // 3. Handle object/string
-            else {
+                try {
+                    parsedValue = JSON.parse(value.content.toString());
+                } catch (e) {
+                    this.logger.error(`Error parsing JSON: ${e.message}`);
+                    parsedValue = {};
+                }
+            } else if (Buffer.isBuffer(value)) {
+                try {
+                    parsedValue = JSON.parse(value.toString());
+                } catch (e) {
+                     parsedValue = {};
+                }
+            } else {
                 parsedValue = value;
             }
 
-            // 4. Check if it's already a NestJS formatted message
+            // 2. Check if it's already a NestJS formatted message (from another NestJS client)
             if (parsedValue && parsedValue.pattern) {
                 return parsedValue;
             }
 
-            // 5. If it's a standard event (e.g. from Go Payment Service)
-            // We expect a 'type' field to map to the pattern (routing key)
+            // 3. Use Routing Key as Pattern (if available) - For Raw Pub/Sub
+            if (value && value.fields && value.fields.routingKey) {
+                // this.logger.log(`Using Routing Key as Pattern: ${value.fields.routingKey}`);
+                return {
+                    pattern: value.fields.routingKey,
+                    data: parsedValue,
+                    id: value.properties && value.properties.messageId ? value.properties.messageId : 'auto-id',
+                };
+            }
+
+            // 4. Fallback: Check for 'type' field in the body
             if (parsedValue && parsedValue.type) {
-                this.logger.debug(`Adapting external event: ${parsedValue.type}`);
                 return {
                     pattern: parsedValue.type,
                     data: parsedValue,
@@ -37,11 +52,10 @@ export class InboundMessageDeserializer implements ConsumerDeserializer {
                 };
             }
 
-            // 6. Fallback
+            // 5. Ultimate Fallback
             return parsedValue;
         } catch (error) {
             this.logger.error('Failed to deserialize message', error);
-            // Return a safe object to prevent crashing
             return { pattern: undefined, data: undefined, id: 'error' };
         }
     }

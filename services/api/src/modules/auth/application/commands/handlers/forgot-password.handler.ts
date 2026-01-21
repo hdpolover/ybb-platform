@@ -1,9 +1,8 @@
-import { Injectable, Inject, Logger, BadRequestException } from '@nestjs/common';
-import { ClientProxy } from '@nestjs/microservices';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ForgotPasswordCommand } from '../forgot-password.command';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { randomBytes } from 'crypto';
-import { lastValueFrom } from 'rxjs';
+import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 
 @Injectable()
 export class ForgotPasswordHandler {
@@ -11,7 +10,7 @@ export class ForgotPasswordHandler {
 
     constructor(
         private readonly prisma: PrismaService,
-        @Inject('NOTIFICATION_SERVICE') private readonly notificationClient: ClientProxy,
+        private readonly rabbitmqProducer: RabbitMQProducerService,
     ) { }
 
     /**
@@ -96,14 +95,12 @@ export class ForgotPasswordHandler {
             });
 
             this.logger.log(`Emitting user.forgot-password for ${command.email}`);
-            await lastValueFrom(
-                this.notificationClient.emit('user.forgot-password', {
-                    email: user.email,
-                    name: user.email.split('@')[0], // Fallback name
-                    token,
-                    programCategoryId, // Pass category ID for email customization
-                })
-            );
+            await this.rabbitmqProducer.emit('user.forgot-password', {
+                email: user.email,
+                name: user.email.split('@')[0], // Fallback name
+                token,
+                programCategoryId, // Pass category ID for email customization
+            });
         } else {
             this.logger.warn(`Forgot password requested for non-existent email: ${command.email}`);
         }

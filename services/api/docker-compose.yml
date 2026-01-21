@@ -24,6 +24,7 @@ services:
       PAYMENT_SERVICE_URL: ${PAYMENT_SERVICE_URL}
       FILE_SERVICE_URL: ${FILE_SERVICE_URL}
       CORS_ORIGINS: ${CORS_ORIGINS}
+      RABBITMQ_URL: ${RABBITMQ_URL}
     volumes:
       - ./src:/app/src
       - /app/node_modules

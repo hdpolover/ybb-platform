@@ -116,6 +116,8 @@ export class EmailService {
     }
 
     async sendRawEmail(to: string, subject: string, html: string) {
+        this.logger.log(`[sendRawEmail] Attempting to send email to=${to}, subject="${subject}"`);
+        
         // Option 1: Use Resend if available
         if (this.resend) {
             try {
@@ -123,6 +125,8 @@ export class EmailService {
                 // For development, we might use onboarding@resend.dev
                 // For production, we should use the configured sender
                 const fromAddress = this.configService.get('RESEND_FROM') || 'onboarding@resend.dev';
+                
+                this.logger.log(`[sendRawEmail] Sending via Resend from=${fromAddress}`);
                 
                 const response = await this.resend.emails.send({
                     from: fromAddress,
@@ -139,7 +143,7 @@ export class EmailService {
                 this.logger.log(`Email sent via Resend. ID: ${response.data?.id} | Full Response: ${JSON.stringify(response)}`);
                 return response;
             } catch (error) {
-                this.logger.error(`Failed to send email via Resend to ${to}`, error);
+                this.logger.error(`Failed to send email via Resend to ${to}: ${error.message}`, error.stack);
                 throw error;
             }
         }
@@ -205,6 +209,7 @@ export class EmailService {
     }
 
     async sendVerificationEmail(to: string, name: string, token: string, programCategory?: any) {
+        this.logger.log(`[sendVerificationEmail] Preparing verification email for ${to} (name: ${name})`);
         // Determine base URL: modify logic to prioritize programCategory.websiteUrl
         let baseUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
         
@@ -212,6 +217,8 @@ export class EmailService {
             // Remove trailing slash if present
             baseUrl = programCategory.websiteUrl.replace(/\/$/, '');
         }
+
+        this.logger.log(`[sendVerificationEmail] Using base URL for link: ${baseUrl}`);
 
         const html = await this.compileTemplate('verify-email', {
             name,

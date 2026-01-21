@@ -30,19 +30,6 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
       }),
       inject: [ConfigService],
     }),
-    ClientsModule.register([
-      {
-        name: 'NOTIFICATION_SERVICE',
-        transport: Transport.RMQ,
-        options: {
-          urls: [process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672/'],
-          queue: 'notification_queue',
-          queueOptions: {
-            durable: true,
-          },
-        },
-      },
-    ]),
   ],
   controllers: [AuthController],
   providers: [

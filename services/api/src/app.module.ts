@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from '@shared/infrastructure/prisma/prisma.module';
 import { CacheModule } from '@shared/infrastructure/cache/cache.module';
 import { ThrottlerModule } from '@shared/infrastructure/throttler/throttler.module';
+import { RabbitMQModule } from '@shared/infrastructure/rabbitmq/rabbitmq.module';
 import { CacheController } from '@shared/presentation/cache.controller';
 import { MetricsController } from '@shared/presentation/metrics.controller';
 import { AchievementsModule } from '@modules/achievements/achievements.module';
@@ -32,6 +33,7 @@ import { UsersModule } from '@modules/users/users.module';
     PrismaModule,
     CacheModule,
     ThrottlerModule,
+    RabbitMQModule,
 
     // Feature modules
     AchievementsModule,
