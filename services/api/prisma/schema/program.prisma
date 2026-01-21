@@ -194,6 +194,7 @@ model Program {
   subthemes            ProgramSubtheme[]
   certificateTemplates CertificateTemplate[]
   awards               ProgramAward[]
+  participationInfos   ProgramParticipationInfo[]
 
   @@unique([programCategoryId, slug])
   @@index([programCategoryId])
