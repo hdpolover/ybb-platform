@@ -27,6 +27,7 @@ services:
       RABBITMQ_URL: ${RABBITMQ_URL}
     volumes:
       - ./src:/app/src
+      - ./prisma:/app/prisma
       - /app/node_modules
       - /app/dist
     depends_on:
