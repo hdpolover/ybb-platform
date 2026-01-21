@@ -18,18 +18,20 @@ class MinIOStorage(IStorageService):
         secret_key: str,
         secure: bool = False,
         public_endpoint: str | None = None,
-        public_secure: bool | None = None
+        public_secure: bool | None = None,
+        region: str | None = None
     ):
         """
         Initialize MinIO client.
         
         Args:
-            endpoint: MinIO server endpoint for internal operations (e.g., 'minio:9000')
+            endpoint: MinIO server endpoint for internal operations (e.g., 'minio:9000' or 'sgp1.digitaloceanspaces.com')
             access_key: Access key
             secret_key: Secret key
             secure: Use HTTPS (default: False for local)
             public_endpoint: Public endpoint for presigned URLs (e.g., 'localhost:9000' or 'files.example.com')
             public_secure: Use HTTPS for public URLs (defaults to secure if not set)
+            region: Region name (optional, important for S3/DO Spaces)
         """
         self.endpoint = endpoint
         self.secure = secure
@@ -39,7 +41,8 @@ class MinIOStorage(IStorageService):
             endpoint=endpoint,
             access_key=access_key,
             secret_key=secret_key,
-            secure=secure
+            secure=secure,
+            region=region
         )
         
         # Store public endpoint config for URL rewriting

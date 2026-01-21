@@ -27,7 +27,8 @@ def get_storage_service() -> MinIOStorage:
         secret_key=os.getenv("MINIO_SECRET_KEY", "minioadmin"),
         secure=os.getenv("MINIO_SECURE", "false").lower() == "true",
         public_endpoint=os.getenv("MINIO_PUBLIC_ENDPOINT", "localhost:9000"),
-        public_secure=os.getenv("MINIO_PUBLIC_SECURE", "false").lower() == "true"
+        public_secure=os.getenv("MINIO_PUBLIC_SECURE", "false").lower() == "true",
+        region=os.getenv("MINIO_REGION", None)
     )
 
 
