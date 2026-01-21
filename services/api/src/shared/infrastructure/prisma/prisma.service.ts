@@ -1,5 +1,5 @@
 import { INestApplication, Injectable, OnModuleInit } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 
@@ -32,6 +32,71 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
    */
   async onModuleInit() {
     await this.$connect();
+
+    // Use Prisma Extensions for Soft Delete since middleware ($use) is deprecated/removed in v7
+    const extendedClient = this.$extends({
+      query: {
+        $allModels: {
+          async findUnique({ model, operation, args, query }) {
+            if (modelHasDeletedAt(model)) {
+              // Change to findFirst to support deletedAt filter
+              // We need to cast the operation to findFirst and ensure args are compatible
+              return (extendedClient as any)[toCamelCase(model)].findFirst({
+                ...args,
+                where: { ...args.where, deletedAt: null },
+              });
+            }
+            return query(args);
+          },
+          async findFirst({ model, operation, args, query }) {
+            if (modelHasDeletedAt(model)) {
+              args.where = { deletedAt: null, ...args.where };
+            }
+            return query(args);
+          },
+          async findMany({ model, operation, args, query }) {
+            if (modelHasDeletedAt(model)) {
+              const safeWhere = args.where as any;
+              if (safeWhere?.deletedAt === undefined) {
+                args.where = { deletedAt: null, ...(args.where as any) };
+              }
+            }
+            return query(args);
+          },
+          async delete({ model, operation, args, query }) {
+            if (modelHasDeletedAt(model)) {
+              return (extendedClient as any)[toCamelCase(model)].update({
+                ...args,
+                data: { deletedAt: new Date() },
+              });
+            }
+            return query(args);
+          },
+          async deleteMany({ model, operation, args, query }) {
+            if (modelHasDeletedAt(model)) {
+              return (extendedClient as any)[toCamelCase(model)].updateMany({
+                ...args,
+                data: { deletedAt: new Date() },
+              });
+            }
+            return query(args);
+          },
+        },
+      },
+    });
+
+    // Patch the current instance to use the extended client methods
+    // This allows existing code using `this.user` to get the soft-delete behavior
+    const models = Prisma.dmmf.datamodel.models;
+    for (const model of models) {
+      if (modelHasDeletedAt(model.name)) {
+        const camelCaseName = toCamelCase(model.name);
+        Object.defineProperty(this, camelCaseName, {
+          get: () => (extendedClient as any)[camelCaseName],
+          configurable: true,
+        });
+      }
+    }
   }
 
   /**
@@ -84,7 +149,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
    * Check if record is soft deleted
    */
   isSoftDeleted(record: any): boolean {
-    return record.deletedAt !== null;
+    return record?.deletedAt !== null;
   }
 
   /**
@@ -95,4 +160,14 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
       deletedAt: null,
     };
   }
+}
+
+// Helpers
+function toCamelCase(str: string) {
+  return str.charAt(0).toLowerCase() + str.slice(1);
+}
+
+function modelHasDeletedAt(modelName: string) {
+  const model = Prisma.dmmf.datamodel.models.find((m) => m.name === modelName);
+  return model?.fields.some((f) => f.name === 'deletedAt') ?? false;
 }
