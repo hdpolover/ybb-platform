@@ -2,8 +2,8 @@
     "Servers": {
         "1": {
             "Name": "YBB API (Staging)",
-            "Group": "Servers",
-            "Host": "ybb-postgres-api-staging",
+            "Group": "Staging",
+            "Host": "ybb-postgres-api",
             "Port": 5432,
             "MaintenanceDB": "postgres",
             "Username": "ybb_user_staging",
@@ -11,8 +11,8 @@
         },
         "2": {
             "Name": "YBB Payment (Staging)",
-            "Group": "Servers",
-            "Host": "ybb-postgres-payment-staging",
+            "Group": "Staging",
+            "Host": "ybb-postgres-payment",
             "Port": 5432,
             "MaintenanceDB": "postgres",
             "Username": "ybb_user_staging",
@@ -20,8 +20,8 @@
         },
         "3": {
             "Name": "YBB File (Staging)",
-            "Group": "Servers",
-            "Host": "ybb-postgres-file-staging",
+            "Group": "Staging",
+            "Host": "ybb-postgres-file",
             "Port": 5432,
             "MaintenanceDB": "postgres",
             "Username": "ybb_user_staging",

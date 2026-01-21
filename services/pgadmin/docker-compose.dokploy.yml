@@ -15,8 +15,7 @@ services:
       # For simplicity here, we rely on manual setup or volume persistence.
     volumes:
       - pgadmin_data_prod:/var/lib/pgadmin
-      - ./servers.prod.json:/pgadmin4/servers.json:ro
-        # Note: server.prod.json must exist in repo
+      - ./servers.staging.json:/pgadmin4/servers.json:ro
     networks:
       - dokploy-network
     labels:
