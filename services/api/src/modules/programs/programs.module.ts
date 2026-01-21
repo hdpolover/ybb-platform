@@ -4,6 +4,7 @@ import { AuthModule } from '@modules/auth/auth.module';
 import { UsersModule } from '@modules/users/users.module';
 import { ProgramsController } from './presentation/programs.controller';
 import { ProgramParticipationController } from './presentation/program-participation.controller';
+import { ProgramLandingController } from './presentation/program-landing.controller';
 import {
   UpsertParticipationInfoHandler,
   DeleteParticipationInfoHandler,
@@ -12,6 +13,7 @@ import {
 } from './application/handlers/participation-info.handlers';
 import { ListProgramsHandler } from './application/queries/handlers/list-programs.handler';
 import { GetProgramDetailHandler } from './application/queries/handlers/get-program-detail.handler';
+import { GetProgramLandingHandler } from './application/queries/handlers/get-program-landing.handler';
 import { CreateProgramHandler } from './application/commands/handlers/create-program.handler';
 import { UpdateProgramHandler } from './application/commands/handlers/update-program.handler';
 import { DeleteProgramHandler } from './application/commands/handlers/delete-program.handler';
@@ -55,10 +57,11 @@ import { CacheService } from '../../shared/infrastructure/cache/cache.service';
 
 @Module({
   imports: [CqrsModule, AuthModule, UsersModule],
-  controllers: [ProgramsController, ProgramParticipationController],
+  controllers: [ProgramsController, ProgramParticipationController, ProgramLandingController],
   providers: [
     ListProgramsHandler,
     GetProgramDetailHandler,
+    GetProgramLandingHandler,
     CreateProgramHandler,
     UpdateProgramHandler,
     DeleteProgramHandler,

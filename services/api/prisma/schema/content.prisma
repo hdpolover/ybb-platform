@@ -295,6 +295,8 @@ model ProgramAnnouncement {
   title          String    @db.VarChar(255)
   content        String    @db.Text
   imageUrl       String?   @map("image_url") @db.VarChar(500)
+  category       String?   @db.VarChar(50) // e.g., "News", "Award", "Scholarship", "General"
+  tags           String[]  @default([])
   targetAudience String    @default("all") @map("target_audience") @db.VarChar(50) // all, applicants, accepted, rejected, participants
   sendEmail      Boolean   @default(false) @map("send_email")
   isPinned       Boolean   @default(false) @map("is_pinned")
@@ -308,6 +310,7 @@ model ProgramAnnouncement {
   program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
 
   @@index([programId])
+  @@index([category])
   @@index([targetAudience])
   @@index([isPinned])
   @@index([publishDate])
