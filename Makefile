@@ -10,17 +10,19 @@ help:
 	@echo "make start    - Start all services (detached)"
 	@echo "make stop     - Stop all services"
 	@echo "make restart  - Restart all services"
+	@echo "make rebuild  - Rebuild and start a specific service (default: all)"
+	@echo "make logs-api - Watch logs for API service"
 	@echo "make status   - Show status of all services"
 	@echo "make logs     - Show logs (Ctrl+C to exit)"
 	@echo "make clean    - Stop and remove all containers"
 
 start:
-	@echo "Starting all services..."
+	@echo "Starting all services (Hot-reload enabled for API)..."
 	@for service in $(SERVICES); do \
 		echo ">> Starting $$service..."; \
 		(cd services/$$service && docker compose up -d); \
 	done
-	@echo "All services started!"
+	@echo "All services started! run 'make logs-api' to see API output."
 
 stop:
 	@echo "Stopping all services..."
@@ -30,6 +32,22 @@ stop:
 	done
 
 restart: stop start
+
+rebuild:
+	@echo "Rebuilding services..."
+	@if [ -z "$(service)" ]; then \
+		for s in $(SERVICES); do \
+			echo ">> Rebuilding $$s..."; \
+			(cd services/$$s && docker compose up -d --build); \
+		done; \
+	else \
+		echo ">> Rebuilding $(service)..."; \
+		(cd services/$(service) && docker compose up -d --build); \
+	fi
+
+logs-api:
+	@echo "Tailing API logs..."
+	@(cd services/api && docker compose logs -f api)
 
 status:
 	@echo "Checking Service Status..."

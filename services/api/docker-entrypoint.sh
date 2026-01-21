@@ -25,7 +25,13 @@ if [ $EXIT_CODE -ne 0 ]; then
 fi
 
 echo "🌱 Running seed script to ensure reference data..."
-node dist/prisma/seed.js
+if [ "$NODE_ENV" = "production" ]; then
+  node dist/prisma/seed.js
+else
+  # In development, use ts-node via the prisma CLI or directly
+  # The package.json "prisma.seed" is configured to use ts-node
+  npx prisma db seed
+fi
 
 echo "✅ Database ready!"
 
