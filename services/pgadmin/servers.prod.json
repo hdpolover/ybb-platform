@@ -2,7 +2,7 @@
     "Servers": {
         "1": {
             "Name": "YBB API (Prod)",
-            "Group": "Servers",
+            "Group": "Production",
             "Host": "ybb-postgres-api",
             "Port": 5432,
             "MaintenanceDB": "postgres",
@@ -11,7 +11,7 @@
         },
         "2": {
             "Name": "YBB Payment (Prod)",
-            "Group": "Servers",
+            "Group": "Production",
             "Host": "ybb-postgres-payment",
             "Port": 5432,
             "MaintenanceDB": "postgres",
@@ -20,7 +20,7 @@
         },
         "3": {
             "Name": "YBB File (Prod)",
-            "Group": "Servers",
+            "Group": "Production",
             "Host": "ybb-postgres-file",
             "Port": 5432,
             "MaintenanceDB": "postgres",
