@@ -15,6 +15,7 @@ export class LegalDocumentRepository {
                     slug: brandSlug,
                 },
                 isActive: true, // Public only sees active
+                deletedAt: null,
             },
             orderBy: {
                 title: 'asc',
@@ -30,6 +31,7 @@ export class LegalDocumentRepository {
                 },
                 slug: slug,
                 isActive: true,
+                deletedAt: null,
             },
             orderBy: {
                 version: 'desc', // Get latest version
@@ -54,14 +56,21 @@ export class LegalDocumentRepository {
     }
 
     async delete(id: string): Promise<LegalDocument> {
-        return this.prisma.legalDocument.delete({
+        return this.prisma.legalDocument.update({
             where: { id },
+            data: {
+                deletedAt: new Date(),
+                isActive: false, // Also mark as inactive
+            },
         });
     }
     
     async findById(id: string): Promise<LegalDocument | null> {
-        return this.prisma.legalDocument.findUnique({
-            where: { id },
+        return this.prisma.legalDocument.findFirst({
+            where: { 
+                id,
+                deletedAt: null 
+            },
         });
     }
 }
