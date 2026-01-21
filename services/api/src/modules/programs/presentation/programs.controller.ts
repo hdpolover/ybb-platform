@@ -117,6 +117,9 @@ import {
   DeleteApplicationFormFieldHandler,
 } from '../application/commands/handlers/application-form-field.handler';
 import { GetApplicationFormFieldsHandler } from '../application/queries/handlers/get-application-form-fields.handler';
+import { GetParticipantProgressHandler } from '../application/queries/handlers/get-participant-progress.handler';
+import { GetParticipantProgressQuery } from '../application/queries/get-participant-progress.query';
+import { ProgressStepDto } from './dto/participant-progress-response.dto';
 
 @ApiTags('programs')
 @Controller('programs')
@@ -127,6 +130,7 @@ export class ProgramsController {
     private readonly createProgramHandler: CreateProgramHandler,
     private readonly updateProgramHandler: UpdateProgramHandler,
     private readonly deleteProgramHandler: DeleteProgramHandler,
+    private readonly getParticipantProgressHandler: GetParticipantProgressHandler,
     // Content List Handlers
     private readonly listProgramTimelineHandler: ListProgramTimelineHandler,
     private readonly listProgramSchedulesHandler: ListProgramSchedulesHandler,
@@ -289,6 +293,15 @@ export class ProgramsController {
     return {
       message: 'Program deleted successfully',
     };
+  }
+
+  @Get(':id/participant/progress')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get participant progress tracking from timeline' })
+  @ApiResponse({ status: 200, type: [ProgressStepDto] })
+  async getParticipantProgress(@Param('id') id: string, @Request() req: any): Promise<ProgressStepDto[]> {
+     return this.getParticipantProgressHandler.execute(new GetParticipantProgressQuery(id, req.user.id));
   }
 
   @Get(':id/timeline')

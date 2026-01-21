@@ -65,6 +65,12 @@ CREATE TYPE "SupportTicketPriority" AS ENUM ('low', 'normal', 'high', 'urgent');
 CREATE TYPE "DocumentTemplateType" AS ENUM ('letter_of_acceptance', 'letter_of_invitation', 'certificate_participation', 'certificate_achievement', 'certificate_speaker', 'letter_recommendation', 'agreement_letter', 'custom');
 
 -- CreateEnum
+CREATE TYPE "TimelineType" AS ENUM ('registration', 'announcement_loa', 'payment_1', 'payment_2', 'mentoring', 'interview', 'announcement_final', 'program_start', 'program_end', 'onboarding', 'custom');
+
+-- CreateEnum
+CREATE TYPE "TimelineCompletionType" AS ENUM ('date_passed', 'status_change', 'payment_completed', 'document_uploaded', 'manual', 'always_open');
+
+-- CreateEnum
 CREATE TYPE "PaymentStatus" AS ENUM ('unpaid', 'pending', 'paid', 'captured', 'settled', 'failed', 'refunded', 'cancelled', 'expired');
 
 -- CreateTable
@@ -75,8 +81,14 @@ CREATE TABLE "program_pricing_tiers" (
     "description" TEXT,
     "price" DECIMAL(10,2) NOT NULL,
     "currency" VARCHAR(3) NOT NULL DEFAULT 'IDR',
-    "quota" INTEGER DEFAULT 0,
+    "capacity" INTEGER DEFAULT 0,
     "current_count" INTEGER NOT NULL DEFAULT 0,
+    "benefits" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "requirements" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "fee_type" "PricingFeeType" NOT NULL DEFAULT 'registration_fee',
+    "target" "PricingTarget" NOT NULL DEFAULT 'self_funded',
+    "icon" VARCHAR(255),
+    "sold_count" INTEGER NOT NULL DEFAULT 0,
     "is_active" BOOLEAN NOT NULL DEFAULT true,
     "order" INTEGER NOT NULL DEFAULT 0,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -102,9 +114,12 @@ CREATE TABLE "pricing_tier_validity_periods" (
 CREATE TABLE "program_requirements" (
     "id" UUID NOT NULL DEFAULT uuid_generate_v4(),
     "program_id" UUID NOT NULL,
-    "title" VARCHAR(255) NOT NULL,
+    "name" VARCHAR(255) NOT NULL,
     "description" TEXT,
     "type" VARCHAR(50) NOT NULL DEFAULT 'document',
+    "file_max_size" INTEGER,
+    "file_allowed_types" VARCHAR(255),
+    "options" JSON DEFAULT '[]',
     "is_required" BOOLEAN NOT NULL DEFAULT true,
     "order" INTEGER NOT NULL DEFAULT 0,
     "is_active" BOOLEAN NOT NULL DEFAULT true,
@@ -139,7 +154,7 @@ CREATE TABLE "application_form_fields" (
 CREATE TABLE "participant_applications" (
     "id" UUID NOT NULL DEFAULT uuid_generate_v4(),
     "program_id" UUID NOT NULL,
-    "user_id" UUID NOT NULL,
+    "participant_id" UUID NOT NULL,
     "status" "ApplicationStatus" NOT NULL DEFAULT 'draft',
     "payment_status" "PaymentStatus" NOT NULL DEFAULT 'unpaid',
     "ticket_status" TEXT NOT NULL DEFAULT 'regular',
@@ -152,6 +167,7 @@ CREATE TABLE "participant_applications" (
     "admin_notes" TEXT,
     "reviewed_by" UUID,
     "reviewed_at" TIMESTAMPTZ(6),
+    "deleted_at" TIMESTAMPTZ(6),
     "deleted_by" UUID,
     "withdrawn_by" UUID,
     "interview_date" TIMESTAMPTZ(6),
@@ -183,6 +199,8 @@ CREATE TABLE "participant_awards" (
     "program_award_id" UUID NOT NULL,
     "awarded_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "awarded_by" UUID,
+    "notes" TEXT,
+    "certificate_url" VARCHAR(500),
 
     CONSTRAINT "participant_awards_pkey" PRIMARY KEY ("id")
 );
@@ -192,6 +210,7 @@ CREATE TABLE "participant_documents" (
     "id" UUID NOT NULL DEFAULT uuid_generate_v4(),
     "application_id" UUID NOT NULL,
     "template_id" UUID,
+    "document_number" VARCHAR(50),
     "name" VARCHAR(255) NOT NULL,
     "type" VARCHAR(50) NOT NULL,
     "file_url" VARCHAR(500) NOT NULL,
@@ -407,9 +426,14 @@ CREATE TABLE "program_timeline" (
     "id" UUID NOT NULL DEFAULT uuid_generate_v4(),
     "program_id" UUID NOT NULL,
     "date" TIMESTAMPTZ(6) NOT NULL,
+    "end_date" TIMESTAMPTZ(6),
     "title" VARCHAR(255) NOT NULL,
     "description" TEXT,
     "icon" VARCHAR(100),
+    "type" "TimelineType" NOT NULL DEFAULT 'custom',
+    "completion_type" "TimelineCompletionType" NOT NULL DEFAULT 'date_passed',
+    "completion_config" JSON NOT NULL DEFAULT '{}',
+    "target_audience" "PricingTarget" NOT NULL DEFAULT 'all',
     "order" INTEGER NOT NULL DEFAULT 0,
     "is_active" BOOLEAN NOT NULL DEFAULT true,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -701,6 +725,9 @@ CREATE TABLE "user_announcement_reads" (
     "user_id" UUID NOT NULL,
     "announcement_id" UUID NOT NULL,
     "read_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "last_seen_at" TIMESTAMPTZ(6),
+    "is_dismissed" BOOLEAN NOT NULL DEFAULT false,
+    "dismissed_at" TIMESTAMPTZ(6),
 
     CONSTRAINT "user_announcement_reads_pkey" PRIMARY KEY ("id")
 );
@@ -1213,7 +1240,7 @@ CREATE INDEX "application_form_fields_order_idx" ON "application_form_fields"("o
 CREATE INDEX "participant_applications_program_id_idx" ON "participant_applications"("program_id");
 
 -- CreateIndex
-CREATE INDEX "participant_applications_user_id_idx" ON "participant_applications"("user_id");
+CREATE INDEX "participant_applications_participant_id_idx" ON "participant_applications"("participant_id");
 
 -- CreateIndex
 CREATE INDEX "participant_applications_status_idx" ON "participant_applications"("status");
@@ -1225,7 +1252,7 @@ CREATE INDEX "participant_applications_payment_status_idx" ON "participant_appli
 CREATE INDEX "participant_applications_referral_code_idx" ON "participant_applications"("referral_code");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "participant_applications_program_id_user_id_key" ON "participant_applications"("program_id", "user_id");
+CREATE UNIQUE INDEX "participant_applications_participant_id_program_id_key" ON "participant_applications"("participant_id", "program_id");
 
 -- CreateIndex
 CREATE INDEX "application_edit_history_application_id_idx" ON "application_edit_history"("application_id");
@@ -1834,7 +1861,7 @@ ALTER TABLE "application_form_fields" ADD CONSTRAINT "application_form_fields_pr
 ALTER TABLE "participant_applications" ADD CONSTRAINT "participant_applications_program_id_fkey" FOREIGN KEY ("program_id") REFERENCES "programs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "participant_applications" ADD CONSTRAINT "participant_applications_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "participant_applications" ADD CONSTRAINT "participant_applications_participant_id_fkey" FOREIGN KEY ("participant_id") REFERENCES "participants"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "participant_applications" ADD CONSTRAINT "participant_applications_reviewed_by_fkey" FOREIGN KEY ("reviewed_by") REFERENCES "admins"("id") ON DELETE SET NULL ON UPDATE CASCADE;

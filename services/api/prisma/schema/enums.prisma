@@ -159,6 +159,29 @@ enum DocumentTemplateType {
   custom
 }
 
+enum TimelineType {
+  registration
+  announcement_loa
+  payment_1
+  payment_2
+  mentoring
+  interview
+  announcement_final
+  program_start
+  program_end
+  onboarding
+  custom
+}
+
+enum TimelineCompletionType {
+  date_passed         // Step completes when date passes
+  status_change       // Step completes when ApplicationStatus matches
+  payment_completed   // Step completes when a specific Fee Type is paid
+  document_uploaded   // Step completes when a specific document is uploaded
+  manual              // Step must be manually marked by admin
+  always_open         // Informational only
+}
+
 enum PaymentStatus {
   unpaid
   pending

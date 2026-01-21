@@ -40,6 +40,7 @@ import {
   DeleteApplicationFormFieldHandler,
 } from './application/commands/handlers/application-form-field.handler';
 import { GetApplicationFormFieldsHandler } from './application/queries/handlers/get-application-form-fields.handler';
+import { GetParticipantProgressHandler } from './application/queries/handlers/get-participant-progress.handler';
 import { ProgramContentRepository } from './infrastructure/persistence/program-content.repository';
 import { ProgramRepository } from './infrastructure/persistence/program.repository';
 import { PrismaService } from '../../shared/infrastructure/prisma/prisma.service';
@@ -54,6 +55,7 @@ import { CacheService } from '../../shared/infrastructure/cache/cache.service';
     CreateProgramHandler,
     UpdateProgramHandler,
     DeleteProgramHandler,
+    GetParticipantProgressHandler,
     // Content Handlers
     ListProgramTimelineHandler,
     ListProgramSchedulesHandler,
