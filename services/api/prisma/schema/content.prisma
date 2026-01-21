@@ -446,3 +446,90 @@ model ProgramSubtheme {
   @@index([programId])
   @@map("program_subthemes")
 }
+
+model PartnershipOpportunity {
+  id                String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programCategoryId String?  @map("program_category_id") @db.Uuid
+  programId         String?  @map("program_id") @db.Uuid
+  
+  title             String   @db.VarChar(255)
+  subtitle          String?  @db.VarChar(255)
+  description       String?  @db.Text
+  
+  features          Json?    @default("[]") @db.Json // List of benefits/points
+  ctaLabel          String?  @map("cta_label") @db.VarChar(50)
+  
+  type              String   @db.VarChar(50) // ambassador, affiliate, community, etc.
+  
+  order             Int      @default(0)
+  isActive          Boolean  @default(true) @map("is_active")
+  
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
+  
+  programCategory   ProgramCategory? @relation(fields: [programCategoryId], references: [id])
+  program           Program?         @relation(fields: [programId], references: [id])
+
+  @@index([programCategoryId])
+  @@index([programId])
+  @@index([type])
+  @@map("partnership_opportunities")
+}
+
+model SponsorshipTier {
+  id                String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programCategoryId String?  @map("program_category_id") @db.Uuid
+  programId         String?  @map("program_id") @db.Uuid
+  
+  name              String   @db.VarChar(255)
+  priceDescription  String?  @map("price_description") @db.VarChar(255)
+  description       String?  @db.Text
+  
+  features          Json?    @default("[]") @db.Json
+  
+  order             Int      @default(0)
+  isActive          Boolean  @default(true) @map("is_active")
+  
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  programCategory   ProgramCategory? @relation(fields: [programCategoryId], references: [id])
+  program           Program?         @relation(fields: [programId], references: [id])
+  
+  @@index([programCategoryId])
+  @@index([programId])
+  @@map("sponsorship_tiers")
+}
+
+model PartnershipEnquiry {
+  id                String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programCategoryId String?  @map("program_category_id") @db.Uuid
+  programId         String?  @map("program_id") @db.Uuid
+  
+  partnershipType   String   @map("partnership_type") @db.VarChar(50)
+  subCategory       String?  @map("sub_category") @db.VarChar(50)
+  
+  fullName          String   @map("full_name") @db.VarChar(255)
+  email             String   @db.VarChar(255)
+  whatsappNumber    String?  @map("whatsapp_number") @db.VarChar(25)
+  company           String?  @db.VarChar(255)
+  subject           String?  @db.VarChar(255)
+  description       String?  @db.Text
+  
+  status            String   @default("pending") @db.VarChar(20)
+  
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
+  
+  programCategory   ProgramCategory? @relation(fields: [programCategoryId], references: [id])
+  program           Program?         @relation(fields: [programId], references: [id])
+  
+  @@index([programCategoryId])
+  @@index([programId])
+  @@index([partnershipType])
+  @@index([status])
+  @@map("partnership_enquiries")
+}

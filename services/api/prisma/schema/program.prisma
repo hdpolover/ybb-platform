@@ -57,6 +57,9 @@ model ProgramCategory {
   activeAdmins        AdminProgramCategory[]
   legalDocuments      LegalDocument[]
   aiChatBots          AiChatBotConfig[]
+  partnershipOpportunities PartnershipOpportunity[]
+  sponsorshipTiers         SponsorshipTier[]
+  partnershipEnquiries     PartnershipEnquiry[]
 
   @@index([slug])
   @@index([isActive])
@@ -195,6 +198,9 @@ model Program {
   certificateTemplates CertificateTemplate[]
   awards               ProgramAward[]
   participationInfos   ProgramParticipationInfo[]
+  partnershipOpportunities PartnershipOpportunity[]
+  sponsorshipTiers         SponsorshipTier[]
+  partnershipEnquiries     PartnershipEnquiry[]
 
   @@unique([programCategoryId, slug])
   @@index([programCategoryId])

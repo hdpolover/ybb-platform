@@ -50,7 +50,7 @@ services:
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
       POSTGRES_DB: ${DATABASE_NAME}
     ports:
-      - "5432:5432" # Exposed on standard port (Api is primary)
+      - "5438:5432" # Exposed on standard port (Api is primary)
     volumes:
       - postgres_api_data:/var/lib/postgresql/data
     healthcheck:

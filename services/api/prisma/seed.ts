@@ -1841,6 +1841,114 @@ async function main() {
       console.log(`✅ Award Winners assigned for: ${bestPresenter.name}`);
   }
 
+  // ==========================================
+  // 20. Create Partnership Opportunities
+  // ==========================================
+
+  // Ambassador Program Opportunity
+  await prisma.partnershipOpportunity.create({
+    data: {
+      programCategoryId: iysBrand.id,
+      title: "Ambassador Program",
+      subtitle: "Join our global network of youth leaders",
+      description: "Represent the Istanbul Youth Summit in your country. As an ambassador, you will gain exclusive access to leadership training, networking opportunities, and the chance to drive impactful projects.",
+      type: "ambassador",
+      features: [
+        "Exclusive Leadership Training",
+        "Global Networking",
+        "Certificate of Ambassadorship",
+        "Priority Access to Summit"
+      ],
+      ctaLabel: "Apply Now",
+      isActive: true,
+      order: 1
+    }
+  });
+
+  // Affiliate Program Opportunity
+  await prisma.partnershipOpportunity.create({
+    data: {
+      programCategoryId: iysBrand.id,
+      title: "Affiliate Program",
+      subtitle: "Partner with us for mutual growth",
+      description: "Collaborate with IYS to promote youth empowerment. Ideal for organizations, student bodies, and media partners looking to expand their reach.",
+      type: "affiliate",
+      features: [
+        "Brand Exposure",
+        "Joint Events",
+        "Revenue Sharing (Optional)",
+        "Marketing Resources"
+      ],
+      ctaLabel: "Join as Partner",
+      isActive: true,
+      order: 2
+    }
+  });
+
+  console.log(`✅ Partnership Opportunities created for: ${iysBrand.name}`);
+
+  // ==========================================
+  // 21. Create Sponsorship Tiers
+  // ==========================================
+
+  // Platinum Tier
+  await prisma.sponsorshipTier.create({
+    data: {
+      programCategoryId: iysBrand.id,
+      name: "Platinum Sponsor",
+      priceDescription: "$5,000+",
+      description: "Maximum visibility and strategic partnership.",
+      features: [
+        "Logo on Main Stage Backdrop",
+        "Keynote Speaking Slot",
+        "VIP Access for 5 Representatives",
+        "Dedicated Booth Space",
+        "Social Media Feature (3 Posts)"
+      ],
+      isActive: true,
+      order: 1
+    }
+  });
+
+  // Gold Tier
+  await prisma.sponsorshipTier.create({
+    data: {
+      programCategoryId: iysBrand.id,
+      name: "Gold Sponsor",
+      priceDescription: "$3,000 - $4,999",
+      description: "Significant brand exposure and engagement.",
+      features: [
+        "Logo on Event Banner",
+        "Workshop Hosting Opportunity",
+        "VIP Access for 3 Representatives",
+        "Shared Booth Space",
+        "Social Media Feature (1 Post)"
+      ],
+      isActive: true,
+      order: 2
+    }
+  });
+
+  // Silver Tier
+  await prisma.sponsorshipTier.create({
+    data: {
+      programCategoryId: iysBrand.id,
+      name: "Silver Sponsor",
+      priceDescription: "$1,000 - $2,999",
+      description: "Essential branding and networking.",
+      features: [
+        "Logo on Website",
+        "Mention in Opening Ceremony",
+        "VIP Access for 1 Representative",
+        "Logo in Program Booklet"
+      ],
+      isActive: true,
+      order: 3
+    }
+  });
+
+  console.log(`✅ Sponsorship Tiers created for: ${iysBrand.name}`);
+
   console.log('🎉 Seeding completed successfully!');
 }
 
