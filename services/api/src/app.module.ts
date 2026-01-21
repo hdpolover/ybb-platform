@@ -18,6 +18,7 @@ import { MetadataModule } from '@modules/metadata/metadata.module';
 import { NewsletterModule } from '@modules/newsletter/newsletter.module';
 import { AiBotModule } from '@modules/ai-bot/ai-bot.module';
 import { ParticipantsModule } from '@modules/participants/participants.module';
+import { PartnershipsModule } from '@modules/partnerships/partnerships.module';
 import { PaymentsModule } from '@modules/payments/payments.module';
 import { ProgramsModule } from '@modules/programs/programs.module';
 import { StatsModule } from '@modules/stats/stats.module';
@@ -52,6 +53,7 @@ import { UsersModule } from '@modules/users/users.module';
     NewsletterModule,
     AiBotModule,
     ParticipantsModule,
+    PartnershipsModule,
     PaymentsModule,
     ProgramsModule,
     StatsModule,
