@@ -9,9 +9,12 @@ import { AmbassadorRepository } from './infrastructure/persistence/ambassador.re
 import { ApplyAmbassadorHandler } from './application/commands/handlers/apply-ambassador.handler';
 import { GetAmbassadorDashboardHandler } from './application/queries/handlers/get-ambassador-dashboard.handler';
 
+import { ParticipantsController } from './presentation/participants.controller';
+import { CompleteOnboardingHandler } from './application/commands/handlers/complete-onboarding.handler';
+
 @Module({
     imports: [CqrsModule],
-    controllers: [],
+    controllers: [ParticipantsController],
     providers: [
         PrismaService,
         {
@@ -26,6 +29,7 @@ import { GetAmbassadorDashboardHandler } from './application/queries/handlers/ge
         AmbassadorRepository,
         GetMyParticipantProfileHandler,
         UpdateParticipantProfileHandler,
+        CompleteOnboardingHandler,
         ApplyAmbassadorHandler,
         GetAmbassadorDashboardHandler,
     ],

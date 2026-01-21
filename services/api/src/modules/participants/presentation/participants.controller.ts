@@ -17,6 +17,8 @@ import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { CurrentUser } from '@shared/decorators/current-user.decorator';
 import { GetMyParticipantProfileQuery } from '../application/queries/get-my-participant-profile.query';
 import { UpdateParticipantProfileCommand } from '../application/commands/update-participant-profile.command';
+import { CompleteOnboardingCommand } from '../application/commands/complete-onboarding.command';
+import { OnboardingDto } from './dto/onboarding.dto';
 import { UpdateParticipantProfileDto, ParticipantResponseDto } from './dto/participant.dto';
 import { ApplyAmbassadorDto, AmbassadorDashboardDto } from './dto/ambassador.dto';
 import { ApplyAmbassadorCommand } from '../application/commands/apply-ambassador.command';
@@ -47,6 +49,25 @@ export class ParticipantsController {
             throw new UnauthorizedException();
         }
         return this.queryBus.execute(new GetMyParticipantProfileQuery(user.id));
+    }
+
+    @Post('onboarding')
+    @ApiOperation({ summary: 'Complete participant onboarding (first-time setup)' })
+    @ApiResponse({
+        status: 201,
+        description: 'Onboarding data saved successfully',
+        type: ParticipantResponseDto,
+    })
+    async completeOnboarding(
+        @CurrentUser() user: any,
+        @Body() dto: OnboardingDto,
+    ): Promise<ParticipantResponseDto> {
+        if (!user || !user.id) {
+            throw new UnauthorizedException();
+        }
+        return this.commandBus.execute(
+            new CompleteOnboardingCommand(user.id, dto),
+        );
     }
 
     @Put('me')

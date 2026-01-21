@@ -226,7 +226,8 @@ export class AuthController {
         programCategoryId: user.programCategoryId,
         identities: [],
         participantId: null,
-        registeredPrograms: []
+        registeredPrograms: [],
+        isProfileCompleted: false
       };
     }
 
@@ -239,6 +240,10 @@ export class AuthController {
       applicationStatus: app.status
     })) || [];
 
+    // Determine if onboarding is needed (isFirstTime)
+    // We consider it completed if we have a participant record AND profileCompletedAt is set
+    const isProfileCompleted = !!(userData.participant?.profileCompletedAt);
+
     return {
       userId: userData.id,
       email: userData.email,
@@ -248,7 +253,8 @@ export class AuthController {
         lastUsedAt: i.lastUsedAt
       })),
       participantId: userData.participant?.id,
-      registeredPrograms
+      registeredPrograms,
+      isProfileCompleted
     };
   }
 
