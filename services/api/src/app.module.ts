@@ -16,6 +16,7 @@ import { LandingModule } from '@modules/landing/landing.module';
 import { LegalModule } from '@modules/legal/legal.module';
 import { MetadataModule } from '@modules/metadata/metadata.module';
 import { NewsletterModule } from '@modules/newsletter/newsletter.module';
+import { AiBotModule } from '@modules/ai-bot/ai-bot.module';
 import { ParticipantsModule } from '@modules/participants/participants.module';
 import { PaymentsModule } from '@modules/payments/payments.module';
 import { ProgramsModule } from '@modules/programs/programs.module';
@@ -49,6 +50,7 @@ import { UsersModule } from '@modules/users/users.module';
     LegalModule,
     MetadataModule,
     NewsletterModule,
+    AiBotModule,
     ParticipantsModule,
     PaymentsModule,
     ProgramsModule,
