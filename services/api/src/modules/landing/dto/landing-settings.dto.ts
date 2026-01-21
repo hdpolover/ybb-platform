@@ -29,6 +29,18 @@ export class BrandSettingsDto {
 
   @ApiProperty({ example: '123456789', required: false, description: 'Meta/Facebook Pixel ID' })
   pixel_id?: string;
+
+  @ApiProperty({ example: '+628123456789', required: false, description: 'Contact phone number' })
+  contact_phone?: string;
+
+  @ApiProperty({ example: '+628123456789', required: false, description: 'WhatsApp number' })
+  contact_whatsapp?: string;
+
+  @ApiProperty({ example: 'Jl. Malioboro No. 1, Yogyakarta', required: false, description: 'Physical address' })
+  address?: string;
+
+  @ApiProperty({ example: { instagram: '@username' }, required: false, description: 'Social media links object' })
+  social_media?: any;
 }
 
 export class NavigationItemDto {

@@ -100,6 +100,16 @@ async function main() {
       mission: "To empower youth through education, leadership development, and community engagement programs.",
       logoUrl: "https://placehold.co/400x100/EEE/31343C?text=YBB+Logo",
       bannerUrl: "https://placehold.co/1200x400/000/FFF?text=YBB+Banner",
+      contactPhone: '+6285173386622',
+      contactWhatsapp: '+6285173386622',
+      contactAddress: 'Ngaglik, Sleman, Yogyakarta, Indonesia',
+      socialMediaLinks: {
+        instagram: 'https://instagram.com/youthbreaktheboundaries',
+        tiktok: 'https://tiktok.com/@youthbreaktheboundaries',
+        youtube: 'https://youtube.com/youthbreaktheboundaries',
+        telegram: 'https://t.me/youthbreaktheboundaries',
+        email: 'mailto:admin@youthbreaktheboundaries.com'
+      },
     },
     create: {
       name: 'Youth Break the Boundaries',
@@ -114,6 +124,16 @@ async function main() {
       mission: "To empower youth through education, leadership development, and community engagement programs.",
       logoUrl: "https://placehold.co/400x100/EEE/31343C?text=YBB+Logo",
       bannerUrl: "https://placehold.co/1200x400/000/FFF?text=YBB+Banner",
+      contactPhone: '+6285173386622',
+      contactWhatsapp: '+6285173386622',
+      contactAddress: 'Ngaglik, Sleman, Yogyakarta, Indonesia',
+      socialMediaLinks: {
+        instagram: 'https://instagram.com/youthbreaktheboundaries',
+        tiktok: 'https://tiktok.com/@youthbreaktheboundaries',
+        youtube: 'https://youtube.com/youthbreaktheboundaries',
+        telegram: 'https://t.me/youthbreaktheboundaries',
+        email: 'mailto:admin@youthbreaktheboundaries.com'
+      },
     },
   });
   console.log(`✅ Brand created/updated: ${ybbBrand.name}`);
@@ -129,6 +149,16 @@ async function main() {
       bannerUrl: "https://placehold.co/1200x400/E31E24/FFF?text=IYS+Banner",
       websiteUrl: 'https://istanbulyouthsummit.com',
       contactEmail: 'admin@istanbulyouthsummit.com',
+      contactPhone: '+6285173386622',
+      contactWhatsapp: '+6285173386622',
+      contactAddress: 'Ngaglik, Sleman, Yogyakarta, Indonesia',
+      socialMediaLinks: {
+        instagram: 'https://instagram.com/istanbulyouthsummit',
+        tiktok: 'https://tiktok.com/@istanbulyouthsummit',
+        youtube: 'https://youtube.com/istanbulyouthsummit',
+        telegram: 'https://t.me/istanbulyouthsummit',
+        email: 'mailto:admin@istanbulyouthsummit.com'
+      },
     },
     create: {
       name: 'Istanbul Youth Summit',
@@ -143,6 +173,16 @@ async function main() {
       mission: "To foster cross-cultural understanding and empower youth to take leadership roles in their communities.",
       logoUrl: "https://placehold.co/400x100/E31E24/FFF?text=IYS+Logo",
       bannerUrl: "https://placehold.co/1200x400/E31E24/FFF?text=IYS+Banner",
+      contactPhone: '+6285173386622',
+      contactWhatsapp: '+6285173386622',
+      contactAddress: 'Ngaglik, Sleman, Yogyakarta, Indonesia',
+      socialMediaLinks: {
+        instagram: 'https://instagram.com/istanbulyouthsummit',
+        tiktok: 'https://tiktok.com/@istanbulyouthsummit',
+        youtube: 'https://youtube.com/istanbulyouthsummit',
+        telegram: 'https://t.me/istanbulyouthsummit',
+        email: 'mailto:admin@istanbulyouthsummit.com'
+      },
     },
   });
   console.log(`✅ Brand created/updated: ${iysBrand.name}`);
@@ -181,7 +221,40 @@ async function main() {
   // YBB Settings
   await prisma.programCategorySetting.upsert({
     where: { programCategoryId: ybbBrand.id },
-    update: {},
+    update: {
+      footerNavigation: [
+        {
+          title: "Programs",
+          items: [
+            { label: "YBB Ambassador 2025", url: "/programs/ybb-ambassador-2025" },
+            { label: "Istanbul Youth Summit", url: "https://istanyouthsummit.com" }
+          ]
+        },
+        {
+          title: "About",
+          items: [
+            { label: "About Us", url: "/about" },
+            { label: "Contact", url: "/contact" }
+          ]
+        },
+        {
+            title: "Legal",
+            items: [
+                { label: "Privacy Policy", url: "/privacy" },
+                { label: "Terms of Service", url: "/terms" }
+            ]
+        },
+        {
+            title: "Connect",
+            items: [
+                { label: "Instagram", url: "https://instagram.com/youthbreaktheboundaries" },
+                { label: "TikTok", url: "https://tiktok.com/@youthbreaktheboundaries" },
+                { label: "YouTube", url: "https://youtube.com/youthbreaktheboundaries" },
+                { label: "Telegram", url: "https://t.me/youthbreaktheboundaries" }
+            ]
+        }
+      ]
+    },
     create: {
       programCategoryId: ybbBrand.id,
       isMaintenanceMode: false,
@@ -207,6 +280,15 @@ async function main() {
                 { label: "Privacy Policy", url: "/privacy" },
                 { label: "Terms of Service", url: "/terms" }
             ]
+        },
+        {
+            title: "Connect",
+            items: [
+                { label: "Instagram", url: "https://instagram.com/youthbreaktheboundaries" },
+                { label: "TikTok", url: "https://tiktok.com/@youthbreaktheboundaries" },
+                { label: "YouTube", url: "https://youtube.com/youthbreaktheboundaries" },
+                { label: "Telegram", url: "https://t.me/youthbreaktheboundaries" }
+            ]
         }
       ]
     }
@@ -216,7 +298,33 @@ async function main() {
   // IYS Settings
   await prisma.programCategorySetting.upsert({
     where: { programCategoryId: iysBrand.id },
-    update: {},
+    update: {
+      footerNavigation: [
+        {
+          title: "Quick Links",
+          items: [
+            { label: "Home", url: "/" },
+            { label: "Programs", url: "/programs" }
+          ]
+        },
+        {
+            title: "Support",
+            items: [
+                { label: "FAQ", url: "/faq" },
+                { label: "Contact Support", url: "/support" }
+            ]
+        },
+        {
+            title: "Connect",
+            items: [
+                { label: "Instagram", url: "https://instagram.com/istanbulyouthsummit" },
+                { label: "TikTok", url: "https://tiktok.com/@istanbulyouthsummit" },
+                { label: "YouTube", url: "https://youtube.com/istanbulyouthsummit" },
+                { label: "Telegram", url: "https://t.me/istanbulyouthsummit" }
+            ]
+        }
+      ]
+    },
     create: {
       programCategoryId: iysBrand.id,
       isMaintenanceMode: false,
@@ -234,6 +342,15 @@ async function main() {
             items: [
                 { label: "FAQ", url: "/faq" },
                 { label: "Contact Support", url: "/support" }
+            ]
+        },
+        {
+            title: "Connect",
+            items: [
+                { label: "Instagram", url: "https://instagram.com/istanbulyouthsummit" },
+                { label: "TikTok", url: "https://tiktok.com/@istanbulyouthsummit" },
+                { label: "YouTube", url: "https://youtube.com/istanbulyouthsummit" },
+                { label: "Telegram", url: "https://t.me/istanbulyouthsummit" }
             ]
         }
       ]

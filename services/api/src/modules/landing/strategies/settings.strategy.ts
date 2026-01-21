@@ -33,7 +33,11 @@ export class SettingsStrategy {
             primary_color: category.primaryColor || undefined,
             support_email: settings?.supportEmail || category.contactEmail || undefined,
             google_analytics_id: settings?.googleAnalyticsId || undefined,
-            pixel_id: settings?.pixelId || undefined
+            pixel_id: settings?.pixelId || undefined,
+            contact_phone: category.contactPhone || undefined,
+            contact_whatsapp: category.contactWhatsapp || undefined,
+            address: category.contactAddress || undefined,
+            social_media: category.socialMediaLinks || undefined
         },
         footer_navigation: (settings?.footerNavigation as any) || [],
         currency: {

@@ -207,6 +207,22 @@ export class HomeStrategy implements ILandingPageStrategy {
           },
         },
         {
+          type: 'program_gallery',
+          content: {
+            title: 'Our Gallery',
+            description: 'See the excitement and best moments from our previous programs.',
+            images: galleryImages.slice(0, 6).map((img) => ({
+              id: img.id,
+              url: img.imageUrl,
+              caption: img.title,
+            })),
+            cta: {
+              label: 'See More',
+              url: '/gallery',
+            },
+          },
+        },
+        {
           type: 'program_highlight_videos',
           content: {
             title: 'Experience Our Program in Action',
