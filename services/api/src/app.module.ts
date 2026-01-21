@@ -13,6 +13,7 @@ import { BrandsModule } from '@modules/brands/brands.module';
 import { FilesModule } from '@modules/files/files.module';
 import { HealthModule } from '@modules/health/health.module';
 import { LandingModule } from '@modules/landing/landing.module';
+import { MetadataModule } from '@modules/metadata/metadata.module';
 import { ParticipantsModule } from '@modules/participants/participants.module';
 import { PaymentsModule } from '@modules/payments/payments.module';
 import { ProgramsModule } from '@modules/programs/programs.module';
@@ -43,6 +44,7 @@ import { UsersModule } from '@modules/users/users.module';
     FilesModule,
     HealthModule,
     LandingModule,
+    MetadataModule,
     ParticipantsModule,
     PaymentsModule,
     ProgramsModule,
