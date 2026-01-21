@@ -22,10 +22,13 @@ COPY tsconfig.json ./
 # Copy source code
 COPY src ./src
 
+# Copy and set up entrypoint script
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
 # Expose port
 EXPOSE 4000
 
-# Start in development mode with watch
-# Generate Prisma Client at runtime to ensure compatibility with the volume-mounted code
-# Also run migrations to ensure DB is up to date
-CMD ["sh", "-c", "npx prisma generate && npx prisma migrate deploy && npm run start:dev"]
+# Use entrypoint to run migrations before starting app
+ENTRYPOINT ["/docker-entrypoint.sh"]
+CMD ["npm", "run", "start:dev"]
