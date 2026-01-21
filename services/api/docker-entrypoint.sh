@@ -24,10 +24,8 @@ if [ $EXIT_CODE -ne 0 ]; then
   fi
 fi
 
-# Note: In a normal deployment where migration succeeds, we might want to ensure 
-# seed data (idempotent updates) is applied. Uncomment below if desired:
-# echo "🌱 Running seed script to ensure reference data..."
-# node dist/prisma/seed.js
+echo "🌱 Running seed script to ensure reference data..."
+node dist/prisma/seed.js
 
 echo "✅ Database ready!"
 
