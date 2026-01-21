@@ -9,8 +9,7 @@ COPY package*.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci
 
 COPY . .
-COPY . .
-RUN npx prisma generate
+RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" npx prisma generate
 RUN npm run build
 RUN npm run build:seed
 
@@ -35,7 +34,7 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
 
 # Generate Prisma Client (if needed at runtime, otherwise run in build)
-RUN npx prisma generate
+RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" npx prisma generate
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /docker-entrypoint.sh
