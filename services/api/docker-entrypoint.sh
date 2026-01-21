@@ -15,12 +15,9 @@ if [ $EXIT_CODE -ne 0 ]; then
   # Only automatically reset in non-production or if explicitly allowed to avoid data loss in prod
   if [ "$NODE_ENV" != "production" ]; then
       echo "🔄 Attempting to reset database to rescue state (non-production)..."
-      # Using --skip-seed because we will run seed manually with the compiled file
-      npx prisma migrate reset --force --skip-seed
+      # This will also run the seed script defined in package.json (which we updated to use the compiled JS)
+      npx prisma migrate reset --force
       npx prisma migrate deploy
-      
-      echo "🌱 Seeding database after reset..."
-      node dist/prisma/seed.js
   else
       echo "❌ Migration failed in PRODUCTION. Manual intervention required to prevent data loss."
       exit $EXIT_CODE
