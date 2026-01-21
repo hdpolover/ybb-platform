@@ -55,6 +55,7 @@ model ProgramCategory {
   settings            ProgramCategorySetting?
   socialFeeds         ProgramSocialFeed[]
   activeAdmins        AdminProgramCategory[]
+  legalDocuments      LegalDocument[]
 
   @@index([slug])
   @@index([isActive])

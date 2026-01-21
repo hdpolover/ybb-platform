@@ -1,0 +1,29 @@
+// ============================================================================
+// LEGAL COMPLIANCE & DOCUMENTS
+// ============================================================================
+
+model LegalDocument {
+  id                String          @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programCategoryId String          @map("program_category_id") @db.Uuid
+  
+  title             String          @db.VarChar(255) // "Privacy Policy", "Terms of Service"
+  slug              String          @db.VarChar(255) // "privacy-policy", "terms-of-service"
+  content           String          @db.Text
+  version           String          @default("1.0") @db.VarChar(20)
+  
+  description       String?         @db.Text
+  isRequired        Boolean         @default(false) @map("is_required") // If true, users might need to explicitly agree
+  isActive          Boolean         @default(true) @map("is_active")
+  publishedAt       DateTime?       @default(now()) @map("published_at") @db.Timestamptz(6)
+  
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  programCategory   ProgramCategory @relation(fields: [programCategoryId], references: [id], onDelete: Cascade)
+
+  @@index([programCategoryId])
+  @@index([slug])
+  @@unique([programCategoryId, slug, version])
+  @@map("legal_documents")
+}
