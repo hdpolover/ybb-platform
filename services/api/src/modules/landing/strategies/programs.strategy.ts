@@ -54,7 +54,6 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                 }
             }
         });
-    }
 
     // Fallback: If no active program, find the latest published one (even if closed/completed)
     if (!currentProgram) {
@@ -67,6 +66,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
             include: {
                 objectives: { where: { isActive: true }, orderBy: { order: 'asc' } },
                 subthemes: { where: { isActive: true }, orderBy: { order: 'asc' } },
+                resources: { where: { type: 'guide', isActive: true } },
                 faqs: { where: { isActive: true }, take: 5, orderBy: { order: 'asc' } },
                 timeline: { where: { isActive: true }, orderBy: { order: 'asc' } },
                 schedules: { where: { isActive: true }, orderBy: { order: 'asc' } },
@@ -494,7 +494,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
 
     // 4. Rundown (Program Schedules)
     // Grouping by day for better structure
-    const schedulesByDay = program.schedules.reduce((acc, curr) => {
+    const schedulesByDay = program.schedules.reduce((acc: Record<string, any[]>, curr) => {
         const day = curr.day || 'Unscheduled';
         if (!acc[day]) acc[day] = [];
         acc[day].push({
