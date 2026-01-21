@@ -9,6 +9,7 @@ RUN apk add --no-cache openssl
 COPY package*.json ./
 COPY tsconfig.json ./
 COPY prisma ./prisma/
+COPY prisma.config.ts ./
 
 # Install dependencies
 RUN npm ci
@@ -35,6 +36,7 @@ ENV NODE_ENV=production
 # Copy package files
 COPY package*.json ./
 COPY prisma ./prisma/
+COPY prisma.config.ts ./
 
 # Install only production dependencies
 RUN npm ci --only=production

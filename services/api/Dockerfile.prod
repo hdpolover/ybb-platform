@@ -32,6 +32,7 @@ RUN npm prune --production
 COPY --from=builder /app/dist ./dist
 # Copy prisma schema if it exists in expected location for generating client
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 
 # Generate Prisma Client (if needed at runtime, otherwise run in build)
 RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" npx prisma generate
