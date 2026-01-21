@@ -1,0 +1,50 @@
+services:
+  # =========================================
+  # File Service (Production)
+  # =========================================
+  file:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ybb-file
+    restart: always
+    ports:
+      - "8001:8001"
+    env_file:
+      - .env.prod
+    depends_on:
+      postgres-file:
+        condition: service_healthy
+    networks:
+      - ybb-network
+
+  postgres-file:
+    image: postgres:15-alpine
+    container_name: ybb-postgres-file
+    restart: always
+    env_file:
+      - .env.prod
+    environment:
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_file_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+    networks:
+      - ybb-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  ybb-network:
+    name: ybb-network
+    external: true
+
+volumes:
+  postgres_file_data:

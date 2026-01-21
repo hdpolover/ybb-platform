@@ -1,0 +1,21 @@
+services:
+  # =========================================
+  # Admin Dashboard (Staging)
+  # =========================================
+  admin-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: ybb-admin-dashboard-staging
+    restart: always
+    ports:
+      - "4001:4001"
+    env_file:
+      - .env.staging
+    networks:
+      - ybb-network-staging
+
+networks:
+  ybb-network-staging:
+    name: ybb-network-staging
+    external: true

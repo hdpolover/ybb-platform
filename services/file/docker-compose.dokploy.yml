@@ -1,0 +1,57 @@
+version: "3.8"
+
+services:
+  file:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: ybb-file
+    restart: always
+    environment:
+      PYTHON_ENV: production
+      SERVICE_PORT: 8001
+      # Database
+      DATABASE_URL: postgresql+asyncpg://${DATABASE_USER}:${DATABASE_PASSWORD}@ybb-postgres-file:5432/${DATABASE_NAME}
+      # MinIO (External or Staging) - Usually separate service in Dockploy or SaaS
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+      MINIO_SECURE: "true"
+    depends_on:
+      postgres-file:
+        condition: service_healthy
+    networks:
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=dokploy-network"
+      - "traefik.http.routers.ybb-file.rule=${APP_DOMAINS_RULE:-Host(`files.ybbhub.com`)}"
+      - "traefik.http.routers.ybb-file.entrypoints=websecure"
+      - "traefik.http.routers.ybb-file.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ybb-file.loadbalancer.server.port=8001"
+
+  postgres-file:
+    image: postgres:15-alpine
+    container_name: ybb-postgres-file
+    restart: always
+    environment:
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
+    volumes:
+      - postgres_file_data_prod:/var/lib/postgresql/data
+    networks:
+      - dokploy-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  postgres_file_data_prod:

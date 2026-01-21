@@ -1,0 +1,43 @@
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ybb-prometheus
+    restart: always
+    volumes:
+      - ./prometheus/prometheus.prod.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    # Dockploy usually exposes ports or uses internal routing.
+    # We expose internally. Traefik (if used) routes to 9090.
+    ports:
+      - "9090:9090"
+    networks:
+      - ybb-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ybb-grafana
+    restart: always
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - grafana_data:/var/lib/grafana
+    env_file:
+      - .env.prod
+    networks:
+      - ybb-network
+    ports:
+      - "3001:3000"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`monitor.ybbhub.com`)"
+      - "traefik.http.routers.grafana.entrypoints=websecure"
+      - "traefik.http.routers.grafana.tls.certresolver=myresolver"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+
+networks:
+  ybb-network:
+    name: ybb-network
+    external: true
+
+volumes:
+  prometheus_data:
+  grafana_data:

@@ -1,0 +1,41 @@
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ybb-prometheus-staging
+    restart: always
+    volumes:
+      - ./prometheus/prometheus.staging.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data_staging:/prometheus
+    ports:
+      - "9091:9090" # Use distinct port for staging if on same node
+    networks:
+      - ybb-network-staging
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ybb-grafana-staging
+    restart: always
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - grafana_data_staging:/var/lib/grafana
+    env_file:
+      - .env.staging
+    networks:
+      - ybb-network-staging
+    ports:
+      - "3002:3000"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana-staging.rule=Host(`staging-monitor.ybbhub.com`)"
+      - "traefik.http.routers.grafana-staging.entrypoints=websecure"
+      - "traefik.http.routers.grafana-staging.tls.certresolver=myresolver"
+      - "traefik.http.services.grafana-staging.loadbalancer.server.port=3000"
+
+networks:
+  ybb-network-staging:
+    name: ybb-network-staging
+    external: true
+
+volumes:
+  prometheus_data_staging:
+  grafana_data_staging:

@@ -1,0 +1,40 @@
+version: "3.8"
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ybb-prometheus
+    restart: always
+    volumes:
+      - ./prometheus/prometheus.prod.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - dokploy-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ybb-grafana
+    restart: always
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - grafana_data:/var/lib/grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
+    networks:
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=dokploy-network"
+      - "traefik.http.routers.ybb-grafana.rule=${APP_DOMAINS_RULE:-Host(`monitor.ybbhub.com`)}"
+      - "traefik.http.routers.ybb-grafana.entrypoints=websecure"
+      - "traefik.http.routers.ybb-grafana.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ybb-grafana.loadbalancer.server.port=3000"
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  prometheus_data:
+  grafana_data:
