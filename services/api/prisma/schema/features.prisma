@@ -62,18 +62,18 @@ model SystemAnnouncement {
 }
 
 model UserAnnouncementRead {
-  id             String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  userId         String @map("user_id") @db.Uuid
-  announcementId String @map("announcement_id") @db.Uuid
+  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  announcementId String   @map("announcement_id") @db.Uuid
   readAt         DateTime @default(now()) @map("read_at") @db.Timestamptz(6)
-  
-  // Added fields to match code
-  lastSeenAt     DateTime? @map("last_seen_at") @db.Timestamptz(6)
-  isDismissed    Boolean   @default(false) @map("is_dismissed")
-  dismissedAt    DateTime? @map("dismissed_at") @db.Timestamptz(6)
 
-  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  announcement   SystemAnnouncement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  // Added fields to match code
+  lastSeenAt  DateTime? @map("last_seen_at") @db.Timestamptz(6)
+  isDismissed Boolean   @default(false) @map("is_dismissed")
+  dismissedAt DateTime? @map("dismissed_at") @db.Timestamptz(6)
+
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  announcement SystemAnnouncement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
 
   @@unique([userId, announcementId])
   @@index([userId])
@@ -129,10 +129,10 @@ model UserNotification {
 }
 
 model SupportTicket {
-  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  participantId String   @map("participant_id") @db.Uuid
-  assignedTo    String?  @map("assigned_to") @db.Uuid
-  programId     String?  @map("program_id") @db.Uuid
+  id            String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  participantId String  @map("participant_id") @db.Uuid
+  assignedTo    String? @map("assigned_to") @db.Uuid
+  programId     String? @map("program_id") @db.Uuid
 
   // Ticket Details
   ticketNumber String  @unique @map("ticket_number") @db.VarChar(20) // e.g., TKT-2024-001234
@@ -156,7 +156,7 @@ model SupportTicket {
   // Feedback
   satisfactionRating Int?    @map("satisfaction_rating") @db.SmallInt // 1-5
   feedback           String? @db.Text
-  
+
   // Audit
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)

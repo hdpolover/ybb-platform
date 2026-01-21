@@ -4,34 +4,35 @@
 
 // Authentication Providers - Configurable OAuth/Auth Providers
 model AuthProvider {
-  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  name        String   @unique @db.VarChar(50) // 'local', 'google', 'facebook', 'apple', etc.
-  displayName String   @map("display_name") @db.VarChar(100) // 'Email & Password', 'Google', 'Facebook'
-  description String?  @db.Text
-  
+  id          String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name        String  @unique @db.VarChar(50) // 'local', 'google', 'facebook', 'apple', etc.
+  displayName String  @map("display_name") @db.VarChar(100) // 'Email & Password', 'Google', 'Facebook'
+  description String? @db.Text
+
   // OAuth Configuration (optional, for OAuth providers)
   clientId     String? @map("client_id") @db.VarChar(255)
   clientSecret String? @map("client_secret") @db.VarChar(255)
   authUrl      String? @map("auth_url") @db.VarChar(500)
   tokenUrl     String? @map("token_url") @db.VarChar(500)
   scopes       Json?   @default("[]") @db.Json // ["email", "profile"]
-  
+
   // Status
-  isActive     Boolean @default(true) @map("is_active")
-  isOAuth      Boolean @default(false) @map("is_oauth") // true for OAuth providers, false for local
-  
+  isActive Boolean @default(true) @map("is_active")
+  isOAuth  Boolean @default(false) @map("is_oauth") // true for OAuth providers, false for local
+
   // UI
-  icon         String? @db.VarChar(100) // Icon identifier or URL
-  buttonColor  String? @map("button_color") @db.VarChar(7) // Hex color for button
-  order        Int     @default(0) // Display order
-  
+  icon        String? @db.VarChar(100) // Icon identifier or URL
+  buttonColor String? @map("button_color") @db.VarChar(7) // Hex color for button
+  order       Int     @default(0) // Display order
+
   // Audit
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
-  
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
   // Relations
-  identities   UserIdentity[]
-  
+  identities UserIdentity[]
+
   @@index([name])
   @@index([isActive])
   @@index([order])
@@ -71,30 +72,30 @@ model User {
   legacyType String? @map("legacy_type") @db.VarChar(20)
 
   // Relations
-  programCategory       ProgramCategory          @relation(fields: [programCategoryId], references: [id])
-  identities            UserIdentity[]           // Multiple auth providers
-  admin                 Admin?
-  participant           Participant?
-  ambassador            Ambassador?
-  preferences           UserPreference?
-  sessions              UserSession[]
-  securityLogs          UserSecurityLog[]
-  notifications         UserNotification[]
-  privacyConsents       UserPrivacyConsent[]
-  blockedAccounts       UserBlockedAccount[]
-  activityLogs          UserActivityLog[]
-  deletionRequests      AccountDeletionRequest[]
-  announcementReads     UserAnnouncementRead[]
+  programCategory          ProgramCategory          @relation(fields: [programCategoryId], references: [id])
+  identities               UserIdentity[] // Multiple auth providers
+  admin                    Admin?
+  participant              Participant?
+  ambassador               Ambassador?
+  preferences              UserPreference?
+  sessions                 UserSession[]
+  securityLogs             UserSecurityLog[]
+  notifications            UserNotification[]
+  privacyConsents          UserPrivacyConsent[]
+  blockedAccounts          UserBlockedAccount[]
+  activityLogs             UserActivityLog[]
+  deletionRequests         AccountDeletionRequest[]
+  announcementReads        UserAnnouncementRead[]
   // applications          ParticipantApplication[] // Main submission relation (Moved to Participant)
-  editHistoryChangedBy  ApplicationEditHistory[] @relation("EditHistoryChangedBy")
-  deletedParticipants   Participant[]            @relation("ParticipantDeleter")
-  deletedApplications   ParticipantApplication[] @relation("ApplicationDeleter")
-  deletedAmbassadors    Ambassador[]             @relation("AmbassadorDeleter")
-  withdrawnApplications ParticipantApplication[] @relation("ApplicationWithdrawer")
+  editHistoryChangedBy     ApplicationEditHistory[] @relation("EditHistoryChangedBy")
+  deletedParticipants      Participant[]            @relation("ParticipantDeleter")
+  deletedApplications      ParticipantApplication[] @relation("ApplicationDeleter")
+  deletedAmbassadors       Ambassador[]             @relation("AmbassadorDeleter")
+  withdrawnApplications    ParticipantApplication[] @relation("ApplicationWithdrawer")
   awardedParticipantAwards ParticipantAward[]
-  payments              PaymentTransaction[]
-  files                 File[]
-  waitlist              ProgramWaitlist[]
+  payments                 PaymentTransaction[]
+  files                    File[]
+  waitlist                 ProgramWaitlist[]
 
   @@unique([email, programCategoryId])
   @@index([email])
@@ -107,29 +108,30 @@ model User {
 
 // User Authentication Identities - Supports multiple auth providers per user
 model UserIdentity {
-  id            String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  userId        String    @map("user_id") @db.Uuid
-  providerId    String    @map("provider_id") @db.Uuid // Reference to AuthProvider
-  providerUserId String?  @map("provider_user_id") @db.VarChar(255) // Provider's user ID (null for local)
-  providerEmail String?   @map("provider_email") @db.VarChar(255) // Email from provider
-  
+  id             String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId         String  @map("user_id") @db.Uuid
+  providerId     String  @map("provider_id") @db.Uuid // Reference to AuthProvider
+  providerUserId String? @map("provider_user_id") @db.VarChar(255) // Provider's user ID (null for local)
+  providerEmail  String? @map("provider_email") @db.VarChar(255) // Email from provider
+
   // OAuth tokens (optional, for future use)
-  accessToken   String?   @map("access_token") @db.Text
-  refreshToken  String?   @map("refresh_token") @db.Text
-  tokenExpiry   DateTime? @map("token_expiry") @db.Timestamptz(6)
-  
+  accessToken  String?   @map("access_token") @db.Text
+  refreshToken String?   @map("refresh_token") @db.Text
+  tokenExpiry  DateTime? @map("token_expiry") @db.Timestamptz(6)
+
   // Metadata
-  isPrimary     Boolean   @default(false) @map("is_primary") // Primary login method
-  lastUsedAt    DateTime? @map("last_used_at") @db.Timestamptz(6)
-  
+  isPrimary  Boolean   @default(false) @map("is_primary") // Primary login method
+  lastUsedAt DateTime? @map("last_used_at") @db.Timestamptz(6)
+
   // Timestamps
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
   // Relations
   user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   provider AuthProvider @relation(fields: [providerId], references: [id], onDelete: Restrict)
-  
+
   @@unique([userId, providerId]) // One provider per user
   @@unique([providerId, providerUserId]) // Unique provider-providerUserId combination
   @@index([userId])
@@ -263,7 +265,8 @@ model UserBlockedAccount {
   notes           String? @db.Text
 
   // Status
-  isActive Boolean @default(true) @map("is_active")
+  isActive  Boolean   @default(true) @map("is_active")
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
   user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)

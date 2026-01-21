@@ -12,6 +12,7 @@ model ProgramFaq {
   isActive  Boolean     @default(true) @map("is_active")
   createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime?   @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
   program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
@@ -23,28 +24,29 @@ model ProgramFaq {
 }
 
 model ProgramTimeline {
-  id             String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId      String        @map("program_id") @db.Uuid
-  date           DateTime      @db.Timestamptz(6)
-  endDate        DateTime?     @map("end_date") @db.Timestamptz(6)
-  title          String        @db.VarChar(255)
-  description    String?       @db.Text
-  icon           String?       @db.VarChar(100)
-  type           TimelineType  @default(custom)
-  
+  id          String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId   String       @map("program_id") @db.Uuid
+  date        DateTime     @db.Timestamptz(6)
+  endDate     DateTime?    @map("end_date") @db.Timestamptz(6)
+  title       String       @db.VarChar(255)
+  description String?      @db.Text
+  icon        String?      @db.VarChar(100)
+  type        TimelineType @default(custom)
+
   // Dynamic Configuration
   completionType   TimelineCompletionType @default(date_passed) @map("completion_type")
-  completionConfig Json                   @default("{}") @map("completion_config") @db.Json 
+  completionConfig Json                   @default("{}") @map("completion_config") @db.Json
   // Config Examples:
   // status_change: { "status": "accepted" }
   // payment_completed: { "feeType": "registration_fee" }
   // document_uploaded: { "requirementId": "uuid..." }
-  
+
   targetAudience PricingTarget @default(all) @map("target_audience")
   order          Int           @default(0)
   isActive       Boolean       @default(true) @map("is_active")
   createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime?     @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
   program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
@@ -56,19 +58,20 @@ model ProgramTimeline {
 }
 
 model ProgramSchedule {
-  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId   String   @map("program_id") @db.Uuid
-  day         String   @db.VarChar(100) // e.g., "Day 1", "Monday", "March 15"
-  startTime   String?  @map("start_time") @db.VarChar(20) // e.g., "09:00"
-  endTime     String?  @map("end_time") @db.VarChar(20) // e.g., "17:00"
-  activity    String   @db.VarChar(255)
-  description String?  @db.Text
-  location    String?  @db.VarChar(255)
-  speaker     String?  @db.VarChar(255) // Speaker name if applicable
-  order       Int      @default(0)
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId   String    @map("program_id") @db.Uuid
+  day         String    @db.VarChar(100) // e.g., "Day 1", "Monday", "March 15"
+  startTime   String?   @map("start_time") @db.VarChar(20) // e.g., "09:00"
+  endTime     String?   @map("end_time") @db.VarChar(20) // e.g., "17:00"
+  activity    String    @db.VarChar(255)
+  description String?   @db.Text
+  location    String?   @db.VarChar(255)
+  speaker     String?   @db.VarChar(255) // Speaker name if applicable
+  order       Int       @default(0)
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
   program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
@@ -79,20 +82,21 @@ model ProgramSchedule {
 }
 
 model ProgramSpeaker {
-  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId   String   @map("program_id") @db.Uuid
-  name        String   @db.VarChar(255)
-  title       String?  @db.VarChar(255) // Job title or role
-  organization String? @db.VarChar(255)
-  bio         String?  @db.Text
-  photoUrl    String?  @map("photo_url") @db.VarChar(500)
-  email       String?  @db.VarChar(255)
-  linkedinUrl String?  @map("linkedin_url") @db.VarChar(500)
-  twitterUrl  String?  @map("twitter_url") @db.VarChar(500)
-  order       Int      @default(0)
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id           String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId    String    @map("program_id") @db.Uuid
+  name         String    @db.VarChar(255)
+  title        String?   @db.VarChar(255) // Job title or role
+  organization String?   @db.VarChar(255)
+  bio          String?   @db.Text
+  photoUrl     String?   @map("photo_url") @db.VarChar(500)
+  email        String?   @db.VarChar(255)
+  linkedinUrl  String?   @map("linkedin_url") @db.VarChar(500)
+  twitterUrl   String?   @map("twitter_url") @db.VarChar(500)
+  order        Int       @default(0)
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
   program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
@@ -103,17 +107,18 @@ model ProgramSpeaker {
 }
 
 model ProgramGallery {
-  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId   String   @map("program_id") @db.Uuid
-  imageUrl    String   @map("image_url") @db.VarChar(500)
-  videoUrl    String?  @map("video_url") @db.VarChar(500) // For YouTube/Vimeo links
-  title       String?  @db.VarChar(255)
-  description String?  @db.Text
-  type        String   @default("image") @db.VarChar(50) // image, video
-  order       Int      @default(0)
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId   String    @map("program_id") @db.Uuid
+  imageUrl    String    @map("image_url") @db.VarChar(500)
+  videoUrl    String?   @map("video_url") @db.VarChar(500) // For YouTube/Vimeo links
+  title       String?   @db.VarChar(255)
+  description String?   @db.Text
+  type        String    @default("image") @db.VarChar(50) // image, video
+  order       Int       @default(0)
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
   program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
@@ -125,27 +130,28 @@ model ProgramGallery {
 }
 
 model ProgramTestimonial {
-  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId     String?  @map("program_id") @db.Uuid
-  programCategoryId String? @map("program_category_id") @db.Uuid
-  name          String   @db.VarChar(255)
-  role          String?  @db.VarChar(255) // e.g., "Participant 2024", "Alumni"
-  company       String?  @db.VarChar(255)
-  testimonial   String   @db.Text
-  category      String   @default("alumni") @db.VarChar(50) // alumni, speaker, mentor, partner
-  type          String   @default("text") @db.VarChar(20) // text, video
-  videoUrl      String?  @map("video_url") @db.VarChar(500) // For video testimonials
-  thumbnailUrl  String?  @map("thumbnail_url") @db.VarChar(500) // Video thumbnail
-  avatarUrl     String?  @map("avatar_url") @db.VarChar(500)
-  rating        Int?     @db.SmallInt // Optional 1-5 rating
-  isFeatured    Boolean  @default(false) @map("is_featured") // Highlight on homepage
-  isActive      Boolean  @default(true) @map("is_active")
-  order         Int      @default(0)
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId         String?   @map("program_id") @db.Uuid
+  programCategoryId String?   @map("program_category_id") @db.Uuid
+  name              String    @db.VarChar(255)
+  role              String?   @db.VarChar(255) // e.g., "Participant 2024", "Alumni"
+  company           String?   @db.VarChar(255)
+  testimonial       String    @db.Text
+  category          String    @default("alumni") @db.VarChar(50) // alumni, speaker, mentor, partner
+  type              String    @default("text") @db.VarChar(20) // text, video
+  videoUrl          String?   @map("video_url") @db.VarChar(500) // For video testimonials
+  thumbnailUrl      String?   @map("thumbnail_url") @db.VarChar(500) // Video thumbnail
+  avatarUrl         String?   @map("avatar_url") @db.VarChar(500)
+  rating            Int?      @db.SmallInt // Optional 1-5 rating
+  isFeatured        Boolean   @default(false) @map("is_featured") // Highlight on homepage
+  isActive          Boolean   @default(true) @map("is_active")
+  order             Int       @default(0)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
-  program Program? @relation(fields: [programId], references: [id], onDelete: Cascade)
+  program         Program?         @relation(fields: [programId], references: [id], onDelete: Cascade)
   programCategory ProgramCategory? @relation(fields: [programCategoryId], references: [id], onDelete: Cascade)
 
   @@index([programId])
@@ -169,6 +175,7 @@ model Sponsor {
   order             Int       @default(0)
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
   programCategory ProgramCategory? @relation(fields: [programCategoryId], references: [id], onDelete: Cascade)
@@ -181,17 +188,18 @@ model Sponsor {
 }
 
 model EmailTemplate {
-  id                String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programCategoryId String?  @map("program_category_id") @db.Uuid
-  programId         String?  @map("program_id") @db.Uuid
-  name              String   @db.VarChar(100)
-  type              String   @db.VarChar(50) // welcome, application_received, accepted, rejected, payment_reminder, etc
-  subject           String   @db.VarChar(255)
-  body              String   @db.Text // HTML content
-  variables         Json?    @default("[]") @db.Json // ["{{name}}", "{{program_name}}", "{{deadline}}"]
-  isActive          Boolean  @default(true) @map("is_active")
-  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programCategoryId String?   @map("program_category_id") @db.Uuid
+  programId         String?   @map("program_id") @db.Uuid
+  name              String    @db.VarChar(100)
+  type              String    @db.VarChar(50) // welcome, application_received, accepted, rejected, payment_reminder, etc
+  subject           String    @db.VarChar(255)
+  body              String    @db.Text // HTML content
+  variables         Json?     @default("[]") @db.Json // ["{{name}}", "{{program_name}}", "{{deadline}}"]
+  isActive          Boolean   @default(true) @map("is_active")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
   programCategory ProgramCategory? @relation(fields: [programCategoryId], references: [id], onDelete: Cascade)
@@ -204,20 +212,21 @@ model EmailTemplate {
 }
 
 model ProgramTeam {
-  id                String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programCategoryId String?  @map("program_category_id") @db.Uuid
-  programId         String?  @map("program_id") @db.Uuid
-  name              String   @db.VarChar(255)
-  role              String   @db.VarChar(100) // Program Director, Coordinator, Marketing Lead
-  bio               String?  @db.Text
-  photoUrl          String?  @map("photo_url") @db.VarChar(500)
-  email             String?  @db.VarChar(255)
-  phone             String?  @db.VarChar(50)
-  linkedinUrl       String?  @map("linkedin_url") @db.VarChar(500)
-  order             Int      @default(0)
-  isActive          Boolean  @default(true) @map("is_active")
-  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programCategoryId String?   @map("program_category_id") @db.Uuid
+  programId         String?   @map("program_id") @db.Uuid
+  name              String    @db.VarChar(255)
+  role              String    @db.VarChar(100) // Program Director, Coordinator, Marketing Lead
+  bio               String?   @db.Text
+  photoUrl          String?   @map("photo_url") @db.VarChar(500)
+  email             String?   @db.VarChar(255)
+  phone             String?   @db.VarChar(50)
+  linkedinUrl       String?   @map("linkedin_url") @db.VarChar(500)
+  order             Int       @default(0)
+  isActive          Boolean   @default(true) @map("is_active")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
   programCategory ProgramCategory? @relation(fields: [programCategoryId], references: [id], onDelete: Cascade)
@@ -230,18 +239,19 @@ model ProgramTeam {
 }
 
 model ProgramPartner {
-  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId   String   @map("program_id") @db.Uuid
-  name        String   @db.VarChar(255)
-  type        String   @db.VarChar(50) // university, ngo, government, venue, speaker_bureau
-  role        String?  @db.VarChar(255) // Venue Provider, Knowledge Partner
-  logoUrl     String?  @map("logo_url") @db.VarChar(500)
-  websiteUrl  String?  @map("website_url") @db.VarChar(500)
-  description String?  @db.Text
-  order       Int      @default(0)
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId   String    @map("program_id") @db.Uuid
+  name        String    @db.VarChar(255)
+  type        String    @db.VarChar(50) // university, ngo, government, venue, speaker_bureau
+  role        String?   @db.VarChar(255) // Venue Provider, Knowledge Partner
+  logoUrl     String?   @map("logo_url") @db.VarChar(500)
+  websiteUrl  String?   @map("website_url") @db.VarChar(500)
+  description String?   @db.Text
+  order       Int       @default(0)
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
   program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
@@ -253,20 +263,21 @@ model ProgramPartner {
 }
 
 model ProgramResource {
-  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId   String   @map("program_id") @db.Uuid
-  title       String   @db.VarChar(255)
-  description String?  @db.Text
-  fileUrl     String   @map("file_url") @db.VarChar(500)
-  fileSize    BigInt?  @map("file_size") // In bytes
-  fileType    String?  @map("file_type") @db.VarChar(50) // pdf, docx, pptx
-  type        String   @db.VarChar(50) // brochure, guide, presentation, handbook, media_kit
-  isPublic    Boolean  @default(true) @map("is_public") // Visible before login
-  downloads   Int      @default(0) // Track download count
-  order       Int      @default(0)
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId   String    @map("program_id") @db.Uuid
+  title       String    @db.VarChar(255)
+  description String?   @db.Text
+  fileUrl     String    @map("file_url") @db.VarChar(500)
+  fileSize    BigInt?   @map("file_size") // In bytes
+  fileType    String?   @map("file_type") @db.VarChar(50) // pdf, docx, pptx
+  type        String    @db.VarChar(50) // brochure, guide, presentation, handbook, media_kit
+  isPublic    Boolean   @default(true) @map("is_public") // Visible before login
+  downloads   Int       @default(0) // Track download count
+  order       Int       @default(0)
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
   program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
@@ -279,18 +290,19 @@ model ProgramResource {
 }
 
 model ProgramAnnouncement {
-  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId      String   @map("program_id") @db.Uuid
-  title          String   @db.VarChar(255)
-  content        String   @db.Text
-  imageUrl       String?  @map("image_url") @db.VarChar(500)
-  targetAudience String   @default("all") @map("target_audience") @db.VarChar(50) // all, applicants, accepted, rejected, participants
-  sendEmail      Boolean  @default(false) @map("send_email")
-  isPinned       Boolean  @default(false) @map("is_pinned")
-  publishDate    DateTime @default(now()) @map("publish_date") @db.Timestamptz(6)
-  isActive       Boolean  @default(true) @map("is_active")
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id             String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId      String    @map("program_id") @db.Uuid
+  title          String    @db.VarChar(255)
+  content        String    @db.Text
+  imageUrl       String?   @map("image_url") @db.VarChar(500)
+  targetAudience String    @default("all") @map("target_audience") @db.VarChar(50) // all, applicants, accepted, rejected, participants
+  sendEmail      Boolean   @default(false) @map("send_email")
+  isPinned       Boolean   @default(false) @map("is_pinned")
+  publishDate    DateTime  @default(now()) @map("publish_date") @db.Timestamptz(6)
+  isActive       Boolean   @default(true) @map("is_active")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
   program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
@@ -303,14 +315,15 @@ model ProgramAnnouncement {
 }
 
 model CertificateTemplate {
-  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId   String   @map("program_id") @db.Uuid
-  name        String   @db.VarChar(255)
-  templateUrl String   @map("template_url") @db.VarChar(500) // Background image/PDF
-  fields      Json     @default("[]") @db.Json // [{name: "participant_name", x: 100, y: 200, fontSize: 24}]
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId   String    @map("program_id") @db.Uuid
+  name        String    @db.VarChar(255)
+  templateUrl String    @map("template_url") @db.VarChar(500) // Background image/PDF
+  fields      Json      @default("[]") @db.Json // [{name: "participant_name", x: 100, y: 200, fontSize: 24}]
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
   program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
@@ -342,15 +355,16 @@ model ProgramAward {
   certificateTemplateId String? @map("certificate_template_id") @db.Uuid
 
   // Status
-  isActive  Boolean  @default(true) @map("is_active")
-  order     Int      @default(0)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
-  legacyId  Int?     @unique @map("legacy_id")
+  isActive  Boolean   @default(true) @map("is_active")
+  order     Int       @default(0)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  legacyId  Int?      @unique @map("legacy_id")
 
   // Relations
-  program      Program            @relation(fields: [programId], references: [id], onDelete: Cascade)
-  recipients   ParticipantAward[]
+  program    Program            @relation(fields: [programId], references: [id], onDelete: Cascade)
+  recipients ParticipantAward[]
 
   @@index([programId])
   @@index([category])
@@ -359,8 +373,8 @@ model ProgramAward {
 }
 
 model DocumentTemplate {
-  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId String   @map("program_id") @db.Uuid
+  id        String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId String @map("program_id") @db.Uuid
 
   // Template Info
   name        String               @db.VarChar(255)
@@ -378,11 +392,12 @@ model DocumentTemplate {
   layoutConfig Json @default("{}") @map("layout_config") @db.Json
 
   // Status
-  isActive  Boolean  @default(true) @map("is_active")
-  order     Int      @default(0)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
-  legacyId  Int?     @unique @map("legacy_id")
+  isActive  Boolean   @default(true) @map("is_active")
+  order     Int       @default(0)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  legacyId  Int?      @unique @map("legacy_id")
 
   // Relations
   generatedDocuments ParticipantDocument[]
@@ -394,16 +409,17 @@ model DocumentTemplate {
 }
 
 model ProgramObjective {
-  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId   String   @map("program_id") @db.Uuid
-  description String   @db.Text
-  order       Int      @default(0)
-  
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id          String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId   String @map("program_id") @db.Uuid
+  description String @db.Text
+  order       Int    @default(0)
 
-  program     Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
 
   @@index([programId])
   @@index([order])
@@ -411,17 +427,18 @@ model ProgramObjective {
 }
 
 model ProgramSubtheme {
-  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId   String   @map("program_id") @db.Uuid
-  name        String   @db.VarChar(255)
-  description String?  @db.Text
-  order       Int      @default(0)
-  
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id          String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId   String  @map("program_id") @db.Uuid
+  name        String  @db.VarChar(255)
+  description String? @db.Text
+  order       Int     @default(0)
 
-  program     Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
 
   @@index([programId])
   @@map("program_subthemes")
