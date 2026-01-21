@@ -16,6 +16,7 @@ import { JwtStrategy } from './infrastructure/strategies/jwt.strategy';
 import { JwtAuthGuard } from './infrastructure/guards/jwt-auth.guard';
 import { TokenBlacklistService } from './infrastructure/services/token-blacklist.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { AuthLoggingService } from './application/services/auth-logging.service';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
     JwtStrategy,
     JwtAuthGuard,
     TokenBlacklistService,
+    AuthLoggingService,
   ],
   exports: [JwtAuthGuard, JwtStrategy, TokenBlacklistService, PassportModule],
 })
