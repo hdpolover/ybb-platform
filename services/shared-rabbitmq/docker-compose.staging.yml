@@ -1,0 +1,35 @@
+services:
+  # =========================================
+  # Shared RabbitMQ (Staging)
+  # =========================================
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: ybb-shared-rabbitmq-staging
+    restart: always
+    env_file:
+      - .env.staging
+    ports:
+      - "5675:5672"   # Different host port for Staging if running on same node
+      - "15675:15672" # UI
+    volumes:
+      - rabbitmq_data_staging:/var/lib/rabbitmq
+    networks:
+      - ybb-network-staging
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rabbitmq-staging.rule=Host(`staging-queue.ybbhub.com`)"
+      - "traefik.http.routers.rabbitmq-staging.entrypoints=websecure"
+      - "traefik.http.services.rabbitmq-staging.loadbalancer.server.port=15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+networks:
+  ybb-network-staging:
+    name: ybb-network-staging
+    external: true
+
+volumes:
+  rabbitmq_data_staging:

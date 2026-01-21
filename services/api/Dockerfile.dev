@@ -22,8 +22,13 @@ COPY tsconfig.json ./
 # Copy source code
 COPY src ./src
 
+# Copy and set up entrypoint script
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
 # Expose port
 EXPOSE 4000
 
-# Start in development mode with watch
+# Use entrypoint to run migrations before starting app
+ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["npm", "run", "start:dev"]

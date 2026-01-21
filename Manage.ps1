@@ -1,203 +1,314 @@
 <#
 .SYNOPSIS
-    Windows management script for YBB Platform (Makefile alternative)
+    Management script for YBB Platform services on Windows.
+    This is the Windows equivalent of the root Makefile.
+
 .DESCRIPTION
-    Replicates the functionality of the Makefile for Windows users via PowerShell.
-    This script acts as a unified entry point for development commands.
+    Allows starting, stopping, and managing the lifecycle of the microservices
+    defined in the /services directory.
+
 .EXAMPLE
-    .\Manage.ps1 dev
-.EXAMPLE
-    .\Manage.ps1 help
-.EXAMPLE
-    .\Manage.ps1 logs
+    .\Manage.ps1 start
+    .\Manage.ps1 stop
+    .\Manage.ps1 start api
+    .\Manage.ps1 logs payment
+    .\Manage.ps1 shell api
 #>
 
 param (
-    [Parameter(Position=0)]
-    [string]$Command = "help"
+    [Parameter(Mandatory=$false, Position=0)]
+    [ValidateSet("start", "stop", "restart", "status", "clean", "help", "logs", "ps", "migrate", "shell", "db-shell", "build")]
+    [string]$Command = "help",
+    
+    [Parameter(Mandatory=$false, Position=1)]
+    [string]$Service = "",
+    
+    [Parameter(Mandatory=$false)]
+    [switch]$Build = $false
 )
 
-$ErrorActionPreference = "Continue"
+# List of services matching the Makefile
+$Services = @(
+    "shared-rabbitmq",
+    "api",
+    "payment",
+    "file",
+    "notification",
+    "admin-dashboard",
+    "minimal-admin",
+    "monitoring"
+)
 
-# --- Helper to detect Docker Compose command ---
-function Get-DockerComposeCmd {
-    if (Get-Command "docker-compose" -ErrorAction SilentlyContinue) {
-        return "docker-compose"
-    } elseif (Get-Command "docker" -ErrorAction SilentlyContinue) {
-        # Check if 'docker compose' works
-        $ver = docker compose version 2>&1
-        if ($LASTEXITCODE -eq 0) { return "docker compose" }
-    }
-    Write-Host "Error: Docker options (docker-compose or docker compose) not found." -ForegroundColor Red
-    Write-Host "Please install Docker Desktop for Windows."
-    exit 1
-}
+# Save the root directory to ensure we can return to it
+$RootDir = Get-Location
 
-$DC = Get-DockerComposeCmd
-
-# --- Help Menu ---
-function Show-Help {
-    Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host "  YBB Platform - Manager (Windows)" -ForegroundColor Cyan
-    Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host "Usage: .\Manage.ps1 <command>"
-    Write-Host ""
-    Write-Host "Development:"
-    Write-Host "  dev           Start development environment (uses scripts\dev.ps1)"
-    Write-Host "  stop          Stop all services"
-    Write-Host "  restart       Restart all services"
-    Write-Host "  logs          View logs (ctrl+c to exit)"
-    Write-Host "  build         Build all Docker images"
-    Write-Host "  clean         Remove all containers, volumes, and images"
-    Write-Host "  ps            Show running containers"
-    Write-Host ""
-    Write-Host "Production:"
-    Write-Host "  prod          Start production environment"
-    Write-Host "  prod-build    Build production images"
-    Write-Host ""
-    Write-Host "Database:"
-    Write-Host "  setup         Initial project setup (env, db, migrations)"
-    Write-Host "  migrate       Run API migrations (npm run migration:run)"
-    Write-Host "  seed-db       Seed database with sample data"
-    Write-Host "  backup        Backup database"
-    Write-Host "  restore       Restore database"
-    Write-Host ""
-    Write-Host "Service Logs:"
-    Write-Host "  api-logs, payment-logs, file-logs, dashboard-logs"
-    Write-Host ""
-    Write-Host "Shell Access:"
-    Write-Host "  api-shell, payment-shell, db-shell"
-    Write-Host ""
-}
-
-# --- Command Switch ---
-switch ($Command) {
-    "help" { Show-Help }
+function Start-Services {
+    param(
+        [string]$TargetService = "",
+        [bool]$BuildFirst = $false
+    )
     
-    # --- Development ---
-    "dev" { 
-        if (Test-Path "$PSScriptRoot\scripts\dev.ps1") {
-            & "$PSScriptRoot\scripts\dev.ps1"
-        } else {
-            Write-Host "Starting dev environment..."
-            Invoke-Expression "$DC up -d" 
-        }
-    }
-
-    "stop" {
-        Write-Host "Stopping services..." -ForegroundColor Yellow
-        Invoke-Expression "$DC down"
-    }
-
-    "restart" {
-        Write-Host "Restarting services..." -ForegroundColor Cyan
-        Invoke-Expression "$DC restart"
-    }
-
-    "logs" {
-        Invoke-Expression "$DC logs -f"
-    }
-
-    "build" {
-        Write-Host "Building Docker images..." -ForegroundColor Cyan
-        Invoke-Expression "$DC build"
-    }
-
-    "clean" {
-        Write-Host "⚠️  Cleaning up all containers, volumes, and images..." -ForegroundColor Red
-        Invoke-Expression "$DC down -v --rmi all"
-        Write-Host "Cleanup complete." -ForegroundColor Green
-    }
-
-    "ps" {
-        Invoke-Expression "$DC ps"
-    }
-
-    # --- Production ---
-    "prod" {
-        Write-Host "Starting production environment..." -ForegroundColor Cyan
-        Invoke-Expression "$DC -f docker-compose.prod.yml up -d"
-    }
-
-    "prod-build" {
-        Write-Host "Building Production images..." -ForegroundColor Cyan
-        Invoke-Expression "$DC -f docker-compose.prod.yml build"
-    }
-
-    # --- Database / Setup ---
-    "setup" {
-        if (Test-Path "$PSScriptRoot\scripts\setup.ps1") {
-            & "$PSScriptRoot\scripts\setup.ps1"
-        } else {
-            Write-Error "scripts\setup.ps1 not found."
-        }
-    }
-
-    "migrate" {
-        Write-Host "Running migrations..." -ForegroundColor Cyan
-        # Check if API container is running
-        $status = Invoke-Expression "$DC ps -q api"
-        if (-not $status) {
-            Write-Host "API service is not running. Starting it..."
-            Invoke-Expression "$DC up -d api postgres"
-            Start-Sleep -Seconds 5
-        }
-        Invoke-Expression "$DC exec api npm run migration:run"
-    }
-
-    "seed-db" {
-        if (Test-Path "$PSScriptRoot\scripts\seed-db.ps1") {
-            & "$PSScriptRoot\scripts\seed-db.ps1"
-        } else {
-            Write-Error "scripts\seed-db.ps1 not found."
-        }
-    }
-
-    "backup" {
-        if (Test-Path "$PSScriptRoot\scripts\export-db.ps1") {
-            & "$PSScriptRoot\scripts\export-db.ps1"
-        } else {
-            Write-Error "scripts\export-db.ps1 not found."
-        }
-    }
-
-    "restore" {
-         if (Test-Path "$PSScriptRoot\scripts\import-db.ps1") {
-            & "$PSScriptRoot\scripts\import-db.ps1"
-        } else {
-            Write-Error "scripts\import-db.ps1 not found."
-        }
-    }
-
-    # --- Logs Wrappers ---
-    "api-logs" { Invoke-Expression "$DC logs -f api" }
-    "payment-logs" { Invoke-Expression "$DC logs -f payment-service" }
-    "file-logs" { Invoke-Expression "$DC logs -f file-service" }
-    "dashboard-logs" { Invoke-Expression "$DC logs -f admin-dashboard" }
-    
-    # --- Shell Access ---
-    "api-shell" { Invoke-Expression "$DC exec api sh" }
-    "payment-shell" { Invoke-Expression "$DC exec payment-service sh" }
-    "file-shell" { Invoke-Expression "$DC exec file-service sh" }
-    "db-shell" {
-        # Try to read env vars if not set
-        if (Test-Path .env) {
-            Get-Content .env | Where-Object { $_ -match '=' -and $_ -notmatch '^#' } | ForEach-Object {
-                $parts = $_ -split '=', 2
-                if (-not (Get-Item "Env:\$($parts[0])" -ErrorAction SilentlyContinue)) {
-                    [Environment]::SetEnvironmentVariable($parts[0], $parts[1], "Process")
+    if ($TargetService) {
+        Write-Host "Starting $TargetService..." -ForegroundColor Cyan
+        if (Test-Path "services\$TargetService") {
+            Push-Location "services\$TargetService"
+            try {
+                if ($BuildFirst) {
+                    Write-Host "  Building image..." -ForegroundColor Yellow
+                    docker compose build
                 }
+                docker compose up -d
+            } finally {
+                Pop-Location
+            }
+        } else {
+            Write-Warning "Directory services\$TargetService not found."
+        }
+        return
+    }
+    
+    Write-Host "Starting all services..." -ForegroundColor Green
+    foreach ($service in $Services) {
+        Write-Host ">> Starting $service..." -ForegroundColor Cyan
+        if (Test-Path "services\$service") {
+            Push-Location "services\$service"
+            try {
+                if ($BuildFirst) {
+                    Write-Host "  Building image..." -ForegroundColor Yellow
+                    docker compose build
+                }
+                docker compose up -d
+            } finally {
+                Pop-Location
+            }
+        } else {
+            Write-Warning "Directory services\$service not found."
+        }
+    }
+    Write-Host "All services started!" -ForegroundColor Green
+}
+
+function Stop-Services {
+    param([string]$TargetService = "")
+    
+    if ($TargetService) {
+        Write-Host "Stopping $TargetService..." -ForegroundColor Yellow
+        if (Test-Path "services\$TargetService") {
+            Push-Location "services\$TargetService"
+            try {
+                docker compose down
+            } finally {
+                Pop-Location
             }
         }
-        $DB_USER = if ($Env:DATABASE_USER) { $Env:DATABASE_USER } else { "ybb_user" }
-        $DB_NAME = if ($Env:DATABASE_NAME) { $Env:DATABASE_NAME } else { "ybb_db" }
-        
-        Write-Host "Connecting to database '$DB_NAME' as '$DB_USER'..."
-        Invoke-Expression "$DC exec postgres psql -U $DB_USER -d $DB_NAME"
+        return
     }
+    
+    Write-Host "Stopping all services..." -ForegroundColor Yellow
+    foreach ($service in $Services) {
+        Write-Host ">> Stopping $service..." -ForegroundColor Cyan
+        if (Test-Path "services\$service") {
+            Push-Location "services\$service"
+            try {
+                docker compose down
+            } finally {
+                Pop-Location
+            }
+        }
+    }
+}
 
-    Default {
-        Write-Host "Unknown command: $Command" -ForegroundColor Red
-        Show-Help
+function Get-Status {
+    Write-Host "Checking Service Status..." -ForegroundColor Magenta
+    foreach ($service in $Services) {
+        Write-Host "--- $service ---" -ForegroundColor Cyan
+        if (Test-Path "services\$service") {
+            Push-Location "services\$service"
+            try {
+                docker compose ps
+            } finally {
+                Pop-Location
+            }
+        }
     }
+}
+
+function Clean-Services {
+    Write-Host "Cleaning up (Stop and Remove Volumes)..." -ForegroundColor Red
+    foreach ($service in $Services) {
+        Write-Host ">> Cleaning $service..." -ForegroundColor Cyan
+        if (Test-Path "services\$service") {
+            Push-Location "services\$service"
+            try {
+                docker compose down -v
+            } finally {
+                Pop-Location
+            }
+        }
+    }
+    Write-Host "Cleanup complete!" -ForegroundColor Green
+}
+
+function Build-Services {
+    param([string]$TargetService = "")
+    
+    if ($TargetService) {
+        Write-Host "Building $TargetService..." -ForegroundColor Cyan
+        if (Test-Path "services\$TargetService") {
+            Push-Location "services\$TargetService"
+            try {
+                docker compose build
+            } finally {
+                Pop-Location
+            }
+        } else {
+            Write-Warning "Directory services\$TargetService not found."
+        }
+        return
+    }
+    
+    Write-Host "Building all services..." -ForegroundColor Green
+    foreach ($service in $Services) {
+        Write-Host ">> Building $service..." -ForegroundColor Cyan
+        if (Test-Path "services\$service") {
+            Push-Location "services\$service"
+            try {
+                docker compose build
+            } finally {
+                Pop-Location
+            }
+        } else {
+            Write-Warning "Directory services\$service not found."
+        }
+    }
+    Write-Host "Build complete!" -ForegroundColor Green
+}
+
+function Show-Logs-Help {
+    param([string]$TargetService = "")
+    
+    if ($TargetService) {
+        Write-Host "Tailing logs for $TargetService..." -ForegroundColor Yellow
+        if (Test-Path "services\$TargetService") {
+            Push-Location "services\$TargetService"
+            try {
+                docker compose logs -f
+            } finally {
+                Pop-Location
+            }
+        }
+        return
+    }
+    
+    Write-Host "Tailing logs (Ctrl+C to exit)..." -ForegroundColor Yellow
+    Write-Host "For a better experience, we recommend checking individual service logs."
+    Write-Host "Use: .\Manage.ps1 logs <service>"
+    Write-Host ""
+    Write-Host "Available services: $($Services -join ', ')"
+}
+
+function Show-DockerPs {
+    docker ps --format "table {{.Names}}`t{{.Status}}`t{{.Ports}}"
+}
+
+function Run-Migrate {
+    Write-Host "Running Prisma migrations on API service..." -ForegroundColor Cyan
+    docker exec ybb-api npx prisma migrate deploy
+}
+
+function Open-Shell {
+    param([string]$TargetService)
+    
+    if (-not $TargetService) {
+        Write-Host "Please specify a service: .\Manage.ps1 shell <service>" -ForegroundColor Red
+        Write-Host "Available: api, payment, file, notification"
+        return
+    }
+    
+    $containerMap = @{
+        "api" = "ybb-api"
+        "payment" = "ybb-payment"
+        "file" = "ybb-file"
+        "notification" = "ybb-notification"
+        "admin-dashboard" = "ybb-admin-dashboard"
+        "minimal-admin" = "ybb-minimal-admin"
+    }
+    
+    $container = $containerMap[$TargetService]
+    if (-not $container) {
+        Write-Host "Unknown service: $TargetService" -ForegroundColor Red
+        return
+    }
+    
+    Write-Host "Opening shell in $container..." -ForegroundColor Cyan
+    docker exec -it $container sh
+}
+
+function Open-DbShell {
+    Write-Host "Connecting to API database..." -ForegroundColor Cyan
+    docker exec -it ybb-postgres-api psql -U ybb_user -d ybb_db
+}
+
+function Show-Help {
+    Write-Host "YBB Platform (Microservices Edition) - Windows Management Script"
+    Write-Host "----------------------------------------------------------------"
+    Write-Host "Usage: .\Manage.ps1 [command] [service] [-Build]"
+    Write-Host ""
+    Write-Host "Commands:"
+    Write-Host "  start [svc]  - Start all services or a specific service"
+    Write-Host "  stop [svc]   - Stop all services or a specific service"
+    Write-Host "  restart      - Restart all services"
+    Write-Host "  build [svc]  - Build all Docker images or a specific service"
+    Write-Host "  status       - Show status of all services"
+    Write-Host "  ps           - Show all running containers"
+    Write-Host "  logs [svc]   - Show log instructions or tail a specific service"
+    Write-Host "  clean        - Stop and remove all containers and volumes"
+    Write-Host "  migrate      - Run Prisma migrations on API"
+    Write-Host "  shell <svc>  - Open shell in a service container"
+    Write-Host "  db-shell     - Connect to API PostgreSQL database"
+    Write-Host "  help         - Show this help message"
+    Write-Host ""
+    Write-Host "Options:"
+    Write-Host "  -Build       - Build images before starting (use with 'start')"
+    Write-Host ""
+    Write-Host "Services: $($Services -join ', ')"
+    Write-Host ""
+    Write-Host "Examples:"
+    Write-Host "  .\Manage.ps1 start              # Start all services"
+    Write-Host "  .\Manage.ps1 start -Build       # Build and start all services"
+    Write-Host "  .\Manage.ps1 start api          # Start only API"
+    Write-Host "  .\Manage.ps1 start api -Build   # Build and start API"
+    Write-Host "  .\Manage.ps1 build api          # Build only API image"
+    Write-Host "  .\Manage.ps1 clean              # Clean everything (fresh start)"
+    Write-Host "  .\Manage.ps1 logs payment       # Tail payment logs"
+    Write-Host "  .\Manage.ps1 shell api          # Shell into API container"
+    Write-Host ""
+    Write-Host "Fresh Start (clean install):"
+    Write-Host "  .\Manage.ps1 clean"
+    Write-Host "  .\Manage.ps1 start -Build"
+    Write-Host ""
+    Write-Host "Note: API service auto-runs database migrations on startup."
+}
+
+# Main Execution Flow
+try {
+    switch ($Command) {
+        "start"    { Start-Services -TargetService $Service -BuildFirst $Build }
+        "stop"     { Stop-Services -TargetService $Service }
+        "restart"  { Stop-Services; Start-Services -BuildFirst $Build }
+        "build"    { Build-Services -TargetService $Service }
+        "status"   { Get-Status }
+        "ps"       { Show-DockerPs }
+        "clean"    { Clean-Services }
+        "logs"     { Show-Logs-Help -TargetService $Service }
+        "migrate"  { Run-Migrate }
+        "shell"    { Open-Shell -TargetService $Service }
+        "db-shell" { Open-DbShell }
+        "help"     { Show-Help }
+        Default    { Show-Help }
+    }
+}
+catch {
+    Write-Error "An error occurred executing the command: $_"
+    Set-Location $RootDir
 }

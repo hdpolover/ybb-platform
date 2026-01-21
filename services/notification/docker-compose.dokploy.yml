@@ -1,0 +1,34 @@
+version: "3.8"
+
+services:
+  notification:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: ybb-notification
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: 4002
+      # RabbitMQ
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@ybb-shared-rabbitmq:5672/
+      # Email / SMTP Config (Add as needed in Dockploy dashboard)
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+    networks:
+      - dokploy-network
+    # Notification might not need a public domain if it only consumes events
+    # But if it has webhooks or API, we expose it:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=dokploy-network"
+      - "traefik.http.routers.ybb-notification.rule=${APP_DOMAINS_RULE:-Host(`notify.ybbhub.com`)}"
+      - "traefik.http.routers.ybb-notification.entrypoints=websecure"
+      - "traefik.http.routers.ybb-notification.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ybb-notification.loadbalancer.server.port=4002"
+
+networks:
+  dokploy-network:
+    external: true

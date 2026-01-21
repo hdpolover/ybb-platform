@@ -1,0 +1,50 @@
+services:
+  # =========================================
+  # File Service (Staging)
+  # =========================================
+  file:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ybb-file-staging
+    restart: always
+    ports:
+      - "8001:8001"
+    env_file:
+      - .env.staging
+    depends_on:
+      postgres-file:
+        condition: service_healthy
+    networks:
+      - ybb-network-staging
+
+  postgres-file:
+    image: postgres:15-alpine
+    container_name: ybb-postgres-file-staging
+    restart: always
+    env_file:
+      - .env.staging
+    environment:
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_file_data_staging:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+    networks:
+      - ybb-network-staging
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  ybb-network-staging:
+    name: ybb-network-staging
+    external: true
+
+volumes:
+  postgres_file_data_staging:

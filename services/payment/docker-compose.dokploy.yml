@@ -1,0 +1,57 @@
+version: "3.8"
+
+services:
+  payment:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: ybb-payment
+    restart: always
+    environment:
+      ENVIRONMENT: production
+      PORT: 8002
+      # Database
+      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@ybb-postgres-payment:5432/${DATABASE_NAME}
+      # RabbitMQ
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@ybb-shared-rabbitmq:5672/
+      # Gateways
+      MIDTRANS_SERVER_KEY: ${MIDTRANS_SERVER_KEY}
+      MIDTRANS_CLIENT_KEY: ${MIDTRANS_CLIENT_KEY}
+      MIDTRANS_IS_PRODUCTION: "true"
+    depends_on:
+      postgres-payment:
+        condition: service_healthy
+    networks:
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=dokploy-network"
+      - "traefik.http.routers.ybb-payment.rule=${APP_DOMAINS_RULE:-Host(`payment.ybbhub.com`)}"
+      - "traefik.http.routers.ybb-payment.entrypoints=websecure"
+      - "traefik.http.routers.ybb-payment.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ybb-payment.loadbalancer.server.port=8002"
+
+  postgres-payment:
+    image: postgres:15-alpine
+    container_name: ybb-postgres-payment
+    restart: always
+    environment:
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
+    volumes:
+      - postgres_payment_data_prod:/var/lib/postgresql/data
+    networks:
+      - dokploy-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  postgres_payment_data_prod:

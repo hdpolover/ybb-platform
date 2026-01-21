@@ -1,0 +1,33 @@
+fastapi>=0.110.0
+uvicorn>=0.29.0
+python-multipart>=0.0.9
+minio>=7.2.0
+python-dotenv>=1.0.0
+pydantic>=2.7.0
+pydantic-settings>=2.2.0
+
+# Database
+prisma>=0.11.0
+
+
+# Excel/Reporting
+openpyxl>=3.1.2
+xlsxwriter>=3.1.9
+pandas>=2.1.4
+
+# PDF Generation
+reportlab>=4.0.7
+PyPDF2>=3.0.1
+weasyprint>=60.1
+
+# Image Processing for Certificates
+Pillow>=10.1.0
+
+# Template Engine
+jinja2>=3.1.2
+
+# QR Code for Certificate Verification
+qrcode>=7.4.2
+
+# Date/Time utilities
+python-dateutil>=2.8.2
