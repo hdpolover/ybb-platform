@@ -1237,6 +1237,85 @@ async function main() {
   });
   console.log(`✅ Schedule created for: ${iys2025.name}`);
 
+  // ==========================================
+  // 17. Create Legal Documents
+  // ==========================================
+  
+  const legalDocs = [
+    {
+      title: 'Terms of Service',
+      slug: 'terms-of-service',
+      content: '<h1>Terms of Service</h1><p>Welcome to our platform. By using our services, you agree to these terms. These terms govern your use of our website and participation in our programs.</p><h3>1. Acceptance</h3><p>By accessing our services, you agree to be bound by these Terms.</p><h3>2. Eligibility</h3><p>You must be at least 17 years old to participate in our programs.</p>',
+      isRequired: true
+    },
+    {
+      title: 'Privacy Policy',
+      slug: 'privacy-policy',
+      content: '<h1>Privacy Policy</h1><p>We value your privacy. This policy explains how we collect and use your data.</p><h3>1. Data Collection</h3><p>We collect personal information such as name, email, and nationality when you register.</p><h3>2. Usage</h3><p>We use this data to process your application and communicate with you.</p>',
+      isRequired: true
+    },
+    {
+        title: 'Cookie Policy',
+        slug: 'cookie-policy',
+        content: '<h1>Cookie Policy</h1><p>We use cookies to improve your experience on our website. This includes necessary cookies for site functionality and analytics cookies to understand user behavior.</p>',
+        isRequired: false
+    },
+    {
+        title: 'Participant Agreement',
+        slug: 'participant-agreement',
+        content: '<h1>Participant Agreement</h1><p>By participating in our programs, you agree to conduct yourself with integrity and respect towards other participants and staff.</p><h3>Code of Conduct</h3><p> harassment, discrimination, or disruptive behavior will not be tolerated and may result in immediate disqualification.</p>',
+        isRequired: true
+    }
+  ];
+
+  // Seed for YBB
+  for (const doc of legalDocs) {
+    await prisma.legalDocument.upsert({
+      where: {
+        programCategoryId_slug_version: {
+            programCategoryId: ybbBrand.id,
+            slug: doc.slug,
+            version: '1.0'
+        }
+      },
+      update: {},
+      create: {
+        programCategoryId: ybbBrand.id,
+        title: doc.title,
+        slug: doc.slug,
+        content: doc.content.replace('our platform', 'Youth Break the Boundaries'),
+        version: '1.0',
+        isRequired: doc.isRequired,
+        isActive: true
+      }
+    });
+  }
+  console.log(`✅ Legal Documents created for: ${ybbBrand.name}`);
+
+  // Seed for IYS
+  for (const doc of legalDocs) {
+    await prisma.legalDocument.upsert({
+      where: {
+        programCategoryId_slug_version: {
+            programCategoryId: iysBrand.id,
+            slug: doc.slug,
+            version: '1.0'
+        }
+      },
+      update: {},
+      create: {
+        programCategoryId: iysBrand.id,
+        title: doc.title,
+        slug: doc.slug,
+        content: doc.content.replace('our platform', 'Istanbul Youth Summit'),
+        version: '1.0',
+        isRequired: doc.isRequired,
+        isActive: true
+      }
+    });
+  }
+  console.log(`✅ Legal Documents created for: ${iysBrand.name}`);
+
   console.log('🎉 Seeding completed successfully!');
 }
 
