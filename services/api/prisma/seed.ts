@@ -1692,6 +1692,155 @@ async function main() {
   }
   console.log(`✅ Legal Documents created for: ${iysBrand.name}`);
 
+  // ==========================================
+  // 18. Create Program Announcements (News)
+  // ==========================================
+  
+  await prisma.programAnnouncement.deleteMany({
+      where: { programId: iys2025.id }
+  });
+
+  const newsItems = [
+    {
+      title: "Registration Extended to September 30th",
+      content: "Due to high demand, we are extending the registration deadline for Istanbul Youth Summit 2025. Don't miss this opportunity to join 500+ global leaders.",
+      category: "News",
+      imageUrl: "https://placehold.co/600x400/E31E24/FFF?text=Deadline+Extended",
+      publishDate: new Date('2025-09-15T09:00:00Z')
+    },
+    {
+      title: "Keynote Speaker Announcement: Dr. Sarah Johnson",
+      content: "We are thrilled to announce our first keynote speaker, Dr. Sarah Johnson from the UN Environmental Programme. She will be sharing insights on sustainable leadership.",
+      category: "News",
+      imageUrl: "https://placehold.co/600x400/E31E24/FFF?text=Speaker+Reveal",
+      publishDate: new Date('2025-10-01T10:00:00Z')
+    },
+    {
+      title: "Scholarship Results Announced",
+      content: "The list of fully funded scholarship recipients for IYS 2025 has been published. Check your email and the dashboard for results.",
+      category: "Award",
+      imageUrl: "https://placehold.co/600x400/E31E24/FFF?text=Scholarship+Results",
+      publishDate: new Date('2026-01-10T09:00:00Z')
+    },
+    {
+       title: "Official Venue Partner: Istanbul Convention Center",
+       content: "We are proud to partner with the ICC for our 2025 summit. Experience world-class facilities in the heart of Istanbul.",
+       category: "News",
+       imageUrl: "https://placehold.co/600x400/E31E24/FFF?text=Venue+Partner",
+       publishDate: new Date('2025-11-20T14:00:00Z')
+    }
+  ];
+
+  for (const item of newsItems) {
+    await prisma.programAnnouncement.create({
+      data: {
+        programId: iys2025.id,
+        title: item.title,
+        content: item.content,
+        category: item.category, // Now valid thanks to migration
+        imageUrl: item.imageUrl,
+        targetAudience: 'all',
+        publishDate: item.publishDate,
+        isActive: true
+      }
+    });
+  }
+  console.log(`✅ Announcements created for: ${iys2025.name}`);
+
+  // ==========================================
+  // 19. Create Award Winners (Participants)
+  // ==========================================
+
+  // 19.1 Create Dummy Participants if needed
+  // We'll create 3 winners.
+  const winnersData = [
+    { name: "Ali Hassan", country: "Turkey", institution: "Istanbul University", gender: "male" },
+    { name: "Maria Garcia", country: "Spain", institution: "University of Barcelona", gender: "female" },
+    { name: "Chen Wei", country: "China", institution: "Tsinghua University", gender: "male" }
+  ];
+
+  // We need the 'participant' role
+  const participantRole = await prisma.adminRole.upsert({ // Using adminRole just for placeholder ref if needed, but Participants link to User
+      where: { name: 'Participant' },
+      update: {},
+      create: { name: 'Participant', isActive: true }
+  });
+
+  // Get Best Presenter Award
+  const bestPresenter = await prisma.programAward.findFirst({
+      where: { programId: iys2025.id, name: 'Best Presenter' }
+  });
+
+  if (bestPresenter) {
+      for (const [index, w] of winnersData.entries()) {
+          const email = `winner${index + 1}@example.com`;
+          
+          // 1. Create User
+          const user = await prisma.user.upsert({
+              where: { email_programCategoryId: { email, programCategoryId: iysBrand.id } },
+              update: {},
+              create: {
+                  email,
+                  programCategoryId: iysBrand.id,
+                  passwordHash: 'dummy',
+                  emailVerified: true,
+                  isActive: true
+              }
+          });
+
+          // 2. Create Participant Profile
+          const participant = await prisma.participant.upsert({
+              where: { userId: user.id },
+              update: {},
+              create: {
+                  userId: user.id,
+                  fullName: w.name,
+                  nationality: w.country,
+                  institution: w.institution,
+                  profilePictureUrl: `https://randomuser.me/api/portraits/${w.gender === 'male' ? 'men' : 'women'}/${index + 50}.jpg`,
+                  phoneNumber: '+1234567890',
+                  gender: w.gender === 'male' ? 'male' : 'female',
+              }
+          });
+
+          // 3. Create Application
+          const application = await prisma.participantApplication.upsert({
+              where: {
+                  participantId_programId: {
+                      participantId: participant.id,
+                      programId: iys2025.id
+                  }
+              },
+              update: {},
+              create: {
+                  participantId: participant.id,
+                  programId: iys2025.id,
+                  status: 'accepted',
+                  paymentStatus: 'paid',
+                  ticketStatus: 'fully_funded'
+              }
+          });
+
+          // 4. Assign Award
+          // Check if already awarded
+          const existingAward = await prisma.participantAward.findFirst({
+              where: { applicationId: application.id, programAwardId: bestPresenter.id }
+          });
+
+          if (!existingAward) {
+              await prisma.participantAward.create({
+                  data: {
+                      applicationId: application.id,
+                      programAwardId: bestPresenter.id,
+                      awardedAt: new Date(),
+                      notes: "For exceptional presentation on sustainable energy."
+                  }
+              });
+          }
+      }
+      console.log(`✅ Award Winners assigned for: ${bestPresenter.name}`);
+  }
+
   console.log('🎉 Seeding completed successfully!');
 }
 
