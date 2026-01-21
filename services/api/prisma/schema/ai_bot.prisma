@@ -1,0 +1,27 @@
+
+model AiChatBotConfig {
+  id                String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  
+  // Can be null for Global, or linked to a category
+  programCategoryId String?  @map("program_category_id") @db.Uuid
+  
+  name              String   @db.VarChar(100) // "YBB Main Bot"
+  type              String   @default("iframe") @db.VarChar(20) // iframe, script, embed
+  botConfig         String   @map("bot_config") @db.Text // The URL or Embed Code
+  
+  // Controls
+  isActive          Boolean  @default(true) @map("is_active")
+  displayOnWeb      Boolean  @default(true) @map("display_on_web") // Show on landing page
+  allowedDomains    String[] @default([]) @map("allowed_domains") // ["ybb.co.id"]
+
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  programCategory   ProgramCategory? @relation(fields: [programCategoryId], references: [id], onDelete: Cascade)
+
+  @@index([programCategoryId])
+  @@index([isActive])
+  @@map("ai_chatbot_configs")
+}

@@ -56,6 +56,7 @@ model ProgramCategory {
   socialFeeds         ProgramSocialFeed[]
   activeAdmins        AdminProgramCategory[]
   legalDocuments      LegalDocument[]
+  aiChatBots          AiChatBotConfig[]
 
   @@index([slug])
   @@index([isActive])
