@@ -25,7 +25,7 @@ if [ $EXIT_CODE -ne 0 ]; then
 fi
 
 echo "🌱 Running seed script to ensure reference data..."
-if [ "$NODE_ENV" = "production" ]; then
+if [ "$NODE_ENV" = "production" ] || [ "$NODE_ENV" = "staging" ]; then
   node dist/prisma/seed.js
 else
   # In development, use ts-node via the prisma CLI or directly
