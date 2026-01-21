@@ -1,0 +1,172 @@
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum Gender {
+  male
+  female
+  other
+}
+
+enum ApplicationCategory {
+  fully_funded
+  self_funded
+  partial_funded
+}
+
+enum ApplicationStatus {
+  draft
+  submitted
+  under_review
+  interview_scheduled
+  accepted
+  rejected
+  waitlisted
+  withdrawn
+}
+
+enum ScoreStatus {
+  pending
+  scored
+  go_to_interview
+  rejected
+}
+
+enum ReferralStatus {
+  referred
+  registered
+  applied
+  accepted
+  completed
+}
+
+enum BlockType {
+  temporary
+  permanent
+}
+
+enum RiskLevel {
+  low
+  medium
+  high
+  critical
+}
+
+enum NotificationPriority {
+  low
+  normal
+  high
+  urgent
+}
+
+enum AnnouncementTarget {
+  all
+  participants
+  ambassadors
+  specific_program
+}
+
+enum AnnouncementPriority {
+  low
+  normal
+  high
+  urgent
+}
+
+enum AnnouncementType {
+  general
+  maintenance
+  deadline
+  feature
+  alert
+}
+
+enum FaqCategory {
+  general
+  registration
+  payment
+  event_details
+  accommodation
+  visa
+  other
+}
+
+enum DeletionStatus {
+  pending
+  approved
+  rejected
+  completed
+  cancelled
+}
+
+enum Theme {
+  light
+  dark
+  auto
+}
+
+enum ChangeType {
+  create
+  update
+  delete
+  status_change
+}
+
+enum ChangedByType {
+  participant
+  admin
+  system
+}
+
+enum PricingFeeType {
+  registration_fee
+  program_fee_1
+  program_fee_2
+  full_fee
+  custom_fee
+}
+
+enum PricingTarget {
+  self_funded
+  fully_funded
+  partial_funded
+  all
+}
+
+enum SupportTicketStatus {
+  open
+  in_progress
+  waiting_response
+  resolved
+  closed
+}
+
+enum SupportTicketPriority {
+  low
+  normal
+  high
+  urgent
+}
+
+enum DocumentTemplateType {
+  letter_of_acceptance
+  letter_of_invitation
+  certificate_participation
+  certificate_achievement
+  certificate_speaker
+  letter_recommendation
+  agreement_letter
+  custom
+}
+
+enum PaymentStatus {
+  unpaid
+  pending
+  paid
+  captured
+  settled
+  failed
+  refunded
+  cancelled
+  expired
+}

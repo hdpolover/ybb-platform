@@ -18,32 +18,32 @@ export class AchievementsRepository implements IAchievementsRepository {
         return docs.map(d => new ParticipantDocument(
             d.id,
             d.applicationId,
-            d.templateId,
-            d.documentNumber,
-            d.documentUrl,
+            d.templateId || '',
+            (d as any).documentNumber,
+            d.fileUrl,
             d.generatedAt,
             d.downloadCount,
-            d.template.name,
+            d.template?.name || '',
         ));
     }
 
     async findAwardsByApplicationId(applicationId: string): Promise<ParticipantAward[]> {
         const awards = await this.prisma.participantAward.findMany({
             where: { applicationId },
-            include: { award: true },
+            include: { programAward: true },
             orderBy: { awardedAt: 'desc' },
         });
 
         return awards.map(a => new ParticipantAward(
             a.id,
             a.applicationId,
-            a.awardId,
+            a.programAwardId,
             a.awardedAt,
-            a.notes,
-            a.certificateUrl,
-            a.award.name,
-            a.award.description,
-            a.award.badgeUrl,
+            (a as any).notes,
+            (a as any).certificateUrl,
+            a.programAward.name,
+            a.programAward.description,
+            a.programAward.badgeUrl,
         ));
     }
 }

@@ -2,14 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { IPaymentRepository } from '@core/interfaces/repositories/payment.repository.interface';
 import { Payment } from '@core/entities/payment.entity';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
-import { Decimal } from '@prisma/client/runtime/library';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class PaymentRepository implements IPaymentRepository {
     constructor(private readonly prisma: PrismaService) { }
 
     async findByUserId(userId: string): Promise<Payment[]> {
-        const payments = await this.prisma.payment.findMany({
+        const payments = await this.prisma.paymentTransaction.findMany({
             where: { userId },
             orderBy: { createdAt: 'desc' },
         });
@@ -17,7 +17,7 @@ export class PaymentRepository implements IPaymentRepository {
     }
 
     async findById(id: string): Promise<Payment | null> {
-        const payment = await this.prisma.payment.findUnique({
+        const payment = await this.prisma.paymentTransaction.findUnique({
             where: { id },
         });
         return payment ? this.mapToEntity(payment) : null;

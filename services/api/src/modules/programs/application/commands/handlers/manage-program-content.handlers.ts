@@ -2,7 +2,7 @@ import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { Inject } from '@nestjs/common';
 import { IProgramContentRepository } from '@core/interfaces/repositories/program-content.repository.interface';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
-import { Decimal } from '@prisma/client/runtime/library';
+import { Prisma } from '@prisma/client';
 import {
     CreateProgramTimelineCommand, UpdateProgramTimelineCommand, DeleteProgramTimelineCommand,
     CreateProgramScheduleCommand, UpdateProgramScheduleCommand, DeleteProgramScheduleCommand,
@@ -252,7 +252,7 @@ export class CreateProgramPricingTierHandler implements ICommandHandler<CreatePr
     async execute(command: CreateProgramPricingTierCommand) {
         const dto = {
             ...command.dto,
-            price: new Decimal(command.dto.price),
+            price: new Prisma.Decimal(command.dto.price),
             validFrom: new Date(command.dto.validFrom),
             validUntil: new Date(command.dto.validUntil)
         };
@@ -265,7 +265,7 @@ export class UpdateProgramPricingTierHandler implements ICommandHandler<UpdatePr
     async execute(command: UpdateProgramPricingTierCommand) {
         const dto = {
             ...command.dto,
-            price: command.dto.price ? new Decimal(command.dto.price) : undefined,
+            price: command.dto.price ? new Prisma.Decimal(command.dto.price) : undefined,
             validFrom: command.dto.validFrom ? new Date(command.dto.validFrom) : undefined,
             validUntil: command.dto.validUntil ? new Date(command.dto.validUntil) : undefined
         };
