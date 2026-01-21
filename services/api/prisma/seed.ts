@@ -94,7 +94,13 @@ async function main() {
   // 1.1 YBB (Youth Break the Boundaries)
   const ybbBrand = await prisma.programCategory.upsert({
     where: { slug: 'ybb' },
-    update: {},
+    update: {
+      about: "Youth Break the Boundaries Foundation (YBB) is a non-profit organization that focuses on youth development and empowerment. We believe that young people are the key to a better future, and we are dedicated to providing them with the tools, resources, and opportunities they need to succeed.",
+      vision: "To create a generation of young leaders who are capable of making a positive impact on the world.",
+      mission: "To empower youth through education, leadership development, and community engagement programs.",
+      logoUrl: "https://youthbreaktheboundaries.com/wp-content/uploads/2023/12/YBB-Logo-High-Res.png",
+      bannerUrl: "https://youthbreaktheboundaries.com/wp-content/uploads/2023/12/YBB-Banner.jpg",
+    },
     create: {
       name: 'Youth Break the Boundaries',
       slug: 'ybb',
@@ -103,6 +109,11 @@ async function main() {
       contactEmail: 'admin@youthbreaktheboundaries.com',
       primaryColor: '#000000',
       isActive: true,
+      about: "Youth Break the Boundaries Foundation (YBB) is a non-profit organization that focuses on youth development and empowerment. We believe that young people are the key to a better future, and we are dedicated to providing them with the tools, resources, and opportunities they need to succeed.",
+      vision: "To create a generation of young leaders who are capable of making a positive impact on the world.",
+      mission: "To empower youth through education, leadership development, and community engagement programs.",
+      logoUrl: "https://youthbreaktheboundaries.com/wp-content/uploads/2023/12/YBB-Logo-High-Res.png",
+      bannerUrl: "https://youthbreaktheboundaries.com/wp-content/uploads/2023/12/YBB-Banner.jpg",
     },
   });
   console.log(`✅ Brand created/updated: ${ybbBrand.name}`);
@@ -110,7 +121,13 @@ async function main() {
   // 1.2 IYS (Istanbul Youth Summit)
   const iysBrand = await prisma.programCategory.upsert({
     where: { slug: 'iys' },
-    update: {},
+    update: {
+      about: "Istanbul Youth Summit (IYS) is an international summit that brings together young leaders from around the world to discuss and find solutions to global challenges. Since its inception, IYS has been a platform for youth to share ideas, collaborate on projects, and build a network of change-makers.",
+      vision: "To be the premier global platform for youth dialogue and action on sustainable development goals.",
+      mission: "To foster cross-cultural understanding and empower youth to take leadership roles in their communities.",
+      logoUrl: "https://istanyouthsummit.com/images/logo-iys.png",
+      bannerUrl: "https://istanyouthsummit.com/images/banner-iys.jpg",
+    },
     create: {
       name: 'Istanbul Youth Summit',
       slug: 'iys',
@@ -119,6 +136,11 @@ async function main() {
       contactEmail: 'admin@istanyouthsummit.com',
       primaryColor: '#E31E24', // Example red
       isActive: true,
+      about: "Istanbul Youth Summit (IYS) is an international summit that brings together young leaders from around the world to discuss and find solutions to global challenges. Since its inception, IYS has been a platform for youth to share ideas, collaborate on projects, and build a network of change-makers.",
+      vision: "To be the premier global platform for youth dialogue and action on sustainable development goals.",
+      mission: "To foster cross-cultural understanding and empower youth to take leadership roles in their communities.",
+      logoUrl: "https://istanyouthsummit.com/images/logo-iys.png",
+      bannerUrl: "https://istanyouthsummit.com/images/banner-iys.jpg",
     },
   });
   console.log(`✅ Brand created/updated: ${iysBrand.name}`);
@@ -126,7 +148,13 @@ async function main() {
   // 1.3 Youth Academic Forum
   const yafBrand = await prisma.programCategory.upsert({
     where: { slug: 'youth-academic-forum' },
-    update: {},
+    update: {
+       about: "Youth Academic Forum (YAF) is a dedicated platform for young scholars, researchers, and students to present their academic work and engage in intellectual discourse. YAF aims to bridge the gap between academic research and practical application.",
+       vision: "To cultivate a culture of academic excellence and critical thinking among youth.",
+       mission: "To provide a supportive environment for young academics to share their research, receive feedback, and collaborate.",
+       logoUrl: "https://youthacademicforum.com/assets/img/logo.png",
+       bannerUrl: "https://youthacademicforum.com/assets/img/hero-bg.jpg",
+    },
     create: {
       name: 'Youth Academic Forum',
       slug: 'youth-academic-forum',
@@ -135,6 +163,11 @@ async function main() {
       contactEmail: 'admin@youthacademicforum.com',
       primaryColor: '#0056B3', // Example blue
       isActive: true,
+      about: "Youth Academic Forum (YAF) is a dedicated platform for young scholars, researchers, and students to present their academic work and engage in intellectual discourse. YAF aims to bridge the gap between academic research and practical application.",
+      vision: "To cultivate a culture of academic excellence and critical thinking among youth.",
+      mission: "To provide a supportive environment for young academics to share their research, receive feedback, and collaborate.",
+      logoUrl: "https://youthacademicforum.com/assets/img/logo.png",
+      bannerUrl: "https://youthacademicforum.com/assets/img/hero-bg.jpg",
     },
   });
   console.log(`✅ Brand created/updated: ${yafBrand.name}`);
@@ -240,12 +273,17 @@ async function main() {
         slug: 'ybb-ambassador-2025',
       },
     },
-    update: {},
+    update: {
+      description: 'The YBB Ambassador Program 2025 is a prestigious opportunity for youth leaders worldwide to represent their countries and communities. As an ambassador, you will gain exclusive access to leadership training, networking opportunities, and the chance to drive impactful projects. This program is designed to cultivate the next generation of global changemakers who are passionate about education, social entrepreneurship, and sustainable development.',
+      shortDescription: 'Become a YBB Ambassador and lead change in your community. Join a global network of young leaders committed to making a difference.',
+      benefitsDescription: "- Networking with global leaders\n- Leadership training and workshops\n- Certificate of Ambassadorship\n- Exclusive access to YBB events\n- Opportunity to represent your country",
+      requirementsDescription: "- Aged 17-35 years old\n- Passionate about social change\n- Good communication skills\n- Committed to the program duration",
+    },
     create: {
       programCategoryId: ybbBrand.id,
       name: 'YBB Ambassador Program 2025',
       slug: 'ybb-ambassador-2025',
-      description: 'Join the global movement of youth leaders.',
+      description: 'The YBB Ambassador Program 2025 is a prestigious opportunity for youth leaders worldwide to represent their countries and communities. As an ambassador, you will gain exclusive access to leadership training, networking opportunities, and the chance to drive impactful projects. This program is designed to cultivate the next generation of global changemakers who are passionate about education, social entrepreneurship, and sustainable development.',
       shortDescription: 'Become a YBB Ambassador and lead change in your community.',
       year: 2025,
       startDate: new Date('2025-01-01'),
@@ -261,6 +299,8 @@ async function main() {
       allowRegistration: true,
       registrationOpenDate: new Date('2024-10-01'),
       registrationCloseDate: new Date('2024-12-31'),
+      benefitsDescription: "- Networking with global leaders\n- Leadership training and workshops\n- Certificate of Ambassadorship\n- Exclusive access to YBB events\n- Opportunity to represent your country",
+      requirementsDescription: "- Aged 17-35 years old\n- Passionate about social change\n- Good communication skills\n- Committed to the program duration",
     },
   });
   console.log(`✅ Program created/updated: ${ybbAmbassador2025.name}`);
@@ -273,12 +313,17 @@ async function main() {
         slug: 'istanbul-youth-summit-2025',
       },
     },
-    update: {},
+    update: {
+      description: 'The 8th Istanbul Youth Summit (IYS 2025) is set to be the largest gathering of youth leaders in Turkey. Under the theme "Sustainable Leadership for a Better Future", delegates will engage in rigorous debates, workshops, and project presentations. This summit aims to equip young leaders with the skills and knowledge needed to tackle global challenges such as climate change, education inequality, and economic instability. Join us in the historic city of Istanbul for an unforgettable experience.',
+      shortDescription: 'Gathering youth leaders in Istanbul for a transformative summit experience focusing on sustainable leadership.',
+      benefitsDescription: "1. International Certificate\n2. Networking with 500+ leaders\n3. Cultural Exchange\n4. Mentorship from Experts\n5. Opportunity to win funding for projects",
+      requirementsDescription: "1. Youth aged 17-35\n2. Open to all nationalities\n3. No criminal record\n4. Able to communicate in English",
+    },
     create: {
       programCategoryId: iysBrand.id,
       name: 'Istanbul Youth Summit 2025',
       slug: 'istanbul-youth-summit-2025',
-      description: 'The 8th Istanbul Youth Summit in Turkey.',
+      description: 'The 8th Istanbul Youth Summit (IYS 2025) is set to be the largest gathering of youth leaders in Turkey. Under the theme "Sustainable Leadership for a Better Future", delegates will engage in rigorous debates, workshops, and project presentations. This summit aims to equip young leaders with the skills and knowledge needed to tackle global challenges such as climate change, education inequality, and economic instability. Join us in the historic city of Istanbul for an unforgettable experience.',
       shortDescription: 'Gathering youth leaders in Istanbul.',
       year: 2025,
       startDate: new Date('2025-02-10'),
@@ -297,6 +342,8 @@ async function main() {
       requirePayment: true,
       registrationFee: 150.00,
       currency: 'USD',
+      benefitsDescription: "1. International Certificate\n2. Networking with 500+ leaders\n3. Cultural Exchange\n4. Mentorship from Experts\n5. Opportunity to win funding for projects",
+      requirementsDescription: "1. Youth aged 17-35\n2. Open to all nationalities\n3. No criminal record\n4. Able to communicate in English",
     },
   });
   console.log(`✅ Program created/updated: ${iys2025.name}`);
@@ -308,12 +355,14 @@ async function main() {
         slug: 'istanbul-youth-summit-2024',
       },
     },
-    update: {},
+    update: {
+      description: 'The 7th Istanbul Youth Summit brought together over 400 delegates from 30+ countries. It was a resounding success, featuring keynote speeches from prominent figures and innovative project presentations. Although this event has concluded, you can still view the highlights and outcomes.',
+    },
     create: {
       programCategoryId: iysBrand.id,
       name: 'Istanbul Youth Summit 2024',
       slug: 'istanbul-youth-summit-2024',
-      description: 'The 7th Istanbul Youth Summit in Turkey.',
+      description: 'The 7th Istanbul Youth Summit brought together over 400 delegates from 30+ countries. It was a resounding success, featuring keynote speeches from prominent figures and innovative project presentations. Although this event has concluded, you can still view the highlights and outcomes.',
       shortDescription: 'Past event.',
       year: 2024,
       startDate: new Date('2024-03-04'),
@@ -339,12 +388,16 @@ async function main() {
         slug: 'youth-academic-forum-2025',
       },
     },
-    update: {},
+    update: {
+        description: 'Youth Academic Forum 2025 is the premier platform for young researchers. We invite abstracts and papers from all disciplines. Selected papers will be published in our partner journals, and authors will have the chance to present their work to a panel of distinguished academics.',
+        shortDescription: 'Share your research and ideas with a global academic community.',
+        benefitsDescription: "- Publication opportunity\n- Peer review feedback\n- Academic networking\n- Presentation skills development",
+    },
     create: {
       programCategoryId: yafBrand.id,
       name: 'Youth Academic Forum 2025',
       slug: 'youth-academic-forum-2025',
-      description: 'International academic forum for youth.',
+      description: 'Youth Academic Forum 2025 is the premier platform for young researchers. We invite abstracts and papers from all disciplines. Selected papers will be published in our partner journals, and authors will have the chance to present their work to a panel of distinguished academics.',
       shortDescription: 'Share your research and ideas.',
       year: 2025,
       startDate: new Date('2025-05-15'),
@@ -363,6 +416,7 @@ async function main() {
       requirePayment: true,
       registrationFee: 50.00,
       currency: 'USD',
+      benefitsDescription: "- Publication opportunity\n- Peer review feedback\n- Academic networking\n- Presentation skills development",
     },
   });
   console.log(`✅ Program created/updated: ${yaf2025.name}`);
