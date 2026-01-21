@@ -1,8 +1,8 @@
 import { Inject, Injectable, ConflictException, BadRequestException } from '@nestjs/common';
-import { ClientProxy } from '@nestjs/microservices';
 import { RegisterCommand } from '../register.command';
 import { AuthResponseDto } from '../../../presentation/dto/auth-response.dto';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
+import { RabbitMQProducerService } from '../../../../../shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
@@ -12,7 +12,7 @@ export class RegisterHandler {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
-    @Inject('NOTIFICATION_SERVICE') private readonly notificationClient: ClientProxy,
+    private readonly rabbitmqProducer: RabbitMQProducerService,
   ) {}
 
   /**
@@ -308,7 +308,7 @@ export class RegisterHandler {
 
     // Send notifications
     if (authProvider.name === 'local' && emailVerificationToken) {
-      this.notificationClient.emit('user.verify-email', {
+      this.rabbitmqProducer.emit('user.verify-email', {
         email: newUser.email,
         name: newUser.email.split('@')[0], // Use part of email as name since we don't have it yet
         token: emailVerificationToken,
@@ -322,7 +322,7 @@ export class RegisterHandler {
         },
       });
     } else if (authProvider.isOAuth) {
-      this.notificationClient.emit('user.registered', {
+      this.rabbitmqProducer.emit('user.registered', {
         email: newUser.email,
         name: newUser.email.split('@')[0],
         programCategory: {

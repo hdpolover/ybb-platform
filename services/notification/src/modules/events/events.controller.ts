@@ -51,16 +51,26 @@ export class EventsController {
     }
 
     @EventPattern('user.verify-email')
-    async handleVerifyEmail(@Payload() data: any) {
-        this.logger.log(`Received user.verify-email event: ${JSON.stringify(data)}`);
-
-        if (data.email && data.token) {
-            await this.emailService.sendVerificationEmail(
-                data.email,
-                data.name || 'User',
-                data.token,
-                data.programCategory
-            );
+    async handleVerifyEmail(@Payload() data: any, @Ctx() context: RmqContext) {
+        this.logger.log(`Received user.verify-email event START processing`);
+        this.logger.log(`Event Data: ${JSON.stringify(data)}`);
+        
+        try {
+            if (data.email && data.token) {
+                this.logger.log(`Calling emailService.sendVerificationEmail for ${data.email}`);
+                const result = await this.emailService.sendVerificationEmail(
+                    data.email,
+                    data.name || 'User',
+                    data.token,
+                    data.programCategory
+                );
+                this.logger.log(`Email service returned successfully for ${data.email}. Result: ${JSON.stringify(result)}`);
+            } else {
+                 this.logger.warn(`Invalid data received for user.verify-email: Missing email or token`);
+            }
+        } catch (error) {
+            this.logger.error(`Error processing user.verify-email event: ${error.message}`, error.stack);
         }
+        this.logger.log(`Received user.verify-email event FINISHED processing`);
     }
 }

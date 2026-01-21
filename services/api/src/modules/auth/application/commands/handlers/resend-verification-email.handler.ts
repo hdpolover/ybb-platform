@@ -1,14 +1,14 @@
-import { Injectable, BadRequestException, Inject, NotFoundException } from '@nestjs/common';
-import { ClientProxy } from '@nestjs/microservices';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
 import { ResendVerificationEmailCommand } from '../resend-verification-email.command';
 import * as crypto from 'crypto';
+import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 
 @Injectable()
 export class ResendVerificationEmailHandler {
   constructor(
     private readonly prisma: PrismaService,
-    @Inject('NOTIFICATION_SERVICE') private readonly notificationClient: ClientProxy,
+    private readonly rabbitmqProducer: RabbitMQProducerService,
   ) {}
 
   private async resolveProgramCategoryId(programCategoryId?: string, domain?: string): Promise<string> {
@@ -86,7 +86,7 @@ export class ResendVerificationEmailHandler {
     });
 
     // Send notification
-    this.notificationClient.emit('user.verify-email', {
+    await this.rabbitmqProducer.emit('user.verify-email', {
       email: user.email,
       name: user.email.split('@')[0],
       token: emailVerificationToken,
