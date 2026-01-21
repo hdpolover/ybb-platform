@@ -1,5 +1,5 @@
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { SubmitPartnershipEnquiryCommand } from '../commands/submit-partnership-enquiry.command';
 import { BadRequestException } from '@nestjs/common';
 

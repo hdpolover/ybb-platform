@@ -1,8 +1,8 @@
 import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { NotFoundException } from '@nestjs/common';
 import { GetProgramLandingQuery } from '../get-program-landing.query';
-import { ProgramLandingResponseDto } from '../dto/program-landing.dto';
-import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service';
+import { ProgramLandingResponseDto } from '../../dto/program-landing.dto';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 
 @QueryHandler(GetProgramLandingQuery)
 export class GetProgramLandingHandler implements IQueryHandler<GetProgramLandingQuery> {
@@ -106,7 +106,7 @@ export class GetProgramLandingHandler implements IQueryHandler<GetProgramLanding
       conference,
       program: {
         id: program.id,
-        title: program.title,
+        title: program.name,
         videoUrl: program.videoUrl, // Main promo video
         startDate: program.startDate,
         endDate: program.endDate,

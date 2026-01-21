@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
-import { SharedModule } from '../../shared/shared.module';
+import { PrismaModule } from '@shared/infrastructure/prisma/prisma.module';
 import { PartnershipsPublicController } from './presentation/controllers/partnerships.public.controller';
 import { GetPublicPartnershipsHandler } from './application/handlers/get-public-partnerships.handler';
 import { SubmitPartnershipEnquiryHandler } from './application/handlers/submit-partnership-enquiry.handler';
 
 @Module({
-  imports: [CqrsModule, SharedModule],
+  imports: [CqrsModule, PrismaModule],
   controllers: [PartnershipsPublicController],
   providers: [
     GetPublicPartnershipsHandler,
