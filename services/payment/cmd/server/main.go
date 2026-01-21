@@ -20,6 +20,7 @@ import (
 
 	_ "github.com/ybb-platform/payment/docs" 
 
+	"github.com/ybb-platform/payment/internal/domain/entities"
 	commandHandlers "github.com/ybb-platform/payment/internal/application/commands/handlers"
 	queryHandlers "github.com/ybb-platform/payment/internal/application/queries/handlers"
 	"github.com/ybb-platform/payment/internal/infrastructure/config"
@@ -65,14 +66,15 @@ func main() {
 	}
 
 	// Auto-migrate database schema
-	// if err := db.AutoMigrate(
-	// 	&entities.Payment{}, 
-	// 	&entities.PaymentMethodEntity{}, 
-	// 	&entities.Refund{}, 
-	// 	&entities.GatewayConfig{},
-	// ); err != nil {
-	// 	log.Fatalf("Failed to migrate database: %v", err)
-	// }
+	// Enabled for Deployment auto-healing
+	if err := db.AutoMigrate(
+		&entities.Payment{}, 
+		&entities.PaymentMethodEntity{}, 
+		&entities.Refund{}, 
+		&entities.GatewayConfig{},
+	); err != nil {
+		log.Fatalf("Failed to migrate database: %v", err)
+	}
 
 	log.Println("Connected to database successfully")
 
