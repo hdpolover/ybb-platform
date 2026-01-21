@@ -12,14 +12,83 @@ export class ProgramsStrategy implements ILandingPageStrategy {
         return { slug: 'programs', title: 'Our Programs', sections: [] };
     }
 
-    // 2. Fetch Programs for this Category
-    const programs = await this.prisma.program.findMany({
+    // 1. Fetch Latest Active Program for this Category
+    let currentProgram = await this.prisma.program.findFirst({
         where: {
             programCategoryId: category.id,
             isPublished: true,
             isActive: true,
         },
+        orderBy: { startDate: 'desc' }, // Latest start date
+        include: {
+                objectives: {
+                    where: { isActive: true },
+                    orderBy: { order: 'asc' }
+                },
+                subthemes: {
+                    where: { isActive: true },
+                    orderBy: { order: 'asc' }
+                },
+                resources: {
+                    where: { 
+                        type: 'guide',
+                        isActive: true 
+                    }
+                },
+                faqs: {
+                    where: { isActive: true },
+                    take: 5,
+                    orderBy: { order: 'asc' }
+                },
+                timeline: {
+                    where: { isActive: true },
+                    orderBy: { order: 'asc' }
+                },
+                schedules: { // Fetch schedules for the Activity section
+                    where: { isActive: true },
+                    orderBy: { order: 'asc' }
+                },
+                pricingTiers: {
+                    where: { isActive: true },
+                    orderBy: { order: 'asc' }
+                }
+            }
+        });
+    }
+
+    // Fallback: If no active program, find the latest published one (even if closed/completed)
+    if (!currentProgram) {
+        currentProgram = await this.prisma.program.findFirst({
+            where: {
+                programCategoryId: category.id,
+                isPublished: true,
+            },
+            orderBy: { startDate: 'desc' },
+            include: {
+                objectives: { where: { isActive: true }, orderBy: { order: 'asc' } },
+                subthemes: { where: { isActive: true }, orderBy: { order: 'asc' } },
+                faqs: { where: { isActive: true }, take: 5, orderBy: { order: 'asc' } },
+                timeline: { where: { isActive: true }, orderBy: { order: 'asc' } },
+                schedules: { where: { isActive: true }, orderBy: { order: 'asc' } },
+                pricingTiers: { where: { isActive: true }, orderBy: { order: 'asc' } }
+            }
+        });
+    }
+
+    // 2. Fetch Previous Programs (Same Category)
+    const previousProgramsData = await this.prisma.program.findMany({
+        where: {
+            programCategoryId: category.id,
+            id: { not: currentProgram?.id }, // Exclude current
+            isPublished: true,
+            // Logic: Either explicitly completed OR endDate in past
+            OR: [
+                { status: 'completed' },
+                { endDate: { lt: new Date() } }
+            ]
+        },
         orderBy: { startDate: 'desc' },
+        take: 4,
         select: {
             id: true,
             name: true,
@@ -33,32 +102,295 @@ export class ProgramsStrategy implements ILandingPageStrategy {
         }
     });
 
+    // 3. Fetch Other Programs (Other Categories - Cross Promotion)
+    const otherProgramsData = await this.prisma.program.findMany({
+        where: {
+            programCategoryId: { not: category.id },
+            isPublished: true,
+            isActive: true,
+            // Only show future/ongoing programs
+            endDate: { gt: new Date() }
+        },
+        orderBy: { startDate: 'asc' }, // Soonest first
+        take: 3,
+        select: {
+            id: true,
+            name: true,
+            slug: true,
+            thumbnailUrl: true,
+            startDate: true,
+            endDate: true,
+            location: true,
+            programCategory: {
+                select: {
+                    name: true,
+                    logoUrl: true
+                }
+            }
+        }
+    });
+
+    const sections: any[] = [];
+
+    if (currentProgram) {
+        // Section 1: Hero (Image + Title)
+        sections.push({
+            type: 'hero',
+            content: {
+                id: currentProgram.id,
+                title: currentProgram.name,
+                subtitle: `Connecting Generations Through Cultural Collaboration`, // Static or dynamic if added to schema
+                bg_image: currentProgram.bannerUrl,
+                thumbnail: currentProgram.thumbnailUrl,
+                status: currentProgram.status
+            }
+        });
+
+        // Section 2: Program Details (Description, Theme, Subthemes, Summary)
+        sections.push({
+            type: 'program_overview',
+            content: {
+                description: currentProgram.description,
+                theme: currentProgram.theme || currentProgram.shortDescription, 
+                subthemes: currentProgram.subthemes.map(sub => ({
+                    id: sub.id,
+                    title: sub.name,
+                    description: sub.description
+                })),
+                
+                // Side Panel Data
+                location: currentProgram.location,
+                start_date: currentProgram.startDate,
+                end_date: currentProgram.endDate,
+                duration: `${Math.ceil((currentProgram.endDate.getTime() - currentProgram.startDate.getTime()) / (1000 * 60 * 60 * 24))} Days`,
+                guidebooks: currentProgram.resources.map(r => ({
+                    label: `Read Guidebook (${r.title})`, // e.g. "Read Guidebook (Eng)"
+                    url: r.fileUrl
+                }))
+            }
+        });
+
+        // Section 3: Registration/Pricing Types & Instructions
+        // Logic to determine if registration is open
+        const now = new Date();
+        const isRegistrationOpen = currentProgram.isActive && 
+            currentProgram.allowRegistration &&
+            (!currentProgram.registrationOpenDate || currentProgram.registrationOpenDate <= now) &&
+            (!currentProgram.registrationCloseDate || currentProgram.registrationCloseDate >= now);
+
+        sections.push({
+            type: 'registration_info',
+            content: {
+                title: 'Choose Your Registration Type',
+                description: 'Read Important Payment & Selection Information',
+                status: isRegistrationOpen ? 'open' : 'closed',
+                registration_dates: {
+                    open: currentProgram.registrationOpenDate,
+                    close: currentProgram.registrationCloseDate
+                },
+                pricing_tiers: currentProgram.pricingTiers.map(tier => ({
+                    id: tier.id,
+                    name: tier.name,
+                    description: tier.description,
+                    price: tier.price,
+                    currency: tier.currency,
+                    benefits: tier.benefits,
+                    fee_type: tier.feeType, // fully_funded, partial, etc.
+                    target: tier.target // self_funded, etc.
+                })),
+                instructions: [
+                     {
+                         title: "Payment Schedule",
+                         icon: "calendar",
+                         text: "All participants pay program fees in scheduled batches over time - not as a single upfront payment"
+                     },
+                     {
+                         title: "Selection Quota",
+                         icon: "chart",
+                         text: "Fully funded slots are limited and competitive based on qualifications and available funding."
+                     },
+                     {
+                         title: "Fully Funded Process",
+                         icon: "clipboard-check",
+                         text: "Pay each batch as scheduled, complete essays and interviews, then get full reimbursement if selected."
+                     },
+                     {
+                         title: "Self Funded Guarantee",
+                         icon: "shield-check",
+                         text: "Guaranteed participation without competitive selection - just follow payment schedule."
+                     }
+                ]
+            }
+        });
+
+        // Section 3b: Detailed Activities (Rundown)
+        if (currentProgram.schedules && currentProgram.schedules.length > 0) {
+            const startDate = new Date(currentProgram.startDate);
+            
+            sections.push({
+                type: 'program_activities',
+                content: {
+                    title: `${currentProgram.name} Activity`,
+                    subtitle: 'Detailed schedule of activities for this program',
+                    items: currentProgram.schedules.map((schedule) => {
+                        // Calculate Date: "Day N" logic
+                        let scheduleDate = new Date(startDate);
+                        const dayMatch = schedule.day.match(/Day (\d+)/i);
+                        if (dayMatch) {
+                            const dayOffset = parseInt(dayMatch[1]) - 1;
+                            scheduleDate.setDate(startDate.getDate() + dayOffset);
+                        }
+                        
+                        // Parse Checkitems from Description
+                        // Convention: Text description... \n[CHECKLIST]Item1,Item2
+                        let description = schedule.description || '';
+                        let checkItems: string[] = [];
+                        
+                        if (description.includes('[CHECKLIST]')) {
+                            const parts = description.split('[CHECKLIST]');
+                            description = parts[0].trim();
+                            checkItems = parts[1].split(',').map(s => s.trim());
+                        }
+
+                        // Duration Calc (Simple approx if HH:MM format used)
+                        let duration = '';
+                        if (schedule.startTime && schedule.endTime) {
+                            // Assuming HH:MM format 24h
+                            const [startH, startM] = schedule.startTime.split(':').map(Number);
+                            const [endH, endM] = schedule.endTime.split(':').map(Number);
+                            if (!isNaN(startH) && !isNaN(endH)) {
+                                let diffMins = (endH * 60 + endM) - (startH * 60 + startM);
+                                const diffHrs = Math.floor(diffMins / 60);
+                                const remMins = diffMins % 60;
+                                duration = `${diffHrs}h ${remMins}m`;
+                            }
+                        }
+
+                        return {
+                            day: schedule.day, // "Day 1"
+                            title: schedule.activity, // "First Day: Arrival..."
+                            date: scheduleDate,
+                            time_range: `${schedule.startTime} - ${schedule.endTime}`,
+                            duration: duration,
+                            description: description,
+                            checklist: checkItems
+                        };
+                    })
+                }
+            });
+        }
+
+        // Section 4: Program Journey (Steps)
+        // Using `program_timeline` but filtering or ordering specifically for this view
+        sections.push({
+            type: 'program_journey',
+            content: {
+                title: 'What steps will you go through in this program?',
+                subtitle: 'Explore the step-by-step journey of our program—from registration to selection and participation.',
+                items: currentProgram.timeline.map((t, index) => ({
+                    step_number: (index + 1).toString().padStart(2, '0'),
+                    title: t.title,
+                    description: t.description,
+                    date_display: t.endDate 
+                        ? `${t.date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })} - ${t.endDate.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })}`
+                        : t.date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
+                    // Assuming fees are stored in description for now or extended in schema later
+                    // For the "Journey" view, description usually contains the fee details if relevant
+                }))
+            }
+        });
+
+        // Section 5: Program Important Dates (Table Schedule)
+        // Also using `program_timeline` but formatted as a table with Status indicators
+        const today = new Date();
+        sections.push({
+            type: 'program_important_dates',
+            content: {
+                title: 'Program Schedules',
+                subtitle: 'Important dates and deadlines for this program',
+                items: currentProgram.timeline.map(t => {
+                    const startDate = new Date(t.date);
+                    const endDate = t.endDate ? new Date(t.endDate) : startDate;
+                    
+                    // Determine Status
+                    let status = 'Upcoming';
+                    if (today >= startDate && today <= endDate) {
+                        status = 'Active';
+                    } else if (today > endDate) {
+                        status = 'Passed';
+                    }
+
+                    return {
+                        date_display: t.endDate 
+                        ? `${t.date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })} - ${t.endDate.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })}`
+                        : t.date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
+                        status: status,
+                        name: t.title,
+                        description: t.description,
+                        is_active: status === 'Active'
+                    };
+                })
+            }
+        });
+        
+        // Section 6: FAQs
+
+        // Section 4: FAQs
+        sections.push({
+            type: 'program_faqs',
+            content: {
+                title: 'Frequently Asked Questions',
+                items: currentProgram.faqs.map(f => ({
+                    question: f.question,
+                    answer: f.answer,
+                    category: f.category
+                }))
+            }
+        });
+    }
+
+    // Section 5: Previous Programs
+    if (previousProgramsData.length > 0) {
+        sections.push({
+            type: 'previous_programs',
+            content: {
+                title: `Previous ${category.name} Programs`,
+                items: previousProgramsData.map(p => ({
+                    id: p.id,
+                    name: p.name,
+                    slug: p.slug,
+                    thumbnail: p.thumbnailUrl,
+                    year: p.startDate.getFullYear(),
+                    location: p.location
+                }))
+            }
+        });
+    }
+
+    // Section 6: Other Programs
+    if (otherProgramsData.length > 0) {
+        sections.push({
+            type: 'other_programs',
+            content: {
+                title: 'Other Programs',
+                items: otherProgramsData.map(p => ({
+                    id: p.id,
+                    name: p.name,
+                    slug: p.slug,
+                    thumbnail: p.thumbnailUrl,
+                    brand_name: p.programCategory.name,
+                    brand_logo: p.programCategory.logoUrl,
+                    start_date: p.startDate,
+                    location: p.location
+                }))
+            }
+        });
+    }
+
     return {
       slug: 'programs',
       title: `${category.name} Programs`,
-      sections: [
-        {
-          type: 'hero',
-          content: {
-            headline: `Discover ${category.name} Programs`,
-            subheadline: category.description || 'Find the perfect program to accelerate your growth.',
-            bg_image: category.bannerUrl,
-          },
-        },
-        {
-          type: 'program_list',
-          data: programs.map(p => ({
-              id: p.id,
-              name: p.name,
-              slug: p.slug,
-              description: p.shortDescription || p.description,
-              thumbnail: p.thumbnailUrl,
-              startDate: p.startDate,
-              endDate: p.endDate,
-              location: p.location,
-          })), 
-        },
-      ],
+      sections: sections,
     };
   }
 

@@ -444,6 +444,7 @@ async function main() {
       slug: 'istanbul-youth-summit-2025',
       description: 'The 8th Istanbul Youth Summit (IYS 2025) is set to be the largest gathering of youth leaders in Turkey. Under the theme "Sustainable Leadership for a Better Future", delegates will engage in rigorous debates, workshops, and project presentations. This summit aims to equip young leaders with the skills and knowledge needed to tackle global challenges such as climate change, education inequality, and economic instability. Join us in the historic city of Istanbul for an unforgettable experience.',
       shortDescription: 'Gathering youth leaders in Istanbul.',
+      theme: 'Sustainable Leadership for a Better Future',
       year: 2025,
       startDate: new Date('2025-02-10'),
       endDate: new Date('2025-02-13'),
@@ -498,6 +499,64 @@ async function main() {
       console.log(`✅ Objectives created for: ${iys2025.name}`);
   } catch (error) {
       console.log('⚠️ Could not seed objectives (Model might not exist yet if schema not pushed):', error.message);
+  }
+
+  // 2.2c IYS Subthemes
+  const iysSubthemes = [
+    { name: "Education", description: "Improving quality of education for future generations." },
+    { name: "Health", description: "Ensuring healthy lives and well-being for all." },
+    { name: "Economy", description: "Promoting inclusive and sustainable economic growth." },
+    { name: "Environment", description: "Taking urgent action to combat climate change." },
+    { name: "Social Policy", description: "Reducing inequality within and among countries." }
+  ];
+
+  try {
+      await prisma.programSubtheme.deleteMany({
+          where: { programId: iys2025.id }
+      });
+      
+      for (const sub of iysSubthemes) {
+        await prisma.programSubtheme.create({
+          data: {
+            programId: iys2025.id,
+            name: sub.name,
+            description: sub.description,
+            isActive: true
+          }
+        });
+      }
+      console.log(`✅ Subthemes created for: ${iys2025.name}`);
+  } catch (error) {
+      console.log('⚠️ Could not seed subthemes (Model might not exist yet):', error.message);
+  }
+
+  // 2.2b YBB Ambassador Objectives
+  const ybbObjectives = [
+    "Represent Youth Break the Boundaries in your local community.",
+    "Organize and lead social impact projects.",
+    "Promote SDG awareness and implementation.",
+    "Build strategic partnerships with local organizations.",
+    "Facilitate knowledge sharing among youth."
+  ];
+
+  try {
+      await prisma.programObjective.deleteMany({
+          where: { programId: ybbAmbassador2025.id }
+      });
+      
+      for (let i = 0; i < ybbObjectives.length; i++) {
+        await prisma.programObjective.create({
+          data: {
+            programId: ybbAmbassador2025.id,
+            description: ybbObjectives[i],
+            order: i + 1,
+            isActive: true
+          }
+        });
+      }
+      console.log(`✅ Objectives created for: ${ybbAmbassador2025.name}`);
+  } catch (error) {
+     console.log('⚠️ Could not seed YBB objectives:', error.message);
   }
 
   const iys2024 = await prisma.program.upsert({
@@ -1012,14 +1071,20 @@ async function main() {
   await prisma.programPricingTier.create({
     data: {
       programId: iys2025.id,
-      name: 'Early Bird - International',
-      description: 'Special price for early registrants from outside Turkey',
-      price: 450.00,
+      name: 'Fully Funded',
+      description: 'Competitive selection for full scholarship.',
+      price: 15.00, // Application fee often applies even for fully funded selection
       currency: 'USD',
-      capacity: 100,
-      feeType: 'full_fee',
-      target: 'self_funded',
-      benefits: ['Access to all sessions', 'Accommodation (3 nights)', 'Meals', 'Certificate', 'Airport Transfer'],
+      capacity: 50,
+      feeType: 'registration_fee',
+      target: 'fully_funded',
+      benefits: [
+        'Full flight coverage', 
+        'Accommodation at 5-star hotel', 
+        'Meals and transport included', 
+        'VIP Access to all sessions', 
+        'Exclusive mentorship'
+      ],
       isActive: true,
       order: 1
     }
@@ -1028,20 +1093,43 @@ async function main() {
   await prisma.programPricingTier.create({
     data: {
       programId: iys2025.id,
-      name: 'Regular - International',
-      description: 'Regular price for international participants',
-      price: 550.00,
+      name: 'Partial / Self Funded',
+      description: 'Guaranteed spot for self-supporting delegates.',
+      price: 450.00,
       currency: 'USD',
-      capacity: 200,
+      capacity: 100,
       feeType: 'full_fee',
       target: 'self_funded',
-      benefits: ['Access to all sessions', 'Accommodation (3 nights)', 'Meals', 'Certificate', 'Airport Transfer'],
+      benefits: [
+        'Accommodation at 4-star hotel', 
+        'Meals and transport included', 
+        'Access to all sessions', 
+        'International Certificate', 
+        'Gala Dinner Entrance'
+      ],
       isActive: true,
       order: 2
     }
   });
 
-  console.log(`✅ Pricing Tiers created for: ${iys2025.name}`);
+  // YBB Ambassador 2025 Pricing
+  await prisma.programPricingTier.create({
+      data: {
+        programId: ybbAmbassador2025.id,
+        name: 'Ambassador Registration',
+        description: 'Administrative commitment fee',
+        price: 10.00,
+        currency: 'USD',
+        capacity: 1000,
+        feeType: 'registration_fee',
+        target: 'self_funded',
+        benefits: ['Official Ambassador ID', 'Digital Toolkit', 'Global Network Access'],
+        isActive: true,
+        order: 1
+      }
+  });
+
+  console.log(`✅ Pricing Tiers created for: ${iys2025.name} and ${ybbAmbassador2025.name}`);
 
   // ==========================================
   // 12. Create Sponsors & Partners
@@ -1107,53 +1195,173 @@ async function main() {
   console.log(`✅ Speakers created for: ${iys2025.name}`);
 
   // ==========================================
-  // 14. Create Program Timeline
+  // 14. Create Program Timeline (Journey & Important Dates)
   // ==========================================
 
+  // Cleanup IYS 2025 timeline
+  await prisma.programTimeline.deleteMany({ where: { programId: iys2025.id } });
+
+  // 1. Participant Registration
   await prisma.programTimeline.create({
     data: {
       programId: iys2025.id,
-      title: 'Registration Opens',
-      date: new Date('2024-08-01'),
-      description: 'Start submitting your applications.',
+      title: 'Participant Registration',
+      date: new Date('2025-08-01'),
+      endDate: new Date('2025-09-30'), 
+      description: 'Register an Account and Complete the Registration Form including payment.\nRegistration Fee: Initial Stage: 10 USD / Rp167,500\nProgram Fee: Start from 330 USD',
+      order: 1,
+      isActive: true
+    }
+  });
+
+  // 2. LoA Announcement
+  await prisma.programTimeline.create({
+    data: {
+      programId: iys2025.id,
+      title: 'LoA Announcement',
+      date: new Date('2025-10-01'),
+      endDate: new Date('2025-10-05'),
+      description: 'Check your email and IG for more information.',
+      order: 2,
+      isActive: true
+    }
+  });
+
+  // 3. On Boarding Session
+  await prisma.programTimeline.create({
+    data: {
+      programId: iys2025.id,
+      title: 'On Boarding Session',
+      date: new Date('2025-10-10'), // Placeholder date
+      description: 'Date will be confirmed via email.',
+      order: 3,
+      isActive: true
+    }
+  });
+
+  // 4. First Payment
+  await prisma.programTimeline.create({
+    data: {
+      programId: iys2025.id,
+      title: 'First Payment',
+      date: new Date('2025-11-20'),
+      description: 'Program fees are available when the payment period begins. First Installment: 330 USD / Rp5.000.000',
+      order: 4,
+      isActive: true
+    }
+  });
+
+  // 5. Mentoring
+  await prisma.programTimeline.create({
+    data: {
+      programId: iys2025.id,
+      title: 'Mentoring',
+      date: new Date('2025-11-25'),
+      description: 'Participants will receive mentoring after the first stage of payment.',
+      order: 5,
+      isActive: true
+    }
+  });
+
+  // 6. Second Payment
+  await prisma.programTimeline.create({
+    data: {
+      programId: iys2025.id,
+      title: 'Second Payment',
+      date: new Date('2025-12-20'),
+      description: 'Participants must complete the second installment. Second Installment: 400 USD / Rp6.500.000',
+      order: 6,
+      isActive: true
+    }
+  });
+
+  // 7. Fully Funded Interview Announcement
+  await prisma.programTimeline.create({
+    data: {
+      programId: iys2025.id,
+      title: 'Fully Funded Candidate Interview Announcement',
+      date: new Date('2025-11-25'),
+      endDate: new Date('2025-11-30'),
+      description: 'Selected fully funded candidates are invited to attend the interview stage.',
+      order: 7,
+      isActive: true
+    }
+  });
+
+  // 8. Interview Fully Funded Candidates
+  await prisma.programTimeline.create({
+    data: {
+      programId: iys2025.id,
+      title: 'Interview Fully Funded Candidates',
+      date: new Date('2025-12-01'),
+      endDate: new Date('2025-12-10'),
+      description: 'Interview session for shortlisted fully funded candidates.',
+      order: 8,
+      isActive: true
+    }
+  });
+
+  // 9. Final Announcement
+  await prisma.programTimeline.create({
+    data: {
+      programId: iys2025.id,
+      title: 'Final Announcement of Fully Funded Candidates',
+      date: new Date('2025-12-20'),
+      endDate: new Date('2025-12-25'),
+      description: 'Final results for fully funded candidates who have been selected.',
+      order: 9,
+      isActive: true
+    }
+  });
+
+  // 10. Summit Program
+  await prisma.programTimeline.create({
+    data: {
+      programId: iys2025.id,
+      title: 'Istanbul Youth Summit Program',
+      date: new Date('2026-02-02'),
+      endDate: new Date('2026-02-05'),
+      description: 'The Istanbul Youth Summit program will take place on February 2-5, 2026, in Istanbul, Turkey.',
+      order: 10,
+      isActive: true
+    }
+  });
+
+  console.log(`✅ Timeline created for: ${iys2025.name}`);
+
+  // YBB Ambassador Timeline
+  await prisma.programTimeline.create({
+    data: {
+      programId: ybbAmbassador2025.id,
+      title: 'Application Period',
+      date: new Date('2024-10-01'),
+      description: 'Open call for ambassadors.',
       order: 1,
       isActive: true
     }
   });
 
   await prisma.programTimeline.create({
-    data: {
-      programId: iys2025.id,
-      title: 'Registration Closes',
-      date: new Date('2024-11-30'), 
-      description: 'Last day to submit applications.',
-      order: 2,
-      isActive: true
-    }
+      data: {
+        programId: ybbAmbassador2025.id,
+        title: 'Interview Stage',
+        date: new Date('2025-01-15'),
+        description: 'Selected candidates interview.',
+        order: 2,
+        isActive: true
+      }
   });
 
   await prisma.programTimeline.create({
-    data: {
-      programId: iys2025.id,
-      title: 'Announcement of Delegates',
-      date: new Date('2024-12-15'),
-      description: 'Selected participants will be notified via email.',
-      order: 3,
-      isActive: true
-    }
+      data: {
+        programId: ybbAmbassador2025.id,
+        title: 'Onboarding',
+        date: new Date('2025-02-01'),
+        description: 'Welcome new ambassadors.',
+        order: 3,
+        isActive: true
+      }
   });
-
-   await prisma.programTimeline.create({
-    data: {
-      programId: iys2025.id,
-      title: 'Summit Day',
-      date: new Date('2025-02-10'),
-      description: 'Welcome to Istanbul!',
-      order: 4,
-      isActive: true
-    }
-  });
-  console.log(`✅ Timeline created for: ${iys2025.name}`);
 
   // ==========================================
   // 15. Create Program FAQs
@@ -1190,52 +1398,107 @@ async function main() {
   }
   console.log(`✅ FAQs created for: ${iys2025.name}`);
 
+  // YBB Ambassador FAQs
+  const ybbFaqs = [
+      {
+          question: "What does an Ambassador do?",
+          answer: "Ambassadors represent YBB in their region, organizing events and spreading awareness about our programs.",
+          category: "general"
+      },
+      {
+          question: "Is this a paid position?",
+          answer: "This is a voluntary role, but top performers receive rewards and exclusive opportunities.",
+          category: "general"
+      },
+      {
+          question: "How long is the term?",
+          answer: "The ambassadorship lasts for one year.",
+          category: "general"
+      }
+  ];
+
+  for (const f of ybbFaqs) {
+      await prisma.programFaq.create({
+          data: {
+              programId: ybbAmbassador2025.id,
+              question: f.question,
+              answer: f.answer,
+              category: f.category as any, // Cast if necessary depending on strict typing in seed
+              isActive: true
+          }
+      });
+  }
+
   // ==========================================
   // 16. Create Program Schedule
   // ==========================================
   
+  // Cleanup old schedule entries for IYS 2025
+  await prisma.programSchedule.deleteMany({
+      where: { programId: iys2025.id }
+  });
+
+  // Day 1
   await prisma.programSchedule.create({
     data: {
         programId: iys2025.id,
         day: 'Day 1',
-        startTime: '09:00',
-        endTime: '12:00',
-        activity: 'Opening Ceremony',
-        description: 'Keynote speeches and cultural performances.',
-        location: 'Main Hall',
+        startTime: '12:11',
+        endTime: '13:12', // For duration calc in strategy
+        activity: 'First Day: Arrival of the Delegates',
+        description: 'Airport Assistance will be provided exclusively at Istanbul Airport, with an estimated schedule pickup session at approximately 12:00 PM local time.[CHECKLIST]Airport assistance,Opening Ceremony,Registration (Hotel Check In),Gala Dinner',
+        location: 'Istanbul Airport / Hotel',
         order: 1,
         isActive: true
     }
   });
 
+  // Day 2
   await prisma.programSchedule.create({
     data: {
         programId: iys2025.id,
-        day: 'Day 1',
-        startTime: '13:00',
-        endTime: '15:00',
-        activity: 'Panel Discussion: Future Leaders',
-        description: 'Discussion with industry experts.',
-        location: 'Main Hall',
+        day: 'Day 2',
+        startTime: '11:15',
+        endTime: '17:20', 
+        activity: 'Day 2: City Tour and University Visit',
+        description: 'A meaningful opportunity to experience Turkish culture and daily life through a city tour and university visit, gaining both cultural insights and academic perspectives.[CHECKLIST]International Symposium with Global Experts',
+        location: 'Istanbul City Center',
         order: 2,
         isActive: true
     }
   });
   
+  // Day 3
   await prisma.programSchedule.create({
     data: {
         programId: iys2025.id,
-        day: 'Day 2',
-        startTime: '09:00',
-        endTime: '17:00',
-        activity: 'Project Presentations',
-        description: 'Delegates present their social projects.',
-        location: 'Meeting Rooms',
+        day: 'Day 3',
+        startTime: '11:19',
+        endTime: '17:22',
+        activity: 'Day 3: Project Presentations, Awards, and Cultural Night',
+        description: 'Each delegate will be assigned to a distribution group based on the SDGs they have selected. The groups consisting 7-12 members).[CHECKLIST]Project Group Presentations,Closing Ceremony,Awarding Night and Cultural Night',
+        location: 'Conference Hall',
         order: 3,
         isActive: true
     }
   });
-  console.log(`✅ Schedule created for: ${iys2025.name}`);
+
+  // Day 4
+  await prisma.programSchedule.create({
+    data: {
+         programId: iys2025.id,
+         day: 'Day 4',
+         startTime: '11:23',
+         endTime: '13:24',
+         activity: 'Day 4: Closing Chapter as Delegates Return to Their Countries',
+         description: 'The Airport Assistance service for departure at Istanbul Airport will be available at 12:00 PM local time.[CHECKLIST]Certificate claims,Airport Assistance,Hotel Check out',
+         location: 'Hotel Lobby',
+         order: 4,
+         isActive: true
+    }
+  });
+
+  console.log(`✅ Detailed Schedule created for: ${iys2025.name}`);
 
   // ==========================================
   // 17. Create Legal Documents
