@@ -8,7 +8,7 @@ services:
     container_name: ybb-payment
     restart: always
     environment:
-      ENVIRONMENT: production
+      ENVIRONMENT: ${ENVIRONMENT:-production}
       PORT: 8002
       # Database
       DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@ybb-postgres-payment:5432/${DATABASE_NAME}
@@ -17,7 +17,7 @@ services:
       # Gateways
       MIDTRANS_SERVER_KEY: ${MIDTRANS_SERVER_KEY}
       MIDTRANS_CLIENT_KEY: ${MIDTRANS_CLIENT_KEY}
-      MIDTRANS_IS_PRODUCTION: "true"
+      MIDTRANS_IS_PRODUCTION: "${MIDTRANS_IS_PRODUCTION:-true}"
     depends_on:
       postgres-payment:
         condition: service_healthy
