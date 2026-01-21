@@ -38,6 +38,9 @@ COPY package*.json ./
 COPY prisma ./prisma/
 COPY prisma.config.ts ./
 
+# Update package.json to use compiled seed script in production
+RUN sed -i 's/ts-node prisma\/seed.ts/node dist\/prisma\/seed.js/g' package.json
+
 # Install only production dependencies
 RUN npm ci --only=production
 

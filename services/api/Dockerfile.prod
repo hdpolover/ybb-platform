@@ -34,6 +34,9 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 
+# Update package.json to use compiled seed script in production
+RUN sed -i 's/ts-node prisma\/seed.ts/node dist\/prisma\/seed.js/g' package.json
+
 # Generate Prisma Client (if needed at runtime, otherwise run in build)
 RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" npx prisma generate
 
