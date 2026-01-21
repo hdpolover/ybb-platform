@@ -19,7 +19,7 @@ export class ProgressStepDto {
   @ApiProperty({ required: false })
   endDate?: Date;
 
-  @ApiProperty({ enum: ['completed', 'in_progress', 'not_yet', 'failed', 'locked'] })
+  @ApiProperty({ enum: ['completed', 'in_progress', 'not_yet', 'failed', 'locked', 'expired'] })
   status: string;
 
   @ApiProperty()
