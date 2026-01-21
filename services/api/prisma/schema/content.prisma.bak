@@ -392,20 +392,3 @@ model DocumentTemplate {
   @@index([isActive])
   @@map("document_templates")
 }
-
-model ProgramObjective {
-  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId   String   @map("program_id") @db.Uuid
-  description String   @db.Text
-  order       Int      @default(0)
-  
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
-
-  program     Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
-
-  @@index([programId])
-  @@index([order])
-  @@map("program_objectives")
-}

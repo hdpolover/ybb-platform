@@ -185,6 +185,7 @@ model Program {
   programAnnouncements ProgramAnnouncement[]
   tags                ProgramTagRelation[]
   waitlist            ProgramWaitlist[]
+  objectives          ProgramObjective[]
   certificateTemplates CertificateTemplate[]
   awards              ProgramAward[]
 
