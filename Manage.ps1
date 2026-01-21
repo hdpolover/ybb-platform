@@ -17,11 +17,14 @@
 
 param (
     [Parameter(Mandatory=$false, Position=0)]
-    [ValidateSet("start", "stop", "restart", "status", "clean", "help", "logs", "ps", "migrate", "shell", "db-shell")]
+    [ValidateSet("start", "stop", "restart", "status", "clean", "help", "logs", "ps", "migrate", "shell", "db-shell", "build")]
     [string]$Command = "help",
     
     [Parameter(Mandatory=$false, Position=1)]
-    [string]$Service = ""
+    [string]$Service = "",
+    
+    [Parameter(Mandatory=$false)]
+    [switch]$Build = $false
 )
 
 # List of services matching the Makefile
@@ -40,13 +43,20 @@ $Services = @(
 $RootDir = Get-Location
 
 function Start-Services {
-    param([string]$TargetService = "")
+    param(
+        [string]$TargetService = "",
+        [bool]$BuildFirst = $false
+    )
     
     if ($TargetService) {
         Write-Host "Starting $TargetService..." -ForegroundColor Cyan
         if (Test-Path "services\$TargetService") {
             Push-Location "services\$TargetService"
             try {
+                if ($BuildFirst) {
+                    Write-Host "  Building image..." -ForegroundColor Yellow
+                    docker compose build
+                }
                 docker compose up -d
             } finally {
                 Pop-Location
@@ -63,6 +73,10 @@ function Start-Services {
         if (Test-Path "services\$service") {
             Push-Location "services\$service"
             try {
+                if ($BuildFirst) {
+                    Write-Host "  Building image..." -ForegroundColor Yellow
+                    docker compose build
+                }
                 docker compose up -d
             } finally {
                 Pop-Location
@@ -132,6 +146,42 @@ function Clean-Services {
             }
         }
     }
+    Write-Host "Cleanup complete!" -ForegroundColor Green
+}
+
+function Build-Services {
+    param([string]$TargetService = "")
+    
+    if ($TargetService) {
+        Write-Host "Building $TargetService..." -ForegroundColor Cyan
+        if (Test-Path "services\$TargetService") {
+            Push-Location "services\$TargetService"
+            try {
+                docker compose build
+            } finally {
+                Pop-Location
+            }
+        } else {
+            Write-Warning "Directory services\$TargetService not found."
+        }
+        return
+    }
+    
+    Write-Host "Building all services..." -ForegroundColor Green
+    foreach ($service in $Services) {
+        Write-Host ">> Building $service..." -ForegroundColor Cyan
+        if (Test-Path "services\$service") {
+            Push-Location "services\$service"
+            try {
+                docker compose build
+            } finally {
+                Pop-Location
+            }
+        } else {
+            Write-Warning "Directory services\$service not found."
+        }
+    }
+    Write-Host "Build complete!" -ForegroundColor Green
 }
 
 function Show-Logs-Help {
@@ -202,12 +252,13 @@ function Open-DbShell {
 function Show-Help {
     Write-Host "YBB Platform (Microservices Edition) - Windows Management Script"
     Write-Host "----------------------------------------------------------------"
-    Write-Host "Usage: .\Manage.ps1 [command] [service]"
+    Write-Host "Usage: .\Manage.ps1 [command] [service] [-Build]"
     Write-Host ""
     Write-Host "Commands:"
     Write-Host "  start [svc]  - Start all services or a specific service"
     Write-Host "  stop [svc]   - Stop all services or a specific service"
     Write-Host "  restart      - Restart all services"
+    Write-Host "  build [svc]  - Build all Docker images or a specific service"
     Write-Host "  status       - Show status of all services"
     Write-Host "  ps           - Show all running containers"
     Write-Host "  logs [svc]   - Show log instructions or tail a specific service"
@@ -217,21 +268,35 @@ function Show-Help {
     Write-Host "  db-shell     - Connect to API PostgreSQL database"
     Write-Host "  help         - Show this help message"
     Write-Host ""
+    Write-Host "Options:"
+    Write-Host "  -Build       - Build images before starting (use with 'start')"
+    Write-Host ""
     Write-Host "Services: $($Services -join ', ')"
     Write-Host ""
     Write-Host "Examples:"
     Write-Host "  .\Manage.ps1 start              # Start all services"
+    Write-Host "  .\Manage.ps1 start -Build       # Build and start all services"
     Write-Host "  .\Manage.ps1 start api          # Start only API"
+    Write-Host "  .\Manage.ps1 start api -Build   # Build and start API"
+    Write-Host "  .\Manage.ps1 build api          # Build only API image"
+    Write-Host "  .\Manage.ps1 clean              # Clean everything (fresh start)"
     Write-Host "  .\Manage.ps1 logs payment       # Tail payment logs"
     Write-Host "  .\Manage.ps1 shell api          # Shell into API container"
+    Write-Host ""
+    Write-Host "Fresh Start (clean install):"
+    Write-Host "  .\Manage.ps1 clean"
+    Write-Host "  .\Manage.ps1 start -Build"
+    Write-Host ""
+    Write-Host "Note: API service auto-runs database migrations on startup."
 }
 
 # Main Execution Flow
 try {
     switch ($Command) {
-        "start"    { Start-Services -TargetService $Service }
+        "start"    { Start-Services -TargetService $Service -BuildFirst $Build }
         "stop"     { Stop-Services -TargetService $Service }
-        "restart"  { Stop-Services; Start-Services }
+        "restart"  { Stop-Services; Start-Services -BuildFirst $Build }
+        "build"    { Build-Services -TargetService $Service }
         "status"   { Get-Status }
         "ps"       { Show-DockerPs }
         "clean"    { Clean-Services }
