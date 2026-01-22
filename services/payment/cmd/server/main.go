@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -207,6 +208,9 @@ func setupRouter(paymentHandler *handlers.PaymentHandler, paymentMethodHandler *
 			"service": "payment",
 		})
 	})
+
+	// Prometheus Metrics
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// API v1 routes
 	v1 := router.Group("/api/v1")

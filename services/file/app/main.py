@@ -1,6 +1,7 @@
 """FastAPI application entry point."""
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_fastapi_instrumentator import Instrumentator
 from app.presentation.api.routes import files, documents, images
 from app.infrastructure.persistence.postgres.database import connect_db, disconnect_db
 
@@ -24,6 +25,9 @@ app.add_middleware(
 app.include_router(files.router, prefix="/api/v1")
 app.include_router(documents.router, prefix="/api/v1")
 app.include_router(images.router, prefix="/api/v1")
+
+# Instrument Prometheus
+Instrumentator().instrument(app).expose(app)
 
 
 @app.on_event("startup")

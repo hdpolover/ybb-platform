@@ -62,7 +62,7 @@
             "pluginVersion": "10.0.0",
             "targets": [
                 {
-                    "expr": "up{job=\"api\"}",
+                    "expr": "up{job=\"ybb-api\"}",
                     "legendFormat": "API Gateway",
                     "refId": "A"
                 }
@@ -122,7 +122,7 @@
             "pluginVersion": "10.0.0",
             "targets": [
                 {
-                    "expr": "up{job=\"payment-service\"}",
+                    "expr": "up{job=\"ybb-payment\"}",
                     "legendFormat": "Payment Service",
                     "refId": "A"
                 }
@@ -182,7 +182,7 @@
             "pluginVersion": "10.0.0",
             "targets": [
                 {
-                    "expr": "up{job=\"file-service\"}",
+                    "expr": "up{job=\"ybb-file\"}",
                     "legendFormat": "File Service",
                     "refId": "A"
                 }
@@ -242,7 +242,7 @@
             "pluginVersion": "10.0.0",
             "targets": [
                 {
-                    "expr": "up{job=\"notification-service\"}",
+                    "expr": "up{job=\"ybb-notification\"}",
                     "legendFormat": "Notification Service",
                     "refId": "A"
                 }

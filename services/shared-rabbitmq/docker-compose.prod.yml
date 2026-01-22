@@ -13,6 +13,7 @@ services:
       - "15672:15672" # UI potentially blocked by firewall unless proxied
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+      - ./enabled_plugins:/etc/rabbitmq/enabled_plugins
     networks:
       - ybb-network
     labels:
