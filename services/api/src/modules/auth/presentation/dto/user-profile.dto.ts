@@ -4,8 +4,8 @@ export class IdentityDto {
   @ApiProperty({ example: 'local' })
   provider: string;
 
-  @ApiProperty({ example: '2024-03-20T10:00:00Z' })
-  lastUsedAt: Date;
+  @ApiProperty({ example: '2024-03-20T10:00:00Z', nullable: true })
+  lastUsedAt: Date | null;
 }
 
 export class RegisteredProgramDto {

@@ -19,6 +19,8 @@ import { ForgotPasswordHandler } from '../application/commands/handlers/forgot-p
 import { ResetPasswordHandler } from '../application/commands/handlers/reset-password.handler';
 import { VerifyEmailHandler } from '../application/commands/handlers/verify-email.handler';
 import { ResendVerificationEmailHandler } from '../application/commands/handlers/resend-verification-email.handler';
+import { GetUserProfileHandler } from '../application/queries/handlers/get-user-profile.handler';
+import { GetAuthProvidersHandler } from '../application/queries/handlers/get-auth-providers.handler';
 import { LoginCommand } from '../application/commands/login.command';
 import { RegisterCommand } from '../application/commands/register.command';
 import { RegisterAdminCommand } from '../application/commands/register-admin.command';
@@ -27,10 +29,11 @@ import { ForgotPasswordCommand } from '../application/commands/forgot-password.c
 import { ResetPasswordCommand } from '../application/commands/reset-password.command';
 import { VerifyEmailCommand } from '../application/commands/verify-email.command';
 import { ResendVerificationEmailCommand } from '../application/commands/resend-verification-email.command';
+import { GetUserProfileQuery } from '../application/queries/get-user-profile.query';
+import { GetAuthProvidersQuery } from '../application/queries/get-auth-providers.query';
 import { Public } from '../../../shared/decorators/public.decorator';
 import { CurrentUser, CurrentUserData } from '../../../shared/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../infrastructure/guards/jwt-auth.guard';
-import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -49,7 +52,8 @@ export class AuthController {
     private readonly resetPasswordHandler: ResetPasswordHandler,
     private readonly verifyEmailHandler: VerifyEmailHandler,
     private readonly resendVerificationEmailHandler: ResendVerificationEmailHandler,
-    private readonly prisma: PrismaService,
+    private readonly getUserProfileHandler: GetUserProfileHandler,
+    private readonly getAuthProvidersHandler: GetAuthProvidersHandler,
   ) { }
 
   @Public()
@@ -198,69 +202,8 @@ export class AuthController {
     type: UserProfileDto,
   })
   async getProfile(@CurrentUser() user: CurrentUserData) {
-    // Fetch fresh user data with identities and participant info
-    const userData = await this.prisma.user.findUnique({
-      where: { id: user.userId },
-      include: {
-        identities: {
-          include: {
-            provider: true
-          }
-        },
-        participant: {
-          include: {
-            applications: {
-              where: {
-                program: {
-                  programCategoryId: user.programCategoryId
-                }
-              },
-              include: {
-                program: true
-              }
-            }
-          }
-        }
-      }
-    });
-
-    if (!userData) {
-      return {
-        userId: user.userId,
-        email: user.email,
-        programCategoryId: user.programCategoryId,
-        identities: [],
-        participantId: null,
-        registeredPrograms: [],
-        isProfileCompleted: false
-      };
-    }
-
-    const registeredPrograms = userData.participant?.applications.map(app => ({
-      programId: app.programId,
-      programName: app.program.name,
-      programSlug: app.program.slug,
-      year: app.program.year,
-      applicationId: app.id,
-      applicationStatus: app.status
-    })) || [];
-
-    // Determine if onboarding is needed (isFirstTime)
-    // We consider it completed if we have a participant record AND profileCompletedAt is set
-    const isProfileCompleted = !!(userData.participant?.profileCompletedAt);
-
-    return {
-      userId: userData.id,
-      email: userData.email,
-      programCategoryId: userData.programCategoryId,
-      identities: userData.identities.map(i => ({
-        provider: i.provider.name,
-        lastUsedAt: i.lastUsedAt
-      })),
-      participantId: userData.participant?.id,
-      registeredPrograms,
-      isProfileCompleted
-    };
+    const query = new GetUserProfileQuery(user.userId, user.programCategoryId);
+    return this.getUserProfileHandler.execute(query);
   }
 
   @Public()
@@ -287,20 +230,7 @@ export class AuthController {
     },
   })
   async getProviders() {
-    const providers = await this.prisma.authProvider.findMany({
-      where: { isActive: true },
-      select: {
-        id: true,
-        name: true,
-        displayName: true,
-        description: true,
-        isOAuth: true,
-        icon: true,
-        buttonColor: true,
-      },
-      orderBy: { order: 'asc' },
-    });
-
-    return providers;
+    const query = new GetAuthProvidersQuery();
+    return this.getAuthProvidersHandler.execute(query);
   }
 }
