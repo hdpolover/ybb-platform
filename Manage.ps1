@@ -135,7 +135,24 @@ function Get-Status {
 }
 
 function Clean-Services {
-    Write-Host "Cleaning up (Stop and Remove Volumes)..." -ForegroundColor Red
+    param([string]$TargetService = "")
+
+    if ($TargetService) {
+        Write-Host "Cleaning up $TargetService (Stop and Remove Volumes)..." -ForegroundColor Red
+        if (Test-Path "services\$TargetService") {
+            Push-Location "services\$TargetService"
+            try {
+                docker compose down -v
+            } finally {
+                Pop-Location
+            }
+        } else {
+            Write-Warning "Directory services\$TargetService not found."
+        }
+        return
+    }
+
+    Write-Host "Cleaning up ALL services (Stop and Remove Volumes)..." -ForegroundColor Red
     foreach ($service in $Services) {
         Write-Host ">> Cleaning $service..." -ForegroundColor Cyan
         if (Test-Path "services\$service") {
@@ -264,7 +281,7 @@ function Show-Help {
     Write-Host "  status       - Show status of all services"
     Write-Host "  ps           - Show all running containers"
     Write-Host "  logs [svc]   - Show log instructions or tail a specific service"
-    Write-Host "  clean        - Stop and remove all containers and volumes"
+    Write-Host "  clean [svc]  - Stop and remove containers and volumes (all or specific)"
     Write-Host "  migrate      - Run Prisma migrations on API"
     Write-Host "  shell <svc>  - Open shell in a service container"
     Write-Host "  db-shell     - Connect to API PostgreSQL database"
@@ -301,7 +318,7 @@ try {
         "build"    { Build-Services -TargetService $Service }
         "status"   { Get-Status }
         "ps"       { Show-DockerPs }
-        "clean"    { Clean-Services }
+        "clean"    { Clean-Services -TargetService $Service }
         "logs"     { Show-Logs-Help -TargetService $Service }
         "migrate"  { Run-Migrate }
         "shell"    { Open-Shell -TargetService $Service }
