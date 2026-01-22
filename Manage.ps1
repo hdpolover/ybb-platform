@@ -36,7 +36,8 @@ $Services = @(
     "notification",
     "admin-dashboard",
     "minimal-admin",
-    "monitoring"
+    "monitoring",
+    "pgadmin"
 )
 
 # Save the root directory to ensure we can return to it
@@ -232,6 +233,7 @@ function Open-Shell {
         "notification" = "ybb-notification"
         "admin-dashboard" = "ybb-admin-dashboard"
         "minimal-admin" = "ybb-minimal-admin"
+        "pgadmin" = "ybb-pgadmin"
     }
     
     $container = $containerMap[$TargetService]
