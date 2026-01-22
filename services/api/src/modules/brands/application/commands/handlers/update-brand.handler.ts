@@ -3,7 +3,7 @@ import { Inject, NotFoundException } from '@nestjs/common';
 import { UpdateBrandCommand } from '../update-brand.command';
 import { IBrandRepository } from '@core/interfaces/repositories/brand.repository.interface';
 import { Brand } from '@core/entities/brand.entity';
-import { StorageService } from '../../../../../files/application/storage.service';
+import { StorageService } from '../../../../files/application/storage.service';
 
 @CommandHandler(UpdateBrandCommand)
 export class UpdateBrandHandler implements ICommandHandler<UpdateBrandCommand> {

@@ -35,7 +35,8 @@ export class StorageService {
     brandId: string,
     folder: string, 
     programId?: string,
-    targetBucket: string = 'ybb'
+    targetBucket: string = 'ybb',
+    participantId?: string
   ): Promise<StorageUploadResult> {
     this.logger.log(`Uploading file to folder ${folder} for program ${programId}`);
 
@@ -47,7 +48,8 @@ export class StorageService {
       userId,
       brandId,
       folder, 
-      programId
+      programId,
+      participantId
     );
 
     if (!uploadResult || !uploadResult.file) {

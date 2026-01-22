@@ -13,6 +13,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
+import { StorageService } from '../application/storage.service';
 import { FileServiceClient, FileResponse } from '../infrastructure/clients/file-service.client';
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
 
@@ -31,6 +32,7 @@ export class FilesController {
 
   constructor(
     private readonly fileServiceClient: FileServiceClient,
+    private readonly storageService: StorageService,
     private readonly metricsService: MetricsService,
   ) {}
 
@@ -80,13 +82,14 @@ export class FilesController {
         `Uploading file: ${file.originalname} for user ${userId}, brand ${brandId}`,
       );
       
-      const result = await this.fileServiceClient.uploadFile(
+      const uploadResult = await this.storageService.uploadFile(
         file,
         userId,
         brandId,
         bucket,
         programId,
-        participantId,
+        'ybb',
+        participantId
       );
       
       this.metricsService.fileUploadsTotal.inc({ file_type: bucket });
@@ -94,7 +97,11 @@ export class FilesController {
       return {
         success: true,
         message: 'File uploaded successfully',
-        data: result,
+        data: {
+          file: uploadResult.fileInfo,
+          url: uploadResult.url,
+          path: uploadResult.path
+        },
       };
     } catch (error) {
       this.logger.error(`Failed to upload file: ${error.message}`);

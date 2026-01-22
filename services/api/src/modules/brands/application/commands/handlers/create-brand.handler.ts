@@ -4,7 +4,7 @@ import { CreateBrandCommand } from '../create-brand.command';
 import { IBrandRepository } from '@core/interfaces/repositories/brand.repository.interface';
 import { Brand } from '@core/entities/brand.entity';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
-import { StorageService } from '../../../../../files/application/storage.service';
+import { StorageService } from '../../../../files/application/storage.service';
 
 @CommandHandler(CreateBrandCommand)
 export class CreateBrandHandler implements ICommandHandler<CreateBrandCommand> {
