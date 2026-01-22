@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { setupSwagger } from './config/swagger.config';
@@ -7,6 +8,20 @@ import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Connect Microservice for Event Consumption
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.RMQ,
+    options: {
+      urls: [process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672/'],
+      queue: 'api-service-payment-events',
+      queueOptions: {
+        durable: true,
+      },
+      noAck: false,
+      prefetchCount: 1,
+    },
+  });
 
   // Use Winston Logger
   app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));
@@ -55,6 +70,8 @@ async function bootstrap() {
   });
 
   const port = process.env.PORT || 3000;
+  
+  await app.startAllMicroservices();
   await app.listen(port);
 
   console.log(`\n🚀 Application is running on: http://localhost:${port}`);
