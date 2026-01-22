@@ -3,6 +3,7 @@ import { ForgotPasswordCommand } from '../forgot-password.command';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { randomBytes } from 'crypto';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
+import { AuthLoggingService } from '../../services/auth-logging.service';
 
 @Injectable()
 export class ForgotPasswordHandler {
@@ -11,6 +12,7 @@ export class ForgotPasswordHandler {
     constructor(
         private readonly prisma: PrismaService,
         private readonly rabbitmqProducer: RabbitMQProducerService,
+        private readonly authLoggingService: AuthLoggingService,
     ) { }
 
     /**
@@ -104,6 +106,12 @@ export class ForgotPasswordHandler {
         } else {
             this.logger.warn(`Forgot password requested for non-existent email: ${command.email}`);
         }
+
+        await this.authLoggingService.logForgotPasswordRequest(
+            command.email,
+            command.ipAddress || '0.0.0.0',
+            command.userAgent || 'unknown',
+        );
 
         // Always return success to prevent user enumeration
         return {

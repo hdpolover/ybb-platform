@@ -135,8 +135,11 @@ export class AuthController {
     @Body() dto: ForgotPasswordDto,
     @Query('url') url?: string,
     @Headers('x-brand-domain') brandDomain?: string,
+    @Ip() ip?: string,
+    @Req() req?: Request,
   ) {
-    const command = new ForgotPasswordCommand(dto.email, dto.programCategoryId);
+    const userAgent = req?.headers['user-agent'] || 'unknown';
+    const command = new ForgotPasswordCommand(dto.email, dto.programCategoryId, ip || '0.0.0.0', userAgent);
     return this.forgotPasswordHandler.execute(command, url || brandDomain);
   }
 
@@ -145,8 +148,13 @@ export class AuthController {
   @Throttle({ default: { limit: 3, ttl: 900000 } })
   @ApiOperation({ summary: 'Reset Password' })
   @ApiResponse({ status: 201, description: 'Password successfully reset' })
-  async resetPassword(@Body() dto: ResetPasswordDto) {
-    const command = new ResetPasswordCommand(dto.token, dto.password);
+  async resetPassword(
+    @Body() dto: ResetPasswordDto,
+    @Ip() ip?: string,
+    @Req() req?: Request,
+  ) {
+    const userAgent = req?.headers['user-agent'] || 'unknown';
+    const command = new ResetPasswordCommand(dto.token, dto.password, ip || '0.0.0.0', userAgent);
     return this.resetPasswordHandler.execute(command);
   }
 
@@ -155,8 +163,13 @@ export class AuthController {
   @Throttle({ default: { limit: 5, ttl: 900000 } })
   @ApiOperation({ summary: 'Verify Email' })
   @ApiResponse({ status: 201, description: 'Email successfully verified' })
-  async verifyEmail(@Body() dto: VerifyEmailDto) {
-    const command = new VerifyEmailCommand(dto.token);
+  async verifyEmail(
+    @Body() dto: VerifyEmailDto,
+    @Ip() ip?: string,
+    @Req() req?: Request,
+  ) {
+    const userAgent = req?.headers['user-agent'] || 'unknown';
+    const command = new VerifyEmailCommand(dto.token, ip || '0.0.0.0', userAgent);
     return this.verifyEmailHandler.execute(command);
   }
 
@@ -170,8 +183,11 @@ export class AuthController {
     @Body() dto: ResendVerificationDto,
     @Query('url') url?: string,
     @Headers('x-brand-domain') brandDomain?: string,
+    @Ip() ip?: string,
+    @Req() req?: Request,
   ) {
-    const command = new ResendVerificationEmailCommand(dto.email, dto.programCategoryId);
+    const userAgent = req?.headers['user-agent'] || 'unknown';
+    const command = new ResendVerificationEmailCommand(dto.email, dto.programCategoryId, ip || '0.0.0.0', userAgent);
     return this.resendVerificationEmailHandler.execute(command, url || brandDomain);
   }
 

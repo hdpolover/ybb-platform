@@ -3,12 +3,14 @@ import { PrismaService } from '../../../../../shared/infrastructure/prisma/prism
 import { ResendVerificationEmailCommand } from '../resend-verification-email.command';
 import * as crypto from 'crypto';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
+import { AuthLoggingService } from '../../services/auth-logging.service';
 
 @Injectable()
 export class ResendVerificationEmailHandler {
   constructor(
     private readonly prisma: PrismaService,
     private readonly rabbitmqProducer: RabbitMQProducerService,
+    private readonly authLoggingService: AuthLoggingService,
   ) {}
 
   private async resolveProgramCategoryId(programCategoryId?: string, domain?: string): Promise<string> {
@@ -99,7 +101,13 @@ export class ResendVerificationEmailHandler {
         contactEmail: programCategory.contactEmail,
       } : undefined,
     });
+await this.authLoggingService.logResendVerification(
+        user.id,
+        command.ipAddress || '0.0.0.0',
+        command.userAgent || 'unknown',
+    );
 
+    
     return { success: true, message: 'Verification email sent successfully.' };
   }
 }
