@@ -26,6 +26,7 @@ export class MetricsService implements OnModuleInit {
     public readonly externalApiDuration: Histogram;
     // jobQueueDepth is typically best monitored via RabbitMQ exporter, but we can declare it here if we want to push it manually
     public readonly jobQueueDepth: Gauge; 
+    public readonly jobQueueConsumers: Gauge;
     public readonly jobProcessingDuration: Histogram;
 
     constructor() {
@@ -150,6 +151,13 @@ export class MetricsService implements OnModuleInit {
         this.jobQueueDepth = new Gauge({
             name: 'job_queue_depth',
             help: 'Depth of job queues',
+            labelNames: ['queue_name'],
+            registers: [this.registry],
+        });
+
+        this.jobQueueConsumers = new Gauge({
+            name: 'job_queue_consumers',
+            help: 'Number of consumers for job queues',
             labelNames: ['queue_name'],
             registers: [this.registry],
         });
