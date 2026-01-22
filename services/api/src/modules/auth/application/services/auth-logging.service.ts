@@ -112,4 +112,104 @@ export class AuthLoggingService {
         }
     });
   }
+
+  async logEmailVerification(userId: string, ipAddress: string = '0.0.0.0', userAgent: string = 'unknown') {
+    const agentInfo = this.parseUserAgent(userAgent);
+    await this.prisma.userActivityLog.create({
+      data: {
+        userId,
+        activityType: 'VERIFY_EMAIL',
+        activityCategory: 'AUTH',
+        activityData: {},
+        ipAddress,
+        userAgent,
+        deviceType: agentInfo.deviceType,
+      },
+    });
+
+    await this.prisma.userSecurityLog.create({
+      data: {
+        userId,
+        eventType: 'EMAIL_VERIFIED',
+        eventStatus: 'SUCCESS',
+        eventDescription: 'Email address verified successfully',
+        ipAddress,
+        userAgent,
+        riskLevel: RiskLevel.low,
+      },
+    });
+  }
+
+  async logForgotPasswordRequest(email: string, ipAddress: string = '0.0.0.0', userAgent: string = 'unknown') {
+    const user = await this.prisma.user.findFirst({ where: { email }, select: { id: true } });
+    const agentInfo = this.parseUserAgent(userAgent);
+
+    if (user) {
+      await this.prisma.userActivityLog.create({
+        data: {
+          userId: user.id,
+          activityType: 'FORGOT_PASSWORD_REQUEST',
+          activityCategory: 'AUTH',
+          activityData: { email },
+          ipAddress,
+          userAgent,
+          deviceType: agentInfo.deviceType,
+        },
+      });
+    }
+
+    await this.prisma.userSecurityLog.create({
+      data: {
+        userId: user?.id,
+        eventType: 'FORGOT_PASSWORD',
+        eventStatus: 'SUCCESS',
+        eventDescription: `Password reset requested for ${email}`,
+        ipAddress,
+        userAgent,
+        riskLevel: RiskLevel.medium,
+      },
+    });
+  }
+
+  async logPasswordReset(userId: string, ipAddress: string = '0.0.0.0', userAgent: string = 'unknown') {
+    const agentInfo = this.parseUserAgent(userAgent);
+    await this.prisma.userActivityLog.create({
+      data: {
+        userId,
+        activityType: 'PASSWORD_RESET',
+        activityCategory: 'AUTH',
+        activityData: {},
+        ipAddress,
+        userAgent,
+        deviceType: agentInfo.deviceType,
+      },
+    });
+
+    await this.prisma.userSecurityLog.create({
+      data: {
+        userId,
+        eventType: 'PASSWORD_RESET',
+        eventStatus: 'SUCCESS',
+        eventDescription: 'Password successfully reset',
+        ipAddress,
+        userAgent,
+        riskLevel: RiskLevel.high,
+      },
+    });
+  }
+
+  async logResendVerification(userId: string, ipAddress: string = '0.0.0.0', userAgent: string = 'unknown') {
+    const agentInfo = this.parseUserAgent(userAgent);
+    await this.prisma.userActivityLog.create({
+      data: {
+        userId,
+        activityType: 'RESEND_VERIFICATION',
+        activityCategory: 'AUTH',
+        activityData: {},
+        ipAddress,
+        userAgent,
+        deviceType: agentInfo.deviceType,
+      },
+    });
+  }
 }

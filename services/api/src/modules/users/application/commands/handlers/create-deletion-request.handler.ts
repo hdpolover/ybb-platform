@@ -34,6 +34,7 @@ export class CreateDeletionRequestHandler {
 
         return {
             id: created.id,
+            userId: created.userId,
             status: created.status,
             reason: created.reason ?? undefined,
             reasonCategory: created.reasonCategory ?? undefined,

@@ -1,11 +1,15 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { ResetPasswordCommand } from '../reset-password.command';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { AuthLoggingService } from '../../services/auth-logging.service';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class ResetPasswordHandler {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly authLoggingService: AuthLoggingService,
+  ) {}
 
   async execute(command: ResetPasswordCommand): Promise<{ message: string }> {
     const { token, newPassword } = command;
@@ -40,6 +44,12 @@ export class ResetPasswordHandler {
         isActive: true, 
       },
     });
+
+    await this.authLoggingService.logPasswordReset(
+        user.id,
+        command.ipAddress || '0.0.0.0',
+        command.userAgent || 'unknown',
+    );
 
     return {
       message: 'Password has been successfully reset. You can now login with your new password.',

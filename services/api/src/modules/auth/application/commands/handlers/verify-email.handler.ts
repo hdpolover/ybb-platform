@@ -1,10 +1,14 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { VerifyEmailCommand } from '../verify-email.command';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
+import { AuthLoggingService } from '../../services/auth-logging.service';
 
 @Injectable()
 export class VerifyEmailHandler {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly authLoggingService: AuthLoggingService,
+  ) {}
 
   async execute(command: VerifyEmailCommand): Promise<{ success: boolean; message: string }> {
     const user = await this.prisma.user.findFirst({
@@ -43,6 +47,12 @@ export class VerifyEmailHandler {
     } catch (e) {
         // Participant might not exist yet, ignore
     }
+
+    await this.authLoggingService.logEmailVerification(
+      user.id,
+      command.ipAddress || '0.0.0.0',
+      command.userAgent || 'unknown',
+    );
 
     return { success: true, message: 'Email successfully verified' };
   }
