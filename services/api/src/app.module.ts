@@ -31,6 +31,7 @@ import { StatsModule } from '@modules/stats/stats.module';
 import { SupportModule } from '@modules/support/support.module';
 import { SystemModule } from '@modules/system/system.module';
 import { UsersModule } from '@modules/users/users.module';
+import { GalleryModule } from '@modules/gallery/gallery.module';
 
 @Module({
   imports: [
@@ -100,6 +101,7 @@ import { UsersModule } from '@modules/users/users.module';
     SupportModule,
     SystemModule,
     UsersModule,
+    GalleryModule,
   ],
   controllers: [CacheController, MetricsController],
 })
