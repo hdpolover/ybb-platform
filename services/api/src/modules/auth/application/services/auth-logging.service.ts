@@ -1,9 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { RiskLevel } from '@prisma/client';
 
 @Injectable()
 export class AuthLoggingService {
+  private readonly logger = new Logger(AuthLoggingService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   public parseUserAgent(ua: string) {
@@ -44,6 +46,13 @@ export class AuthLoggingService {
       },
     });
 
+    this.logger.log({
+        message: 'User logged in successfully',
+        userId,
+        ipAddress,
+        userAgent,
+    });
+
     // 2. Log Activity
     const agentInfo = this.parseUserAgent(userAgent);
     await this.prisma.userActivityLog.create({
@@ -81,6 +90,14 @@ export class AuthLoggingService {
         riskLevel: RiskLevel.medium,
         flagged: false, // Could flag if repeated
       },
+    });
+
+    this.logger.warn({
+        message: 'Failed login attempt',
+        reason,
+        email,
+        ipAddress,
+        userAgent,
     });
   }
 

@@ -6,6 +6,7 @@ import { PrismaService } from '../../../../../shared/infrastructure/prisma/prism
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { AuthLoggingService } from '../../services/auth-logging.service';
+import { GeoIpService } from '@shared/infrastructure/geoip/geoip.service';
 
 @Injectable()
 export class LoginHandler {
@@ -13,6 +14,7 @@ export class LoginHandler {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly authLoggingService: AuthLoggingService,
+    private readonly geoIpService: GeoIpService,
   ) { }
 
   /**
@@ -203,6 +205,8 @@ export class LoginHandler {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 days expiration
 
+    const geoCtx = this.geoIpService.lookup(command.ipAddress);
+
     await this.prisma.userSession.create({
       data: {
         userId: user.id,
@@ -214,8 +218,8 @@ export class LoginHandler {
         operatingSystem: agentInfo.os,
         ipAddress: command.ipAddress,
         expiresAt,
-        country: 'XX', // GeoIP could be added later
-        city: 'Unknown',
+        country: geoCtx.country,
+        city: geoCtx.city,
       }
     });
 

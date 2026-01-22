@@ -23,6 +23,7 @@ import { JwtAuthGuard } from './infrastructure/guards/jwt-auth.guard';
 import { TokenBlacklistService } from './infrastructure/services/token-blacklist.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { AuthLoggingService } from './application/services/auth-logging.service';
+import { GeoIpModule } from '@shared/infrastructure/geoip/geoip.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { AuthLoggingService } from './application/services/auth-logging.service'
       }),
       inject: [ConfigService],
     }),
+    GeoIpModule,
   ],
   controllers: [AuthController, AuthProviderController],
   providers: [

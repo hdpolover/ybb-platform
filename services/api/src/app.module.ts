@@ -1,11 +1,17 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { PrismaModule } from '@shared/infrastructure/prisma/prisma.module';
 import { CacheModule } from '@shared/infrastructure/cache/cache.module';
 import { ThrottlerModule } from '@shared/infrastructure/throttler/throttler.module';
 import { RabbitMQModule } from '@shared/infrastructure/rabbitmq/rabbitmq.module';
+import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.module';
+import { GeoIpModule } from '@shared/infrastructure/geoip/geoip.module';
 import { CacheController } from '@shared/presentation/cache.controller';
 import { MetricsController } from '@shared/presentation/metrics.controller';
+import { WinstonModule } from 'nest-winston';
+import * as winston from 'winston';
+import { Logtail } from '@logtail/node';
+import { LogtailTransport } from '@logtail/winston';
 import { AchievementsModule } from '@modules/achievements/achievements.module';
 import { ApplicationsModule } from '@modules/applications/applications.module';
 import { AuthModule } from '@modules/auth/auth.module';
@@ -34,11 +40,45 @@ import { UsersModule } from '@modules/users/users.module';
       envFilePath: '.env',
     }),
 
+    // Logging
+    WinstonModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        const transports: winston.transport[] = [
+          new winston.transports.Console({
+            format: winston.format.combine(
+              winston.format.timestamp(),
+              winston.format.ms(),
+              winston.format.colorize(),
+              winston.format.printf(({ timestamp, level, message, context, ...meta }) => {
+                return `${timestamp} [${context || 'Application'}] ${level}: ${message} ${Object.keys(meta).length ? JSON.stringify(meta) : ''}`;
+              }),
+            ),
+          }),
+        ];
+
+        const logtailToken = configService.get<string>('LOGTAIL_SOURCE_TOKEN');
+        if (logtailToken) {
+          const logtail = new Logtail(logtailToken);
+          transports.push(new LogtailTransport(logtail));
+        }
+
+        return {
+          transports,
+          // Set default level based on env
+          level: configService.get('NODE_ENV') === 'production' ? 'info' : 'debug',
+        };
+      },
+    }),
+
     // Infrastructure
     PrismaModule,
     CacheModule,
     ThrottlerModule,
     RabbitMQModule,
+    MonitoringModule,
+    GeoIpModule,
 
     // Feature modules
     AchievementsModule,
