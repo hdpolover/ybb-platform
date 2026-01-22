@@ -127,7 +127,7 @@ class MinIOStorage(IStorageService):
             )
             
             # Rewrite URL to use public endpoint if different
-            if self.public_endpoint != self.endpoint:
+            if self.public_endpoint and self.public_endpoint != self.endpoint:
                 # Determine the protocols
                 internal_protocol = "https" if self.secure else "http"
                 public_protocol = "https" if self.public_secure else "http"
@@ -135,7 +135,14 @@ class MinIOStorage(IStorageService):
                 # Replace the internal endpoint with public endpoint
                 internal_base = f"{internal_protocol}://{self.endpoint}"
                 public_base = f"{public_protocol}://{self.public_endpoint}"
-                url = url.replace(internal_base, public_base, 1)
+                
+                # Try to replace endpoint + bucket first (e.g. https://do.com/bucket -> https://cdn.com)
+                # This handles the case where the custom domain maps directly to the bucket
+                internal_base_with_bucket = f"{internal_base}/{bucket}"
+                if internal_base_with_bucket in url:
+                    url = url.replace(internal_base_with_bucket, public_base, 1)
+                else:
+                    url = url.replace(internal_base, public_base, 1)
             
             return url
             
