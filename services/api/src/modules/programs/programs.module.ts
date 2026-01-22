@@ -102,7 +102,6 @@ import { CacheService } from '../../shared/infrastructure/cache/cache.service';
     GetParticipationInfoHandler,
     ListParticipationInfoHandler,
 
-    PrismaService,
     CacheService,
     {
       provide: 'IProgramContentRepository',

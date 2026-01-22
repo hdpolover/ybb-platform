@@ -23,13 +23,22 @@ router = APIRouter(prefix="/files", tags=["files"])
 @router.post("/upload", response_model=UploadFileResponseDto, status_code=status.HTTP_201_CREATED)
 async def upload_file(
     file: Annotated[UploadFile, File(description="File to upload")],
-    user_id: Annotated[str, Form(description="User ID")],
+    user_id: Annotated[str, Form(description="User ID (Global Identity)")],
     brand_id: Annotated[str, Form(description="Brand ID")],
-    bucket: Annotated[str, Form(description="Bucket name")] = "documents",
+    bucket: Annotated[str, Form(description="Category (e.g., documents, essays, payments)")] = "documents",
+    program_id: Annotated[str | None, Form(description="Program ID (Optional - for Program Context)")] = None,
+    participant_id: Annotated[str | None, Form(description="Participant ID (Optional - for Program Context)")] = None,
     upload_handler: UploadFileHandler = Depends(get_upload_handler)
 ):
     """
-    Upload a file to MinIO storage.
+    Upload a file to MinIO/Spaces storage.
+    
+    Path Strategy:
+    1. **Program Context** (If program_id & participant_id provided):
+       `/{env}/{brand}/{program_id}/{participant_id}/{category}/{filename}`
+    
+    2. **Global User Context** (Default):
+       `/{env}/{brand}/users/{user_id}/{category}/{filename}`
     
     Supported file types:
     - Images: JPEG, PNG, GIF, WebP (max 5MB)
@@ -51,7 +60,9 @@ async def upload_file(
             size=len(contents),
             user_id=user_id,
             brand_id=brand_id,
-            bucket=bucket
+            bucket=bucket,
+            program_id=program_id,
+            participant_id=participant_id
         )
         
         # Execute upload

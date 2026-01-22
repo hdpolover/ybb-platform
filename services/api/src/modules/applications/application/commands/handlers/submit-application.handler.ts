@@ -54,7 +54,7 @@ export class SubmitApplicationHandler {
     const updated = await this.applicationRepository.update(application);
 
     // Record metric
-    this.metricsService.applicationSubmittedTotal.inc({ program_category: application.category });
+    this.metricsService.applicationSubmittedTotal.inc({ program_category: application.applicationCategory || 'unknown' });
 
     // Return DTO
     return this.applicationMapper.toDto(updated);

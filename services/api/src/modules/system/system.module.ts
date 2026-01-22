@@ -13,7 +13,6 @@ import { MarkAnnouncementReadHandler } from './application/commands/handlers/mar
     imports: [CqrsModule, AuthModule],
     controllers: [SystemAnnouncementsController],
     providers: [
-        PrismaService,
         {
             provide: 'ISystemAnnouncementRepository',
             useClass: SystemAnnouncementRepository,

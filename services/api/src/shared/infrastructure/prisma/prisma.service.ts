@@ -77,11 +77,23 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
         $allModels: {
           async findUnique({ model, operation, args, query }) {
             if (modelHasDeletedAt(model)) {
-              // Change to findFirst to support deletedAt filter
-              // We need to cast the operation to findFirst and ensure args are compatible
+              const where = args.where || {};
+              const newWhere: any = { deletedAt: null };
+              
+              // Flatten compound unique keys for findFirst compatibility
+              // findUnique({ where: { compound_key: { a: 1, b: 2 } } }) -> findFirst({ where: { a: 1, b: 2, deletedAt: null } })
+              for (const key of Object.keys(where)) {
+                const value = where[key];
+                if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+                  Object.assign(newWhere, value);
+                } else {
+                  newWhere[key] = value;
+                }
+              }
+              
               return (extendedClient as any)[toCamelCase(model)].findFirst({
                 ...args,
-                where: { ...args.where, deletedAt: null },
+                where: newWhere,
               });
             }
             return query(args);

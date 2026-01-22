@@ -1,5 +1,6 @@
 """Upload file command handler."""
 import uuid
+import os
 from datetime import datetime
 from app.application.commands.upload_file_command import UploadFileCommand
 from app.application.dto.file_dto import FileDto
@@ -52,7 +53,7 @@ class UploadFileHandler:
             InvalidFileTypeException: If file type not allowed
             FileSizeLimitException: If file exceeds size limit
         """
-        # Validate file type
+        # Confirm allowed file types
         allowed_types = self.ALLOWED_IMAGE_TYPES + self.ALLOWED_DOCUMENT_TYPES
         if command.content_type not in allowed_types:
             raise InvalidFileTypeException(command.content_type, allowed_types)
@@ -66,15 +67,73 @@ class UploadFileHandler:
         if command.size > max_size:
             raise FileSizeLimitException(command.size, max_size)
         
-        # Generate unique file ID and storage path
+        # Determine unique file ID
         file_id = str(uuid.uuid4())
         extension = command.filename.split('.')[-1] if '.' in command.filename else ''
         storage_filename = f"{file_id}.{extension}" if extension else file_id
-        storage_path = f"{command.brand_id}/{command.user_id}/{storage_filename}"
+
+        # Resolve bucket and storage path
+        # Strategy: Single Physical Bucket (e.g., ybb-assets-dev) -> Virtual Folders
+        real_bucket = os.getenv("MINIO_BUCKET", "ybb-assets-dev")
+        env = os.getenv("PYTHON_ENV", "development")
+        prefix_map = {
+            "development": "dev",
+            "staging": "staging",
+            "production": "prod"
+        }
+        env_prefix = prefix_map.get(env, "dev")
+        
+        # Path Construction Logic
+        # Strategy: Namespaced Hierarchy
+        # Root: /{env}/{brand}/
+        
+        root_path = f"{env_prefix}/{command.brand_id}"
+        
+        # Prepare metadata to save
+        file_metadata = command.metadata or {}
+        
+        # Context 1: Program Participant
+        # Path: .../programs/{program_id}/participants/{participant_id}/{category}/{filename}
+        if command.program_id and command.participant_id:
+            namespace = "programs"
+            storage_path = f"{root_path}/{namespace}/{command.program_id}/participants/{command.participant_id}/{command.bucket}/{storage_filename}"
+            
+            # Enrich metadata
+            file_metadata.update({
+                "namespace": namespace,
+                "program_id": command.program_id,
+                "participant_id": command.participant_id,
+                "context": "program_participation"
+            })
+
+        # Context 2: Program Global (e.g. Gallery, Banners)
+        # Path: .../programs/{program_id}/{category}/{filename}
+        elif command.program_id:
+            namespace = "programs"
+            storage_path = f"{root_path}/{namespace}/{command.program_id}/{command.bucket}/{storage_filename}"
+            
+            # Enrich metadata
+            file_metadata.update({
+                "namespace": namespace,
+                "program_id": command.program_id,
+                "context": "program_global"
+            })
+        
+        # Context 3: Global User
+        # Path: .../users/{user_id}/{category}/{filename}
+        else:
+            namespace = "users"
+            storage_path = f"{root_path}/{namespace}/{command.user_id}/{command.bucket}/{storage_filename}"
+            
+            # Enrich metadata
+            file_metadata.update({
+                "namespace": namespace,
+                "context": "user_global"
+            })
         
         # Upload to storage
         await self.storage_service.upload(
-            bucket=command.bucket,
+            bucket=real_bucket,
             object_name=storage_path,
             file_data=command.file_data,
             content_type=command.content_type,
@@ -101,12 +160,12 @@ class UploadFileHandler:
             file_type=file_type,
             mime_type=command.content_type,
             file_size=command.size,
-            bucket=command.bucket,
+            bucket=real_bucket,
             storage_path=storage_path,
             user_id=command.user_id,
             brand_id=command.brand_id,
             uploaded_at=datetime.utcnow(),
-            metadata=command.metadata
+            metadata=file_metadata
         )
         
         # Save metadata to repository

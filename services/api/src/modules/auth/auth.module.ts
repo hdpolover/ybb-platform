@@ -44,7 +44,6 @@ import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.m
   ],
   controllers: [AuthController, AuthProviderController],
   providers: [
-    PrismaService,
     LoginHandler,
     RegisterHandler,
     RegisterAdminHandler,

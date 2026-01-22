@@ -55,6 +55,12 @@ export class FilesController {
           type: 'string',
           default: 'documents',
         },
+        program_id: {
+          type: 'string',
+        },
+        participant_id: {
+          type: 'string',
+        },
       },
       required: ['file', 'user_id', 'brand_id'],
     },
@@ -66,6 +72,8 @@ export class FilesController {
     @Body('user_id') userId: string,
     @Body('brand_id') brandId: string,
     @Body('bucket') bucket: string = 'documents',
+    @Body('program_id') programId?: string,
+    @Body('participant_id') participantId?: string,
   ) {
     try {
       this.logger.log(
@@ -77,6 +85,8 @@ export class FilesController {
         userId,
         brandId,
         bucket,
+        programId,
+        participantId,
       );
       
       this.metricsService.fileUploadsTotal.inc({ file_type: bucket });

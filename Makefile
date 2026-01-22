@@ -20,10 +20,6 @@ start:
 	@echo "Starting all services (Hot-reload enabled for API)..."
 	@for service in $(SERVICES); do \
 		echo ">> Starting $$service..."; \
-		if [ -f "services/$$service/package.json" ]; then \
-			echo "Installing dependencies for $$service..."; \
-			(cd services/$$service && npm install); \
-		fi; \
 		(cd services/$$service && docker compose up -d); \
 	done
 	@echo "All services started! run 'make logs-api' to see API output."

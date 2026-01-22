@@ -55,6 +55,8 @@ export class FileServiceClient {
     userId: string,
     brandId: string,
     bucket: string = 'documents',
+    programId?: string,
+    participantId?: string,
   ): Promise<FileUploadResponse> {
     const FormData = require('form-data');
     const formData = new FormData();
@@ -62,6 +64,14 @@ export class FileServiceClient {
     formData.append('user_id', userId);
     formData.append('brand_id', brandId);
     formData.append('bucket', bucket);
+    
+    // Add optional context
+    if (programId) {
+      formData.append('program_id', programId);
+    }
+    if (participantId) {
+      formData.append('participant_id', participantId);
+    }
 
     return this.executeRequest(async () => {
       try {

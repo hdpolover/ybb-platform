@@ -13,7 +13,6 @@ import { GetPaymentDetailHandler } from './application/queries/handlers/get-paym
     imports: [CqrsModule, AuthModule, MonitoringModule],
     controllers: [PaymentsController, PaymentEventsController],
     providers: [
-        PrismaService,
         {
             provide: 'IPaymentRepository',
             useClass: PaymentRepository,
