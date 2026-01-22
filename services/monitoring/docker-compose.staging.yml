@@ -4,8 +4,17 @@ services:
     container_name: ybb-prometheus-staging
     restart: always
     volumes:
-      - ./prometheus/prometheus.staging.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus/prometheus.local.yml:/etc/prometheus/prometheus.yml.tpl
+      - ./prometheus/docker-entrypoint.sh:/etc/prometheus/docker-entrypoint.sh
       - prometheus_data_staging:/prometheus
+    entrypoint: ["/bin/sh", "/etc/prometheus/docker-entrypoint.sh"]
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+    env_file:
+      - .env.staging
     ports:
       - "9091:9090" # Use distinct port for staging if on same node
     networks:
