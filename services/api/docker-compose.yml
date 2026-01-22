@@ -23,6 +23,7 @@ services:
       # Service Links (Configured as full URLs for independence)
       PAYMENT_SERVICE_URL: ${PAYMENT_SERVICE_URL}
       FILE_SERVICE_URL: ${FILE_SERVICE_URL}
+      STORAGE_PUBLIC_URL: ${STORAGE_PUBLIC_URL}
       CORS_ORIGINS: ${CORS_ORIGINS}
       RABBITMQ_URL: ${RABBITMQ_URL}
     volumes:

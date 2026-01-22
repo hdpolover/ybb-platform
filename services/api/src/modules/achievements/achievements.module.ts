@@ -12,7 +12,6 @@ import { ListParticipantAwardsHandler } from './application/queries/handlers/lis
     imports: [CqrsModule, AuthModule],
     controllers: [AchievementsController],
     providers: [
-        PrismaService,
         {
             provide: 'IAchievementsRepository',
             useClass: AchievementsRepository,

@@ -123,25 +123,20 @@ pip install -r requirements.txt
 
 ### 2. Environment Configuration
 
-Copy `.env.example` to `.env` and configure:
+Copy `.env.example` to `.env` and configure for DigitalOcean Spaces (Dev/Staging Strategy):
 
 ```env
-# MinIO Configuration
-MINIO_ENDPOINT=localhost:9000
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin
-MINIO_SECURE=false
-
-# PostgreSQL Configuration
-DATABASE_URL=postgresql://ybb_user:ybb_password@localhost:5432/ybb_files_db
-
-# Certificate Configuration
-CERTIFICATE_SIGNING_KEY=your-secret-signing-key
-CERTIFICATE_VERIFICATION_URL=https://verify.ybb.org
-
-# Service Configuration
-SERVICE_PORT=8001
+# MinIO / DigitalOcean Spaces Configuration
+MINIO_ENDPOINT=sgp1.digitaloceanspaces.com
+MINIO_ACCESS_KEY=your_do_access_key
+MINIO_SECRET_KEY=your_do_secret_key
+# Shared bucket for Dev & Staging to allow DB sync
+MINIO_BUCKET=ybb-assets-dev
+MINIO_SECURE=true
+MINIO_REGION=sgp1
 ```
+
+For completely offline development, see the comments in `.env.example`.
 
 ### 3. Database Setup
 

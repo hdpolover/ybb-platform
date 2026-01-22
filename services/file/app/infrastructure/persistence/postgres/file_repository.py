@@ -5,6 +5,7 @@ from app.domain.repositories.file_repository import IFileRepository
 from .database import db
 from datetime import datetime
 import json
+from prisma import Json
 
 class PostgresFileRepository(IFileRepository):
     """PostgreSQL implementation of file repository via Prisma."""
@@ -15,6 +16,7 @@ class PostgresFileRepository(IFileRepository):
         as we use the global client, but kept for interface compatibility.
         """
         self.prisma = db.file
+
     
     async def find_by_id(self, file_id: str) -> Optional[File]:
         model = await self.prisma.find_first(
@@ -45,8 +47,13 @@ class PostgresFileRepository(IFileRepository):
     
     async def save(self, file: File) -> File:
         """Save file metadata."""
-        # Convert dictionary metadata to JSON-compatible format if needed
-        metadata_json = json.loads(json.dumps(file.metadata)) if file.metadata else {}
+        # Convert dictionary metadata to JSON-compatible format
+        if file.metadata:
+            # Wrap in prisma.Json to ensure correct type
+            metadata_json = Json(file.metadata)
+        else:
+            # Default to empty JSON object
+            metadata_json = Json({})
 
         # Prisma upsert
         await self.prisma.upsert(

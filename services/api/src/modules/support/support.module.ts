@@ -14,7 +14,6 @@ import { ReplySupportTicketHandler } from './application/commands/handlers/reply
     imports: [CqrsModule, AuthModule],
     controllers: [SupportTicketsController],
     providers: [
-        PrismaService,
         {
             provide: 'ISupportTicketRepository',
             useClass: SupportTicketRepository,

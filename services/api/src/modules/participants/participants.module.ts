@@ -17,7 +17,6 @@ import { CompleteOnboardingHandler } from './application/commands/handlers/compl
     imports: [CqrsModule, AuthModule],
     controllers: [ParticipantsController],
     providers: [
-        PrismaService,
         {
             provide: 'IParticipantRepository',
             useClass: ParticipantRepository,

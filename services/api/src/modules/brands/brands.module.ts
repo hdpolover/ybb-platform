@@ -18,7 +18,6 @@ import { DeleteBrandHandler } from './application/commands/handlers/delete-brand
     imports: [CqrsModule, AuthModule, FilesModule, UsersModule],
     controllers: [BrandsController],
     providers: [
-        PrismaService,
         {
             provide: 'IBrandRepository',
             useClass: BrandRepository,

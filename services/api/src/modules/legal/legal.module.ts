@@ -9,7 +9,6 @@ import { AuthModule } from '../auth/auth.module';
     imports: [AuthModule],
     controllers: [LegalDocumentController],
     providers: [
-        PrismaService,
         LegalDocumentService,
         LegalDocumentRepository,
     ],
