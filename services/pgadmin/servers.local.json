@@ -4,7 +4,7 @@
             "Name": "YBB API (Local)",
             "Group": "Servers",
             "Host": "host.docker.internal",
-            "Port": 5432,
+            "Port": 5438,
             "MaintenanceDB": "postgres",
             "Username": "ybb_user",
             "SSLMode": "disable"

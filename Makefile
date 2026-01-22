@@ -1,4 +1,4 @@
-SERVICES := shared-rabbitmq api payment file notification admin-dashboard minimal-admin monitoring
+SERVICES := shared-rabbitmq api payment file notification admin-dashboard minimal-admin monitoring pgadmin
 # Postgres Port Map: API=5432, Payment=5433, File=5434
 # RabbitMQ Port Map: Payment=5673, Notification=5674
 
