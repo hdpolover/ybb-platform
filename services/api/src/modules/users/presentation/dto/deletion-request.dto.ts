@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class CreateDeletionRequestDto {
     @ApiPropertyOptional()
@@ -13,9 +13,29 @@ export class CreateDeletionRequestDto {
     reasonCategory?: string;
 }
 
+export enum DeletionRequestReviewAction {
+    APPROVE = 'approve',
+    REJECT = 'reject'
+}
+
+export class ReviewDeletionRequestDto {
+    @ApiProperty({ enum: DeletionRequestReviewAction })
+    @IsEnum(DeletionRequestReviewAction)
+    @IsNotEmpty()
+    action: DeletionRequestReviewAction;
+
+    @ApiPropertyOptional()
+    @IsOptional()
+    @IsString()
+    notes?: string;
+}
+
 export class DeletionRequestResponseDto {
     @ApiProperty()
     id: string;
+
+    @ApiProperty()
+    userId: string;
 
     @ApiProperty()
     status: string;
@@ -28,4 +48,13 @@ export class DeletionRequestResponseDto {
 
     @ApiProperty()
     createdAt: Date;
+
+    @ApiPropertyOptional()
+    reviewedAt?: Date;
+
+    @ApiPropertyOptional()
+    reviewedBy?: string;
+
+    @ApiPropertyOptional()
+    reviewNotes?: string;
 }
