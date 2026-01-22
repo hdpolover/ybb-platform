@@ -80,8 +80,6 @@ infrastructure/nginx/ssl/*.pem
 infrastructure/postgres/backups/*.sql
 infrastructure/postgres/backups/*.dump
 
-
-
 # Compiled binaries
 services/payment-service/bin/
 *.exe
@@ -102,7 +100,6 @@ services/api/.next/
 services/api/dist/
 services/admin-dashboard/.next/
 services/admin-dashboard/out/
-
 
 
 # Migration Data
