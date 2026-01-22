@@ -71,14 +71,32 @@ export class StorageService {
     if (!fileData.storage_path) return '';
 
     // Logic to construct the public URL
-    // We assume STORAGE_PUBLIC_URL is something like "https://sgp1.digitaloceanspaces.com"
-    const regionUrl = this.storagePublicUrl.replace('https://', '');
+    // Check if we are using a custom domain (e.g. files.ybbhub.com)
+    // Heuristic: If STORAGE_PUBLIC_URL does NOT contain "digitaloceanspaces.com", assume it's custom domain for the bucket.
+    const isCustomDomain = this.storagePublicUrl && !this.storagePublicUrl.includes('digitaloceanspaces.com');
     
     // Ensure path doesn't have leading slash for concatenation
     const path = fileData.storage_path.startsWith('/') 
         ? fileData.storage_path.substring(1) 
         : fileData.storage_path;
-        
+
+    if (isCustomDomain) {
+        // Assume STORAGE_PUBLIC_URL points to the bucket root
+        let baseUrl = this.storagePublicUrl;
+        if (!baseUrl.startsWith('http')) {
+             baseUrl = `https://${baseUrl}`;
+        }
+        // Remove trailing slash
+        if (baseUrl.endsWith('/')) {
+            baseUrl = baseUrl.slice(0, -1);
+        }
+        return `${baseUrl}/${path}`;
+    }
+
+    // Default DO/S3 logic: assume bucket.region/path
+    // We assume STORAGE_PUBLIC_URL is something like "https://sgp1.digitaloceanspaces.com"
+    const regionUrl = this.storagePublicUrl.replace('https://', '').replace(/\/$/, '');
+    
     // Use bucket from response if available, else default
     const bucket = fileData.bucket || defaultBucket;
     
