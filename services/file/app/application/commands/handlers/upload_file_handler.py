@@ -30,6 +30,20 @@ class UploadFileHandler:
     MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB
     MAX_DOCUMENT_SIZE = 10 * 1024 * 1024  # 10MB
     
+    # Public Categories
+    PUBLIC_CATEGORIES = [
+        'gallery',
+        'programs',
+        'banners',
+        'assets',
+        'partners',
+        'sponsors',
+        'speakers',
+        'content',
+        'announcements',
+        'faq'
+    ]
+    
     def __init__(
         self,
         storage_service: IStorageService,
@@ -131,13 +145,17 @@ class UploadFileHandler:
                 "context": "user_global"
             })
         
+        # Determine visibility
+        is_public = command.bucket in self.PUBLIC_CATEGORIES
+
         # Upload to storage
         await self.storage_service.upload(
             bucket=real_bucket,
             object_name=storage_path,
             file_data=command.file_data,
             content_type=command.content_type,
-            size=command.size
+            size=command.size,
+            is_public=is_public
         )
         
         # Determine file type from content type

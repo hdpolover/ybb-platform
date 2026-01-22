@@ -26,6 +26,7 @@ services:
       STORAGE_PUBLIC_URL: ${STORAGE_PUBLIC_URL}
       CORS_ORIGINS: ${CORS_ORIGINS}
       RABBITMQ_URL: ${RABBITMQ_URL}
+      ADMIN_REGISTRATION_SECRET: ${ADMIN_REGISTRATION_SECRET}
     volumes:
       - ./src:/app/src
       - ./prisma:/app/prisma

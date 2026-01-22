@@ -19,11 +19,13 @@ services:
       # Links to other services (on same dokploy-network)
       PAYMENT_SERVICE_URL: ${PAYMENT_SERVICE_URL}
       FILE_SERVICE_URL: ${FILE_SERVICE_URL}
+      STORAGE_PUBLIC_URL: ${STORAGE_PUBLIC_URL}
       CORS_ORIGINS: ${CORS_ORIGINS}
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@ybb-shared-rabbitmq:5672/
       # Auth
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      ADMIN_REGISTRATION_SECRET: ${ADMIN_REGISTRATION_SECRET}
     depends_on:
       postgres-api:
         condition: service_healthy
