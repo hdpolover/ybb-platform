@@ -2,6 +2,28 @@
 // FINANCE & PAYMENTS
 // ============================================================================
 
+model PaymentGatewayConfig {
+  id                String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programCategoryId String   @map("program_category_id") @db.Uuid
+  
+  provider          String   @db.VarChar(50) // 'midtrans', 'xendit', 'stripe'
+  mode              String   @default("sandbox") @db.VarChar(20) // 'sandbox', 'production'
+  
+  // Credentials (should be encrypted at app level if possible)
+  serverKey         String   @map("server_key") @db.Text 
+  clientKey         String   @map("client_key") @db.Text
+  webhookSecret     String?  @map("webhook_secret") @db.Text
+  
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  programCategory   ProgramCategory @relation(fields: [programCategoryId], references: [id], onDelete: Cascade)
+
+  @@index([programCategoryId])
+  @@map("payment_gateway_configs")
+}
+
 model PaymentTransaction {
   id                   String  @id @db.Uuid // Same UUID as Payment Service payment ID
   userId               String  @map("user_id") @db.Uuid

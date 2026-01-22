@@ -60,6 +60,7 @@ model ProgramCategory {
   partnershipOpportunities PartnershipOpportunity[]
   sponsorshipTiers         SponsorshipTier[]
   partnershipEnquiries     PartnershipEnquiry[]
+  paymentGatewayConfigs    PaymentGatewayConfig[]
 
   @@index([slug])
   @@index([isActive])
