@@ -55,7 +55,8 @@ class MinIOStorage(IStorageService):
         object_name: str, 
         file_data: BinaryIO, 
         content_type: str,
-        size: int
+        size: int,
+        is_public: bool = False
     ) -> str:
         """Upload file to MinIO."""
         try:
@@ -63,13 +64,19 @@ class MinIOStorage(IStorageService):
             if not self.client.bucket_exists(bucket_name=bucket):
                 self.client.make_bucket(bucket_name=bucket)
             
+            # Prepare metadata
+            metadata = {}
+            if is_public:
+                metadata["x-amz-acl"] = "public-read"
+
             # Upload file
             self.client.put_object(
                 bucket_name=bucket,
                 object_name=object_name,
                 data=file_data,
                 length=size,
-                content_type=content_type
+                content_type=content_type,
+                metadata=metadata
             )
             
             return f"{bucket}/{object_name}"

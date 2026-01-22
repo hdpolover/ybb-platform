@@ -13,7 +13,8 @@ class IStorageService(ABC):
         object_name: str, 
         file_data: BinaryIO, 
         content_type: str,
-        size: int
+        size: int,
+        is_public: bool = False
     ) -> str:
         """
         Upload file to storage.
@@ -24,6 +25,7 @@ class IStorageService(ABC):
             file_data: File binary data
             content_type: MIME type
             size: File size in bytes
+            is_public: Whether object should be publicly readable
             
         Returns:
             Storage URL or path
