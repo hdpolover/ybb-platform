@@ -3,8 +3,8 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install OpenSSL for Prisma
-RUN apk add --no-cache openssl
+# Install OpenSSL for Prisma and dos2unix
+RUN apk add --no-cache openssl dos2unix
 
 # Install dependencies first (for better caching)
 COPY package*.json ./
@@ -23,7 +23,7 @@ COPY src ./src
 
 # Copy and set up entrypoint script
 COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
+RUN dos2unix /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
 
 # Expose port
 EXPOSE 4000
