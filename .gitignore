@@ -108,6 +108,6 @@ services/admin-dashboard/out/
 # Migration Data
 migration_data/
 migration_temp_data/
-*.sql
+!*.sql
 *.sql.gz
 !**/prisma/migrations/*/migration.sql

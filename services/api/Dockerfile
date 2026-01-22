@@ -29,7 +29,7 @@ FROM node:20-alpine AS production
 WORKDIR /app
 
 # Install OpenSSL for Prisma (needed for runtime)
-RUN apk add --no-cache openssl dos2unix
+RUN apk add --no-cache openssl
 
 ENV NODE_ENV=production
 
@@ -52,11 +52,11 @@ COPY --from=builder /app/dist ./dist
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN dos2unix /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
 
 # Expose port
 EXPOSE 4000
 
 # Use entrypoint to run migrations before starting app
-ENTRYPOINT ["/docker-entrypoint.sh"]
+ENTRYPOINT ["/bin/sh", "/docker-entrypoint.sh"]
 CMD ["node", "dist/main"]
