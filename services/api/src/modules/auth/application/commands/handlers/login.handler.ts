@@ -7,6 +7,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { AuthLoggingService } from '../../services/auth-logging.service';
 import { GeoIpService } from '@shared/infrastructure/geoip/geoip.service';
+import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
 
 @Injectable()
 export class LoginHandler {
@@ -15,6 +16,7 @@ export class LoginHandler {
     private readonly jwtService: JwtService,
     private readonly authLoggingService: AuthLoggingService,
     private readonly geoIpService: GeoIpService,
+    private readonly metricsService: MetricsService,
   ) { }
 
   /**
@@ -153,6 +155,8 @@ export class LoginHandler {
 
       await this.authLoggingService.logFailedLogin(user.email, command.ipAddress, command.userAgent, 'Invalid Password');
 
+      this.metricsService.loginTotal.inc({ method: 'email', result: 'failure' });
+
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -167,6 +171,8 @@ export class LoginHandler {
 
     // Log success
     await this.authLoggingService.logSuccessfulLogin(user.id, command.ipAddress, command.userAgent);
+    
+    this.metricsService.loginTotal.inc({ method: 'email', result: 'success' });
 
     // Update identity last used
     if (localIdentity) {

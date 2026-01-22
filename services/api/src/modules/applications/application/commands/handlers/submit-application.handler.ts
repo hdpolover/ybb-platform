@@ -4,6 +4,7 @@ import { SubmitApplicationCommand } from '../submit-application.command';
 import { ApplicationResponseDto } from '../../dto/application-response.dto';
 import { ApplicationMapper } from '@modules/applications/infrastructure/mappers/application.mapper';
 import { APPLICATION_REPOSITORY } from '@modules/applications/infrastructure/tokens';
+import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
 
 /**
  * Submit Application Handler
@@ -17,6 +18,7 @@ export class SubmitApplicationHandler {
     @Inject(APPLICATION_REPOSITORY)
     private readonly applicationRepository: IApplicationRepository,
     private readonly applicationMapper: ApplicationMapper,
+    private readonly metricsService: MetricsService,
   ) {}
 
   async execute(command: SubmitApplicationCommand): Promise<ApplicationResponseDto> {
@@ -50,6 +52,9 @@ export class SubmitApplicationHandler {
 
     // Save to database
     const updated = await this.applicationRepository.update(application);
+
+    // Record metric
+    this.metricsService.applicationSubmittedTotal.inc({ program_category: application.category });
 
     // Return DTO
     return this.applicationMapper.toDto(updated);

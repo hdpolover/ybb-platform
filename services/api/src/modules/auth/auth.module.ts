@@ -24,6 +24,7 @@ import { TokenBlacklistService } from './infrastructure/services/token-blacklist
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { AuthLoggingService } from './application/services/auth-logging.service';
 import { GeoIpModule } from '@shared/infrastructure/geoip/geoip.module';
+import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { GeoIpModule } from '@shared/infrastructure/geoip/geoip.module';
       inject: [ConfigService],
     }),
     GeoIpModule,
+    MonitoringModule,
   ],
   controllers: [AuthController, AuthProviderController],
   providers: [
