@@ -193,10 +193,15 @@ export class CreateProgramSpeakerDto {
     @IsOptional()
     photoUrl?: string;
 
+    @ApiProperty({ type: 'string', format: 'binary', required: false, description: 'Speaker Photo to upload' })
+    @IsOptional()
+    photo?: any;
+
     @ApiProperty({ required: false })
     @IsString()
     @IsOptional()
     email?: string;
+
 
     @ApiProperty({ required: false })
     @IsString()
@@ -538,6 +543,10 @@ export class CreateProgramTeamDto {
     @IsOptional()
     photoUrl?: string;
 
+    @ApiProperty({ type: 'string', format: 'binary', required: false, description: 'Member Photo to upload' })
+    @IsOptional()
+    photo?: any;
+
     @ApiProperty({ required: false })
     @IsString()
     @IsOptional()
@@ -633,6 +642,10 @@ export class CreateProgramPartnerDto {
     @IsOptional()
     logoUrl?: string;
 
+    @ApiProperty({ type: 'string', format: 'binary', required: false, description: 'Partner Logo to upload' })
+    @IsOptional()
+    logo?: any;
+
     @ApiProperty({ required: false })
     @IsString()
     @IsOptional()
@@ -708,10 +721,14 @@ export class CreateProgramResourceDto {
     @IsOptional()
     description?: string;
 
-    @ApiProperty()
+    @ApiProperty({ required: false, description: 'URL of the file (if already uploaded)' })
     @IsString()
-    @IsNotEmpty()
-    fileUrl: string;
+    @IsOptional()
+    fileUrl?: string;
+    
+    @ApiProperty({ type: 'string', format: 'binary', required: false, description: 'File to upload' })
+    @IsOptional()
+    file?: any;
 
     @ApiProperty({ required: false })
     @IsNumber()

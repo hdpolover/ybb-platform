@@ -25,6 +25,15 @@ export class CreateBrandDto {
     @IsUrl()
     logoUrl?: string;
 
+    @ApiProperty({ type: 'string', format: 'binary', required: false })
+    @IsOptional()
+    banner?: any;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsUrl()
+    bannerUrl?: string;
+
     @ApiProperty({ required: false })
     @IsOptional()
     @IsUrl()

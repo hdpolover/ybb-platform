@@ -6,6 +6,7 @@ import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.m
 import { FilesController } from './presentation/files.controller';
 import { DocumentsController } from './presentation/documents.controller';
 import { FileServiceClient } from './infrastructure/clients/file-service.client';
+import { StorageService } from './application/storage.service';
 
 @Module({
   imports: [
@@ -18,7 +19,7 @@ import { FileServiceClient } from './infrastructure/clients/file-service.client'
     MonitoringModule,
   ],
   controllers: [FilesController, DocumentsController],
-  providers: [FileServiceClient],
-  exports: [FileServiceClient],
+  providers: [FileServiceClient, StorageService],
+  exports: [FileServiceClient, StorageService],
 })
 export class FilesModule { }

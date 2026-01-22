@@ -4,5 +4,9 @@ export class CreateBrandCommand {
     constructor(
         public readonly dto: CreateBrandDto,
         public readonly userId: string,
+        public readonly files?: {
+            logo?: any;
+            banner?: any;
+        }
     ) {}
 }

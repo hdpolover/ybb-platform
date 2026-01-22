@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
 import { AuthModule } from '@modules/auth/auth.module';
 import { UsersModule } from '@modules/users/users.module';
+import { FilesModule } from '@modules/files/files.module';
 import { ProgramsController } from './presentation/programs.controller';
 import { ProgramParticipationController } from './presentation/program-participation.controller';
 import { ProgramLandingController } from './presentation/program-landing.controller';
@@ -17,6 +18,7 @@ import { GetProgramLandingHandler } from './application/queries/handlers/get-pro
 import { CreateProgramHandler } from './application/commands/handlers/create-program.handler';
 import { UpdateProgramHandler } from './application/commands/handlers/update-program.handler';
 import { DeleteProgramHandler } from './application/commands/handlers/delete-program.handler';
+import { UpdateProgramBrandingHandler } from './application/commands/handlers/update-program-branding.handler';
 import {
   ListProgramTimelineHandler,
   ListProgramSchedulesHandler,
@@ -56,7 +58,7 @@ import { PrismaService } from '../../shared/infrastructure/prisma/prisma.service
 import { CacheService } from '../../shared/infrastructure/cache/cache.service';
 
 @Module({
-  imports: [CqrsModule, AuthModule, UsersModule],
+  imports: [CqrsModule, AuthModule, UsersModule, FilesModule],
   controllers: [ProgramsController, ProgramParticipationController, ProgramLandingController],
   providers: [
     ListProgramsHandler,
@@ -64,6 +66,7 @@ import { CacheService } from '../../shared/infrastructure/cache/cache.service';
     GetProgramLandingHandler,
     CreateProgramHandler,
     UpdateProgramHandler,
+    UpdateProgramBrandingHandler,
     DeleteProgramHandler,
     GetParticipantProgressHandler,
     // Content Handlers
