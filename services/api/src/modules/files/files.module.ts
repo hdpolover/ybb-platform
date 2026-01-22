@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from '@modules/auth/auth.module';
+import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.module';
 import { FilesController } from './presentation/files.controller';
 import { DocumentsController } from './presentation/documents.controller';
 import { FileServiceClient } from './infrastructure/clients/file-service.client';
@@ -14,6 +15,7 @@ import { FileServiceClient } from './infrastructure/clients/file-service.client'
     }),
     ConfigModule,
     AuthModule,
+    MonitoringModule,
   ],
   controllers: [FilesController, DocumentsController],
   providers: [FileServiceClient],

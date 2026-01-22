@@ -14,6 +14,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { FileServiceClient, FileResponse } from '../infrastructure/clients/file-service.client';
+import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
 
 /**
  * Files Controller
@@ -28,7 +29,10 @@ import { FileServiceClient, FileResponse } from '../infrastructure/clients/file-
 export class FilesController {
   private readonly logger = new Logger(FilesController.name);
 
-  constructor(private readonly fileServiceClient: FileServiceClient) {}
+  constructor(
+    private readonly fileServiceClient: FileServiceClient,
+    private readonly metricsService: MetricsService,
+  ) {}
 
   @Post('upload')
   @ApiOperation({ summary: 'Upload file to storage' })
@@ -75,6 +79,8 @@ export class FilesController {
         bucket,
       );
       
+      this.metricsService.fileUploadsTotal.inc({ file_type: bucket });
+
       return {
         success: true,
         message: 'File uploaded successfully',

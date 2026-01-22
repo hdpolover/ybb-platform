@@ -17,10 +17,11 @@ import { ListApplicationsHandler } from './application/queries/handlers/list-app
 import { ApplicationRepository } from './infrastructure/persistence/application.repository';
 import { ApplicationMapper } from './infrastructure/mappers/application.mapper';
 import { PrismaModule } from '@shared/infrastructure/prisma/prisma.module';
+import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.module';
 import { APPLICATION_REPOSITORY } from './infrastructure/tokens';
 
 @Module({
-  imports: [PrismaModule, AuthModule],
+  imports: [PrismaModule, AuthModule, MonitoringModule],
   controllers: [ApplicationsController],
   providers: [
     // Command Handlers

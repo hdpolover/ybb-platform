@@ -1,4 +1,5 @@
 import { Module, Global } from '@nestjs/common';
+import { MonitoringModule } from '../monitoring/monitoring.module';
 import { PrismaService } from './prisma.service';
 
 /**
@@ -13,6 +14,7 @@ import { PrismaService } from './prisma.service';
  */
 @Global()
 @Module({
+  imports: [MonitoringModule],
   providers: [PrismaService],
   exports: [PrismaService],
 })

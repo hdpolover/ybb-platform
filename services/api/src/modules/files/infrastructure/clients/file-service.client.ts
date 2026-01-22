@@ -3,6 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import { AxiosResponse } from 'axios';
+import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
 
 export interface FileUploadResponse {
   file: any;
@@ -27,12 +28,23 @@ export class FileServiceClient {
   constructor(
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
+    private readonly metricsService: MetricsService,
   ) {
     this.fileServiceUrl = this.configService.get<string>(
       'FILE_SERVICE_URL',
       'http://file-service:8001',
     );
     this.logger.log(`File Service URL: ${this.fileServiceUrl}`);
+  }
+
+  private async executeRequest<T>(operation: () => Promise<T>, service: string = 'storage'): Promise<T> {
+    const start = Date.now();
+    try {
+      return await operation();
+    } finally {
+      const duration = (Date.now() - start) / 1000;
+        this.metricsService.externalApiDuration.observe({ service }, duration);
+    }
   }
 
   /**
@@ -51,21 +63,23 @@ export class FileServiceClient {
     formData.append('brand_id', brandId);
     formData.append('bucket', bucket);
 
-    try {
-      const response: AxiosResponse<FileUploadResponse> = await firstValueFrom(
-        this.httpService.post(
-          `${this.fileServiceUrl}/api/v1/files/upload`,
-          formData,
-          {
-            headers: formData.getHeaders(),
-          },
-        ),
-      );
-      return response.data;
-    } catch (error: any) {
-      this.logger.error(`Failed to upload file: ${error.message}`);
-      throw error;
-    }
+    return this.executeRequest(async () => {
+      try {
+        const response: AxiosResponse<FileUploadResponse> = await firstValueFrom(
+          this.httpService.post(
+            `${this.fileServiceUrl}/api/v1/files/upload`,
+            formData,
+            {
+              headers: formData.getHeaders(),
+            },
+          ),
+        );
+        return response.data;
+      } catch (error: any) {
+        this.logger.error(`Failed to upload file: ${error.message}`);
+        throw error;
+      }
+    });
   }
 
   /**
@@ -76,20 +90,22 @@ export class FileServiceClient {
     userId: string,
     brandId: string,
   ): Promise<FileResponse> {
-    try {
-      const response: AxiosResponse<FileResponse> = await firstValueFrom(
-        this.httpService.get(
-          `${this.fileServiceUrl}/api/v1/files/${fileId}`,
-          {
-            params: { user_id: userId, brand_id: brandId },
-          },
-        ),
-      );
-      return response.data;
-    } catch (error: any) {
-      this.logger.error(`Failed to get file: ${error.message}`);
-      throw error;
-    }
+    return this.executeRequest(async () => {
+      try {
+        const response: AxiosResponse<FileResponse> = await firstValueFrom(
+          this.httpService.get(
+            `${this.fileServiceUrl}/api/v1/files/${fileId}`,
+            {
+              params: { user_id: userId, brand_id: brandId },
+            },
+          ),
+        );
+        return response.data;
+      } catch (error: any) {
+        this.logger.error(`Failed to get file: ${error.message}`);
+        throw error;
+      }
+    });
   }
 
   /**

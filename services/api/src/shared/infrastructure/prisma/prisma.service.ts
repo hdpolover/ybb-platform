@@ -2,6 +2,7 @@ import { INestApplication, Injectable, OnModuleInit } from '@nestjs/common';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { MetricsService } from '../monitoring/metrics.service';
 
 /**
  * Prisma Service
@@ -14,7 +15,9 @@ import { PrismaPg } from '@prisma/adapter-pg';
  */
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit {
-  constructor() {
+  private readonly pool: Pool;
+
+  constructor(private readonly metricsService: MetricsService) {
     const connectionString = process.env.DATABASE_URL;
     const pool = new Pool({ connectionString });
     const adapter = new PrismaPg(pool);
@@ -25,7 +28,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
         ? ['query', 'info', 'warn', 'error']
         : ['error'],
     });
+
+    this.pool = pool;
   }
+
 
   /**
    * Connect to the database when the module initializes
@@ -33,8 +39,40 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
   async onModuleInit() {
     await this.$connect();
 
+    // Monitoring: Update pool size every 5 seconds
+    setInterval(() => {
+      this.metricsService.prismaPoolConnectionsOpen.set(this.pool.totalCount);
+    }, 5000);
+
+    const metricsService = this.metricsService;
+
     // Use Prisma Extensions for Soft Delete since middleware ($use) is deprecated/removed in v7
-    const extendedClient = this.$extends({
+    // Chain extensions: Monitoring (Inner) -> Soft Delete (Outer)
+    const extendedClient = this
+      .$extends({
+        query: {
+          $allModels: {
+            async $allOperations({ model, operation, args, query }) {
+              const start = Date.now();
+              try {
+                const result = await query(args);
+                const duration = (Date.now() - start) / 1000;
+                
+                metricsService.prismaQueryDuration.observe({ model, operation }, duration);
+                metricsService.prismaQueryTotal.inc({ model, operation });
+
+                return result;
+              } catch (error) {
+                const duration = (Date.now() - start) / 1000;
+                metricsService.prismaQueryDuration.observe({ model, operation }, duration);
+                metricsService.prismaQueryTotal.inc({ model, operation });
+                throw error;
+              }
+            },
+          },
+        },
+      })
+      .$extends({
       query: {
         $allModels: {
           async findUnique({ model, operation, args, query }) {
@@ -86,16 +124,16 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     });
 
     // Patch the current instance to use the extended client methods
-    // This allows existing code using `this.user` to get the soft-delete behavior
+    // We patch ALL models to ensure monitoring logic applies to everything
+    // Not just soft-delete models
     const models = Prisma.dmmf.datamodel.models;
     for (const model of models) {
-      if (modelHasDeletedAt(model.name)) {
-        const camelCaseName = toCamelCase(model.name);
-        Object.defineProperty(this, camelCaseName, {
-          get: () => (extendedClient as any)[camelCaseName],
-          configurable: true,
-        });
-      }
+      // Always patch the model to use the extended client (which includes monitoring)
+      const camelCaseName = toCamelCase(model.name);
+      Object.defineProperty(this, camelCaseName, {
+        get: () => (extendedClient as any)[camelCaseName],
+        configurable: true,
+      });
     }
   }
 

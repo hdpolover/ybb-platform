@@ -5,6 +5,7 @@ import { CreateApplicationCommand } from '../create-application.command';
 import { ApplicationResponseDto } from '../../dto/application-response.dto';
 import { ApplicationMapper } from '@modules/applications/infrastructure/mappers/application.mapper';
 import { APPLICATION_REPOSITORY } from '@modules/applications/infrastructure/tokens';
+import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
 
 /**
  * Create Application Handler
@@ -18,6 +19,7 @@ export class CreateApplicationHandler {
     @Inject(APPLICATION_REPOSITORY)
     private readonly applicationRepository: IApplicationRepository,
     private readonly applicationMapper: ApplicationMapper,
+    private readonly metricsService: MetricsService,
   ) {}
 
   async execute(command: CreateApplicationCommand): Promise<ApplicationResponseDto> {
@@ -51,6 +53,9 @@ export class CreateApplicationHandler {
 
     // Save to database
     const saved = await this.applicationRepository.create(application);
+
+    // Record metric
+    this.metricsService.applicationStartedTotal.inc({ program_category: command.applicationCategory });
 
     // Return DTO
     return this.applicationMapper.toDto(saved);
