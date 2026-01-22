@@ -3,9 +3,13 @@ import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { setupSwagger } from './config/swagger.config';
 import { TransformInterceptor } from './shared/interceptors/transform.interceptor';
+import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Use Winston Logger
+  app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));
 
   // Global validation pipe
   app.useGlobalPipes(

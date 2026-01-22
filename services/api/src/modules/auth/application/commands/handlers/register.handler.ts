@@ -7,6 +7,8 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { AuthLoggingService } from '../../services/auth-logging.service';
+import { MetricsService } from '../../../../../shared/infrastructure/monitoring/metrics.service';
+import { GeoIpService } from '@shared/infrastructure/geoip/geoip.service';
 
 @Injectable()
 export class RegisterHandler {
@@ -15,6 +17,8 @@ export class RegisterHandler {
     private readonly jwtService: JwtService,
     private readonly rabbitmqProducer: RabbitMQProducerService,
     private readonly authLoggingService: AuthLoggingService,
+    private readonly metricsService: MetricsService,
+    private readonly geoIpService: GeoIpService,
   ) {}
 
   /**
@@ -366,6 +370,8 @@ export class RegisterHandler {
         const sessionToken = crypto.randomUUID();
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + 7);
+        
+        const geoCtx = this.geoIpService.lookup(command.ipAddress);
 
         await this.prisma.userSession.create({
             data: {
@@ -378,8 +384,8 @@ export class RegisterHandler {
                 operatingSystem: agentInfo.os,
                 ipAddress: command.ipAddress,
                 expiresAt,
-                country: 'XX', // TODO: GeoIP
-                city: 'Unknown',
+                country: geoCtx.country,
+                city: geoCtx.city,
             }
         });
     }
@@ -393,7 +399,12 @@ export class RegisterHandler {
             command.userAgent
         );
     }
+// Record Metric
+    this.metricsService.userRegistrationsTotal
+        .labels(authProvider.name, programCategory.name)
+        .inc();
 
+    
     return {
       accessToken,
       refreshToken,
