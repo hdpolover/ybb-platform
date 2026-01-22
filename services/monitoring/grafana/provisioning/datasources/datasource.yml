@@ -3,7 +3,36 @@ apiVersion: 1
 datasources:
   - name: Prometheus
     type: prometheus
+    uid: prometheus
     access: proxy
     url: http://prometheus:9090
     isDefault: true
     editable: false
+
+  - name: Postgres - API
+    type: postgres
+    uid: postgres-api
+    url: ${DB_HOST_API}:${DB_PORT_API}
+    database: ${DB_NAME_API}
+    user: ${DB_USER}
+    secureJsonData:
+      password: ${DB_PASSWORD}
+    jsonData:
+      sslmode: "disable"
+      postgresVersion: 1500
+    isDefault: false
+    editable: true
+
+  - name: Postgres - Payment
+    type: postgres
+    uid: postgres-payment
+    url: ${DB_HOST_PAYMENT}:${DB_PORT_PAYMENT}
+    database: ${DB_NAME_API} # Assuming same DB name for now, or use separate var
+    user: ${DB_USER}
+    secureJsonData:
+      password: ${DB_PASSWORD}
+    jsonData:
+      sslmode: "disable"
+      postgresVersion: 1500
+    isDefault: false
+    editable: true

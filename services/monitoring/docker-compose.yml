@@ -21,8 +21,18 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      # Datasource Configuration
+      DB_HOST_API: host.docker.internal
+      DB_PORT_API: 5438
+      DB_NAME_API: ybb_platform
+      DB_HOST_PAYMENT: host.docker.internal
+      DB_PORT_PAYMENT: 5433
+      DB_USER: ybb_user
+      DB_PASSWORD: ybb_password
     ports:
       - "3001:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 volumes:
   prometheus_data:
