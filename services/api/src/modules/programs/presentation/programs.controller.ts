@@ -1,5 +1,6 @@
-import { Controller, Get, Query, Param, Put, Post, Delete, Body, UseGuards, Request } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { Controller, Get, Query, Param, Put, Post, Delete, Body, UseGuards, Request, UseInterceptors, UploadedFile, UploadedFiles } from '@nestjs/common';
+import { FileInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery, ApiConsumes } from '@nestjs/swagger';
 import { ListProgramsDto } from './dto/list-programs.dto';
 import { ProgramListResponseDto } from './dto/program-response.dto';
 import { ListProgramsQuery } from '../application/queries/list-programs.query';
@@ -16,6 +17,9 @@ import { UpdateProgramCommand } from '../application/commands/update-program.com
 import { UpdateProgramHandler } from '../application/commands/handlers/update-program.handler';
 import { DeleteProgramCommand } from '../application/commands/delete-program.command';
 import { DeleteProgramHandler } from '../application/commands/handlers/delete-program.handler';
+import { UploadProgramBrandingDto } from './dto/upload-content.dto';
+import { UpdateProgramBrandingCommand } from '../application/commands/update-program-branding.command';
+import { UpdateProgramBrandingHandler } from '../application/commands/handlers/update-program-branding.handler';
 import {
   ProgramTimelineResponseDto,
   ProgramScheduleResponseDto,
@@ -129,6 +133,7 @@ export class ProgramsController {
     private readonly getProgramDetailHandler: GetProgramDetailHandler,
     private readonly createProgramHandler: CreateProgramHandler,
     private readonly updateProgramHandler: UpdateProgramHandler,
+    private readonly updateProgramBrandingHandler: UpdateProgramBrandingHandler,
     private readonly deleteProgramHandler: DeleteProgramHandler,
     private readonly getParticipantProgressHandler: GetParticipantProgressHandler,
     // Content List Handlers
@@ -274,6 +279,33 @@ export class ProgramsController {
       message: 'Program updated successfully',
       data: program,
     };
+  }
+
+  @Post(':id/branding')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update program branding (logo, banner, thumbnail)' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileFieldsInterceptor([
+    { name: 'logo', maxCount: 1 },
+    { name: 'banner', maxCount: 1 },
+    { name: 'thumbnail', maxCount: 1 },
+  ]))
+  async updateBranding(
+    @Param('id') id: string,
+    @Body() dto: UploadProgramBrandingDto,
+    @UploadedFiles() files: { logo?: any[], banner?: any[], thumbnail?: any[] },
+    @Request() req: any,
+  ) {
+    const uploadedFiles = {
+      logo: files?.logo?.[0],
+      banner: files?.banner?.[0],
+      thumbnail: files?.thumbnail?.[0],
+    };
+    
+    return this.updateProgramBrandingHandler.execute(
+        new UpdateProgramBrandingCommand(id, dto, req.user.id, uploadedFiles)
+    );
   }
 
   @Delete(':id')
@@ -447,16 +479,30 @@ export class ProgramsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add speaker' })
-  async addSpeaker(@Param('id') programId: string, @Body() dto: CreateProgramSpeakerDto, @Request() req: any) {
-    return this.createProgramSpeakerHandler.execute(new CreateProgramSpeakerCommand(dto, req.user.id));
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('photo'))
+  async addSpeaker(
+    @Param('id') programId: string, 
+    @Body() dto: CreateProgramSpeakerDto, 
+    @UploadedFile() photo: any,
+    @Request() req: any
+  ) {
+    return this.createProgramSpeakerHandler.execute(new CreateProgramSpeakerCommand(dto, req.user.id, photo));
   }
 
   @Put('speakers/:itemId')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update speaker' })
-  async updateSpeaker(@Param('itemId') itemId: string, @Body() dto: UpdateProgramSpeakerDto, @Request() req: any) {
-    return this.updateProgramSpeakerHandler.execute(new UpdateProgramSpeakerCommand(itemId, dto, req.user.id));
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('photo'))
+  async updateSpeaker(
+    @Param('itemId') itemId: string, 
+    @Body() dto: UpdateProgramSpeakerDto, 
+    @UploadedFile() photo: any,
+    @Request() req: any
+  ) {
+    return this.updateProgramSpeakerHandler.execute(new UpdateProgramSpeakerCommand(itemId, dto, req.user.id, photo));
   }
 
   @Delete('speakers/:itemId')
@@ -547,16 +593,30 @@ export class ProgramsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add team member' })
-  async addTeam(@Param('id') programId: string, @Body() dto: CreateProgramTeamDto, @Request() req: any) {
-    return this.createProgramTeamHandler.execute(new CreateProgramTeamCommand(dto, req.user.id));
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('photo'))
+  async addTeam(
+    @Param('id') programId: string, 
+    @Body() dto: CreateProgramTeamDto, 
+    @UploadedFile() photo: any,
+    @Request() req: any
+  ) {
+    return this.createProgramTeamHandler.execute(new CreateProgramTeamCommand(dto, req.user.id, photo));
   }
 
   @Put('team/:itemId')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update team member' })
-  async updateTeam(@Param('itemId') itemId: string, @Body() dto: UpdateProgramTeamDto, @Request() req: any) {
-    return this.updateProgramTeamHandler.execute(new UpdateProgramTeamCommand(itemId, dto, req.user.id));
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('photo'))
+  async updateTeam(
+    @Param('itemId') itemId: string, 
+    @Body() dto: UpdateProgramTeamDto, 
+    @UploadedFile() photo: any,
+    @Request() req: any
+  ) {
+    return this.updateProgramTeamHandler.execute(new UpdateProgramTeamCommand(itemId, dto, req.user.id, photo));
   }
 
   @Delete('team/:itemId')
@@ -572,16 +632,30 @@ export class ProgramsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add partner' })
-  async addPartner(@Param('id') programId: string, @Body() dto: CreateProgramPartnerDto, @Request() req: any) {
-    return this.createProgramPartnerHandler.execute(new CreateProgramPartnerCommand(dto, req.user.id));
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('logo'))
+  async addPartner(
+    @Param('id') programId: string, 
+    @Body() dto: CreateProgramPartnerDto, 
+    @UploadedFile() logo: any,
+    @Request() req: any
+  ) {
+    return this.createProgramPartnerHandler.execute(new CreateProgramPartnerCommand(dto, req.user.id, logo));
   }
 
   @Put('partners/:itemId')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update partner' })
-  async updatePartner(@Param('itemId') itemId: string, @Body() dto: UpdateProgramPartnerDto, @Request() req: any) {
-    return this.updateProgramPartnerHandler.execute(new UpdateProgramPartnerCommand(itemId, dto, req.user.id));
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('logo'))
+  async updatePartner(
+    @Param('itemId') itemId: string, 
+    @Body() dto: UpdateProgramPartnerDto, 
+    @UploadedFile() logo: any,
+    @Request() req: any
+  ) {
+    return this.updateProgramPartnerHandler.execute(new UpdateProgramPartnerCommand(itemId, dto, req.user.id, logo));
   }
 
   @Delete('partners/:itemId')
@@ -597,16 +671,30 @@ export class ProgramsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add resource' })
-  async addResource(@Param('id') programId: string, @Body() dto: CreateProgramResourceDto, @Request() req: any) {
-    return this.createProgramResourceHandler.execute(new CreateProgramResourceCommand(dto, req.user.id));
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  async addResource(
+    @Param('id') programId: string, 
+    @Body() dto: CreateProgramResourceDto, 
+    @UploadedFile() file: any,
+    @Request() req: any
+  ) {
+    return this.createProgramResourceHandler.execute(new CreateProgramResourceCommand(dto, req.user.id, file));
   }
 
   @Put('resources/:itemId')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update resource' })
-  async updateResource(@Param('itemId') itemId: string, @Body() dto: UpdateProgramResourceDto, @Request() req: any) {
-    return this.updateProgramResourceHandler.execute(new UpdateProgramResourceCommand(itemId, dto, req.user.id));
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  async updateResource(
+    @Param('itemId') itemId: string, 
+    @Body() dto: UpdateProgramResourceDto, 
+    @UploadedFile() file: any,
+    @Request() req: any
+  ) {
+    return this.updateProgramResourceHandler.execute(new UpdateProgramResourceCommand(itemId, dto, req.user.id, file));
   }
 
   @Delete('resources/:itemId')

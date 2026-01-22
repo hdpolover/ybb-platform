@@ -36,10 +36,19 @@ export class DeleteProgramScheduleCommand {
 
 // Speaker
 export class CreateProgramSpeakerCommand {
-    constructor(public readonly dto: CreateProgramSpeakerDto, public readonly userId: string) { }
+    constructor(
+        public readonly dto: CreateProgramSpeakerDto, 
+        public readonly userId: string,
+        public readonly image?: any
+    ) { }
 }
 export class UpdateProgramSpeakerCommand {
-    constructor(public readonly id: string, public readonly dto: UpdateProgramSpeakerDto, public readonly userId: string) { }
+    constructor(
+        public readonly id: string, 
+        public readonly dto: UpdateProgramSpeakerDto, 
+        public readonly userId: string,
+        public readonly image?: any
+    ) { }
 }
 export class DeleteProgramSpeakerCommand {
     constructor(public readonly id: string, public readonly userId: string) { }
@@ -80,10 +89,19 @@ export class DeleteProgramFaqCommand {
 
 // Team
 export class CreateProgramTeamCommand {
-    constructor(public readonly dto: CreateProgramTeamDto, public readonly userId: string) { }
+    constructor(
+        public readonly dto: CreateProgramTeamDto, 
+        public readonly userId: string,
+        public readonly image?: any
+    ) { }
 }
 export class UpdateProgramTeamCommand {
-    constructor(public readonly id: string, public readonly dto: UpdateProgramTeamDto, public readonly userId: string) { }
+    constructor(
+        public readonly id: string, 
+        public readonly dto: UpdateProgramTeamDto, 
+        public readonly userId: string,
+        public readonly image?: any
+    ) { }
 }
 export class DeleteProgramTeamCommand {
     constructor(public readonly id: string, public readonly userId: string) { }
@@ -91,10 +109,19 @@ export class DeleteProgramTeamCommand {
 
 // Partner
 export class CreateProgramPartnerCommand {
-    constructor(public readonly dto: CreateProgramPartnerDto, public readonly userId: string) { }
+    constructor(
+        public readonly dto: CreateProgramPartnerDto, 
+        public readonly userId: string,
+        public readonly logo?: any
+    ) { }
 }
 export class UpdateProgramPartnerCommand {
-    constructor(public readonly id: string, public readonly dto: UpdateProgramPartnerDto, public readonly userId: string) { }
+    constructor(
+        public readonly id: string, 
+        public readonly dto: UpdateProgramPartnerDto, 
+        public readonly userId: string,
+        public readonly logo?: any
+    ) { }
 }
 export class DeleteProgramPartnerCommand {
     constructor(public readonly id: string, public readonly userId: string) { }
@@ -102,10 +129,19 @@ export class DeleteProgramPartnerCommand {
 
 // Resource
 export class CreateProgramResourceCommand {
-    constructor(public readonly dto: CreateProgramResourceDto, public readonly userId: string) { }
+    constructor(
+        public readonly dto: CreateProgramResourceDto, 
+        public readonly userId: string,
+        public readonly file?: any
+    ) { }
 }
 export class UpdateProgramResourceCommand {
-    constructor(public readonly id: string, public readonly dto: UpdateProgramResourceDto, public readonly userId: string) { }
+    constructor(
+        public readonly id: string, 
+        public readonly dto: UpdateProgramResourceDto, 
+        public readonly userId: string,
+        public readonly file?: any
+    ) { }
 }
 export class DeleteProgramResourceCommand {
     constructor(public readonly id: string, public readonly userId: string) { }

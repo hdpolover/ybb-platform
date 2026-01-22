@@ -1,8 +1,10 @@
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { Inject } from '@nestjs/common';
+import { Inject, NotFoundException } from '@nestjs/common';
 import { IProgramContentRepository } from '@core/interfaces/repositories/program-content.repository.interface';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
 import { Prisma } from '@prisma/client';
+import { StorageService } from '../../../../files/application/storage.service';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import {
     CreateProgramTimelineCommand, UpdateProgramTimelineCommand, DeleteProgramTimelineCommand,
     CreateProgramScheduleCommand, UpdateProgramScheduleCommand, DeleteProgramScheduleCommand,
@@ -79,16 +81,76 @@ export class DeleteProgramScheduleHandler implements ICommandHandler<DeleteProgr
 // --- Speaker Handlers ---
 @CommandHandler(CreateProgramSpeakerCommand)
 export class CreateProgramSpeakerHandler implements ICommandHandler<CreateProgramSpeakerCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly storageService: StorageService,
+        private readonly prisma: PrismaService,
+    ) {}
     async execute(command: CreateProgramSpeakerCommand) {
-        return this.repository.createSpeaker(command.dto);
+        let photoUrl = command.dto.photoUrl;
+
+        if (command.image) {
+            const program = await this.prisma.program.findUnique({ where: { id: command.dto.programId } });
+            if (!program) {
+                throw new NotFoundException('Program not found');
+            }
+            
+            const result = await this.storageService.uploadFile(
+                command.image,
+                command.userId,
+                program.programCategoryId, // brandId
+                'speakers',
+                program.id
+            );
+            
+            photoUrl = result.url;
+        }
+
+        const dto = {
+            ...command.dto,
+            photoUrl
+        };
+        return this.repository.createSpeaker(dto);
     }
 }
 @CommandHandler(UpdateProgramSpeakerCommand)
 export class UpdateProgramSpeakerHandler implements ICommandHandler<UpdateProgramSpeakerCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly storageService: StorageService,
+        private readonly prisma: PrismaService,
+    ) {}
+
     async execute(command: UpdateProgramSpeakerCommand) {
-        return this.repository.updateSpeaker(command.id, command.dto);
+        let photoUrl = command.dto.photoUrl;
+
+        if (command.image) {
+            const speaker = await this.repository.findSpeakerById(command.id);
+            if (!speaker) {
+                throw new NotFoundException('Speaker not found');
+            }
+
+            const program = await this.prisma.program.findUnique({ where: { id: speaker.programId } });
+            if (!program) {
+                throw new NotFoundException('Program not found');
+            }
+            
+            const result = await this.storageService.uploadFile(
+                command.image,
+                command.userId,
+                program.programCategoryId, 
+                'speakers',
+                program.id
+            );
+            photoUrl = result.url;
+        }
+
+        const dto = {
+            ...command.dto,
+            photoUrl
+        };
+
+        return this.repository.updateSpeaker(command.id, dto);
     }
 }
 @CommandHandler(DeleteProgramSpeakerCommand)
@@ -171,16 +233,85 @@ export class DeleteProgramFaqHandler implements ICommandHandler<DeleteProgramFaq
 // --- Team Handlers ---
 @CommandHandler(CreateProgramTeamCommand)
 export class CreateProgramTeamHandler implements ICommandHandler<CreateProgramTeamCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly storageService: StorageService,
+        private readonly prisma: PrismaService,
+    ) {}
     async execute(command: CreateProgramTeamCommand) {
-        return this.repository.createTeam(command.dto);
+        let photoUrl = command.dto.photoUrl;
+
+        if (command.image) {
+            let brandId;
+            if (command.dto.programId) {
+                const program = await this.prisma.program.findUnique({ where: { id: command.dto.programId } });
+                brandId = program?.programCategoryId;
+            } else if (command.dto.programCategoryId) {
+                brandId = command.dto.programCategoryId;
+            }
+
+            if (!brandId) {
+                 throw new NotFoundException('Program or Brand ID required');
+            }
+
+             const result = await this.storageService.uploadFile(
+                command.image,
+                command.userId,
+                brandId, 
+                'team',
+                command.dto.programId
+            );
+             photoUrl = result.url;
+        }
+
+        const dto = {
+            ...command.dto,
+            photoUrl
+        };
+        return this.repository.createTeam(dto);
     }
 }
 @CommandHandler(UpdateProgramTeamCommand)
 export class UpdateProgramTeamHandler implements ICommandHandler<UpdateProgramTeamCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly storageService: StorageService,
+        private readonly prisma: PrismaService,
+    ) {}
+
     async execute(command: UpdateProgramTeamCommand) {
-        return this.repository.updateTeam(command.id, command.dto);
+        let photoUrl = command.dto.photoUrl;
+
+        if (command.image) {
+            const teamMember = await this.repository.findTeamById(command.id);
+            if (!teamMember) {
+                throw new NotFoundException('Team member not found');
+            }
+            
+            if (!teamMember.programId) {
+                throw new NotFoundException('Program ID missing on team member');
+            }
+
+            const program = await this.prisma.program.findUnique({ where: { id: teamMember.programId } });
+             if (!program) {
+                throw new NotFoundException('Program not found');
+            }
+            
+            const result = await this.storageService.uploadFile(
+                command.image,
+                command.userId,
+                program.programCategoryId, 
+                'team',
+                program.id
+            );
+            photoUrl = result.url;
+        }
+
+        const dto = {
+            ...command.dto,
+            photoUrl
+        };
+        return this.repository.updateTeam(command.id, dto);
     }
 }
 @CommandHandler(DeleteProgramTeamCommand)
@@ -194,16 +325,78 @@ export class DeleteProgramTeamHandler implements ICommandHandler<DeleteProgramTe
 // --- Partner Handlers ---
 @CommandHandler(CreateProgramPartnerCommand)
 export class CreateProgramPartnerHandler implements ICommandHandler<CreateProgramPartnerCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly storageService: StorageService,
+        private readonly prisma: PrismaService,
+    ) {}
     async execute(command: CreateProgramPartnerCommand) {
-        return this.repository.createPartner(command.dto);
+         let logoUrl = command.dto.logoUrl;
+
+         if (command.logo) {
+            const program = await this.prisma.program.findUnique({ where: { id: command.dto.programId } });
+            if (!program) {
+                throw new NotFoundException('Program not found');
+            }
+
+             const result = await this.storageService.uploadFile(
+                command.logo,
+                command.userId,
+                program.programCategoryId, 
+                'partners',
+                program.id
+            );
+            logoUrl = result.url;
+        }
+
+        const dto = {
+            ...command.dto,
+            logoUrl
+        };
+        return this.repository.createPartner(dto);
     }
 }
 @CommandHandler(UpdateProgramPartnerCommand)
 export class UpdateProgramPartnerHandler implements ICommandHandler<UpdateProgramPartnerCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly storageService: StorageService,
+        private readonly prisma: PrismaService,
+    ) {}
+
     async execute(command: UpdateProgramPartnerCommand) {
-        return this.repository.updatePartner(command.id, command.dto);
+        let logoUrl = command.dto.logoUrl;
+
+        if (command.logo) {
+            const partner = await this.repository.findPartnerById(command.id);
+            if (!partner) {
+                throw new NotFoundException('Partner not found');
+            }
+
+            if (!partner.programId) {
+                throw new NotFoundException('Program ID missing on partner');
+            }
+
+            const program = await this.prisma.program.findUnique({ where: { id: partner.programId } });
+            if (!program) {
+                throw new NotFoundException('Program not found');
+            }
+
+             const result = await this.storageService.uploadFile(
+                command.logo,
+                command.userId,
+                program.programCategoryId, 
+                'partners',
+                program.id
+            );
+            logoUrl = result.url;
+        }
+
+        const dto = {
+            ...command.dto,
+            logoUrl
+        };
+        return this.repository.updatePartner(command.id, dto);
     }
 }
 @CommandHandler(DeleteProgramPartnerCommand)
@@ -217,22 +410,93 @@ export class DeleteProgramPartnerHandler implements ICommandHandler<DeleteProgra
 // --- Resource Handlers ---
 @CommandHandler(CreateProgramResourceCommand)
 export class CreateProgramResourceHandler implements ICommandHandler<CreateProgramResourceCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly storageService: StorageService,
+        private readonly prisma: PrismaService,
+    ) {}
     async execute(command: CreateProgramResourceCommand) {
+        let fileUrl = command.dto.fileUrl;
+        let fileSize: number | undefined = command.dto.fileSize;
+        let fileType = command.dto.fileType;
+
+        if (command.file) {
+            const program = await this.prisma.program.findUnique({ where: { id: command.dto.programId } });
+            if (!program) {
+                throw new NotFoundException('Program not found');
+            }
+            
+            // Use programCategoryId as brandId for now, similar to Gallery Service logic
+            const brandId = program.programCategoryId; 
+            
+            const result = await this.storageService.uploadFile(
+                command.file,
+                command.userId,
+                brandId,
+                'resources',
+                program.id
+            );
+            
+            fileUrl = result.url;
+            fileSize = command.file.size;
+            fileType = command.file.mimetype;
+        }
+
         const dto = {
             ...command.dto,
-            fileSize: command.dto.fileSize ? BigInt(command.dto.fileSize) : undefined
+            fileUrl: fileUrl,
+            fileSize: fileSize ? BigInt(fileSize) : undefined,
+            fileType: fileType
         };
         return this.repository.createResource(dto);
     }
 }
 @CommandHandler(UpdateProgramResourceCommand)
 export class UpdateProgramResourceHandler implements ICommandHandler<UpdateProgramResourceCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly storageService: StorageService,
+        private readonly prisma: PrismaService,
+    ) {}
+
     async execute(command: UpdateProgramResourceCommand) {
+        let fileUrl = command.dto.fileUrl;
+        let fileSize: number | undefined = command.dto.fileSize;
+        let fileType = command.dto.fileType;
+
+        if (command.file) {
+            const resource = await this.repository.findResourceById(command.id);
+            if (!resource) {
+                throw new NotFoundException('Resource not found');
+            }
+
+            if (!resource.programId) {
+                throw new NotFoundException('Program ID missing on resource');
+            }
+
+            const program = await this.prisma.program.findUnique({ where: { id: resource.programId } });
+            if (!program) {
+                throw new NotFoundException('Program not found');
+            }
+            
+            const result = await this.storageService.uploadFile(
+                command.file,
+                command.userId,
+                program.programCategoryId,
+                'resources',
+                program.id
+            );
+            
+            fileUrl = result.url;
+            fileSize = command.file.size;
+            fileType = command.file.mimetype;
+        }
+
         const dto = {
             ...command.dto,
-            fileSize: command.dto.fileSize ? BigInt(command.dto.fileSize) : undefined
+            fileUrl: fileUrl,
+            fileType: fileType,
+            fileSize: fileSize ? BigInt(fileSize) : undefined
         };
         return this.repository.updateResource(command.id, dto);
     }
