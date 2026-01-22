@@ -18,9 +18,9 @@ const (
 // PaymentMethodEntity represents a configurable payment method
 type PaymentMethodEntity struct {
 	ID          string            `gorm:"type:uuid;primaryKey"`
-	Name        string            `gorm:"type:varchar(100);not null;uniqueIndex:idx_payment_methods_name"` // e.g., "Bank BCA", "Midtrans", "GoPay"
+	Name        string            `gorm:"type:varchar(100);not null;unique"` // e.g., "Bank BCA", "Midtrans", "GoPay"
 	Type        PaymentMethodType `gorm:"type:varchar(20);not null;index"`
-	Code        string            `gorm:"type:varchar(50);not null;uniqueIndex:idx_payment_methods_code"` // e.g., "bank_bca", "midtrans", "gopay"
+	Code        string            `gorm:"type:varchar(50);not null;unique"` // e.g., "bank_bca", "midtrans", "gopay"
 	IsActive    bool              `gorm:"not null;default:true;index"`
 	DisplayName string            `gorm:"type:varchar(100);not null"` // User-facing name
 	Description string            `gorm:"type:text"`
