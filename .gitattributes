@@ -1,0 +1,5 @@
+# Enforce LF for shell scripts to ensure they work in Docker on Windows
+*.sh text eol=lf
+
+# Standardize other text files to auto-detect
+* text=auto
