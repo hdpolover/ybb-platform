@@ -15,6 +15,9 @@ COPY . .
 RUN go env -w GOPROXY=https://proxy.golang.org,direct && \
     (go mod tidy && go mod download || go mod tidy && go mod download || go mod tidy && go mod download)
 
+# Explicitly Copy migrations to /app/migrations to ensure they exist even if volume fails
+COPY migrations ./migrations
+
 # Expose port
 EXPOSE 8002
 
