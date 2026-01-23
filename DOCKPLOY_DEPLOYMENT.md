@@ -80,8 +80,8 @@ Each service requires accessing `dokploy-network` to communicate internally and 
 *   **Build Path**: `services/admin-dashboard`
 *   **Compose Path**: `docker-compose.dokploy.yml`
 *   **Environment Variables**:
-    *   `APP_DOMAINS_RULE`: `Host(\`admin.ybbhub.com\`)`
-    *   `NEXT_PUBLIC_API_URL`: `https://api.ybbhub.com`
+    *   `APP_DOMAINS_RULE`: `Host(\`staging-admin.ybbhub.com\`)`
+    *   `NEXT_PUBLIC_API_URL`: `https://staging-api.ybbhub.com` (Required at Build Time)
 
 ## 7. Minimal Admin
 *   **Name**: `minimal-admin`
