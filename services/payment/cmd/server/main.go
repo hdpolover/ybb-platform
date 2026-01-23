@@ -66,8 +66,14 @@ func main() {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 
-	// Auto-migrate database schema
-	// Enabled for Deployment auto-healing
+	// Run SQL Migrations (from migrations/ folder)
+	// This ensures triggers, indexes, and seeded data are present
+	if err := persistence.RunRawSqlMigrations(db, "migrations"); err != nil {
+		log.Fatalf("Failed to run SQL migrations: %v", err)
+	}
+
+	// Auto-migrate database schema (GORM Structs)
+	// Keeps Go structs in sync for basic CRUD
 	if err := db.AutoMigrate(
 		&entities.Payment{}, 
 		&entities.PaymentMethodEntity{}, 

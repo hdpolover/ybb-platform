@@ -232,6 +232,13 @@ function Show-DockerPs {
 function Run-Migrate {
     Write-Host "Running Prisma migrations on API service..." -ForegroundColor Cyan
     docker exec ybb-api npx prisma migrate deploy
+    
+    Write-Host "Triggering Payment service migrations (via restart)..." -ForegroundColor Cyan
+    # Payment service runs validation on startup
+    docker compose restart payment
+    
+    # Also ensure File service does the same if needed
+    # docker compose restart file 
 }
 
 function Open-Shell {

@@ -14,6 +14,9 @@ COPY . .
 # Update go.sum to ensure all dependencies are correct
 RUN go mod tidy
 
+# Copy migrations (Required for runtime)
+COPY migrations ./migrations
+
 # Build the application
 RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main ./cmd/server/main.go
@@ -27,6 +30,7 @@ WORKDIR /root/
 RUN apk --no-cache add ca-certificates
 
 COPY --from=builder /app/main .
+COPY --from=builder /app/migrations ./migrations
 
 EXPOSE 8002
 
