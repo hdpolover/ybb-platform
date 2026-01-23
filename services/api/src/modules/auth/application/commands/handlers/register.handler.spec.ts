@@ -11,6 +11,11 @@ import { RegisterCommand } from '../register.command';
 import { BadRequestException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 
+jest.mock('bcrypt', () => ({
+  hash: jest.fn().mockResolvedValue('hashed_password'),
+  compare: jest.fn().mockResolvedValue(true),
+}));
+
 describe('RegisterHandler', () => {
   let handler: RegisterHandler;
   let prismaService: any;
