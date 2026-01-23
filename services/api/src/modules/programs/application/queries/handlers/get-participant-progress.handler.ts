@@ -18,10 +18,10 @@ export class GetParticipantProgressHandler implements IQueryHandler<GetParticipa
         participant: { userId },
       },
       include: {
-        transactions: {
-          where: { status: 'paid' },
-          include: { pricingTier: true },
-        },
+        // transactions: {
+        //   where: { status: 'paid' },
+        //   include: { pricingTier: true },
+        // },
         documents: true, // Only if we want to check for doc uploads later
       },
     });
@@ -99,9 +99,12 @@ export class GetParticipantProgressHandler implements IQueryHandler<GetParticipa
           case TimelineCompletionType.payment_completed:
             const payConfig = step.completionConfig as { feeType: string };
             if (payConfig?.feeType) {
+              const hasPaid = application.paymentStatus === 'paid'; // Temporary fix until cross-service logic implemented
+              /*
               const hasPaid = application.transactions.some(
                 (t) => t.pricingTier?.feeType === payConfig.feeType
               );
+              */
               
               if (hasPaid) {
                 status = 'completed';
