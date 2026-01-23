@@ -12,6 +12,7 @@ Welcome to the YBB Platform documentation. This directory contains comprehensive
 | [Architecture](./architecture.md) | System design and service communication |
 | [Setup Guide](./setup.md) | Development environment setup |
 | [Deployment](./deployment.md) | Production deployment guide |
+| [Ambassador System](./AMBASSADOR_REFERRAL.md) | Anonymous referral & tracking guide |
 | [Service Credentials](./SERVICE_CREDENTIALS.md) | Default logins and access info |
 | [Clean Architecture](./clean-architecture-guide.md) | Code organization principles |
 
