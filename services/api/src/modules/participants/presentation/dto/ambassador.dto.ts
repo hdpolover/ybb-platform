@@ -39,4 +39,7 @@ export class AmbassadorDashboardDto {
 
     @ApiPropertyOptional()
     programName?: string;
+
+    @ApiPropertyOptional({ description: 'The unique share link for this ambassador for this program' })
+    shareLink?: string;
 }
