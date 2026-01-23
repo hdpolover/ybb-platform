@@ -231,14 +231,19 @@ function Show-DockerPs {
 
 function Run-Migrate {
     Write-Host "Running Prisma migrations on API service..." -ForegroundColor Cyan
+    # Note: API service automatically runs migrations on startup via docker-entrypoint.sh
+    # This manual command is for triggering it without restart
     docker exec ybb-api npx prisma migrate deploy
     
     Write-Host "Triggering Payment service migrations (via restart)..." -ForegroundColor Cyan
-    # Payment service runs validation on startup
-    docker compose restart payment
-    
-    # Also ensure File service does the same if needed
-    # docker compose restart file 
+    if (Test-Path "services\payment") {
+        Push-Location "services\payment"
+        try {
+            docker compose restart
+        } finally {
+            Pop-Location
+        }
+    }
 }
 
 function Open-Shell {
