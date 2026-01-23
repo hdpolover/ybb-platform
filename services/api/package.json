@@ -29,6 +29,8 @@
     "prisma:reset": "prisma migrate reset"
   },
   "dependencies": {
+    "@grpc/grpc-js": "^1.14.3",
+    "@grpc/proto-loader": "^0.8.0",
     "@keyv/redis": "^4.0.3",
     "@logtail/node": "^0.5.6",
     "@logtail/winston": "^0.5.6",
