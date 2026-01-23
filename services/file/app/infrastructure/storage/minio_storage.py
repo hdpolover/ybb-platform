@@ -15,11 +15,11 @@ class MinIOStorage(IStorageService):
         self, 
         endpoint: str, 
         access_key: str, 
-        secret_key: str,
+        secret_key: str, 
         secure: bool = False,
-        public_endpoint: str | None = None,
-        public_secure: bool | None = None,
-        region: str | None = None
+        public_endpoint: str = None,
+        public_secure: bool = None,
+        region: str = None
     ):
         """
         Initialize MinIO client.
