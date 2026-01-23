@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
+import { HttpModule } from '@nestjs/axios';
+import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from '../auth/auth.module';
 import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.module';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
@@ -10,7 +12,13 @@ import { ListUserPaymentsHandler } from './application/queries/handlers/list-use
 import { GetPaymentDetailHandler } from './application/queries/handlers/get-payment-detail.handler';
 
 @Module({
-    imports: [CqrsModule, AuthModule, MonitoringModule],
+    imports: [
+        CqrsModule,
+        AuthModule,
+        MonitoringModule,
+        HttpModule,
+        ConfigModule,
+    ],
     controllers: [PaymentsController, PaymentEventsController],
     providers: [
         {
