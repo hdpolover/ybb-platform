@@ -30,48 +30,71 @@ class FileService(file_service_pb2_grpc.FileServiceServicer):
 
     async def UploadFile(self, request_iterator, context):
         metadata = None
-        data = BytesIO()
-        size = 0
+        read_fd, write_fd = os.pipe()
+        
+        # Get first request for metadata
+        try:
+            first_request = await request_iterator.__anext__()
+            if first_request.HasField('metadata'):
+                metadata = first_request.metadata
+            else:
+                os.close(read_fd)
+                os.close(write_fd)
+                await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "First message must be metadata")
+        except StopAsyncIteration:
+            os.close(read_fd)
+            os.close(write_fd)
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "Empty request")
 
-        async for request in request_iterator:
-            if request.HasField('metadata'):
-                metadata = request.metadata
-            elif request.HasField('chunk_data'):
-                chunk = request.chunk_data
-                data.write(chunk)
-                size += len(chunk)
+        file_size = metadata.size if metadata.size > 0 else -1
         
-        data.seek(0)
-        
-        if not metadata:
-            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "Metadata missing")
+        # Create reader for MinIO (it will run in a separate thread)
+        file_reader = os.fdopen(read_fd, 'rb')
 
         command = UploadFileCommand(
-            file_data=data,
+            file_data=file_reader,
             filename=metadata.filename,
             content_type=metadata.content_type,
-            size=size,
+            size=metadata.size,
             user_id=metadata.user_id,
             brand_id=metadata.brand_id,
             bucket=metadata.bucket,
             program_id=metadata.program_id if metadata.program_id else None,
             participant_id=metadata.participant_id if metadata.participant_id else None,
-            metadata={} # Additional arbitrary metadata if needed
+            metadata={} 
         )
 
         try:
-            result = await self.upload_handler.execute(command)
+            # Start Upload Task (Consumer) - Logic runs in thread because of MinIOStorage update
+            upload_task = asyncio.create_task(self.upload_handler.execute(command))
+            
+            # Start Streaming (Producer)
+            with os.fdopen(write_fd, 'wb') as writer:
+                async for request in request_iterator:
+                    if request.HasField('chunk_data'):
+                        writer.write(request.chunk_data)
+            
+            # Start awaiting result
+            result = await upload_task
+            
+            # Cleanup
+            file_reader.close()
+
             return file_service_pb2.UploadFileResponse(
                 id=result.id,
-                url=result.url or "",
+                url=result.download_url or "",
                 storage_path=result.storage_path,
                 original_filename=result.original_filename,
-                content_type=result.mime_type,
+                content_type=result.content_type,
                 size=result.size,
                 bucket=result.bucket
             )
         except Exception as e:
-            logging.error(f"Upload failed: {e}")
+            logging.error(f"Streaming upload failed: {e}")
+            if not file_reader.closed:
+                file_reader.close()
+            # Ensure write_fd is closed if error happened before with block exit?
+            # os.fdopen(write_fd) context manager handles it.
             await context.abort(grpc.StatusCode.INTERNAL, str(e))
 
     async def GetFile(self, request, context):
@@ -86,9 +109,9 @@ class FileService(file_service_pb2_grpc.FileServiceServicer):
             return file_service_pb2.FileResponse(
                 id=result.id,
                 original_filename=result.original_filename,
-                content_type=result.mime_type,
+                content_type=result.content_type,
                 size=result.size,
-                url=result.url or "",
+                url=result.download_url or "",
                 bucket=result.bucket,
                 storage_path=result.storage_path,
                 created_at=str(result.uploaded_at),

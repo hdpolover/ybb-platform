@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-import file_service_pb2 as file__service__pb2
+from app.protos import file_service_pb2 as app_dot_protos_dot_file__service__pb2
 
 GRPC_GENERATED_VERSION = '1.76.0'
 GRPC_VERSION = grpc.__version__
@@ -18,7 +18,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + ' but the generated code in file_service_pb2_grpc.py depends on'
+        + ' but the generated code in app/protos/file_service_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -36,18 +36,18 @@ class FileServiceStub(object):
         """
         self.UploadFile = channel.stream_unary(
                 '/file.FileService/UploadFile',
-                request_serializer=file__service__pb2.UploadFileRequest.SerializeToString,
-                response_deserializer=file__service__pb2.UploadFileResponse.FromString,
+                request_serializer=app_dot_protos_dot_file__service__pb2.UploadFileRequest.SerializeToString,
+                response_deserializer=app_dot_protos_dot_file__service__pb2.UploadFileResponse.FromString,
                 _registered_method=True)
         self.DownloadFile = channel.unary_stream(
                 '/file.FileService/DownloadFile',
-                request_serializer=file__service__pb2.DownloadFileRequest.SerializeToString,
-                response_deserializer=file__service__pb2.DownloadFileResponse.FromString,
+                request_serializer=app_dot_protos_dot_file__service__pb2.DownloadFileRequest.SerializeToString,
+                response_deserializer=app_dot_protos_dot_file__service__pb2.DownloadFileResponse.FromString,
                 _registered_method=True)
         self.GetFile = channel.unary_unary(
                 '/file.FileService/GetFile',
-                request_serializer=file__service__pb2.GetFileRequest.SerializeToString,
-                response_deserializer=file__service__pb2.FileResponse.FromString,
+                request_serializer=app_dot_protos_dot_file__service__pb2.GetFileRequest.SerializeToString,
+                response_deserializer=app_dot_protos_dot_file__service__pb2.FileResponse.FromString,
                 _registered_method=True)
 
 
@@ -80,18 +80,18 @@ def add_FileServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'UploadFile': grpc.stream_unary_rpc_method_handler(
                     servicer.UploadFile,
-                    request_deserializer=file__service__pb2.UploadFileRequest.FromString,
-                    response_serializer=file__service__pb2.UploadFileResponse.SerializeToString,
+                    request_deserializer=app_dot_protos_dot_file__service__pb2.UploadFileRequest.FromString,
+                    response_serializer=app_dot_protos_dot_file__service__pb2.UploadFileResponse.SerializeToString,
             ),
             'DownloadFile': grpc.unary_stream_rpc_method_handler(
                     servicer.DownloadFile,
-                    request_deserializer=file__service__pb2.DownloadFileRequest.FromString,
-                    response_serializer=file__service__pb2.DownloadFileResponse.SerializeToString,
+                    request_deserializer=app_dot_protos_dot_file__service__pb2.DownloadFileRequest.FromString,
+                    response_serializer=app_dot_protos_dot_file__service__pb2.DownloadFileResponse.SerializeToString,
             ),
             'GetFile': grpc.unary_unary_rpc_method_handler(
                     servicer.GetFile,
-                    request_deserializer=file__service__pb2.GetFileRequest.FromString,
-                    response_serializer=file__service__pb2.FileResponse.SerializeToString,
+                    request_deserializer=app_dot_protos_dot_file__service__pb2.GetFileRequest.FromString,
+                    response_serializer=app_dot_protos_dot_file__service__pb2.FileResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -119,8 +119,8 @@ class FileService(object):
             request_iterator,
             target,
             '/file.FileService/UploadFile',
-            file__service__pb2.UploadFileRequest.SerializeToString,
-            file__service__pb2.UploadFileResponse.FromString,
+            app_dot_protos_dot_file__service__pb2.UploadFileRequest.SerializeToString,
+            app_dot_protos_dot_file__service__pb2.UploadFileResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -146,8 +146,8 @@ class FileService(object):
             request,
             target,
             '/file.FileService/DownloadFile',
-            file__service__pb2.DownloadFileRequest.SerializeToString,
-            file__service__pb2.DownloadFileResponse.FromString,
+            app_dot_protos_dot_file__service__pb2.DownloadFileRequest.SerializeToString,
+            app_dot_protos_dot_file__service__pb2.DownloadFileResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -173,8 +173,8 @@ class FileService(object):
             request,
             target,
             '/file.FileService/GetFile',
-            file__service__pb2.GetFileRequest.SerializeToString,
-            file__service__pb2.FileResponse.FromString,
+            app_dot_protos_dot_file__service__pb2.GetFileRequest.SerializeToString,
+            app_dot_protos_dot_file__service__pb2.FileResponse.FromString,
             options,
             channel_credentials,
             insecure,
