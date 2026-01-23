@@ -1,7 +1,10 @@
 #!/bin/sh
 set -e
 
-echo "🔄 Generating Prisma Client..."
+echo "� DEBUG: Checking environment..."
+echo "DATABASE_URL host: $(echo $DATABASE_URL | sed -n 's/.*@\([^:]*\).*/\1/p')"
+
+echo "�🔄 Generating Prisma Client..."
 npx prisma generate
 
 echo "🗄️  Running database migrations..."
