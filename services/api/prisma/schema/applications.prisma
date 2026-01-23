@@ -29,7 +29,7 @@ model ProgramPricingTier {
   // Relations
   program         Program                     @relation(fields: [programId], references: [id], onDelete: Cascade)
   validityPeriods PricingTierValidityPeriod[]
-  transactions    PaymentTransaction[]
+  // transactions    PaymentTransaction[] -- REMOVED: Managed by Payment Service
 
   @@index([programId])
   @@index([isActive])
@@ -148,7 +148,7 @@ model ParticipantApplication {
   reviewer     Admin?                   @relation(fields: [reviewedBy], references: [id])
   deleter      User?                    @relation("ApplicationDeleter", fields: [deletedBy], references: [id])
   withdrawer   User?                    @relation("ApplicationWithdrawer", fields: [withdrawnBy], references: [id])
-  transactions PaymentTransaction[]
+  // transactions PaymentTransaction[] -- REMOVED: Managed by Payment Service
   editHistory  ApplicationEditHistory[]
   awards       ParticipantAward[]
   documents    ParticipantDocument[]

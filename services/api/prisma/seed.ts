@@ -1949,6 +1949,105 @@ async function main() {
 
   console.log(`✅ Sponsorship Tiers created for: ${iysBrand.name}`);
 
+
+  // ==========================================
+  // 22. Seed Payment Configuration (NEW) 
+  // ==========================================
+
+  // 1. Payment Gateway for YBB (Sandbox Keys)
+  await prisma.paymentGatewayConfig.create({
+    data: {
+      programCategoryId: ybbBrand.id,
+      provider: 'midtrans',
+      mode: 'sandbox',
+      serverKey: 'SB-Mid-server-YOUR_KEY_HERE',
+      clientKey: 'SB-Mid-client-YOUR_KEY_HERE',
+      isActive: true
+    }
+  });
+  console.log(`✅ Payment Gateway Config created for: ${ybbBrand.name}`);
+
+  // 2. Seed Payment Methods
+  // 2.1 Manual BCA
+  const methodBca = await prisma.paymentMethod.upsert({
+    where: { code: 'manual_bca' },
+    update: {},
+    create: {
+      code: 'manual_bca',
+      name: 'Bank Transfer BCA',
+      type: 'MANUAL',
+      logoUrl: 'https://placehold.co/100x50/0056B3/FFF?text=BCA',
+      description: 'Transfer to BCA Account',
+      isEnabled: true,
+    }
+  });
+
+  await prisma.manualPaymentDetail.create({
+    data: {
+      paymentMethodId: methodBca.id,
+      providerName: 'BCA',
+      accountNumber: '1234567890',
+      accountHolder: 'YBB Foundation',
+      instructionText: 'Please transfer exact amount including unique code.'
+    }
+  });
+
+  // 2.2 Manual PayPal
+  const methodPaypal = await prisma.paymentMethod.upsert({
+    where: { code: 'manual_paypal' },
+    update: {},
+    create: {
+      code: 'manual_paypal',
+      name: 'PayPal',
+      type: 'MANUAL',
+      logoUrl: 'https://placehold.co/100x50/003087/FFF?text=PayPal',
+      description: 'Send to our PayPal email',
+      isEnabled: true,
+    }
+  });
+
+  await prisma.manualPaymentDetail.create({
+    data: {
+      paymentMethodId: methodPaypal.id,
+      providerName: 'PayPal',
+      accountNumber: 'finance@ybbhub.com',
+      accountHolder: 'YBB Finance',
+      instructionText: 'Use "Friends and Family" to avoid fees.'
+    }
+  });
+
+  // 2.3 Midtrans Credit Card
+  await prisma.paymentMethod.upsert({
+    where: { code: 'midtrans_credit_card' },
+    update: {},
+    create: {
+      code: 'midtrans_credit_card',
+      name: 'Credit Card',
+      type: 'AUTOMATIC',
+      provider: 'midtrans',
+      logoUrl: 'https://placehold.co/100x50/000/FFF?text=VISA',
+      description: 'Visa / Mastercard / JCB',
+      isEnabled: true,
+    }
+  });
+
+  // 2.4 Midtrans GoPay
+  await prisma.paymentMethod.upsert({
+    where: { code: 'midtrans_gopay' },
+    update: {},
+    create: {
+      code: 'midtrans_gopay',
+      name: 'GoPay',
+      type: 'AUTOMATIC',
+      provider: 'midtrans',
+      logoUrl: 'https://placehold.co/100x50/00AA13/FFF?text=GoPay',
+      description: 'Scan QR with GoJek',
+      isEnabled: true,
+    }
+  });
+
+  console.log('✅ Payment Methods & Config seeded.');
+
   console.log('🎉 Seeding completed successfully!');
 }
 

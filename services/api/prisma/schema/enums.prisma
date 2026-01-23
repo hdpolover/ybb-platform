@@ -184,12 +184,10 @@ enum TimelineCompletionType {
 
 enum PaymentStatus {
   unpaid
-  pending
   paid
-  captured
-  settled
+  processing
   failed
   refunded
-  cancelled
-  expired
 }
+
+
