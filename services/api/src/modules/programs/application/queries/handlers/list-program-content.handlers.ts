@@ -1,5 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { IProgramContentRepository } from '../../../../../core/interfaces/repositories/program-content.repository.interface';
+import { IProgramRepository } from '../../../../../core/interfaces/repositories/program.repository.interface';
 import {
     ListProgramTimelineQuery,
     ListProgramSchedulesQuery,
@@ -14,15 +15,31 @@ import {
     ListProgramRequirementsQuery,
 } from '../list-program-content.queries';
 
+async function resolveProgramId(
+    repo: IProgramRepository, 
+    identifier: string
+): Promise<string | null> {
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier);
+    if (isUUID) return identifier;
+    
+    const program = await repo.findBySlug(identifier);
+    return program ? program.id : null;
+}
+
 @Injectable()
 export class ListProgramTimelineHandler {
     constructor(
         @Inject('IProgramContentRepository')
         private readonly repository: IProgramContentRepository,
+        @Inject('IProgramRepository')
+        private readonly programRepository: IProgramRepository,
     ) { }
 
     async execute(query: ListProgramTimelineQuery) {
-        const items = await this.repository.findTimelineByProgramId(query.programId);
+        const programId = await resolveProgramId(this.programRepository, query.programId);
+        if (!programId) return [];
+
+        const items = await this.repository.findTimelineByProgramId(programId);
         return items.map(item => ({
             ...item,
             description: item.description ?? undefined,
@@ -36,10 +53,15 @@ export class ListProgramSchedulesHandler {
     constructor(
         @Inject('IProgramContentRepository')
         private readonly repository: IProgramContentRepository,
+        @Inject('IProgramRepository')
+        private readonly programRepository: IProgramRepository,
     ) { }
 
     async execute(query: ListProgramSchedulesQuery) {
-        const items = await this.repository.findSchedulesByProgramId(query.programId);
+        const programId = await resolveProgramId(this.programRepository, query.programId);
+        if (!programId) return [];
+
+        const items = await this.repository.findSchedulesByProgramId(programId);
         return items.map(item => ({
             ...item,
             startTime: item.startTime ?? undefined,
@@ -56,10 +78,15 @@ export class ListProgramSpeakersHandler {
     constructor(
         @Inject('IProgramContentRepository')
         private readonly repository: IProgramContentRepository,
+        @Inject('IProgramRepository')
+        private readonly programRepository: IProgramRepository,
     ) { }
 
     async execute(query: ListProgramSpeakersQuery) {
-        const items = await this.repository.findSpeakersByProgramId(query.programId);
+        const programId = await resolveProgramId(this.programRepository, query.programId);
+        if (!programId) return [];
+
+        const items = await this.repository.findSpeakersByProgramId(programId);
         return items.map(item => ({
             ...item,
             title: item.title ?? undefined,
@@ -78,10 +105,15 @@ export class ListProgramGalleryHandler {
     constructor(
         @Inject('IProgramContentRepository')
         private readonly repository: IProgramContentRepository,
+        @Inject('IProgramRepository')
+        private readonly programRepository: IProgramRepository,
     ) { }
 
     async execute(query: ListProgramGalleryQuery) {
-        const items = await this.repository.findGalleryByProgramId(query.programId);
+        const programId = await resolveProgramId(this.programRepository, query.programId);
+        if (!programId) return [];
+
+        const items = await this.repository.findGalleryByProgramId(programId);
         return items.map(item => ({
             ...item,
             title: item.title ?? undefined,
@@ -95,10 +127,15 @@ export class ListProgramTestimonialsHandler {
     constructor(
         @Inject('IProgramContentRepository')
         private readonly repository: IProgramContentRepository,
+        @Inject('IProgramRepository')
+        private readonly programRepository: IProgramRepository,
     ) { }
 
     async execute(query: ListProgramTestimonialsQuery) {
-        const items = await this.repository.findTestimonialsByProgramId(query.programId);
+        const programId = await resolveProgramId(this.programRepository, query.programId);
+        if (!programId) return [];
+
+        const items = await this.repository.findTestimonialsByProgramId(programId);
         return items.map(item => ({
             ...item,
             role: item.role ?? undefined,
@@ -114,10 +151,15 @@ export class ListProgramFaqsHandler {
     constructor(
         @Inject('IProgramContentRepository')
         private readonly repository: IProgramContentRepository,
+        @Inject('IProgramRepository')
+        private readonly programRepository: IProgramRepository,
     ) { }
 
     async execute(query: ListProgramFaqsQuery) {
-        return this.repository.findFaqsByProgramId(query.programId);
+        const programId = await resolveProgramId(this.programRepository, query.programId);
+        if (!programId) return [];
+
+        return this.repository.findFaqsByProgramId(programId);
     }
 }
 
@@ -126,10 +168,15 @@ export class ListProgramTeamHandler {
     constructor(
         @Inject('IProgramContentRepository')
         private readonly repository: IProgramContentRepository,
+        @Inject('IProgramRepository')
+        private readonly programRepository: IProgramRepository,
     ) { }
 
     async execute(query: ListProgramTeamQuery) {
-        const items = await this.repository.findTeamByProgramId(query.programId);
+        const programId = await resolveProgramId(this.programRepository, query.programId);
+        if (!programId) return [];
+
+        const items = await this.repository.findTeamByProgramId(programId);
         return items.map(item => ({
             ...item,
             bio: item.bio ?? undefined,
@@ -144,10 +191,15 @@ export class ListProgramPartnersHandler {
     constructor(
         @Inject('IProgramContentRepository')
         private readonly repository: IProgramContentRepository,
+        @Inject('IProgramRepository')
+        private readonly programRepository: IProgramRepository,
     ) { }
 
     async execute(query: ListProgramPartnersQuery) {
-        const items = await this.repository.findPartnersByProgramId(query.programId);
+        const programId = await resolveProgramId(this.programRepository, query.programId);
+        if (!programId) return [];
+
+        const items = await this.repository.findPartnersByProgramId(programId);
         return items.map(item => ({
             ...item,
             role: item.role ?? undefined,
@@ -162,10 +214,15 @@ export class ListProgramResourcesHandler {
     constructor(
         @Inject('IProgramContentRepository')
         private readonly repository: IProgramContentRepository,
+        @Inject('IProgramRepository')
+        private readonly programRepository: IProgramRepository,
     ) { }
 
     async execute(query: ListProgramResourcesQuery) {
-        const items = await this.repository.findResourcesByProgramId(query.programId);
+        const programId = await resolveProgramId(this.programRepository, query.programId);
+        if (!programId) return [];
+
+        const items = await this.repository.findResourcesByProgramId(programId);
         return items.map(item => ({
             ...item,
             description: item.description ?? undefined,
@@ -180,10 +237,15 @@ export class ListProgramPricingTiersHandler {
     constructor(
         @Inject('IProgramContentRepository')
         private readonly repository: IProgramContentRepository,
+        @Inject('IProgramRepository')
+        private readonly programRepository: IProgramRepository,
     ) { }
 
     async execute(query: ListProgramPricingTiersQuery) {
-        const items = await this.repository.findPricingTiersByProgramId(query.programId);
+        const programId = await resolveProgramId(this.programRepository, query.programId);
+        if (!programId) return [];
+
+        const items = await this.repository.findPricingTiersByProgramId(programId);
         return items.map(item => ({
             ...item,
             description: item.description ?? undefined,
@@ -210,10 +272,15 @@ export class ListProgramRequirementsHandler {
     constructor(
         @Inject('IProgramContentRepository')
         private readonly repository: IProgramContentRepository,
+        @Inject('IProgramRepository')
+        private readonly programRepository: IProgramRepository,
     ) { }
 
     async execute(query: ListProgramRequirementsQuery) {
-        const items = await this.repository.findRequirementsByProgramId(query.programId);
+        const programId = await resolveProgramId(this.programRepository, query.programId);
+        if (!programId) return [];
+
+        const items = await this.repository.findRequirementsByProgramId(programId);
         return items.map(item => ({
             ...item,
             description: item.description ?? undefined,
