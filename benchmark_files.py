@@ -6,35 +6,31 @@ import sys
 
 # Add current dir to path to find generated protos
 sys.path.append(os.getcwd())
+sys.path.append(os.path.join(os.getcwd(), 'services/file/app/protos'))
 
 # from services.file.app.protos import file_service_pb2, file_service_pb2_grpc
 
 FILE_SIZE_MB = 10
 FILE_SIZE_BYTES = FILE_SIZE_MB * 1024 * 1024
 TEST_FILE_PATH = "test_large_file.bin"
-API_REST_URL = "http://localhost:4000/files/upload" # Via Gateway
-API_GRPC_TEST_URL = "http://localhost:4000/grpc-files/upload" # Via Gateway calling gRPC
+API_REST_URL = "http://localhost:4000/v1/rest-files-test/upload"
+API_GRPC_TEST_URL = "http://localhost:4000/v1/grpc-files/upload"
 
-def create_test_file():
-    print(f"Generating {FILE_SIZE_MB}MB test file...")
-    with open(TEST_FILE_PATH, "wb") as f:
-        f.write(os.urandom(FILE_SIZE_BYTES))
+def create_test_file(path, size_mb):
+    print(f"Generating {size_mb}MB test file at {path}...")
+    with open(path, "wb") as f:
+        f.write(os.urandom(int(size_mb * 1024 * 1024)))
 
-def test_rest_upload():
-    print(f"Testing REST Upload ({FILE_SIZE_MB}MB)...")
+def test_rest_upload(file_path):
+    print(f"Testing REST Upload ({file_path})...")
     start = time.time()
-    with open(TEST_FILE_PATH, "rb") as f:
-        files = {'file': f}
+    with open(file_path, "rb") as f:
+        files = {'file': (os.path.basename(file_path), f, 'application/pdf')}
         data = {
             'user_id': 'test-user',
             'brand_id': 'test-brand',
-            'bucket': 'temp'
+            'bucket': 'documents'
         }
-        # Note: This hits the API Gateway which forwards to File Service via HTTP
-        # To truly test the Inter-Service communication comparison, users usually hit the Gateway.
-        # But this test sends file TO Gateway.
-        # Ideally we want to measure Gateway -> File Service latency.
-        # But end-to-end is also valuable as it includes the overhead of the Gateway parsing the file.
         response = requests.post(API_REST_URL, files=files, data=data)
     
     end = time.time()
@@ -45,17 +41,16 @@ def test_rest_upload():
         print(f"REST Upload Failed: {response.status_code} - {response.text}")
     return duration
 
-def test_grpc_upload():
-    print(f"Testing gRPC Upload via Gateway ({FILE_SIZE_MB}MB)...")
+def test_grpc_upload(file_path):
+    print(f"Testing gRPC Upload via Gateway ({file_path})...")
     start = time.time()
-    with open(TEST_FILE_PATH, "rb") as f:
-        files = {'file': f}
+    with open(file_path, "rb") as f:
+        files = {'file': (os.path.basename(file_path), f, 'application/pdf')}
         data = {
             'user_id': 'test-user',
             'brand_id': 'test-brand',
-            'bucket': 'temp'
+            'bucket': 'documents'
         }
-        # This hits the new endpoint in Gateway which parses Multipart, then streams to File Service via gRPC
         response = requests.post(API_GRPC_TEST_URL, files=files, data=data)
 
     end = time.time()
@@ -66,29 +61,34 @@ def test_grpc_upload():
         print(f"gRPC Upload Failed: {response.status_code} - {response.text}")
     return duration
 
-if __name__ == "__main__":
-    if not os.path.exists(TEST_FILE_PATH):
-        create_test_file()
+def run_suite(size_mb):
+    filename = f"test_{size_mb}mb.pdf"
+    create_test_file(filename, size_mb)
     
-    # Warmup
-    print("Warming up...")
-    # time.sleep(2)
+    print(f"\n--- Benchmark Suite: {size_mb}MB ---")
+    rest_time = test_rest_upload(filename)
+    grpc_time = test_grpc_upload(filename)
     
-    # Run Tests
-    rest_time = test_rest_upload()
-    grpc_time = test_grpc_upload()
-    
-    print("\nResults:")
-    print(f"REST Total Time: {rest_time:.4f}s")
-    print(f"gRPC Total Time: {grpc_time:.4f}s")
+    print(f"\nResults for {size_mb}MB:")
+    print(f"REST: {rest_time:.4f}s")
+    print(f"gRPC: {grpc_time:.4f}s")
     
     if rest_time > 0 and grpc_time > 0:
-        diff = (rest_time - grpc_time) / rest_time * 100
-        if diff > 0:
-            print(f"gRPC is {diff:.2f}% faster")
+        if grpc_time < rest_time:
+            diff = (rest_time - grpc_time) / rest_time * 100
+            print(f"👉 gRPC is {diff:.2f}% faster")
         else:
-            print(f"gRPC is {abs(diff):.2f}% slower")
+            diff = (grpc_time - rest_time) / rest_time * 100
+            print(f"👉 gRPC is {diff:.2f}% slower")
+            
+    if os.path.exists(filename):
+        os.remove(filename)
 
-    # Cleanup
-    if os.path.exists(TEST_FILE_PATH):
-        os.remove(TEST_FILE_PATH)
+if __name__ == "__main__":
+    # Warmup
+    print("Warming up with 0.1MB...")
+    run_suite(0.1) 
+    
+    # Normal files
+    run_suite(1)   # 1MB (High quality image)
+    run_suite(5)   # 5MB (Small document/asset)

@@ -21,6 +21,11 @@ export class FileGrpcClient implements OnModuleInit {
   ) {
     try {
       const subject = new ReplaySubject<UploadFileRequest>();
+      
+      // Ensure size is present
+      if (!metadata.size) {
+        metadata.size = fileBuffer.length;
+      }
 
       // 1. Send Metadata Packet First
       subject.next({ metadata });

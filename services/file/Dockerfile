@@ -23,8 +23,13 @@ RUN prisma generate
 # Copy application
 COPY ./app ./app
 
-# Expose port
-EXPOSE 8001
+# Generate gRPC code
+RUN python -m grpc_tools.protoc -I./app/protos --python_out=./app/protos --grpc_python_out=./app/protos ./app/protos/file_service.proto
 
-# Run application (generate client again on startup to ensure sync with mounted volumes)
-CMD ["sh", "-c", "prisma generate && prisma db push --skip-generate && uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload"]
+# Expose ports (REST + gRPC)
+EXPOSE 8001
+EXPOSE 50052
+
+# Run application (Start both REST and gRPC)
+COPY ./app/grpc_main.py ./app/grpc_main.py
+CMD ["sh", "-c", "prisma generate && prisma db push --skip-generate && (uvicorn app.main:app --host 0.0.0.0 --port 8001 & python -m app.grpc_main)"]

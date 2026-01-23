@@ -8,6 +8,7 @@ export interface FileMetadata {
   bucket: string;
   program_id?: string;
   participant_id?: string;
+  size?: number;
 }
 
 export interface UploadFileRequest {

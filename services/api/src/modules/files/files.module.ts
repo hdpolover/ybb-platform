@@ -8,6 +8,7 @@ import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.m
 import { FilesController } from './presentation/files.controller';
 import { DocumentsController } from './presentation/documents.controller';
 import { GrpcFilesTestController } from './presentation/grpc-files-test.controller';
+import { RestFilesTestController } from './presentation/rest-files-test.controller';
 import { FileServiceClient } from './infrastructure/clients/file-service.client';
 import { FileGrpcClient } from './infrastructure/clients/file-grpc-client.service';
 import { StorageService } from './application/storage.service';
@@ -27,7 +28,10 @@ import { StorageService } from './application/storage.service';
           options: {
             package: 'file',
             protoPath: join(__dirname, '../../protos/file_service.proto'),
-            url: configService.get('FILE_GRPC_URL') || 'localhost:50052',
+            url: configService.get('FILE_GRPC_URL') || 'host.docker.internal:50052',
+            loader: {
+              keepCase: true,
+            },
           },
         }),
         inject: [ConfigService],
@@ -37,7 +41,7 @@ import { StorageService } from './application/storage.service';
     AuthModule,
     MonitoringModule,
   ],
-  controllers: [FilesController, DocumentsController, GrpcFilesTestController],
+  controllers: [FilesController, DocumentsController, GrpcFilesTestController, RestFilesTestController],
   providers: [FileServiceClient, FileGrpcClient, StorageService],
   exports: [FileServiceClient, FileGrpcClient, StorageService],
 })

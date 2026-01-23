@@ -10,6 +10,7 @@ services:
     restart: unless-stopped
     ports:
       - "8001:8001"
+      - "50052:50052"
     environment:
       SERVICE_PORT: 8001
       PYTHON_ENV: development

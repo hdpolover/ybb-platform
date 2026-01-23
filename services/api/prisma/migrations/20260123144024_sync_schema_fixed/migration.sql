@@ -27,7 +27,7 @@ ALTER TABLE "payments" DROP CONSTRAINT "payments_program_pricing_tier_id_fkey";
 ALTER TABLE "payments" DROP CONSTRAINT "payments_user_id_fkey";
 
 -- AlterTable
-ALTER TABLE "users" ADD COLUMN     "is_onboarding_completed" BOOLEAN NOT NULL DEFAULT false;
+-- ALTER TABLE "users" ADD COLUMN     "is_onboarding_completed" BOOLEAN NOT NULL DEFAULT false;
 
 -- DropTable
 DROP TABLE "payments";
