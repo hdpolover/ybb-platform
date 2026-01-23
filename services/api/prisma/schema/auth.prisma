@@ -55,6 +55,7 @@ model User {
 
   // Account Status
   isActive Boolean @default(true) @map("is_active")
+  isOnboardingCompleted Boolean @default(false) @map("is_onboarding_completed")
 
   // Security (Basic)
   failedLoginAttempts Int       @default(0) @map("failed_login_attempts")

@@ -1,8 +1,9 @@
-import { Inject, Injectable, ConflictException, BadRequestException } from '@nestjs/common';
+import { Inject, Injectable, ConflictException, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
 import { RegisterCommand } from '../register.command';
 import { AuthResponseDto } from '../../../presentation/dto/auth-response.dto';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
 import { RabbitMQProducerService } from '../../../../../shared/infrastructure/rabbitmq/rabbitmq-producer.service';
+import { Ambassador } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
@@ -12,6 +13,8 @@ import { GeoIpService } from '@shared/infrastructure/geoip/geoip.service';
 
 @Injectable()
 export class RegisterHandler {
+  private readonly logger = new Logger(RegisterHandler.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
@@ -77,11 +80,11 @@ export class RegisterHandler {
   async execute(command: RegisterCommand, domain?: string): Promise<AuthResponseDto> {
     // Validate provider exists and is active
     const authProvider = await this.prisma.authProvider.findUnique({
-      where: { name: command.provider || 'local' },
+      where: { id: command.providerId },
     });
 
     if (!authProvider || !authProvider.isActive) {
-      throw new BadRequestException(`Authentication provider '${command.provider}' is not available`);
+      throw new BadRequestException(`Authentication provider is not available or inactive`);
     }
 
     // Resolve programCategoryId from command or domain
@@ -96,19 +99,63 @@ export class RegisterHandler {
       throw new BadRequestException('Invalid program category');
     }
 
-    // If this is a registration for a specific program
-    if (command.programId) {
-      const program = await this.prisma.program.findUnique({
-        where: { id: command.programId },
+    // Resolve Target Program ID
+    let targetProgramId = command.programId;
+
+    if (command.programSlug) {
+        const programBySlug = await this.prisma.program.findUnique({
+          where: {
+            programCategoryId_slug: {
+              programCategoryId: programCategoryId,
+              slug: command.programSlug,
+            }
+          }
+        });
+
+        if (!programBySlug) {
+          throw new BadRequestException(`Invalid program slug '${command.programSlug}' for the current brand domain.`);
+        }
+        targetProgramId = programBySlug.id;
+    }
+
+    // Automatic registration to latest active program if no specific program requested
+    if (!targetProgramId) {
+      const latestProgram = await this.prisma.program.findFirst({
+        where: {
+          programCategoryId: programCategoryId,
+          isActive: true,
+        },
+        orderBy: {
+          startDate: 'desc',
+        },
       });
 
-      if (!program) {
-        throw new BadRequestException('Invalid program ID');
+      if (latestProgram) {
+        targetProgramId = latestProgram.id;
       }
+    }
 
-      if (program.programCategoryId !== programCategoryId) {
-        throw new BadRequestException('Program does not belong to the selected category');
-      }
+    // Compatibility check (if ID was manually provided)
+    if (targetProgramId && command.programId) {
+       const confirmProgram = await this.prisma.program.findUnique({ where: { id: targetProgramId }});
+       if (confirmProgram && confirmProgram.programCategoryId !== programCategoryId) {
+           throw new BadRequestException('Program does not belong to the selected category');
+       }
+    }
+
+    // Check Ambassador Referral
+    let ambassador: Ambassador | null = null;
+    if (command.referralCode) {
+        ambassador = await this.prisma.ambassador.findUnique({
+            where: { referralCode: command.referralCode },
+        });
+        
+        // If ambassador not found or inactive, we generally ignore or log warning, 
+        // but typically registration should proceed without referral.
+        if (!ambassador || !ambassador.isActive) {
+            this.logger.warn(`Invalid or inactive referral code used: ${command.referralCode}`);
+            ambassador = null;
+        }
     }
 
     // Check if user already exists by email + programCategoryId
@@ -128,30 +175,57 @@ export class RegisterHandler {
       },
     });
 
-    // Function to handle program registration
+    // Function to handle program registration & referrals
     const handleProgramRegistration = async (userId: string, email: string) => {
-      if (!command.programId) return;
-
-      // Check if participant profile exists
+      // Create participant profile if not exists
       let participant = await this.prisma.participant.findUnique({
         where: { userId },
       });
 
-      // Create participant profile if not exists
       if (!participant) {
         participant = await this.prisma.participant.create({
           data: {
             userId,
             fullName: email.split('@')[0], // Default name from email prefix
+            referralCode: command.referralCode, // Store what they entered even if invalid? Or only valid? 
+                                                // Storing valid one if ambassador exists, else maybe null or raw string.
+                                                // Schema has referralCode on Participant (String).
           },
         });
+        
+        // If this is a new participant and we have a valid ambassador, link them
+        if (ambassador) {
+             try {
+                 await this.prisma.ambassadorReferral.create({
+                     data: {
+                         ambassadorId: ambassador.id,
+                         participantId: participant.id,
+                         status: 'referred', // Default
+                     }
+                 });
+
+                 // Increment stats
+                 await this.prisma.ambassador.update({
+                     where: { id: ambassador.id },
+                     data: {
+                         totalReferrals: { increment: 1 },
+                         lastReferralAt: new Date(),
+                     }
+                 });
+             } catch (e) {
+                 // Ignore unique constraint violation if retry
+                 this.logger.error(`Failed to link ambassador: ${e.message}`);
+             }
+        }
       }
+
+      if (!targetProgramId) return;
 
       // Check if already registered for this program
       const existingApplication = await this.prisma.participantApplication.findFirst({
         where: {
           participantId: participant.id,
-          programId: command.programId,
+          programId: targetProgramId,
         },
       });
 
@@ -160,7 +234,7 @@ export class RegisterHandler {
         await this.prisma.participantApplication.create({
           data: {
             participantId: participant.id,
-            programId: command.programId,
+            programId: targetProgramId,
             status: 'draft',
           },
         });
@@ -168,12 +242,12 @@ export class RegisterHandler {
     };
 
     // For OAuth providers, check if identity already exists
-    if (command.provider !== 'local' && command.providerId) {
+    if (authProvider.name !== 'local' && command.providerUserId) {
       const existingIdentity = await this.prisma.userIdentity.findUnique({
         where: {
           providerId_providerUserId: {
             providerId: authProvider.id,
-            providerUserId: command.providerId,
+            providerUserId: command.providerUserId,
           },
         },
         include: {
@@ -208,10 +282,14 @@ export class RegisterHandler {
             email: existingIdentity.user.email,
             programCategoryId: existingIdentity.user.programCategoryId,
             isActive: existingIdentity.user.isActive,
+            isOnboardingCompleted: existingIdentity.user.isOnboardingCompleted ?? false,
           },
         };
       }
     }
+
+    // Fallback for providerUserId (Email usually for local, or if not provided)
+    const providerUserIdToUse = command.providerUserId || command.email;
 
     if (user) {
       // User exists, handle program registration first just in case
@@ -229,7 +307,7 @@ export class RegisterHandler {
         data: {
           userId: user.id,
           providerId: authProvider.id,
-          providerUserId: command.providerId,
+          providerUserId: providerUserIdToUse,
           providerEmail: command.email,
           isPrimary: user.identities.length === 0, // First identity is primary
           lastUsedAt: new Date(),
@@ -263,6 +341,7 @@ export class RegisterHandler {
           email: user.email,
           programCategoryId: user.programCategoryId,
           isActive: user.isActive,
+          isOnboardingCompleted: user.isOnboardingCompleted ?? false,
         },
       };
     }
@@ -278,13 +357,23 @@ export class RegisterHandler {
       ? await bcrypt.hash(command.password, 10)
       : null;
 
-    // Generate verification token for local registration
+    // Email Verification Logic
     let emailVerificationToken: string | null = null;
     let emailVerificationExpires: Date | null = null;
+    
+    // Default: OAuth verified, Local depends on setting
+    let emailVerified = authProvider.isOAuth; 
 
     if (authProvider.name === 'local') {
-      emailVerificationToken = crypto.randomBytes(32).toString('hex');
-      emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+      if (programCategory.requireEmailVerification) {
+        // Verification Required
+        emailVerified = false;
+        emailVerificationToken = crypto.randomBytes(32).toString('hex');
+        emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+      } else {
+        // No Verification Required
+        emailVerified = true;
+      }
     }
 
     // Create user with identity
@@ -294,14 +383,14 @@ export class RegisterHandler {
         passwordHash,
         programCategoryId: programCategoryId,
         isActive: true,
-        // OAuth providers usually verify email automatically
-        emailVerified: authProvider.isOAuth,
+        isOnboardingCompleted: false,
+        emailVerified: emailVerified,
         emailVerificationToken,
         emailVerificationExpires,
         identities: {
           create: {
             providerId: authProvider.id,
-            providerUserId: command.providerId,
+            providerUserId: providerUserIdToUse,
             providerEmail: command.email,
             isPrimary: true,
             lastUsedAt: new Date(),
@@ -371,23 +460,27 @@ export class RegisterHandler {
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + 7);
         
-        const geoCtx = this.geoIpService.lookup(command.ipAddress);
-
-        await this.prisma.userSession.create({
-            data: {
-                userId: newUser.id,
-                sessionToken,
-                refreshToken,
-                deviceType: agentInfo.deviceType,
-                deviceName: `${agentInfo.browser} on ${agentInfo.os}`,
-                browser: agentInfo.browser,
-                operatingSystem: agentInfo.os,
-                ipAddress: command.ipAddress,
-                expiresAt,
-                country: geoCtx.country,
-                city: geoCtx.city,
-            }
-        });
+        try {
+          const geoCtx = this.geoIpService.lookup(command.ipAddress);
+          await this.prisma.userSession.create({
+              data: {
+                  userId: newUser.id,
+                  sessionToken,
+                  refreshToken,
+                  deviceType: agentInfo.deviceType,
+                  deviceName: `${agentInfo.browser} on ${agentInfo.os}`,
+                  browser: agentInfo.browser,
+                  operatingSystem: agentInfo.os,
+                  ipAddress: command.ipAddress,
+                  expiresAt,
+                  country: geoCtx.country,
+                  city: geoCtx.city,
+              }
+          });
+        } catch (error) {
+           console.error('Failed to create user session', error);
+           // Non-blocking error
+        }
     }
 
     // Log Registration
@@ -413,6 +506,7 @@ export class RegisterHandler {
         email: newUser.email,
         programCategoryId: newUser.programCategoryId,
         isActive: newUser.isActive,
+        isOnboardingCompleted: newUser.isOnboardingCompleted ?? false,
       },
     };
   }

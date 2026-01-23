@@ -36,10 +36,13 @@ export class ApplyAmbassadorHandler implements ICommandHandler<ApplyAmbassadorCo
     }
 
     private async generateReferralCode(name: string): Promise<string> {
-        // Simple generation logic: First name + random suffix
-        // clean name
-        const prefix = name.split(' ')[0].toUpperCase().replace(/[^A-Z]/g, '').substring(0, 5);
-        const suffix = Math.floor(1000 + Math.random() * 9000); // 4 digit random
-        return `${prefix}${suffix}`;
+        // Generate a fully anonymous opaque code (looks like a session or tracking ID)
+        // Format: 8 random alphanumeric chars (e.g., K9X2M4P1)
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No ambiguous chars
+        let result = '';
+        for (let i = 0; i < 8; i++) {
+            result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return result;
     }
 }

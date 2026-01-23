@@ -13,5 +13,6 @@ export class AuthResponseDto {
     email: string;
     programCategoryId: string;
     isActive: boolean;
+    isOnboardingCompleted: boolean;
   };
 }

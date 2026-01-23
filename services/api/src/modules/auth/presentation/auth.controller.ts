@@ -96,11 +96,13 @@ export class AuthController {
     const userAgent = req?.headers['user-agent'] || 'unknown';
     const command = new RegisterCommand(
       dto.email,
+      dto.providerId,
       dto.password,
       dto.programCategoryId,
-      dto.provider || 'local',
-      dto.providerId,
+      dto.providerUserId,
       dto.programId,
+      dto.programSlug,
+      dto.referralCode,
       ip || '0.0.0.0',
       userAgent,
     );
