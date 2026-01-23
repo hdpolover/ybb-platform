@@ -40,7 +40,7 @@ services:
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
       POSTGRES_DB: ${DATABASE_NAME}
     volumes:
-      - postgres_payment_data_prod:/var/lib/postgresql/data
+      - postgres_payment_data_prod_v2:/var/lib/postgresql/data
     networks:
       - dokploy-network
     healthcheck:
@@ -54,4 +54,4 @@ networks:
     external: true
 
 volumes:
-  postgres_payment_data_prod:
+  postgres_payment_data_prod_v2:
