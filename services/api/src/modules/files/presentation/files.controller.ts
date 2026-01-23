@@ -15,6 +15,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { StorageService } from '../application/storage.service';
 import { FileServiceClient, FileResponse } from '../infrastructure/clients/file-service.client';
+import { FileGrpcClient } from '../infrastructure/clients/file-grpc-client.service';
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
 
 /**
@@ -32,6 +33,7 @@ export class FilesController {
 
   constructor(
     private readonly fileServiceClient: FileServiceClient,
+    private readonly fileGrpcClient: FileGrpcClient,
     private readonly storageService: StorageService,
     private readonly metricsService: MetricsService,
   ) {}
@@ -120,7 +122,14 @@ export class FilesController {
     try {
       this.logger.log(`Retrieving file: ${fileId} for user ${userId}, brand ${brandId}`);
       
-      const result = await this.fileServiceClient.getFile(fileId, userId, brandId);
+      let result;
+      // Try gRPC first
+      try {
+         result = await this.fileGrpcClient.getFile(fileId, userId, brandId);
+      } catch (grpcError) {
+         this.logger.warn(`gRPC getFile failed, falling back to REST: ${grpcError.message}`);
+         result = await this.fileServiceClient.getFile(fileId, userId, brandId);
+      }
       
       return {
         success: true,
