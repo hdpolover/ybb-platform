@@ -93,7 +93,6 @@ model User {
   deletedAmbassadors       Ambassador[]             @relation("AmbassadorDeleter")
   withdrawnApplications    ParticipantApplication[] @relation("ApplicationWithdrawer")
   awardedParticipantAwards ParticipantAward[]
-  payments                 PaymentTransaction[]
   files                    File[]
   waitlist                 ProgramWaitlist[]
   newsletterSubscription   NewsletterSubscriber[] // One-to-one or one-to-many? Usually one-to-many if they sub multiple times or just one. Let's assume one or more.
