@@ -27,7 +27,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=dokploy-network"
-      - "traefik.http.routers.ybb-notification.rule=${APP_DOMAINS_RULE:-Host(`notify.ybbhub.com`)}"
+      - "traefik.http.routers.ybb-notification.rule=${APP_DOMAINS_RULE:-Host(`staging-notification.ybbhub.com`)}"
       - "traefik.http.routers.ybb-notification.entrypoints=websecure"
       - "traefik.http.routers.ybb-notification.tls.certresolver=letsencrypt"
       - "traefik.http.services.ybb-notification.loadbalancer.server.port=4002"
