@@ -83,7 +83,17 @@ export class AuthController {
   @Public()
   @Post('register')
   @Throttle({ default: { limit: 3, ttl: 3600000 } }) // 3 attempts per hour
-  @ApiOperation({ summary: 'Register User' })
+  @ApiOperation({ 
+    summary: 'Register User',
+    description: `
+      Registers a new user with support for "Smart Registration" features:
+      
+      - **Program Slug**: Provide \`programSlug\` (e.g., 'ybb-15') to automatically register the user for a specific program.
+      - **Referral Code**: Provide \`referralCode\` (e.g., 'K9X2M4P1') to unknowingly credit an ambassador.
+      - **Brand Context**: Use the \`x-brand-domain\` header or \`url\` query parameter to automatically infer the Program Category.
+      - **Auth Provider**: Use \`providerId\` (UUID) to specify the authentication configuration (Local, Google, etc.).
+    `
+  })
   @ApiResponse({ status: 201, description: 'User successfully registered', type: AuthResponseDto })
   @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
   async register(
