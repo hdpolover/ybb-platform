@@ -11,11 +11,14 @@ import { ApplyAmbassadorHandler } from './application/commands/handlers/apply-am
 import { GetAmbassadorDashboardHandler } from './application/queries/handlers/get-ambassador-dashboard.handler';
 
 import { ParticipantsController } from './presentation/participants.controller';
+import { AmbassadorAdminController } from './presentation/ambassador-admin.controller';
 import { CompleteOnboardingHandler } from './application/commands/handlers/complete-onboarding.handler';
+import { GetAmbassadorsListHandler } from './application/queries/handlers/get-ambassadors-list.handler';
+import { UpdateAmbassadorStatusHandler } from './application/commands/handlers/update-ambassador-status.handler';
 
 @Module({
     imports: [CqrsModule, AuthModule],
-    controllers: [ParticipantsController],
+    controllers: [ParticipantsController, AmbassadorAdminController],
     providers: [
         {
             provide: 'IParticipantRepository',
@@ -32,6 +35,8 @@ import { CompleteOnboardingHandler } from './application/commands/handlers/compl
         CompleteOnboardingHandler,
         ApplyAmbassadorHandler,
         GetAmbassadorDashboardHandler,
+        GetAmbassadorsListHandler,
+        UpdateAmbassadorStatusHandler,
     ],
     exports: ['IParticipantRepository', 'IAmbassadorRepository'],
 })
