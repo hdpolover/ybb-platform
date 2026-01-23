@@ -1,7 +1,8 @@
 """MinIO storage implementation."""
 import io
 import re
-from typing import BinaryIO
+import asyncio
+from typing import BinaryIO, Any
 from minio import Minio
 from minio.error import S3Error
 from app.domain.services.storage_service import IStorageService
@@ -15,11 +16,11 @@ class MinIOStorage(IStorageService):
         self, 
         endpoint: str, 
         access_key: str, 
-        secret_key: str,
+        secret_key: str, 
         secure: bool = False,
-        public_endpoint: str | None = None,
-        public_secure: bool | None = None,
-        region: str | None = None
+        public_endpoint: str = None,
+        public_secure: bool = None,
+        region: str = None
     ):
         """
         Initialize MinIO client.
@@ -48,6 +49,11 @@ class MinIOStorage(IStorageService):
         # Store public endpoint config for URL rewriting
         self.public_endpoint = public_endpoint or endpoint
         self.public_secure = public_secure if public_secure is not None else secure
+
+    async def _run_in_thread(self, func, *args, **kwargs) -> Any:
+        """Run blocking function in a separate thread."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, lambda: func(*args, **kwargs))
     
     async def upload(
         self, 
@@ -61,8 +67,10 @@ class MinIOStorage(IStorageService):
         """Upload file to MinIO."""
         try:
             # Ensure bucket exists
-            if not self.client.bucket_exists(bucket_name=bucket):
-                self.client.make_bucket(bucket_name=bucket)
+            # Note: bucket_exists is blocking, moving to thread
+            bucket_exists = await self._run_in_thread(self.client.bucket_exists, bucket_name=bucket)
+            if not bucket_exists:
+                await self._run_in_thread(self.client.make_bucket, bucket_name=bucket)
             
             # Prepare metadata
             metadata = {}
@@ -70,7 +78,9 @@ class MinIOStorage(IStorageService):
                 metadata["x-amz-acl"] = "public-read"
 
             # Upload file
-            self.client.put_object(
+            # Note: put_object is blocking, moving to thread
+            await self._run_in_thread(
+                self.client.put_object,
                 bucket_name=bucket,
                 object_name=object_name,
                 data=file_data,

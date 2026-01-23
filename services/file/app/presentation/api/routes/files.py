@@ -26,8 +26,8 @@ async def upload_file(
     user_id: Annotated[str, Form(description="User ID (Global Identity)")],
     brand_id: Annotated[str, Form(description="Brand ID")],
     bucket: Annotated[str, Form(description="Category (e.g., documents, essays, payments)")] = "documents",
-    program_id: Annotated[str | None, Form(description="Program ID (Optional - for Program Context)")] = None,
-    participant_id: Annotated[str | None, Form(description="Participant ID (Optional - for Program Context)")] = None,
+    program_id: Annotated[str, Form(description="Program ID (Optional - for Program Context)")] = None,
+    participant_id: Annotated[str, Form(description="Participant ID (Optional - for Program Context)")] = None,
     upload_handler: UploadFileHandler = Depends(get_upload_handler)
 ):
     """
