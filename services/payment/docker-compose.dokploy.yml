@@ -11,7 +11,7 @@ services:
       ENVIRONMENT: ${ENVIRONMENT:-production}
       PORT: 8002
       # Database
-      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@ybb-postgres-payment:5432/${DATABASE_NAME}
+      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@ybb-postgres-payment:5432/${DATABASE_NAME}?sslmode=disable
       # RabbitMQ
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@ybb-shared-rabbitmq:5672/
       # Gateways
