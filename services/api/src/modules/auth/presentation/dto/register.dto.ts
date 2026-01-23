@@ -31,25 +31,22 @@ export class RegisterDto {
   programCategoryId?: string;
 
   @ApiProperty({
-    example: 'local',
-    description: 'The authentication provider method.',
-    required: false,
-    default: 'local',
-    enum: ['local', 'google', 'facebook', 'apple']
+    example: '123e4567-e89b-12d3-a456-426614174000',
+    description: 'The UUID of the authentication provider configuration (Local, Google, etc.).',
+    required: true
   })
-  @IsString()
-  @IsOptional()
-  @IsIn(['local', 'google', 'facebook', 'apple'])
-  provider?: string;
+  @IsUUID()
+  @IsNotEmpty()
+  providerId: string;
 
   @ApiProperty({
     example: '123456789',
-    description: 'The unique user ID from the external provider (used for OAuth).',
+    description: 'The unique user ID from the external provider (Required for OAuth, e.g. Google sub).',
     required: false
   })
   @IsString()
   @IsOptional()
-  providerId?: string;
+  providerUserId?: string;
 
   @ApiProperty({
     example: '123e4567-e89b-12d3-a456-426614174000',
@@ -59,4 +56,22 @@ export class RegisterDto {
   @IsUUID()
   @IsOptional()
   programId?: string;
+
+  @ApiProperty({
+    example: 'iys-2025',
+    description: 'The slug of a specific program to immediately register the user for.',
+    required: false
+  })
+  @IsString()
+  @IsOptional()
+  programSlug?: string;
+
+  @ApiProperty({
+    example: 'K9X2M4P1',
+    description: 'Referral code from an ambassador.',
+    required: false
+  })
+  @IsString()
+  @IsOptional()
+  referralCode?: string;
 }

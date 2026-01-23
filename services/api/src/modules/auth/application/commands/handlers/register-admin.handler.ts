@@ -142,6 +142,8 @@ export class RegisterAdminHandler {
         email: user.email,
         programCategoryId: user.programCategoryId,
         isActive: user.isActive,
+        // @ts-ignore
+        isOnboardingCompleted: user.isOnboardingCompleted ?? false,
       },
     };
   }

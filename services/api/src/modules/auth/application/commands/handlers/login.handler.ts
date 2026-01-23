@@ -237,6 +237,8 @@ export class LoginHandler {
         email: user.email,
         programCategoryId: user.programCategoryId,
         isActive: user.isActive,
+        // @ts-ignore
+        isOnboardingCompleted: user.isOnboardingCompleted ?? false,
       },
     };
   }
