@@ -16,10 +16,10 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
+	// swaggerFiles "github.com/swaggo/files"
+	// ginSwagger "github.com/swaggo/gin-swagger"
 
-	_ "github.com/ybb-platform/payment/docs" 
+	// _ "github.com/ybb-platform/payment/docs" 
 
 	"github.com/ybb-platform/payment/internal/domain/entities"
 	commandHandlers "github.com/ybb-platform/payment/internal/application/commands/handlers"
@@ -199,7 +199,7 @@ func setupRouter(paymentHandler *handlers.PaymentHandler, paymentMethodHandler *
 	router := gin.Default()
 
 	// Akses via browser: http://localhost:8002/swagger/index.html
-	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	// router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// Health check
 	router.GET("/health", func(c *gin.Context) {	
