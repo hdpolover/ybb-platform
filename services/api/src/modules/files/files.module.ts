@@ -7,8 +7,6 @@ import { AuthModule } from '@modules/auth/auth.module';
 import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.module';
 import { FilesController } from './presentation/files.controller';
 import { DocumentsController } from './presentation/documents.controller';
-import { GrpcFilesTestController } from './presentation/grpc-files-test.controller';
-import { RestFilesTestController } from './presentation/rest-files-test.controller';
 import { FileServiceClient } from './infrastructure/clients/file-service.client';
 import { FileGrpcClient } from './infrastructure/clients/file-grpc-client.service';
 import { StorageService } from './application/storage.service';
@@ -41,7 +39,7 @@ import { StorageService } from './application/storage.service';
     AuthModule,
     MonitoringModule,
   ],
-  controllers: [FilesController, DocumentsController, GrpcFilesTestController, RestFilesTestController],
+  controllers: [FilesController, DocumentsController],
   providers: [FileServiceClient, FileGrpcClient, StorageService],
   exports: [FileServiceClient, FileGrpcClient, StorageService],
 })
