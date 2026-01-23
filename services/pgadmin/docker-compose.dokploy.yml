@@ -21,7 +21,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=dokploy-network"
-      - "traefik.http.routers.ybb-pgadmin.rule=${APP_DOMAINS_RULE:-Host(`db-manager.ybbhub.com`)}"
+      - "traefik.http.routers.ybb-pgadmin.rule=${APP_DOMAINS_RULE:-Host(`staging-pgadmin.ybbhub.com`)}"
       - "traefik.http.routers.ybb-pgadmin.entrypoints=websecure"
       - "traefik.http.routers.ybb-pgadmin.tls.certresolver=letsencrypt"
       - "traefik.http.services.ybb-pgadmin.loadbalancer.server.port=80"

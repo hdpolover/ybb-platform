@@ -16,7 +16,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=dokploy-network"
-      - "traefik.http.routers.ybb-admin-dashboard.rule=${APP_DOMAINS_RULE:-Host(`admin.ybbhub.com`)}"
+      - "traefik.http.routers.ybb-admin-dashboard.rule=${APP_DOMAINS_RULE:-Host(`staging-admin.ybbhub.com`)}"
       - "traefik.http.routers.ybb-admin-dashboard.entrypoints=websecure"
       - "traefik.http.routers.ybb-admin-dashboard.tls.certresolver=letsencrypt"
       - "traefik.http.services.ybb-admin-dashboard.loadbalancer.server.port=4001"

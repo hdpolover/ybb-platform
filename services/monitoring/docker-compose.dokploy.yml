@@ -26,7 +26,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=dokploy-network"
-      - "traefik.http.routers.ybb-grafana.rule=${APP_DOMAINS_RULE:-Host(`monitor.ybbhub.com`)}"
+      - "traefik.http.routers.ybb-grafana.rule=${APP_DOMAINS_RULE:-Host(`staging-monitor.ybbhub.com`)}"
       - "traefik.http.routers.ybb-grafana.entrypoints=websecure"
       - "traefik.http.routers.ybb-grafana.tls.certresolver=letsencrypt"
       - "traefik.http.services.ybb-grafana.loadbalancer.server.port=3000"
