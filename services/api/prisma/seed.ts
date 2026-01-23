@@ -1954,6 +1954,8 @@ async function main() {
   // 22. Seed Payment Configuration (NEW) 
   // ==========================================
 
+  /*
+  // REMOVED IN V2 - MOVED TO PAYMENT SERVICE
   // 1. Payment Gateway for YBB (Sandbox Keys)
   await prisma.paymentGatewayConfig.create({
     data: {
@@ -2047,6 +2049,7 @@ async function main() {
   });
 
   console.log('✅ Payment Methods & Config seeded.');
+  */
 
   console.log('🎉 Seeding completed successfully!');
 }
