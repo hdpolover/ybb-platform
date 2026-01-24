@@ -2,8 +2,8 @@ import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CompleteOnboardingCommand } from '../complete-onboarding.command';
 import { Gender } from '@prisma/client';
-
-import { Logger } from '@nestjs/common';
+import { Country } from 'country-state-city';
+import { Logger, BadRequestException } from '@nestjs/common';
 
 @CommandHandler(CompleteOnboardingCommand)
 export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboardingCommand> {
@@ -14,11 +14,11 @@ export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboar
     async execute(command: CompleteOnboardingCommand) {
         const { userId, dto } = command;
 
-        // Validating Gender Enum manually if needed, or let Prisma handle it
-        // We cast string to Gender if valid, otherwise undefined or null
-        const gender = Object.values(Gender).includes(dto.gender as Gender) 
-            ? (dto.gender as Gender) 
-            : null;
+        // Validate Country Code
+        const country = Country.getCountryByCode(dto.originCountry);
+        if (!country) {
+            throw new BadRequestException(`Invalid country code: ${dto.originCountry}`);
+        }
 
         const result = await this.prisma.$transaction(async (tx) => {
             let participant = await tx.participant.upsert({
@@ -26,29 +26,21 @@ export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboar
                 create: {
                     userId,
                     fullName: dto.fullName,
-                    gender: gender,
-                    originCountry: dto.originCountry,
-                    originCity: dto.originCity,
-                    occupation: dto.occupation,
-                    institution: dto.institution,
+                    originCountry: country.isoCode, // Ensure we save the standardized code
                     knowledgeSource: dto.knowledgeSource,
                     referralCode: dto.referralCode,
                     profileCompletedAt: new Date(),
                     profileCompletionPercentage: 20, // Base completion for basic info
-                    currentCountry: dto.originCountry, // Default current to origin initially
+                    currentCountry: country.isoCode, // Default current to origin initially
                 },
                 update: {
                     fullName: dto.fullName,
-                    gender: gender,
-                    originCountry: dto.originCountry,
-                    originCity: dto.originCity,
-                    occupation: dto.occupation,
-                    institution: dto.institution,
+                    originCountry: country.isoCode,
                     knowledgeSource: dto.knowledgeSource,
                     // Only set profileCompletedAt if it wasn't set before
                     profileCompletedAt: new Date(), 
                     // Only bump percentage if it was 0
-                    profileCompletionPercentage: { set: 20 }
+                    profileCompletionPercentage: { set: 20 },
                 },
             });
 

@@ -93,6 +93,26 @@ export class UpdateParticipantProfileDto {
     @IsString()
     medicalConditions?: string;
 
+    @ApiPropertyOptional({ example: 'Jane Doe', description: 'Emergency contact name' })
+    @IsOptional()
+    @IsString()
+    emergencyContactName?: string;
+
+    @ApiPropertyOptional({ example: 'Mother', description: 'Relation to emergency contact' })
+    @IsOptional()
+    @IsString()
+    emergencyContactRelation?: string;
+
+    @ApiPropertyOptional({ example: '62', description: 'Country code for emergency contact phone' })
+    @IsOptional()
+    @IsString()
+    emergencyContactCountryCode?: string;
+
+    @ApiPropertyOptional({ example: '81234567890', description: 'Emergency contact phone number' })
+    @IsOptional()
+    @IsString()
+    emergencyContactPhone?: string;
+
     // Add other fields as needed based on schema
 }
 
@@ -158,6 +178,19 @@ export class ParticipantResponseDto {
 
     @ApiPropertyOptional({ example: 'Vegetarian' })
     dietaryRestrictions?: string;
+
+    // Emergency Contact
+    @ApiPropertyOptional({ example: 'Jane Doe' })
+    emergencyContactName?: string;
+
+    @ApiPropertyOptional({ example: 'Mother' })
+    emergencyContactRelation?: string;
+
+    @ApiPropertyOptional({ example: '62' })
+    emergencyContactCountryCode?: string;
+
+    @ApiPropertyOptional({ example: '81234567890' })
+    emergencyContactPhone?: string;
 
     @ApiProperty({ example: 40 })
     profileCompletionPercentage: number;
