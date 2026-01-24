@@ -18,8 +18,8 @@ import { PaymentController } from './infrastructure/presentation/payment.control
           transport: Transport.GRPC,
           options: {
             package: 'payment',
-            // Use source path to avoid build asset copy issues
-            protoPath: join(process.cwd(), 'src/common/proto/payment_service.proto'),
+            // Use __dirname to locate proto file relative to the module in both dev (src) and prod (dist)
+            protoPath: join(__dirname, '../../common/proto/payment_service.proto'),
             url: configService.get('PAYMENT_GRPC_URL') || 'host.docker.internal:50053',
             loader: {
               keepCase: true,
