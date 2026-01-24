@@ -1,6 +1,6 @@
 import { Injectable, UnauthorizedException, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { Ambassador } from '@prisma/client';
+import { Ambassador, ApplicationCategory } from '@prisma/client';
 import { FirebaseLoginCommand } from '../firebase-login.command';
 import { AuthResponseDto } from '../../../presentation/dto/auth-response.dto';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
@@ -205,11 +205,34 @@ export class FirebaseLoginHandler {
             }
 
             if (targetProgramId) {
+                 // Determine Default Category from Active Participation Infos
+                 const participationInfos = await this.prisma.programParticipationInfo.findMany({
+                     where: {
+                         programId: targetProgramId,
+                         isActive: true
+                     }
+                 });
+
+                 // Default priority: Fully Funded -> Self Funded -> Other/First Available
+                 let applicationCategory: ApplicationCategory = ApplicationCategory.self_funded;
+
+                 const hasFullyFunded = participationInfos.some(pi => pi.category === ApplicationCategory.fully_funded);
+                 const hasSelfFunded = participationInfos.some(pi => pi.category === ApplicationCategory.self_funded);
+
+                 if (hasFullyFunded) {
+                     applicationCategory = ApplicationCategory.fully_funded;
+                 } else if (hasSelfFunded) {
+                      applicationCategory = ApplicationCategory.self_funded;
+                 } else if (participationInfos.length > 0) {
+                      applicationCategory = participationInfos[0].category;
+                 }
+
                  await this.prisma.participantApplication.create({
                      data: {
                          participantId: participant.id,
                          programId: targetProgramId,
-                         status: 'draft'
+                         status: 'draft',
+                         applicationCategory: applicationCategory
                      }
                  });
             }

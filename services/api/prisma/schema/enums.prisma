@@ -189,5 +189,3 @@ enum PaymentStatus {
   failed
   refunded
 }
-
-

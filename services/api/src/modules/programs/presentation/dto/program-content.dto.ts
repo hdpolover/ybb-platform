@@ -215,7 +215,7 @@ export class ProgramPricingTierResponseDto {
     feeType?: string;
 
     @ApiProperty({ required: false })
-    target?: string;
+    allowedCategories?: string[];
 
     @ApiProperty({ required: false })
     capacity?: number;
