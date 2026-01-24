@@ -54,7 +54,7 @@ model User {
   passwordResetExpires     DateTime? @map("password_reset_expires") @db.Timestamptz(6)
 
   // Account Status
-  isActive Boolean @default(true) @map("is_active")
+  isActive              Boolean @default(true) @map("is_active")
   isOnboardingCompleted Boolean @default(false) @map("is_onboarding_completed")
 
   // Security (Basic)

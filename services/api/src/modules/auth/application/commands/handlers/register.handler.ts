@@ -3,7 +3,7 @@ import { RegisterCommand } from '../register.command';
 import { AuthResponseDto } from '../../../presentation/dto/auth-response.dto';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
 import { RabbitMQProducerService } from '../../../../../shared/infrastructure/rabbitmq/rabbitmq-producer.service';
-import { Ambassador } from '@prisma/client';
+import { Ambassador, ApplicationCategory } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
@@ -265,11 +265,34 @@ export class RegisterHandler {
 
       // Create application if not exists
       if (!existingApplication) {
+        // Determine Default Category from Active Participation Infos
+        const participationInfos = await this.prisma.programParticipationInfo.findMany({
+            where: {
+                programId: targetProgramId,
+                isActive: true
+            }
+        });
+
+        // Default priority: Fully Funded -> Self Funded -> Other/First Available
+        let applicationCategory: ApplicationCategory = ApplicationCategory.self_funded;
+
+        const hasFullyFunded = participationInfos.some(pi => pi.category === ApplicationCategory.fully_funded);
+        const hasSelfFunded = participationInfos.some(pi => pi.category === ApplicationCategory.self_funded);
+
+        if (hasFullyFunded) {
+            applicationCategory = ApplicationCategory.fully_funded;
+        } else if (hasSelfFunded) {
+             applicationCategory = ApplicationCategory.self_funded;
+        } else if (participationInfos.length > 0) {
+             applicationCategory = participationInfos[0].category;
+        }
+
         await this.prisma.participantApplication.create({
           data: {
             participantId: participant.id,
             programId: targetProgramId,
             status: 'draft',
+            applicationCategory: applicationCategory
           },
         });
       }

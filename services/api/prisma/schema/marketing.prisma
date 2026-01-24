@@ -1,22 +1,21 @@
-
 // ============================================================================
 // MARKETING & NEWSLETTER
 // ============================================================================
 
 model NewsletterSubscriber {
-  id        String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  email     String    @unique @db.VarChar(255)
-  name      String?   @db.VarChar(255)
-  source    String?   @db.VarChar(50) // landing_page, footer, checkout, pop_up
-  
+  id     String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  email  String  @unique @db.VarChar(255)
+  name   String? @db.VarChar(255)
+  source String? @db.VarChar(50) // landing_page, footer, checkout, pop_up
+
   // Status
   isSubscribed   Boolean   @default(true) @map("is_subscribed")
   subscribedAt   DateTime  @default(now()) @map("subscribed_at") @db.Timestamptz(6)
   unsubscribedAt DateTime? @map("unsubscribed_at") @db.Timestamptz(6)
-  
+
   // Relations (Optional)
-  userId    String?   @map("user_id") @db.Uuid // If they are a registered user
-  
+  userId String? @map("user_id") @db.Uuid // If they are a registered user
+
   // Meta
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)

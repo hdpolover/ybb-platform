@@ -13,12 +13,12 @@ model ProgramPricingTier {
   currentCount Int     @default(0) @map("current_count") // Track usage
 
   // New/Restored Fields
-  benefits     String[]       @default([])
-  requirements String[]       @default([])
-  feeType      PricingFeeType @default(registration_fee) @map("fee_type")
-  target       PricingTarget  @default(self_funded)
-  icon         String?        @db.VarChar(255)
-  soldCount    Int            @default(0) @map("sold_count")
+  benefits          String[]              @default([])
+  requirements      String[]              @default([])
+  feeType           PricingFeeType        @default(registration_fee) @map("fee_type")
+  allowedCategories ApplicationCategory[] @default([self_funded]) @map("allowed_categories")
+  icon              String?               @db.VarChar(255)
+  soldCount         Int                   @default(0) @map("sold_count")
 
   isActive  Boolean   @default(true) @map("is_active")
   order     Int       @default(0)
@@ -109,14 +109,15 @@ model ApplicationFormField {
 }
 
 model ParticipantApplication {
-  id            String            @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId     String            @map("program_id") @db.Uuid
-  participantId String            @map("participant_id") @db.Uuid
-  status        ApplicationStatus @default(draft)
-  paymentStatus PaymentStatus     @default(unpaid) @map("payment_status")
-  ticketStatus  String            @default("regular") @map("ticket_status")
-  referralCode  String?           @map("referral_code") @db.VarChar(50)
-  submittedAt   DateTime?         @map("submission_date") @db.Timestamptz(6)
+  id                  String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId           String               @map("program_id") @db.Uuid
+  participantId       String               @map("participant_id") @db.Uuid
+  status              ApplicationStatus    @default(draft)
+  paymentStatus       PaymentStatus        @default(unpaid) @map("payment_status")
+  ticketStatus        String               @default("regular") @map("ticket_status")
+  referralCode        String?              @map("referral_code") @db.VarChar(50)
+  applicationCategory ApplicationCategory? @map("application_category")
+  submittedAt         DateTime?            @map("submission_date") @db.Timestamptz(6)
 
   // Application Data (Flexible Store)
   personalData  Json @default("{}") @map("personal_data") @db.Json
@@ -143,15 +144,15 @@ model ParticipantApplication {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   // Relations
-  program      Program                  @relation(fields: [programId], references: [id], onDelete: Cascade)
-  participant  Participant              @relation(fields: [participantId], references: [id], onDelete: Cascade)
-  reviewer     Admin?                   @relation(fields: [reviewedBy], references: [id])
-  deleter      User?                    @relation("ApplicationDeleter", fields: [deletedBy], references: [id])
-  withdrawer   User?                    @relation("ApplicationWithdrawer", fields: [withdrawnBy], references: [id])
+  program     Program                  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  participant Participant              @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  reviewer    Admin?                   @relation(fields: [reviewedBy], references: [id])
+  deleter     User?                    @relation("ApplicationDeleter", fields: [deletedBy], references: [id])
+  withdrawer  User?                    @relation("ApplicationWithdrawer", fields: [withdrawnBy], references: [id])
   // transactions PaymentTransaction[] -- REMOVED: Managed by Payment Service
-  editHistory  ApplicationEditHistory[]
-  awards       ParticipantAward[]
-  documents    ParticipantDocument[]
+  editHistory ApplicationEditHistory[]
+  awards      ParticipantAward[]
+  documents   ParticipantDocument[]
 
   @@unique([participantId, programId]) // One application per program per participant
   @@index([programId])

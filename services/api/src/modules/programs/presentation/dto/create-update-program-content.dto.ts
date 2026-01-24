@@ -851,6 +851,26 @@ export class CreateProgramPricingTierDto {
     benefits?: any[];
 
     @ApiProperty({ required: false })
+    @IsArray()
+    @IsOptional()
+    requirements?: any[];
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    feeType?: string;
+
+    @ApiProperty({ required: false })
+    @IsArray()
+    @IsOptional()
+    allowedCategories?: string[];
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    icon?: string;
+
+    @ApiProperty({ required: false })
     @IsNumber()
     @IsOptional()
     order?: number;
@@ -896,6 +916,26 @@ export class UpdateProgramPricingTierDto {
     @IsArray()
     @IsOptional()
     benefits?: any[];
+
+    @ApiProperty({ required: false })
+    @IsArray()
+    @IsOptional()
+    requirements?: any[];
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    feeType?: string;
+
+    @ApiProperty({ required: false })
+    @IsArray()
+    @IsOptional()
+    allowedCategories?: string[];
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    icon?: string;
 
     @ApiProperty({ required: false })
     @IsNumber()
