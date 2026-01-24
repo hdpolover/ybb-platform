@@ -20,6 +20,40 @@ export class LoginHandler {
   ) { }
 
   /**
+   * Helper to fetch Registered Programs
+   */
+  private async getRegisteredPrograms(userId: string, programCategoryId: string) {
+    const userData = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        participant: {
+          include: {
+            applications: {
+              where: {
+                program: {
+                  programCategoryId: programCategoryId 
+                }
+              },
+              include: {
+                program: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    return userData?.participant?.applications.map(app => ({
+      programId: app.programId,
+      programName: app.program.name,
+      programSlug: app.program.slug,
+      year: app.program.year,
+      applicationId: app.id,
+      applicationStatus: app.status
+    })) || [];
+  }
+
+  /**
    * Resolve domain to programCategoryId
    * Similar logic to landing.service.ts resolveCategory method
    */
@@ -229,6 +263,8 @@ export class LoginHandler {
       }
     });
 
+    const registeredPrograms = await this.getRegisteredPrograms(user.id, user.programCategoryId);
+
     return {
       accessToken,
       refreshToken,
@@ -239,6 +275,7 @@ export class LoginHandler {
         isActive: user.isActive,
         // @ts-ignore
         isOnboardingCompleted: user.isOnboardingCompleted ?? false,
+        registeredPrograms,
       },
     };
   }

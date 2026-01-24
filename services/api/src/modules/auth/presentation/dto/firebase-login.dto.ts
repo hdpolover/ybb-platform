@@ -12,6 +12,15 @@ export class FirebaseLoginDto {
 
   @ApiProperty({
     example: '123e4567-e89b-12d3-a456-426614174000',
+    description: 'The UUID of the authentication provider (e.g. Google, Apple).',
+    required: true
+  })
+  @IsUUID()
+  @IsNotEmpty()
+  providerId: string;
+
+  @ApiProperty({
+    example: '123e4567-e89b-12d3-a456-426614174000',
     description: 'The UUID of the program category (brand scope). Optional if the "x-brand-domain" header is provided.',
     required: false
   })

@@ -76,6 +76,7 @@ export class AuthController {
     const userAgent = req?.headers['user-agent'] || 'unknown';
     const command = new FirebaseLoginCommand(
       dto.idToken,
+      dto.providerId,
       ip || '0.0.0.0',
       userAgent,
       dto.programCategoryId,
