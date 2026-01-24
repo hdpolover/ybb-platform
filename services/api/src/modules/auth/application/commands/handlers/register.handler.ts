@@ -25,6 +25,40 @@ export class RegisterHandler {
   ) {}
 
   /**
+   * Helper to fetch Registered Programs
+   */
+  private async getRegisteredPrograms(userId: string, programCategoryId: string) {
+    const userData = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        participant: {
+          include: {
+            applications: {
+              where: {
+                program: {
+                  programCategoryId: programCategoryId 
+                }
+              },
+              include: {
+                program: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    return userData?.participant?.applications.map(app => ({
+      programId: app.programId,
+      programName: app.program.name,
+      programSlug: app.program.slug,
+      year: app.program.year,
+      applicationId: app.id,
+      applicationStatus: app.status
+    })) || [];
+  }
+
+  /**
    * Resolve domain to programCategoryId
    * Similar logic to login handler
    */
@@ -274,6 +308,8 @@ export class RegisterHandler {
           data: { lastUsedAt: new Date() },
         });
 
+        const registeredPrograms = await this.getRegisteredPrograms(existingIdentity.user.id, existingIdentity.user.programCategoryId);
+
         return {
           accessToken,
           refreshToken,
@@ -283,6 +319,7 @@ export class RegisterHandler {
             programCategoryId: existingIdentity.user.programCategoryId,
             isActive: existingIdentity.user.isActive,
             isOnboardingCompleted: existingIdentity.user.isOnboardingCompleted ?? false,
+            registeredPrograms,
           },
         };
       }
@@ -333,6 +370,8 @@ export class RegisterHandler {
       const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
       const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
 
+      const registeredPrograms = await this.getRegisteredPrograms(user.id, user.programCategoryId);
+
       return {
         accessToken,
         refreshToken,
@@ -342,6 +381,7 @@ export class RegisterHandler {
           programCategoryId: user.programCategoryId,
           isActive: user.isActive,
           isOnboardingCompleted: user.isOnboardingCompleted ?? false,
+          registeredPrograms,
         },
       };
     }
@@ -497,6 +537,7 @@ export class RegisterHandler {
         .labels(authProvider.name, programCategory.name)
         .inc();
 
+    const registeredPrograms = await this.getRegisteredPrograms(newUser.id, newUser.programCategoryId);
     
     return {
       accessToken,
@@ -507,6 +548,7 @@ export class RegisterHandler {
         programCategoryId: newUser.programCategoryId,
         isActive: newUser.isActive,
         isOnboardingCompleted: newUser.isOnboardingCompleted ?? false,
+        registeredPrograms,
       },
     };
   }

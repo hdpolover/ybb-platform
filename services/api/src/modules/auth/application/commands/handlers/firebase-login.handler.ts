@@ -1,5 +1,6 @@
-import { Injectable, UnauthorizedException, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import { Ambassador } from '@prisma/client';
 import { FirebaseLoginCommand } from '../firebase-login.command';
 import { AuthResponseDto } from '../../../presentation/dto/auth-response.dto';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
@@ -11,6 +12,8 @@ import { MetricsService } from '@shared/infrastructure/monitoring/metrics.servic
 
 @Injectable()
 export class FirebaseLoginHandler {
+  private readonly logger = new Logger(FirebaseLoginHandler.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
@@ -60,7 +63,12 @@ export class FirebaseLoginHandler {
     // 1. Verify Token
     const decodedToken = await this.firebaseAuthService.verifyIdToken(command.idToken);
     const { email, uid, picture, firebase } = decodedToken;
-    const providerName = firebase.sign_in_provider.split('.')[0]; // e.g. 'google.com' -> 'google'
+    let providerName = firebase.sign_in_provider.split('.')[0]; // e.g. 'google.com' -> 'google'
+
+    // Map 'password' provider from Firebase to 'local'
+    if (providerName === 'password') {
+        providerName = 'local';
+    }
 
     if (!email) {
       throw new BadRequestException('Email is required from OAuth provider.');
@@ -69,18 +77,19 @@ export class FirebaseLoginHandler {
     // 2. Resolve Program Category
     const programCategoryId = await this.resolveProgramCategoryId(command.programCategoryId, domain);
 
-    // 3. Find Auth Provider
+    // 3. Find Auth Provider by ID (Explicitly passed)
     const authProvider = await this.prisma.authProvider.findUnique({
-      where: { name: providerName },
+      where: { id: command.providerId },
     });
 
     if (!authProvider) {
-      // Create if doesn't exist or throw? Better to assume seed created it, but helper creation is nice.
-      // For now, fail if not supported
-      // Or fallback to 'google' if generic
-      throw new BadRequestException(`Authentication provider '${providerName}' is not supported.`);
+      throw new BadRequestException(`Authentication provider not found or unsupported.`);
     }
 
+    // Optional: Validate that the token provider matches the DB provider name if necessary
+    // e.g. if providerName === 'google' but authProvider.name !== 'google' -> Warning?
+    // For now we trust the ID token verification + the explicit provider ID intent.
+    
     // 4. Check for existing User Identity
     let userIdentity = await this.prisma.userIdentity.findFirst({
         where: {
@@ -139,6 +148,76 @@ export class FirebaseLoginHandler {
         
         // Log registration
         this.metricsService.userRegistrationsTotal.inc({ provider: providerName, program_category: programCategoryId });
+
+        // Handle Referral & Participant Creation
+        try {
+            // Check for Referral Code
+            let ambassador: Ambassador | null = null;
+            if (command.referralCode) {
+                const foundAmbassador = await this.prisma.ambassador.findUnique({
+                    where: { referralCode: command.referralCode }
+                });
+                
+                if (foundAmbassador && foundAmbassador.isActive) {
+                    ambassador = foundAmbassador;
+                }
+            }
+
+            // Parse Name from Email if not provided elsewhere (Firebase token might have name)
+            const fullName = decodedToken.name || email.split('@')[0];
+
+            // Create Participant Profile
+            const participant = await this.prisma.participant.create({
+                data: {
+                    userId: user.id,
+                    fullName: fullName,
+                    referralCode: command.referralCode,
+                    profileCompletionPercentage: 0,
+                    knowledgeSource: 'Other', // Default
+                }
+            });
+
+            // Link Ambassador Relationship
+            if (ambassador) {
+                await this.prisma.ambassadorReferral.create({
+                    data: {
+                         ambassadorId: ambassador.id,
+                         participantId: participant.id,
+                         status: 'referred'
+                    }
+                });
+                
+                await this.prisma.ambassador.update({
+                    where: { id: ambassador.id },
+                    data: { totalReferrals: { increment: 1 }, lastReferralAt: new Date() }
+                });
+            }
+
+            // Handle Program Auto-Registration
+            let targetProgramId = command.programId;
+            if (!targetProgramId && command.programSlug) {
+                const prog = await this.prisma.program.findUnique({
+                    where: { 
+                        programCategoryId_slug: { programCategoryId, slug: command.programSlug }
+                    }
+                });
+                if (prog) targetProgramId = prog.id;
+            }
+
+            if (targetProgramId) {
+                 await this.prisma.participantApplication.create({
+                     data: {
+                         participantId: participant.id,
+                         programId: targetProgramId,
+                         status: 'draft'
+                     }
+                 });
+            }
+
+        } catch (e) {
+            this.logger.error(`Failed to handle post-registration logic for user ${user.id}: ${e.message}`);
+            // Non-blocking, return auth success even if referral/program link fails
+        }
     }
 
     // 7. Login Logic (Generate Tokens)

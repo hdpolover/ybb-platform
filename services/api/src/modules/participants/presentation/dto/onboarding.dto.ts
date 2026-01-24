@@ -36,4 +36,9 @@ export class OnboardingDto {
     @IsString()
     @IsNotEmpty()
     knowledgeSource: string;
+
+    @ApiPropertyOptional({ example: 'K9X2M4P1', description: 'Referral code from an ambassador' })
+    @IsString()
+    @IsOptional()
+    referralCode?: string;
 }
