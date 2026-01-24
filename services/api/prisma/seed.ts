@@ -1077,7 +1077,7 @@ async function main() {
       currency: 'USD',
       capacity: 50,
       feeType: 'registration_fee',
-      target: 'fully_funded',
+      allowedCategories: [ApplicationCategory.fully_funded],
       benefits: [
         'Full flight coverage', 
         'Accommodation at 5-star hotel', 
@@ -1099,7 +1099,7 @@ async function main() {
       currency: 'USD',
       capacity: 100,
       feeType: 'full_fee',
-      target: 'self_funded',
+      allowedCategories: [ApplicationCategory.self_funded],
       benefits: [
         'Accommodation at 4-star hotel', 
         'Meals and transport included', 
@@ -1122,7 +1122,7 @@ async function main() {
         currency: 'USD',
         capacity: 1000,
         feeType: 'registration_fee',
-        target: 'self_funded',
+        allowedCategories: [ApplicationCategory.self_funded],
         benefits: ['Official Ambassador ID', 'Digital Toolkit', 'Global Network Access'],
         isActive: true,
         order: 1
