@@ -1,6 +1,16 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, ApplicationCategory } from '@prisma/client';
+import { Pool } from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
+import 'dotenv/config';
 
-const prisma = new PrismaClient();
+// -------------------------------------------------------------
+// Fix for Prisma 7 + Postgres Adapter in Seed Script
+// -------------------------------------------------------------
+const connectionString = process.env.DATABASE_URL;
+const pool = new Pool({ connectionString });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
+// -------------------------------------------------------------
 
 async function main() {
   console.log('🌱 Starting specific brand seeding for WYF and JYS...');
@@ -263,7 +273,7 @@ async function seedProgramContent(prisma: PrismaClient, programId: string) {
       price: 0,
       currency: 'USD',
       feeType: 'registration_fee',
-      target: 'fully_funded',
+      allowedCategories: [ApplicationCategory.fully_funded],
       isActive: true,
       order: 1,
       benefits: ['Return Flights', 'Hotel Accommodation', 'Meals & Transport', 'Certificate', 'Merchandise Kit']
@@ -278,7 +288,7 @@ async function seedProgramContent(prisma: PrismaClient, programId: string) {
       price: 250,
       currency: 'USD',
       feeType: 'full_fee',
-      target: 'partial_funded', // Assuming enum has this or similar
+      allowedCategories: [ApplicationCategory.partial_funded],
       isActive: true,
       order: 2,
       benefits: ['Hotel Accommodation', 'Meals & Transport', 'Certificate', 'Merchandise Kit']
@@ -293,7 +303,7 @@ async function seedProgramContent(prisma: PrismaClient, programId: string) {
       price: 450,
       currency: 'USD',
       feeType: 'full_fee',
-      target: 'self_funded',
+      allowedCategories: [ApplicationCategory.self_funded],
       isActive: true,
       order: 3,
       benefits: ['Access to all sessions', 'Certificate', 'Merchandise Kit', 'Networking Dinner']

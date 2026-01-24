@@ -1,4 +1,4 @@
-import { PrismaClient, TimelineCompletionType, TimelineType, PricingTarget, FaqCategory, PricingFeeType } from '@prisma/client';
+import { PrismaClient, TimelineCompletionType, TimelineType, FaqCategory, PricingFeeType, ApplicationCategory } from '@prisma/client';
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import 'dotenv/config';
@@ -364,7 +364,7 @@ async function seedPricingTiers(programId: string) {
         description: 'Competition for Full Scholarship',
         benefits: ["Flight Included", "Hotel Included", "Meals Included"],
         icon: 'award',
-        target: PricingTarget.fully_funded,
+        allowedCategories: [ApplicationCategory.fully_funded],
         feeType: PricingFeeType.registration_fee,
         order: 1
       },
@@ -376,7 +376,7 @@ async function seedPricingTiers(programId: string) {
         description: 'Direct Registration',
         benefits: ["Hotel Included", "Meals Included"],
         icon: 'user-check',
-        target: PricingTarget.self_funded,
+        allowedCategories: [ApplicationCategory.self_funded],
         feeType: PricingFeeType.registration_fee,
         order: 2
       }

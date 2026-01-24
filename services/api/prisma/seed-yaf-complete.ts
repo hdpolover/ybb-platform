@@ -1,8 +1,18 @@
 
 import { PrismaClient, PricingFeeType } from '@prisma/client';
+import { Pool } from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
+import 'dotenv/config';
 import { v4 as uuidv4 } from 'uuid';
 
-const prisma = new PrismaClient();
+// -------------------------------------------------------------
+// Fix for Prisma 7 + Postgres Adapter in Seed Script
+// -------------------------------------------------------------
+const connectionString = process.env.DATABASE_URL;
+const pool = new Pool({ connectionString });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
+// -------------------------------------------------------------
 
 async function main() {
   console.log('🌱 Starting Comprehensive YAF Seeding...');

@@ -196,7 +196,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                     currency: tier.currency,
                     benefits: tier.benefits,
                     fee_type: tier.feeType, // fully_funded, partial, etc.
-                    target: tier.target // self_funded, etc.
+                    allowed_categories: tier.allowedCategories // self_funded, etc.
                 })),
                 instructions: [
                      {
@@ -486,7 +486,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
             end_date: vp.endDate
         })),
         fee_type: tier.feeType,
-        target: tier.target,
+        allowed_categories: tier.allowedCategories,
         icon: tier.icon,
         requirements: tier.requirements
       })),
