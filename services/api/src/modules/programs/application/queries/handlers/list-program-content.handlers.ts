@@ -253,7 +253,7 @@ export class ListProgramPricingTiersHandler {
             capacity: item.capacity ?? undefined,
             benefits: item.benefits ?? undefined,
             feeType: item.feeType ?? undefined,
-            target: item.target ?? undefined,
+            allowedCategories: item.allowedCategories ?? undefined,
             icon: item.icon ?? undefined,
             requirements: item.requirements ?? undefined,
             validityPeriods: item.validityPeriods.map(vp => ({

@@ -1,6 +1,16 @@
 import { PrismaClient } from '@prisma/client';
+import { Pool } from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
+import 'dotenv/config';
 
-const prisma = new PrismaClient();
+// -------------------------------------------------------------
+// Fix for Prisma 7 + Postgres Adapter in Seed Script
+// -------------------------------------------------------------
+const connectionString = process.env.DATABASE_URL;
+const pool = new Pool({ connectionString });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
+// -------------------------------------------------------------
 
 async function main() {
   console.log('🌱 Starting database seeding...');

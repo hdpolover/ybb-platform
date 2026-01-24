@@ -2,7 +2,7 @@ import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { Inject, NotFoundException } from '@nestjs/common';
 import { IProgramContentRepository } from '@core/interfaces/repositories/program-content.repository.interface';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
-import { Prisma } from '@prisma/client';
+import { Prisma, PricingFeeType, ApplicationCategory } from '@prisma/client';
 import { StorageService } from '../../../../files/application/storage.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import {
@@ -514,11 +514,16 @@ export class DeleteProgramResourceHandler implements ICommandHandler<DeleteProgr
 export class CreateProgramPricingTierHandler implements ICommandHandler<CreateProgramPricingTierCommand> {
     constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
     async execute(command: CreateProgramPricingTierCommand) {
+        const { feeType, allowedCategories, ...rest } = command.dto;
         const dto = {
-            ...command.dto,
+            ...rest,
             price: new Prisma.Decimal(command.dto.price),
             validFrom: new Date(command.dto.validFrom),
-            validUntil: new Date(command.dto.validUntil)
+            validUntil: new Date(command.dto.validUntil),
+            feeType: command.dto.feeType ? command.dto.feeType as PricingFeeType : undefined,
+            allowedCategories: command.dto.allowedCategories 
+                ? command.dto.allowedCategories.map(c => c as ApplicationCategory) 
+                : undefined
         };
         return this.repository.createPricingTier(dto);
     }
@@ -527,11 +532,16 @@ export class CreateProgramPricingTierHandler implements ICommandHandler<CreatePr
 export class UpdateProgramPricingTierHandler implements ICommandHandler<UpdateProgramPricingTierCommand> {
     constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
     async execute(command: UpdateProgramPricingTierCommand) {
+        const { feeType, allowedCategories, ...rest } = command.dto;
         const dto = {
-            ...command.dto,
+            ...rest,
             price: command.dto.price ? new Prisma.Decimal(command.dto.price) : undefined,
             validFrom: command.dto.validFrom ? new Date(command.dto.validFrom) : undefined,
-            validUntil: command.dto.validUntil ? new Date(command.dto.validUntil) : undefined
+            validUntil: command.dto.validUntil ? new Date(command.dto.validUntil) : undefined,
+            feeType: command.dto.feeType ? command.dto.feeType as PricingFeeType : undefined,
+            allowedCategories: command.dto.allowedCategories 
+                ? command.dto.allowedCategories.map(c => c as ApplicationCategory) 
+                : undefined
         };
         return this.repository.updatePricingTier(command.id, dto);
     }
