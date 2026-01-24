@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { RegisteredProgramDto } from './user-profile.dto';
 
 export class AuthResponseDto {
   @ApiProperty()
@@ -14,5 +15,6 @@ export class AuthResponseDto {
     programCategoryId: string;
     isActive: boolean;
     isOnboardingCompleted: boolean;
+    registeredPrograms?: RegisteredProgramDto[];
   };
 }
