@@ -21,7 +21,7 @@ export class FirebaseLoginDto {
   
   @ApiProperty({
      example: '123e4567-e89b-12d3-a456-426614174000',
-     description: 'To link with a specific program (Waitlist/Registration)',
+     description: '(Registration only) To automatically link new user with a specific program on first sign-in.',
      required: false
   })
   @IsUUID()
@@ -30,7 +30,7 @@ export class FirebaseLoginDto {
 
   @ApiProperty({
     example: 'ybb-15',
-    description: 'To link with a specific program slug',
+    description: '(Registration only) To automatically link new user with a specific program slug on first sign-in.',
     required: false
   })
   @IsString()
@@ -39,7 +39,7 @@ export class FirebaseLoginDto {
 
   @ApiProperty({
     example: 'K9X2M4P1',
-    description: 'Referral code from an ambassador.',
+    description: '(Registration only) Referral code to credit an ambassador on first sign-in.',
     required: false
   })
   @IsString()

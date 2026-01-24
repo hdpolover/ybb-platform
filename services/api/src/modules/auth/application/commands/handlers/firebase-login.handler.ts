@@ -200,6 +200,37 @@ export class FirebaseLoginHandler {
       }
     });
 
+    // 8. Fetch Registered Programs (User Participation)
+    // We fetch this fresh from DB to be sure
+    const userData = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      include: {
+        participant: {
+          include: {
+            applications: {
+              where: {
+                program: {
+                  programCategoryId: programCategoryId // Scope to current category context
+                }
+              },
+              include: {
+                program: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    const registeredPrograms = userData?.participant?.applications.map(app => ({
+      programId: app.programId,
+      programName: app.program.name,
+      programSlug: app.program.slug,
+      year: app.program.year,
+      applicationId: app.id,
+      applicationStatus: app.status
+    })) || [];
+
     return {
       accessToken,
       refreshToken,
@@ -209,6 +240,7 @@ export class FirebaseLoginHandler {
         programCategoryId: user.programCategoryId,
         isActive: user.isActive,
         isOnboardingCompleted: user.isOnboardingCompleted ?? false,
+        registeredPrograms,
       },
     };
   }
