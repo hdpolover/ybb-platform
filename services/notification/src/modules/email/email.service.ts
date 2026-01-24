@@ -115,7 +115,7 @@ export class EmailService {
         return this.sendRawEmail(to, subject, html);
     }
 
-    async sendRawEmail(to: string, subject: string, html: string) {
+    async sendRawEmail(to: string, subject: string, html: string, attachments?: any[]) {
         this.logger.log(`[sendRawEmail] Attempting to send email to=${to}, subject="${subject}"`);
         
         // Option 1: Use Resend if available
@@ -133,6 +133,7 @@ export class EmailService {
                     to: to,
                     subject: subject,
                     html: html,
+                    attachments: attachments,
                 });
 
                 if (response.error) {
@@ -164,6 +165,7 @@ export class EmailService {
                 to,
                 subject,
                 html,
+                attachments,
             });
 
             this.logger.log(`Email sent via SMTP: ${info.messageId}`);
@@ -187,7 +189,7 @@ export class EmailService {
         return this.sendRawEmail(to, subject, html);
     }
 
-    async sendPaymentSuccessEmail(to: string, paymentData: any) {
+    async sendPaymentSuccessEmail(to: string, paymentData: any, receiptBuffer?: Buffer) {
         const html = await this.compileTemplate('payment-success', {
             name: paymentData.name,
             amount: paymentData.amount,
@@ -197,7 +199,13 @@ export class EmailService {
             description: paymentData.description,
             invoiceUrl: paymentData.invoiceUrl || '#',
         });
-        return this.sendRawEmail(to, 'Payment Confirmation', html);
+        
+        const attachments = receiptBuffer ? [{
+            filename: `receipt-${paymentData.orderId}.pdf`,
+            content: receiptBuffer,
+        }] : [];
+
+        return this.sendRawEmail(to, 'Payment Confirmation', html, attachments);
     }
 
     async sendForgotPasswordEmail(to: string, name: string, token: string) {
@@ -227,5 +235,45 @@ export class EmailService {
         });
         const subject = programCategory ? `Verify Your Email for ${programCategory.name}` : 'Verify Your Email Address';
         return this.sendRawEmail(to, subject, html);
+    }
+
+    async sendManualPaymentReceivedEmail(to: string, paymentData: any) {
+        const html = await this.compileTemplate('manual-payment-received', {
+            name: paymentData.name,
+            amount: paymentData.amount,
+            currency: paymentData.currency || 'IDR',
+            orderId: paymentData.orderId,
+            date: new Date().toLocaleDateString(),
+        });
+        return this.sendRawEmail(to, 'Payment Proof Received', html);
+    }
+
+    async sendPaymentFailedEmail(to: string, paymentData: any) {
+        const retryUrl = this.configService.get('FRONTEND_URL') 
+            ? `${this.configService.get('FRONTEND_URL')}/dashboard/payments`
+            : '#';
+
+        const html = await this.compileTemplate('payment-failed', {
+            name: paymentData.name,
+            amount: paymentData.amount,
+            currency: paymentData.currency || 'IDR',
+            orderId: paymentData.orderId,
+            date: new Date().toLocaleDateString(),
+            reason: paymentData.reason,
+            retryUrl: paymentData.retryUrl || retryUrl,
+        });
+        return this.sendRawEmail(to, 'Payment Failed', html);
+    }
+
+    async sendPaymentRefundedEmail(to: string, paymentData: any) {
+        const html = await this.compileTemplate('payment-refunded', {
+            name: paymentData.name,
+            amount: paymentData.amount,
+            currency: paymentData.currency || 'IDR',
+            orderId: paymentData.orderId,
+            date: new Date().toLocaleDateString(),
+            description: paymentData.description,
+        });
+        return this.sendRawEmail(to, 'Payment Refunded', html);
     }
 }

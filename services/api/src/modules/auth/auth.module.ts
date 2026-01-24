@@ -12,6 +12,7 @@ import { ForgotPasswordHandler } from './application/commands/handlers/forgot-pa
 import { ResetPasswordHandler } from './application/commands/handlers/reset-password.handler';
 import { VerifyEmailHandler } from './application/commands/handlers/verify-email.handler';
 import { ResendVerificationEmailHandler } from './application/commands/handlers/resend-verification-email.handler';
+import { FirebaseLoginHandler } from './application/commands/handlers/firebase-login.handler';
 import { GetUserProfileHandler } from './application/queries/handlers/get-user-profile.handler';
 import { GetAuthProvidersHandler } from './application/queries/handlers/get-auth-providers.handler';
 import { CreateAuthProviderHandler } from './application/commands/handlers/create-auth-provider.handler';
@@ -21,6 +22,7 @@ import { AuthProviderController } from './presentation/auth-provider.controller'
 import { JwtStrategy } from './infrastructure/strategies/jwt.strategy';
 import { JwtAuthGuard } from './infrastructure/guards/jwt-auth.guard';
 import { TokenBlacklistService } from './infrastructure/services/token-blacklist.service';
+import { FirebaseAuthService } from './infrastructure/services/firebase-auth.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { AuthLoggingService } from './application/services/auth-logging.service';
 import { GeoIpModule } from '@shared/infrastructure/geoip/geoip.module';
@@ -52,6 +54,7 @@ import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.m
     ResetPasswordHandler,
     VerifyEmailHandler,
     ResendVerificationEmailHandler,
+    FirebaseLoginHandler,
     GetUserProfileHandler,
     GetAuthProvidersHandler,
     CreateAuthProviderHandler,
@@ -60,6 +63,7 @@ import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.m
     JwtStrategy,
     JwtAuthGuard,
     TokenBlacklistService,
+    FirebaseAuthService,
     AuthLoggingService,
   ],
   exports: [JwtAuthGuard, JwtStrategy, TokenBlacklistService, PassportModule],

@@ -5,6 +5,8 @@ import { ApplicationResponseDto } from '../../dto/application-response.dto';
 import { ApplicationMapper } from '@modules/applications/infrastructure/mappers/application.mapper';
 import { APPLICATION_REPOSITORY } from '@modules/applications/infrastructure/tokens';
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
+import { PaymentGrpcClient } from '@modules/payments/infrastructure/services/payment-grpc.client';
+import { ApplicationCategory } from '@core/entities/participant-application.entity';
 
 /**
  * Submit Application Handler
@@ -19,6 +21,7 @@ export class SubmitApplicationHandler {
     private readonly applicationRepository: IApplicationRepository,
     private readonly applicationMapper: ApplicationMapper,
     private readonly metricsService: MetricsService,
+    private readonly paymentClient: PaymentGrpcClient,
   ) {}
 
   async execute(command: SubmitApplicationCommand): Promise<ApplicationResponseDto> {
@@ -41,10 +44,28 @@ export class SubmitApplicationHandler {
       );
     }
 
-    // TODO: Add validation - check required fields are filled
-    // if (!application.motivationLetter || !application.achievements) {
-    //   throw new BadRequestException('Missing required fields');
-    // }
+    // --- CHECK PAYMENT STATUS ---
+    // Rule: Participant must have successfully PAID the 'registration' fee for this application
+    // Exception: 'fully_funded' applicants do not pay registration fees.
+    
+    const isFullyFunded = application.applicationCategory === ApplicationCategory.FULLY_FUNDED;
+
+    if (!isFullyFunded) {
+      const payments = await this.paymentClient.getIntentsByReference({
+        reference_type: 'application',
+        reference_id: application.id,
+      });
+
+      // Check for any SUCCEEDED registration payment
+      const hasPaidRegistration = payments.intents.some(intent => 
+        intent.status === 'SUCCEEDED'
+        // && intent.metadata['payment_category'] === 'registration' // Optional: strict check
+      );
+
+      if (!hasPaidRegistration) {
+         throw new BadRequestException('Registration fee must be paid (or verified) before submission.');
+      }
+    }
 
     // Submit application
     application.submit();

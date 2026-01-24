@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@modules/auth/auth.module';
 import { ApplicationsController } from './presentation/applications.controller';
+import { PaymentModule } from '@modules/payments/payment.module';
 
 // Command Handlers
 import { CreateApplicationHandler } from './application/commands/handlers/create-application.handler';
@@ -21,7 +22,7 @@ import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.m
 import { APPLICATION_REPOSITORY } from './infrastructure/tokens';
 
 @Module({
-  imports: [PrismaModule, AuthModule, MonitoringModule],
+  imports: [PrismaModule, AuthModule, MonitoringModule, PaymentModule],
   controllers: [ApplicationsController],
   providers: [
     // Command Handlers

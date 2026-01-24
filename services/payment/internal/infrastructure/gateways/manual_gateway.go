@@ -20,6 +20,18 @@ func (g *ManualGateway) GetName() string {
     return "manual"
 }
 
+// ChargePayment implements domainGateways.PaymentGateway.
+func (g *ManualGateway) ChargePayment(ctx context.Context, req *domainGateways.ChargePaymentRequest) (*domainGateways.ChargePaymentResponse, error) {
+	return &domainGateways.ChargePaymentResponse{
+		Status:             "PENDING",
+		GatewayReferenceID: req.TransactionID,
+		ActionType:         "manual_instruction",
+		Metadata: map[string]interface{}{
+			"instructions": "Please transfer manually and upload proof.",
+		},
+	}, nil
+}
+
 // CreatePayment handles the creation of a manual payment
 func (g *ManualGateway) CreatePayment(ctx context.Context, req *domainGateways.CreatePaymentRequest) (*domainGateways.CreatePaymentResponse, error) {
     // Return instruksi transfer sederhana

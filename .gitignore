@@ -108,3 +108,4 @@ migration_temp_data/
 !*.sql
 *.sql.gz
 !**/prisma/migrations/*/migration.sql
+services/api/ybb-platform-firebase-adminsdk-*.json

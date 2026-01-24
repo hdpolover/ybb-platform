@@ -9,6 +9,7 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
+import { FirebaseLoginDto } from './dto/firebase-login.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { UserProfileDto } from './dto/user-profile.dto';
 import { LoginHandler } from '../application/commands/handlers/login.handler';
@@ -19,6 +20,7 @@ import { ForgotPasswordHandler } from '../application/commands/handlers/forgot-p
 import { ResetPasswordHandler } from '../application/commands/handlers/reset-password.handler';
 import { VerifyEmailHandler } from '../application/commands/handlers/verify-email.handler';
 import { ResendVerificationEmailHandler } from '../application/commands/handlers/resend-verification-email.handler';
+import { FirebaseLoginHandler } from '../application/commands/handlers/firebase-login.handler';
 import { GetUserProfileHandler } from '../application/queries/handlers/get-user-profile.handler';
 import { GetAuthProvidersHandler } from '../application/queries/handlers/get-auth-providers.handler';
 import { LoginCommand } from '../application/commands/login.command';
@@ -29,6 +31,7 @@ import { ForgotPasswordCommand } from '../application/commands/forgot-password.c
 import { ResetPasswordCommand } from '../application/commands/reset-password.command';
 import { VerifyEmailCommand } from '../application/commands/verify-email.command';
 import { ResendVerificationEmailCommand } from '../application/commands/resend-verification-email.command';
+import { FirebaseLoginCommand } from '../application/commands/firebase-login.command';
 import { GetUserProfileQuery } from '../application/queries/get-user-profile.query';
 import { GetAuthProvidersQuery } from '../application/queries/get-auth-providers.query';
 import { Public } from '../../../shared/decorators/public.decorator';
@@ -52,9 +55,36 @@ export class AuthController {
     private readonly resetPasswordHandler: ResetPasswordHandler,
     private readonly verifyEmailHandler: VerifyEmailHandler,
     private readonly resendVerificationEmailHandler: ResendVerificationEmailHandler,
+    private readonly firebaseLoginHandler: FirebaseLoginHandler,
     private readonly getUserProfileHandler: GetUserProfileHandler,
     private readonly getAuthProvidersHandler: GetAuthProvidersHandler,
   ) { }
+
+  @Public()
+  @Post('firebase-login')
+  @Throttle({ default: { limit: 20, ttl: 900000 } }) // Higher limit than login
+  @ApiOperation({ summary: 'Login/Register with Firebase Token (Google, Apple, etc.)' })
+  @ApiResponse({ status: 200, description: 'User successfully logged in or registered', type: AuthResponseDto })
+  @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
+  async firebaseLogin(
+    @Body() dto: FirebaseLoginDto,
+    @Query('url') url?: string,
+    @Headers('x-brand-domain') brandDomain?: string,
+    @Ip() ip?: string,
+    @Req() req?: Request,
+  ): Promise<AuthResponseDto> {
+    const userAgent = req?.headers['user-agent'] || 'unknown';
+    const command = new FirebaseLoginCommand(
+      dto.idToken,
+      ip || '0.0.0.0',
+      userAgent,
+      dto.programCategoryId,
+      dto.programId,
+      dto.programSlug,
+      dto.referralCode,
+    );
+    return this.firebaseLoginHandler.execute(command, url || brandDomain);
+  }
 
   @Public()
   @Post('login')

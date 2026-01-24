@@ -1,0 +1,123 @@
+syntax = "proto3";
+
+package payment;
+
+option go_package = "github.com/ybb-platform/payment/internal/infrastructure/grpc/proto";
+
+service PaymentService {
+  // Create a payment intent (an order to pay)
+  rpc CreateIntent (CreateIntentRequest) returns (CreateIntentResponse) {}
+
+  // Get available payment methods based on amount/currency
+  rpc GetPaymentMethods (GetPaymentMethodsRequest) returns (GetPaymentMethodsResponse) {}
+
+  // Process a payment (charge) using a token from the frontend
+  rpc ProcessPayment (ProcessPaymentRequest) returns (ProcessPaymentResponse) {}
+
+  // Manual Payment Support
+  rpc SubmitManualPayment (SubmitManualPaymentRequest) returns (SubmitManualPaymentResponse) {}
+  rpc VerifyManualPayment (VerifyManualPaymentRequest) returns (VerifyManualPaymentResponse) {}
+
+  // Get intents by reference
+  rpc GetIntentsByReference (GetIntentsByReferenceRequest) returns (GetIntentsByReferenceResponse) {}
+}
+
+message GetIntentsByReferenceRequest {
+  string reference_type = 1;
+  string reference_id = 2;
+}
+
+message PaymentIntent {
+  string id = 1;
+  string user_id = 2;
+  int64 amount = 3;
+  string currency = 4;
+  string status = 5;
+  string created_at = 6;
+  string reference_type = 7;
+  string reference_id = 8;
+  map<string, string> metadata = 9;
+}
+
+message GetIntentsByReferenceResponse {
+  repeated PaymentIntent intents = 1;
+}
+
+message CreateIntentRequest {
+  string user_id = 1;
+  string participant_id = 2; // Optional
+  int64 amount = 3;
+  string currency = 4;
+  string reference_type = 5;
+  string reference_id = 6;
+  map<string, string> metadata = 7;
+}
+
+message CreateIntentResponse {
+  string intent_id = 1;
+  string client_secret = 2; // Might be needed for some gateways, or empty
+  string status = 3;
+}
+
+message SubmitManualPaymentRequest {
+    string intent_id = 1;
+    string proof_file_id = 2; // optional if just using URL
+    string proof_file_url = 3;
+    string details = 4; // notes from user
+}
+
+message SubmitManualPaymentResponse {
+    string status = 1; // "PENDING_REVIEW"
+    string transaction_id = 2;
+}
+
+message VerifyManualPaymentRequest {
+    string transaction_id = 1;
+    string status = 2; // "SUCCESS", "FAILED"
+    string admin_id = 3;
+    string reason = 4;
+}
+
+message VerifyManualPaymentResponse {
+    string status = 1;
+}
+
+message GetPaymentMethodsRequest {
+  int64 amount = 1;
+  string currency = 2;
+}
+
+message PaymentMethod {
+  string id = 1;
+  string name = 2;
+  string category = 3; // e.g., "bank_transfer", "credit_card", "ewallet"
+  string image_url = 4;
+}
+
+message GetPaymentMethodsResponse {
+  repeated PaymentMethod methods = 1;
+}
+
+message PaymentDetails {
+    // Arbitrary JSON string for gateway specific details
+    string details_json = 1; 
+}
+
+message ProcessPaymentRequest {
+  string intent_id = 1;
+  string payment_method_id = 2;
+  string gateway_token = 3; // Token from Midtrans/Xendit JS SDK
+  PaymentDetails payment_details = 4;
+}
+
+message ProcessPaymentAction {
+    string type = 1; // "redirect", "display_qr", "none"
+    string url = 2;
+    string qr_string = 3;
+}
+
+message ProcessPaymentResponse {
+  string status = 1; // "PENDING", "SUCCESS", "FAILED"
+  string transaction_id = 2;
+  ProcessPaymentAction action = 3;
+}
