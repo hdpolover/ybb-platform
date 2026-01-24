@@ -33,6 +33,9 @@ COPY --from=builder /app/dist ./dist
 # Ensure proto files are copied to dist
 RUN mkdir -p dist/src/protos && cp -r dist/src/protos || true
 COPY --from=builder /app/src/protos ./dist/src/protos
+RUN mkdir -p dist/src/common/proto
+COPY --from=builder /app/src/common/proto ./dist/src/common/proto
+
 
 # Copy prisma schema if it exists in expected location for generating client
 COPY --from=builder /app/prisma ./prisma
