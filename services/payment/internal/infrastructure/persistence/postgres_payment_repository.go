@@ -130,8 +130,24 @@ func (r *PostgresPaymentRepository) Update(ctx context.Context, payment *entitie
 	return nil
 }
 
+// UpdateProof updates the proof of payment
 func (r *PostgresPaymentRepository) UpdateProof(ctx context.Context, id string, fileID string, fileURL string) error {
-    return nil
+	query := `
+		UPDATE payments 
+		SET proof_file_id = $2, 
+		    proof_file_url = $3, 
+		    status = 'processing',
+		    updated_at = NOW()
+		WHERE id = $1
+	`
+
+	_, err := r.db.ExecContext(ctx, query, id, fileID, fileURL)
+	if err != nil {
+		log.Printf("Failed to update payment proof: %v", err)
+		return fmt.Errorf("failed to update payment proof: %w", err)
+	}
+
+	return nil
 }
 
 // FindByGatewayOrderID finds a payment by the gateway's order ID
@@ -179,15 +195,112 @@ func (r *PostgresPaymentRepository) FindByGatewayOrderID(ctx context.Context, ga
 }
 
 // FindByApplicationID retrieves all payments for a specific application
-// TODO for intern: Implement this method
 func (r *PostgresPaymentRepository) FindByApplicationID(ctx context.Context, applicationID string) ([]*entities.Payment, error) {
-	log.Printf("TODO: Implement FindByApplicationID for application: %s", applicationID)
-	return nil, fmt.Errorf("not implemented")
+	query := `
+		SELECT id, application_id, user_id, amount, currency, 
+			   status, payment_method, gateway_name, gateway_order_id,
+			   created_at, updated_at, paid_at
+		FROM payments 
+		WHERE application_id = $1
+		ORDER BY created_at DESC
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, applicationID)
+	if err != nil {
+		log.Printf("Failed to find payments by application ID: %v", err)
+		return nil, fmt.Errorf("failed to find payments: %w", err)
+	}
+	defer rows.Close()
+
+	var payments []*entities.Payment
+	for rows.Next() {
+		payment := &entities.Payment{}
+		var paidAt sql.NullTime
+
+		if err := rows.Scan(
+			&payment.ID,
+			&payment.ApplicationID,
+			&payment.UserID,
+			&payment.Amount,
+			&payment.Currency,
+			&payment.Status,
+			&payment.PaymentMethod,
+			&payment.GatewayName,
+			&payment.GatewayOrderID,
+			&payment.CreatedAt,
+			&payment.UpdatedAt,
+			&paidAt,
+		); err != nil {
+			log.Printf("Failed to scan payment: %v", err)
+			return nil, fmt.Errorf("failed to scan payment: %w", err)
+		}
+
+		if paidAt.Valid {
+			payment.PaidAt = &paidAt.Time
+		}
+		payments = append(payments, payment)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Printf("Error during rows iteration: %v", err)
+		return nil, fmt.Errorf("error during rows iteration: %w", err)
+	}
+
+	return payments, nil
 }
 
 // FindByUserID retrieves all payments for a specific user
-// TODO for intern: Implement this method with pagination
 func (r *PostgresPaymentRepository) FindByUserID(ctx context.Context, userID string, limit, offset int) ([]*entities.Payment, error) {
-	log.Printf("TODO: Implement FindByUserID for user: %s, limit: %d, offset: %d", userID, limit, offset)
-	return nil, fmt.Errorf("not implemented")
+	query := `
+		SELECT id, application_id, user_id, amount, currency, 
+			   status, payment_method, gateway_name, gateway_order_id,
+			   created_at, updated_at, paid_at
+		FROM payments 
+		WHERE user_id = $1
+		ORDER BY created_at DESC
+		LIMIT $2 OFFSET $3
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, userID, limit, offset)
+	if err != nil {
+		log.Printf("Failed to find payments by user ID: %v", err)
+		return nil, fmt.Errorf("failed to find payments: %w", err)
+	}
+	defer rows.Close()
+
+	var payments []*entities.Payment
+	for rows.Next() {
+		payment := &entities.Payment{}
+		var paidAt sql.NullTime
+
+		if err := rows.Scan(
+			&payment.ID,
+			&payment.ApplicationID,
+			&payment.UserID,
+			&payment.Amount,
+			&payment.Currency,
+			&payment.Status,
+			&payment.PaymentMethod,
+			&payment.GatewayName,
+			&payment.GatewayOrderID,
+			&payment.CreatedAt,
+			&payment.UpdatedAt,
+			&paidAt,
+		); err != nil {
+			log.Printf("Failed to scan payment: %v", err)
+			return nil, fmt.Errorf("failed to scan payment: %w", err)
+		}
+
+		if paidAt.Valid {
+			payment.PaidAt = &paidAt.Time
+		}
+		payments = append(payments, payment)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Printf("Error during rows iteration: %v", err)
+		return nil, fmt.Errorf("error during rows iteration: %w", err)
+	}
+
+	return payments, nil
 }

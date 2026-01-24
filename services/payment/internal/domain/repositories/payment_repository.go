@@ -7,7 +7,6 @@ import (
 )
 
 // PaymentRepository defines the interface for payment data persistence
-// TODO for intern: Implement this interface with PostgreSQL
 type PaymentRepository interface {
 	// Create saves a new payment to the database
 	Create(ctx context.Context, payment *entities.Payment) error

@@ -23,6 +23,7 @@ type PaymentEvent struct {
 	PaymentID     string                 `json:"payment_id"`
 	ApplicationID string                 `json:"application_id"`
 	UserID        string                 `json:"user_id"`
+	Email         string                 `json:"email"` // Added for Notification Service
 	Amount        float64                `json:"amount"`
 	Currency      string                 `json:"currency"`
 	Status        string                 `json:"status"`
@@ -32,13 +33,14 @@ type PaymentEvent struct {
 }
 
 // NewPaymentEvent creates a new payment event
-func NewPaymentEvent(eventType EventType, paymentID, applicationID, userID string, amount float64, currency, status, gatewayName string) *PaymentEvent {
+func NewPaymentEvent(eventType EventType, paymentID, applicationID, userID, email string, amount float64, currency, status, gatewayName string) *PaymentEvent {
 	return &PaymentEvent{
 		ID:            "", // Will be set by event publisher
 		Type:          eventType,
 		PaymentID:     paymentID,
 		ApplicationID: applicationID,
 		UserID:        userID,
+		Email:         email,
 		Amount:        amount,
 		Currency:      currency,
 		Status:        status,

@@ -1,26 +1,89 @@
 import { Controller, Logger } from '@nestjs/common';
 import { EventPattern, Payload, Ctx, RmqContext } from '@nestjs/microservices';
 import { EmailService } from '../email/email.service';
+import { ReceiptService } from '../email/receipt.service';
 
 @Controller()
 export class EventsController {
     private readonly logger = new Logger(EventsController.name);
 
-    constructor(private readonly emailService: EmailService) { }
+    constructor(
+        private readonly emailService: EmailService,
+        private readonly receiptService: ReceiptService
+    ) { }
 
     @EventPattern('payment.succeeded')
     async handlePaymentSucceeded(@Payload() data: any, @Ctx() context: RmqContext) {
         this.logger.log(`Received payment.succeeded event: ${JSON.stringify(data)}`);
 
         if (data.email) {
+            let receiptBuffer: Buffer | undefined;
+            try {
+                receiptBuffer = await this.receiptService.generateReceipt({
+                    orderId: data.order_id || data.payment_id,
+                    amount: data.amount,
+                    currency: data.currency,
+                    customerName: data.metadata?.customer_name || data.customer_name || 'Customer',
+                    date: new Date().toLocaleDateString(),
+                    description: 'Payment for services'
+                });
+            } catch (error) {
+                this.logger.error('Failed to generate receipt', error);
+            }
+
             await this.emailService.sendPaymentSuccessEmail(data.email, {
-                name: data.customer_name || 'Customer',
+                name: data.metadata?.customer_name || data.customer_name || 'Customer',
                 amount: data.amount,
                 currency: data.currency,
-                orderId: data.order_id,
+                orderId: data.order_id || data.payment_id,
                 description: 'Payment for services',
                 invoiceUrl: '#', // TODO: Add real invoice URL
-            });
+            }, receiptBuffer);
+        }
+    }
+
+    @EventPattern('payment.created')
+    async handlePaymentCreated(@Payload() data: any, @Ctx() context: RmqContext) {
+        this.logger.log(`Received payment.created event: ${JSON.stringify(data)}`);
+        
+        // Notify user that manual payment proof is received
+        if (data.status === 'PENDING_REVIEW' && data.email) {
+             await this.emailService.sendManualPaymentReceivedEmail(data.email, {
+                name: data.metadata?.customer_name || data.customer_name || 'Customer',
+                amount: data.amount,
+                currency: data.currency,
+                orderId: data.order_id || data.payment_id,
+             });
+        }
+    }
+
+    @EventPattern('payment.failed')
+    async handlePaymentFailed(@Payload() data: any, @Ctx() context: RmqContext) {
+        this.logger.log(`Received payment.failed event: ${JSON.stringify(data)}`);
+        
+        if (data.email) {
+             await this.emailService.sendPaymentFailedEmail(data.email, {
+                name: data.metadata?.customer_name || data.customer_name || 'Customer',
+                amount: data.amount,
+                currency: data.currency,
+                orderId: data.order_id || data.payment_id,
+                reason: data.metadata?.failure_reason || 'Transaction could not be processed',
+             });
+        }
+    }
+
+    @EventPattern('payment.refunded')
+    async handlePaymentRefunded(@Payload() data: any, @Ctx() context: RmqContext) {
+        this.logger.log(`Received payment.refunded event: ${JSON.stringify(data)}`);
+        
+        if (data.email) {
+             await this.emailService.sendPaymentRefundedEmail(data.email, {
+                name: data.metadata?.customer_name || data.customer_name || 'Customer',
+                amount: data.amount,
+                currency: data.currency,
+                orderId: data.order_id || data.payment_id,
+                description: 'Refund for services'
+             });
         }
     }
 

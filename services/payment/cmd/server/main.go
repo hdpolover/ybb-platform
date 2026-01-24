@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"google.golang.org/grpc"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -26,6 +28,8 @@ import (
 	queryHandlers "github.com/ybb-platform/payment/internal/application/queries/handlers"
 	"github.com/ybb-platform/payment/internal/infrastructure/config"
 	infraGateways "github.com/ybb-platform/payment/internal/infrastructure/gateways"
+	grpcServer "github.com/ybb-platform/payment/internal/infrastructure/grpc"
+	pb "github.com/ybb-platform/payment/internal/infrastructure/grpc/proto"
 	"github.com/ybb-platform/payment/internal/infrastructure/messaging"
 	"github.com/ybb-platform/payment/internal/infrastructure/persistence"
 	"github.com/ybb-platform/payment/internal/presentation/http/handlers"
@@ -79,6 +83,8 @@ func main() {
 		&entities.PaymentMethodEntity{}, 
 		&entities.Refund{}, 
 		&entities.GatewayConfig{},
+		&entities.PaymentIntent{},
+		&entities.PaymentTransaction{},
 	); err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
@@ -117,8 +123,36 @@ func main() {
 	log.Println("Registered payment gateways: Manual")
 
 	// Initialize repositories
-	paymentRepo := persistence.NewGormPaymentRepository(db)
+	sqlDB, err := db.DB()
+	if err != nil {
+		log.Fatalf("Failed to get SQL DB from GORM: %v", err)
+	}
+	paymentRepo := persistence.NewPostgresPaymentRepository(sqlDB)
+	// paymentRepo := persistence.NewGormPaymentRepository(db)
 	paymentMethodRepo := persistence.NewPaymentMethodRepository(db)
+	intentRepo := persistence.NewGormPaymentIntentRepository(db)
+	txRepo := persistence.NewGormPaymentTransactionRepository(db)
+
+	// Start gRPC Server
+	go func() {
+		grpcPort := "50053" // TODO: Move to config
+		lis, err := net.Listen("tcp", ":"+grpcPort)
+		if err != nil {
+			log.Fatalf("failed to listen for gRPC: %v", err)
+		}
+		s := grpc.NewServer()
+		paymentGrpcService := grpcServer.NewPaymentGrpcServer(
+            intentRepo,
+            txRepo,
+            gatewayFactory,
+            eventPublisher,
+        )
+		pb.RegisterPaymentServiceServer(s, paymentGrpcService)
+		log.Printf("gRPC server listening at %v", lis.Addr())
+		if err := s.Serve(lis); err != nil {
+			log.Fatalf("failed to serve gRPC: %v", err)
+		}
+	}()
 
 	// Initialize handlers
 	createPaymentHandler := commandHandlers.NewCreatePaymentHandler(

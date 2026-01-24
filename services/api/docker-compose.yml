@@ -28,9 +28,20 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS}
       RABBITMQ_URL: ${RABBITMQ_URL}
       ADMIN_REGISTRATION_SECRET: ${ADMIN_REGISTRATION_SECRET}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL}
+      FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY}
+      FIREBASE_API_KEY: ${FIREBASE_API_KEY}
+      FIREBASE_AUTH_DOMAIN: ${FIREBASE_AUTH_DOMAIN}
+      FIREBASE_STORAGE_BUCKET: ${FIREBASE_STORAGE_BUCKET}
+      FIREBASE_MESSAGING_SENDER_ID: ${FIREBASE_MESSAGING_SENDER_ID}
+      FIREBASE_APP_ID: ${FIREBASE_APP_ID}
+      FIREBASE_MEASUREMENT_ID: ${FIREBASE_MEASUREMENT_ID}
     volumes:
       - ./src:/app/src
       - ./prisma:/app/prisma
+      - ./tsconfig.json:/app/tsconfig.json
+      - ./package.json:/app/package.json
       - /app/node_modules
       - /app/dist
     depends_on:

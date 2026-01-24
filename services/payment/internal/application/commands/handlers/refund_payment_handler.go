@@ -81,6 +81,7 @@ func (h *RefundPaymentHandler) Handle(ctx context.Context, paymentID string) (*d
 		payment.ID,
 		payment.ApplicationID,
 		payment.UserID,
+		payment.CustomerEmail,
 		payment.Amount,
 		payment.Currency,
 		string(payment.Status),

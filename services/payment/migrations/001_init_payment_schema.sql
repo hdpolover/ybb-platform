@@ -39,10 +39,10 @@ CREATE TABLE IF NOT EXISTS payment_methods (
     CONSTRAINT valid_method_type CHECK (type IN ('automatic', 'manual'))
 );
 
-CREATE INDEX idx_payment_methods_type ON payment_methods(type);
-CREATE INDEX idx_payment_methods_is_active ON payment_methods(is_active);
-CREATE INDEX idx_payment_methods_code ON payment_methods(code);
-CREATE INDEX idx_payment_methods_deleted_at ON payment_methods(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_payment_methods_type ON payment_methods(type);
+CREATE INDEX IF NOT EXISTS idx_payment_methods_is_active ON payment_methods(is_active);
+CREATE INDEX IF NOT EXISTS idx_payment_methods_code ON payment_methods(code);
+CREATE INDEX IF NOT EXISTS idx_payment_methods_deleted_at ON payment_methods(deleted_at);
 
 -- Payments table
 CREATE TABLE IF NOT EXISTS payments (
@@ -100,18 +100,19 @@ CREATE TABLE IF NOT EXISTS payments (
 );
 
 -- Indexes for performance
-CREATE INDEX idx_payments_application_id ON payments(application_id);
-CREATE INDEX idx_payments_user_id ON payments(user_id);
-CREATE INDEX idx_payments_gateway_order_id ON payments(gateway_order_id);
-CREATE INDEX idx_payments_status ON payments(status);
-CREATE INDEX idx_payments_type ON payments(payment_type);
-CREATE INDEX idx_payments_method_id ON payments(payment_method_id);
-CREATE INDEX idx_payments_gateway_name ON payments(gateway_name);
-CREATE INDEX idx_payments_created_at ON payments(created_at DESC);
-CREATE INDEX idx_payments_user_status ON payments(user_id, status);
-CREATE INDEX idx_payments_verified_by ON payments(verified_by_id) WHERE verified_by_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_payments_application_id ON payments(application_id);
+CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments(user_id);
+CREATE INDEX IF NOT EXISTS idx_payments_gateway_order_id ON payments(gateway_order_id);
+CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status);
+CREATE INDEX IF NOT EXISTS idx_payments_type ON payments(payment_type);
+CREATE INDEX IF NOT EXISTS idx_payments_method_id ON payments(payment_method_id);
+CREATE INDEX IF NOT EXISTS idx_payments_gateway_name ON payments(gateway_name);
+CREATE INDEX IF NOT EXISTS idx_payments_created_at ON payments(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_payments_user_status ON payments(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_payments_verified_by ON payments(verified_by_id) WHERE verified_by_id IS NOT NULL;
 
 -- Trigger for updated_at
+DROP TRIGGER IF EXISTS update_payments_updated_at ON payments;
 CREATE TRIGGER update_payments_updated_at
     BEFORE UPDATE ON payments
     FOR EACH ROW
@@ -137,9 +138,9 @@ CREATE TABLE IF NOT EXISTS payment_events (
     ))
 );
 
-CREATE INDEX idx_payment_events_payment_id ON payment_events(payment_id);
-CREATE INDEX idx_payment_events_type ON payment_events(event_type);
-CREATE INDEX idx_payment_events_created_at ON payment_events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_payment_events_payment_id ON payment_events(payment_id);
+CREATE INDEX IF NOT EXISTS idx_payment_events_type ON payment_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_payment_events_created_at ON payment_events(created_at DESC);
 
 -- Refunds table
 CREATE TABLE IF NOT EXISTS refunds (
@@ -156,9 +157,9 @@ CREATE TABLE IF NOT EXISTS refunds (
     CONSTRAINT valid_refund_status CHECK (status IN ('pending', 'processing', 'success', 'failed'))
 );
 
-CREATE INDEX idx_refunds_payment_id ON refunds(payment_id);
-CREATE INDEX idx_refunds_status ON refunds(status);
-CREATE INDEX idx_refunds_created_at ON refunds(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_refunds_payment_id ON refunds(payment_id);
+CREATE INDEX IF NOT EXISTS idx_refunds_status ON refunds(status);
+CREATE INDEX IF NOT EXISTS idx_refunds_created_at ON refunds(created_at DESC);
 
 -- Payment gateway configurations (for multi-gateway support)
 CREATE TABLE IF NOT EXISTS gateway_configs (
@@ -171,6 +172,7 @@ CREATE TABLE IF NOT EXISTS gateway_configs (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+DROP TRIGGER IF EXISTS update_gateway_configs_updated_at ON gateway_configs;
 CREATE TRIGGER update_gateway_configs_updated_at
     BEFORE UPDATE ON gateway_configs
     FOR EACH ROW

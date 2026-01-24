@@ -4,13 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/textproto"
 	"time"
-	"bytes"
-	"io"
-	"mime/multipart"
-	"encoding/json"
-	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ybb-platform/payment/internal/application/commands"
@@ -255,6 +249,7 @@ func (h *PaymentHandler) HandleWebhook(c *gin.Context) {
 				payment.ID,
 				payment.ApplicationID,
 				payment.UserID,
+				payment.CustomerEmail,
 				payment.Amount,
 				payment.Currency,
 				string(payment.Status),
@@ -281,109 +276,38 @@ func (h *PaymentHandler) HandleWebhook(c *gin.Context) {
 }
 
 // UploadProof godoc
-// @Summary      Upload Bukti Transfer
-// @Description  User mengupload foto bukti transfer untuk pembayaran manual
+// @Summary      Upload Bukti Transfer (Submit URL)
+// @Description  Menerima URL Bukti Transfer yang sudah diupload oleh API/File Service
 // @Tags         Manual Payment
-// @Accept       multipart/form-data
+// @Accept       json
 // @Produce      json
-// @Param        id   path      string  true  "Transaction ID (UUID)"
-// @Param        file formData  file    true  "File Gambar Bukti Transfer (JPG/PNG)"
+// @Param        id   path      string          true  "Transaction ID (UUID)"
+// @Param        body body      UploadProofReq  true  "Data File (ID & URL)"
 // @Success      200  {object}  map[string]interface{}
 // @Failure      400  {object}  map[string]interface{}
 // @Failure      500  {object}  map[string]interface{}
 // @Router       /payments/{id}/proof [post]
-// UploadProof handles manual payment proof upload
 func (h *PaymentHandler) UploadProof(c *gin.Context) {
 	paymentID := c.Param("id")
 
-	// 1. Ambil File dari User
-	fileHeader, err := c.FormFile("file")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "File bukti transfer wajib diupload"})
-		return
-	}
-
-	file, err := fileHeader.Open()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal membuka file"})
-		return
-	}
-	defer file.Close()
-
-	// 2. Siapkan Multipart Request (Versi Lengkap)
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-
-	// A. Buat Part File dengan Content-Type yang Benar
-	mh := make(textproto.MIMEHeader)
-	mh.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, "file", fileHeader.Filename))
-	mh.Set("Content-Type", fileHeader.Header.Get("Content-Type")) // Oper Content-Type asli
-
-	part, err := writer.CreatePart(mh)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal membuat part file"})
-		return
-	}
-	_, err = io.Copy(part, file)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menyalin file"})
-		return
-	}
-
-	// B. Isi Field-Field Wajib (Sesuai Dokumentasi File Service)
-	// Pastikan bucket "payment-proofs" sudah dibuat di MinIO console!
-	_ = writer.WriteField("bucket", "payment-proofs")
-	_ = writer.WriteField("brand_id", "ybb")
-	_ = writer.WriteField("user_id", "payment-system")
-
-	writer.Close() // Tutup writer
-
-	// 3. Tentukan URL File Service
-	// Menggunakan nama service docker "file-service"
-	fileServiceHost := os.Getenv("FILE_SERVICE_URL")
-	if fileServiceHost == "" {
-		// Default untuk komunikasi antar container di Docker network yang sama
-		fileServiceHost = "http://file-service:8001/api/v1/files/upload"
-	}
-
-	req, err := http.NewRequest("POST", fileServiceHost, body)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal membuat request"})
-		return
-	}
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-
-	// 4. Kirim Request
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "File Service tidak merespon", "details": err.Error()})
-		return
-	}
-	defer resp.Body.Close()
-
-	// 5. Cek Response
-	if resp.StatusCode >= 400 {
-		respBody, _ := io.ReadAll(resp.Body)
-		fmt.Printf("[FILE SERVICE ERROR] Status: %d, Body: %s\n", resp.StatusCode, string(respBody))
-
-		c.JSON(resp.StatusCode, gin.H{
-			"error":       "Gagal upload ke File Service",
-			"status_code": resp.StatusCode,
-			"details":     string(respBody),
+	var req UploadProofReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid request body",
+			"details": err.Error(),
 		})
 		return
 	}
 
-	// 6. Parsing Sukses
-	var fileResp FileServiceResponse
-	if err := json.NewDecoder(resp.Body).Decode(&fileResp); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Format response tidak valid"})
+	if req.FileID == "" || req.FileURL == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "file_id and file_url are required",
+		})
 		return
 	}
 
-	// 7. Update Database
-	err = h.paymentRepo.UpdateProof(c.Request.Context(), paymentID, fileResp.File.ID, fileResp.File.StoragePath)
+	// Update Database
+	err := h.paymentRepo.UpdateProof(c.Request.Context(), paymentID, req.FileID, req.FileURL)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal update database"})
 		return
@@ -391,9 +315,18 @@ func (h *PaymentHandler) UploadProof(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
-		"message": "Bukti transfer berhasil diupload",
-		"data":    fileResp.File,
+		"message": "Bukti transfer berhasil disubmit",
+		"data": gin.H{
+			"payment_id": paymentID,
+			"file_id": req.FileID,
+			"file_url": req.FileURL,
+		},
 	})
+}
+
+type UploadProofReq struct {
+	FileID  string `json:"file_id"`
+	FileURL string `json:"file_url"`
 }
 
 // VerifyPayment godoc
@@ -469,6 +402,7 @@ func (h *PaymentHandler) VerifyPayment(c *gin.Context) {
             payment.ID,
             payment.ApplicationID,
             payment.UserID,
+			payment.CustomerEmail,
             payment.Amount,
             payment.Currency,
             string(payment.Status),

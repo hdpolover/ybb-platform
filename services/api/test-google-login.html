@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Google Login</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+        .container { border: 1px solid #ccc; padding: 20px; border-radius: 8px; }
+        button { padding: 10px 20px; background-color: #4285f4; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        button:hover { background-color: #357ae8; }
+        #output { margin-top: 20px; white-space: pre-wrap; background: #f4f4f4; padding: 10px; border-radius: 4px; font-family: monospace; overflow-x: auto; }
+        .error { color: red; }
+        .success { color: green; }
+        input { width: 100%; padding: 8px; margin-bottom: 10px; box-sizing: border-box; }
+        .notice { background: #fff3cd; color: #856404; padding: 10px; margin-bottom: 20px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Test Google Login Flow</h1>
+        
+        <div class="notice">
+            <strong>Configuration Required:</strong> You must replace the <code>firebaseConfig</code> object in the source code of this file with your own values from the Firebase Console (Project Settings > General > Your apps).
+        </div>
+
+        <div id="controls">
+            <button id="loginBtn" onclick="loginWithGoogle()">Sign in with Google</button>
+            <button id="logoutBtn" onclick="logout()" style="display:none; background-color: #666;">Sign out</button>
+        </div>
+
+        <div id="status" style="margin-top: 20px;"></div>
+        <div id="output">logs will appear here...</div>
+    </div>
+
+    <!-- Firebase App (the core Firebase SDK) is always required and must be listed first -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
+
+    <script>
+        // TODO: REPLACE WITH YOUR FIREBASE CONFIGURATION
+        // Get this from: Firebase Console -> Project Overview -> Project Settings -> General -> Your apps
+        const firebaseConfig = {
+            apiKey: "AIzaSyBiQqRLe1tnbqOPsadNuoNQUtAPHiJGrCY",
+            authDomain: "ybb-platform.firebaseapp.com",
+            projectId: "ybb-platform",
+            storageBucket: "ybb-platform.firebasestorage.app",
+            messagingSenderId: "557349955654",
+            appId: "1:557349955654:web:28b63438b0e1db4ec30247",
+            measurementId: "G-79HMSYF23Y"
+        };
+
+        // Initialize Firebase
+        try {
+            firebase.initializeApp(firebaseConfig);
+            log("Firebase initialized. Ready to sign in.");
+        } catch (e) {
+            log("Error initializing Firebase. Did you replace the config object?", true);
+            console.error(e);
+        }
+
+        const auth = firebase.auth();
+        const provider = new firebase.auth.GoogleAuthProvider();
+
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                document.getElementById('loginBtn').style.display = 'none';
+                document.getElementById('logoutBtn').style.display = 'inline-block';
+                log(`User authenticated: ${user.email} (${user.uid})`);
+            } else {
+                document.getElementById('loginBtn').style.display = 'inline-block';
+                document.getElementById('logoutBtn').style.display = 'none';
+            }
+        });
+
+        async function loginWithGoogle() {
+            log("Starting Google Sign-In popup...");
+            try {
+                const result = await auth.signInWithPopup(provider);
+                const user = result.user;
+                log("Google Sign-In successful!");
+                
+                // Get the ID Token
+                log("Fetching ID Token...");
+                const idToken = await user.getIdToken();
+                log(`ID Token obtained (first 20 chars): ${idToken.substring(0, 20)}...`);
+
+                // Send to Backend
+                await sendTokenToBackend(idToken);
+
+            } catch (error) {
+                log(`Error during sign-in: ${error.message}`, true);
+                console.error(error);
+            }
+        }
+
+        async function sendTokenToBackend(idToken) {
+            log("Sending ID token to backend...");
+            
+            // Try both localhost and 127.0.0.1
+            const urlsToTry = [
+                'http://localhost:4000/v1/auth/firebase-login',
+                'http://127.0.0.1:4000/v1/auth/firebase-login'
+            ];
+
+            for (const url of urlsToTry) {
+                log(`Attempting POST to: ${url}`);
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ idToken: idToken })
+                    });
+
+                    log(`Response Status: ${response.status} ${response.statusText}`);
+                    
+                    const text = await response.text();
+                    try {
+                        const data = JSON.parse(text);
+                        if (response.ok) {
+                            log("Backend response (SUCCESS):", false, true);
+                            log(JSON.stringify(data, null, 2));
+                            return; // Success!
+                        } else {
+                            log(`Backend error:`, true);
+                            log(JSON.stringify(data, null, 2));
+                        }
+                    } catch (e) {
+                         log(`Backend sent non-JSON response: ${text}`, true);
+                    }
+                    return; // Stop after first server response (even if error)
+                } catch (error) {
+                    log(`Failed to reach ${url}: ${error.name} - ${error.message}`, true);
+                }
+            }
+            log("All backend connection attempts failed. Is Docker running?", true);
+        }
+
+        function logout() {
+            auth.signOut().then(() => {
+                log("Signed out.");
+                document.getElementById('output').innerText = 'logs will appear here...';
+            });
+        }
+
+        function log(message, isError = false, isSuccess = false) {
+            const output = document.getElementById('output');
+            const div = document.createElement('div');
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            if (isError) div.style.color = 'red';
+            if (isSuccess) div.style.color = 'green';
+            output.appendChild(div);
+            output.scrollTop = output.scrollHeight;
+            console.log(message);
+        }
+    </script>
+</body>
+</html>

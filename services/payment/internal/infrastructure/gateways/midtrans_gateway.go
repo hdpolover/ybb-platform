@@ -249,3 +249,106 @@ func (g *MidtransGateway) RefundPayment(ctx context.Context, gatewayOrderID stri
 	
 	return nil
 }
+
+// ChargePayment processes a direct charge (Core API style)
+func (g *MidtransGateway) ChargePayment(ctx context.Context, req *domainGateways.ChargePaymentRequest) (*domainGateways.ChargePaymentResponse, error) {
+	chargeReq := &coreapi.ChargeReq{
+		TransactionDetails: midtrans.TransactionDetails{
+			OrderID:  req.TransactionID,
+			GrossAmt: int64(req.Amount),
+		},
+		CustomerDetails: &midtrans.CustomerDetails{
+			FName: req.CustomerDetails.Name,
+			Email: req.CustomerDetails.Email,
+			Phone: req.CustomerDetails.Phone,
+		},
+	}
+
+	// Map Payment Method
+	switch req.PaymentMethodID {
+	case "credit_card":
+		chargeReq.PaymentType = coreapi.PaymentTypeCreditCard
+		chargeReq.CreditCard = &coreapi.CreditCardDetails{
+			TokenID:        req.GatewayToken,
+			Authentication: true, // 3DS
+		}
+	case "gopay":
+		chargeReq.PaymentType = coreapi.PaymentTypeGopay
+	case "shopeepay":
+		chargeReq.PaymentType = coreapi.PaymentTypeShopeepay
+	case "bca_va":
+		chargeReq.PaymentType = coreapi.PaymentTypeBankTransfer
+		chargeReq.BankTransfer = &coreapi.BankTransferDetails{
+			Bank: midtrans.BankBca,
+		}
+	case "bni_va":
+		chargeReq.PaymentType = coreapi.PaymentTypeBankTransfer
+		chargeReq.BankTransfer = &coreapi.BankTransferDetails{
+			Bank: midtrans.BankBni,
+		}
+	case "permata_va":
+		chargeReq.PaymentType = coreapi.PaymentTypeBankTransfer
+		chargeReq.BankTransfer = &coreapi.BankTransferDetails{
+			Bank: midtrans.BankPermata,
+		}
+	case "bri_va":
+		chargeReq.PaymentType = coreapi.PaymentTypeBankTransfer
+		chargeReq.BankTransfer = &coreapi.BankTransferDetails{
+			Bank: midtrans.BankBri,
+		}
+	default:
+		// Attempt to pass through generic bank transfer if ID corresponds to a bank
+		if req.PaymentMethodID == "bank_transfer" {
+			chargeReq.PaymentType = coreapi.PaymentTypeBankTransfer
+		} else {
+			return nil, fmt.Errorf("unsupported payment method for Core API: %s", req.PaymentMethodID)
+		}
+	}
+
+	resp, err := g.coreApiClient.ChargeTransaction(chargeReq)
+	if err != nil {
+		return nil, fmt.Errorf("midtrans charge failed: %w", err)
+	}
+
+	// Map Response
+	status := "PENDING"
+	if resp.TransactionStatus == "settlement" {
+		status = "SUCCESS"
+	} else if resp.TransactionStatus == "capture" {
+		if resp.FraudStatus == "challenge" {
+			status = "PENDING"
+		} else {
+			status = "SUCCESS"
+		}
+	} else if resp.TransactionStatus == "deny" || resp.TransactionStatus == "cancel" || resp.TransactionStatus == "expire" {
+		status = "FAILED"
+	}
+
+	actionType := "none"
+	actionURL := ""
+
+	// Check for redirect (Gopay deep link, 3DS URL)
+	if resp.RedirectURL != "" {
+		actionType = "redirect"
+		actionURL = resp.RedirectURL
+	}
+
+	// Capture Metadata (VA numbers, etc)
+	metadata := make(map[string]interface{})
+	if len(resp.VaNumbers) > 0 {
+		metadata["va_number"] = resp.VaNumbers[0].VANumber
+		metadata["bank"] = resp.VaNumbers[0].Bank
+	}
+	if resp.PermataVaNumber != "" {
+		metadata["va_number"] = resp.PermataVaNumber
+		metadata["bank"] = "permata"
+	}
+
+	return &domainGateways.ChargePaymentResponse{
+		Status:             status,
+		GatewayReferenceID: resp.TransactionID,
+		ActionType:         actionType,
+		ActionURL:          actionURL,
+		Metadata:           metadata,
+	}, nil
+}

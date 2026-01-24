@@ -30,6 +30,40 @@ type PaymentStatusResponse struct {
 	OriginalStatus string // Status asli dari Midtrans (misal: "settlement")
 }
 
+type CustomerDetails struct {
+	Name  string
+	Email string
+	Phone string
+}
+
+type ItemDetails struct {
+	ID       string
+	Name     string
+	Price    int64
+	Quantity int32
+}
+
+type ChargePaymentRequest struct {
+	TransactionID   string // Unique ID for this attempt (OrderID in Midtrans)
+	IntentID        string
+	Amount          float64
+	Currency        string
+	PaymentMethodID string                 // "bca_va", "credit_card", "gopay"
+	GatewayToken    string                 // Token from JS SDK (for CC)
+	PaymentDetails  map[string]interface{} // Extra details like bank specific params
+	CustomerDetails CustomerDetails
+	Items           []ItemDetails
+}
+
+type ChargePaymentResponse struct {
+	Status             string // "PENDING", "SUCCESS", "FAILED"
+	GatewayReferenceID string
+	ActionType         string // "redirect", "display_qr", "none"
+	ActionURL          string // If redirect
+	QRCodeString       string // If QR
+	Metadata           map[string]interface{}
+}
+
 // PaymentGateway defines the interface that all payment gateways must implement
 // This allows easy addition of new payment gateways (Stripe, PayPal, etc.)
 // TODO for intern: Implement this interface for each payment gateway
@@ -37,8 +71,11 @@ type PaymentGateway interface {
 	// GetName returns the name of the payment gateway (e.g., "midtrans", "stripe")
 	GetName() string
 
-	// CreatePayment initiates a payment transaction
+	// CreatePayment initiates a payment transaction (Snap/Redirect style)
 	CreatePayment(ctx context.Context, req *CreatePaymentRequest) (*CreatePaymentResponse, error)
+
+	// ChargePayment processes a direct charge (Core API style)
+	ChargePayment(ctx context.Context, req *ChargePaymentRequest) (*ChargePaymentResponse, error)
 
 	// VerifyPayment verifies the payment status with the gateway
 	VerifyPayment(ctx context.Context, gatewayOrderID string) (*entities.Payment, error)
