@@ -2,6 +2,7 @@ import { prisma, log, error } from './utils';
 import { cleanDatabase } from './clean';
 import { seedAuth } from './seed-auth';
 import { seedBrands } from './seed-brands';
+import { seedFromCSV } from './seed-csv';
 import { seedBrandContent } from './seed-brand-content';
 import { seedAdmins } from './seed-admins';
 import { seedIYSPrograms } from './seed-programs-iys';
@@ -19,6 +20,7 @@ async function main() {
     
     // Seed Programs
     // await seedYBBPrograms(); // Removed
+    await seedFromCSV();
     await seedIYSPrograms();
     
     // Seed Participants & Apps

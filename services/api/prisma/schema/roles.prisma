@@ -47,7 +47,6 @@ model Admin {
   role                   AdminRole?               @relation(fields: [roleId], references: [id])
   adminPrograms          AdminProgram[]
   adminProgramCategories AdminProgramCategory[]
-  reviewedApplications   ParticipantApplication[]
   verifiedReferrals      AmbassadorReferral[]
   createdAnnouncements   SystemAnnouncement[]     @relation("AnnouncementCreator")
   updatedAnnouncements   SystemAnnouncement[]     @relation("AnnouncementUpdater")
