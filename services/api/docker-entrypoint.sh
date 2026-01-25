@@ -29,7 +29,7 @@ fi
 
 echo "🌱 Running seed script to ensure reference data..."
 if [ "$NODE_ENV" = "production" ] || [ "$NODE_ENV" = "staging" ]; then
-  node dist/prisma/seed.js
+  node dist/prisma/seeds/main.js
 else
   # In development, use ts-node via the prisma CLI or directly
   # The package.json "prisma.seed" is configured to use ts-node
