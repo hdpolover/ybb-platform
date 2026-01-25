@@ -201,6 +201,8 @@ model Program {
   partnershipOpportunities PartnershipOpportunity[]
   sponsorshipTiers         SponsorshipTier[]
   partnershipEnquiries     PartnershipEnquiry[]
+  essays                   ProgramEssay[]
+  scoringSchemas           ScoringSchema[]
 
   @@unique([programCategoryId, slug])
   @@index([programCategoryId])
@@ -260,4 +262,25 @@ model ProgramWaitlist {
   @@index([userId])
   @@index([position])
   @@map("program_waitlist")
+}
+
+model ProgramEssay {
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId   String    @map("program_id") @db.Uuid
+  question    String    @db.Text
+  description String?   @db.Text
+  wordLimit   Int?      @map("word_limit")
+  isRequired  Boolean   @default(true) @map("is_required")
+  order       Int       @default(0)
+  isActive    Boolean   @default(true) @map("is_active")
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@index([isActive])
+  @@map("program_essays")
 }

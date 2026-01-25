@@ -12,6 +12,7 @@ import {
     ProgramPricingTier,
     ProgramRequirement,
     ApplicationFormField,
+    ProgramEssay,
 } from '@prisma/client';
 import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service';
 import { IProgramContentRepository, ProgramPricingTierWithPeriods } from '../../../../core/interfaces/repositories/program-content.repository.interface';
@@ -276,4 +277,25 @@ export class ProgramContentRepository implements IProgramContentRepository {
     async findFormFieldById(id: string): Promise<ApplicationFormField | null> {
         return this.prisma.applicationFormField.findUnique({ where: { id } });
     }
-}
+
+    async findEssaysByProgramId(programId: string): Promise<ProgramEssay[]> {
+        return this.prisma.programEssay.findMany({
+            where: { programId, isActive: true },
+            orderBy: { order: 'asc' },
+        });
+    }
+
+    // CRUD for Essays
+    async createEssay(data: any): Promise<ProgramEssay> {
+        return this.prisma.programEssay.create({ data });
+    }
+    async updateEssay(id: string, data: any): Promise<ProgramEssay> {
+        return this.prisma.programEssay.update({ where: { id }, data });
+    }
+    async deleteEssay(id: string): Promise<void> {
+        await this.prisma.programEssay.delete({ where: { id } });
+    }
+    async findEssayById(id: string): Promise<ProgramEssay | null> {
+        return this.prisma.programEssay.findUnique({ where: { id } });
+    }
+} // Re-closing the class

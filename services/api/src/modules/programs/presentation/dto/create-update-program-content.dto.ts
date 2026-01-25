@@ -1050,3 +1050,68 @@ export class UpdateProgramRequirementDto {
     @IsOptional()
     isActive?: boolean;
 }
+
+// Essay DTOs
+export class CreateProgramEssayDto {
+    @ApiProperty()
+    @IsUUID()
+    @IsNotEmpty()
+    programId: string;
+
+    @ApiProperty()
+    @IsString()
+    @IsNotEmpty()
+    question: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    description?: string;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    wordLimit?: number;
+
+    @ApiProperty({ required: false })
+    @IsBoolean()
+    @IsOptional()
+    isRequired?: boolean;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    order?: number;
+}
+
+export class UpdateProgramEssayDto {
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    question?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    description?: string;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    wordLimit?: number;
+
+    @ApiProperty({ required: false })
+    @IsBoolean()
+    @IsOptional()
+    isRequired?: boolean;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    order?: number;
+
+    @ApiProperty({ required: false })
+    @IsBoolean()
+    @IsOptional()
+    isActive?: boolean;
+}

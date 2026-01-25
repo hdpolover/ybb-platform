@@ -288,3 +288,23 @@ export class ApplicationFormFieldResponseDto {
     @ApiProperty()
     order: number;
 }
+
+export class ProgramEssayResponseDto {
+    @ApiProperty()
+    id: string;
+
+    @ApiProperty()
+    question: string;
+
+    @ApiProperty({ required: false })
+    description?: string;
+
+    @ApiProperty({ required: false })
+    wordLimit?: number;
+
+    @ApiProperty()
+    isRequired: boolean;
+    
+    @ApiProperty()
+    order: number;
+}

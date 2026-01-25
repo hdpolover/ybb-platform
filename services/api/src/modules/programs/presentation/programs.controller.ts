@@ -33,6 +33,7 @@ import {
   ProgramPricingTierResponseDto,
   ProgramRequirementResponseDto,
   ApplicationFormFieldResponseDto,
+  ProgramEssayResponseDto,
 } from './dto/program-content.dto';
 import {
   ListProgramTimelineQuery,
@@ -46,6 +47,7 @@ import {
   ListProgramResourcesQuery,
   ListProgramPricingTiersQuery,
   ListProgramRequirementsQuery,
+  ListProgramEssaysQuery,
 } from '../application/queries/list-program-content.queries';
 import {
   ListProgramTimelineHandler,
@@ -59,6 +61,7 @@ import {
   ListProgramResourcesHandler,
   ListProgramPricingTiersHandler,
   ListProgramRequirementsHandler,
+  ListProgramEssaysHandler,
 } from '../application/queries/handlers/list-program-content.handlers';
 import { Public } from '../../../shared/decorators/public.decorator';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
@@ -76,6 +79,7 @@ import {
   CreateProgramResourceDto, UpdateProgramResourceDto,
   CreateProgramPricingTierDto, UpdateProgramPricingTierDto,
   CreateProgramRequirementDto, UpdateProgramRequirementDto,
+  CreateProgramEssayDto, UpdateProgramEssayDto,
 } from './dto/create-update-program-content.dto';
 import { CreateApplicationFormFieldDto } from '../application/dto/application-form-field/create-application-form-field.dto';
 import { UpdateApplicationFormFieldDto } from '../application/dto/application-form-field/update-application-form-field.dto';
@@ -93,6 +97,7 @@ import {
   CreateProgramResourceCommand, UpdateProgramResourceCommand, DeleteProgramResourceCommand,
   CreateProgramPricingTierCommand, UpdateProgramPricingTierCommand, DeleteProgramPricingTierCommand,
   CreateProgramRequirementCommand, UpdateProgramRequirementCommand, DeleteProgramRequirementCommand,
+  CreateProgramEssayCommand, UpdateProgramEssayCommand, DeleteProgramEssayCommand,
 } from '../application/commands/program-content.commands';
 import {
   CreateApplicationFormFieldCommand,
@@ -114,6 +119,7 @@ import {
   CreateProgramResourceHandler, UpdateProgramResourceHandler, DeleteProgramResourceHandler,
   CreateProgramPricingTierHandler, UpdateProgramPricingTierHandler, DeleteProgramPricingTierHandler,
   CreateProgramRequirementHandler, UpdateProgramRequirementHandler, DeleteProgramRequirementHandler,
+  CreateProgramEssayHandler, UpdateProgramEssayHandler, DeleteProgramEssayHandler,
 } from '../application/commands/handlers/manage-program-content.handlers';
 import {
   CreateApplicationFormFieldHandler,
@@ -148,6 +154,7 @@ export class ProgramsController {
     private readonly listProgramResourcesHandler: ListProgramResourcesHandler,
     private readonly listProgramPricingTiersHandler: ListProgramPricingTiersHandler,
     private readonly listProgramRequirementsHandler: ListProgramRequirementsHandler,
+    private readonly listProgramEssaysHandler: ListProgramEssaysHandler,
     // Content Management Handlers
     // Timeline
     private readonly createProgramTimelineHandler: CreateProgramTimelineHandler,
@@ -193,6 +200,10 @@ export class ProgramsController {
     private readonly createProgramRequirementHandler: CreateProgramRequirementHandler,
     private readonly updateProgramRequirementHandler: UpdateProgramRequirementHandler,
     private readonly deleteProgramRequirementHandler: DeleteProgramRequirementHandler,
+    // Essay
+    private readonly createProgramEssayHandler: CreateProgramEssayHandler,
+    private readonly updateProgramEssayHandler: UpdateProgramEssayHandler,
+    private readonly deleteProgramEssayHandler: DeleteProgramEssayHandler,
     // Content Management Handlers
     private readonly createApplicationFormFieldHandler: CreateApplicationFormFieldHandler,
     private readonly updateApplicationFormFieldHandler: UpdateApplicationFormFieldHandler,
@@ -753,6 +764,39 @@ export class ProgramsController {
   @ApiOperation({ summary: 'Delete requirement' })
   async deleteRequirement(@Param('itemId') itemId: string, @Request() req: any) {
     return this.deleteProgramRequirementHandler.execute(new DeleteProgramRequirementCommand(itemId, req.user.id));
+  }
+
+  // --- Essay Endpoints ---
+  @Get(':id/essays')
+  @Public()
+  @ApiOperation({ summary: 'Get program essays' })
+  @ApiResponse({ status: 200, type: [ProgramEssayResponseDto] })
+  async getEssays(@Param('id') id: string) {
+    return this.listProgramEssaysHandler.execute(new ListProgramEssaysQuery(id));
+  }
+
+  @Post(':id/essays')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Add essay' })
+  async addEssay(@Param('id') programId: string, @Body() dto: CreateProgramEssayDto, @Request() req: any) {
+    return this.createProgramEssayHandler.execute(new CreateProgramEssayCommand(dto, req.user.id));
+  }
+
+  @Put('essays/:itemId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update essay' })
+  async updateEssay(@Param('itemId') itemId: string, @Body() dto: UpdateProgramEssayDto, @Request() req: any) {
+    return this.updateProgramEssayHandler.execute(new UpdateProgramEssayCommand(itemId, dto, req.user.id));
+  }
+
+  @Delete('essays/:itemId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete essay' })
+  async deleteEssay(@Param('itemId') itemId: string, @Request() req: any) {
+    return this.deleteProgramEssayHandler.execute(new DeleteProgramEssayCommand(itemId, req.user.id));
   }
 
   // --- Form Field Endpoints ---

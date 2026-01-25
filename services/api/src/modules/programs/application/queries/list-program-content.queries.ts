@@ -41,3 +41,7 @@ export class ListProgramPricingTiersQuery {
 export class ListProgramRequirementsQuery {
     constructor(public readonly programId: string) { }
 }
+
+export class ListProgramEssaysQuery {
+    constructor(public readonly programId: string) { }
+}

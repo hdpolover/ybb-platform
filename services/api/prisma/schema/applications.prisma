@@ -153,6 +153,7 @@ model ParticipantApplication {
   editHistory ApplicationEditHistory[]
   awards      ParticipantAward[]
   documents   ParticipantDocument[]
+  reviews     ApplicationReview[]
 
   @@unique([participantId, programId]) // One application per program per participant
   @@index([programId])

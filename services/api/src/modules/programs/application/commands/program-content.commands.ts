@@ -9,7 +9,8 @@ import {
     CreateProgramPartnerDto, UpdateProgramPartnerDto,
     CreateProgramResourceDto, UpdateProgramResourceDto,
     CreateProgramPricingTierDto, UpdateProgramPricingTierDto,
-    CreateProgramRequirementDto, UpdateProgramRequirementDto
+    CreateProgramRequirementDto, UpdateProgramRequirementDto,
+    CreateProgramEssayDto, UpdateProgramEssayDto
 } from '../../presentation/dto/create-update-program-content.dto';
 
 // Timeline
@@ -166,5 +167,16 @@ export class UpdateProgramRequirementCommand {
     constructor(public readonly id: string, public readonly dto: UpdateProgramRequirementDto, public readonly userId: string) { }
 }
 export class DeleteProgramRequirementCommand {
+    constructor(public readonly id: string, public readonly userId: string) { }
+}
+
+// Essay
+export class CreateProgramEssayCommand {
+    constructor(public readonly dto: CreateProgramEssayDto, public readonly userId: string) { }
+}
+export class UpdateProgramEssayCommand {
+    constructor(public readonly id: string, public readonly dto: UpdateProgramEssayDto, public readonly userId: string) { }
+}
+export class DeleteProgramEssayCommand {
     constructor(public readonly id: string, public readonly userId: string) { }
 }
