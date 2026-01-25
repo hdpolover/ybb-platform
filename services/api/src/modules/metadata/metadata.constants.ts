@@ -40,3 +40,19 @@ export const DIETARY_RESTRICTIONS = [
   'Dairy Free',
   'Nut Allergy',
 ];
+
+export const KNOWLEDGE_SOURCES = [
+  'Instagram',
+  'TikTok',
+  'LinkedIn',
+  'Facebook',
+  'Twitter/X',
+  'YouTube',
+  'WhatsApp Group',
+  'Telegram Group',
+  'Friend / Referral',
+  'Search Engine (Google, Bing)',
+  'Email / Newsletter',
+  'Campus / School',
+  'Other',
+];

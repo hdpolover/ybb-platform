@@ -115,4 +115,23 @@ export class LandingController {
     const brandDomain = headers?.['x-brand-domain'];
     return this.landingService.getAnnouncements(url || brandDomain);
   }
+
+  @Get('faqs')
+  @ApiOperation({ summary: 'Get FAQs page' })
+  @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number', type: Number })
+  @ApiQuery({ name: 'limit', required: false, description: 'Items per page', type: Number })
+  @ApiQuery({ name: 'search', required: false, description: 'Search term' })
+  @ApiResponse({ status: 200, description: 'Return FAQs page structure', type: LandingPageResponseDto })
+  @ApiBadRequestResponse({ description: 'Invalid brand identification' })
+  async getFaqs(
+    @Query('url') url?: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+    @Query('search') search?: string,
+    @Headers() headers?: Record<string, string>,
+  ): Promise<LandingPageResponseDto> {
+    const brandDomain = headers?.['x-brand-domain'];
+    return this.landingService.getFaqs(url || brandDomain, page, limit, search);
+  }
 }

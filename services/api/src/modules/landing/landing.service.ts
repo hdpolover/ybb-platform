@@ -7,6 +7,7 @@ import { ProgramsStrategy } from './strategies/programs.strategy';
 import { PartnersSponsorsStrategy } from './strategies/partners-sponsors.strategy';
 import { AnnouncementsStrategy } from './strategies/announcements.strategy';
 import { SettingsStrategy } from './strategies/settings.strategy';
+import { FaqsStrategy } from './strategies/faqs.strategy';
 import { ProgramCategory } from '@prisma/client';
 
 @Injectable()
@@ -21,6 +22,7 @@ export class LandingService {
     private readonly partnersSponsorsStrategy: PartnersSponsorsStrategy,
     private readonly announcementsStrategy: AnnouncementsStrategy,
     private readonly settingsStrategy: SettingsStrategy,
+    private readonly faqsStrategy: FaqsStrategy,
   ) {}
 
   private async resolveCategory(url?: string): Promise<ProgramCategory | null> {
@@ -32,6 +34,15 @@ export class LandingService {
         // For now, any active one or 'ybb' specifically if we wanted to enforce default
         orderBy: { createdAt: 'asc' }
       });
+    }
+
+    // Check if input is UUID (Program Category ID)
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(url);
+    if (isUuid) {
+       const category = await this.prisma.programCategory.findFirst({
+           where: { id: url, isActive: true }
+       });
+       if (category) return category;
     }
 
     // Try to find by exact URL match (most reliable)
@@ -87,6 +98,11 @@ export class LandingService {
   async getAnnouncements(url?: string) {
     const category = await this.resolveCategory(url);
     return this.announcementsStrategy.getData(category);
+  }
+
+  async getFaqs(url?: string, page: number = 1, limit: number = 10, search?: string) {
+    const category = await this.resolveCategory(url);
+    return this.faqsStrategy.getFaqs(category, page, limit, search);
   }
 
   async getSettings(url?: string) {

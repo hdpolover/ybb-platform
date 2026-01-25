@@ -4,6 +4,7 @@ import { Country, State, City } from 'country-state-city';
 import { 
   CURRENCIES, 
   DIETARY_RESTRICTIONS, 
+  KNOWLEDGE_SOURCES,
   SHIRT_SIZES, 
   TIMEZONES 
 } from './metadata.constants';
@@ -55,6 +56,10 @@ export class MetadataService {
 
   getDietaryRestrictions() {
     return DIETARY_RESTRICTIONS;
+  }
+
+  getKnowledgeSources() {
+    return KNOWLEDGE_SOURCES;
   }
 
   getPaymentStatuses() {
