@@ -177,6 +177,9 @@ export class GetProgramDetailHandler {
         where: { isActive: true },
         orderBy: { order: 'asc' },
       };
+      includes.participationCategories = {
+        orderBy: { order: 'asc' },
+      };
     }
 
     if (include === 'all') {
@@ -314,6 +317,10 @@ export class GetProgramDetailHandler {
 
     if (program.formFields) {
       response.formFields = program.formFields;
+    }
+
+    if (program.participationCategories) {
+        response.participationCategories = program.participationCategories;
     }
 
     if (program.partners) {

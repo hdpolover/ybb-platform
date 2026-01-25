@@ -1,5 +1,13 @@
 import { ApplicationStatus, ApplicationCategory, ScoreStatus } from '@core/entities/participant-application.entity';
 
+export class ApplicationStepDto {
+  section: string;       // e.g., 'personal_info'
+  label: string;         // e.g., 'Personal Details'
+  status: 'completed' | 'in_progress' | 'not_started';
+  flag: string;          // UI Label: 'Process', 'Not yet', 'Done'
+  progress: number;      // 0 to 100
+}
+
 /**
  * Application Response DTO
  * 
@@ -35,6 +43,9 @@ export class ApplicationResponseDto {
   lastEditedAt?: Date;
   withdrawnAt?: Date;
   withdrawnBy?: string;
+
+  // Progress Steps for UI
+  steps?: ApplicationStepDto[];
 
   // Relations (populated when requested)
   participant?: {

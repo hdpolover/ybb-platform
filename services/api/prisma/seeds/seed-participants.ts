@@ -125,17 +125,17 @@ export async function seedParticipants() {
 
     if (!existingApp) {
         let status: any = 'draft';
-        let paymentStatus: any = 'unpaid';
+        let regPaymentStatus: any = 'unpaid';
         let category: any = 'self_funded';
-        let reviewScore: any = null;
+        let scoreToSeed: number | null = null;
 
         if (p.name.includes('Applicant')) {
             status = 'submitted'; 
             category = 'fully_funded';
         } else if (p.name.includes('Winner')) {
             status = 'accepted';
-            paymentStatus = 'paid';
-            reviewScore = 95.5; // Pass as number
+            regPaymentStatus = 'paid';
+            scoreToSeed = 95.5; 
         }
 
         const app = await prisma.participantApplication.create({
@@ -143,10 +143,11 @@ export async function seedParticipants() {
                 programId: iys2026.id,
                 participantId: participant.id,
                 status: status,
-                paymentStatus: paymentStatus,
+                registrationPaymentStatus: regPaymentStatus,
+                programPaymentStatus: 'unpaid', // Default
                 applicationCategory: category,
                 submittedAt: status !== 'draft' ? new Date() : null,
-                reviewScore: reviewScore,
+                // reviewScore removed
                 personalData: {
                     full_name: p.name,
                     whatsapp_number: p.phone,
@@ -158,6 +159,42 @@ export async function seedParticipants() {
                 }
             }
         });
+
+        // Seed Assessment if score exists
+        if (scoreToSeed) {
+             await prisma.applicationAssessment.create({
+                data: {
+                    applicationId: app.id,
+                    type: 'document_review',
+                    status: 'completed',
+                    score: scoreToSeed,
+                    notes: 'Excellent submission.'
+                }
+             });
+        }
+        
+        // Seed Invoice if paid
+        if (regPaymentStatus === 'paid') {
+            // Find pricing tier
+             const tier = await prisma.programPricingTier.findFirst({
+                 where: { programId: iys2026.id, feeType: 'registration_fee' }
+             });
+             
+             if (tier) {
+                 await prisma.applicationInvoice.create({
+                     data: {
+                         applicationId: app.id,
+                         pricingTierId: tier.id,
+                         amount: tier.price,
+                         currency: tier.currency,
+                         status: 'paid',
+                         paidAt: new Date(),
+                         paymentMethod: 'credit_card',
+                         externalTransactionId: 'TXN_' + Math.floor(Math.random() * 100000)
+                     }
+                 });
+             }
+        }
 
         // 3. Seed Document (if accepted)
         if (status === 'accepted') {

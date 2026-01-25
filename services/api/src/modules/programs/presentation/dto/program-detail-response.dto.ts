@@ -311,6 +311,26 @@ class ProgramAnnouncementDto {
   publishDate: Date;
 }
 
+class ProgramParticipationCategoryDto {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  name: string;
+
+  @ApiProperty()
+  description?: string;
+
+  @ApiProperty()
+  benefits?: string;
+
+  @ApiProperty()
+  eligibility?: string;
+
+  @ApiProperty()
+  order: number;
+}
+
 export class ProgramDetailResponseDto {
   @ApiProperty()
   id: string;
@@ -404,6 +424,9 @@ export class ProgramDetailResponseDto {
 
   @ApiProperty({ type: [ProgramRequirementDto] })
   requirements?: ProgramRequirementDto[];
+
+  @ApiProperty({ type: [ProgramParticipationCategoryDto] })
+  participationCategories?: ProgramParticipationCategoryDto[];
 
   @ApiProperty({ type: [ApplicationFormFieldDto] })
   formFields?: ApplicationFormFieldDto[];

@@ -203,6 +203,7 @@ model Program {
   partnershipEnquiries     PartnershipEnquiry[]
   essays                   ProgramEssay[]
   scoringSchemas           ScoringSchema[]
+  participationCategories  ProgramParticipationCategory[]
 
   @@unique([programCategoryId, slug])
   @@index([programCategoryId])
@@ -283,4 +284,25 @@ model ProgramEssay {
   @@index([programId])
   @@index([isActive])
   @@map("program_essays")
+}
+
+model ProgramParticipationCategory {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId   String   @map("program_id") @db.Uuid
+  name        String   @db.VarChar(255) // "Future Innovators", "High School Students"
+  description String?  @db.Text
+  benefits    String?  @db.Text
+  eligibility String?  @db.Text
+  
+  order       Int      @default(0)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  program      Program                  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  applications ParticipantApplication[]
+
+  @@index([programId])
+  @@map("program_participation_categories")
 }
