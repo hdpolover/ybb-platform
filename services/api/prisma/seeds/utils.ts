@@ -9,19 +9,7 @@ import 'dotenv/config';
 const connectionString = process.env.DATABASE_URL;
 const pool = new Pool({ connectionString });
 const adapter = new PrismaPg(pool);
-const prisma = new PrismaClient({ adapter });
-// -------------------------------------------------------------
+export const prisma = new PrismaClient({ adapter });
 
-async function main() {
-  console.log('🌱 Starting database seeding...');
-  console.log('✅ Seed file ready - add your seed logic here');
-}
-
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+export const log = (msg: string) => console.log(`[SEED] ${msg}`);
+export const error = (msg: string) => console.error(`[SEED ERROR] ${msg}`);

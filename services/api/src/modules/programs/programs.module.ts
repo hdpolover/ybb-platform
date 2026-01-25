@@ -31,6 +31,7 @@ import {
   ListProgramResourcesHandler,
   ListProgramPricingTiersHandler,
   ListProgramRequirementsHandler,
+  ListProgramEssaysHandler,
 } from './application/queries/handlers/list-program-content.handlers';
 import {
   CreateProgramTimelineHandler, UpdateProgramTimelineHandler, DeleteProgramTimelineHandler,
@@ -43,7 +44,8 @@ import {
   CreateProgramPartnerHandler, UpdateProgramPartnerHandler, DeleteProgramPartnerHandler,
   CreateProgramResourceHandler, UpdateProgramResourceHandler, DeleteProgramResourceHandler,
   CreateProgramPricingTierHandler, UpdateProgramPricingTierHandler, DeleteProgramPricingTierHandler,
-  CreateProgramRequirementHandler, UpdateProgramRequirementHandler, DeleteProgramRequirementHandler
+  CreateProgramRequirementHandler, UpdateProgramRequirementHandler, DeleteProgramRequirementHandler,
+  CreateProgramEssayHandler, UpdateProgramEssayHandler, DeleteProgramEssayHandler,
 } from './application/commands/handlers/manage-program-content.handlers';
 import {
   CreateApplicationFormFieldHandler,
@@ -81,6 +83,7 @@ import { CacheService } from '../../shared/infrastructure/cache/cache.service';
     ListProgramResourcesHandler,
     ListProgramPricingTiersHandler,
     ListProgramRequirementsHandler,
+    ListProgramEssaysHandler,
     // Content Management Handlers
     CreateProgramTimelineHandler, UpdateProgramTimelineHandler, DeleteProgramTimelineHandler,
     CreateProgramScheduleHandler, UpdateProgramScheduleHandler, DeleteProgramScheduleHandler,
@@ -93,6 +96,7 @@ import { CacheService } from '../../shared/infrastructure/cache/cache.service';
     CreateProgramResourceHandler, UpdateProgramResourceHandler, DeleteProgramResourceHandler,
     CreateProgramPricingTierHandler, UpdateProgramPricingTierHandler, DeleteProgramPricingTierHandler,
     CreateProgramRequirementHandler, UpdateProgramRequirementHandler, DeleteProgramRequirementHandler,
+    CreateProgramEssayHandler, UpdateProgramEssayHandler, DeleteProgramEssayHandler,
     // Form Field Handlers
     CreateApplicationFormFieldHandler,
     UpdateApplicationFormFieldHandler,

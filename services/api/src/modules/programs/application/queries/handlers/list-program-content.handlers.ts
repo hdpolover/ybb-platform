@@ -13,6 +13,7 @@ import {
     ListProgramResourcesQuery,
     ListProgramPricingTiersQuery,
     ListProgramRequirementsQuery,
+    ListProgramEssaysQuery,
 } from '../list-program-content.queries';
 
 async function resolveProgramId(
@@ -286,6 +287,28 @@ export class ListProgramRequirementsHandler {
             description: item.description ?? undefined,
             fileMaxSize: item.fileMaxSize ?? undefined,
             fileAllowedTypes: item.fileAllowedTypes ?? undefined,
+        }));
+    }
+}
+
+@Injectable()
+export class ListProgramEssaysHandler {
+    constructor(
+        @Inject('IProgramContentRepository')
+        private readonly repository: IProgramContentRepository,
+        @Inject('IProgramRepository')
+        private readonly programRepository: IProgramRepository,
+    ) { }
+
+    async execute(query: ListProgramEssaysQuery) {
+        const programId = await resolveProgramId(this.programRepository, query.programId);
+        if (!programId) return [];
+
+        const items = await this.repository.findEssaysByProgramId(programId);
+        return items.map(item => ({
+            ...item,
+            description: item.description ?? undefined,
+            wordLimit: item.wordLimit ?? undefined,
         }));
     }
 }

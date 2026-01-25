@@ -16,7 +16,8 @@ import {
     CreateProgramPartnerCommand, UpdateProgramPartnerCommand, DeleteProgramPartnerCommand,
     CreateProgramResourceCommand, UpdateProgramResourceCommand, DeleteProgramResourceCommand,
     CreateProgramPricingTierCommand, UpdateProgramPricingTierCommand, DeleteProgramPricingTierCommand,
-    CreateProgramRequirementCommand, UpdateProgramRequirementCommand, DeleteProgramRequirementCommand
+    CreateProgramRequirementCommand, UpdateProgramRequirementCommand, DeleteProgramRequirementCommand,
+    CreateProgramEssayCommand, UpdateProgramEssayCommand, DeleteProgramEssayCommand
 } from '../program-content.commands';
    
 // --- Timeline Handlers ---
@@ -576,3 +577,27 @@ export class DeleteProgramRequirementHandler implements ICommandHandler<DeletePr
         return this.repository.deleteRequirement(command.id);
     }
 }
+
+// --- Essay Handlers ---
+@CommandHandler(CreateProgramEssayCommand)
+export class CreateProgramEssayHandler implements ICommandHandler<CreateProgramEssayCommand> {
+    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    async execute(command: CreateProgramEssayCommand) {
+        return this.repository.createEssay(command.dto);
+    }
+}
+@CommandHandler(UpdateProgramEssayCommand)
+export class UpdateProgramEssayHandler implements ICommandHandler<UpdateProgramEssayCommand> {
+    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    async execute(command: UpdateProgramEssayCommand) {
+        return this.repository.updateEssay(command.id, command.dto);
+    }
+}
+@CommandHandler(DeleteProgramEssayCommand)
+export class DeleteProgramEssayHandler implements ICommandHandler<DeleteProgramEssayCommand> {
+    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    async execute(command: DeleteProgramEssayCommand) {
+        return this.repository.deleteEssay(command.id);
+    }
+}
+
