@@ -7,6 +7,7 @@ import { ProgramsStrategy } from './strategies/programs.strategy';
 import { PartnersSponsorsStrategy } from './strategies/partners-sponsors.strategy';
 import { AnnouncementsStrategy } from './strategies/announcements.strategy';
 import { SettingsStrategy } from './strategies/settings.strategy';
+import { FaqsStrategy } from './strategies/faqs.strategy';
 
 @Module({
   controllers: [LandingController],
@@ -18,6 +19,7 @@ import { SettingsStrategy } from './strategies/settings.strategy';
     PartnersSponsorsStrategy,
     AnnouncementsStrategy,
     SettingsStrategy,
+    FaqsStrategy,
   ],
   exports: [LandingService],
 })

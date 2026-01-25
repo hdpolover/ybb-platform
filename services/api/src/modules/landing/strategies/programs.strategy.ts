@@ -107,12 +107,12 @@ export class ProgramsStrategy implements ILandingPageStrategy {
         where: {
             programCategoryId: { not: category.id },
             isPublished: true,
-            isActive: true,
-            // Only show future/ongoing programs
-            endDate: { gt: new Date() }
+            // isActive: true, // Removed requirement for program to be active
+            // endDate: { gt: new Date() } // Removed requirement for future end date
         },
-        orderBy: { startDate: 'asc' }, // Soonest first
+        orderBy: { startDate: 'desc' }, // Latest first
         take: 3,
+        distinct: ['programCategoryId'], // One per category to show variety
         select: {
             id: true,
             name: true,
@@ -121,6 +121,34 @@ export class ProgramsStrategy implements ILandingPageStrategy {
             startDate: true,
             endDate: true,
             location: true,
+            programCategory: {
+                select: {
+                    name: true,
+                    logoUrl: true
+                }
+            }
+        }
+    });
+    
+    // 4. Fetch Additional Active Programs (Same Category)
+    const additionalProgramsData = await this.prisma.program.findMany({
+        where: {
+            programCategoryId: category.id,
+            id: { not: currentProgram?.id },
+            isPublished: true,
+            isActive: true,
+            endDate: { gt: new Date() }
+        },
+        orderBy: { startDate: 'asc' },
+        select: {
+            id: true,
+            name: true,
+            slug: true,
+            thumbnailUrl: true,
+            startDate: true,
+            endDate: true,
+            location: true,
+            shortDescription: true,
             programCategory: {
                 select: {
                     name: true,
@@ -348,6 +376,23 @@ export class ProgramsStrategy implements ILandingPageStrategy {
             }
         });
     }
+    
+    // Section: Additional Programs (Active, same category)
+    if (additionalProgramsData.length > 0) {
+        sections.push({
+            type: 'additional_programs',
+            content: {
+                title: 'More Active Programs',
+                items: additionalProgramsData.map(p => ({
+                    id: p.id,
+                    name: p.name,
+                    slug: p.slug,
+                    thumbnail: p.thumbnailUrl,
+                    summary: p.shortDescription
+                }))
+            }
+        });
+    }
 
     // Section 5: Previous Programs
     if (previousProgramsData.length > 0) {
@@ -537,6 +582,33 @@ export class ProgramsStrategy implements ILandingPageStrategy {
             time: `${p.startTime} - ${p.endTime}`
         }))
     };
+
+    // 6.5. Additional Active Programs (Same Category, excluding current)
+    const additionalProgramsData = await this.prisma.program.findMany({
+        where: {
+            programCategoryId: program.programCategoryId,
+            id: { not: program.id },
+            isPublished: true,
+            isActive: true,
+            endDate: { gt: new Date() }
+        },
+        orderBy: { startDate: 'asc' },
+        select: {
+            id: true,
+            name: true,
+            slug: true,
+            thumbnailUrl: true,
+            startDate: true,
+            endDate: true,
+            location: true,
+            shortDescription: true,
+        }
+    });
+
+    const additionalPrograms = {
+        type: 'additional_programs',
+        data: additionalProgramsData
+    };
     
     // 7. Previous Programs (Same brand)
     const previousProgramsData = await this.prisma.program.findMany({
@@ -566,19 +638,16 @@ export class ProgramsStrategy implements ILandingPageStrategy {
     };
 
     // 8. Other Programs (Ongoing, other brands/categories if applicable, or same brand active)
-    // "other brand programs that are still active" implies finding programs where Category is different OR just active
+    // Show programs from other categories to cross-pollinate traffic
     const otherProgramsData = await this.prisma.program.findMany({
         where: {
-            // id: { not: program.id }, // don't show current
-            // isActive: true,
-            // endDate: { gt: new Date() }, // still active
-            // OR logic if we want strictly OTHER brands:
              programCategoryId: { not: program.programCategoryId },
              isPublished: true,
-             isActive: true
+             // isActive: true // Relaxed constraints to show visibility of other brands
         },
-        orderBy: { startDate: 'asc' },
+        orderBy: { startDate: 'desc' },
         take: 3,
+        distinct: ['programCategoryId'], // Ensure variety of brands
         select: {
             id: true,
             name: true,
@@ -621,6 +690,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
         rundown,
         journey,
         schedules,
+        additionalPrograms,
         previousPrograms,
         otherPrograms,
         faqs

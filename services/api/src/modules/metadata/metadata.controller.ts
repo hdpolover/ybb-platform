@@ -85,4 +85,12 @@ export class MetadataController {
   getDietaryRestrictions() {
     return this.metadataService.getDietaryRestrictions();
   }
+
+  @Public()
+  @Get('knowledge-sources')
+  @ApiOperation({ summary: 'Get list of knowledge sources' })
+  @ApiResponse({ status: 200, description: 'Return list of knowledge sources' })
+  getKnowledgeSources() {
+    return this.metadataService.getKnowledgeSources();
+  }
 }
