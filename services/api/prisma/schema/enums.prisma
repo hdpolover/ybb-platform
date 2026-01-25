@@ -2,6 +2,20 @@
 // ENUMS
 // ============================================================================
 
+enum AssessmentType {
+  document_review
+  interview
+  essay_scoring
+  final_assessment
+}
+
+enum AssessmentStatus {
+  pending
+  in_progress
+  completed
+  skipped
+}
+
 enum Gender {
   male
   female

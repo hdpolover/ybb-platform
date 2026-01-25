@@ -29,6 +29,7 @@ model ProgramPricingTier {
   // Relations
   program         Program                     @relation(fields: [programId], references: [id], onDelete: Cascade)
   validityPeriods PricingTierValidityPeriod[]
+  invoices        ApplicationInvoice[]
   // transactions    PaymentTransaction[] -- REMOVED: Managed by Payment Service
 
   @@index([programId])
@@ -113,7 +114,11 @@ model ParticipantApplication {
   programId           String               @map("program_id") @db.Uuid
   participantId       String               @map("participant_id") @db.Uuid
   status              ApplicationStatus    @default(draft)
-  paymentStatus       PaymentStatus        @default(unpaid) @map("payment_status")
+  
+  // Payment Status Overview (Detailed tracking in ApplicationInvoice)
+  registrationPaymentStatus PaymentStatus @default(unpaid) @map("registration_payment_status")
+  programPaymentStatus      PaymentStatus @default(unpaid) @map("program_payment_status")
+
   ticketStatus        String               @default("regular") @map("ticket_status")
   referralCode        String?              @map("referral_code") @db.VarChar(50)
   applicationCategory ApplicationCategory? @map("application_category")
@@ -122,22 +127,14 @@ model ParticipantApplication {
   // Application Data (Flexible Store)
   personalData  Json @default("{}") @map("personal_data") @db.Json
   essayAnswers  Json @default("{}") @map("essay_answers") @db.Json
-  uploadedFiles Json @default("{}") @map("uploaded_files") @db.Json // Links to uploaded requirements
+  uploadedFiles Json @default("{}") @map("uploaded_files") @db.Json
 
-  // Review & Scoring
-  reviewScore Decimal?  @map("review_score") @db.Decimal(5, 2)
-  adminNotes  String?   @map("admin_notes") @db.Text
-  reviewedBy  String?   @map("reviewed_by") @db.Uuid
-  reviewedAt  DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  // Deprecated Hardcoded Fields (Migrating to ApplicationAssessment)
+  // reviewScore, adminNotes, interviewScore etc. are replaced by assessments relation
+  
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   deletedBy   String?   @map("deleted_by") @db.Uuid
   withdrawnBy String?   @map("withdrawn_by") @db.Uuid
-
-  // Interview
-  interviewDate  DateTime? @map("interview_date") @db.Timestamptz(6)
-  interviewLink  String?   @map("interview_link") @db.VarChar(500)
-  interviewScore Decimal?  @map("interview_score") @db.Decimal(5, 2)
-  interviewNotes String?   @map("interview_notes") @db.Text
 
   // Meta
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -146,30 +143,81 @@ model ParticipantApplication {
   // Relations
   program     Program                  @relation(fields: [programId], references: [id], onDelete: Cascade)
   participant Participant              @relation(fields: [participantId], references: [id], onDelete: Cascade)
-  reviewer    Admin?                   @relation(fields: [reviewedBy], references: [id])
   deleter     User?                    @relation("ApplicationDeleter", fields: [deletedBy], references: [id])
   withdrawer  User?                    @relation("ApplicationWithdrawer", fields: [withdrawnBy], references: [id])
-  // transactions PaymentTransaction[] -- REMOVED: Managed by Payment Service
+  
   editHistory ApplicationEditHistory[]
   awards      ParticipantAward[]
   documents   ParticipantDocument[]
   reviews     ApplicationReview[]
+  
+  // New Modular Relations
+  invoices    ApplicationInvoice[]
+  assessments ApplicationAssessment[]
 
-  @@unique([participantId, programId]) // One application per program per participant
+  @@unique([participantId, programId])
   @@index([programId])
   @@index([participantId])
   @@index([status])
-  @@index([paymentStatus])
-  @@index([referralCode])
+  @@index([registrationPaymentStatus])
   @@map("participant_applications")
+}
+
+model ApplicationInvoice {
+  id            String             @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  applicationId String             @map("application_id") @db.Uuid
+  pricingTierId String             @map("pricing_tier_id") @db.Uuid
+  amount        Decimal            @db.Decimal(10, 2)
+  currency      String             @default("IDR") @db.VarChar(3)
+  status        PaymentStatus      @default(unpaid)
+  paidAt        DateTime?          @map("paid_at") @db.Timestamptz(6)
+  
+  // Link to external transaction ID from Payment Service for reference
+  externalTransactionId String?    @map("external_transaction_id") @db.VarChar(100)
+  paymentMethod         String?    @map("payment_method") @db.VarChar(50)
+  
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  application   ParticipantApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  pricingTier   ProgramPricingTier     @relation(fields: [pricingTierId], references: [id])
+
+  @@index([applicationId])
+  @@index([status])
+  @@map("application_invoices")
+}
+
+model ApplicationAssessment {
+  id            String             @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  applicationId String             @map("application_id") @db.Uuid
+  type          AssessmentType     @default(document_review)
+  status        AssessmentStatus   @default(pending)
+  
+  score         Decimal?           @db.Decimal(5, 2) // e.g. 85.50
+  notes         String?            @db.Text          // Internal notes
+  feedback      String?            @db.Text          // Feedback for participant (optional)
+  
+  assessorId    String?            @map("assessor_id") @db.Uuid
+  assessedAt    DateTime?          @map("assessed_at") @db.Timestamptz(6)
+  
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  application   ParticipantApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  assessor      User?                  @relation(fields: [assessorId], references: [id])
+
+  @@index([applicationId])
+  @@index([type])
+  @@map("application_assessments")
 }
 
 model ApplicationEditHistory {
   id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   applicationId String   @map("application_id") @db.Uuid
-  editedBy      String   @map("edited_by") @db.Uuid // Who made the edit (User or Admin)
+  editedBy      String   @map("edited_by") @db.Uuid
   reason        String?  @db.Text
   changes       Json     @db.Json // { field: { old: "val", new: "val" } }
+  snapshot      Json?    @db.Json // Full state of the application before/after edit
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   // Relations

@@ -96,7 +96,10 @@ model User {
   awardedParticipantAwards ParticipantAward[]
   files                    File[]
   waitlist                 ProgramWaitlist[]
-  newsletterSubscription   NewsletterSubscriber[] // One-to-one or one-to-many? Usually one-to-many if they sub multiple times or just one. Let's assume one or more.
+  newsletterSubscription   NewsletterSubscriber[]
+  
+  // Relations for new modular tables
+  assessments              ApplicationAssessment[]
 
   @@unique([email, programCategoryId])
   @@index([email])
