@@ -194,7 +194,7 @@ services:
           memory: 512M
 
   # =========================================
-  # Payment Service (Go) -> payment.ybbhub.com
+  # Payment Service (Go) -> payments.ybbhub.com
   # =========================================
   payment-service:
     build:
@@ -216,7 +216,7 @@ services:
         condition: service_healthy
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.payment.rule=Host(`payment.ybbhub.com`)"
+      - "traefik.http.routers.payment.rule=Host(`payments.ybbhub.com`)"
       - "traefik.http.routers.payment.entrypoints=websecure"
       - "traefik.http.routers.payment.tls.certresolver=myresolver"
       - "traefik.http.services.payment.loadbalancer.server.port=8002"

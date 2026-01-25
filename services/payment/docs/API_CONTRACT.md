@@ -17,7 +17,7 @@ graph LR
 
 ## 2. Public API Contract (Consumed by Frontend)
 
-**Base URL**: `https://payment.ybbhub.com/v1`
+**Base URL**: `https://payments.ybbhub.com/v1`
 **Authentication**: `Authorization: Bearer <User_JWT>`
 
 ### 2.1. Get Payment Methods

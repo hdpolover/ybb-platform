@@ -47,7 +47,7 @@ Each service requires accessing `dokploy-network` to communicate internally and 
     *   `DATABASE_PASSWORD`
     *   `DATABASE_NAME` (e.g., ybb_payments_db)
     *   `MIDTRANS_SERVER_KEY`
-    *   `APP_DOMAINS_RULE`: `Host(\`payment.ybbhub.com\`)`
+    *   `APP_DOMAINS_RULE`: `Host(\`payments.ybbhub.com\`)`
 
 ## 4. File Service
 *   **Name**: `file`

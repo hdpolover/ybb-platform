@@ -219,7 +219,7 @@ services:
           memory: 256M
 
   # =========================================
-  # Payment Service (Go) -> staging-payment.ybbhub.com
+  # Payment Service (Go) -> staging-payments.ybbhub.com
   # =========================================
   payment-service:
     build:
@@ -241,7 +241,7 @@ services:
         condition: service_healthy
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.payment-staging.rule=Host(`staging-payment.ybbhub.com`)"
+      - "traefik.http.routers.payment-staging.rule=Host(`staging-payments.ybbhub.com`)"
       - "traefik.http.routers.payment-staging.entrypoints=websecure"
       - "traefik.http.routers.payment-staging.tls.certresolver=myresolver"
       - "traefik.http.services.payment-staging.loadbalancer.server.port=8002"

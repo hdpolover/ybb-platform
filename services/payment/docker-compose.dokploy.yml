@@ -26,7 +26,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=dokploy-network"
-      - "traefik.http.routers.ybb-payment.rule=${APP_DOMAINS_RULE:-Host(`staging-payment.ybbhub.com`)}"
+      - "traefik.http.routers.ybb-payment.rule=${APP_DOMAINS_RULE:-Host(`staging-payments.ybbhub.com`)}"
       - "traefik.http.routers.ybb-payment.entrypoints=websecure"
       - "traefik.http.routers.ybb-payment.tls.certresolver=letsencrypt"
       - "traefik.http.services.ybb-payment.loadbalancer.server.port=8002"
