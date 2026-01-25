@@ -21,12 +21,14 @@ import { UpdateApplicationHandler } from '../application/commands/handlers/updat
 import { SubmitApplicationHandler } from '../application/commands/handlers/submit-application.handler';
 import { ReviewApplicationHandler } from '../application/commands/handlers/review-application.handler';
 import { WithdrawApplicationHandler } from '../application/commands/handlers/withdraw-application.handler';
+import { SwitchApplicationCategoryHandler } from '../application/commands/handlers/switch-application-category.handler';
 
 import { CreateApplicationCommand } from '../application/commands/create-application.command';
 import { UpdateApplicationCommand } from '../application/commands/update-application.command';
 import { SubmitApplicationCommand } from '../application/commands/submit-application.command';
 import { ReviewApplicationCommand } from '../application/commands/review-application.command';
 import { WithdrawApplicationCommand } from '../application/commands/withdraw-application.command';
+import { SwitchApplicationCategoryCommand } from '../application/commands/switch-application-category.command';
 
 // Queries
 import { GetApplicationHandler } from '../application/queries/handlers/get-application.handler';
@@ -38,6 +40,7 @@ import { ListApplicationsQuery } from '../application/queries/list-applications.
 import { CreateApplicationRequestDto } from './dto/create-application-request.dto';
 import { UpdateApplicationRequestDto } from './dto/update-application-request.dto';
 import { ReviewApplicationRequestDto } from './dto/review-application-request.dto';
+import { SwitchApplicationCategoryRequestDto } from './dto/switch-application-category-request.dto';
 import { ApplicationResponseDto, ApplicationListResponseDto } from '../application/dto/application-response.dto';
 import { ApplicationStatus } from '@core/entities/participant-application.entity';
 
@@ -60,6 +63,7 @@ export class ApplicationsController {
     private readonly submitApplicationHandler: SubmitApplicationHandler,
     private readonly reviewApplicationHandler: ReviewApplicationHandler,
     private readonly withdrawApplicationHandler: WithdrawApplicationHandler,
+    private readonly switchApplicationCategoryHandler: SwitchApplicationCategoryHandler,
     private readonly getApplicationHandler: GetApplicationHandler,
     private readonly listApplicationsHandler: ListApplicationsHandler,
   ) {}
@@ -148,6 +152,23 @@ export class ApplicationsController {
 
     const command = new UpdateApplicationCommand(id, dto);
     return this.updateApplicationHandler.execute(command);
+  }
+
+  @Post(':id/switch-category')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Switch application category' })
+  @ApiResponse({ status: 200, description: 'Application category switched successfully', type: ApplicationResponseDto })
+  @ApiResponse({ status: 400, description: 'Cannot switch category due to status or payments' })
+  @ApiResponse({ status: 404, description: 'Application not found' })
+  async switchCategory(
+    @Param('id') id: string,
+    @Body() dto: SwitchApplicationCategoryRequestDto,
+    @Body('userId') userId: string,
+  ): Promise<ApplicationResponseDto> {
+    this.logger.log(`Switching category for application ${id} to ${dto.targetCategory}`);
+
+    const command = new SwitchApplicationCategoryCommand(id, dto.targetCategory, userId);
+    return this.switchApplicationCategoryHandler.execute(command);
   }
 
   @Post(':id/submit')

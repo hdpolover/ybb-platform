@@ -1,5 +1,5 @@
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { Inject, NotFoundException } from '@nestjs/common';
+import { Inject, NotFoundException, BadRequestException } from '@nestjs/common';
 import { IProgramContentRepository } from '@core/interfaces/repositories/program-content.repository.interface';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
 import { Prisma, PricingFeeType, ApplicationCategory } from '@prisma/client';
@@ -515,6 +515,23 @@ export class DeleteProgramResourceHandler implements ICommandHandler<DeleteProgr
 export class CreateProgramPricingTierHandler implements ICommandHandler<CreateProgramPricingTierCommand> {
     constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
     async execute(command: CreateProgramPricingTierCommand) {
+        // Validation: Ensure uniqueness of active registration fee tier per category
+        if (command.dto.feeType === 'registration_fee' && command.dto.allowedCategories && command.dto.allowedCategories.length > 0) {
+            const existingTiers = await this.repository.findPricingTiersByProgramId(command.dto.programId);
+             for (const category of command.dto.allowedCategories) {
+                 const hasConflict = existingTiers.some(tier => 
+                     tier.isActive && 
+                     !tier.deletedAt && 
+                     tier.feeType === 'registration_fee' &&
+                     tier.allowedCategories &&
+                     (tier.allowedCategories as unknown as string[]).includes(category)
+                 );
+                 if (hasConflict) {
+                     throw new BadRequestException(`Active registration fee tier already exists for category ${category}`);
+                 }
+             }
+        }
+
         const { feeType, allowedCategories, ...rest } = command.dto;
         const dto = {
             ...rest,
@@ -533,6 +550,35 @@ export class CreateProgramPricingTierHandler implements ICommandHandler<CreatePr
 export class UpdateProgramPricingTierHandler implements ICommandHandler<UpdateProgramPricingTierCommand> {
     constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
     async execute(command: UpdateProgramPricingTierCommand) {
+        // Fetch existing tier to check validation
+        const existingTier = await this.repository.findPricingTierById(command.id);
+        if (!existingTier) {
+             throw new NotFoundException(`Pricing tier ${command.id} not found`);
+        }
+
+        const targetFeeType = command.dto.feeType || existingTier.feeType;
+        const targetCategories = command.dto.allowedCategories || (existingTier.allowedCategories as unknown as string[]);
+        const targetIsActive = command.dto.isActive !== undefined ? command.dto.isActive : existingTier.isActive;
+
+        // Validation: Ensure uniqueness of active registration fee tier per category
+        if (targetIsActive && targetFeeType === 'registration_fee' && targetCategories && targetCategories.length > 0) {
+             const existingTiers = await this.repository.findPricingTiersByProgramId(existingTier.programId);
+             
+             for (const category of targetCategories) {
+                 const hasConflict = existingTiers.some(tier => 
+                     tier.id !== command.id && // Exclude self
+                     tier.isActive && 
+                     !tier.deletedAt && 
+                     tier.feeType === 'registration_fee' &&
+                     tier.allowedCategories &&
+                     (tier.allowedCategories as unknown as string[]).includes(category)
+                 );
+                 if (hasConflict) {
+                     throw new BadRequestException(`Active registration fee tier already exists for category ${category}`);
+                 }
+             }
+        }
+
         const { feeType, allowedCategories, ...rest } = command.dto;
         const dto = {
             ...rest,

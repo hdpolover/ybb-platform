@@ -9,6 +9,7 @@ import { UpdateApplicationHandler } from './application/commands/handlers/update
 import { SubmitApplicationHandler } from './application/commands/handlers/submit-application.handler';
 import { ReviewApplicationHandler } from './application/commands/handlers/review-application.handler';
 import { WithdrawApplicationHandler } from './application/commands/handlers/withdraw-application.handler';
+import { SwitchApplicationCategoryHandler } from './application/commands/handlers/switch-application-category.handler';
 
 // Query Handlers
 import { GetApplicationHandler } from './application/queries/handlers/get-application.handler';
@@ -31,6 +32,7 @@ import { APPLICATION_REPOSITORY } from './infrastructure/tokens';
     SubmitApplicationHandler,
     ReviewApplicationHandler,
     WithdrawApplicationHandler,
+    SwitchApplicationCategoryHandler,
 
     // Query Handlers
     GetApplicationHandler,
