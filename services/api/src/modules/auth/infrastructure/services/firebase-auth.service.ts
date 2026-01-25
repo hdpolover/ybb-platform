@@ -16,24 +16,35 @@ export class FirebaseAuthService implements OnModuleInit {
       let privateKey: string | undefined;
 
       if (rawPrivateKey) {
+        // Strip framing quotes if present (some env injectors add them)
+        const cleanRawKey = rawPrivateKey.replace(/^"|"$/g, '');
+        
         // Handle Base64 encoded private key (common in Docker environments to avoid newline issues)
-        if (!rawPrivateKey.includes('-----BEGIN PRIVATE KEY-----')) {
+        if (!cleanRawKey.includes('-----BEGIN PRIVATE KEY-----') && !cleanRawKey.includes('-----BEGIN RSA PRIVATE KEY-----')) {
           try {
-            const decoded = Buffer.from(rawPrivateKey, 'base64').toString('utf-8');
-            if (decoded.includes('-----BEGIN PRIVATE KEY-----')) {
+            const decoded = Buffer.from(cleanRawKey, 'base64').toString('utf-8');
+            if (decoded.includes('-----BEGIN PRIVATE KEY-----') || decoded.includes('-----BEGIN RSA PRIVATE KEY-----')) {
               privateKey = decoded;
+              this.logger.log('Successfully decoded Base64 private key');
             } else {
-              privateKey = rawPrivateKey;
+              // If decode doesn't result in a PEM header, it might mean the user provided a key body without headers
+              // or it's just a malformed string. We use the original cleaned key fallback.
+              this.logger.warn('Base64 decode did not produce a valid PEM header. Using raw value.');
+              privateKey = cleanRawKey;
             }
           } catch (e) {
-             privateKey = rawPrivateKey;
+             this.logger.error('Failed to decode Base64 private key', e);
+             privateKey = cleanRawKey;
           }
         } else {
-          privateKey = rawPrivateKey;
+          privateKey = cleanRawKey;
         }
 
         // Handle escaped newlines (e.g. from .env files)
         privateKey = privateKey.replace(/\\n/g, '\n');
+        
+        // Validation logging (safe - no secrets printed)
+        this.logger.log(`Private Key loaded. Length: ${privateKey.length}. Header found: ${privateKey.includes('-----BEGIN')}`);
       }
 
       if (projectId && clientEmail && privateKey) {
