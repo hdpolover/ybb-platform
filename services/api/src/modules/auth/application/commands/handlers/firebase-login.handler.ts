@@ -128,29 +128,44 @@ export class FirebaseLoginHandler {
 
     // 6. If still no user, REGISTER new user
     if (!user) {
-        user = await this.prisma.user.create({
-            data: {
-                email: email,
-                programCategoryId: programCategoryId,
-                emailVerified: decodedToken.email_verified || false,
-                emailVerifiedAt: decodedToken.email_verified ? new Date() : null,
-                isActive: true,
-                identities: {
-                    create: {
-                        providerId: authProvider.id,
-                        providerUserId: uid,
-                        providerEmail: email,
-                        isPrimary: true,
+        try {
+            user = await this.prisma.user.create({
+                data: {
+                    email: email,
+                    programCategoryId: programCategoryId,
+                    emailVerified: decodedToken.email_verified || false,
+                    emailVerifiedAt: decodedToken.email_verified ? new Date() : null,
+                    isActive: true,
+                    identities: {
+                        create: {
+                            providerId: authProvider.id,
+                            providerUserId: uid,
+                            providerEmail: email,
+                            isPrimary: true,
+                        }
                     }
                 }
+            });
+        } catch (error) {
+            if (error.code === 'P2003') { // Prisma Foreign Key Constraint failed
+                 throw new BadRequestException(`Invalid Program Category ID: ${programCategoryId}. Please provide a valid ID or leave it empty to use the default.`);
             }
-        });
+            throw error;
+        }
         
         // Log registration
         this.metricsService.userRegistrationsTotal.inc({ provider: providerName, program_category: programCategoryId });
+    }
 
-        // Handle Referral & Participant Creation
-        try {
+    // 6.5. Ensure Participant Exists & Handle Program Linking (Auto-Registration Logic for ALL users)
+    try {
+        // Check for existing participant profile
+        let participant = await this.prisma.participant.findUnique({
+             where: { userId: user.id }
+        });
+
+        // Create Participant Profile if missing
+        if (!participant) {
             // Check for Referral Code
             let ambassador: Ambassador | null = null;
             if (command.referralCode) {
@@ -163,17 +178,16 @@ export class FirebaseLoginHandler {
                 }
             }
 
-            // Parse Name from Email if not provided elsewhere (Firebase token might have name)
+            // Parse Name from Email if not provided elsewhere
             const fullName = decodedToken.name || email.split('@')[0];
 
-            // Create Participant Profile
-            const participant = await this.prisma.participant.create({
+            participant = await this.prisma.participant.create({
                 data: {
                     userId: user.id,
                     fullName: fullName,
                     referralCode: command.referralCode,
                     profileCompletionPercentage: 0,
-                    knowledgeSource: 'Other', // Default
+                    knowledgeSource: 'Other',
                 }
             });
 
@@ -181,9 +195,9 @@ export class FirebaseLoginHandler {
             if (ambassador) {
                 await this.prisma.ambassadorReferral.create({
                     data: {
-                         ambassadorId: ambassador.id,
-                         participantId: participant.id,
-                         status: 'referred'
+                            ambassadorId: ambassador.id,
+                            participantId: participant.id,
+                            status: 'referred'
                     }
                 });
                 
@@ -192,19 +206,69 @@ export class FirebaseLoginHandler {
                     data: { totalReferrals: { increment: 1 }, lastReferralAt: new Date() }
                 });
             }
+        }
 
-            // Handle Program Auto-Registration
-            let targetProgramId = command.programId;
-            if (!targetProgramId && command.programSlug) {
-                const prog = await this.prisma.program.findUnique({
-                    where: { 
-                        programCategoryId_slug: { programCategoryId, slug: command.programSlug }
-                    }
+        // Handle Program Auto-Registration
+        // We only auto-register if the participant has NO applications for this Program Category
+        // OR if a specific program was requested.
+
+        let targetProgramId = command.programId;
+
+        // A. Explicit Program Requested via Slug
+        if (!targetProgramId && command.programSlug) {
+            const prog = await this.prisma.program.findUnique({
+                where: { 
+                    programCategoryId_slug: { programCategoryId, slug: command.programSlug }
+                }
+            });
+            if (prog) targetProgramId = prog.id;
+        }
+
+        // B. Check if already registered in THIS category
+        // (If explicit program not requested, we check if we need to auto-link)
+        if (!targetProgramId) {
+             const existingApp = await this.prisma.participantApplication.findFirst({
+                 where: {
+                     participantId: participant.id,
+                     program: {
+                         programCategoryId: programCategoryId
+                     }
+                 }
+             });
+
+             // Only auto-link if they have NO presence in this category yet
+             if (!existingApp) {
+                const activeProgram = await this.prisma.program.findFirst({
+                    where: {
+                        programCategoryId: programCategoryId,
+                        isActive: true, // Must be active
+                        isPublished: true, // Must be published
+                    },
+                    orderBy: {
+                        createdAt: 'desc', // Latest one
+                    },
                 });
-                if (prog) targetProgramId = prog.id;
-            }
 
-            if (targetProgramId) {
+                if (activeProgram) {
+                    targetProgramId = activeProgram.id;
+                    this.logger.log(`Auto-linking user ${user.id} to active program: ${activeProgram.name} (${activeProgram.id})`);
+                }
+             }
+        }
+
+        // Perform Registration if determined
+        if (targetProgramId) {
+             // Check if already applied to THIS specific program (idempotency check)
+             const alreadyApplied = await this.prisma.participantApplication.findUnique({
+                 where: {
+                     participantId_programId: {
+                         participantId: participant.id,
+                         programId: targetProgramId
+                     }
+                 }
+             });
+
+             if (!alreadyApplied) {
                  // Determine Default Category from Active Participation Infos
                  const participationInfos = await this.prisma.programParticipationInfo.findMany({
                      where: {
@@ -235,12 +299,12 @@ export class FirebaseLoginHandler {
                          applicationCategory: applicationCategory
                      }
                  });
-            }
-
-        } catch (e) {
-            this.logger.error(`Failed to handle post-registration logic for user ${user.id}: ${e.message}`);
-            // Non-blocking, return auth success even if referral/program link fails
+             }
         }
+
+    } catch (e) {
+        this.logger.error(`Failed to handle post-auth logic for user ${user.id}: ${e.message}`, e.stack);
+        // Non-blocking, return auth success even if referral/program link fails
     }
 
     // 7. Login Logic (Generate Tokens)

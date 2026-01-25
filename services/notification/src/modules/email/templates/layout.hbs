@@ -43,20 +43,23 @@
             max-width: 600px;
             margin: 0 auto;
             background-color: #ffffff;
-            border-radius: 12px;
+            border-radius: 8px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.1);
             overflow: hidden;
             border: 1px solid #e5e7eb;
+            border-top: 4px solid {{#if programCategory.primaryColor}}{{programCategory.primaryColor}}{{else}}#000000{{/if}};
         }
 
         /* Elements */
         .header {
-            padding: 30px 40px 10px;
+            padding: 32px 40px 24px;
             text-align: center;
+            border-bottom: 1px solid #f3f4f6;
+            background-color: #ffffff;
         }
         
         .brand-logo {
-            max-height: 50px;
+            max-height: 48px;
             width: auto;
             display: block;
             margin: 0 auto;
@@ -71,11 +74,12 @@
         }
 
         .content {
-            padding: 10px 40px 40px;
+            padding: 32px 40px 48px;
             color: #374151;
             font-size: 16px;
             line-height: 1.6;
             text-align: left;
+            background-color: #ffffff;
         }
 
         .cta-button {
@@ -83,18 +87,24 @@
             background-color: {{#if programCategory.primaryColor}}{{programCategory.primaryColor}}{{else}}#000000{{/if}};
             color: #ffffff !important;
             padding: 14px 32px;
-            border-radius: 8px;
+            border-radius: 6px;
             text-decoration: none;
             font-weight: 600;
             font-size: 16px;
             text-align: center;
-            margin-top: 24px;
+            margin-top: 32px;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            transition: opacity 0.2s ease;
+        }
+        
+        .cta-button:hover {
+            opacity: 0.9;
         }
         
         .link {
             color: {{#if programCategory.primaryColor}}{{programCategory.primaryColor}}{{else}}#2563eb{{/if}};
             text-decoration: underline;
+            font-weight: 500;
         }
         
         .break-word {
@@ -105,29 +115,46 @@
         .footer {
             max-width: 600px;
             margin: 0 auto;
-            padding: 24px 20px;
+            padding: 32px 20px;
             text-align: center;
-            color: #9ca3af;
-            font-size: 12px;
+            color: #6b7280;
+            font-size: 13px;
             line-height: 1.5;
         }
 
-        .footer a {
-            color: #6b7280;
-            text-decoration: none;
-            margin: 0 8px;
-            transition: color 0.2s;
+        .social-links {
+            margin-bottom: 24px;
         }
-        
-        .footer a:hover {
-            color: #374151;
+
+        .social-links a {
+            display: inline-block;
+            margin: 0 10px;
+            text-decoration: none;
+            color: {{#if programCategory.primaryColor}}{{programCategory.primaryColor}}{{else}}#6b7280{{/if}};
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .legal-links {
+            margin-top: 16px;
+            margin-bottom: 24px;
+            font-size: 12px;
+            color: #9ca3af;
+        }
+
+        .legal-links a {
+            color: #6b7280;
+            text-decoration: underline;
+            margin: 0 6px;
         }
 
         /* Mobile */
         @media screen and (max-width: 600px) {
-            .wrapper { padding-top: 20px; padding-bottom: 20px; }
-            .header { padding: 24px 24px 10px; }
-            .content { padding: 10px 24px 30px; }
+            .wrapper { padding-top: 0; padding-bottom: 0; background-color: #ffffff; }
+            .main-container { border: none; box-shadow: none; border-radius: 0; border-top: none; }
+            .header { padding: 24px 20px 20px; border-bottom: none; }
+            .content { padding: 0 20px 40px; }
+            .footer { padding: 20px; border-top: 1px solid #f3f4f6; }
             .cta-button { display: block; width: 100%; box-sizing: border-box; }
         }
     </style>
@@ -153,37 +180,51 @@
 
         <!-- External Footer -->
         <div class="footer">
-            <p style="margin-bottom: 12px; font-weight: 500;">
-                &copy; {{year}} {{#if programCategory.name}}{{programCategory.name}}{{else}}YBB Platform{{/if}}
-            </p>
-            
+            <!-- Social Links -->
             {{#if programCategory.socialMediaLinks}}
-            <p style="margin-bottom: 12px;">
+            <div class="social-links">
                 {{#if programCategory.socialMediaLinks.instagram}}
-                    <a href="{{programCategory.socialMediaLinks.instagram}}">Instagram</a>
+                    <a href="{{programCategory.socialMediaLinks.instagram}}" target="_blank">Instagram</a>
                 {{/if}}
                 {{#if programCategory.socialMediaLinks.facebook}}
-                    <a href="{{programCategory.socialMediaLinks.facebook}}">Facebook</a>
+                    <a href="{{programCategory.socialMediaLinks.facebook}}" target="_blank">Facebook</a>
                 {{/if}}
                 {{#if programCategory.socialMediaLinks.linkedin}}
-                    <a href="{{programCategory.socialMediaLinks.linkedin}}">LinkedIn</a>
+                    <a href="{{programCategory.socialMediaLinks.linkedin}}" target="_blank">LinkedIn</a>
                 {{/if}}
                 {{#if programCategory.socialMediaLinks.website}}
-                    <a href="{{programCategory.socialMediaLinks.website}}">Website</a>
+                    <a href="{{programCategory.socialMediaLinks.website}}" target="_blank">Website</a>
                 {{/if}}
-            </p>
+                {{#if programCategory.socialMediaLinks.tiktok}}
+                    <a href="{{programCategory.socialMediaLinks.tiktok}}" target="_blank">TikTok</a>
+                {{/if}}
+                {{#if programCategory.socialMediaLinks.youtube}}
+                    <a href="{{programCategory.socialMediaLinks.youtube}}" target="_blank">YouTube</a>
+                {{/if}}
+            </div>
             {{/if}}
 
-            <p style="max-width: 400px; margin: 0 auto 8px;">
-                You received this email because you signed up for 
-                {{#if programCategory.name}}{{programCategory.name}}{{else}}YBB Platform{{/if}}.
+            <p style="margin: 0 0 12px;">
+                You received this email because you signed up for <strong>{{#if programCategory.name}}{{programCategory.name}}{{else}}YBB Platform{{/if}}</strong>.
             </p>
             
             {{#if programCategory.contactEmail}}
-                <p style="margin: 0;">
-                    Questions? Email us at <a href="mailto:{{programCategory.contactEmail}}" style="text-decoration: underline;">{{programCategory.contactEmail}}</a>
+                <p style="margin: 0 0 16px;">
+                    Questions? Email us at <a href="mailto:{{programCategory.contactEmail}}" style="color: inherit; text-decoration: underline;">{{programCategory.contactEmail}}</a>
                 </p>
             {{/if}}
+
+            <!-- Legal Links -->
+            {{#if programCategory.website}}
+            <div class="legal-links">
+                <a href="{{programCategory.website}}/terms" target="_blank">Terms of Service</a> &bull;
+                <a href="{{programCategory.website}}/privacy" target="_blank">Privacy Policy</a>
+            </div>
+            {{/if}}
+
+            <p style="margin: 0; opacity: 0.7;">
+                &copy; {{year}} {{#if programCategory.name}}{{programCategory.name}}{{else}}YBB Platform{{/if}}. All rights reserved.
+            </p>
         </div>
     </div>
 </body>

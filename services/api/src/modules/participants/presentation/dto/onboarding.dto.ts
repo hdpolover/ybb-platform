@@ -1,11 +1,22 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+
+export enum Gender {
+  male = 'male',
+  female = 'female',
+  other = 'other',
+}
 
 export class OnboardingDto {
     @ApiProperty({ example: 'John Doe', description: 'Full name of the participant' })
     @IsString()
     @IsNotEmpty()
     fullName: string;
+
+    @ApiProperty({ example: 'male', enum: Gender, description: 'Gender of the participant' })
+    @IsEnum(Gender)
+    @IsNotEmpty()
+    gender: Gender;
 
     @ApiProperty({ example: 'ID', description: 'Origin country ISO Code (e.g. ID, US)' })
     @IsString()

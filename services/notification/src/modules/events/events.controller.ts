@@ -136,4 +136,17 @@ export class EventsController {
         }
         this.logger.log(`Received user.verify-email event FINISHED processing`);
     }
+
+    @EventPattern('user.email-verified')
+    async handleEmailVerified(@Payload() data: any) {
+        this.logger.log(`Received user.email-verified event: ${JSON.stringify(data)}`);
+
+        if (data.email) {
+            await this.emailService.sendEmailVerifiedEmail(
+                data.email,
+                data.name || 'User',
+                data.programCategory
+            );
+        }
+    }
 }
