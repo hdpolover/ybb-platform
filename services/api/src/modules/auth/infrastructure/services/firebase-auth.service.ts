@@ -12,7 +12,29 @@ export class FirebaseAuthService implements OnModuleInit {
     if (admin.apps.length === 0) {
       const projectId = this.configService.get<string>('FIREBASE_PROJECT_ID');
       const clientEmail = this.configService.get<string>('FIREBASE_CLIENT_EMAIL');
-      const privateKey = this.configService.get<string>('FIREBASE_PRIVATE_KEY')?.replace(/\\n/g, '\n');
+      const rawPrivateKey = this.configService.get<string>('FIREBASE_PRIVATE_KEY');
+      let privateKey: string | undefined;
+
+      if (rawPrivateKey) {
+        // Handle Base64 encoded private key (common in Docker environments to avoid newline issues)
+        if (!rawPrivateKey.includes('-----BEGIN PRIVATE KEY-----')) {
+          try {
+            const decoded = Buffer.from(rawPrivateKey, 'base64').toString('utf-8');
+            if (decoded.includes('-----BEGIN PRIVATE KEY-----')) {
+              privateKey = decoded;
+            } else {
+              privateKey = rawPrivateKey;
+            }
+          } catch (e) {
+             privateKey = rawPrivateKey;
+          }
+        } else {
+          privateKey = rawPrivateKey;
+        }
+
+        // Handle escaped newlines (e.g. from .env files)
+        privateKey = privateKey.replace(/\\n/g, '\n');
+      }
 
       if (projectId && clientEmail && privateKey) {
         admin.initializeApp({

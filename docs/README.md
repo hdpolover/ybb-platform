@@ -39,7 +39,7 @@ Welcome to the YBB Platform documentation. This directory contains comprehensive
 |---------|-----|
 | **Admin Dashboard** | https://admin.ybbhub.com |
 | **API Gateway** | https://api.ybbhub.com |
-| **Payment Service** | https://payment.ybbhub.com |
+| **Payment Service** | https://payments.ybbhub.com |
 | **File Service** | https://files.ybbhub.com |
 | **Notification Service** | https://notification.ybbhub.com |
 | **MinIO Console** | https://minio.ybbhub.com |

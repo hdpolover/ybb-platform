@@ -81,7 +81,7 @@ sudo certbot --nginx -d ybbhub.com \
   -d api.ybbhub.com \
   -d admin.ybbhub.com \
   -d files.ybbhub.com \
-  -d payment.ybbhub.com \
+  -d payments.ybbhub.com \
   -d minio.ybbhub.com \
   -d grafana.ybbhub.com
 ```
@@ -106,7 +106,7 @@ curl https://files.ybbhub.com/api/v1/files/health
 | Admin Dashboard | https://admin.ybbhub.com |
 | API Gateway | https://api.ybbhub.com |
 | File Service | https://files.ybbhub.com |
-| Payment Service | https://payment.ybbhub.com |
+| Payment Service | https://payments.ybbhub.com |
 | MinIO Console | https://minio.ybbhub.com |
 | Grafana | https://grafana.ybbhub.com |
 

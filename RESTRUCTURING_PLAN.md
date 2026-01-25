@@ -49,7 +49,7 @@ ybb-platform/
 ## Implementation Steps
 
 ### 1. Networking approach
-- [ ] No shared Docker network. Services will communicate via **Configured URLs** in `.env` (e.g., `PAYMENT_SERVICE_URL=http://localhost:8002` or `https://payment.ybbhub.com`).
+- [ ] No shared Docker network. Services will communicate via **Configured URLs** in `.env` (e.g., `PAYMENT_SERVICE_URL=http://localhost:8002` or `https://payments.ybbhub.com`).
 - [ ] Each service exposes its necessary ports to the host so they are reachable.
 
 ### 2. Service Isolation Execution

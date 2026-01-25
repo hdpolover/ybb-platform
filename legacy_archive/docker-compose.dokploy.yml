@@ -238,7 +238,7 @@ services:
           memory: 512M
 
   # =========================================
-  # Payment Service (Go) -> payment.ybbhub.com
+  # Payment Service (Go) -> payments.ybbhub.com
   # =========================================
   payment-service:
     build:
