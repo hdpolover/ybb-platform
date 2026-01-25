@@ -18,27 +18,32 @@ export class UpdateParticipantProfileHandler implements ICommandHandler<UpdatePa
         let participant = await this.participantRepository.findByUserId(userId);
 
         if (!participant) {
-            // If profile doesn't exist, create it.
-            // The updateDto might not have fullName if it's optional, but CREATE usually requires it.
-            // We'll enforce fullName for creation in Schema, but here we might need to fetch User to get a default name.
-            // For simplicity, we'll try to create with active data.
-
-            // Ideally we should have a CreateParticipantCommand separately, but "update" often acts as upsert for profiles.
-
-            // Assuming we can create with basic data
+            // Create with basic default if missing
             participant = await this.participantRepository.create({
                 userId,
                 ...updateDto,
                 birthdate: updateDto.birthdate ? new Date(updateDto.birthdate) : undefined,
-                fullName: updateDto.fullName || 'New Participant', // Fallback
+                fullName: updateDto.fullName || 'New Participant',
+                profileCompletionPercentage: 0,
             });
-        } else {
-            const updateData: any = { ...updateDto };
-            if (updateData.birthdate) {
-                updateData.birthdate = new Date(updateData.birthdate);
-            }
-            participant = await this.participantRepository.update(userId, updateData);
         }
+
+        // Prepare Update Data
+        const updateData: any = { ...updateDto };
+        if (updateData.birthdate) {
+            updateData.birthdate = new Date(updateData.birthdate);
+        }
+
+        // Calculate New Completion Score
+        // We merge existing data with the update to check total completeness
+        const mergedData = { ...participant, ...updateData };
+        const newScore = this.calculateCompletionPercentage(mergedData);
+
+        // Apply metadata updates
+        updateData.profileCompletionPercentage = newScore;
+        updateData.lastProfileUpdate = new Date(); // Track when it was last updated
+
+        participant = await this.participantRepository.update(userId, updateData);
 
         // Return updated DTO
         return {
@@ -61,7 +66,37 @@ export class UpdateParticipantProfileHandler implements ICommandHandler<UpdatePa
             linkedinUrl: participant.linkedinUrl ?? undefined,
             tshirtSize: participant.tshirtSize ?? undefined,
             dietaryRestrictions: participant.dietaryRestrictions ?? undefined,
+            emergencyContactName: participant.emergencyContactName ?? undefined,
+            emergencyContactRelation: participant.emergencyContactRelation ?? undefined,
+            emergencyContactPhone: participant.emergencyContactPhone ?? undefined,
+            emergencyContactCountryCode: participant.emergencyContactCountryCode ?? undefined,
             profileCompletionPercentage: participant.profileCompletionPercentage ?? 0,
         };
+    }
+
+    private calculateCompletionPercentage(data: any): number {
+        let score = 20; // Base score for Onboarding (Name, Origin, etc.)
+
+        // 1. Personal Details (+20%)
+        if (data.birthdate) score += 5;
+        if (data.gender) score += 5;
+        if (data.phoneNumber) score += 5;
+        if (data.nationality) score += 5;
+
+        // 2. Location (+20%)
+        if (data.currentCity) score += 10;
+        if (data.currentCountry) score += 10;
+
+        // 3. Education / Work (+20%)
+        if (data.institution) score += 10;
+        if (data.major || data.occupation) score += 10;
+
+        // 4. Socials (+10%)
+        if (data.instagramUsername || data.linkedinUrl) score += 10;
+
+        // 5. Emergency Contact (+10%)
+        if (data.emergencyContactName && data.emergencyContactPhone) score += 10;
+
+        return Math.min(score, 100);
     }
 }

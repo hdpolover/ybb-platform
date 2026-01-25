@@ -180,12 +180,32 @@ export class EmailService {
     }
 
     async sendWelcomeEmail(to: string, name: string, programCategory?: any) {
+        let baseUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
+        if (programCategory?.websiteUrl) {
+            baseUrl = programCategory.websiteUrl.replace(/\/$/, '');
+        }
+
         const html = await this.compileTemplate('welcome', {
             name,
-            loginUrl: this.configService.get('FRONTEND_URL') || 'http://localhost:3000/login',
+            loginUrl: `${baseUrl}/login`,
             programCategory,
         });
         const subject = programCategory ? `Welcome to ${programCategory.name}` : 'Welcome to YBB Platform';
+        return this.sendRawEmail(to, subject, html);
+    }
+
+    async sendEmailVerifiedEmail(to: string, name: string, programCategory?: any) {
+        let baseUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
+        if (programCategory?.websiteUrl) {
+            baseUrl = programCategory.websiteUrl.replace(/\/$/, '');
+        }
+        
+        const html = await this.compileTemplate('email-verified', {
+            name,
+            loginUrl: `${baseUrl}/login`,
+            programCategory,
+        });
+        const subject = programCategory ? `Email Verified - ${programCategory.name}` : 'Email Verified';
         return this.sendRawEmail(to, subject, html);
     }
 

@@ -2,12 +2,14 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { VerifyEmailCommand } from '../verify-email.command';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
 import { AuthLoggingService } from '../../services/auth-logging.service';
+import { RabbitMQProducerService } from '../../../../../shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 
 @Injectable()
 export class VerifyEmailHandler {
   constructor(
     private readonly prisma: PrismaService,
     private readonly authLoggingService: AuthLoggingService,
+    private readonly rabbitmqProducer: RabbitMQProducerService,
   ) {}
 
   async execute(command: VerifyEmailCommand): Promise<{ success: boolean; message: string }> {
@@ -24,6 +26,11 @@ export class VerifyEmailHandler {
       throw new BadRequestException('Invalid or expired verification token');
     }
 
+    // Fetch Program Category for email context
+    const programCategory = await this.prisma.programCategory.findUnique({
+      where: { id: user.programCategoryId },
+    });
+
     await this.prisma.user.update({
       where: { id: user.id },
       data: {
@@ -35,10 +42,6 @@ export class VerifyEmailHandler {
     });
     
     // Also update Participant if exists
-    // But we don't have direct link easily unless we query
-    // Wait, we have user.id
-    
-    // We can try to update participant if it exists
     try {
         await this.prisma.participant.update({
             where: { userId: user.id },
@@ -53,6 +56,32 @@ export class VerifyEmailHandler {
       command.ipAddress || '0.0.0.0',
       command.userAgent || 'unknown',
     );
+
+    // Emit user.registered to send Welcome Email (delayed until verification)
+    this.rabbitmqProducer.emit('user.registered', {
+      email: user.email,
+      name: user.email.split('@')[0],
+      programCategory: programCategory ? {
+          name: programCategory.name,
+          logoUrl: programCategory.logoUrl,
+          primaryColor: programCategory.primaryColor,
+          websiteUrl: programCategory.websiteUrl,
+          socialMediaLinks: programCategory.socialMediaLinks,
+      } : undefined,
+    });
+
+    // Emit user.email-verified for explicit confirmation
+    this.rabbitmqProducer.emit('user.email-verified', {
+        email: user.email,
+        name: user.email.split('@')[0],
+        programCategory: programCategory ? {
+            name: programCategory.name,
+            logoUrl: programCategory.logoUrl,
+            primaryColor: programCategory.primaryColor,
+            websiteUrl: programCategory.websiteUrl,
+            socialMediaLinks: programCategory.socialMediaLinks,
+        } : undefined,
+    });
 
     return { success: true, message: 'Email successfully verified' };
   }

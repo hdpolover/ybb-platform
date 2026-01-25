@@ -1,22 +1,39 @@
-<h2>Payment Failed</h2>
+<div style="text-align: center;">
+    <div style="width: 64px; height: 64px; background-color: #fee2e2; border-radius: 50%; margin: 0 auto 24px; display: flex; align-items: center; justify-content: center;">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="15" y1="9" x2="9" y2="15"></line>
+            <line x1="9" y1="9" x2="15" y2="15"></line>
+        </svg>
+    </div>
 
-<p>Hi {{name}},</p>
-<p>We were unable to process your payment for the following transaction:</p>
+    <h2 style="font-size: 24px; font-weight: 700; color: #111827; margin: 0 0 8px;">
+        Payment Failed
+    </h2>
+    <p style="font-size: 16px; color: #6b7280; margin: 0 0 32px;">
+        We couldn't process your payment
+    </p>
 
-<div style="background-color: #fee2e2; padding: 16px; border-radius: 8px; margin: 16px 0; color: #991b1b;">
-    <p style="margin: 4px 0;"><strong>Order ID:</strong> {{orderId}}</p>
-    <p style="margin: 4px 0;"><strong>Amount:</strong> {{currency}} {{amount}}</p>
-    <p style="margin: 4px 0;"><strong>Date:</strong> {{date}}</p>
-    {{#if reason}}
-    <p style="margin: 12px 0 4px; font-weight: 600;">Reason:</p>
-    <p style="margin: 0;">{{reason}}</p>
-    {{/if}}
-</div>
+    <div style="background-color: #fff1f2; border: 1px solid #fecaca; border-radius: 8px; padding: 16px; text-align: left; margin-bottom: 24px;">
+        <p style="font-size: 14px; color: #991b1b; margin: 0;">
+            <strong>Reason:</strong> {{reason}}
+        </p>
+    </div>
 
-<p>Please try again with a different payment method or contact your bank.</p>
+    <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 24px; text-align: left; margin-bottom: 32px;">
+         <table style="width: 100%; font-size: 14px; color: #374151;">
+            <tr>
+                <td style="padding-bottom: 8px; color: #6b7280;">Amount Attempted</td>
+                <td style="padding-bottom: 8px; text-align: right; font-weight: 600;">{{currency}} {{amount}}</td>
+            </tr>
+            <tr>
+                <td style="padding-bottom: 0px; color: #6b7280;">Order ID</td>
+                <td style="padding-bottom: 0px; text-align: right; font-family: monospace;">{{orderId}}</td>
+            </tr>
+        </table>
+    </div>
 
-<div style="text-align: center; margin-top: 30px;">
-    {{#if retryUrl}}
-    <a href="{{retryUrl}}" class="cta-button">Retry Payment</a>
-    {{/if}}
+    <a href="{{retryUrl}}" class="cta-button">
+        Try Payment Again
+    </a>
 </div>

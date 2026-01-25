@@ -1,16 +1,22 @@
-<h1>Payment Refunded</h1>
+<div style="text-align: center;">
+    <h2 style="font-size: 24px; font-weight: 700; color: #111827; margin: 0 0 24px;">
+        Refund Initiated
+    </h2>
 
-<p>Hi {{name}},</p>
+    <p style="font-size: 16px; color: #4b5563; margin-bottom: 24px;">
+        Hi {{name}},
+    </p>
 
-<p>A refund has been processed for your payment of <strong>{{amount}} {{currency}}</strong>.</p>
+    <p style="font-size: 16px; color: #4b5563; margin-bottom: 32px; line-height: 1.6;">
+        A refund of <strong>{{currency}} {{amount}}</strong> has been initiated for your recent payment.
+    </p>
 
-<p><strong>Refund Details:</strong></p>
-<ul>
-    <li>Order ID: {{orderId}}</li>
-    <li>Refund Date: {{date}}</li>
-    <li>Original Description: {{description}}</li>
-</ul>
+    <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; text-align: left; margin-bottom: 24px; max-width: 400px; margin-left: auto; margin-right: auto;">
+         <p style="font-size: 14px; color: #6b7280; margin: 0 0 4px;">Original Order ID</p>
+         <p style="font-size: 16px; font-weight: 500; color: #111827; margin: 0; font-family: monospace;">{{orderId}}</p>
+    </div>
 
-<p>The funds should appear in your account within 5-10 business days, depending on your bank.</p>
-
-<p>If you have any questions, please contact our support.</p>
+    <p style="font-size: 14px; color: #6b7280;">
+        Refunds typically take 5-10 business days to appear on your statement, depending on your bank.
+    </p>
+</div>

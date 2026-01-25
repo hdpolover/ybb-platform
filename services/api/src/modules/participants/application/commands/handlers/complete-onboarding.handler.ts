@@ -26,6 +26,7 @@ export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboar
                 create: {
                     userId,
                     fullName: dto.fullName,
+                    gender: dto.gender as Gender,
                     originCountry: country.isoCode, // Ensure we save the standardized code
                     knowledgeSource: dto.knowledgeSource,
                     referralCode: dto.referralCode,
@@ -35,14 +36,25 @@ export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboar
                 },
                 update: {
                     fullName: dto.fullName,
+                    gender: dto.gender as Gender,
                     originCountry: country.isoCode,
                     knowledgeSource: dto.knowledgeSource,
                     // Only set profileCompletedAt if it wasn't set before
                     profileCompletedAt: new Date(), 
                     // Only bump percentage if it was 0
                     profileCompletionPercentage: { set: 20 },
+                    lastProfileUpdate: new Date(),
                 },
             });
+
+            // 1. Sync User Data to Participant (Email Verified Status)
+            const user = await tx.user.findUnique({ where: { id: userId } });
+            if (user && user.emailVerifiedAt && !participant.emailVerifiedAt) {
+                 participant = await tx.participant.update({
+                     where: { id: participant.id },
+                     data: { emailVerifiedAt: user.emailVerifiedAt }
+                 });
+            }
 
             // Handle Referral Logic if provided
             if (dto.referralCode) {

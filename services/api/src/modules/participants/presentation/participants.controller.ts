@@ -45,10 +45,11 @@ export class ParticipantsController {
     async getMyProfile(
         @CurrentUser() user: any,
     ): Promise<ParticipantResponseDto> {
-        if (!user || !user.id) {
+        const userId = user?.userId || user?.id;
+        if (!userId) {
             throw new UnauthorizedException();
         }
-        return this.queryBus.execute(new GetMyParticipantProfileQuery(user.id));
+        return this.queryBus.execute(new GetMyParticipantProfileQuery(userId));
     }
 
     @Post('onboarding')
@@ -62,11 +63,12 @@ export class ParticipantsController {
         @CurrentUser() user: any,
         @Body() dto: OnboardingDto,
     ): Promise<ParticipantResponseDto> {
-        if (!user || !user.id) {
+        const userId = user?.userId || user?.id;
+        if (!userId) {
             throw new UnauthorizedException();
         }
         return this.commandBus.execute(
-            new CompleteOnboardingCommand(user.id, dto),
+            new CompleteOnboardingCommand(userId, dto),
         );
     }
 
@@ -81,11 +83,12 @@ export class ParticipantsController {
         @CurrentUser() user: any,
         @Body() updateDto: UpdateParticipantProfileDto,
     ): Promise<ParticipantResponseDto> {
-        if (!user || !user.id) {
+        const userId = user?.userId || user?.id;
+        if (!userId) {
             throw new UnauthorizedException();
         }
         return this.commandBus.execute(
-            new UpdateParticipantProfileCommand(user.id, updateDto),
+            new UpdateParticipantProfileCommand(userId, updateDto),
         );
     }
 
@@ -96,8 +99,9 @@ export class ParticipantsController {
         @CurrentUser() user: any,
         @Body() dto: ApplyAmbassadorDto,
     ): Promise<any> {
-        if (!user || !user.id) throw new UnauthorizedException();
-        return this.commandBus.execute(new ApplyAmbassadorCommand(user.id, dto));
+        const userId = user?.userId || user?.id;
+        if (!userId) throw new UnauthorizedException();
+        return this.commandBus.execute(new ApplyAmbassadorCommand(userId, dto));
     }
 
     @Get('ambassador/dashboard')
@@ -106,7 +110,8 @@ export class ParticipantsController {
     async getAmbassadorDashboard(
         @CurrentUser() user: any,
     ): Promise<AmbassadorDashboardDto> {
-        if (!user || !user.id) throw new UnauthorizedException();
-        return this.queryBus.execute(new GetAmbassadorDashboardQuery(user.id));
+        const userId = user?.userId || user?.id;
+        if (!userId) throw new UnauthorizedException();
+        return this.queryBus.execute(new GetAmbassadorDashboardQuery(userId));
     }
 }
