@@ -99,7 +99,7 @@ export class GetParticipantProgressHandler implements IQueryHandler<GetParticipa
           case TimelineCompletionType.payment_completed:
             const payConfig = step.completionConfig as { feeType: string };
             if (payConfig?.feeType) {
-              const hasPaid = application.paymentStatus === 'paid'; // Temporary fix until cross-service logic implemented
+              const hasPaid = application.registrationPaymentStatus === 'paid' || application.programPaymentStatus === 'paid';
               /*
               const hasPaid = application.transactions.some(
                 (t) => t.pricingTier?.feeType === payConfig.feeType

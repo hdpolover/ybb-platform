@@ -120,9 +120,11 @@ model ParticipantApplication {
   programPaymentStatus      PaymentStatus @default(unpaid) @map("program_payment_status")
 
   ticketStatus        String               @default("regular") @map("ticket_status")
-  referralCode        String?              @map("referral_code") @db.VarChar(50)
-  applicationCategory ApplicationCategory? @map("application_category")
-  submittedAt         DateTime?            @map("submission_date") @db.Timestamptz(6)
+  referralCode          String?                       @map("referral_code") @db.VarChar(50)
+  applicationCategory   ApplicationCategory?          @map("application_category")
+  participationCategoryId String?                     @map("participation_category_id") @db.Uuid
+  participationCategory ProgramParticipationCategory? @relation(fields: [participationCategoryId], references: [id])
+  submittedAt           DateTime?                     @map("submission_date") @db.Timestamptz(6)
 
   // Application Data (Flexible Store)
   personalData  Json @default("{}") @map("personal_data") @db.Json

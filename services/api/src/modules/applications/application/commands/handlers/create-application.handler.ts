@@ -42,6 +42,9 @@ export class CreateApplicationHandler {
       command.programId,
       ApplicationStatus.DRAFT,
       command.applicationCategory,
+      {}, // personalData
+      {}, // essayAnswers
+      {}, // uploadedFiles
       command.motivationLetter,
       command.achievements,
       command.experiences,

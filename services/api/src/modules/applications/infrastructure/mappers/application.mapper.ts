@@ -25,6 +25,11 @@ export class ApplicationMapper {
       prismaModel.programId,
       prismaModel.status as ApplicationStatus,
       prismaModel.applicationCategory as ApplicationCategory,
+      // Map New JSON Fields
+      prismaModel.personalData || {},
+      prismaModel.essayAnswers || {},
+      prismaModel.uploadedFiles || {},
+      
       prismaModel.motivationLetter,
       prismaModel.achievements,
       prismaModel.experiences,

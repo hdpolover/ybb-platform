@@ -54,6 +54,11 @@ export class ParticipantApplication {
     public readonly programId: string,
     public status: ApplicationStatus,
     public applicationCategory?: ApplicationCategory,
+    // New JSON Fields
+    public personalData: Record<string, any> = {},
+    public essayAnswers: Record<string, any> = {},
+    public uploadedFiles: Record<string, any> = {},
+
     public motivationLetter?: string,
     public achievements?: string,
     public experiences?: string,
