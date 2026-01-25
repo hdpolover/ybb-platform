@@ -40,6 +40,12 @@ const PROGRAM_ID_MAP: Record<string, string> = {};
 export async function seedFromCSV() {
   log('📂 Seeding from CSV migration data...');
 
+  if (!fs.existsSync(MIGRATION_DIR)) {
+    console.warn(`⚠️  MIGRATION_DIR not found at ${MIGRATION_DIR}`);
+    console.warn('   Skipping CSV seeding. This is expected in production if CSVs are not deployed.');
+    return;
+  }
+
   try {
     // 1. Seed Categories (Brands)
     log('  - Seeding Brands (Categories)...');
