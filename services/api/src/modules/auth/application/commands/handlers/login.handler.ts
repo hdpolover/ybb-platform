@@ -147,6 +147,11 @@ export class LoginHandler {
             provider: true,
           },
         },
+        admin: {
+          include: {
+            adminProgramCategories: true
+          }
+        },
       },
     });
 
@@ -216,12 +221,25 @@ export class LoginHandler {
       });
     }
 
+    // Determine roles
+    const roles: string[] = [];
+    if (user.admin) {
+      roles.push('admin');
+      const brandRole = user.admin.adminProgramCategories.find(
+        (apc) => apc.programCategoryId === user.programCategoryId,
+      );
+      if (brandRole && brandRole.roleInBrand) {
+        roles.push(brandRole.roleInBrand);
+      }
+    }
+
     // Generate JWT tokens with unique JTI for blacklisting support
     const accessTokenPayload = {
       sub: user.id,
       email: user.email,
       programCategoryId: user.programCategoryId,
       jti: randomUUID(), // Unique token ID for blacklisting
+      roles: roles,
     };
 
     const refreshTokenPayload = {

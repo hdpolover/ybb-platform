@@ -10,6 +10,7 @@ export interface JwtPayload {
   programCategoryId: string;
   jti?: string; // JWT unique token ID for blacklisting
   exp?: number; // Token expiration timestamp
+  roles?: string[]; // Roles from token
 }
 
 @Injectable()
@@ -43,6 +44,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       programCategoryId: payload.programCategoryId,
       jti: payload.jti,
       exp: payload.exp,
+      role: payload.roles || [], // Map roles to role for RolesGuard compatibility
     };
   }
 }

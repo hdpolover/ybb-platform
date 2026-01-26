@@ -277,6 +277,7 @@ func setupRouter(paymentHandler *handlers.PaymentHandler, paymentMethodHandler *
 		methods := v1.Group("/payment-methods")
 		{
 			methods.GET("", paymentMethodHandler.GetAll)
+			methods.GET("/:id", paymentMethodHandler.GetByID)
 			methods.POST("", paymentMethodHandler.Create)
 			methods.PUT("/:id", paymentMethodHandler.Update)
 			methods.DELETE("/:id", paymentMethodHandler.Delete)

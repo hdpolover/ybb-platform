@@ -6,6 +6,7 @@ import { AuthModule } from '../auth/auth.module';
 import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.module';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { PaymentsController } from './presentation/payments.controller';
+import { PaymentAdminController } from './presentation/payment-admin.controller';
 import { PaymentEventsController } from './presentation/payment-events.controller';
 import { WebhooksController } from './presentation/webhooks.controller';
 import { PaymentRepository } from './infrastructure/persistence/payment.repository';
@@ -22,7 +23,7 @@ import { ProcessPaymentHandler } from './application/commands/handlers/process-p
         HttpModule,
         ConfigModule,
     ],
-    controllers: [PaymentsController, PaymentEventsController, WebhooksController],
+    controllers: [PaymentsController, PaymentAdminController, PaymentEventsController, WebhooksController],
     providers: [
         {
             provide: 'IPaymentRepository',
