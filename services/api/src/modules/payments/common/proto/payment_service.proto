@@ -20,6 +20,13 @@ service PaymentService {
 
   // Get intents by reference
   rpc GetIntentsByReference (GetIntentsByReferenceRequest) returns (GetIntentsByReferenceResponse) {}
+
+  // Admin: Payment Method Management
+  rpc AdminCreatePaymentMethod (AdminCreatePaymentMethodRequest) returns (AdminCreatePaymentMethodResponse) {}
+  rpc AdminUpdatePaymentMethod (AdminUpdatePaymentMethodRequest) returns (AdminUpdatePaymentMethodResponse) {}
+  rpc AdminDeletePaymentMethod (AdminDeletePaymentMethodRequest) returns (AdminDeletePaymentMethodResponse) {}
+  rpc AdminGetPaymentMethod (AdminGetPaymentMethodRequest) returns (AdminGetPaymentMethodResponse) {}
+  rpc AdminListPaymentMethods (AdminListPaymentMethodsRequest) returns (AdminListPaymentMethodsResponse) {}
 }
 
 message GetIntentsByReferenceRequest {
@@ -37,6 +44,23 @@ message PaymentIntent {
   string reference_type = 7;
   string reference_id = 8;
   map<string, string> metadata = 9;
+
+  // Snapshots of customer/item details
+  string customer_name = 10;
+  string customer_email = 11;
+  string customer_phone = 12;
+  string description = 13;
+  repeated ItemDetail item_details = 14;
+}
+
+message ItemDetail {
+    string id = 1;
+    string name = 2;
+    int64 price = 3;
+    int32 quantity = 4;
+    string brand = 5;
+    string category = 6;
+    string merchant_name = 7;
 }
 
 message GetIntentsByReferenceResponse {
@@ -51,6 +75,15 @@ message CreateIntentRequest {
   string reference_type = 5;
   string reference_id = 6;
   map<string, string> metadata = 7;
+
+  // Customer Info
+  string customer_name = 8;
+  string customer_email = 9;
+  string customer_phone = 10;
+
+  // Item Details
+  string description = 11;
+  repeated ItemDetail item_details = 12;
 }
 
 message CreateIntentResponse {
@@ -92,6 +125,10 @@ message PaymentMethod {
   string name = 2;
   string category = 3; // e.g., "bank_transfer", "credit_card", "ewallet"
   string image_url = 4;
+  
+  // Fee details for user display
+  double estimated_fee = 5; 
+  bool is_surcharge = 6; // If true, UI should show "Fee: X" and "Total: Amount + Fee"
 }
 
 message GetPaymentMethodsResponse {
@@ -120,4 +157,108 @@ message ProcessPaymentResponse {
   string status = 1; // "PENDING", "SUCCESS", "FAILED"
   string transaction_id = 2;
   ProcessPaymentAction action = 3;
+}
+
+message FeeConfig {
+  double fixed_fee = 1;
+  double percentage_fee = 2;
+  double min_fee = 3;
+  string currency = 4;
+  bool is_surcharge = 5;
+}
+
+message AdminPaymentMethod {
+  string id = 1;
+  string name = 2; // Internal name
+  string type = 3; // "automatic", "manual"
+  string code = 4; // "bca_va"
+  bool is_active = 5;
+  string display_name = 6;
+  string description = 7;
+  string icon = 8;
+  
+  string gateway_name = 9; // "midtrans"
+  string gateway_type = 10; // "bank_transfer"
+
+  // Manual fields
+  string bank_name = 11;
+  string account_number = 12;
+  string account_name = 13;
+  string instructions = 14;
+  bool requires_proof = 15;
+  string admin_instructions = 16;
+
+  FeeConfig config = 17;
+  int32 sort_order = 18;
+}
+
+message AdminCreatePaymentMethodRequest {
+  string name = 1;
+  string type = 2;
+  string code = 3;
+  bool is_active = 4;
+  string display_name = 5;
+  string description = 6;
+  string icon = 7;
+  string gateway_name = 8;
+  string gateway_type = 9;
+  string bank_name = 10;
+  string account_number = 11;
+  string account_name = 12;
+  string instructions = 13;
+  bool requires_proof = 14;
+  string admin_instructions = 15;
+  FeeConfig config = 16;
+  int32 sort_order = 17;
+}
+
+message AdminCreatePaymentMethodResponse {
+  string id = 1;
+}
+
+message AdminUpdatePaymentMethodRequest {
+  string id = 1;
+  string name = 2;
+  string type = 3;
+  string code = 4;
+  bool is_active = 5;
+  string display_name = 6;
+  string description = 7;
+  string icon = 8;
+  string gateway_name = 9;
+  string gateway_type = 10;
+  string bank_name = 11;
+  string account_number = 12;
+  string account_name = 13;
+  string instructions = 14;
+  bool requires_proof = 15;
+  string admin_instructions = 16;
+  FeeConfig config = 17;
+  int32 sort_order = 18;
+}
+
+message AdminUpdatePaymentMethodResponse {
+  string id = 1;
+}
+
+message AdminDeletePaymentMethodRequest {
+  string id = 1;
+}
+
+message AdminDeletePaymentMethodResponse {
+  bool success = 1;
+}
+
+message AdminGetPaymentMethodRequest {
+  string id = 1;
+}
+
+message AdminGetPaymentMethodResponse {
+  AdminPaymentMethod method = 1;
+}
+
+message AdminListPaymentMethodsRequest {}
+
+message AdminListPaymentMethodsResponse {
+  repeated AdminPaymentMethod methods = 1;
 }

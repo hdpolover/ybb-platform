@@ -7,6 +7,13 @@ export interface PaymentService {
   GetIntentsByReference(req: GetIntentsByReferenceRequest): Observable<GetIntentsByReferenceResponse>;
   SubmitManualPayment(req: SubmitManualPaymentRequest): Observable<SubmitManualPaymentResponse>;
   VerifyManualPayment(req: VerifyManualPaymentRequest): Observable<VerifyManualPaymentResponse>;
+
+  // Admin Methods
+  AdminCreatePaymentMethod(req: AdminCreatePaymentMethodRequest): Observable<AdminCreatePaymentMethodResponse>;
+  AdminUpdatePaymentMethod(req: AdminUpdatePaymentMethodRequest): Observable<AdminUpdatePaymentMethodResponse>;
+  AdminDeletePaymentMethod(req: AdminDeletePaymentMethodRequest): Observable<AdminDeletePaymentMethodResponse>;
+  AdminGetPaymentMethod(req: AdminGetPaymentMethodRequest): Observable<AdminGetPaymentMethodResponse>;
+  AdminListPaymentMethods(req: AdminListPaymentMethodsRequest): Observable<AdminListPaymentMethodsResponse>;
 }
 
 export interface SubmitManualPaymentRequest {
@@ -51,4 +58,104 @@ export interface PaymentIntent {
 
 export interface GetIntentsByReferenceResponse {
   intents: PaymentIntent[];
+}
+
+export interface FeeConfig {
+  fixed_fee: number;
+  percentage_fee: number;
+  min_fee: number;
+  currency: string;
+  is_surcharge: boolean;
+}
+
+export interface AdminPaymentMethod {
+  id: string;
+  name: string;
+  type: string;
+  code: string;
+  is_active: boolean;
+  display_name: string;
+  description: string;
+  icon: string;
+  gateway_name: string;
+  gateway_type: string;
+  bank_name: string;
+  account_number: string;
+  account_name: string;
+  instructions: string;
+  requires_proof: boolean;
+  admin_instructions: string;
+  config?: FeeConfig;
+  sort_order: number;
+}
+
+export interface AdminCreatePaymentMethodRequest {
+  name: string;
+  type: string;
+  code: string;
+  is_active: boolean;
+  display_name: string;
+  description: string;
+  icon: string;
+  gateway_name: string;
+  gateway_type: string;
+  bank_name: string;
+  account_number: string;
+  account_name: string;
+  instructions: string;
+  requires_proof: boolean;
+  admin_instructions: string;
+  config?: FeeConfig;
+  sort_order: number;
+}
+
+export interface AdminCreatePaymentMethodResponse {
+  id: string;
+}
+
+export interface AdminUpdatePaymentMethodRequest {
+  id: string;
+  name: string;
+  type: string;
+  code: string;
+  is_active: boolean;
+  display_name: string;
+  description: string;
+  icon: string;
+  gateway_name: string;
+  gateway_type: string;
+  bank_name: string;
+  account_number: string;
+  account_name: string;
+  instructions: string;
+  requires_proof: boolean;
+  admin_instructions: string;
+  config?: FeeConfig;
+  sort_order: number;
+}
+
+export interface AdminUpdatePaymentMethodResponse {
+  id: string;
+}
+
+export interface AdminDeletePaymentMethodRequest {
+  id: string;
+}
+
+export interface AdminDeletePaymentMethodResponse {
+  success: boolean;
+}
+
+export interface AdminGetPaymentMethodRequest {
+  id: string;
+}
+
+export interface AdminGetPaymentMethodResponse {
+  method: AdminPaymentMethod;
+}
+
+export interface AdminListPaymentMethodsRequest {}
+
+export interface AdminListPaymentMethodsResponse {
+  methods: AdminPaymentMethod[];
 }
