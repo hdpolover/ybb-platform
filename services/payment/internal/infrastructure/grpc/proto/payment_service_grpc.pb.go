@@ -19,12 +19,17 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	PaymentService_CreateIntent_FullMethodName          = "/payment.PaymentService/CreateIntent"
-	PaymentService_GetPaymentMethods_FullMethodName     = "/payment.PaymentService/GetPaymentMethods"
-	PaymentService_ProcessPayment_FullMethodName        = "/payment.PaymentService/ProcessPayment"
-	PaymentService_SubmitManualPayment_FullMethodName   = "/payment.PaymentService/SubmitManualPayment"
-	PaymentService_VerifyManualPayment_FullMethodName   = "/payment.PaymentService/VerifyManualPayment"
-	PaymentService_GetIntentsByReference_FullMethodName = "/payment.PaymentService/GetIntentsByReference"
+	PaymentService_CreateIntent_FullMethodName             = "/payment.PaymentService/CreateIntent"
+	PaymentService_GetPaymentMethods_FullMethodName        = "/payment.PaymentService/GetPaymentMethods"
+	PaymentService_ProcessPayment_FullMethodName           = "/payment.PaymentService/ProcessPayment"
+	PaymentService_SubmitManualPayment_FullMethodName      = "/payment.PaymentService/SubmitManualPayment"
+	PaymentService_VerifyManualPayment_FullMethodName      = "/payment.PaymentService/VerifyManualPayment"
+	PaymentService_GetIntentsByReference_FullMethodName    = "/payment.PaymentService/GetIntentsByReference"
+	PaymentService_AdminCreatePaymentMethod_FullMethodName = "/payment.PaymentService/AdminCreatePaymentMethod"
+	PaymentService_AdminUpdatePaymentMethod_FullMethodName = "/payment.PaymentService/AdminUpdatePaymentMethod"
+	PaymentService_AdminDeletePaymentMethod_FullMethodName = "/payment.PaymentService/AdminDeletePaymentMethod"
+	PaymentService_AdminGetPaymentMethod_FullMethodName    = "/payment.PaymentService/AdminGetPaymentMethod"
+	PaymentService_AdminListPaymentMethods_FullMethodName  = "/payment.PaymentService/AdminListPaymentMethods"
 )
 
 // PaymentServiceClient is the client API for PaymentService service.
@@ -42,6 +47,12 @@ type PaymentServiceClient interface {
 	VerifyManualPayment(ctx context.Context, in *VerifyManualPaymentRequest, opts ...grpc.CallOption) (*VerifyManualPaymentResponse, error)
 	// Get intents by reference
 	GetIntentsByReference(ctx context.Context, in *GetIntentsByReferenceRequest, opts ...grpc.CallOption) (*GetIntentsByReferenceResponse, error)
+	// Admin: Payment Method Management
+	AdminCreatePaymentMethod(ctx context.Context, in *AdminCreatePaymentMethodRequest, opts ...grpc.CallOption) (*AdminCreatePaymentMethodResponse, error)
+	AdminUpdatePaymentMethod(ctx context.Context, in *AdminUpdatePaymentMethodRequest, opts ...grpc.CallOption) (*AdminUpdatePaymentMethodResponse, error)
+	AdminDeletePaymentMethod(ctx context.Context, in *AdminDeletePaymentMethodRequest, opts ...grpc.CallOption) (*AdminDeletePaymentMethodResponse, error)
+	AdminGetPaymentMethod(ctx context.Context, in *AdminGetPaymentMethodRequest, opts ...grpc.CallOption) (*AdminGetPaymentMethodResponse, error)
+	AdminListPaymentMethods(ctx context.Context, in *AdminListPaymentMethodsRequest, opts ...grpc.CallOption) (*AdminListPaymentMethodsResponse, error)
 }
 
 type paymentServiceClient struct {
@@ -112,6 +123,56 @@ func (c *paymentServiceClient) GetIntentsByReference(ctx context.Context, in *Ge
 	return out, nil
 }
 
+func (c *paymentServiceClient) AdminCreatePaymentMethod(ctx context.Context, in *AdminCreatePaymentMethodRequest, opts ...grpc.CallOption) (*AdminCreatePaymentMethodResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AdminCreatePaymentMethodResponse)
+	err := c.cc.Invoke(ctx, PaymentService_AdminCreatePaymentMethod_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *paymentServiceClient) AdminUpdatePaymentMethod(ctx context.Context, in *AdminUpdatePaymentMethodRequest, opts ...grpc.CallOption) (*AdminUpdatePaymentMethodResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AdminUpdatePaymentMethodResponse)
+	err := c.cc.Invoke(ctx, PaymentService_AdminUpdatePaymentMethod_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *paymentServiceClient) AdminDeletePaymentMethod(ctx context.Context, in *AdminDeletePaymentMethodRequest, opts ...grpc.CallOption) (*AdminDeletePaymentMethodResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AdminDeletePaymentMethodResponse)
+	err := c.cc.Invoke(ctx, PaymentService_AdminDeletePaymentMethod_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *paymentServiceClient) AdminGetPaymentMethod(ctx context.Context, in *AdminGetPaymentMethodRequest, opts ...grpc.CallOption) (*AdminGetPaymentMethodResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AdminGetPaymentMethodResponse)
+	err := c.cc.Invoke(ctx, PaymentService_AdminGetPaymentMethod_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *paymentServiceClient) AdminListPaymentMethods(ctx context.Context, in *AdminListPaymentMethodsRequest, opts ...grpc.CallOption) (*AdminListPaymentMethodsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AdminListPaymentMethodsResponse)
+	err := c.cc.Invoke(ctx, PaymentService_AdminListPaymentMethods_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PaymentServiceServer is the server API for PaymentService service.
 // All implementations must embed UnimplementedPaymentServiceServer
 // for forward compatibility.
@@ -127,6 +188,12 @@ type PaymentServiceServer interface {
 	VerifyManualPayment(context.Context, *VerifyManualPaymentRequest) (*VerifyManualPaymentResponse, error)
 	// Get intents by reference
 	GetIntentsByReference(context.Context, *GetIntentsByReferenceRequest) (*GetIntentsByReferenceResponse, error)
+	// Admin: Payment Method Management
+	AdminCreatePaymentMethod(context.Context, *AdminCreatePaymentMethodRequest) (*AdminCreatePaymentMethodResponse, error)
+	AdminUpdatePaymentMethod(context.Context, *AdminUpdatePaymentMethodRequest) (*AdminUpdatePaymentMethodResponse, error)
+	AdminDeletePaymentMethod(context.Context, *AdminDeletePaymentMethodRequest) (*AdminDeletePaymentMethodResponse, error)
+	AdminGetPaymentMethod(context.Context, *AdminGetPaymentMethodRequest) (*AdminGetPaymentMethodResponse, error)
+	AdminListPaymentMethods(context.Context, *AdminListPaymentMethodsRequest) (*AdminListPaymentMethodsResponse, error)
 	mustEmbedUnimplementedPaymentServiceServer()
 }
 
@@ -154,6 +221,21 @@ func (UnimplementedPaymentServiceServer) VerifyManualPayment(context.Context, *V
 }
 func (UnimplementedPaymentServiceServer) GetIntentsByReference(context.Context, *GetIntentsByReferenceRequest) (*GetIntentsByReferenceResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetIntentsByReference not implemented")
+}
+func (UnimplementedPaymentServiceServer) AdminCreatePaymentMethod(context.Context, *AdminCreatePaymentMethodRequest) (*AdminCreatePaymentMethodResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AdminCreatePaymentMethod not implemented")
+}
+func (UnimplementedPaymentServiceServer) AdminUpdatePaymentMethod(context.Context, *AdminUpdatePaymentMethodRequest) (*AdminUpdatePaymentMethodResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AdminUpdatePaymentMethod not implemented")
+}
+func (UnimplementedPaymentServiceServer) AdminDeletePaymentMethod(context.Context, *AdminDeletePaymentMethodRequest) (*AdminDeletePaymentMethodResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AdminDeletePaymentMethod not implemented")
+}
+func (UnimplementedPaymentServiceServer) AdminGetPaymentMethod(context.Context, *AdminGetPaymentMethodRequest) (*AdminGetPaymentMethodResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AdminGetPaymentMethod not implemented")
+}
+func (UnimplementedPaymentServiceServer) AdminListPaymentMethods(context.Context, *AdminListPaymentMethodsRequest) (*AdminListPaymentMethodsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AdminListPaymentMethods not implemented")
 }
 func (UnimplementedPaymentServiceServer) mustEmbedUnimplementedPaymentServiceServer() {}
 func (UnimplementedPaymentServiceServer) testEmbeddedByValue()                        {}
@@ -284,6 +366,96 @@ func _PaymentService_GetIntentsByReference_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PaymentService_AdminCreatePaymentMethod_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminCreatePaymentMethodRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaymentServiceServer).AdminCreatePaymentMethod(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PaymentService_AdminCreatePaymentMethod_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaymentServiceServer).AdminCreatePaymentMethod(ctx, req.(*AdminCreatePaymentMethodRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PaymentService_AdminUpdatePaymentMethod_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminUpdatePaymentMethodRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaymentServiceServer).AdminUpdatePaymentMethod(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PaymentService_AdminUpdatePaymentMethod_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaymentServiceServer).AdminUpdatePaymentMethod(ctx, req.(*AdminUpdatePaymentMethodRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PaymentService_AdminDeletePaymentMethod_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminDeletePaymentMethodRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaymentServiceServer).AdminDeletePaymentMethod(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PaymentService_AdminDeletePaymentMethod_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaymentServiceServer).AdminDeletePaymentMethod(ctx, req.(*AdminDeletePaymentMethodRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PaymentService_AdminGetPaymentMethod_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminGetPaymentMethodRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaymentServiceServer).AdminGetPaymentMethod(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PaymentService_AdminGetPaymentMethod_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaymentServiceServer).AdminGetPaymentMethod(ctx, req.(*AdminGetPaymentMethodRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PaymentService_AdminListPaymentMethods_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminListPaymentMethodsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaymentServiceServer).AdminListPaymentMethods(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PaymentService_AdminListPaymentMethods_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaymentServiceServer).AdminListPaymentMethods(ctx, req.(*AdminListPaymentMethodsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PaymentService_ServiceDesc is the grpc.ServiceDesc for PaymentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -314,6 +486,26 @@ var PaymentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetIntentsByReference",
 			Handler:    _PaymentService_GetIntentsByReference_Handler,
+		},
+		{
+			MethodName: "AdminCreatePaymentMethod",
+			Handler:    _PaymentService_AdminCreatePaymentMethod_Handler,
+		},
+		{
+			MethodName: "AdminUpdatePaymentMethod",
+			Handler:    _PaymentService_AdminUpdatePaymentMethod_Handler,
+		},
+		{
+			MethodName: "AdminDeletePaymentMethod",
+			Handler:    _PaymentService_AdminDeletePaymentMethod_Handler,
+		},
+		{
+			MethodName: "AdminGetPaymentMethod",
+			Handler:    _PaymentService_AdminGetPaymentMethod_Handler,
+		},
+		{
+			MethodName: "AdminListPaymentMethods",
+			Handler:    _PaymentService_AdminListPaymentMethods_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

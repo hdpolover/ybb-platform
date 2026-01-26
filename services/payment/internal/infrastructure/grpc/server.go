@@ -591,3 +591,138 @@ func (s *PaymentGrpcServer) GetIntentsByReference(ctx context.Context, req *pb.G
 
 	return &pb.GetIntentsByReferenceResponse{Intents: pbIntents}, nil
 }
+
+// --- Admin Payment Method Management ---
+
+func mapEntityToAdminProto(m entities.PaymentMethodEntity) *pb.AdminPaymentMethod {
+	return &pb.AdminPaymentMethod{
+		Id:                m.ID,
+		Name:              m.Name,
+		Type:              string(m.Type),
+		Code:              m.Code,
+		IsActive:          m.IsActive,
+		DisplayName:       m.DisplayName,
+		Description:       m.Description,
+		Icon:              m.Icon,
+		GatewayName:       m.GatewayName,
+		GatewayType:       m.GatewayType,
+		BankName:          m.BankName,
+		AccountNumber:     m.AccountNumber,
+		AccountName:       m.AccountName,
+		Instructions:      m.Instructions,
+		RequiresProof:     m.RequiresProof,
+		AdminInstructions: m.AdminInstructions,
+		Config: &pb.FeeConfig{
+			FixedFee:      m.Config.FixedFee,
+			PercentageFee: m.Config.PercentageFee,
+			MinFee:        m.Config.MinFee,
+			Currency:      m.Config.Currency,
+			IsSurcharge:   m.Config.IsSurcharge,
+		},
+		SortOrder: int32(m.SortOrder),
+	}
+}
+
+func (s *PaymentGrpcServer) AdminListPaymentMethods(ctx context.Context, req *pb.AdminListPaymentMethodsRequest) (*pb.AdminListPaymentMethodsResponse, error) {
+	methods, err := s.methodRepo.FindAll(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to fetch methods: %v", err)
+	}
+
+	var pbMethods []*pb.AdminPaymentMethod
+	for _, m := range methods {
+		pbMethods = append(pbMethods, mapEntityToAdminProto(m))
+	}
+	return &pb.AdminListPaymentMethodsResponse{Methods: pbMethods}, nil
+}
+
+func (s *PaymentGrpcServer) AdminGetPaymentMethod(ctx context.Context, req *pb.AdminGetPaymentMethodRequest) (*pb.AdminGetPaymentMethodResponse, error) {
+	m, err := s.methodRepo.FindByID(ctx, req.Id)
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "not found: %v", err)
+	}
+	return &pb.AdminGetPaymentMethodResponse{Method: mapEntityToAdminProto(*m)}, nil
+}
+
+func (s *PaymentGrpcServer) AdminCreatePaymentMethod(ctx context.Context, req *pb.AdminCreatePaymentMethodRequest) (*pb.AdminCreatePaymentMethodResponse, error) {
+	cfg := entities.FeeConfig{}
+	if req.Config != nil {
+		cfg.FixedFee = req.Config.FixedFee
+		cfg.PercentageFee = req.Config.PercentageFee
+		cfg.MinFee = req.Config.MinFee
+		cfg.Currency = req.Config.Currency
+		cfg.IsSurcharge = req.Config.IsSurcharge
+	}
+
+	m := entities.PaymentMethodEntity{
+		Name:              req.Name,
+		Type:              entities.PaymentMethodType(req.Type),
+		Code:              req.Code,
+		IsActive:          req.IsActive,
+		DisplayName:       req.DisplayName,
+		Description:       req.Description,
+		Icon:              req.Icon,
+		GatewayName:       req.GatewayName,
+		GatewayType:       req.GatewayType,
+		BankName:          req.BankName,
+		AccountNumber:     req.AccountNumber,
+		AccountName:       req.AccountName,
+		Instructions:      req.Instructions,
+		RequiresProof:     req.RequiresProof,
+		AdminInstructions: req.AdminInstructions,
+		Config:            cfg,
+		SortOrder:         int(req.SortOrder),
+	}
+
+	if err := s.methodRepo.Create(ctx, &m); err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to create: %v", err)
+	}
+
+	return &pb.AdminCreatePaymentMethodResponse{Id: m.ID}, nil
+}
+
+func (s *PaymentGrpcServer) AdminUpdatePaymentMethod(ctx context.Context, req *pb.AdminUpdatePaymentMethodRequest) (*pb.AdminUpdatePaymentMethodResponse, error) {
+	m, err := s.methodRepo.FindByID(ctx, req.Id)
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "not found")
+	}
+
+	// Update fields
+	m.Name = req.Name
+	m.Type = entities.PaymentMethodType(req.Type)
+	m.Code = req.Code
+	m.IsActive = req.IsActive
+	m.DisplayName = req.DisplayName
+	m.Description = req.Description
+	m.Icon = req.Icon
+	m.GatewayName = req.GatewayName
+	m.GatewayType = req.GatewayType
+	m.BankName = req.BankName
+	m.AccountNumber = req.AccountNumber
+	m.AccountName = req.AccountName
+	m.Instructions = req.Instructions
+	m.RequiresProof = req.RequiresProof
+	m.AdminInstructions = req.AdminInstructions
+	m.SortOrder = int(req.SortOrder)
+
+	if req.Config != nil {
+		m.Config.FixedFee = req.Config.FixedFee
+		m.Config.PercentageFee = req.Config.PercentageFee
+		m.Config.MinFee = req.Config.MinFee
+		m.Config.Currency = req.Config.Currency
+		m.Config.IsSurcharge = req.Config.IsSurcharge
+	}
+
+	if err := s.methodRepo.Update(ctx, m); err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to update: %v", err)
+	}
+
+	return &pb.AdminUpdatePaymentMethodResponse{Id: m.ID}, nil
+}
+
+func (s *PaymentGrpcServer) AdminDeletePaymentMethod(ctx context.Context, req *pb.AdminDeletePaymentMethodRequest) (*pb.AdminDeletePaymentMethodResponse, error) {
+	if err := s.methodRepo.Delete(ctx, req.Id); err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to delete: %v", err)
+	}
+	return &pb.AdminDeletePaymentMethodResponse{Success: true}, nil
+}

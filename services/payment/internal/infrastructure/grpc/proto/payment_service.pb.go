@@ -1198,6 +1198,959 @@ func (x *ProcessPaymentResponse) GetAction() *ProcessPaymentAction {
 	return nil
 }
 
+type FeeConfig struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	FixedFee      float64                `protobuf:"fixed64,1,opt,name=fixed_fee,json=fixedFee,proto3" json:"fixed_fee,omitempty"`
+	PercentageFee float64                `protobuf:"fixed64,2,opt,name=percentage_fee,json=percentageFee,proto3" json:"percentage_fee,omitempty"`
+	MinFee        float64                `protobuf:"fixed64,3,opt,name=min_fee,json=minFee,proto3" json:"min_fee,omitempty"`
+	Currency      string                 `protobuf:"bytes,4,opt,name=currency,proto3" json:"currency,omitempty"`
+	IsSurcharge   bool                   `protobuf:"varint,5,opt,name=is_surcharge,json=isSurcharge,proto3" json:"is_surcharge,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FeeConfig) Reset() {
+	*x = FeeConfig{}
+	mi := &file_payment_service_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FeeConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FeeConfig) ProtoMessage() {}
+
+func (x *FeeConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_payment_service_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FeeConfig.ProtoReflect.Descriptor instead.
+func (*FeeConfig) Descriptor() ([]byte, []int) {
+	return file_payment_service_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *FeeConfig) GetFixedFee() float64 {
+	if x != nil {
+		return x.FixedFee
+	}
+	return 0
+}
+
+func (x *FeeConfig) GetPercentageFee() float64 {
+	if x != nil {
+		return x.PercentageFee
+	}
+	return 0
+}
+
+func (x *FeeConfig) GetMinFee() float64 {
+	if x != nil {
+		return x.MinFee
+	}
+	return 0
+}
+
+func (x *FeeConfig) GetCurrency() string {
+	if x != nil {
+		return x.Currency
+	}
+	return ""
+}
+
+func (x *FeeConfig) GetIsSurcharge() bool {
+	if x != nil {
+		return x.IsSurcharge
+	}
+	return false
+}
+
+type AdminPaymentMethod struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Id          string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name        string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"` // Internal name
+	Type        string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"` // "automatic", "manual"
+	Code        string                 `protobuf:"bytes,4,opt,name=code,proto3" json:"code,omitempty"` // "bca_va"
+	IsActive    bool                   `protobuf:"varint,5,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
+	DisplayName string                 `protobuf:"bytes,6,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	Description string                 `protobuf:"bytes,7,opt,name=description,proto3" json:"description,omitempty"`
+	Icon        string                 `protobuf:"bytes,8,opt,name=icon,proto3" json:"icon,omitempty"`
+	GatewayName string                 `protobuf:"bytes,9,opt,name=gateway_name,json=gatewayName,proto3" json:"gateway_name,omitempty"`  // "midtrans"
+	GatewayType string                 `protobuf:"bytes,10,opt,name=gateway_type,json=gatewayType,proto3" json:"gateway_type,omitempty"` // "bank_transfer"
+	// Manual fields
+	BankName          string     `protobuf:"bytes,11,opt,name=bank_name,json=bankName,proto3" json:"bank_name,omitempty"`
+	AccountNumber     string     `protobuf:"bytes,12,opt,name=account_number,json=accountNumber,proto3" json:"account_number,omitempty"`
+	AccountName       string     `protobuf:"bytes,13,opt,name=account_name,json=accountName,proto3" json:"account_name,omitempty"`
+	Instructions      string     `protobuf:"bytes,14,opt,name=instructions,proto3" json:"instructions,omitempty"`
+	RequiresProof     bool       `protobuf:"varint,15,opt,name=requires_proof,json=requiresProof,proto3" json:"requires_proof,omitempty"`
+	AdminInstructions string     `protobuf:"bytes,16,opt,name=admin_instructions,json=adminInstructions,proto3" json:"admin_instructions,omitempty"`
+	Config            *FeeConfig `protobuf:"bytes,17,opt,name=config,proto3" json:"config,omitempty"`
+	SortOrder         int32      `protobuf:"varint,18,opt,name=sort_order,json=sortOrder,proto3" json:"sort_order,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *AdminPaymentMethod) Reset() {
+	*x = AdminPaymentMethod{}
+	mi := &file_payment_service_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminPaymentMethod) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminPaymentMethod) ProtoMessage() {}
+
+func (x *AdminPaymentMethod) ProtoReflect() protoreflect.Message {
+	mi := &file_payment_service_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminPaymentMethod.ProtoReflect.Descriptor instead.
+func (*AdminPaymentMethod) Descriptor() ([]byte, []int) {
+	return file_payment_service_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *AdminPaymentMethod) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *AdminPaymentMethod) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *AdminPaymentMethod) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *AdminPaymentMethod) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *AdminPaymentMethod) GetIsActive() bool {
+	if x != nil {
+		return x.IsActive
+	}
+	return false
+}
+
+func (x *AdminPaymentMethod) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *AdminPaymentMethod) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *AdminPaymentMethod) GetIcon() string {
+	if x != nil {
+		return x.Icon
+	}
+	return ""
+}
+
+func (x *AdminPaymentMethod) GetGatewayName() string {
+	if x != nil {
+		return x.GatewayName
+	}
+	return ""
+}
+
+func (x *AdminPaymentMethod) GetGatewayType() string {
+	if x != nil {
+		return x.GatewayType
+	}
+	return ""
+}
+
+func (x *AdminPaymentMethod) GetBankName() string {
+	if x != nil {
+		return x.BankName
+	}
+	return ""
+}
+
+func (x *AdminPaymentMethod) GetAccountNumber() string {
+	if x != nil {
+		return x.AccountNumber
+	}
+	return ""
+}
+
+func (x *AdminPaymentMethod) GetAccountName() string {
+	if x != nil {
+		return x.AccountName
+	}
+	return ""
+}
+
+func (x *AdminPaymentMethod) GetInstructions() string {
+	if x != nil {
+		return x.Instructions
+	}
+	return ""
+}
+
+func (x *AdminPaymentMethod) GetRequiresProof() bool {
+	if x != nil {
+		return x.RequiresProof
+	}
+	return false
+}
+
+func (x *AdminPaymentMethod) GetAdminInstructions() string {
+	if x != nil {
+		return x.AdminInstructions
+	}
+	return ""
+}
+
+func (x *AdminPaymentMethod) GetConfig() *FeeConfig {
+	if x != nil {
+		return x.Config
+	}
+	return nil
+}
+
+func (x *AdminPaymentMethod) GetSortOrder() int32 {
+	if x != nil {
+		return x.SortOrder
+	}
+	return 0
+}
+
+type AdminCreatePaymentMethodRequest struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Name              string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Type              string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	Code              string                 `protobuf:"bytes,3,opt,name=code,proto3" json:"code,omitempty"`
+	IsActive          bool                   `protobuf:"varint,4,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
+	DisplayName       string                 `protobuf:"bytes,5,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	Description       string                 `protobuf:"bytes,6,opt,name=description,proto3" json:"description,omitempty"`
+	Icon              string                 `protobuf:"bytes,7,opt,name=icon,proto3" json:"icon,omitempty"`
+	GatewayName       string                 `protobuf:"bytes,8,opt,name=gateway_name,json=gatewayName,proto3" json:"gateway_name,omitempty"`
+	GatewayType       string                 `protobuf:"bytes,9,opt,name=gateway_type,json=gatewayType,proto3" json:"gateway_type,omitempty"`
+	BankName          string                 `protobuf:"bytes,10,opt,name=bank_name,json=bankName,proto3" json:"bank_name,omitempty"`
+	AccountNumber     string                 `protobuf:"bytes,11,opt,name=account_number,json=accountNumber,proto3" json:"account_number,omitempty"`
+	AccountName       string                 `protobuf:"bytes,12,opt,name=account_name,json=accountName,proto3" json:"account_name,omitempty"`
+	Instructions      string                 `protobuf:"bytes,13,opt,name=instructions,proto3" json:"instructions,omitempty"`
+	RequiresProof     bool                   `protobuf:"varint,14,opt,name=requires_proof,json=requiresProof,proto3" json:"requires_proof,omitempty"`
+	AdminInstructions string                 `protobuf:"bytes,15,opt,name=admin_instructions,json=adminInstructions,proto3" json:"admin_instructions,omitempty"`
+	Config            *FeeConfig             `protobuf:"bytes,16,opt,name=config,proto3" json:"config,omitempty"`
+	SortOrder         int32                  `protobuf:"varint,17,opt,name=sort_order,json=sortOrder,proto3" json:"sort_order,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *AdminCreatePaymentMethodRequest) Reset() {
+	*x = AdminCreatePaymentMethodRequest{}
+	mi := &file_payment_service_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminCreatePaymentMethodRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminCreatePaymentMethodRequest) ProtoMessage() {}
+
+func (x *AdminCreatePaymentMethodRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_payment_service_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminCreatePaymentMethodRequest.ProtoReflect.Descriptor instead.
+func (*AdminCreatePaymentMethodRequest) Descriptor() ([]byte, []int) {
+	return file_payment_service_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *AdminCreatePaymentMethodRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *AdminCreatePaymentMethodRequest) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *AdminCreatePaymentMethodRequest) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *AdminCreatePaymentMethodRequest) GetIsActive() bool {
+	if x != nil {
+		return x.IsActive
+	}
+	return false
+}
+
+func (x *AdminCreatePaymentMethodRequest) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *AdminCreatePaymentMethodRequest) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *AdminCreatePaymentMethodRequest) GetIcon() string {
+	if x != nil {
+		return x.Icon
+	}
+	return ""
+}
+
+func (x *AdminCreatePaymentMethodRequest) GetGatewayName() string {
+	if x != nil {
+		return x.GatewayName
+	}
+	return ""
+}
+
+func (x *AdminCreatePaymentMethodRequest) GetGatewayType() string {
+	if x != nil {
+		return x.GatewayType
+	}
+	return ""
+}
+
+func (x *AdminCreatePaymentMethodRequest) GetBankName() string {
+	if x != nil {
+		return x.BankName
+	}
+	return ""
+}
+
+func (x *AdminCreatePaymentMethodRequest) GetAccountNumber() string {
+	if x != nil {
+		return x.AccountNumber
+	}
+	return ""
+}
+
+func (x *AdminCreatePaymentMethodRequest) GetAccountName() string {
+	if x != nil {
+		return x.AccountName
+	}
+	return ""
+}
+
+func (x *AdminCreatePaymentMethodRequest) GetInstructions() string {
+	if x != nil {
+		return x.Instructions
+	}
+	return ""
+}
+
+func (x *AdminCreatePaymentMethodRequest) GetRequiresProof() bool {
+	if x != nil {
+		return x.RequiresProof
+	}
+	return false
+}
+
+func (x *AdminCreatePaymentMethodRequest) GetAdminInstructions() string {
+	if x != nil {
+		return x.AdminInstructions
+	}
+	return ""
+}
+
+func (x *AdminCreatePaymentMethodRequest) GetConfig() *FeeConfig {
+	if x != nil {
+		return x.Config
+	}
+	return nil
+}
+
+func (x *AdminCreatePaymentMethodRequest) GetSortOrder() int32 {
+	if x != nil {
+		return x.SortOrder
+	}
+	return 0
+}
+
+type AdminCreatePaymentMethodResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminCreatePaymentMethodResponse) Reset() {
+	*x = AdminCreatePaymentMethodResponse{}
+	mi := &file_payment_service_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminCreatePaymentMethodResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminCreatePaymentMethodResponse) ProtoMessage() {}
+
+func (x *AdminCreatePaymentMethodResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_payment_service_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminCreatePaymentMethodResponse.ProtoReflect.Descriptor instead.
+func (*AdminCreatePaymentMethodResponse) Descriptor() ([]byte, []int) {
+	return file_payment_service_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *AdminCreatePaymentMethodResponse) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type AdminUpdatePaymentMethodRequest struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Id                string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name              string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Type              string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+	Code              string                 `protobuf:"bytes,4,opt,name=code,proto3" json:"code,omitempty"`
+	IsActive          bool                   `protobuf:"varint,5,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
+	DisplayName       string                 `protobuf:"bytes,6,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	Description       string                 `protobuf:"bytes,7,opt,name=description,proto3" json:"description,omitempty"`
+	Icon              string                 `protobuf:"bytes,8,opt,name=icon,proto3" json:"icon,omitempty"`
+	GatewayName       string                 `protobuf:"bytes,9,opt,name=gateway_name,json=gatewayName,proto3" json:"gateway_name,omitempty"`
+	GatewayType       string                 `protobuf:"bytes,10,opt,name=gateway_type,json=gatewayType,proto3" json:"gateway_type,omitempty"`
+	BankName          string                 `protobuf:"bytes,11,opt,name=bank_name,json=bankName,proto3" json:"bank_name,omitempty"`
+	AccountNumber     string                 `protobuf:"bytes,12,opt,name=account_number,json=accountNumber,proto3" json:"account_number,omitempty"`
+	AccountName       string                 `protobuf:"bytes,13,opt,name=account_name,json=accountName,proto3" json:"account_name,omitempty"`
+	Instructions      string                 `protobuf:"bytes,14,opt,name=instructions,proto3" json:"instructions,omitempty"`
+	RequiresProof     bool                   `protobuf:"varint,15,opt,name=requires_proof,json=requiresProof,proto3" json:"requires_proof,omitempty"`
+	AdminInstructions string                 `protobuf:"bytes,16,opt,name=admin_instructions,json=adminInstructions,proto3" json:"admin_instructions,omitempty"`
+	Config            *FeeConfig             `protobuf:"bytes,17,opt,name=config,proto3" json:"config,omitempty"`
+	SortOrder         int32                  `protobuf:"varint,18,opt,name=sort_order,json=sortOrder,proto3" json:"sort_order,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *AdminUpdatePaymentMethodRequest) Reset() {
+	*x = AdminUpdatePaymentMethodRequest{}
+	mi := &file_payment_service_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminUpdatePaymentMethodRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminUpdatePaymentMethodRequest) ProtoMessage() {}
+
+func (x *AdminUpdatePaymentMethodRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_payment_service_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminUpdatePaymentMethodRequest.ProtoReflect.Descriptor instead.
+func (*AdminUpdatePaymentMethodRequest) Descriptor() ([]byte, []int) {
+	return file_payment_service_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *AdminUpdatePaymentMethodRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *AdminUpdatePaymentMethodRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *AdminUpdatePaymentMethodRequest) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *AdminUpdatePaymentMethodRequest) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *AdminUpdatePaymentMethodRequest) GetIsActive() bool {
+	if x != nil {
+		return x.IsActive
+	}
+	return false
+}
+
+func (x *AdminUpdatePaymentMethodRequest) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *AdminUpdatePaymentMethodRequest) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *AdminUpdatePaymentMethodRequest) GetIcon() string {
+	if x != nil {
+		return x.Icon
+	}
+	return ""
+}
+
+func (x *AdminUpdatePaymentMethodRequest) GetGatewayName() string {
+	if x != nil {
+		return x.GatewayName
+	}
+	return ""
+}
+
+func (x *AdminUpdatePaymentMethodRequest) GetGatewayType() string {
+	if x != nil {
+		return x.GatewayType
+	}
+	return ""
+}
+
+func (x *AdminUpdatePaymentMethodRequest) GetBankName() string {
+	if x != nil {
+		return x.BankName
+	}
+	return ""
+}
+
+func (x *AdminUpdatePaymentMethodRequest) GetAccountNumber() string {
+	if x != nil {
+		return x.AccountNumber
+	}
+	return ""
+}
+
+func (x *AdminUpdatePaymentMethodRequest) GetAccountName() string {
+	if x != nil {
+		return x.AccountName
+	}
+	return ""
+}
+
+func (x *AdminUpdatePaymentMethodRequest) GetInstructions() string {
+	if x != nil {
+		return x.Instructions
+	}
+	return ""
+}
+
+func (x *AdminUpdatePaymentMethodRequest) GetRequiresProof() bool {
+	if x != nil {
+		return x.RequiresProof
+	}
+	return false
+}
+
+func (x *AdminUpdatePaymentMethodRequest) GetAdminInstructions() string {
+	if x != nil {
+		return x.AdminInstructions
+	}
+	return ""
+}
+
+func (x *AdminUpdatePaymentMethodRequest) GetConfig() *FeeConfig {
+	if x != nil {
+		return x.Config
+	}
+	return nil
+}
+
+func (x *AdminUpdatePaymentMethodRequest) GetSortOrder() int32 {
+	if x != nil {
+		return x.SortOrder
+	}
+	return 0
+}
+
+type AdminUpdatePaymentMethodResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminUpdatePaymentMethodResponse) Reset() {
+	*x = AdminUpdatePaymentMethodResponse{}
+	mi := &file_payment_service_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminUpdatePaymentMethodResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminUpdatePaymentMethodResponse) ProtoMessage() {}
+
+func (x *AdminUpdatePaymentMethodResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_payment_service_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminUpdatePaymentMethodResponse.ProtoReflect.Descriptor instead.
+func (*AdminUpdatePaymentMethodResponse) Descriptor() ([]byte, []int) {
+	return file_payment_service_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *AdminUpdatePaymentMethodResponse) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type AdminDeletePaymentMethodRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminDeletePaymentMethodRequest) Reset() {
+	*x = AdminDeletePaymentMethodRequest{}
+	mi := &file_payment_service_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminDeletePaymentMethodRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminDeletePaymentMethodRequest) ProtoMessage() {}
+
+func (x *AdminDeletePaymentMethodRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_payment_service_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminDeletePaymentMethodRequest.ProtoReflect.Descriptor instead.
+func (*AdminDeletePaymentMethodRequest) Descriptor() ([]byte, []int) {
+	return file_payment_service_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *AdminDeletePaymentMethodRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type AdminDeletePaymentMethodResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminDeletePaymentMethodResponse) Reset() {
+	*x = AdminDeletePaymentMethodResponse{}
+	mi := &file_payment_service_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminDeletePaymentMethodResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminDeletePaymentMethodResponse) ProtoMessage() {}
+
+func (x *AdminDeletePaymentMethodResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_payment_service_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminDeletePaymentMethodResponse.ProtoReflect.Descriptor instead.
+func (*AdminDeletePaymentMethodResponse) Descriptor() ([]byte, []int) {
+	return file_payment_service_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *AdminDeletePaymentMethodResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+type AdminGetPaymentMethodRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminGetPaymentMethodRequest) Reset() {
+	*x = AdminGetPaymentMethodRequest{}
+	mi := &file_payment_service_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminGetPaymentMethodRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminGetPaymentMethodRequest) ProtoMessage() {}
+
+func (x *AdminGetPaymentMethodRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_payment_service_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminGetPaymentMethodRequest.ProtoReflect.Descriptor instead.
+func (*AdminGetPaymentMethodRequest) Descriptor() ([]byte, []int) {
+	return file_payment_service_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *AdminGetPaymentMethodRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type AdminGetPaymentMethodResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Method        *AdminPaymentMethod    `protobuf:"bytes,1,opt,name=method,proto3" json:"method,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminGetPaymentMethodResponse) Reset() {
+	*x = AdminGetPaymentMethodResponse{}
+	mi := &file_payment_service_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminGetPaymentMethodResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminGetPaymentMethodResponse) ProtoMessage() {}
+
+func (x *AdminGetPaymentMethodResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_payment_service_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminGetPaymentMethodResponse.ProtoReflect.Descriptor instead.
+func (*AdminGetPaymentMethodResponse) Descriptor() ([]byte, []int) {
+	return file_payment_service_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *AdminGetPaymentMethodResponse) GetMethod() *AdminPaymentMethod {
+	if x != nil {
+		return x.Method
+	}
+	return nil
+}
+
+type AdminListPaymentMethodsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminListPaymentMethodsRequest) Reset() {
+	*x = AdminListPaymentMethodsRequest{}
+	mi := &file_payment_service_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminListPaymentMethodsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminListPaymentMethodsRequest) ProtoMessage() {}
+
+func (x *AdminListPaymentMethodsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_payment_service_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminListPaymentMethodsRequest.ProtoReflect.Descriptor instead.
+func (*AdminListPaymentMethodsRequest) Descriptor() ([]byte, []int) {
+	return file_payment_service_proto_rawDescGZIP(), []int{27}
+}
+
+type AdminListPaymentMethodsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Methods       []*AdminPaymentMethod  `protobuf:"bytes,1,rep,name=methods,proto3" json:"methods,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminListPaymentMethodsResponse) Reset() {
+	*x = AdminListPaymentMethodsResponse{}
+	mi := &file_payment_service_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminListPaymentMethodsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminListPaymentMethodsResponse) ProtoMessage() {}
+
+func (x *AdminListPaymentMethodsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_payment_service_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminListPaymentMethodsResponse.ProtoReflect.Descriptor instead.
+func (*AdminListPaymentMethodsResponse) Descriptor() ([]byte, []int) {
+	return file_payment_service_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *AdminListPaymentMethodsResponse) GetMethods() []*AdminPaymentMethod {
+	if x != nil {
+		return x.Methods
+	}
+	return nil
+}
+
 var File_payment_service_proto protoreflect.FileDescriptor
 
 const file_payment_service_proto_rawDesc = "" +
@@ -1299,14 +2252,102 @@ const file_payment_service_proto_rawDesc = "" +
 	"\x16ProcessPaymentResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12%\n" +
 	"\x0etransaction_id\x18\x02 \x01(\tR\rtransactionId\x125\n" +
-	"\x06action\x18\x03 \x01(\v2\x1d.payment.ProcessPaymentActionR\x06action2\xc4\x04\n" +
+	"\x06action\x18\x03 \x01(\v2\x1d.payment.ProcessPaymentActionR\x06action\"\xa7\x01\n" +
+	"\tFeeConfig\x12\x1b\n" +
+	"\tfixed_fee\x18\x01 \x01(\x01R\bfixedFee\x12%\n" +
+	"\x0epercentage_fee\x18\x02 \x01(\x01R\rpercentageFee\x12\x17\n" +
+	"\amin_fee\x18\x03 \x01(\x01R\x06minFee\x12\x1a\n" +
+	"\bcurrency\x18\x04 \x01(\tR\bcurrency\x12!\n" +
+	"\fis_surcharge\x18\x05 \x01(\bR\visSurcharge\"\xc8\x04\n" +
+	"\x12AdminPaymentMethod\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
+	"\x04type\x18\x03 \x01(\tR\x04type\x12\x12\n" +
+	"\x04code\x18\x04 \x01(\tR\x04code\x12\x1b\n" +
+	"\tis_active\x18\x05 \x01(\bR\bisActive\x12!\n" +
+	"\fdisplay_name\x18\x06 \x01(\tR\vdisplayName\x12 \n" +
+	"\vdescription\x18\a \x01(\tR\vdescription\x12\x12\n" +
+	"\x04icon\x18\b \x01(\tR\x04icon\x12!\n" +
+	"\fgateway_name\x18\t \x01(\tR\vgatewayName\x12!\n" +
+	"\fgateway_type\x18\n" +
+	" \x01(\tR\vgatewayType\x12\x1b\n" +
+	"\tbank_name\x18\v \x01(\tR\bbankName\x12%\n" +
+	"\x0eaccount_number\x18\f \x01(\tR\raccountNumber\x12!\n" +
+	"\faccount_name\x18\r \x01(\tR\vaccountName\x12\"\n" +
+	"\finstructions\x18\x0e \x01(\tR\finstructions\x12%\n" +
+	"\x0erequires_proof\x18\x0f \x01(\bR\rrequiresProof\x12-\n" +
+	"\x12admin_instructions\x18\x10 \x01(\tR\x11adminInstructions\x12*\n" +
+	"\x06config\x18\x11 \x01(\v2\x12.payment.FeeConfigR\x06config\x12\x1d\n" +
+	"\n" +
+	"sort_order\x18\x12 \x01(\x05R\tsortOrder\"\xc5\x04\n" +
+	"\x1fAdminCreatePaymentMethodRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
+	"\x04type\x18\x02 \x01(\tR\x04type\x12\x12\n" +
+	"\x04code\x18\x03 \x01(\tR\x04code\x12\x1b\n" +
+	"\tis_active\x18\x04 \x01(\bR\bisActive\x12!\n" +
+	"\fdisplay_name\x18\x05 \x01(\tR\vdisplayName\x12 \n" +
+	"\vdescription\x18\x06 \x01(\tR\vdescription\x12\x12\n" +
+	"\x04icon\x18\a \x01(\tR\x04icon\x12!\n" +
+	"\fgateway_name\x18\b \x01(\tR\vgatewayName\x12!\n" +
+	"\fgateway_type\x18\t \x01(\tR\vgatewayType\x12\x1b\n" +
+	"\tbank_name\x18\n" +
+	" \x01(\tR\bbankName\x12%\n" +
+	"\x0eaccount_number\x18\v \x01(\tR\raccountNumber\x12!\n" +
+	"\faccount_name\x18\f \x01(\tR\vaccountName\x12\"\n" +
+	"\finstructions\x18\r \x01(\tR\finstructions\x12%\n" +
+	"\x0erequires_proof\x18\x0e \x01(\bR\rrequiresProof\x12-\n" +
+	"\x12admin_instructions\x18\x0f \x01(\tR\x11adminInstructions\x12*\n" +
+	"\x06config\x18\x10 \x01(\v2\x12.payment.FeeConfigR\x06config\x12\x1d\n" +
+	"\n" +
+	"sort_order\x18\x11 \x01(\x05R\tsortOrder\"2\n" +
+	" AdminCreatePaymentMethodResponse\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"\xd5\x04\n" +
+	"\x1fAdminUpdatePaymentMethodRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
+	"\x04type\x18\x03 \x01(\tR\x04type\x12\x12\n" +
+	"\x04code\x18\x04 \x01(\tR\x04code\x12\x1b\n" +
+	"\tis_active\x18\x05 \x01(\bR\bisActive\x12!\n" +
+	"\fdisplay_name\x18\x06 \x01(\tR\vdisplayName\x12 \n" +
+	"\vdescription\x18\a \x01(\tR\vdescription\x12\x12\n" +
+	"\x04icon\x18\b \x01(\tR\x04icon\x12!\n" +
+	"\fgateway_name\x18\t \x01(\tR\vgatewayName\x12!\n" +
+	"\fgateway_type\x18\n" +
+	" \x01(\tR\vgatewayType\x12\x1b\n" +
+	"\tbank_name\x18\v \x01(\tR\bbankName\x12%\n" +
+	"\x0eaccount_number\x18\f \x01(\tR\raccountNumber\x12!\n" +
+	"\faccount_name\x18\r \x01(\tR\vaccountName\x12\"\n" +
+	"\finstructions\x18\x0e \x01(\tR\finstructions\x12%\n" +
+	"\x0erequires_proof\x18\x0f \x01(\bR\rrequiresProof\x12-\n" +
+	"\x12admin_instructions\x18\x10 \x01(\tR\x11adminInstructions\x12*\n" +
+	"\x06config\x18\x11 \x01(\v2\x12.payment.FeeConfigR\x06config\x12\x1d\n" +
+	"\n" +
+	"sort_order\x18\x12 \x01(\x05R\tsortOrder\"2\n" +
+	" AdminUpdatePaymentMethodResponse\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"1\n" +
+	"\x1fAdminDeletePaymentMethodRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"<\n" +
+	" AdminDeletePaymentMethodResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\".\n" +
+	"\x1cAdminGetPaymentMethodRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"T\n" +
+	"\x1dAdminGetPaymentMethodResponse\x123\n" +
+	"\x06method\x18\x01 \x01(\v2\x1b.payment.AdminPaymentMethodR\x06method\" \n" +
+	"\x1eAdminListPaymentMethodsRequest\"X\n" +
+	"\x1fAdminListPaymentMethodsResponse\x125\n" +
+	"\amethods\x18\x01 \x03(\v2\x1b.payment.AdminPaymentMethodR\amethods2\xf7\b\n" +
 	"\x0ePaymentService\x12M\n" +
 	"\fCreateIntent\x12\x1c.payment.CreateIntentRequest\x1a\x1d.payment.CreateIntentResponse\"\x00\x12\\\n" +
 	"\x11GetPaymentMethods\x12!.payment.GetPaymentMethodsRequest\x1a\".payment.GetPaymentMethodsResponse\"\x00\x12S\n" +
 	"\x0eProcessPayment\x12\x1e.payment.ProcessPaymentRequest\x1a\x1f.payment.ProcessPaymentResponse\"\x00\x12b\n" +
 	"\x13SubmitManualPayment\x12#.payment.SubmitManualPaymentRequest\x1a$.payment.SubmitManualPaymentResponse\"\x00\x12b\n" +
 	"\x13VerifyManualPayment\x12#.payment.VerifyManualPaymentRequest\x1a$.payment.VerifyManualPaymentResponse\"\x00\x12h\n" +
-	"\x15GetIntentsByReference\x12%.payment.GetIntentsByReferenceRequest\x1a&.payment.GetIntentsByReferenceResponse\"\x00BDZBgithub.com/ybb-platform/payment/internal/infrastructure/grpc/protob\x06proto3"
+	"\x15GetIntentsByReference\x12%.payment.GetIntentsByReferenceRequest\x1a&.payment.GetIntentsByReferenceResponse\"\x00\x12q\n" +
+	"\x18AdminCreatePaymentMethod\x12(.payment.AdminCreatePaymentMethodRequest\x1a).payment.AdminCreatePaymentMethodResponse\"\x00\x12q\n" +
+	"\x18AdminUpdatePaymentMethod\x12(.payment.AdminUpdatePaymentMethodRequest\x1a).payment.AdminUpdatePaymentMethodResponse\"\x00\x12q\n" +
+	"\x18AdminDeletePaymentMethod\x12(.payment.AdminDeletePaymentMethodRequest\x1a).payment.AdminDeletePaymentMethodResponse\"\x00\x12h\n" +
+	"\x15AdminGetPaymentMethod\x12%.payment.AdminGetPaymentMethodRequest\x1a&.payment.AdminGetPaymentMethodResponse\"\x00\x12n\n" +
+	"\x17AdminListPaymentMethods\x12'.payment.AdminListPaymentMethodsRequest\x1a(.payment.AdminListPaymentMethodsResponse\"\x00BDZBgithub.com/ybb-platform/payment/internal/infrastructure/grpc/protob\x06proto3"
 
 var (
 	file_payment_service_proto_rawDescOnce sync.Once
@@ -1320,54 +2361,81 @@ func file_payment_service_proto_rawDescGZIP() []byte {
 	return file_payment_service_proto_rawDescData
 }
 
-var file_payment_service_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_payment_service_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_payment_service_proto_goTypes = []any{
-	(*GetIntentsByReferenceRequest)(nil),  // 0: payment.GetIntentsByReferenceRequest
-	(*PaymentIntent)(nil),                 // 1: payment.PaymentIntent
-	(*ItemDetail)(nil),                    // 2: payment.ItemDetail
-	(*GetIntentsByReferenceResponse)(nil), // 3: payment.GetIntentsByReferenceResponse
-	(*CreateIntentRequest)(nil),           // 4: payment.CreateIntentRequest
-	(*CreateIntentResponse)(nil),          // 5: payment.CreateIntentResponse
-	(*SubmitManualPaymentRequest)(nil),    // 6: payment.SubmitManualPaymentRequest
-	(*SubmitManualPaymentResponse)(nil),   // 7: payment.SubmitManualPaymentResponse
-	(*VerifyManualPaymentRequest)(nil),    // 8: payment.VerifyManualPaymentRequest
-	(*VerifyManualPaymentResponse)(nil),   // 9: payment.VerifyManualPaymentResponse
-	(*GetPaymentMethodsRequest)(nil),      // 10: payment.GetPaymentMethodsRequest
-	(*PaymentMethod)(nil),                 // 11: payment.PaymentMethod
-	(*GetPaymentMethodsResponse)(nil),     // 12: payment.GetPaymentMethodsResponse
-	(*PaymentDetails)(nil),                // 13: payment.PaymentDetails
-	(*ProcessPaymentRequest)(nil),         // 14: payment.ProcessPaymentRequest
-	(*ProcessPaymentAction)(nil),          // 15: payment.ProcessPaymentAction
-	(*ProcessPaymentResponse)(nil),        // 16: payment.ProcessPaymentResponse
-	nil,                                   // 17: payment.PaymentIntent.MetadataEntry
-	nil,                                   // 18: payment.CreateIntentRequest.MetadataEntry
+	(*GetIntentsByReferenceRequest)(nil),     // 0: payment.GetIntentsByReferenceRequest
+	(*PaymentIntent)(nil),                    // 1: payment.PaymentIntent
+	(*ItemDetail)(nil),                       // 2: payment.ItemDetail
+	(*GetIntentsByReferenceResponse)(nil),    // 3: payment.GetIntentsByReferenceResponse
+	(*CreateIntentRequest)(nil),              // 4: payment.CreateIntentRequest
+	(*CreateIntentResponse)(nil),             // 5: payment.CreateIntentResponse
+	(*SubmitManualPaymentRequest)(nil),       // 6: payment.SubmitManualPaymentRequest
+	(*SubmitManualPaymentResponse)(nil),      // 7: payment.SubmitManualPaymentResponse
+	(*VerifyManualPaymentRequest)(nil),       // 8: payment.VerifyManualPaymentRequest
+	(*VerifyManualPaymentResponse)(nil),      // 9: payment.VerifyManualPaymentResponse
+	(*GetPaymentMethodsRequest)(nil),         // 10: payment.GetPaymentMethodsRequest
+	(*PaymentMethod)(nil),                    // 11: payment.PaymentMethod
+	(*GetPaymentMethodsResponse)(nil),        // 12: payment.GetPaymentMethodsResponse
+	(*PaymentDetails)(nil),                   // 13: payment.PaymentDetails
+	(*ProcessPaymentRequest)(nil),            // 14: payment.ProcessPaymentRequest
+	(*ProcessPaymentAction)(nil),             // 15: payment.ProcessPaymentAction
+	(*ProcessPaymentResponse)(nil),           // 16: payment.ProcessPaymentResponse
+	(*FeeConfig)(nil),                        // 17: payment.FeeConfig
+	(*AdminPaymentMethod)(nil),               // 18: payment.AdminPaymentMethod
+	(*AdminCreatePaymentMethodRequest)(nil),  // 19: payment.AdminCreatePaymentMethodRequest
+	(*AdminCreatePaymentMethodResponse)(nil), // 20: payment.AdminCreatePaymentMethodResponse
+	(*AdminUpdatePaymentMethodRequest)(nil),  // 21: payment.AdminUpdatePaymentMethodRequest
+	(*AdminUpdatePaymentMethodResponse)(nil), // 22: payment.AdminUpdatePaymentMethodResponse
+	(*AdminDeletePaymentMethodRequest)(nil),  // 23: payment.AdminDeletePaymentMethodRequest
+	(*AdminDeletePaymentMethodResponse)(nil), // 24: payment.AdminDeletePaymentMethodResponse
+	(*AdminGetPaymentMethodRequest)(nil),     // 25: payment.AdminGetPaymentMethodRequest
+	(*AdminGetPaymentMethodResponse)(nil),    // 26: payment.AdminGetPaymentMethodResponse
+	(*AdminListPaymentMethodsRequest)(nil),   // 27: payment.AdminListPaymentMethodsRequest
+	(*AdminListPaymentMethodsResponse)(nil),  // 28: payment.AdminListPaymentMethodsResponse
+	nil,                                      // 29: payment.PaymentIntent.MetadataEntry
+	nil,                                      // 30: payment.CreateIntentRequest.MetadataEntry
 }
 var file_payment_service_proto_depIdxs = []int32{
-	17, // 0: payment.PaymentIntent.metadata:type_name -> payment.PaymentIntent.MetadataEntry
+	29, // 0: payment.PaymentIntent.metadata:type_name -> payment.PaymentIntent.MetadataEntry
 	2,  // 1: payment.PaymentIntent.item_details:type_name -> payment.ItemDetail
 	1,  // 2: payment.GetIntentsByReferenceResponse.intents:type_name -> payment.PaymentIntent
-	18, // 3: payment.CreateIntentRequest.metadata:type_name -> payment.CreateIntentRequest.MetadataEntry
+	30, // 3: payment.CreateIntentRequest.metadata:type_name -> payment.CreateIntentRequest.MetadataEntry
 	2,  // 4: payment.CreateIntentRequest.item_details:type_name -> payment.ItemDetail
 	11, // 5: payment.GetPaymentMethodsResponse.methods:type_name -> payment.PaymentMethod
 	13, // 6: payment.ProcessPaymentRequest.payment_details:type_name -> payment.PaymentDetails
 	15, // 7: payment.ProcessPaymentResponse.action:type_name -> payment.ProcessPaymentAction
-	4,  // 8: payment.PaymentService.CreateIntent:input_type -> payment.CreateIntentRequest
-	10, // 9: payment.PaymentService.GetPaymentMethods:input_type -> payment.GetPaymentMethodsRequest
-	14, // 10: payment.PaymentService.ProcessPayment:input_type -> payment.ProcessPaymentRequest
-	6,  // 11: payment.PaymentService.SubmitManualPayment:input_type -> payment.SubmitManualPaymentRequest
-	8,  // 12: payment.PaymentService.VerifyManualPayment:input_type -> payment.VerifyManualPaymentRequest
-	0,  // 13: payment.PaymentService.GetIntentsByReference:input_type -> payment.GetIntentsByReferenceRequest
-	5,  // 14: payment.PaymentService.CreateIntent:output_type -> payment.CreateIntentResponse
-	12, // 15: payment.PaymentService.GetPaymentMethods:output_type -> payment.GetPaymentMethodsResponse
-	16, // 16: payment.PaymentService.ProcessPayment:output_type -> payment.ProcessPaymentResponse
-	7,  // 17: payment.PaymentService.SubmitManualPayment:output_type -> payment.SubmitManualPaymentResponse
-	9,  // 18: payment.PaymentService.VerifyManualPayment:output_type -> payment.VerifyManualPaymentResponse
-	3,  // 19: payment.PaymentService.GetIntentsByReference:output_type -> payment.GetIntentsByReferenceResponse
-	14, // [14:20] is the sub-list for method output_type
-	8,  // [8:14] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	17, // 8: payment.AdminPaymentMethod.config:type_name -> payment.FeeConfig
+	17, // 9: payment.AdminCreatePaymentMethodRequest.config:type_name -> payment.FeeConfig
+	17, // 10: payment.AdminUpdatePaymentMethodRequest.config:type_name -> payment.FeeConfig
+	18, // 11: payment.AdminGetPaymentMethodResponse.method:type_name -> payment.AdminPaymentMethod
+	18, // 12: payment.AdminListPaymentMethodsResponse.methods:type_name -> payment.AdminPaymentMethod
+	4,  // 13: payment.PaymentService.CreateIntent:input_type -> payment.CreateIntentRequest
+	10, // 14: payment.PaymentService.GetPaymentMethods:input_type -> payment.GetPaymentMethodsRequest
+	14, // 15: payment.PaymentService.ProcessPayment:input_type -> payment.ProcessPaymentRequest
+	6,  // 16: payment.PaymentService.SubmitManualPayment:input_type -> payment.SubmitManualPaymentRequest
+	8,  // 17: payment.PaymentService.VerifyManualPayment:input_type -> payment.VerifyManualPaymentRequest
+	0,  // 18: payment.PaymentService.GetIntentsByReference:input_type -> payment.GetIntentsByReferenceRequest
+	19, // 19: payment.PaymentService.AdminCreatePaymentMethod:input_type -> payment.AdminCreatePaymentMethodRequest
+	21, // 20: payment.PaymentService.AdminUpdatePaymentMethod:input_type -> payment.AdminUpdatePaymentMethodRequest
+	23, // 21: payment.PaymentService.AdminDeletePaymentMethod:input_type -> payment.AdminDeletePaymentMethodRequest
+	25, // 22: payment.PaymentService.AdminGetPaymentMethod:input_type -> payment.AdminGetPaymentMethodRequest
+	27, // 23: payment.PaymentService.AdminListPaymentMethods:input_type -> payment.AdminListPaymentMethodsRequest
+	5,  // 24: payment.PaymentService.CreateIntent:output_type -> payment.CreateIntentResponse
+	12, // 25: payment.PaymentService.GetPaymentMethods:output_type -> payment.GetPaymentMethodsResponse
+	16, // 26: payment.PaymentService.ProcessPayment:output_type -> payment.ProcessPaymentResponse
+	7,  // 27: payment.PaymentService.SubmitManualPayment:output_type -> payment.SubmitManualPaymentResponse
+	9,  // 28: payment.PaymentService.VerifyManualPayment:output_type -> payment.VerifyManualPaymentResponse
+	3,  // 29: payment.PaymentService.GetIntentsByReference:output_type -> payment.GetIntentsByReferenceResponse
+	20, // 30: payment.PaymentService.AdminCreatePaymentMethod:output_type -> payment.AdminCreatePaymentMethodResponse
+	22, // 31: payment.PaymentService.AdminUpdatePaymentMethod:output_type -> payment.AdminUpdatePaymentMethodResponse
+	24, // 32: payment.PaymentService.AdminDeletePaymentMethod:output_type -> payment.AdminDeletePaymentMethodResponse
+	26, // 33: payment.PaymentService.AdminGetPaymentMethod:output_type -> payment.AdminGetPaymentMethodResponse
+	28, // 34: payment.PaymentService.AdminListPaymentMethods:output_type -> payment.AdminListPaymentMethodsResponse
+	24, // [24:35] is the sub-list for method output_type
+	13, // [13:24] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_payment_service_proto_init() }
@@ -1381,7 +2449,7 @@ func file_payment_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_payment_service_proto_rawDesc), len(file_payment_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   19,
+			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

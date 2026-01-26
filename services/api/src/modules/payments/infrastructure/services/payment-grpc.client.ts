@@ -4,7 +4,12 @@ import { lastValueFrom } from 'rxjs';
 import { 
   PaymentService, 
   GetIntentsByReferenceRequest, 
-  GetIntentsByReferenceResponse 
+  GetIntentsByReferenceResponse,
+  AdminCreatePaymentMethodRequest,
+  AdminUpdatePaymentMethodRequest,
+  AdminDeletePaymentMethodRequest,
+  AdminGetPaymentMethodRequest,
+  AdminListPaymentMethodsRequest
 } from '../../common/proto/payment.interface';
 
 @Injectable()
@@ -72,5 +77,51 @@ export class PaymentGrpcClient implements OnModuleInit {
           this.logger.error(`Failed to process payment: ${error.message}`, error.stack);
           throw error;
       }
+  }
+
+  // Admin Methods
+  async adminCreatePaymentMethod(req: AdminCreatePaymentMethodRequest) {
+    try {
+        return await lastValueFrom(this.paymentService.AdminCreatePaymentMethod(req));
+    } catch (error) {
+        this.logger.error(`Failed to create payment method: ${error.message}`, error.stack);
+        throw error;
+    }
+  }
+
+  async adminUpdatePaymentMethod(req: AdminUpdatePaymentMethodRequest) {
+    try {
+        return await lastValueFrom(this.paymentService.AdminUpdatePaymentMethod(req));
+    } catch (error) {
+        this.logger.error(`Failed to update payment method: ${error.message}`, error.stack);
+        throw error;
+    }
+  }
+
+  async adminDeletePaymentMethod(req: AdminDeletePaymentMethodRequest) {
+    try {
+        return await lastValueFrom(this.paymentService.AdminDeletePaymentMethod(req));
+    } catch (error) {
+        this.logger.error(`Failed to delete payment method: ${error.message}`, error.stack);
+        throw error;
+    }
+  }
+
+  async adminGetPaymentMethod(req: AdminGetPaymentMethodRequest) {
+    try {
+        return await lastValueFrom(this.paymentService.AdminGetPaymentMethod(req));
+    } catch (error) {
+        this.logger.error(`Failed to get payment method: ${error.message}`, error.stack);
+        throw error;
+    }
+  }
+
+  async adminListPaymentMethods(req: AdminListPaymentMethodsRequest) {
+    try {
+        return await lastValueFrom(this.paymentService.AdminListPaymentMethods(req));
+    } catch (error) {
+        this.logger.error(`Failed to list payment methods: ${error.message}`, error.stack);
+        throw error;
+    }
   }
 }
