@@ -4,7 +4,7 @@ import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { GetProgramLandingQuery } from '../application/queries/get-program-landing.query';
 import { GetProgramLandingDto, ProgramLandingResponseDto } from '../application/dto/program-landing.dto';
 
-@ApiTags('Program Landing')
+@ApiTags('Programs')
 @Controller('programs')
 export class ProgramLandingController {
   constructor(private readonly queryBus: QueryBus) {}

@@ -13,7 +13,7 @@ import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { GetAmbassadorsListQuery, UpdateAmbassadorStatusCommand } from '../application/commands/ambassador-admin.commands';
 
-@ApiTags('admin-ambassadors')
+@ApiTags('Ambassadors')
 @Controller('admin/ambassadors')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()

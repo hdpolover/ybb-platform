@@ -6,7 +6,7 @@ import { UpdateLegalDocumentDto } from './dto/update-legal-document.dto';
 import { LegalDocumentResponseDto } from './dto/legal-document-response.dto';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 
-@ApiTags('legal-documents')
+@ApiTags('Legal')
 @Controller('brands/:brandSlug/legal-documents')
 export class LegalDocumentController {
     constructor(private readonly service: LegalDocumentService) {}

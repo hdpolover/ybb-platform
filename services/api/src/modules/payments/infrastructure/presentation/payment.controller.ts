@@ -8,7 +8,7 @@ import { UserRole } from '@core/entities/user.entity';
 import { CreateIntentDto, SubmitManualPaymentDto, VerifyManualPaymentDto } from './dto/payment.dto';
 import { Request } from 'express';
 
-@ApiTags('infrastructure-payments')
+@ApiTags('Payments')
 @Controller('infra/payments') // Renamed to avoid conflict with CQRS controller
 @ApiBearerAuth()
 export class PaymentController {

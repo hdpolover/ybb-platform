@@ -3,7 +3,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagg
 import { CacheService } from '../infrastructure/cache/cache.service';
 import { JwtAuthGuard } from '../../modules/auth/infrastructure/guards/jwt-auth.guard';
 
-@ApiTags('cache')
+@ApiTags('System')
 @Controller('cache')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()

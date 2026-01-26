@@ -3,7 +3,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery } from '@nestjs/
 import { MetadataService } from './metadata.service';
 import { Public } from '../../shared/decorators/public.decorator';
 
-@ApiTags('metadata')
+@ApiTags('Metadata')
 @Controller('metadata')
 export class MetadataController {
   constructor(private readonly metadataService: MetadataService) {}

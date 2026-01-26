@@ -6,7 +6,7 @@ import { SubmitPartnershipEnquiryCommand } from '../../application/commands/subm
 import { SubmitEnquiryDto } from '../../application/dto/submit-enquiry.dto';
 import { PartnershipResponseDto } from '../../application/dto/partnership-response.dto';
 
-@ApiTags('Partnerships (Public)')
+@ApiTags('Partnerships')
 @Controller('public/brands/:brandSlug/partnerships')
 export class PartnershipsPublicController {
   constructor(

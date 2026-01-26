@@ -15,7 +15,7 @@ import { BrandResponseDto, SponsorResponseDto } from './dto/brand.dto';
 import { CreateBrandDto } from './dto/create-brand.dto';
 import { UpdateBrandDto } from './dto/update-brand.dto';
 
-@ApiTags('brands')
+@ApiTags('Brands')
 @Controller('brands')
 export class BrandsController {
     constructor(

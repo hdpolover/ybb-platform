@@ -8,7 +8,7 @@ import { UpsertParticipationInfoCommand, DeleteParticipationInfoCommand } from '
 import { GetParticipationInfoQuery, ListParticipationInfoQuery } from '../application/queries/participation-info.queries';
 import { Public } from '@shared/decorators/public.decorator';
 
-@ApiTags('Program Participation Info')
+@ApiTags('Programs')
 @Controller('programs/:programId/participation-info')
 export class ProgramParticipationController {
   constructor(

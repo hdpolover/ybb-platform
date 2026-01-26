@@ -21,7 +21,7 @@ import { FileServiceClient } from '../infrastructure/clients/file-service.client
  * Handles document generation requests (certificates, reports, PDFs)
  * and proxies them to the File Service
  */
-@ApiTags('documents')
+@ApiTags('Documents')
 @Controller('documents')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()

@@ -5,7 +5,7 @@ import { LandingPageResponseDto } from './dto/landing-page.dto';
 import { LandingSettingsResponseDto } from './dto/landing-settings.dto';
 import { Public } from '../../shared/decorators/public.decorator';
 
-@ApiTags('landing')
+@ApiTags('Landing')
 @Controller('landing')
 @Public()
 @ApiHeader({

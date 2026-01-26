@@ -5,7 +5,7 @@ import { StatsService } from './stats.service';
 import { GetStatsQueryDto } from './dto/get-stats.dto';
 import { StatsResponseDto } from './dto/stats-response.dto';
 
-@ApiTags('stats')
+@ApiTags('Stats')
 @Controller('stats')
 @ApiHeader({
   name: 'x-brand-domain',
