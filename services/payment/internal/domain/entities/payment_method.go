@@ -15,6 +15,14 @@ const (
 	MethodTypeManual    PaymentMethodType = "manual"    // Manual verification
 )
 
+type FeeConfig struct {
+	FixedFee      float64 `json:"fixed_fee"`
+	PercentageFee float64 `json:"percentage_fee"` // 0.029 for 2.9%
+	MinFee        float64 `json:"min_fee"`
+	Currency      string  `json:"currency"`
+	IsSurcharge   bool    `json:"is_surcharge"` // false=absorb, true=customer_pays
+}
+
 // PaymentMethodEntity represents a configurable payment method
 type PaymentMethodEntity struct {
 	ID          string            `gorm:"type:uuid;primaryKey"`
@@ -39,9 +47,9 @@ type PaymentMethodEntity struct {
 	AdminInstructions string `gorm:"type:text"              json:"admin_instructions" example:"Cek mutasi bank tanggal sekian"`
 
 	// --- Configuration ---
-	// swaggertype digunakan agar Swagger tidak bingung membaca map[string]interface{}
-	Config map[string]any `gorm:"type:jsonb;serializer:json" json:"config" swaggerignore:"true"`
-	SortOrder int         `gorm:"default:0" json:"sort_order" example:"1"`
+	// Structure tracking fee logic
+	Config    FeeConfig `gorm:"type:jsonb;serializer:json" json:"config" swaggerignore:"true"`
+	SortOrder int       `gorm:"default:0" json:"sort_order" example:"1"`
 
 	// --- Timestamps ---
 	CreatedAt time.Time      `json:"created_at" example:"2025-12-01T10:00:00Z"`

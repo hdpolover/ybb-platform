@@ -1,5 +1,24 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNumber, IsString, IsOptional, IsObject, Min } from 'class-validator';
+import { IsNumber, IsString, IsOptional, IsObject, Min, IsEmail, IsArray, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class ItemDetailDto {
+    @ApiProperty()
+    @IsString()
+    id: string;
+
+    @ApiProperty()
+    @IsString()
+    name: string;
+
+    @ApiProperty()
+    @IsNumber()
+    price: number;
+
+    @ApiProperty()
+    @IsNumber()
+    quantity: number;
+}
 
 export class CreateIntentDto {
     @ApiProperty()
@@ -23,6 +42,33 @@ export class CreateIntentDto {
     @IsString()
     @IsOptional()
     participant_id?: string;
+
+    @ApiPropertyOptional()
+    @IsString()
+    @IsOptional()
+    customer_name?: string;
+
+    @ApiPropertyOptional()
+    @IsEmail()
+    @IsOptional()
+    customer_email?: string;
+
+    @ApiPropertyOptional()
+    @IsString()
+    @IsOptional()
+    customer_phone?: string;
+
+    @ApiPropertyOptional()
+    @IsString()
+    @IsOptional()
+    description?: string;
+
+    @ApiPropertyOptional({ type: [ItemDetailDto] })
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => ItemDetailDto)
+    @IsOptional()
+    item_details?: ItemDetailDto[];
 
     @ApiPropertyOptional()
     @IsObject()

@@ -21,11 +21,11 @@ import (
 	// swaggerFiles "github.com/swaggo/files"
 	// ginSwagger "github.com/swaggo/gin-swagger"
 
-	// _ "github.com/ybb-platform/payment/docs" 
+	// _ "github.com/ybb-platform/payment/docs"
 
-	"github.com/ybb-platform/payment/internal/domain/entities"
 	commandHandlers "github.com/ybb-platform/payment/internal/application/commands/handlers"
 	queryHandlers "github.com/ybb-platform/payment/internal/application/queries/handlers"
+	"github.com/ybb-platform/payment/internal/domain/entities"
 	"github.com/ybb-platform/payment/internal/infrastructure/config"
 	infraGateways "github.com/ybb-platform/payment/internal/infrastructure/gateways"
 	grpcServer "github.com/ybb-platform/payment/internal/infrastructure/grpc"
@@ -79,9 +79,9 @@ func main() {
 	// Auto-migrate database schema (GORM Structs)
 	// Keeps Go structs in sync for basic CRUD
 	if err := db.AutoMigrate(
-		&entities.Payment{}, 
-		&entities.PaymentMethodEntity{}, 
-		&entities.Refund{}, 
+		&entities.Payment{},
+		&entities.PaymentMethodEntity{},
+		&entities.Refund{},
 		&entities.GatewayConfig{},
 		&entities.PaymentIntent{},
 		&entities.PaymentTransaction{},
@@ -142,11 +142,12 @@ func main() {
 		}
 		s := grpc.NewServer()
 		paymentGrpcService := grpcServer.NewPaymentGrpcServer(
-            intentRepo,
-            txRepo,
-            gatewayFactory,
-            eventPublisher,
-        )
+			intentRepo,
+			txRepo,
+			paymentMethodRepo,
+			gatewayFactory,
+			eventPublisher,
+		)
 		pb.RegisterPaymentServiceServer(s, paymentGrpcService)
 		log.Printf("gRPC server listening at %v", lis.Addr())
 		if err := s.Serve(lis); err != nil {
@@ -162,9 +163,9 @@ func main() {
 	)
 
 	verifyStatusHandler := commandHandlers.NewVerifyStatusHandler(
-        paymentRepo,
-        gatewayFactory,
-    )
+		paymentRepo,
+		gatewayFactory,
+	)
 
 	cancelPaymentHandler := commandHandlers.NewCancelPaymentHandler(
 		paymentRepo,
@@ -172,16 +173,16 @@ func main() {
 	)
 
 	retryPaymentHandler := commandHandlers.NewRetryPaymentHandler(
-		paymentRepo, 
+		paymentRepo,
 		gatewayFactory,
 	)
 
 	// Refund Handler
-    refundPaymentHandler := commandHandlers.NewRefundPaymentHandler(
-        paymentRepo,
-        gatewayFactory,
-        eventPublisher,
-    )
+	refundPaymentHandler := commandHandlers.NewRefundPaymentHandler(
+		paymentRepo,
+		gatewayFactory,
+		eventPublisher,
+	)
 
 	getPaymentHandler := queryHandlers.NewGetPaymentHandler(paymentRepo)
 
@@ -242,7 +243,7 @@ func setupRouter(paymentHandler *handlers.PaymentHandler, paymentMethodHandler *
 	// router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// Health check
-	router.GET("/health", func(c *gin.Context) {	
+	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"status":  "ok",
 			"service": "payment",

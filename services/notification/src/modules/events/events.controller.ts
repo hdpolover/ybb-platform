@@ -18,6 +18,9 @@ export class EventsController {
 
         if (data.email) {
             let receiptBuffer: Buffer | undefined;
+            const items = data.metadata?.item_details || [];
+            const description = data.metadata?.description || 'Payment for services';
+
             try {
                 receiptBuffer = await this.receiptService.generateReceipt({
                     orderId: data.order_id || data.payment_id,
@@ -25,7 +28,8 @@ export class EventsController {
                     currency: data.currency,
                     customerName: data.metadata?.customer_name || data.customer_name || 'Customer',
                     date: new Date().toLocaleDateString(),
-                    description: 'Payment for services'
+                    description: description,
+                    items: items
                 });
             } catch (error) {
                 this.logger.error('Failed to generate receipt', error);
@@ -36,8 +40,9 @@ export class EventsController {
                 amount: data.amount,
                 currency: data.currency,
                 orderId: data.order_id || data.payment_id,
-                description: 'Payment for services',
+                description: description,
                 invoiceUrl: '#', // TODO: Add real invoice URL
+                items: items
             }, receiptBuffer);
         }
     }
