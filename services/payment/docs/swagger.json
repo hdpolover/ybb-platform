@@ -1,7 +1,7 @@
 {
     "swagger": "2.0",
     "info": {
-        "description": "Ini adalah dokumentasi API untuk layanan pembayaran YBB Platform.",
+        "description": "This is the API documentation for the YBB Platform Payment Service.",
         "title": "YBB Payment Service API",
         "termsOfService": "http://swagger.io/terms/",
         "contact": {
@@ -20,14 +20,14 @@
     "paths": {
         "/payment-methods": {
             "get": {
-                "description": "Mendapatkan daftar semua metode pembayaran yang tersedia",
+                "description": "Get a list of all available payment methods",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Payment Methods"
                 ],
-                "summary": "Lihat Semua Metode Pembayaran",
+                "summary": "Get All Payment Methods",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -44,7 +44,7 @@
                 }
             },
             "post": {
-                "description": "Menambahkan bank atau metode pembayaran baru ke database",
+                "description": "Add a new bank or payment method to the database",
                 "consumes": [
                     "application/json"
                 ],
@@ -54,10 +54,10 @@
                 "tags": [
                     "Payment Methods"
                 ],
-                "summary": "Tambah Metode Pembayaran Baru",
+                "summary": "Add New Payment Method",
                 "parameters": [
                     {
-                        "description": "Data Payment Method",
+                        "description": "Payment Method Data",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -88,14 +88,14 @@
         },
         "/payment-methods/{id}": {
             "get": {
-                "description": "Mendapatkan detail metode pembayaran berdasarkan ID",
+                "description": "Get payment method details by ID",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Payment Methods"
                 ],
-                "summary": "Detail Metode Pembayaran",
+                "summary": "Get Payment Method Detail",
                 "parameters": [
                     {
                         "type": "string",
@@ -125,7 +125,7 @@
                 }
             },
             "put": {
-                "description": "Mengubah data bank atau metode pembayaran berdasarkan ID",
+                "description": "Update bank or payment method details by ID",
                 "consumes": [
                     "application/json"
                 ],
@@ -135,7 +135,7 @@
                 "tags": [
                     "Payment Methods"
                 ],
-                "summary": "Update Metode Pembayaran",
+                "summary": "Update Payment Method",
                 "parameters": [
                     {
                         "type": "string",
@@ -145,7 +145,7 @@
                         "required": true
                     },
                     {
-                        "description": "Data Update",
+                        "description": "Update Data",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -181,14 +181,14 @@
                 }
             },
             "delete": {
-                "description": "Menghapus (Soft Delete) metode pembayaran berdasarkan ID",
+                "description": "Delete (Soft Delete) payment method by ID",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Payment Methods"
                 ],
-                "summary": "Hapus Metode Pembayaran",
+                "summary": "Delete Payment Method",
                 "parameters": [
                     {
                         "type": "string",

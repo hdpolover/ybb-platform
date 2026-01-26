@@ -17,12 +17,12 @@ func NewPaymentMethodHandler(repo *persistence.PaymentMethodRepository) *Payment
 }
 
 // Create godoc
-// @Summary      Tambah Metode Pembayaran Baru
-// @Description  Menambahkan bank atau metode pembayaran baru ke database
+// @Summary      Add New Payment Method
+// @Description  Add a new bank or payment method to the database
 // @Tags         Payment Methods
 // @Accept       json
 // @Produce      json
-// @Param        request body entities.PaymentMethodEntity true "Data Payment Method"
+// @Param        request body entities.PaymentMethodEntity true "Payment Method Data"
 // @Success      201  {object}  map[string]entities.PaymentMethodEntity
 // @Failure      400  {object}  map[string]interface{}
 // @Router       /payment-methods [post]
@@ -42,8 +42,8 @@ func (h *PaymentMethodHandler) Create(c *gin.Context) {
 }
 
 // GetAll godoc
-// @Summary      Lihat Semua Metode Pembayaran
-// @Description  Mendapatkan daftar semua metode pembayaran yang tersedia
+// @Summary      Get All Payment Methods
+// @Description  Get a list of all available payment methods
 // @Tags         Payment Methods
 // @Produce      json
 // @Success      200  {object}  map[string][]entities.PaymentMethodEntity
@@ -58,8 +58,8 @@ func (h *PaymentMethodHandler) GetAll(c *gin.Context) {
 }
 
 // GetByID godoc
-// @Summary      Detail Metode Pembayaran
-// @Description  Mendapatkan detail metode pembayaran berdasarkan ID
+// @Summary      Get Payment Method Detail
+// @Description  Get payment method details by ID
 // @Tags         Payment Methods
 // @Produce      json
 // @Param        id   path      string  true  "Payment Method ID (UUID)"
@@ -77,13 +77,13 @@ func (h *PaymentMethodHandler) GetByID(c *gin.Context) {
 }
 
 // Update godoc
-// @Summary      Update Metode Pembayaran
-// @Description  Mengubah data bank atau metode pembayaran berdasarkan ID
+// @Summary      Update Payment Method
+// @Description  Update bank or payment method details by ID
 // @Tags         Payment Methods
 // @Accept       json
 // @Produce      json
 // @Param        id       path  string                      true  "Payment Method ID (UUID)"
-// @Param        request  body  entities.PaymentMethodEntity true "Data Update"
+// @Param        request  body  entities.PaymentMethodEntity true "Update Data"
 // @Success      200      {object}  map[string]entities.PaymentMethodEntity
 // @Failure      400      {object}  map[string]interface{}
 // @Failure      404      {object}  map[string]interface{}
@@ -134,8 +134,8 @@ func (h *PaymentMethodHandler) Update(c *gin.Context) {
 }
 
 // Delete godoc
-// @Summary      Hapus Metode Pembayaran
-// @Description  Menghapus (Soft Delete) metode pembayaran berdasarkan ID
+// @Summary      Delete Payment Method
+// @Description  Delete (Soft Delete) payment method by ID
 // @Tags         Payment Methods
 // @Produce      json
 // @Param        id   path      string  true  "Payment Method ID (UUID)"

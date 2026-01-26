@@ -26,14 +26,14 @@ const docTemplate = `{
     "paths": {
         "/payment-methods": {
             "get": {
-                "description": "Mendapatkan daftar semua metode pembayaran yang tersedia",
+                "description": "Get a list of all available payment methods",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Payment Methods"
                 ],
-                "summary": "Lihat Semua Metode Pembayaran",
+                "summary": "Get All Payment Methods",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -50,7 +50,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Menambahkan bank atau metode pembayaran baru ke database",
+                "description": "Add a new bank or payment method to the database",
                 "consumes": [
                     "application/json"
                 ],
@@ -60,10 +60,10 @@ const docTemplate = `{
                 "tags": [
                     "Payment Methods"
                 ],
-                "summary": "Tambah Metode Pembayaran Baru",
+                "summary": "Add New Payment Method",
                 "parameters": [
                     {
-                        "description": "Data Payment Method",
+                        "description": "Payment Method Data",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -94,14 +94,14 @@ const docTemplate = `{
         },
         "/payment-methods/{id}": {
             "get": {
-                "description": "Mendapatkan detail metode pembayaran berdasarkan ID",
+                "description": "Get payment method details by ID",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Payment Methods"
                 ],
-                "summary": "Detail Metode Pembayaran",
+                "summary": "Get Payment Method Detail",
                 "parameters": [
                     {
                         "type": "string",
@@ -131,7 +131,7 @@ const docTemplate = `{
                 }
             },
             "put": {
-                "description": "Mengubah data bank atau metode pembayaran berdasarkan ID",
+                "description": "Update bank or payment method details by ID",
                 "consumes": [
                     "application/json"
                 ],
@@ -141,7 +141,7 @@ const docTemplate = `{
                 "tags": [
                     "Payment Methods"
                 ],
-                "summary": "Update Metode Pembayaran",
+                "summary": "Update Payment Method",
                 "parameters": [
                     {
                         "type": "string",
@@ -151,7 +151,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Data Update",
+                        "description": "Update Data",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -187,14 +187,14 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Menghapus (Soft Delete) metode pembayaran berdasarkan ID",
+                "description": "Delete (Soft Delete) payment method by ID",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Payment Methods"
                 ],
-                "summary": "Hapus Metode Pembayaran",
+                "summary": "Delete Payment Method",
                 "parameters": [
                     {
                         "type": "string",
@@ -866,7 +866,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/api/v1",
 	Schemes:          []string{},
 	Title:            "YBB Payment Service API",
-	Description:      "Ini adalah dokumentasi API untuk layanan pembayaran YBB Platform.",
+	Description:      "This is the API documentation for the YBB Platform Payment Service.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

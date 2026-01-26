@@ -176,7 +176,7 @@ info:
     email: support@swagger.io
     name: API Support
     url: http://www.swagger.io/support
-  description: Ini adalah dokumentasi API untuk layanan pembayaran YBB Platform.
+  description: This is the API documentation for the YBB Platform Payment Service.
   license:
     name: Apache 2.0
     url: http://www.apache.org/licenses/LICENSE-2.0.html
@@ -186,7 +186,7 @@ info:
 paths:
   /payment-methods:
     get:
-      description: Mendapatkan daftar semua metode pembayaran yang tersedia
+      description: Get a list of all available payment methods
       produces:
       - application/json
       responses:
@@ -198,15 +198,15 @@ paths:
                 $ref: '#/definitions/entities.PaymentMethodEntity'
               type: array
             type: object
-      summary: Lihat Semua Metode Pembayaran
+      summary: Get All Payment Methods
       tags:
       - Payment Methods
     post:
       consumes:
       - application/json
-      description: Menambahkan bank atau metode pembayaran baru ke database
+      description: Add a new bank or payment method to the database
       parameters:
-      - description: Data Payment Method
+      - description: Payment Method Data
         in: body
         name: request
         required: true
@@ -226,12 +226,12 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Tambah Metode Pembayaran Baru
+      summary: Add New Payment Method
       tags:
       - Payment Methods
   /payment-methods/{id}:
     delete:
-      description: Menghapus (Soft Delete) metode pembayaran berdasarkan ID
+      description: Delete (Soft Delete) payment method by ID
       parameters:
       - description: Payment Method ID (UUID)
         in: path
@@ -252,11 +252,11 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Hapus Metode Pembayaran
+      summary: Delete Payment Method
       tags:
       - Payment Methods
     get:
-      description: Mendapatkan detail metode pembayaran berdasarkan ID
+      description: Get payment method details by ID
       parameters:
       - description: Payment Method ID (UUID)
         in: path
@@ -277,20 +277,20 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Detail Metode Pembayaran
+      summary: Get Payment Method Detail
       tags:
       - Payment Methods
     put:
       consumes:
       - application/json
-      description: Mengubah data bank atau metode pembayaran berdasarkan ID
+      description: Update bank or payment method details by ID
       parameters:
       - description: Payment Method ID (UUID)
         in: path
         name: id
         required: true
         type: string
-      - description: Data Update
+      - description: Update Data
         in: body
         name: request
         required: true
@@ -315,7 +315,7 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Update Metode Pembayaran
+      summary: Update Payment Method
       tags:
       - Payment Methods
   /payments:
