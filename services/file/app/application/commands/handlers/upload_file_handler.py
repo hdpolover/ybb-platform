@@ -41,7 +41,9 @@ class UploadFileHandler:
         'speakers',
         'content',
         'announcements',
-        'faq'
+        'faq',
+        'payment_icons',
+        'payment_methods'
     ]
     
     def __init__(

@@ -3,6 +3,7 @@ import { CqrsModule } from '@nestjs/cqrs';
 import { HttpModule } from '@nestjs/axios';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from '../auth/auth.module';
+import { FilesModule } from '../files/files.module';
 import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.module';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { PaymentsController } from './presentation/payments.controller';
@@ -19,6 +20,7 @@ import { ProcessPaymentHandler } from './application/commands/handlers/process-p
     imports: [
         CqrsModule,
         AuthModule,
+        FilesModule,
         MonitoringModule,
         HttpModule,
         ConfigModule,

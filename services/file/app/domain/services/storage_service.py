@@ -81,6 +81,20 @@ class IStorageService(ABC):
         pass
     
     @abstractmethod
+    def get_public_url(self, bucket: str, object_name: str) -> str:
+        """
+        Get public URL for object (no signature).
+        
+        Args:
+            bucket: Bucket name
+            object_name: Object path in bucket
+            
+        Returns:
+            Public URL
+        """
+        pass
+    
+    @abstractmethod
     async def exists(self, bucket: str, object_name: str) -> bool:
         """Check if object exists in storage."""
         pass

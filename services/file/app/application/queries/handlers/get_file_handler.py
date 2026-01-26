@@ -9,6 +9,13 @@ from app.domain.exceptions.file_exceptions import FileNotFoundException
 class GetFileHandler:
     """Handler for getting file information."""
     
+    # Public categories that support direct URL access
+    PUBLIC_CATEGORIES = [
+        'gallery', 'programs', 'banners', 'assets', 'partners',
+        'sponsors', 'speakers', 'content', 'announcements', 'faq',
+        'payment_icons', 'payment_methods'
+    ]
+    
     def __init__(
         self,
         file_repository: IFileRepository,
@@ -40,6 +47,27 @@ class GetFileHandler:
         # Verify user has access (brand-scoped)
         if file.user_id != query.user_id or file.brand_id != query.brand_id:
             raise FileNotFoundException(query.file_id)
+
+        # Generate public URL if file is in public bucket
+        # Note: file.bucket stores the Physical Bucket Name (e.g., "ybb").
+        # Examples of storage_path: 
+        # - dev/brand/programs/prog_id/banners/file.png (parts[-2] = category)
+        # - dev/brand/users/user_id/payment_icons/file.png (parts[-2] = category)
+        public_url = None
+        
+        # Try to infer category from path
+        is_public_category = False
+        parts = file.storage_path.split('/')
+        if len(parts) >= 2:
+            category = parts[-2]
+            if category in self.PUBLIC_CATEGORIES:
+                is_public_category = True
+        
+        if is_public_category:
+            public_url = self.storage_service.get_public_url(
+                bucket=file.bucket,
+                object_name=file.storage_path
+            )
         
         # Generate download URL if requested
         download_url = None
@@ -50,4 +78,4 @@ class GetFileHandler:
                 expiry_seconds=3600  # 1 hour
             )
         
-        return FileDto.from_entity(file, download_url=download_url)
+        return FileDto.from_entity(file, download_url=download_url, url=public_url)
