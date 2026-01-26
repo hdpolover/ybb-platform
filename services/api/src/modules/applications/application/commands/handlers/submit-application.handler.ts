@@ -59,7 +59,7 @@ export class SubmitApplicationHandler {
       // Check for any SUCCEEDED registration payment
       const hasPaidRegistration = payments.intents.some(intent => 
         intent.status === 'SUCCEEDED'
-        // && intent.metadata['payment_category'] === 'registration' // Optional: strict check
+        && intent.metadata?.['payment_category'] === 'registration'
       );
 
       if (!hasPaidRegistration) {

@@ -27,11 +27,14 @@ import { CreateDeletionRequestCommand } from '../application/commands/create-del
 import { CreateDeletionRequestHandler } from '../application/commands/handlers/create-deletion-request.handler';
 import { CurrentUser } from '../../../shared/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../auth/infrastructure/guards/jwt-auth.guard';
+import { RolesGuard } from '../../auth/infrastructure/guards/roles.guard';
+import { Roles } from '../../auth/application/decorators/roles.decorator';
+import { UserRole } from '../../../core/entities/user.entity';
 
 @ApiTags('Users')
 @Controller('users')
-// @ApiBearerAuth()
-// @UseGuards(JwtAuthGuard) // TODO: Implement auth guards
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class UsersController {
   constructor(
     private readonly createUserHandler: CreateUserHandler,
@@ -154,6 +157,7 @@ export class UsersController {
   }
 
   @Post()
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Create New User' })
   @ApiResponse({ status: 201, description: 'User successfully created', type: UserResponseDto })
   async create(@Body() dto: CreateUserDto): Promise<UserResponseDto> {
@@ -167,6 +171,7 @@ export class UsersController {
   }
 
   @Get(':id')
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Get User By ID' })
   @ApiResponse({ status: 200, description: 'Successfully retrieved user details', type: UserResponseDto })
   async findOne(
@@ -178,6 +183,7 @@ export class UsersController {
   }
 
   @Get()
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Get All Users' })
   @ApiResponse({ status: 200, description: 'Successfully retrieved list of users', type: [UserResponseDto] })
   @ApiQuery({ name: 'brandId', required: true })
