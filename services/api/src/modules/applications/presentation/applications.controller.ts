@@ -22,6 +22,7 @@ import { SubmitApplicationHandler } from '../application/commands/handlers/submi
 import { ReviewApplicationHandler } from '../application/commands/handlers/review-application.handler';
 import { WithdrawApplicationHandler } from '../application/commands/handlers/withdraw-application.handler';
 import { SwitchApplicationCategoryHandler } from '../application/commands/handlers/switch-application-category.handler';
+import { CreateRegistrationPaymentIntentHandler } from '../application/commands/handlers/create-registration-payment-intent.handler';
 
 import { CreateApplicationCommand } from '../application/commands/create-application.command';
 import { UpdateApplicationCommand } from '../application/commands/update-application.command';
@@ -29,6 +30,7 @@ import { SubmitApplicationCommand } from '../application/commands/submit-applica
 import { ReviewApplicationCommand } from '../application/commands/review-application.command';
 import { WithdrawApplicationCommand } from '../application/commands/withdraw-application.command';
 import { SwitchApplicationCategoryCommand } from '../application/commands/switch-application-category.command';
+import { CreateRegistrationPaymentIntentCommand } from '../application/commands/create-registration-payment-intent.command';
 
 // Queries
 import { GetApplicationHandler } from '../application/queries/handlers/get-application.handler';
@@ -64,6 +66,7 @@ export class ApplicationsController {
     private readonly reviewApplicationHandler: ReviewApplicationHandler,
     private readonly withdrawApplicationHandler: WithdrawApplicationHandler,
     private readonly switchApplicationCategoryHandler: SwitchApplicationCategoryHandler,
+    private readonly createRegistrationPaymentIntentHandler: CreateRegistrationPaymentIntentHandler,
     private readonly getApplicationHandler: GetApplicationHandler,
     private readonly listApplicationsHandler: ListApplicationsHandler,
   ) {}
@@ -185,6 +188,19 @@ export class ApplicationsController {
 
     const command = new SubmitApplicationCommand(id, participantId);
     return this.submitApplicationHandler.execute(command);
+  }
+
+  @Post(':id/payment-intent')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create Registration Payment Intent' })
+  @ApiResponse({ status: 201, description: 'Payment Intent created' })
+  async createPaymentIntent(
+      @Param('id') id: string,
+      @Body('userId') userId: string
+  ) {
+      this.logger.log(`Creating payment intent for application ${id}`);
+      const command = new CreateRegistrationPaymentIntentCommand(id, userId);
+      return this.createRegistrationPaymentIntentHandler.execute(command);
   }
 
   @Post(':id/review')

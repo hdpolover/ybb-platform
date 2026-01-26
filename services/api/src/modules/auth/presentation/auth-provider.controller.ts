@@ -10,13 +10,15 @@ import { CreateAuthProviderCommand } from '../application/commands/create-auth-p
 import { UpdateAuthProviderCommand } from '../application/commands/update-auth-provider.command';
 import { DeleteAuthProviderCommand } from '../application/commands/delete-auth-provider.command';
 import { JwtAuthGuard } from '../infrastructure/guards/jwt-auth.guard';
-// import { RolesGuard } from ... // Needed for Admin only access, assuming strictly implemented later
-// import { Roles } from ...
+import { RolesGuard } from '../infrastructure/guards/roles.guard';
+import { Roles } from '../application/decorators/roles.decorator';
+import { UserRole } from '../../../core/entities/user.entity';
 
 @ApiTags('Auth')
 @Controller('auth/providers')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
+@Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 export class AuthProviderController {
   constructor(
     private readonly createHandler: CreateAuthProviderHandler,

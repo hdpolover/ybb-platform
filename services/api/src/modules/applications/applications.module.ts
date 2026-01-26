@@ -11,6 +11,8 @@ import { ReviewApplicationHandler } from './application/commands/handlers/review
 import { WithdrawApplicationHandler } from './application/commands/handlers/withdraw-application.handler';
 import { SwitchApplicationCategoryHandler } from './application/commands/handlers/switch-application-category.handler';
 
+import { CreateRegistrationPaymentIntentHandler } from './application/commands/handlers/create-registration-payment-intent.handler';
+
 // Query Handlers
 import { GetApplicationHandler } from './application/queries/handlers/get-application.handler';
 import { ListApplicationsHandler } from './application/queries/handlers/list-applications.handler';
@@ -33,6 +35,7 @@ import { APPLICATION_REPOSITORY } from './infrastructure/tokens';
     ReviewApplicationHandler,
     WithdrawApplicationHandler,
     SwitchApplicationCategoryHandler,
+    CreateRegistrationPaymentIntentHandler,
 
     // Query Handlers
     GetApplicationHandler,

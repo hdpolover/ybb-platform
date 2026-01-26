@@ -7,6 +7,7 @@ import { APPLICATION_REPOSITORY } from '@modules/applications/infrastructure/tok
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { PaymentGrpcClient } from '@modules/payments/infrastructure/services/payment-grpc.client';
 
 /**
  * Get Application Handler
@@ -22,6 +23,7 @@ export class GetApplicationHandler {
     private readonly applicationMapper: ApplicationMapper,
     private readonly cacheService: CacheService,
     private readonly prisma: PrismaService,
+    private readonly paymentClient: PaymentGrpcClient,
   ) { }
 
   async execute(query: GetApplicationQuery): Promise<ApplicationResponseDto> {
@@ -46,6 +48,36 @@ export class GetApplicationHandler {
     }
 
     const dto = this.applicationMapper.toDto(application, query.includeRelations);
+
+    try {
+        const payments = await this.paymentClient.getIntentsByReference({
+            reference_type: 'application',
+            reference_id: application.id
+        });
+        
+        const successfulPayment = payments.intents.find(i => 
+             i.status === 'SUCCEEDED' 
+             && i.metadata?.['payment_category'] === 'registration'
+        );
+
+        if (successfulPayment) {
+             dto.paymentStatus = 'PAID';
+             dto.paymentId = successfulPayment.id;
+             dto.paymentAmount = Number(successfulPayment.amount);
+        } else {
+             // Look for pending registration payments to resume
+             const pending = payments.intents.find(i => 
+                 ['PENDING', 'REQUIRES_PAYMENT_METHOD'].includes(i.status)
+                 && i.metadata?.['payment_category'] === 'registration'
+             );
+             if (pending) {
+                 dto.paymentStatus = pending.status;
+                 dto.paymentId = pending.id;
+             }
+        }
+    } catch (error) {
+        console.error(`Failed to fetch payment status for app ${application.id}`, error);
+    }
 
     try {
       const fields = await this.prisma.applicationFormField.findMany({
