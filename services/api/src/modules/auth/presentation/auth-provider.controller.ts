@@ -13,7 +13,7 @@ import { JwtAuthGuard } from '../infrastructure/guards/jwt-auth.guard';
 // import { RolesGuard } from ... // Needed for Admin only access, assuming strictly implemented later
 // import { Roles } from ...
 
-@ApiTags('auth-providers')
+@ApiTags('Auth')
 @Controller('auth/providers')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()

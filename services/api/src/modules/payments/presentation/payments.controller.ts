@@ -19,7 +19,7 @@ import { ConfirmPaymentDto } from './dto/confirm-payment.dto';
 import { CreateIntentCommand } from '../application/commands/create-intent.command';
 import { ProcessPaymentCommand } from '../application/commands/process-payment.command';
 
-@ApiTags('payments')
+@ApiTags('Payments')
 @Controller('payments')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()

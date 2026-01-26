@@ -6,7 +6,7 @@ import { CacheWarmingService } from '../infrastructure/cache/cache-warming.servi
 import { MetricsService } from '../infrastructure/monitoring/metrics.service';
 import { Public } from '../decorators/public.decorator';
 
-@ApiTags('metrics')
+@ApiTags('System')
 @Controller('metrics')
 export class MetricsController {
     constructor(

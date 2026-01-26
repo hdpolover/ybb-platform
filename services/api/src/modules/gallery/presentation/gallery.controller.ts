@@ -16,7 +16,7 @@ import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard
 import { CreateGalleryItemDto } from '../dto/create-gallery-item.dto';
 import { GalleryService } from '../application/gallery.service';
 
-@ApiTags('gallery')
+@ApiTags('Gallery')
 @Controller('gallery')
 export class GalleryController {
   private readonly logger = new Logger(GalleryController.name);

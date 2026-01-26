@@ -9,7 +9,7 @@ import { ReplySupportTicketCommand } from '../application/commands/reply-support
 import { ListSupportTicketsQuery } from '../application/queries/list-support-tickets.query';
 import { GetSupportTicketQuery } from '../application/queries/get-support-ticket.query';
 
-@ApiTags('support')
+@ApiTags('Support')
 @Controller('support/tickets')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()

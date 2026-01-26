@@ -6,6 +6,7 @@ import {
     Body,
     UseGuards,
     UnauthorizedException,
+    Query,
 } from '@nestjs/common';
 import {
     ApiTags,
@@ -16,16 +17,18 @@ import {
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { CurrentUser } from '@shared/decorators/current-user.decorator';
 import { GetMyParticipantProfileQuery } from '../application/queries/get-my-participant-profile.query';
+import { GetParticipantDashboardQuery } from '../application/queries/get-participant-dashboard.query';
 import { UpdateParticipantProfileCommand } from '../application/commands/update-participant-profile.command';
 import { CompleteOnboardingCommand } from '../application/commands/complete-onboarding.command';
 import { OnboardingDto } from './dto/onboarding.dto';
 import { UpdateParticipantProfileDto, ParticipantResponseDto } from './dto/participant.dto';
+import { ParticipantDashboardResponseDto } from './dto/participant-dashboard.dto';
 import { ApplyAmbassadorDto, AmbassadorDashboardDto } from './dto/ambassador.dto';
 import { ApplyAmbassadorCommand } from '../application/commands/apply-ambassador.command';
 import { GetAmbassadorDashboardQuery } from '../application/queries/get-ambassador-dashboard.query';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 
-@ApiTags('participants')
+@ApiTags('Participants')
 @Controller('participants')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
@@ -102,6 +105,18 @@ export class ParticipantsController {
         const userId = user?.userId || user?.id;
         if (!userId) throw new UnauthorizedException();
         return this.commandBus.execute(new ApplyAmbassadorCommand(userId, dto));
+    }
+
+    @Get('dashboard')
+    @ApiOperation({ summary: 'Get participant dashboard summary' })
+    @ApiResponse({ status: 200, type: ParticipantDashboardResponseDto })
+    async getDashboard(
+        @CurrentUser() user: any,
+        @Query('participantId') participantId?: string,
+    ): Promise<ParticipantDashboardResponseDto> {
+        const userId = user?.userId || user?.id;
+        if (!userId) throw new UnauthorizedException();
+        return this.queryBus.execute(new GetParticipantDashboardQuery(userId, participantId));
     }
 
     @Get('ambassador/dashboard')

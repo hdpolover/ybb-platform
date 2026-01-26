@@ -308,6 +308,7 @@ model ProgramAnnouncement {
 
   // Relations
   program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+  reads   ProgramAnnouncementRead[]
 
   @@index([programId])
   @@index([category])
@@ -315,6 +316,21 @@ model ProgramAnnouncement {
   @@index([isPinned])
   @@index([publishDate])
   @@map("program_announcements")
+}
+
+model ProgramAnnouncementRead {
+  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  announcementId String   @map("announcement_id") @db.Uuid
+  readAt         DateTime @default(now()) @map("read_at") @db.Timestamptz(6)
+
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  programAnnouncement ProgramAnnouncement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, announcementId])
+  @@index([userId])
+  @@index([announcementId])
+  @@map("program_announcement_reads")
 }
 
 model CertificateTemplate {

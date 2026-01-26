@@ -50,7 +50,7 @@ import { ApplicationStatus } from '@core/entities/participant-application.entity
  * Presentation Layer - REST API
  * Handles HTTP requests for application operations
  */
-@ApiTags('applications')
+@ApiTags('Applications')
 @Controller('applications')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()

@@ -14,7 +14,7 @@ import { Request, Response } from 'express';
 import { firstValueFrom } from 'rxjs';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 
-@ApiTags('webhooks')
+@ApiTags('Webhooks')
 @Controller('webhooks/payment')
 export class WebhooksController {
     private readonly logger = new Logger(WebhooksController.name);

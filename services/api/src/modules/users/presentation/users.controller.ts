@@ -28,7 +28,7 @@ import { CreateDeletionRequestHandler } from '../application/commands/handlers/c
 import { CurrentUser } from '../../../shared/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../auth/infrastructure/guards/jwt-auth.guard';
 
-@ApiTags('users')
+@ApiTags('Users')
 @Controller('users')
 // @ApiBearerAuth()
 // @UseGuards(JwtAuthGuard) // TODO: Implement auth guards

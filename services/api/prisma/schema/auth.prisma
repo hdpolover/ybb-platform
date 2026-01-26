@@ -87,6 +87,7 @@ model User {
   activityLogs             UserActivityLog[]
   deletionRequests         AccountDeletionRequest[]
   announcementReads        UserAnnouncementRead[]
+  programAnnouncementReads ProgramAnnouncementRead[]
   // applications          ParticipantApplication[] // Main submission relation (Moved to Participant)
   editHistoryChangedBy     ApplicationEditHistory[] @relation("EditHistoryChangedBy")
   deletedParticipants      Participant[]            @relation("ParticipantDeleter")

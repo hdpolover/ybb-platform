@@ -9,7 +9,7 @@ import { JwtAuthGuard } from '../../auth/infrastructure/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../shared/decorators/current-user.decorator';
 // import { AdminGuard } from ... // Should restrict to admin
 
-@ApiTags('admin-deletion-requests')
+@ApiTags('Users')
 @Controller('admin/deletion-requests')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()

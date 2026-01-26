@@ -6,7 +6,7 @@ import { UpdateAiBotConfigDto } from './dtos/update-ai-bot.dto';
 // import { AdminGuard } from '../../core/guards/admin.guard';
 // import { Public } from '../../core/decorators/public.decorator';
 
-@ApiTags('AI Bot Settings')
+@ApiTags('AI Bot')
 @Controller('ai-bot')
 export class AiBotController {
   constructor(private readonly aiBotService: AiBotService) {}
