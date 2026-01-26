@@ -19,10 +19,11 @@ class FileDto(BaseModel):
     brand_id: str
     uploaded_at: datetime
     download_url: Optional[str] = None
+    url: Optional[str] = None
     metadata: Optional[dict] = None
     
     @staticmethod
-    def from_entity(file: File, download_url: Optional[str] = None) -> 'FileDto':
+    def from_entity(file: File, download_url: Optional[str] = None, url: Optional[str] = None) -> 'FileDto':
         """Convert domain entity to DTO."""
         return FileDto(
             id=file.id,
@@ -36,6 +37,7 @@ class FileDto(BaseModel):
             brand_id=file.brand_id,
             uploaded_at=file.uploaded_at,
             download_url=download_url,
+            url=url,
             metadata=file.metadata
         )
 
