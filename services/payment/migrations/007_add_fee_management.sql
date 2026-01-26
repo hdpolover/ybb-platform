@@ -5,7 +5,9 @@
 DO $$
 BEGIN
     IF EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='payment_transactions' AND column_name='payment_method_code') THEN
-        ALTER TABLE payment_transactions RENAME COLUMN payment_method_code TO payment_method_id;
+        IF NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='payment_transactions' AND column_name='payment_method_id') THEN
+            ALTER TABLE payment_transactions RENAME COLUMN payment_method_code TO payment_method_id;
+        END IF;
     END IF;
 END $$;
 

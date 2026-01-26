@@ -57,6 +57,25 @@ func (h *PaymentMethodHandler) GetAll(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": methods})
 }
 
+// GetByID godoc
+// @Summary      Detail Metode Pembayaran
+// @Description  Mendapatkan detail metode pembayaran berdasarkan ID
+// @Tags         Payment Methods
+// @Produce      json
+// @Param        id   path      string  true  "Payment Method ID (UUID)"
+// @Success      200  {object}  map[string]entities.PaymentMethodEntity
+// @Failure      404  {object}  map[string]interface{}
+// @Router       /payment-methods/{id} [get]
+func (h *PaymentMethodHandler) GetByID(c *gin.Context) {
+	id := c.Param("id")
+	method, err := h.repo.FindByID(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Payment method not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": method})
+}
+
 // Update godoc
 // @Summary      Update Metode Pembayaran
 // @Description  Mengubah data bank atau metode pembayaran berdasarkan ID
@@ -71,7 +90,7 @@ func (h *PaymentMethodHandler) GetAll(c *gin.Context) {
 // @Router       /payment-methods/{id} [put]
 func (h *PaymentMethodHandler) Update(c *gin.Context) {
 	id := c.Param("id")
-	
+
 	existing, err := h.repo.FindByID(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Payment method not found"})
@@ -93,7 +112,7 @@ func (h *PaymentMethodHandler) Update(c *gin.Context) {
 	existing.Description = req.Description
 	existing.Icon = req.Icon
 	existing.SortOrder = req.SortOrder
-	
+
 	// Manual Payment Fields
 	existing.BankName = req.BankName
 	existing.AccountNumber = req.AccountNumber

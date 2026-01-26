@@ -39,8 +39,8 @@ type PaymentHandler struct {
 	refundPaymentHandler *commandHandlers.RefundPaymentHandler
 	retryPaymentHandler  *commandHandlers.RetryPaymentHandler
 
-	paymentRepo          repositories.PaymentRepository
-	eventPublisher       messaging.EventPublisher
+	paymentRepo    repositories.PaymentRepository
+	eventPublisher messaging.EventPublisher
 	gatewayFactory *infraGateways.GatewayFactory
 }
 
@@ -67,13 +67,23 @@ func NewPaymentHandler(
 		refundPaymentHandler: refundPaymentHandler,
 		retryPaymentHandler:  retryHandler,
 
-		paymentRepo:          paymentRepo,
-		eventPublisher:       eventPublisher,
-		gatewayFactory:       gatewayFactory,
+		paymentRepo:    paymentRepo,
+		eventPublisher: eventPublisher,
+		gatewayFactory: gatewayFactory,
 	}
 }
 
-// CreatePayment handles payment creation requests
+// CreatePayment godoc
+// @Summary      Create Payment Intent
+// @Description  Create a new payment intent and get checkout information
+// @Tags         Payments
+// @Accept       json
+// @Produce      json
+// @Param        request body dto.CreatePaymentDTO true "Payment Request Data"
+// @Success      201  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Router       /payments [post]
 func (h *PaymentHandler) CreatePayment(c *gin.Context) {
 	// 1. Gunakan DTO untuk menangkap JSON (Pastikan import dto sudah ada)
 	var req dto.CreatePaymentDTO
@@ -93,7 +103,7 @@ func (h *PaymentHandler) CreatePayment(c *gin.Context) {
 		Currency:      req.Currency,
 		PaymentMethod: req.PaymentMethod,
 		GatewayName:   req.GatewayName,
-		
+
 		// Data yang kemarin kosong, sekarang kita isi manual:
 		Description:   req.Description,   // Sekarang Command sudah punya field ini
 		CustomerName:  req.CustomerName,  // Pindahkan dari req ke cmd
@@ -115,7 +125,16 @@ func (h *PaymentHandler) CreatePayment(c *gin.Context) {
 	c.JSON(http.StatusCreated, response)
 }
 
-// GetPayment handles get payment by ID requests
+// GetPayment godoc
+// @Summary      Get Payment Details
+// @Description  Get payment details by its ID
+// @Tags         Payments
+// @Produce      json
+// @Param        id   path      string  true  "Payment ID"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]interface{}
+// @Failure      404  {object}  map[string]interface{}
+// @Router       /payments/{id} [get]
 func (h *PaymentHandler) GetPayment(c *gin.Context) {
 	paymentID := c.Param("id")
 	if paymentID == "" {
@@ -138,7 +157,18 @@ func (h *PaymentHandler) GetPayment(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// GetPaymentsByUser handles get payments by user ID requests
+// GetPaymentsByUser godoc
+// @Summary      Get User's Payments
+// @Description  Get list of payments for a user with pagination
+// @Tags         Payments
+// @Produce      json
+// @Param        userId  path      string  true  "User UUID"
+// @Param        limit   query     int     false "Limit (default 10)"
+// @Param        offset  query     int     false "Offset (default 0)"
+// @Success      200     {object}  map[string]interface{}
+// @Failure      400     {object}  map[string]interface{}
+// @Failure      500     {object}  map[string]interface{}
+// @Router       /payments/user/{userId} [get]
 func (h *PaymentHandler) GetPaymentsByUser(c *gin.Context) {
 	userID := c.Param("userId")
 	if userID == "" {
@@ -293,7 +323,7 @@ func (h *PaymentHandler) UploadProof(c *gin.Context) {
 	var req UploadProofReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid request body",
+			"error":   "Invalid request body",
 			"details": err.Error(),
 		})
 		return
@@ -318,8 +348,8 @@ func (h *PaymentHandler) UploadProof(c *gin.Context) {
 		"message": "Bukti transfer berhasil disubmit",
 		"data": gin.H{
 			"payment_id": paymentID,
-			"file_id": req.FileID,
-			"file_url": req.FileURL,
+			"file_id":    req.FileID,
+			"file_url":   req.FileURL,
 		},
 	})
 }
@@ -342,101 +372,101 @@ type UploadProofReq struct {
 // @Failure      404     {object}  map[string]interface{}
 // @Router       /payments/{id}/verify [post]
 func (h *PaymentHandler) VerifyPayment(c *gin.Context) {
-    paymentID := c.Param("id")
+	paymentID := c.Param("id")
 
-    var req VerifyPaymentRequest
-    if err := c.ShouldBindJSON(&req); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
-        return
-    }
+	var req VerifyPaymentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
 
-    payment, err := h.paymentRepo.FindByID(c.Request.Context(), paymentID)
-    if err != nil {
-        c.JSON(http.StatusNotFound, gin.H{"error": "Payment not found"})
-        return
-    }
+	payment, err := h.paymentRepo.FindByID(c.Request.Context(), paymentID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Payment not found"})
+		return
+	}
 
-    status := string(payment.Status)
-    if status != "pending" && status != "processing" { 
-        c.JSON(http.StatusBadRequest, gin.H{
-            "error": "Payment status is not pending or processing. Current status: " + status,
-        })
-        return
-    }
+	status := string(payment.Status)
+	if status != "pending" && status != "processing" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Payment status is not pending or processing. Current status: " + status,
+		})
+		return
+	}
 
 	// if payment.PaymentType != "manual" {
-    //     c.JSON(http.StatusBadRequest, gin.H{
-    //         "error": "This endpoint is for manual payment verification only. For automatic gateways, use verify-status.",
-    //     })
-    //     return
-    // }
+	//     c.JSON(http.StatusBadRequest, gin.H{
+	//         "error": "This endpoint is for manual payment verification only. For automatic gateways, use verify-status.",
+	//     })
+	//     return
+	// }
 
-    switch req.Action {
-    case "approve":
-        payment.VerifyManual(req.AdminID)
-    case "reject":
-        if req.Reason == "" {
-            c.JSON(http.StatusBadRequest, gin.H{"error": "Reason is required for rejection"})
-            return
-        }
-        payment.RejectManual(req.AdminID, req.Reason)
-    default:
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid action. Use 'approve' or 'reject'"})
-        return
-    }
+	switch req.Action {
+	case "approve":
+		payment.VerifyManual(req.AdminID)
+	case "reject":
+		if req.Reason == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Reason is required for rejection"})
+			return
+		}
+		payment.RejectManual(req.AdminID, req.Reason)
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid action. Use 'approve' or 'reject'"})
+		return
+	}
 
-    if err := h.paymentRepo.Update(c.Request.Context(), payment); err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update payment"})
-        return
-    }
+	if err := h.paymentRepo.Update(c.Request.Context(), payment); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update payment"})
+		return
+	}
 
 	// --- FITUR NOTIFIKASI (RABBITMQ) ---
-    go func() {
-        eventType := events.PaymentSucceededEvent
-        if string(payment.Status) == "failed" {
-            eventType = events.PaymentFailedEvent
-        }
+	go func() {
+		eventType := events.PaymentSucceededEvent
+		if string(payment.Status) == "failed" {
+			eventType = events.PaymentFailedEvent
+		}
 
-        event := events.NewPaymentEvent(
-            eventType,
-            payment.ID,
-            payment.ApplicationID,
-            payment.UserID,
+		event := events.NewPaymentEvent(
+			eventType,
+			payment.ID,
+			payment.ApplicationID,
+			payment.UserID,
 			payment.CustomerEmail,
-            payment.Amount,
-            payment.Currency,
-            string(payment.Status),
-            payment.GatewayName,
-        )
+			payment.Amount,
+			payment.Currency,
+			string(payment.Status),
+			payment.GatewayName,
+		)
 
-        event.Metadata["customer_email"] = payment.CustomerEmail
-        event.Metadata["customer_name"] = payment.CustomerName
-        
-        if payment.RejectedReason != "" {
-            event.Metadata["reason"] = payment.RejectedReason
-        }
+		event.Metadata["customer_email"] = payment.CustomerEmail
+		event.Metadata["customer_name"] = payment.CustomerName
 
-        err := h.eventPublisher.Publish(context.Background(), event)
-        
-        if err != nil {
-            fmt.Printf("[RABBITMQ] ERROR sending event: %v\n", err)
-        } else {
-            fmt.Printf("[RABBITMQ] Success! Sent event type: %s for Payment ID: %s\n", eventType, payment.ID)
-        }
-    }()
+		if payment.RejectedReason != "" {
+			event.Metadata["reason"] = payment.RejectedReason
+		}
 
-    c.JSON(http.StatusOK, gin.H{
-        "status":  "success",
-        "message": "Payment verification processed successfully",
-        "data":    payment,
-    })
+		err := h.eventPublisher.Publish(context.Background(), event)
+
+		if err != nil {
+			fmt.Printf("[RABBITMQ] ERROR sending event: %v\n", err)
+		} else {
+			fmt.Printf("[RABBITMQ] Success! Sent event type: %s for Payment ID: %s\n", eventType, payment.ID)
+		}
+	}()
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"message": "Payment verification processed successfully",
+		"data":    payment,
+	})
 }
 
 // VerifyPaymentRequest represents the admin verification payload
 type VerifyPaymentRequest struct {
-    Action  string `json:"action"`   // "approve" or "reject"
-    Reason  string `json:"reason"`   // Required if rejected
-    AdminID string `json:"admin_id"` // Simulated Admin ID
+	Action  string `json:"action"`   // "approve" or "reject"
+	Reason  string `json:"reason"`   // Required if rejected
+	AdminID string `json:"admin_id"` // Simulated Admin ID
 }
 
 // RefundPayment handles payment refund requests
@@ -448,13 +478,21 @@ type VerifyPaymentRequest struct {
 // @Router       /payments/{id}/refund [post]
 func (h *PaymentHandler) RefundPayment(c *gin.Context) {
 	// TODO: Implement refund logic with Midtrans Core API.
-    // Currently disabled due to unfinished testing and error handling.
-    // See: payment_service/issues/refund-bug
-    c.JSON(http.StatusOK, gin.H{
-        "message": "Fitur refund dinonaktifkan sementara (silakan cek Dashboard Midtrans)",
-    })
+	// Currently disabled due to unfinished testing and error handling.
+	// See: payment_service/issues/refund-bug
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Fitur refund dinonaktifkan sementara (silakan cek Dashboard Midtrans)",
+	})
 }
 
+// CancelPayment godoc
+// @Summary      Cancel Payment
+// @Description  Cancel a pending payment
+// @Tags         Payments
+// @Param        id   path      string  true  "Payment ID"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Router       /payments/{id}/cancel [post]
 func (h *PaymentHandler) CancelPayment(c *gin.Context) {
 	id := c.Param("id")
 	resp, err := h.cancelPaymentHandler.Handle(c.Request.Context(), id)
@@ -465,10 +503,17 @@ func (h *PaymentHandler) CancelPayment(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Payment cancelled", "data": resp})
 }
 
+// VerifyPaymentStatus godoc
+// @Summary      Verify Payment Status
+// @Description  Check payment status from Gateway (now disabled/noop)
+// @Tags         Payments
+// @Param        id   path      string  true  "Payment ID"
+// @Success      200  {object}  map[string]interface{}
+// @Router       /payments/{id}/verify-status [post]
 func (h *PaymentHandler) VerifyPaymentStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
-        "message": "Fitur verify status otomatis dinonaktifkan (Silakan cek Dashboard Midtrans)",
-    })
+		"message": "Fitur verify status otomatis dinonaktifkan (Silakan cek Dashboard Midtrans)",
+	})
 }
 
 // RetryPayment godoc
