@@ -37,6 +37,23 @@ message PaymentIntent {
   string reference_type = 7;
   string reference_id = 8;
   map<string, string> metadata = 9;
+
+  // Snapshots of customer/item details
+  string customer_name = 10;
+  string customer_email = 11;
+  string customer_phone = 12;
+  string description = 13;
+  repeated ItemDetail item_details = 14;
+}
+
+message ItemDetail {
+    string id = 1;
+    string name = 2;
+    int64 price = 3;
+    int32 quantity = 4;
+    string brand = 5;
+    string category = 6;
+    string merchant_name = 7;
 }
 
 message GetIntentsByReferenceResponse {
@@ -51,6 +68,15 @@ message CreateIntentRequest {
   string reference_type = 5;
   string reference_id = 6;
   map<string, string> metadata = 7;
+
+  // Customer Info
+  string customer_name = 8;
+  string customer_email = 9;
+  string customer_phone = 10;
+
+  // Item Details
+  string description = 11;
+  repeated ItemDetail item_details = 12;
 }
 
 message CreateIntentResponse {
@@ -92,6 +118,10 @@ message PaymentMethod {
   string name = 2;
   string category = 3; // e.g., "bank_transfer", "credit_card", "ewallet"
   string image_url = 4;
+  
+  // Fee details for user display
+  double estimated_fee = 5; 
+  bool is_surcharge = 6; // If true, UI should show "Fee: X" and "Total: Amount + Fee"
 }
 
 message GetPaymentMethodsResponse {

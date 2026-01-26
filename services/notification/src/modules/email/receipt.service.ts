@@ -12,6 +12,7 @@ export class ReceiptService {
         customerName: string;
         date: string;
         description?: string;
+        items?: { name: string; quantity: number; price: number }[];
     }): Promise<Buffer> {
         return new Promise((resolve, reject) => {
             try {
@@ -52,8 +53,18 @@ export class ReceiptService {
                 
                 // Item
                 currentY = doc.y;
-                doc.text(data.description || 'Payment for services', startX, currentY, { width: 300 });
-                doc.text(`${data.currency} ${data.amount}`, 400, currentY, { width: 100, align: 'right' });
+
+                if (data.items && data.items.length > 0) {
+                    data.items.forEach(item => {
+                        const name = item.name + (item.quantity && item.quantity > 1 ? ` x${item.quantity}` : '');
+                        doc.text(name, startX, currentY, { width: 300 });
+                        doc.text(`${data.currency} ${item.price}`, 400, currentY, { width: 100, align: 'right' });
+                        currentY += 20;
+                    });
+                } else {
+                    doc.text(data.description || 'Payment for services', startX, currentY, { width: 300 });
+                    doc.text(`${data.currency} ${data.amount}`, 400, currentY, { width: 100, align: 'right' });
+                }
 
                 // Total
                 doc.moveDown();

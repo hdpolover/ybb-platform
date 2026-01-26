@@ -24,10 +24,22 @@
         </div>
         
         <table style="width: 100%; font-size: 14px; color: #374151;">
+            {{#if items}}
+            {{#each items}}
+            <tr>
+                <td style="padding-bottom: 8px; color: #6b7280;">{{name}} {{#if quantity}}(x{{quantity}}){{/if}}</td>
+                <td style="padding-bottom: 8px; text-align: right; font-weight: 500;">{{price}}</td>
+            </tr>
+            {{/each}}
+            <tr>
+               <td colspan="2" style="border-bottom: 1px solid #e5e7eb; padding-bottom: 8px;"></td>
+            </tr>
+            {{else}}
             <tr>
                 <td style="padding-bottom: 8px; color: #6b7280;">Description</td>
                 <td style="padding-bottom: 8px; text-align: right; font-weight: 500;">{{description}}</td>
             </tr>
+            {{/if}}
             <tr>
                 <td style="padding-bottom: 8px; color: #6b7280;">Order ID</td>
                 <td style="padding-bottom: 8px; text-align: right; font-family: monospace;">{{orderId}}</td>

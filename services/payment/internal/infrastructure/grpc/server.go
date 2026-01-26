@@ -3,24 +3,26 @@ package grpc
 import (
 	"context"
 	"encoding/json"
-	
+
 	"fmt"
-	
+
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/ybb-platform/payment/internal/domain/entities"
+	"github.com/ybb-platform/payment/internal/domain/events"
 	"github.com/ybb-platform/payment/internal/domain/gateways"
 	"github.com/ybb-platform/payment/internal/domain/repositories"
-	"github.com/ybb-platform/payment/internal/domain/events"
-	"github.com/ybb-platform/payment/internal/infrastructure/messaging"
+	"github.com/ybb-platform/payment/internal/domain/services"
 	pb "github.com/ybb-platform/payment/internal/infrastructure/grpc/proto"
+	"github.com/ybb-platform/payment/internal/infrastructure/messaging"
 )
 
 type PaymentGrpcServer struct {
 	pb.UnimplementedPaymentServiceServer
 	intentRepo  repositories.PaymentIntentRepository
 	txRepo      repositories.PaymentTransactionRepository
+	methodRepo  repositories.PaymentMethodRepository
 	gatewayFact gateways.GatewayFactory
 	publisher   messaging.EventPublisher
 }
@@ -28,12 +30,14 @@ type PaymentGrpcServer struct {
 func NewPaymentGrpcServer(
 	intentRepo repositories.PaymentIntentRepository,
 	txRepo repositories.PaymentTransactionRepository,
+	methodRepo repositories.PaymentMethodRepository,
 	gatewayFact gateways.GatewayFactory,
 	publisher messaging.EventPublisher,
 ) *PaymentGrpcServer {
 	return &PaymentGrpcServer{
 		intentRepo:  intentRepo,
 		txRepo:      txRepo,
+		methodRepo:  methodRepo,
 		gatewayFact: gatewayFact,
 		publisher:   publisher,
 	}
@@ -43,6 +47,23 @@ func (s *PaymentGrpcServer) CreateIntent(ctx context.Context, req *pb.CreateInte
 	metadata := make(map[string]interface{})
 	for k, v := range req.Metadata {
 		metadata[k] = v
+	}
+
+	// Store extended payment info in metadata for accurate processing
+	if req.CustomerName != "" {
+		metadata["customer_name"] = req.CustomerName
+	}
+	if req.CustomerEmail != "" {
+		metadata["customer_email"] = req.CustomerEmail
+	}
+	if req.CustomerPhone != "" {
+		metadata["customer_phone"] = req.CustomerPhone
+	}
+	if req.Description != "" {
+		metadata["description"] = req.Description
+	}
+	if len(req.ItemDetails) > 0 {
+		metadata["item_details"] = req.ItemDetails
 	}
 
 	intent := entities.NewPaymentIntent(
@@ -67,16 +88,39 @@ func (s *PaymentGrpcServer) CreateIntent(ctx context.Context, req *pb.CreateInte
 }
 
 func (s *PaymentGrpcServer) GetPaymentMethods(ctx context.Context, req *pb.GetPaymentMethodsRequest) (*pb.GetPaymentMethodsResponse, error) {
-	// TODO: Fetch from dynamic config or DB
-	methods := []*pb.PaymentMethod{
-		{Id: "credit_card", Name: "Credit Card", Category: "card", ImageUrl: ""},
-		{Id: "bca_va", Name: "BCA Virtual Account", Category: "bank_transfer", ImageUrl: ""},
-		{Id: "bni_va", Name: "BNI Virtual Account", Category: "bank_transfer", ImageUrl: ""},
-		{Id: "bri_va", Name: "BRI Virtual Account", Category: "bank_transfer", ImageUrl: ""},
-		{Id: "permata_va", Name: "Permata Virtual Account", Category: "bank_transfer", ImageUrl: ""},
-		{Id: "gopay", Name: "GoPay", Category: "ewallet", ImageUrl: ""},
-		{Id: "shopeepay", Name: "ShopeePay", Category: "ewallet", ImageUrl: ""},
+	// Fetch all enabled methods from DB
+	paymentMethods, err := s.methodRepo.FindAll(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to fetch methods: %v", err)
 	}
+
+	methods := []*pb.PaymentMethod{}
+	for _, m := range paymentMethods {
+		if !m.IsActive {
+			continue
+		}
+
+		fee, _, _ := services.CalculateFee(&m, float64(req.Amount))
+
+		// Map to Proto
+		// Note: Category defaults provided if empty in DB
+		category := "bank_transfer" // fallback
+		if m.GatewayType != "" {
+			category = m.GatewayType
+		} else if m.Type == "manual" {
+			category = "manual"
+		}
+
+		methods = append(methods, &pb.PaymentMethod{
+			Id:           m.Code, // Use Code (e.g. "midtrans_header") as ID for frontend
+			Name:         m.DisplayName,
+			Category:     category,
+			ImageUrl:     m.Icon,
+			EstimatedFee: fee,
+			IsSurcharge:  m.Config.IsSurcharge,
+		})
+	}
+
 	return &pb.GetPaymentMethodsResponse{Methods: methods}, nil
 }
 
@@ -87,16 +131,39 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 		return nil, status.Errorf(codes.NotFound, "intent not found")
 	}
 
-	// 2. Create Transaction (Pending)
-	tx := entities.NewPaymentTransaction(intent.ID, req.PaymentMethodId, intent.Amount)
+	// 2. Fetch Payment Method for Fee Calculation
+	method, err := s.methodRepo.FindByCode(ctx, req.PaymentMethodId)
+	if err != nil {
+		// Fallback or Error?
+		// Ideally we should strict check. But if manual ID was passed...
+		// Let's assume passed ID is 'code'
+		return nil, status.Errorf(codes.InvalidArgument, "invalid payment method: %v", err)
+	}
+
+	// Calculate Fees
+	fee, total, net := services.CalculateFee(method, intent.Amount)
+
+	// 3. Create Transaction (Pending)
+	tx := entities.NewPaymentTransaction(intent.ID, req.PaymentMethodId, total)
+	tx.AmountSubtotal = intent.Amount
+	tx.AmountTotal = total
+	tx.FeeProvider = fee
+	tx.NetAmount = net
+	tx.Currency = intent.Currency
+
 	if err := s.txRepo.Create(ctx, tx); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to create transaction: %v", err)
 	}
 
-	// 3. Call Gateway
-	gateway, err := s.gatewayFact.GetGateway("midtrans") // Default to midtrans
+	// 4. Call Gateway
+	gatewayName := "midtrans"
+	if method.GatewayName != "" {
+		gatewayName = method.GatewayName
+	}
+
+	gateway, err := s.gatewayFact.GetGateway(gatewayName)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "gateway configuration error")
+		return nil, status.Errorf(codes.Internal, "gateway configuration error: %s", gatewayName)
 	}
 
 	// Parse Payment Details
@@ -110,25 +177,91 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 	customerName := "Guest"
 	customerEmail := "guest@example.com"
 	customerPhone := "0800000000"
+	var itemDetails []gateways.ItemDetails
 
 	var metaMap map[string]interface{}
 	if len(intent.Metadata) > 0 {
 		if err := json.Unmarshal(intent.Metadata, &metaMap); err == nil {
-			if n, ok := metaMap["customer_name"].(string); ok { customerName = n }
-			if e, ok := metaMap["customer_email"].(string); ok { customerEmail = e } // Try customer_email first
-			if e, ok := metaMap["email"].(string); ok && customerEmail == "guest@example.com" { customerEmail = e } // Fallback to email
-			if p, ok := metaMap["customer_phone"].(string); ok { customerPhone = p }
+			if n, ok := metaMap["customer_name"].(string); ok && n != "" {
+				customerName = n
+			}
+			if e, ok := metaMap["customer_email"].(string); ok && e != "" {
+				customerEmail = e
+			} else if e, ok := metaMap["email"].(string); ok && e != "" {
+				customerEmail = e
+			}
+			if p, ok := metaMap["customer_phone"].(string); ok && p != "" {
+				customerPhone = p
+			}
+
+			// Extract items
+			if itemsRaw, ok := metaMap["item_details"]; ok {
+				if rawBytes, err := json.Marshal(itemsRaw); err == nil {
+					_ = json.Unmarshal(rawBytes, &itemDetails)
+				}
+			}
+		}
+	}
+
+	// Ensure at least one item
+	if len(itemDetails) == 0 {
+		desc := "Payment"
+		if d, ok := metaMap["description"].(string); ok && d != "" {
+			desc = d
+		} else if intent.ReferenceType != "" {
+			desc = fmt.Sprintf("%s - %s", intent.ReferenceType, intent.ReferenceID)
+		}
+
+		itemDetails = append(itemDetails, gateways.ItemDetails{
+			ID:   intent.ReferenceID,
+			Name: desc,
+			// Assuming IDR/No-decimal currency for price mapping
+			Price:    int64(intent.Amount),
+			Quantity: 1,
+		})
+	}
+
+	// Validate Item Sum for Gateway Consistency (e.g. Midtrans rejects if Sum != Gross Amount)
+	// If Surcharge is applied, AmountTotal > sum(items). We must add the fee as an item.
+	var itemSum int64
+	for _, it := range itemDetails {
+		itemSum += it.Price * int64(it.Quantity)
+	}
+
+	totalChargeInt := int64(tx.AmountTotal)
+	if itemSum != totalChargeInt {
+		diff := totalChargeInt - itemSum
+		if diff > 0 {
+			// Surcharge / Fee
+			itemDetails = append(itemDetails, gateways.ItemDetails{
+				ID:       "SERVICE-FEE",
+				Name:     "Service Fee",
+				Price:    diff,
+				Quantity: 1,
+			})
+		} else {
+			// Weird discrepancy (maybe rounding or discount logic).
+			// To be safe and prevent gateway error: fallback to single aggregate item.
+			itemDetails = []gateways.ItemDetails{
+				{
+					ID:       intent.ReferenceID,
+					Name:     "Payment Total (Consolidated)",
+					Price:    totalChargeInt,
+					Quantity: 1,
+				},
+			}
 		}
 	}
 
 	chargeReq := &gateways.ChargePaymentRequest{
 		TransactionID:   tx.ID,
 		IntentID:        intent.ID,
-		Amount:          intent.Amount,
+		Amount:          tx.AmountTotal, // Charge the TOTAL (inc surcharge if any)
 		Currency:        intent.Currency,
 		PaymentMethodID: req.PaymentMethodId,
 		GatewayToken:    req.GatewayToken,
 		PaymentDetails:  paymentDetails,
+		Items:           itemDetails, // Pass items strictly
 		CustomerDetails: gateways.CustomerDetails{
 			Name:  customerName,
 			Email: customerEmail,
@@ -150,7 +283,7 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 		tx.Status = entities.TransactionStatusSuccess
 		intent.Status = entities.PaymentIntentStatusSucceeded
 		s.intentRepo.Update(ctx, intent)
-		
+
 		// Publish Succeeded Event
 		// Extract email from metadata
 		email := ""
@@ -166,25 +299,34 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 			}
 		}
 
-        event := events.NewPaymentEvent(
-            events.PaymentSucceededEvent,
-            tx.ID,
-            intent.ReferenceID,
-            intent.UserID,
+		event := events.NewPaymentEvent(
+			events.PaymentSucceededEvent,
+			tx.ID,
+			intent.ReferenceID,
+			intent.UserID,
 			email,
-            intent.Amount,
-            intent.Currency,
-            "SUCCEEDED",
-            req.PaymentMethodId,
-        )
-        if err := s.publisher.Publish(ctx, event); err != nil {
+			intent.Amount,
+			intent.Currency,
+			"SUCCEEDED",
+			req.PaymentMethodId,
+		)
+
+		// Populate event metadata from intent metadata
+		if len(intent.Metadata) > 0 {
+			var meta map[string]interface{}
+			if err := json.Unmarshal(intent.Metadata, &meta); err == nil {
+				event.Metadata = meta
+			}
+		}
+
+		if err := s.publisher.Publish(ctx, event); err != nil {
 			// Log error but don't fail transaction
 			fmt.Printf("failed to publish success event: %v\n", err)
 		}
 
 	} else if resp.Status == "FAILED" {
 		tx.Status = entities.TransactionStatusFailed
-		
+
 		// Publish Failed Event
 		// Extract email
 		email := ""
@@ -200,23 +342,23 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 			}
 		}
 
-        event := events.NewPaymentEvent(
-            events.PaymentFailedEvent,
-            tx.ID,
-            intent.ReferenceID,
-            intent.UserID,
+		event := events.NewPaymentEvent(
+			events.PaymentFailedEvent,
+			tx.ID,
+			intent.ReferenceID,
+			intent.UserID,
 			email,
-            intent.Amount,
-            intent.Currency,
-            "FAILED",
-            req.PaymentMethodId,
-        )
-        if err := s.publisher.Publish(ctx, event); err != nil {
+			intent.Amount,
+			intent.Currency,
+			"FAILED",
+			req.PaymentMethodId,
+		)
+		if err := s.publisher.Publish(ctx, event); err != nil {
 			fmt.Printf("failed to publish failed event: %v\n", err)
 		}
 	} else {
-        tx.Status = entities.TransactionStatusPending
-    }
+		tx.Status = entities.TransactionStatusPending
+	}
 
 	if resp.Metadata != nil {
 		rawBytes, _ := json.Marshal(resp.Metadata)
@@ -245,7 +387,7 @@ func (s *PaymentGrpcServer) SubmitManualPayment(ctx context.Context, req *pb.Sub
 	// 2. Create Transaction (Pending)
 	// We treat "manual_transfer" as the method ID
 	tx := entities.NewPaymentTransaction(intent.ID, "manual_transfer", intent.Amount)
-	
+
 	// 3. Store Proof details in GatewayResponse
 	proofData := map[string]interface{}{
 		"proof_url":     req.ProofFileUrl,
@@ -253,7 +395,7 @@ func (s *PaymentGrpcServer) SubmitManualPayment(ctx context.Context, req *pb.Sub
 		"notes":         req.Details,
 		"is_manual":     true,
 	}
-	
+
 	rawProof, _ := json.Marshal(proofData)
 	tx.GatewayResponse = rawProof
 
@@ -286,7 +428,7 @@ func (s *PaymentGrpcServer) SubmitManualPayment(ctx context.Context, req *pb.Sub
 	if err := s.txRepo.Create(ctx, tx); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to create manual transaction: %v", err)
 	}
-	
+
 	s.publisher.Publish(ctx, event)
 
 	return &pb.SubmitManualPaymentResponse{
@@ -320,7 +462,7 @@ func (s *PaymentGrpcServer) VerifyManualPayment(ctx context.Context, req *pb.Ver
 			}
 		}
 	}
-	
+
 	// 3. Update Status
 	if req.Status == "SUCCESS" {
 		tx.Status = entities.TransactionStatusSuccess
@@ -329,7 +471,7 @@ func (s *PaymentGrpcServer) VerifyManualPayment(ctx context.Context, req *pb.Ver
 		if err := s.intentRepo.Update(ctx, intent); err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to update intent status: %v", err)
 		}
-		
+
 		// Publish Succeeded Event
 		event := events.NewPaymentEvent(
 			events.PaymentSucceededEvent,
@@ -342,6 +484,14 @@ func (s *PaymentGrpcServer) VerifyManualPayment(ctx context.Context, req *pb.Ver
 			"SUCCEEDED",
 			"manual_transfer",
 		)
+
+		if len(intent.Metadata) > 0 {
+			var meta map[string]interface{}
+			if err := json.Unmarshal(intent.Metadata, &meta); err == nil {
+				event.Metadata = meta
+			}
+		}
+
 		s.publisher.Publish(ctx, event)
 
 	} else if req.Status == "FAILED" {
@@ -365,8 +515,8 @@ func (s *PaymentGrpcServer) VerifyManualPayment(ctx context.Context, req *pb.Ver
 	} else {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid status")
 	}
-	
-	// Audit/Admin info in Metadata? 
+
+	// Audit/Admin info in Metadata?
 	// For now just save the tx update
 	if err := s.txRepo.Update(ctx, tx); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to update transaction: %v", err)
@@ -385,18 +535,41 @@ func (s *PaymentGrpcServer) GetIntentsByReference(ctx context.Context, req *pb.G
 
 	pbIntents := make([]*pb.PaymentIntent, 0, len(intents))
 	for _, intent := range intents {
-		
-        metadata := make(map[string]string)
-        if len(intent.Metadata) > 0 {
-             var metaMap map[string]interface{}
-             if err := json.Unmarshal(intent.Metadata, &metaMap); err == nil {
-                 for k, v := range metaMap {
-                     if strVal, ok := v.(string); ok {
-                         metadata[k] = strVal
-                     }
-                 }
-             }
-        }
+
+		var metaMap map[string]interface{}
+		metadata := make(map[string]string)
+
+		if len(intent.Metadata) > 0 {
+			if err := json.Unmarshal(intent.Metadata, &metaMap); err == nil {
+				for k, v := range metaMap {
+					if strVal, ok := v.(string); ok {
+						metadata[k] = strVal
+					}
+				}
+			}
+		}
+
+		// Extract fields that were stored in JSONB but need to be returned explicitly
+		var cName, cEmail, cPhone, desc string
+		if s, ok := metaMap["customer_name"].(string); ok {
+			cName = s
+		}
+		if s, ok := metaMap["customer_email"].(string); ok {
+			cEmail = s
+		}
+		if s, ok := metaMap["customer_phone"].(string); ok {
+			cPhone = s
+		}
+		if s, ok := metaMap["description"].(string); ok {
+			desc = s
+		}
+
+		var pbItems []*pb.ItemDetail
+		if itemsRaw, ok := metaMap["item_details"]; ok {
+			if b, err := json.Marshal(itemsRaw); err == nil {
+				_ = json.Unmarshal(b, &pbItems)
+			}
+		}
 
 		pbIntents = append(pbIntents, &pb.PaymentIntent{
 			Id:            intent.ID,
@@ -407,7 +580,12 @@ func (s *PaymentGrpcServer) GetIntentsByReference(ctx context.Context, req *pb.G
 			CreatedAt:     intent.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			ReferenceType: intent.ReferenceType,
 			ReferenceId:   intent.ReferenceID,
-            Metadata:      metadata,
+			Metadata:      metadata,
+			CustomerName:  cName,
+			CustomerEmail: cEmail,
+			CustomerPhone: cPhone,
+			Description:   desc,
+			ItemDetails:   pbItems,
 		})
 	}
 

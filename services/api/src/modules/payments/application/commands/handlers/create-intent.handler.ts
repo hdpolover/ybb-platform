@@ -17,6 +17,11 @@ export class CreateIntentHandler implements ICommandHandler<CreateIntentCommand>
             reference_id: dto.reference_id,
             participant_id: dto.participant_id,
             metadata: dto.metadata,
+            customer_name: dto.customer_name,
+            customer_email: dto.customer_email,
+            customer_phone: dto.customer_phone,
+            description: dto.description,
+            item_details: dto.item_details,
         });
     }
 }

@@ -107,6 +107,10 @@ model PaymentMethod {
   isEnabled         Boolean  @default(true) @map("is_enabled")
   description       String?  @db.Text // Simple instructions
   
+  // Configuration including FEES
+  // Example: { "fee_config": { "fixed_fee": 4000, "percentage_fee": 0.029, "is_surcharge": false } }
+  config            Json?    @db.JsonB
+  
   // For Manual Payments: What details to show user? (Bank, PayPal email, etc)
   manualPaymentDetails ManualPaymentDetail[]
   
@@ -167,6 +171,13 @@ model PaymentTransaction {
   // Snapshots
   paymentMethodName    String?                  @map("payment_method_name") @db.VarChar(100)
   
+  // Financial Breakdown (NEW)
+  // Store exact amounts at time of transaction for Audit
+  amountTotal          Decimal                  @map("amount_total") @db.Decimal(15,2)    // What user was charged
+  amountSubtotal       Decimal                  @map("amount_subtotal") @db.Decimal(15,2) // The original price (Intent amount)
+  feeProvider          Decimal                  @default(0) @map("fee_provider") @db.Decimal(15,2) // Midtrans Fee
+  netAmount            Decimal                  @map("net_amount") @db.Decimal(15,2)      // Revenue (Total - Fees)
+
   // Flow Type
   isManual             Boolean                  @default(false) @map("is_manual")
   
@@ -278,9 +289,16 @@ To prevent double-charging (e.g. User double-clicks "Pay"), we use `Idempotency-
 
 ---
 
-## 7. Implementation Guide
+## 7. Fee Management & Reconciliation (Internal)
 
-### 7.1. Database & Initial Setup
+### 7.1. Fee Calculation Strategy
+Fees are calculated dynamically based on `PaymentMethod.config`.
+*   **Absorb Model** (Default): `UserPay = IntentAmount`. We record the fee as a cost. `Net = Amount - Fee`.
+*   **Surcharge Model** (Future): `UserPay = IntentAmount + Fee`. User covers the cost. `Net = IntentAmount`.
+
+### 7.2. Implementation Guide
+
+#### Database & Initial Setup
 1.  **Schema Update**: Open `schema.prisma`. Copy the ENUMs and Models from Section 3.
 2.  **Migration**: Run `npx prisma migrate dev --name init_payment_system`.
 3.  **Seed Data**: Create a seed script to insert `PaymentGatewayConfig` (Sandbox keys) and `PaymentMethod` (e.g., 'manual_bca', 'midtrans_gopay').
