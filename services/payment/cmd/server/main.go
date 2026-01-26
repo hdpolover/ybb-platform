@@ -18,10 +18,10 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	// swaggerFiles "github.com/swaggo/files"
-	// ginSwagger "github.com/swaggo/gin-swagger"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 
-	// _ "github.com/ybb-platform/payment/docs"
+	_ "github.com/ybb-platform/payment/docs"
 
 	commandHandlers "github.com/ybb-platform/payment/internal/application/commands/handlers"
 	queryHandlers "github.com/ybb-platform/payment/internal/application/queries/handlers"
@@ -37,7 +37,7 @@ import (
 
 // @title           YBB Payment Service API
 // @version         1.0
-// @description     Ini adalah dokumentasi API untuk layanan pembayaran YBB Platform.
+// @description     This is the API documentation for the YBB Platform Payment Service.
 // @termsOfService  http://swagger.io/terms/
 
 // @contact.name   API Support
@@ -239,8 +239,8 @@ func main() {
 func setupRouter(paymentHandler *handlers.PaymentHandler, paymentMethodHandler *handlers.PaymentMethodHandler) *gin.Engine {
 	router := gin.Default()
 
-	// Akses via browser: http://localhost:8002/swagger/index.html
-	// router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	// Access via browser: http://localhost:8002/swagger/index.html
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
