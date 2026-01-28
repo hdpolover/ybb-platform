@@ -6,6 +6,7 @@ import os
 # --- IMPORT INFRASTRUCTURE ---
 from app.infrastructure.storage.minio_storage import MinIOStorage
 from app.infrastructure.persistence.postgres.file_repository import PostgresFileRepository
+from app.infrastructure.messaging.rabbitmq_service import RabbitMQService
 
 # --- IMPORT HANDLERS ---
 from app.application.commands.handlers.upload_file_handler import UploadFileHandler
@@ -36,6 +37,15 @@ def get_storage_service() -> MinIOStorage:
 def get_file_repository() -> PostgresFileRepository:
     """Get PostgreSQL file repository instance."""
     return PostgresFileRepository()
+
+
+@lru_cache()
+def get_rabbitmq_service() -> RabbitMQService:
+    """Get RabbitMQ service instance."""
+    return RabbitMQService(
+        amqp_url=os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/"),
+        exchange_name="ybb.events"
+    )
 
 
 # Document generation services
