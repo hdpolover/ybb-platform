@@ -18,6 +18,7 @@ class FileDto(BaseModel):
     user_id: str
     brand_id: str
     uploaded_at: datetime
+    updated_at: Optional[datetime] = None
     download_url: Optional[str] = None
     url: Optional[str] = None
     metadata: Optional[dict] = None
@@ -36,6 +37,7 @@ class FileDto(BaseModel):
             user_id=file.user_id,
             brand_id=file.brand_id,
             uploaded_at=file.uploaded_at,
+            updated_at=file.updated_at,
             download_url=download_url,
             url=url,
             metadata=file.metadata

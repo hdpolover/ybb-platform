@@ -151,4 +151,43 @@ export class FilesController {
       timestamp: new Date().toISOString(),
     };
   }
+
+  @Post('presigned-upload-url')
+  @ApiOperation({ summary: 'Get presigned URL for direct upload' })
+  @ApiResponse({ status: 200, description: 'Presigned URL generated successfully' })
+  async getPresignedUploadUrl(
+    @Body() dto: {
+      filename: string;
+      content_type: string;
+      user_id: string;
+      brand_id: string;
+      bucket?: string;
+      program_id?: string;
+      participant_id?: string;
+      size?: number;
+    }
+  ) {
+    try {
+      this.logger.log(`Generating presigned upload URL for: ${dto.filename}`);
+      
+      const result = await this.fileGrpcClient.getPresignedUploadUrl({
+          filename: dto.filename,
+          content_type: dto.content_type,
+          user_id: dto.user_id,
+          brand_id: dto.brand_id,
+          bucket: dto.bucket || 'uploads',
+          program_id: dto.program_id,
+          participant_id: dto.participant_id,
+          size: dto.size
+      });
+
+      return {
+        success: true,
+        data: result
+      };
+    } catch (error) {
+      this.logger.error(`Failed to generate presigned upload URL: ${error.message}`);
+      throw error;
+    }
+  }
 }

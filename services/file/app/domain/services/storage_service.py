@@ -79,6 +79,26 @@ class IStorageService(ABC):
             Presigned URL
         """
         pass
+
+    @abstractmethod
+    async def get_presigned_upload_url(
+        self, 
+        bucket: str, 
+        object_name: str, 
+        expiry_seconds: int = 3600
+    ) -> str:
+        """
+        Get presigned URL for direct upload (PUT).
+        
+        Args:
+            bucket: Bucket name
+            object_name: Object path in bucket
+            expiry_seconds: URL expiry time in seconds
+            
+        Returns:
+            Presigned URL
+        """
+        pass
     
     @abstractmethod
     def get_public_url(self, bucket: str, object_name: str) -> str:

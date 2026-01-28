@@ -88,64 +88,20 @@ class UploadFileHandler:
         extension = command.filename.split('.')[-1] if '.' in command.filename else ''
         storage_filename = f"{file_id}.{extension}" if extension else file_id
 
-        # Resolve bucket and storage path
-        # Strategy: Single Physical Bucket (e.g., ybb-assets-dev) -> Virtual Folders
-        real_bucket = os.getenv("MINIO_BUCKET", "ybb-assets-dev")
-        env = os.getenv("PYTHON_ENV", "development")
-        prefix_map = {
-            "development": "dev",
-            "staging": "staging",
-            "production": "prod"
-        }
-        env_prefix = prefix_map.get(env, "dev")
-        
-        # Path Construction Logic
-        # Strategy: Namespaced Hierarchy
-        # Root: /{env}/{brand}/
-        
-        root_path = f"{env_prefix}/{command.brand_id}"
+        # Use shared service to generate path
+        from app.application.services.file_path_service import FilePathService
+        storage_path, real_bucket, path_metadata = FilePathService.get_storage_path(
+            brand_id=command.brand_id,
+            user_id=command.user_id,
+            bucket=command.bucket,
+            filename=storage_filename,
+            program_id=command.program_id,
+            participant_id=command.participant_id
+        )
         
         # Prepare metadata to save
         file_metadata = command.metadata or {}
-        
-        # Context 1: Program Participant
-        # Path: .../programs/{program_id}/participants/{participant_id}/{category}/{filename}
-        if command.program_id and command.participant_id:
-            namespace = "programs"
-            storage_path = f"{root_path}/{namespace}/{command.program_id}/participants/{command.participant_id}/{command.bucket}/{storage_filename}"
-            
-            # Enrich metadata
-            file_metadata.update({
-                "namespace": namespace,
-                "program_id": command.program_id,
-                "participant_id": command.participant_id,
-                "context": "program_participation"
-            })
-
-        # Context 2: Program Global (e.g. Gallery, Banners)
-        # Path: .../programs/{program_id}/{category}/{filename}
-        elif command.program_id:
-            namespace = "programs"
-            storage_path = f"{root_path}/{namespace}/{command.program_id}/{command.bucket}/{storage_filename}"
-            
-            # Enrich metadata
-            file_metadata.update({
-                "namespace": namespace,
-                "program_id": command.program_id,
-                "context": "program_global"
-            })
-        
-        # Context 3: Global User
-        # Path: .../users/{user_id}/{category}/{filename}
-        else:
-            namespace = "users"
-            storage_path = f"{root_path}/{namespace}/{command.user_id}/{command.bucket}/{storage_filename}"
-            
-            # Enrich metadata
-            file_metadata.update({
-                "namespace": namespace,
-                "context": "user_global"
-            })
+        file_metadata.update(path_metadata)
         
         # Determine visibility
         is_public = command.bucket in self.PUBLIC_CATEGORIES

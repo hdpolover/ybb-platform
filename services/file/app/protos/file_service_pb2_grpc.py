@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from app.protos import file_service_pb2 as app_dot_protos_dot_file__service__pb2
+import file_service_pb2 as file__service__pb2
 
 GRPC_GENERATED_VERSION = '1.76.0'
 GRPC_VERSION = grpc.__version__
@@ -18,7 +18,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + ' but the generated code in app/protos/file_service_pb2_grpc.py depends on'
+        + ' but the generated code in file_service_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -36,18 +36,38 @@ class FileServiceStub(object):
         """
         self.UploadFile = channel.stream_unary(
                 '/file.FileService/UploadFile',
-                request_serializer=app_dot_protos_dot_file__service__pb2.UploadFileRequest.SerializeToString,
-                response_deserializer=app_dot_protos_dot_file__service__pb2.UploadFileResponse.FromString,
+                request_serializer=file__service__pb2.UploadFileRequest.SerializeToString,
+                response_deserializer=file__service__pb2.UploadFileResponse.FromString,
                 _registered_method=True)
         self.DownloadFile = channel.unary_stream(
                 '/file.FileService/DownloadFile',
-                request_serializer=app_dot_protos_dot_file__service__pb2.DownloadFileRequest.SerializeToString,
-                response_deserializer=app_dot_protos_dot_file__service__pb2.DownloadFileResponse.FromString,
+                request_serializer=file__service__pb2.DownloadFileRequest.SerializeToString,
+                response_deserializer=file__service__pb2.DownloadFileResponse.FromString,
                 _registered_method=True)
         self.GetFile = channel.unary_unary(
                 '/file.FileService/GetFile',
-                request_serializer=app_dot_protos_dot_file__service__pb2.GetFileRequest.SerializeToString,
-                response_deserializer=app_dot_protos_dot_file__service__pb2.FileResponse.FromString,
+                request_serializer=file__service__pb2.GetFileRequest.SerializeToString,
+                response_deserializer=file__service__pb2.FileResponse.FromString,
+                _registered_method=True)
+        self.GenerateCertificate = channel.unary_unary(
+                '/file.FileService/GenerateCertificate',
+                request_serializer=file__service__pb2.GenerateCertificateRequest.SerializeToString,
+                response_deserializer=file__service__pb2.GenerateDocumentResponse.FromString,
+                _registered_method=True)
+        self.GenerateReceipt = channel.unary_unary(
+                '/file.FileService/GenerateReceipt',
+                request_serializer=file__service__pb2.GenerateReceiptRequest.SerializeToString,
+                response_deserializer=file__service__pb2.GenerateDocumentResponse.FromString,
+                _registered_method=True)
+        self.GetPresignedUploadUrl = channel.unary_unary(
+                '/file.FileService/GetPresignedUploadUrl',
+                request_serializer=file__service__pb2.GetPresignedUploadUrlRequest.SerializeToString,
+                response_deserializer=file__service__pb2.GetPresignedUploadUrlResponse.FromString,
+                _registered_method=True)
+        self.ConfirmUpload = channel.unary_unary(
+                '/file.FileService/ConfirmUpload',
+                request_serializer=file__service__pb2.ConfirmUploadRequest.SerializeToString,
+                response_deserializer=file__service__pb2.ConfirmUploadResponse.FromString,
                 _registered_method=True)
 
 
@@ -75,23 +95,73 @@ class FileServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GenerateCertificate(self, request, context):
+        """--- New Methods ---
+
+        Generate a certificate (returns PDF bytes)
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GenerateReceipt(self, request, context):
+        """Generate a receipt (returns PDF bytes)
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetPresignedUploadUrl(self, request, context):
+        """Get a presigned URL for direct upload (Client -> S3/MinIO)
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ConfirmUpload(self, request, context):
+        """Confirm that a file has been uploaded (Event Hook)
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_FileServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'UploadFile': grpc.stream_unary_rpc_method_handler(
                     servicer.UploadFile,
-                    request_deserializer=app_dot_protos_dot_file__service__pb2.UploadFileRequest.FromString,
-                    response_serializer=app_dot_protos_dot_file__service__pb2.UploadFileResponse.SerializeToString,
+                    request_deserializer=file__service__pb2.UploadFileRequest.FromString,
+                    response_serializer=file__service__pb2.UploadFileResponse.SerializeToString,
             ),
             'DownloadFile': grpc.unary_stream_rpc_method_handler(
                     servicer.DownloadFile,
-                    request_deserializer=app_dot_protos_dot_file__service__pb2.DownloadFileRequest.FromString,
-                    response_serializer=app_dot_protos_dot_file__service__pb2.DownloadFileResponse.SerializeToString,
+                    request_deserializer=file__service__pb2.DownloadFileRequest.FromString,
+                    response_serializer=file__service__pb2.DownloadFileResponse.SerializeToString,
             ),
             'GetFile': grpc.unary_unary_rpc_method_handler(
                     servicer.GetFile,
-                    request_deserializer=app_dot_protos_dot_file__service__pb2.GetFileRequest.FromString,
-                    response_serializer=app_dot_protos_dot_file__service__pb2.FileResponse.SerializeToString,
+                    request_deserializer=file__service__pb2.GetFileRequest.FromString,
+                    response_serializer=file__service__pb2.FileResponse.SerializeToString,
+            ),
+            'GenerateCertificate': grpc.unary_unary_rpc_method_handler(
+                    servicer.GenerateCertificate,
+                    request_deserializer=file__service__pb2.GenerateCertificateRequest.FromString,
+                    response_serializer=file__service__pb2.GenerateDocumentResponse.SerializeToString,
+            ),
+            'GenerateReceipt': grpc.unary_unary_rpc_method_handler(
+                    servicer.GenerateReceipt,
+                    request_deserializer=file__service__pb2.GenerateReceiptRequest.FromString,
+                    response_serializer=file__service__pb2.GenerateDocumentResponse.SerializeToString,
+            ),
+            'GetPresignedUploadUrl': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetPresignedUploadUrl,
+                    request_deserializer=file__service__pb2.GetPresignedUploadUrlRequest.FromString,
+                    response_serializer=file__service__pb2.GetPresignedUploadUrlResponse.SerializeToString,
+            ),
+            'ConfirmUpload': grpc.unary_unary_rpc_method_handler(
+                    servicer.ConfirmUpload,
+                    request_deserializer=file__service__pb2.ConfirmUploadRequest.FromString,
+                    response_serializer=file__service__pb2.ConfirmUploadResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -119,8 +189,8 @@ class FileService(object):
             request_iterator,
             target,
             '/file.FileService/UploadFile',
-            app_dot_protos_dot_file__service__pb2.UploadFileRequest.SerializeToString,
-            app_dot_protos_dot_file__service__pb2.UploadFileResponse.FromString,
+            file__service__pb2.UploadFileRequest.SerializeToString,
+            file__service__pb2.UploadFileResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -146,8 +216,8 @@ class FileService(object):
             request,
             target,
             '/file.FileService/DownloadFile',
-            app_dot_protos_dot_file__service__pb2.DownloadFileRequest.SerializeToString,
-            app_dot_protos_dot_file__service__pb2.DownloadFileResponse.FromString,
+            file__service__pb2.DownloadFileRequest.SerializeToString,
+            file__service__pb2.DownloadFileResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -173,8 +243,116 @@ class FileService(object):
             request,
             target,
             '/file.FileService/GetFile',
-            app_dot_protos_dot_file__service__pb2.GetFileRequest.SerializeToString,
-            app_dot_protos_dot_file__service__pb2.FileResponse.FromString,
+            file__service__pb2.GetFileRequest.SerializeToString,
+            file__service__pb2.FileResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GenerateCertificate(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/file.FileService/GenerateCertificate',
+            file__service__pb2.GenerateCertificateRequest.SerializeToString,
+            file__service__pb2.GenerateDocumentResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GenerateReceipt(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/file.FileService/GenerateReceipt',
+            file__service__pb2.GenerateReceiptRequest.SerializeToString,
+            file__service__pb2.GenerateDocumentResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetPresignedUploadUrl(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/file.FileService/GetPresignedUploadUrl',
+            file__service__pb2.GetPresignedUploadUrlRequest.SerializeToString,
+            file__service__pb2.GetPresignedUploadUrlResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ConfirmUpload(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/file.FileService/ConfirmUpload',
+            file__service__pb2.ConfirmUploadRequest.SerializeToString,
+            file__service__pb2.ConfirmUploadResponse.FromString,
             options,
             channel_credentials,
             insecure,

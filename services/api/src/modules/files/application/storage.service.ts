@@ -23,8 +23,36 @@ export class StorageService {
   }
 
   /**
-   * Upload a file and return its public URL
-   * @param file The file object from Multer
+   * Generates a URL for the file. 
+   * Integrating ImageKit or similar CDNs here is efficient.
+   */
+  private constructPublicUrl(fileData: any, defaultBucket: string): string {
+    if (!fileData.storage_path) return '';
+    
+    // Whitelist for Public Image CDN
+    // ONLY these folders typically contain safe-to-share images
+    const PUBLIC_IMAGE_BUCKETS = ['gallery', 'programs', 'banners', 'sponsors', 'speakers', 'avatars', 'assets'];
+    const bucket = fileData.bucket || defaultBucket;
+
+    // 1. ImageKit Integration (Safe Mode)
+    const imageKitId = this.configService.get<string>('IMAGEKIT_ID');
+    const isImage = fileData.content_type && fileData.content_type.startsWith('image/');
+    const isPublic = PUBLIC_IMAGE_BUCKETS.includes(bucket);
+
+    if (imageKitId && isImage && isPublic) {
+        // Remove leading slash
+        const path = fileData.storage_path.startsWith('/') ? fileData.storage_path.substring(1) : fileData.storage_path;
+        return `https://ik.imagekit.io/${imageKitId}/${path}`;
+    }
+
+    // 2. Custom Domain Logic (Existing)
+    const isCustomDomain = this.storagePublicUrl && !this.storagePublicUrl.includes('digitaloceanspaces.com');
+    // ... rest of logic
+    const path = fileData.storage_path.startsWith('/') 
+        ? fileData.storage_path.substring(1) 
+        : fileData.storage_path;
+
+    if (isCustomDomain) {
    * @param userId The ID of the user uploading the file
    * @param brandId The Brand ID (Program Category ID)
    * @param folder The folder/category on the storage (mapped to 'bucket' param in FileService)
@@ -106,7 +134,6 @@ export class StorageService {
     // Heuristic: If STORAGE_PUBLIC_URL does NOT contain "digitaloceanspaces.com", assume it's custom domain for the bucket.
     const isCustomDomain = this.storagePublicUrl && !this.storagePublicUrl.includes('digitaloceanspaces.com');
     
-    // Ensure path doesn't have leading slash for concatenation
     const path = fileData.storage_path.startsWith('/') 
         ? fileData.storage_path.substring(1) 
         : fileData.storage_path;
