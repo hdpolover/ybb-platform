@@ -39,3 +39,4 @@ prometheus-fastapi-instrumentator>=7.0.0
 grpcio>=1.62.0
 grpcio-tools>=1.62.0
 
+aio-pika>=9.4.0

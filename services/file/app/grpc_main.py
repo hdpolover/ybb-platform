@@ -14,7 +14,11 @@ from app.protos import file_service_pb2
 from app.protos import file_service_pb2_grpc
 
 # Import Logic
-from app.presentation.dependencies.container import get_file_repository, get_storage_service
+from app.presentation.dependencies.container import (
+    get_file_repository, 
+    get_storage_service, 
+    get_rabbitmq_service
+)
 from app.application.commands.handlers.upload_file_handler import UploadFileHandler
 from app.application.queries.handlers.get_file_handler import GetFileHandler
 from app.application.commands.upload_file_command import UploadFileCommand
@@ -31,6 +35,7 @@ class FileService(file_service_pb2_grpc.FileServiceServicer):
     def __init__(self):
         self.repo = get_file_repository()
         self.storage = get_storage_service()
+        self.messaging = get_rabbitmq_service()
         self.upload_handler = UploadFileHandler(self.storage, self.repo)
         self.get_handler = GetFileHandler(file_repository=self.repo, storage_service=self.storage)
         
@@ -65,9 +70,18 @@ class FileService(file_service_pb2_grpc.FileServiceServicer):
                 template_path=template_path
             )
             
+            # Publish Event
+            filename = f"certificate_{uuid.uuid4()}.png"
+            await self.messaging.publish_event("file.certificate.generated", {
+                "filename": filename,
+                "participant_name": request.participant_name,
+                "program_name": request.program_name,
+                "template_type": request.template_type
+            })
+
             return file_service_pb2.GenerateDocumentResponse(
                 file_data=output.getvalue(),
-                filename=f"certificate_{uuid.uuid4()}.png", # Cert generator returns PNG
+                filename=filename, # Cert generator returns PNG
                 content_type="image/png"
             )
         except Exception as e:
@@ -93,9 +107,17 @@ class FileService(file_service_pb2_grpc.FileServiceServicer):
             
             output = await self.pdf_generator.generate_receipt(transaction_data)
             
+            filename = f"receipt_{request.receipt_number}.pdf"
+            await self.messaging.publish_event("file.receipt.generated", {
+                "filename": filename,
+                "receipt_number": request.receipt_number,
+                "amount": request.amount,
+                "email": request.additional_data.get("email", "")
+            })
+
             return file_service_pb2.GenerateDocumentResponse(
                 file_data=output.getvalue(),
-                filename=f"receipt_{request.receipt_number}.pdf",
+                filename=filename,
                 content_type="application/pdf"
             )
         except Exception as e:
@@ -199,6 +221,16 @@ class FileService(file_service_pb2_grpc.FileServiceServicer):
             await self.repo.save(file)
             logging.info(f"ConfirmUpload: File {file.id} marked ACTIVE.")
             
+            # Publish Event
+            await self.messaging.publish_event("file.uploaded", {
+                "file_id": file.id,
+                "filename": file.original_filename,
+                "bucket": file.bucket,
+                "storage_path": file.storage_path,
+                "user_id": file.user_id,
+                "size": file.file_size
+            })
+
             return file_service_pb2.ConfirmUploadResponse(
                 success=True, 
                 file_id=file.id, 
@@ -259,6 +291,16 @@ class FileService(file_service_pb2_grpc.FileServiceServicer):
             
             # Cleanup
             file_reader.close()
+
+            # Publish Event
+            await self.messaging.publish_event("file.uploaded", {
+                "file_id": result.id,
+                "filename": result.original_filename,
+                "bucket": result.bucket,
+                "storage_path": result.storage_path,
+                "user_id": metadata.user_id,
+                "size": result.size
+            })
 
             return file_service_pb2.UploadFileResponse(
                 id=result.id,
@@ -331,8 +373,21 @@ class FileService(file_service_pb2_grpc.FileServiceServicer):
 
 async def serve():
     await connect_db()
+    
+    # Initialize RabbitMQ
+    messaging = get_rabbitmq_service()
+    try:
+        await messaging.connect()
+    except Exception as e:
+        logging.error(f"Failed to connect to RabbitMQ: {e}")
+        # Decide if we want to crash or continue without messaging
+        # For now, we log and continue, but publishing will fail (or reconnect logic handles it)
+
     server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=10))
-    file_service_pb2_grpc.add_FileServiceServicer_to_server(FileService(), server)
+    file_service = FileService()
+    # Explicitly set messaging if it wasn't available during init (dependency injection handles it though)
+    
+    file_service_pb2_grpc.add_FileServiceServicer_to_server(file_service, server)
     port = os.getenv("GRPC_PORT", "50052")
     server.add_insecure_port(f'[::]:{port}')
     logging.info(f"Starting gRPC server on port {port}...")
@@ -340,6 +395,7 @@ async def serve():
     try:
         await server.wait_for_termination()
     finally:
+        await messaging.close()
         await disconnect_db()
 
 if __name__ == '__main__':
