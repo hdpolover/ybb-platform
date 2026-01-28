@@ -1,7 +1,15 @@
 import { Inject, Injectable, OnModuleInit, InternalServerErrorException, Logger } from '@nestjs/common';
 import { ClientGrpc } from '@nestjs/microservices';
 import { lastValueFrom, ReplaySubject, toArray } from 'rxjs';
-import { FileService, UploadFileRequest, FileMetadata } from './file.interface';
+import {
+  FileService,
+  UploadFileRequest,
+  FileMetadata,
+  GenerateCertificateRequest,
+  GenerateReceiptRequest,
+  GetPresignedUploadUrlRequest,
+  ConfirmUploadRequest
+} from './file.interface';
 import { Readable } from 'stream';
 
 @Injectable()
@@ -74,6 +82,42 @@ export class FileGrpcClient implements OnModuleInit {
       return Buffer.concat(bufferChunks);
     } catch (error) {
       this.logger.error(`gRPC download failed: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async generateCertificate(request: GenerateCertificateRequest) {
+    try {
+      return await lastValueFrom(this.fileService.GenerateCertificate(request));
+    } catch (error) {
+      this.logger.error(`gRPC generate certificate failed: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async generateReceipt(request: GenerateReceiptRequest) {
+    try {
+      return await lastValueFrom(this.fileService.GenerateReceipt(request));
+    } catch (error) {
+      this.logger.error(`gRPC generate receipt failed: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async getPresignedUploadUrl(request: GetPresignedUploadUrlRequest) {
+    try {
+      return await lastValueFrom(this.fileService.GetPresignedUploadUrl(request));
+    } catch (error) {
+      this.logger.error(`gRPC get presigned url failed: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async confirmUpload(request: ConfirmUploadRequest) {
+    try {
+      return await lastValueFrom(this.fileService.ConfirmUpload(request));
+    } catch (error) {
+      this.logger.error(`gRPC confirm upload failed: ${error.message}`);
       throw error;
     }
   }

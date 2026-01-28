@@ -167,6 +167,49 @@ class MinIOStorage(IStorageService):
             raise StorageException(f"MinIO presigned URL failed: {e}")
         except Exception as e:
             raise StorageException(f"Presigned URL error: {e}")
+
+    async def get_presigned_upload_url(
+        self, 
+        bucket: str, 
+        object_name: str, 
+        expiry_seconds: int = 3600
+    ) -> str:
+        """Get presigned URL for direct upload."""
+        try:
+            from datetime import timedelta
+            
+            # Ensure bucket exists
+            bucket_exists = await self._run_in_thread(self.client.bucket_exists, bucket_name=bucket)
+            if not bucket_exists:
+                await self._run_in_thread(self.client.make_bucket, bucket_name=bucket)
+
+            # Generate URL
+            url = self.client.presigned_put_object(
+                bucket_name=bucket,
+                object_name=object_name,
+                expires=timedelta(seconds=expiry_seconds)
+            )
+            
+            # Rewrite URL to use public endpoint if different
+            if self.public_endpoint and self.public_endpoint != self.endpoint:
+                internal_protocol = "https" if self.secure else "http"
+                public_protocol = "https" if self.public_secure else "http"
+                
+                internal_base = f"{internal_protocol}://{self.endpoint}"
+                public_base = f"{public_protocol}://{self.public_endpoint}"
+                
+                internal_base_with_bucket = f"{internal_base}/{bucket}"
+                if internal_base_with_bucket in url:
+                    url = url.replace(internal_base_with_bucket, public_base, 1)
+                else:
+                    url = url.replace(internal_base, public_base, 1)
+            
+            return url
+            
+        except S3Error as e:
+            raise StorageException(f"MinIO presigned PUT failed: {e}")
+        except Exception as e:
+            raise StorageException(f"Presigned PUT error: {e}")
     
     async def exists(self, bucket: str, object_name: str) -> bool:
         """Check if object exists in MinIO."""

@@ -13,6 +13,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagg
 import { Response } from 'express';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { FileServiceClient } from '../infrastructure/clients/file-service.client';
+import { FileGrpcClient } from '../infrastructure/clients/file-grpc-client.service';
 
 /**
  * Documents Controller
@@ -28,7 +29,10 @@ import { FileServiceClient } from '../infrastructure/clients/file-service.client
 export class DocumentsController {
   private readonly logger = new Logger(DocumentsController.name);
 
-  constructor(private readonly fileServiceClient: FileServiceClient) {}
+  constructor(
+    private readonly fileServiceClient: FileServiceClient,
+    private readonly fileGrpcClient: FileGrpcClient
+  ) {}
 
   @Post('export/participants')
   @ApiOperation({ summary: 'Export participant report to Excel' })
@@ -171,14 +175,23 @@ export class DocumentsController {
     try {
       this.logger.log(`Generating receipt: ${dto.transaction_data.receipt_number}`);
       
-      const buffer = await this.fileServiceClient.generateReceipt(dto.transaction_data);
+      // Use gRPC client
+      const response = await this.fileGrpcClient.generateReceipt({
+          ...dto.transaction_data,
+          currency: 'IDR', // Default currency
+          additional_data: {
+              email: dto.transaction_data.payer_email,
+              phone: dto.transaction_data.payer_phone,
+              description: dto.transaction_data.description
+          }
+      });
       
-      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Type', response.content_type);
       res.setHeader(
         'Content-Disposition',
-        `attachment; filename=receipt_${dto.transaction_data.receipt_number}.pdf`,
+        `attachment; filename=${response.filename}`,
       );
-      res.send(buffer);
+      res.send(response.file_data);
     } catch (error) {
       this.logger.error(`Failed to generate receipt: ${error.message}`);
       res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
@@ -241,12 +254,15 @@ export class DocumentsController {
       participant_data: {
         name: string;
         email: string;
+        metadata?: Record<string, any>;
       };
       program_data: {
         name: string;
         completion_date?: string;
+        metadata?: Record<string, any>;
       };
-      certificate_type?: 'completion' | 'participation';
+      certificate_type?: string; // Changed from enum to string to support 'award', 'speaker' etc.
+      template_path?: string;
     },
     @Res() res: Response,
   ) {
@@ -256,19 +272,33 @@ export class DocumentsController {
         `Generating ${certificateType} certificate for: ${dto.participant_data.name}`,
       );
       
-      const buffer = await this.fileServiceClient.generateCertificate(
-        dto.participant_data,
-        dto.program_data,
-        certificateType,
-      );
+      // Combine metadata
+      const combinedMetadata: Record<string, string> = {};
+      if (dto.participant_data.metadata) {
+          Object.entries(dto.participant_data.metadata).forEach(([k, v]) => combinedMetadata[k] = String(v));
+      }
+      if (dto.program_data.metadata) {
+          Object.entries(dto.program_data.metadata).forEach(([k, v]) => combinedMetadata[`program_${k}`] = String(v));
+      }
+      if (dto.template_path) {
+          combinedMetadata['template_path'] = dto.template_path;
+      }
+
+      // Use gRPC client
+      const response = await this.fileGrpcClient.generateCertificate({
+          participant_name: dto.participant_data.name,
+          program_name: dto.program_data.name,
+          issued_at: dto.program_data.completion_date || new Date().toISOString(),
+          template_type: certificateType,
+          metadata: combinedMetadata
+      });
       
-      const participantName = dto.participant_data.name.replace(/\s+/g, '_');
-      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Content-Type', response.content_type);
       res.setHeader(
         'Content-Disposition',
-        `attachment; filename=certificate_${participantName}.png`,
+        `attachment; filename=${response.filename}`,
       );
-      res.send(buffer);
+      res.send(response.file_data);
     } catch (error) {
       this.logger.error(`Failed to generate certificate: ${error.message}`);
       res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({

@@ -45,6 +45,18 @@ class PostgresFileRepository(IFileRepository):
         
         return [self._to_domain(model) for model in models]
     
+    async def find_by_storage_path(self, storage_path: str) -> Optional[File]:
+        """Find file by storage path (used for confirm upload hook)."""
+        model = await self.prisma.find_first(
+            where={
+                "storage_path": storage_path,
+                "is_deleted": False
+            }
+        )
+        if model:
+            return self._to_domain(model)
+        return None
+
     async def save(self, file: File) -> File:
         """Save file metadata."""
         # Convert dictionary metadata to JSON-compatible format
@@ -140,5 +152,6 @@ class PostgresFileRepository(IFileRepository):
             user_id=model.user_id,
             brand_id=model.brand_id,
             uploaded_at=model.uploaded_at,
+            updated_at=model.updated_at,
             metadata=meta
         )

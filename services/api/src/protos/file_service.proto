@@ -11,6 +11,61 @@ service FileService {
 
   // Get file metadata
   rpc GetFile (GetFileRequest) returns (FileResponse) {}
+
+  // --- New Methods ---
+
+  // Generate a certificate (returns PDF bytes)
+  rpc GenerateCertificate (GenerateCertificateRequest) returns (GenerateDocumentResponse) {}
+
+  // Generate a receipt (returns PDF bytes)
+  rpc GenerateReceipt (GenerateReceiptRequest) returns (GenerateDocumentResponse) {}
+
+  // Get a presigned URL for direct upload (Client -> S3/MinIO)
+  rpc GetPresignedUploadUrl (GetPresignedUploadUrlRequest) returns (GetPresignedUploadUrlResponse) {}
+}
+
+message GenerateCertificateRequest {
+  string participant_name = 1;
+  string program_name = 2;
+  string issued_at = 3; // Date string or empty
+  string template_type = 4; // "completion" or "participation"
+  map<string, string> metadata = 5;
+}
+
+message GenerateReceiptRequest {
+  string receipt_number = 1;
+  string transaction_id = 2;
+  double amount = 3;
+  string currency = 4;
+  string payer_name = 5;
+  string date = 6;
+  string payment_method = 7;
+  string status = 8;
+  map<string, string> additional_data = 9;
+}
+
+message GenerateDocumentResponse {
+  bytes file_data = 1;
+  string filename = 2;
+  string content_type = 3;
+}
+
+message GetPresignedUploadUrlRequest {
+  string filename = 1;
+  string content_type = 2;
+  string user_id = 3;
+  string brand_id = 4;
+  string bucket = 5; 
+  optional string program_id = 6;
+  optional string participant_id = 7;
+  int64 size = 8;
+}
+
+message GetPresignedUploadUrlResponse {
+  string upload_url = 1;
+  string file_id = 2;
+  string storage_path = 3;
+  string bucket = 4;
 }
 
 message UploadFileRequest {

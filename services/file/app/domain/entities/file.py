@@ -19,6 +19,7 @@ class File:
     user_id: str
     brand_id: str
     uploaded_at: datetime
+    updated_at: Optional[datetime] = None
     metadata: Optional[dict] = None
     
     # Backward compatibility aliases
