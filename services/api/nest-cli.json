@@ -2,11 +2,13 @@
   "collection": "@nestjs/schematics",
   "sourceRoot": "src",
   "compilerOptions": {
+    "webpack": false,
     "deleteOutDir": true,
     "assets": [
       {
-        "include": "**/*.proto",
-        "watchAssets": true
+        "include": "src/**/*.proto",
+        "watchAssets": true,
+        "outDir": "dist"
       },
       {
         "include": "src/docs/*.md",
