@@ -682,5 +682,37 @@ export async function seedIYSPrograms() {
       ]
   });
 
+  // ==========================================
+  // Program Participation Info (Handling Categories: Fully Funded / Self Funded)
+  // This is CRITICAL for the registration handler to allow these categories
+  // ==========================================
+  await prisma.programParticipationInfo.deleteMany({ where: { programId: iys2026.id } });
+  
+  // 1. Fully Funded Info
+  await prisma.programParticipationInfo.create({
+      data: {
+          programId: iys2026.id,
+          category: ApplicationCategory.fully_funded,
+          heroTitle: "Fully Funded Scholarship",
+          heroDescription: "Compete for a fully funded chance to attend IYS 2026.",
+          benefits: ["Flight Ticket (Round Trip)", "Hotel Accommodation", "Airport Transfer", "Meals & Kits"],
+          requirements: ["Submit Essay", "Pass Interview", "Social Project Presentation"],
+          isActive: true
+      }
+  });
+
+  // 2. Self Funded Info
+  await prisma.programParticipationInfo.create({
+      data: {
+          programId: iys2026.id,
+          category: ApplicationCategory.self_funded,
+          heroTitle: "Self Funded Delegate",
+          heroDescription: "Secure your spot at the summit with guaranteed entry.",
+          benefits: ["Hotel Accommodation", "Conference Meals", "Certificate", "Networking"],
+          requirements: ["Pay Registration Fee", "Valid Passport"],
+          isActive: true
+      }
+  });
+
   log('✅ IYS Programs seeded (2025: Inactive, 2026: Active with content)');
 }
