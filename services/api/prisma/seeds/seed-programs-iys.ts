@@ -390,6 +390,61 @@ export async function seedIYSPrograms() {
     ]
   });
 
+  // Participation Categories
+  await prisma.programParticipationCategory.deleteMany({ where: { programId: iys2026.id } });
+  await prisma.programParticipationCategory.createMany({
+    data: [
+      {
+        programId: iys2026.id,
+        name: "Delegate",
+        description: "Active participants involved in all sessions and projects.",
+        order: 1,
+        isActive: true
+      },
+      {
+        programId: iys2026.id,
+        name: "Observer",
+        description: "Participants who attend sessions but do not compete in projects.",
+        order: 2,
+        isActive: true
+      }
+    ]
+  });
+
+  // Program Testimonials
+  await prisma.programTestimonial.deleteMany({ where: { programId: iys2026.id } });
+  await prisma.programTestimonial.createMany({
+    data: [
+      {
+        programId: iys2026.id,
+        name: "John Smith",
+        role: "Best Delegate 2025",
+        testimonial: "An amazing experience that broadened my horizons.",
+        category: "alumni",
+        type: "text",
+        avatarUrl: "https://placehold.co/100x100?text=John",
+        rating: 5,
+        isFeatured: true,
+        order: 1,
+        isActive: true
+      },
+      {
+        programId: iys2026.id,
+        name: "Maria Garcia",
+        role: "Project Winner 2024",
+        testimonial: "The mentorship I received was invaluable for my startup.",
+        category: "alumni",
+        type: "video",
+        videoUrl: "https://www.youtube.com/watch?v=placeholder",
+        thumbnailUrl: "https://placehold.co/300x200?text=Video+Thumb",
+        rating: 5,
+        isFeatured: true,
+        order: 2,
+        isActive: true
+      }
+    ]
+  });
+
   // Resources (Guidebooks)
   await prisma.programResource.deleteMany({ where: { programId: iys2026.id } });
   await prisma.programResource.createMany({
