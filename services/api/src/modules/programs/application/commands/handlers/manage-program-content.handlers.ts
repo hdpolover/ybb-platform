@@ -166,16 +166,77 @@ export class DeleteProgramSpeakerHandler implements ICommandHandler<DeleteProgra
 // --- Gallery Handlers ---
 @CommandHandler(CreateProgramGalleryCommand)
 export class CreateProgramGalleryHandler implements ICommandHandler<CreateProgramGalleryCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly storageService: StorageService,
+        private readonly prisma: PrismaService,
+    ) {}
     async execute(command: CreateProgramGalleryCommand) {
-        return this.repository.createGallery(command.dto);
+        let imageUrl = command.dto.imageUrl;
+
+        if (command.image) {
+            const program = await this.prisma.program.findUnique({ where: { id: command.dto.programId } });
+            if (!program) {
+                throw new NotFoundException('Program not found');
+            }
+            
+            const result = await this.storageService.uploadFile(
+                command.image,
+                command.userId,
+                program.brandId,
+                'gallery',
+                program.id
+            );
+            imageUrl = result.url;
+        }
+
+        const dto = {
+            ...command.dto,
+            imageUrl: imageUrl || '' // Ensure string if not optional in DB or handle error if required
+        };
+        return this.repository.createGallery(dto);
     }
 }
 @CommandHandler(UpdateProgramGalleryCommand)
 export class UpdateProgramGalleryHandler implements ICommandHandler<UpdateProgramGalleryCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly storageService: StorageService,
+        private readonly prisma: PrismaService,
+    ) {}
     async execute(command: UpdateProgramGalleryCommand) {
-        return this.repository.updateGallery(command.id, command.dto);
+        let imageUrl = command.dto.imageUrl;
+
+        if (command.image) {
+            const galleryItem = await this.repository.findGalleryById(command.id);
+            if (!galleryItem) {
+                throw new NotFoundException('Gallery item not found');
+            }
+
+            if (!galleryItem.programId) {
+                 throw new NotFoundException('Program ID missing on gallery item');
+            }
+
+            const program = await this.prisma.program.findUnique({ where: { id: galleryItem.programId } });
+            if (!program) {
+                throw new NotFoundException('Program not found');
+            }
+            
+            const result = await this.storageService.uploadFile(
+                command.image,
+                command.userId,
+                program.brandId,
+                'gallery',
+                program.id
+            );
+            imageUrl = result.url;
+        }
+
+        const dto = {
+            ...command.dto,
+            imageUrl
+        };
+        return this.repository.updateGallery(command.id, dto);
     }
 }
 @CommandHandler(DeleteProgramGalleryCommand)

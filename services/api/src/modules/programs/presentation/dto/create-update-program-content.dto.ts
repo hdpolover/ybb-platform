@@ -278,10 +278,14 @@ export class CreateProgramGalleryDto {
     @IsNotEmpty()
     programId: string;
 
-    @ApiProperty()
+    @ApiProperty({ required: false })
     @IsString()
-    @IsNotEmpty()
-    imageUrl: string;
+    @IsOptional()
+    imageUrl?: string;
+
+    @ApiProperty({ type: 'string', format: 'binary', required: false, description: 'Gallery Image to upload' })
+    @IsOptional()
+    image?: any;
 
     @ApiProperty({ required: false })
     @IsString()
@@ -309,6 +313,10 @@ export class UpdateProgramGalleryDto {
     @IsString()
     @IsOptional()
     imageUrl?: string;
+
+    @ApiProperty({ type: 'string', format: 'binary', required: false, description: 'Gallery Image to upload' })
+    @IsOptional()
+    image?: any;
 
     @ApiProperty({ required: false })
     @IsString()
