@@ -32,6 +32,7 @@ import { SupportModule } from '@modules/support/support.module';
 import { SystemModule } from '@modules/system/system.module';
 import { UsersModule } from '@modules/users/users.module';
 import { GalleryModule } from '@modules/gallery/gallery.module';
+import { PortalModule } from '@modules/portal/portal.module';
 
 @Module({
   imports: [
@@ -102,6 +103,7 @@ import { GalleryModule } from '@modules/gallery/gallery.module';
     SystemModule,
     UsersModule,
     GalleryModule,
+    PortalModule,
   ],
   controllers: [CacheController, MetricsController],
 })

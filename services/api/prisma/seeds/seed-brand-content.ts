@@ -88,7 +88,46 @@ export async function seedBrandContent() {
     ]
   });
 
-  // 4. Partnership Opportunities
+  // 4. Sponsors (Global/Brand Level)
+  await prisma.sponsor.deleteMany({ where: { brandId: iys.id } });
+  await prisma.sponsor.createMany({
+    data: [
+      {
+        brandId: iys.id,
+        name: 'Tech Corp Global',
+        type: 'corporate',
+        tier: 'platinum',
+        logoUrl: 'https://placehold.co/200x100?text=Tech+Corp',
+        websiteUrl: 'https://techcorp.example.com',
+        description: 'Leading innovation worldwide.',
+        order: 1,
+        isActive: true
+      },
+      {
+        brandId: iys.id,
+        name: 'Education First',
+        type: 'ngo',
+        tier: 'gold',
+        logoUrl: 'https://placehold.co/200x100?text=Education+First',
+        websiteUrl: 'https://edu-first.example.org',
+        description: 'Promoting global literacy.',
+        order: 2,
+        isActive: true
+      },
+      {
+        brandId: iys.id,
+        name: 'Local Media Group',
+        type: 'media_partner',
+        tier: 'partner',
+        logoUrl: 'https://placehold.co/200x100?text=Media+Group',
+        websiteUrl: 'https://media.example.com',
+        order: 3,
+        isActive: true
+      }
+    ]
+  });
+
+  // 5. Partnership Opportunities
   await prisma.partnershipOpportunity.deleteMany({ where: { brandId: iys.id } });
   await prisma.partnershipOpportunity.createMany({
     data: [

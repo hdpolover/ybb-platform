@@ -30,6 +30,7 @@ model ProgramPricingTier {
   program         Program                     @relation(fields: [programId], references: [id], onDelete: Cascade)
   validityPeriods PricingTierValidityPeriod[]
   invoices        ApplicationInvoice[]
+  applications    ParticipantApplication[]
   // transactions    PaymentTransaction[] -- REMOVED: Managed by Payment Service
 
   @@index([programId])
@@ -124,6 +125,10 @@ model ParticipantApplication {
   applicationCategory   ApplicationCategory?          @map("application_category")
   participationCategoryId String?                     @map("participation_category_id") @db.Uuid
   participationCategory ProgramParticipationCategory? @relation(fields: [participationCategoryId], references: [id])
+  
+  pricingTierId       String?                       @map("pricing_tier_id") @db.Uuid
+  pricingTier         ProgramPricingTier?           @relation(fields: [pricingTierId], references: [id])
+  
   submittedAt           DateTime?                     @map("submission_date") @db.Timestamptz(6)
 
   // Application Data (Flexible Store)
