@@ -21,8 +21,8 @@ COPY tsconfig.json ./
 # Copy source code
 COPY src ./src
 
-# Create dist/src/protos directory ensuring proto files exist there (fix for missing protos)
-RUN mkdir -p dist/src/protos && cp src/protos/*.proto dist/src/protos/
+# Create dist/protos directory ensuring proto files exist there (fix for missing protos)
+RUN mkdir -p dist/protos && cp src/protos/*.proto dist/protos/
 
 # Copy and set up entrypoint script
 COPY docker-entrypoint.sh /docker-entrypoint.sh

@@ -30,11 +30,11 @@ COPY --from=builder /app/node_modules ./node_modules
 RUN npm prune --production
 
 COPY --from=builder /app/dist ./dist
-# Ensure proto files are copied to dist
-RUN mkdir -p dist/src/protos && cp -r dist/src/protos || true
-COPY --from=builder /app/src/protos ./dist/src/protos
-RUN mkdir -p dist/src/common/proto
-COPY --from=builder /app/src/common/proto ./dist/src/common/proto
+# Ensure proto files are copied to dist/protos (matching structure)
+RUN mkdir -p dist/protos
+COPY --from=builder /app/src/protos/*.proto ./dist/protos/
+RUN mkdir -p dist/common/proto
+COPY --from=builder /app/src/common/proto ./dist/common/proto
 
 
 # Copy prisma schema if it exists in expected location for generating client
@@ -53,4 +53,4 @@ RUN sed -i 's/\r$//' /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
 
 # Use entrypoint to run migrations before starting app
 ENTRYPOINT ["/bin/sh", "/docker-entrypoint.sh"]
-CMD ["node", "dist/src/main"]
+CMD ["node", "dist/main"]
