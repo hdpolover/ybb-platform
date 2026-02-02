@@ -13,12 +13,12 @@ enum Gender {
 export async function seedParticipants() {
   log('🌱 Seeding Participants & Applications...');
 
-  const iys = await prisma.programCategory.findUnique({ where: { slug: BRANDS.IYS } });
+  const iys = await prisma.brand.findUnique({ where: { slug: BRANDS.IYS } });
   if (!iys) return;
 
   const iys2026 = await prisma.program.findFirst({
     where: { 
-      programCategoryId: iys.id, 
+      brandId: iys.id, 
       slug: 'istanbul-youth-summit-2026' 
     }
   });
@@ -66,9 +66,9 @@ export async function seedParticipants() {
     // Check using Compound Unique
     let user = await prisma.user.findUnique({ 
         where: { 
-            email_programCategoryId: {
+            email_brandId: {
                 email: p.email,
-                programCategoryId: iys.id
+                brandId: iys.id
             }
         } 
     });
@@ -77,7 +77,7 @@ export async function seedParticipants() {
         user = await prisma.user.create({
             data: {
                 email: p.email,
-                programCategory: { connect: { id: iys.id } },
+                brand: { connect: { id: iys.id } },
                 passwordHash: hashedPassword,
                 emailVerified: true,
                 isActive: true

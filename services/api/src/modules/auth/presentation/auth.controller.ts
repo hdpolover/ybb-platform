@@ -36,6 +36,7 @@ import { GetUserProfileQuery } from '../application/queries/get-user-profile.que
 import { GetAuthProvidersQuery } from '../application/queries/get-auth-providers.query';
 import { Public } from '../../../shared/decorators/public.decorator';
 import { CurrentUser, CurrentUserData } from '../../../shared/decorators/current-user.decorator';
+import { BrandDomain } from '../../../shared/decorators/brand-domain.decorator';
 import { JwtAuthGuard } from '../infrastructure/guards/jwt-auth.guard';
 
 @ApiTags('auth')
@@ -68,8 +69,7 @@ export class AuthController {
   @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
   async firebaseLogin(
     @Body() dto: FirebaseLoginDto,
-    @Query('url') url?: string,
-    @Headers('x-brand-domain') brandDomain?: string,
+    @BrandDomain() brandDomain?: string,
     @Ip() ip?: string,
     @Req() req?: Request,
   ): Promise<AuthResponseDto> {
@@ -79,12 +79,12 @@ export class AuthController {
       dto.providerId,
       ip || '0.0.0.0',
       userAgent,
-      dto.programCategoryId,
+      dto.brandId,
       dto.programId,
       dto.programSlug,
       dto.referralCode,
     );
-    return this.firebaseLoginHandler.execute(command, url || brandDomain);
+    return this.firebaseLoginHandler.execute(command, brandDomain);
   }
 
   @Public()
@@ -95,8 +95,7 @@ export class AuthController {
   @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
   async login(
     @Body() dto: LoginDto,
-    @Query('url') url?: string,
-    @Headers('x-brand-domain') brandDomain?: string,
+    @BrandDomain() brandDomain?: string,
     @Ip() ip?: string,
     @Req() req?: Request,
   ): Promise<AuthResponseDto> {
@@ -106,9 +105,9 @@ export class AuthController {
       dto.password,
       ip || '0.0.0.0',
       userAgent,
-      dto.programCategoryId,
+      dto.brandId,
     );
-    return this.loginHandler.execute(command, url || brandDomain);
+    return this.loginHandler.execute(command, brandDomain);
   }
 
   @Public()
@@ -129,8 +128,7 @@ export class AuthController {
   @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
   async register(
     @Body() dto: RegisterDto,
-    @Query('url') url?: string,
-    @Headers('x-brand-domain') brandDomain?: string,
+    @BrandDomain() brandDomain?: string,
     @Ip() ip?: string,
     @Req() req?: Request,
   ): Promise<AuthResponseDto> {
@@ -139,15 +137,16 @@ export class AuthController {
       dto.email,
       dto.providerId,
       dto.password,
-      dto.programCategoryId,
+      dto.brandId,
       dto.providerUserId,
       dto.programId,
       dto.programSlug,
       dto.referralCode,
       ip || '0.0.0.0',
       userAgent,
+      dto.applicationCategory,
     );
-    return this.registerHandler.execute(command, url || brandDomain);
+    return this.registerHandler.execute(command, brandDomain);
   }
 
   @Public()
@@ -161,9 +160,9 @@ export class AuthController {
       dto.password,
       dto.fullName,
       dto.secretKey,
-      dto.programCategoryId,
+      dto.brandId,
       dto.role,
-      dto.additionalCategoryIds,
+      dto.additionalBrandIds,
     );
     return this.registerAdminHandler.execute(command);
   }
@@ -176,14 +175,13 @@ export class AuthController {
   @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
   async forgotPassword(
     @Body() dto: ForgotPasswordDto,
-    @Query('url') url?: string,
-    @Headers('x-brand-domain') brandDomain?: string,
+    @BrandDomain() brandDomain?: string,
     @Ip() ip?: string,
     @Req() req?: Request,
   ) {
     const userAgent = req?.headers['user-agent'] || 'unknown';
-    const command = new ForgotPasswordCommand(dto.email, dto.programCategoryId, ip || '0.0.0.0', userAgent);
-    return this.forgotPasswordHandler.execute(command, url || brandDomain);
+    const command = new ForgotPasswordCommand(dto.email, dto.brandId, ip || '0.0.0.0', userAgent);
+    return this.forgotPasswordHandler.execute(command, brandDomain);
   }
 
   @Public()
@@ -224,14 +222,13 @@ export class AuthController {
   @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
   async resendVerification(
     @Body() dto: ResendVerificationDto,
-    @Query('url') url?: string,
-    @Headers('x-brand-domain') brandDomain?: string,
+    @BrandDomain() brandDomain?: string,
     @Ip() ip?: string,
     @Req() req?: Request,
   ) {
     const userAgent = req?.headers['user-agent'] || 'unknown';
-    const command = new ResendVerificationEmailCommand(dto.email, dto.programCategoryId, ip || '0.0.0.0', userAgent);
-    return this.resendVerificationEmailHandler.execute(command, url || brandDomain);
+    const command = new ResendVerificationEmailCommand(dto.email, dto.brandId, ip || '0.0.0.0', userAgent);
+    return this.resendVerificationEmailHandler.execute(command, brandDomain);
   }
 
   @Post('logout')
@@ -261,7 +258,7 @@ export class AuthController {
     type: UserProfileDto,
   })
   async getProfile(@CurrentUser() user: CurrentUserData) {
-    const query = new GetUserProfileQuery(user.userId, user.programCategoryId);
+    const query = new GetUserProfileQuery(user.userId, user.brandId);
     return this.getUserProfileHandler.execute(query);
   }
 

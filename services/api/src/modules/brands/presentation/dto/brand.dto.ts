@@ -4,10 +4,10 @@ export class BrandResponseDto {
     @ApiProperty()
     id: string;
 
-    @ApiProperty()
+    @ApiProperty({ example: 'Istanbul Youth Summit' })
     name: string;
 
-    @ApiProperty()
+    @ApiProperty({ example: 'istanbul-youth-summit' })
     slug: string;
 
     @ApiProperty({ required: false, nullable: true })
@@ -17,13 +17,64 @@ export class BrandResponseDto {
     logoUrl?: string | null;
 
     @ApiProperty({ required: false, nullable: true })
+    bannerUrl?: string | null;
+
+    @ApiProperty({ required: false, nullable: true })
     websiteUrl?: string | null;
 
     @ApiProperty({ required: false, nullable: true })
     primaryColor?: string | null;
 
     @ApiProperty({ required: false, nullable: true })
+    about?: string | null;
+
+    @ApiProperty({ required: false, nullable: true })
+    vision?: string | null;
+
+    @ApiProperty({ required: false, nullable: true })
+    mission?: string | null;
+
+    @ApiProperty({ required: false, nullable: true })
     contactEmail?: string | null;
+
+    @ApiProperty({ required: false, nullable: true })
+    contactPhone?: string | null;
+
+    @ApiProperty({ required: false, nullable: true })
+    contactWhatsapp?: string | null;
+
+    @ApiProperty({ required: false, nullable: true })
+    contactAddress?: string | null;
+
+    @ApiProperty({ required: false, nullable: true, example: { instagram: '...' } })
+    socialMediaLinks?: any | null;
+
+    @ApiProperty({ required: false, nullable: true })
+    defaultLocation?: string | null;
+
+    @ApiProperty({ required: false, nullable: true })
+    defaultCountry?: string | null;
+
+    @ApiProperty({ required: false, nullable: true })
+    defaultTimezone?: string | null;
+
+    @ApiProperty()
+    requireEmailVerification: boolean;
+
+    @ApiProperty({ example: 'USD' })
+    defaultCurrency: string;
+
+    @ApiProperty()
+    enableMultiCurrency: boolean;
+
+    @ApiProperty({ required: false, nullable: true })
+    metaTitle?: string | null;
+
+    @ApiProperty({ required: false, nullable: true })
+    metaDescription?: string | null;
+
+    @ApiProperty({ required: false, nullable: true })
+    metaKeywords?: string | null;
 
     @ApiProperty()
     createdAt: Date;
@@ -33,6 +84,9 @@ export class BrandResponseDto {
 
     @ApiProperty({ required: false, nullable: true })
     deletedAt?: Date | null;
+
+    @ApiProperty({ required: false, nullable: true, description: 'Brand-specific settings like footer config.' })
+    settings?: any | null; // Detailed settings object
 }
 
 export class SponsorResponseDto {

@@ -5,12 +5,12 @@ export async function seedScoring() {
   log('🌱 Seeding Scoring Rubrics & Reviews...');
 
   // 1. Get Program
-  const iys = await prisma.programCategory.findUnique({ where: { slug: BRANDS.IYS } });
+  const iys = await prisma.brand.findUnique({ where: { slug: BRANDS.IYS } });
   if (!iys) return;
 
   const iys2026 = await prisma.program.findFirst({
     where: { 
-      programCategoryId: iys.id, 
+      brandId: iys.id, 
       slug: 'istanbul-youth-summit-2026' 
     }
   });

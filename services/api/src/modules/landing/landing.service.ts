@@ -8,7 +8,7 @@ import { PartnersSponsorsStrategy } from './strategies/partners-sponsors.strateg
 import { AnnouncementsStrategy } from './strategies/announcements.strategy';
 import { SettingsStrategy } from './strategies/settings.strategy';
 import { FaqsStrategy } from './strategies/faqs.strategy';
-import { ProgramCategory } from '@prisma/client';
+import { Brand } from '@prisma/client';
 
 @Injectable()
 export class LandingService {
@@ -25,10 +25,10 @@ export class LandingService {
     private readonly faqsStrategy: FaqsStrategy,
   ) {}
 
-  private async resolveCategory(url?: string): Promise<ProgramCategory | null> {
+  private async resolveBrand(url?: string): Promise<Brand | null> {
     if (!url) {
-      // Return default active category if no URL specified, likely the main YBB one
-      return this.prisma.programCategory.findFirst({
+      // Return default active brand if no URL specified, likely the main YBB one
+      return this.prisma.brand.findFirst({
         where: { isActive: true },
         // Prefer one marked as 'default' if we had such flag, or specific slug
         // For now, any active one or 'ybb' specifically if we wanted to enforce default
@@ -36,26 +36,26 @@ export class LandingService {
       });
     }
 
-    // Check if input is UUID (Program Category ID)
+    // Check if input is UUID (Brand ID)
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(url);
     if (isUuid) {
-       const category = await this.prisma.programCategory.findFirst({
+       const brand = await this.prisma.brand.findFirst({
            where: { id: url, isActive: true }
        });
-       if (category) return category;
+       if (brand) return brand;
     }
 
     // Try to find by exact URL match (most reliable)
-    let category = await this.prisma.programCategory.findFirst({
+    let brand = await this.prisma.brand.findFirst({
       where: { 
         websiteUrl: url,
         isActive: true 
       },
     });
 
-    if (!category) {
+    if (!brand) {
       // Try to find if the stored url contains the request url (e.g request: domain.com, stored: https://domain.com)
-      category = await this.prisma.programCategory.findFirst({
+      brand = await this.prisma.brand.findFirst({
         where: {
           websiteUrl: { contains: url, mode: 'insensitive' },
           isActive: true
@@ -63,50 +63,50 @@ export class LandingService {
       });
     }
 
-    if (!category) {
-      throw new NotFoundException(`No program category found for URL: ${url}`);
+    if (!brand) {
+      throw new NotFoundException(`No brand found for URL: ${url}`);
     }
 
-    return category;
+    return brand;
   }
 
   async getHome(url?: string) {
-    const category = await this.resolveCategory(url);
-    return this.homeStrategy.getData(category);
+    const brand = await this.resolveBrand(url);
+    return this.homeStrategy.getData(brand);
   }
 
   async getAbout(url?: string) {
-    const category = await this.resolveCategory(url);
-    return this.aboutStrategy.getData(category);
+    const brand = await this.resolveBrand(url);
+    return this.aboutStrategy.getData(brand);
   }
 
   async getPrograms(url?: string) {
-    const category = await this.resolveCategory(url);
-    return this.programsStrategy.getData(category);
+    const brand = await this.resolveBrand(url);
+    return this.programsStrategy.getData(brand);
   }
 
   async getProgramDetail(slug: string, url?: string) {
-    const category = await this.resolveCategory(url);
-    return this.programsStrategy.getProgramData(slug, category);
+    const brand = await this.resolveBrand(url);
+    return this.programsStrategy.getProgramData(slug, brand);
   }
 
   async getPartnersSponsors(url?: string) {
-    const category = await this.resolveCategory(url);
-    return this.partnersSponsorsStrategy.getData(category);
+    const brand = await this.resolveBrand(url);
+    return this.partnersSponsorsStrategy.getData(brand);
   }
 
   async getAnnouncements(url?: string) {
-    const category = await this.resolveCategory(url);
-    return this.announcementsStrategy.getData(category);
+    const brand = await this.resolveBrand(url);
+    return this.announcementsStrategy.getData(brand);
   }
 
   async getFaqs(url?: string, page: number = 1, limit: number = 10, search?: string) {
-    const category = await this.resolveCategory(url);
-    return this.faqsStrategy.getFaqs(category, page, limit, search);
+    const brand = await this.resolveBrand(url);
+    return this.faqsStrategy.getFaqs(brand, page, limit, search);
   }
 
   async getSettings(url?: string) {
-    const category = await this.resolveCategory(url);
-    return this.settingsStrategy.getData(category);
+    const brand = await this.resolveBrand(url);
+    return this.settingsStrategy.getData(brand);
   }
 }

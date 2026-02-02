@@ -1,9 +1,10 @@
-import { Controller, Get, Param, Query, Headers } from '@nestjs/common';
+import { Controller, Get, Param, Query } from '@nestjs/common';
 import { LandingService } from './landing.service';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiHeader, ApiNotFoundResponse, ApiBadRequestResponse } from '@nestjs/swagger';
 import { LandingPageResponseDto } from './dto/landing-page.dto';
 import { LandingSettingsResponseDto } from './dto/landing-settings.dto';
 import { Public } from '../../shared/decorators/public.decorator';
+import { BrandDomain } from '../../shared/decorators/brand-domain.decorator';
 
 @ApiTags('Landing')
 @Controller('landing')
@@ -26,11 +27,9 @@ export class LandingController {
   @ApiResponse({ status: 200, description: 'Return settings object', type: LandingSettingsResponseDto })
   @ApiBadRequestResponse({ description: 'Invalid brand identification' })
   async getSettings(
-    @Query('url') url?: string,
-    @Headers() headers?: Record<string, string>,
+    @BrandDomain() brandDomain?: string,
   ): Promise<LandingSettingsResponseDto> {
-    const brandDomain = headers?.['x-brand-domain'];
-    return this.landingService.getSettings(url || brandDomain);
+    return this.landingService.getSettings(brandDomain);
   }
 
   @Get('home')
@@ -42,11 +41,9 @@ export class LandingController {
   @ApiResponse({ status: 200, description: 'Return home page structure', type: LandingPageResponseDto })
   @ApiBadRequestResponse({ description: 'Invalid brand identification' })
   async getHome(
-    @Query('url') url?: string,
-    @Headers() headers?: Record<string, string>,
+    @BrandDomain() brandDomain?: string,
   ): Promise<LandingPageResponseDto> {
-    const brandDomain = headers?.['x-brand-domain'];
-    return this.landingService.getHome(url || brandDomain);
+    return this.landingService.getHome(brandDomain);
   }
 
   @Get('about')
@@ -55,11 +52,9 @@ export class LandingController {
   @ApiResponse({ status: 200, description: 'Return about page structure', type: LandingPageResponseDto })
   @ApiBadRequestResponse({ description: 'Invalid brand identification' })
   async getAbout(
-    @Query('url') url?: string,
-    @Headers() headers?: Record<string, string>,
+    @BrandDomain() brandDomain?: string,
   ): Promise<LandingPageResponseDto> {
-    const brandDomain = headers?.['x-brand-domain'];
-    return this.landingService.getAbout(url || brandDomain);
+    return this.landingService.getAbout(brandDomain);
   }
 
   @Get('programs')
@@ -68,11 +63,9 @@ export class LandingController {
   @ApiResponse({ status: 200, description: 'Return programs listing structure', type: LandingPageResponseDto })
   @ApiBadRequestResponse({ description: 'Invalid brand identification' })
   async getPrograms(
-    @Query('url') url?: string,
-    @Headers() headers?: Record<string, string>,
+    @BrandDomain() brandDomain?: string,
   ): Promise<LandingPageResponseDto> {
-    const brandDomain = headers?.['x-brand-domain'];
-    return this.landingService.getPrograms(url || brandDomain);
+    return this.landingService.getPrograms(brandDomain);
   }
 
   @Get('programs/:slug')
@@ -83,11 +76,9 @@ export class LandingController {
   @ApiBadRequestResponse({ description: 'Invalid brand identification' })
   async getProgramDetail(
     @Param('slug') slug: string,
-    @Query('url') url?: string,
-    @Headers() headers?: Record<string, string>,
+    @BrandDomain() brandDomain?: string,
   ): Promise<LandingPageResponseDto> {
-    const brandDomain = headers?.['x-brand-domain'];
-    return this.landingService.getProgramDetail(slug, url || brandDomain);
+    return this.landingService.getProgramDetail(slug, brandDomain);
   }
 
   @Get('partners-sponsors')
@@ -96,11 +87,9 @@ export class LandingController {
   @ApiResponse({ status: 200, description: 'Return partners page structure', type: LandingPageResponseDto })
   @ApiBadRequestResponse({ description: 'Invalid brand identification' })
   async getPartnersSponsors(
-    @Query('url') url?: string,
-    @Headers() headers?: Record<string, string>,
+    @BrandDomain() brandDomain?: string,
   ): Promise<LandingPageResponseDto> {
-    const brandDomain = headers?.['x-brand-domain'];
-    return this.landingService.getPartnersSponsors(url || brandDomain);
+    return this.landingService.getPartnersSponsors(brandDomain);
   }
 
   @Get('announcements')
@@ -109,11 +98,9 @@ export class LandingController {
   @ApiResponse({ status: 200, description: 'Return announcements page structure', type: LandingPageResponseDto })
   @ApiBadRequestResponse({ description: 'Invalid brand identification' })
   async getAnnouncements(
-    @Query('url') url?: string,
-    @Headers() headers?: Record<string, string>,
+    @BrandDomain() brandDomain?: string,
   ): Promise<LandingPageResponseDto> {
-    const brandDomain = headers?.['x-brand-domain'];
-    return this.landingService.getAnnouncements(url || brandDomain);
+    return this.landingService.getAnnouncements(brandDomain);
   }
 
   @Get('faqs')
@@ -125,13 +112,11 @@ export class LandingController {
   @ApiResponse({ status: 200, description: 'Return FAQs page structure', type: LandingPageResponseDto })
   @ApiBadRequestResponse({ description: 'Invalid brand identification' })
   async getFaqs(
-    @Query('url') url?: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
     @Query('search') search?: string,
-    @Headers() headers?: Record<string, string>,
+    @BrandDomain() brandDomain?: string,
   ): Promise<LandingPageResponseDto> {
-    const brandDomain = headers?.['x-brand-domain'];
-    return this.landingService.getFaqs(url || brandDomain, page, limit, search);
+    return this.landingService.getFaqs(brandDomain, page, limit, search);
   }
 }

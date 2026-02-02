@@ -2,7 +2,7 @@ import { Controller, Get, Query, Param, Put, Post, Delete, Body, UseGuards, Requ
 import { FileInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery, ApiConsumes } from '@nestjs/swagger';
 import { ListProgramsDto } from './dto/list-programs.dto';
-import { ProgramListResponseDto } from './dto/program-response.dto';
+import { ProgramListResponseDto, ProgramResponseDto } from './dto/program-response.dto';
 import { ListProgramsQuery } from '../application/queries/list-programs.query';
 import { ListProgramsHandler } from '../application/queries/handlers/list-programs.handler';
 import { GetProgramDetailDto } from './dto/get-program-detail.dto';
@@ -34,6 +34,7 @@ import {
   ProgramRequirementResponseDto,
   ApplicationFormFieldResponseDto,
   ProgramEssayResponseDto,
+  ProgramParticipationCategoryResponseDto,
 } from './dto/program-content.dto';
 import {
   ListProgramTimelineQuery,
@@ -48,6 +49,7 @@ import {
   ListProgramPricingTiersQuery,
   ListProgramRequirementsQuery,
   ListProgramEssaysQuery,
+  ListProgramParticipationCategoriesQuery,
 } from '../application/queries/list-program-content.queries';
 import {
   ListProgramTimelineHandler,
@@ -61,8 +63,7 @@ import {
   ListProgramResourcesHandler,
   ListProgramPricingTiersHandler,
   ListProgramRequirementsHandler,
-  ListProgramEssaysHandler,
-} from '../application/queries/handlers/list-program-content.handlers';
+  ListProgramEssaysHandler,  ListProgramParticipationCategoriesHandler,} from '../application/queries/handlers/list-program-content.handlers';
 import { Public } from '../../../shared/decorators/public.decorator';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
 
@@ -79,6 +80,7 @@ import {
   CreateProgramResourceDto, UpdateProgramResourceDto,
   CreateProgramPricingTierDto, UpdateProgramPricingTierDto,
   CreateProgramRequirementDto, UpdateProgramRequirementDto,
+  CreateProgramParticipationCategoryDto, UpdateProgramParticipationCategoryDto,
   CreateProgramEssayDto, UpdateProgramEssayDto,
 } from './dto/create-update-program-content.dto';
 import { CreateApplicationFormFieldDto } from '../application/dto/application-form-field/create-application-form-field.dto';
@@ -97,6 +99,7 @@ import {
   CreateProgramResourceCommand, UpdateProgramResourceCommand, DeleteProgramResourceCommand,
   CreateProgramPricingTierCommand, UpdateProgramPricingTierCommand, DeleteProgramPricingTierCommand,
   CreateProgramRequirementCommand, UpdateProgramRequirementCommand, DeleteProgramRequirementCommand,
+  CreateProgramParticipationCategoryCommand, UpdateProgramParticipationCategoryCommand, DeleteProgramParticipationCategoryCommand,
   CreateProgramEssayCommand, UpdateProgramEssayCommand, DeleteProgramEssayCommand,
 } from '../application/commands/program-content.commands';
 import {
@@ -119,6 +122,7 @@ import {
   CreateProgramResourceHandler, UpdateProgramResourceHandler, DeleteProgramResourceHandler,
   CreateProgramPricingTierHandler, UpdateProgramPricingTierHandler, DeleteProgramPricingTierHandler,
   CreateProgramRequirementHandler, UpdateProgramRequirementHandler, DeleteProgramRequirementHandler,
+  CreateProgramParticipationCategoryHandler, UpdateProgramParticipationCategoryHandler, DeleteProgramParticipationCategoryHandler,
   CreateProgramEssayHandler, UpdateProgramEssayHandler, DeleteProgramEssayHandler,
 } from '../application/commands/handlers/manage-program-content.handlers';
 import {
@@ -155,6 +159,7 @@ export class ProgramsController {
     private readonly listProgramPricingTiersHandler: ListProgramPricingTiersHandler,
     private readonly listProgramRequirementsHandler: ListProgramRequirementsHandler,
     private readonly listProgramEssaysHandler: ListProgramEssaysHandler,
+    private readonly listProgramParticipationCategoriesHandler: ListProgramParticipationCategoriesHandler,
     // Content Management Handlers
     // Timeline
     private readonly createProgramTimelineHandler: CreateProgramTimelineHandler,
@@ -204,6 +209,10 @@ export class ProgramsController {
     private readonly createProgramEssayHandler: CreateProgramEssayHandler,
     private readonly updateProgramEssayHandler: UpdateProgramEssayHandler,
     private readonly deleteProgramEssayHandler: DeleteProgramEssayHandler,
+    // Participation Categories
+    private readonly createProgramParticipationCategoryHandler: CreateProgramParticipationCategoryHandler,
+    private readonly updateProgramParticipationCategoryHandler: UpdateProgramParticipationCategoryHandler,
+    private readonly deleteProgramParticipationCategoryHandler: DeleteProgramParticipationCategoryHandler,
     // Content Management Handlers
     private readonly createApplicationFormFieldHandler: CreateApplicationFormFieldHandler,
     private readonly updateApplicationFormFieldHandler: UpdateApplicationFormFieldHandler,
@@ -217,11 +226,13 @@ export class ProgramsController {
   @ApiResponse({ status: 200, type: ProgramListResponseDto })
   async findAll(@Query() dto: ListProgramsDto): Promise<ProgramListResponseDto> {
     const query = new ListProgramsQuery(
-      dto.programCategoryId,
+      dto.brandId,
       dto.year,
       dto.isPublished,
       dto.page,
       dto.limit,
+      dto.isActive,
+      dto.status,
     );
     return this.listProgramsHandler.execute(query);
   }
@@ -267,7 +278,7 @@ export class ProgramsController {
 
     return {
       message: 'Program created successfully',
-      data: program,
+      data: this.mapToResponse(program),
     };
   }
 
@@ -288,7 +299,28 @@ export class ProgramsController {
 
     return {
       message: 'Program updated successfully',
-      data: program,
+      data: this.mapToResponse(program),
+    };
+  }
+
+  private mapToResponse(program: any): ProgramResponseDto {
+    return {
+      id: program.id,
+      brandId: program.brandId,
+      name: program.name,
+      slug: program.slug,
+      description: program.description,
+      year: program.year,
+      startDate: program.startDate,
+      endDate: program.endDate,
+      applicationDeadline: program.applicationDeadline,
+      location: program.location,
+      capacity: program.capacity,
+      isPublished: program.isPublished,
+      isActive: program.isActive,
+      status: program.status,
+      createdAt: program.createdAt,
+      updatedAt: program.updatedAt,
     };
   }
 
@@ -314,9 +346,11 @@ export class ProgramsController {
       thumbnail: files?.thumbnail?.[0],
     };
     
-    return this.updateProgramBrandingHandler.execute(
+    const program = await this.updateProgramBrandingHandler.execute(
         new UpdateProgramBrandingCommand(id, dto, req.user.id, uploadedFiles)
     );
+
+    return this.mapToResponse(program);
   }
 
   @Delete(':id')
@@ -797,6 +831,39 @@ export class ProgramsController {
   @ApiOperation({ summary: 'Delete essay' })
   async deleteEssay(@Param('itemId') itemId: string, @Request() req: any) {
     return this.deleteProgramEssayHandler.execute(new DeleteProgramEssayCommand(itemId, req.user.id));
+  }
+
+  // --- Participation Category Endpoints ---
+  @Get(':id/participation-categories')
+  @Public()
+  @ApiOperation({ summary: 'Get program participation categories' })
+  @ApiResponse({ status: 200, type: [ProgramParticipationCategoryResponseDto] })
+  async getParticipationCategories(@Param('id') id: string) {
+    return this.listProgramParticipationCategoriesHandler.execute(new ListProgramParticipationCategoriesQuery(id));
+  }
+
+  @Post(':id/participation-categories')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Add participation category' })
+  async addParticipationCategory(@Param('id') programId: string, @Body() dto: CreateProgramParticipationCategoryDto, @Request() req: any) {
+    return this.createProgramParticipationCategoryHandler.execute(new CreateProgramParticipationCategoryCommand(dto, req.user.id));
+  }
+
+  @Put('participation-categories/:itemId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update participation category' })
+  async updateParticipationCategory(@Param('itemId') itemId: string, @Body() dto: UpdateProgramParticipationCategoryDto, @Request() req: any) {
+    return this.updateProgramParticipationCategoryHandler.execute(new UpdateProgramParticipationCategoryCommand(itemId, dto, req.user.id));
+  }
+
+  @Delete('participation-categories/:itemId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete participation category' })
+  async deleteParticipationCategory(@Param('itemId') itemId: string, @Request() req: any) {
+    return this.deleteProgramParticipationCategoryHandler.execute(new DeleteProgramParticipationCategoryCommand(itemId, req.user.id));
   }
 
   // --- Form Field Endpoints ---

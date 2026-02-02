@@ -70,13 +70,13 @@ describe('AuthController', () => {
             const dto: LoginDto = {
                 email: 'test@example.com',
                 password: 'password',
-                programCategoryId: 'cat-1'
+                brandId: 'cat-1'
             };
             const mockReq = { headers: { 'user-agent': 'Jest' } };
             const ip = '127.0.0.1';
             const brandDomain = 'ybb.co';
 
-            await controller.login(dto, undefined, brandDomain, ip, mockReq as any);
+            await controller.login(dto, brandDomain, ip, mockReq as any);
 
             expect(mockLoginHandler.execute).toHaveBeenCalledWith(
                 expect.any(LoginCommand),
@@ -96,14 +96,14 @@ describe('AuthController', () => {
                 email: 'new@example.com',
                 password: 'pass',
                 providerId: 'prov-1',
-                programCategoryId: 'cat-1',
+                brandId: 'cat-1',
                 referralCode: 'REFCODE',
                 programSlug: 'prog-slug'
             };
             const mockReq = { headers: { 'user-agent': 'Jest' } };
             const ip = '127.0.0.1';
 
-            await controller.register(dto, undefined, undefined, ip, mockReq as any);
+            await controller.register(dto, undefined, ip, mockReq as any);
 
             expect(mockRegisterHandler.execute).toHaveBeenCalledWith(
                 expect.any(RegisterCommand),

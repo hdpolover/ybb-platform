@@ -45,3 +45,9 @@ export class ListProgramRequirementsQuery {
 export class ListProgramEssaysQuery {
     constructor(public readonly programId: string) { }
 }
+
+export class ListProgramParticipationCategoriesQuery {
+    constructor(
+        public readonly programId: string,
+    ) { }
+}

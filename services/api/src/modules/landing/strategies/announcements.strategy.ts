@@ -1,16 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { ILandingPageStrategy } from './landing-page.strategy';
 import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
-import { ProgramCategory } from '@prisma/client';
+import { Brand } from '@prisma/client';
 
 @Injectable()
 export class AnnouncementsStrategy implements ILandingPageStrategy {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getData(category: ProgramCategory | null) {
+  async getData(category: Brand | null) {
     const announcements = category ? await this.prisma.systemAnnouncement.findMany({
         where: {
-            programCategoryId: category.id,
+            brandId: category.id,
             isPublished: true,
             OR: [
                 { targetAudience: 'all' },

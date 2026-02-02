@@ -1,30 +1,33 @@
 import { Injectable } from '@nestjs/common';
 import { ILandingPageStrategy } from './landing-page.strategy';
 import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
-import { ProgramCategory } from '@prisma/client';
+import { Brand } from '@prisma/client';
 
 @Injectable()
 export class FaqsStrategy implements ILandingPageStrategy {
   constructor(private readonly prisma: PrismaService) {}
 
   // ILandingPageStrategy interface requirement
-  async getData(category: ProgramCategory | null) {
+  async getData(category: Brand | null) {
       // Default behavior if called via standard interface: Return first page
       return this.getFaqs(category, 1, 10);
   }
 
   async getFaqs(
-      category: ProgramCategory | null, 
+      category: Brand | null, 
       page: number = 1, 
       limit: number = 10,
       search?: string
   ) {
-    const skip = (page - 1) * limit;
+    // Ensure page and limit are valid numbers
+    const pageNum = Number(page) > 0 ? Number(page) : 1;
+    const limitNum = Number(limit) > 0 ? Number(limit) : 10;
+    const skip = (pageNum - 1) * limitNum;
 
     // 1. Resolve Category context and Target Program
     // We want FAQs related to the "current" offering of this brand.
     const programWhere = category 
-        ? { programCategoryId: category.id } 
+        ? { brandId: category.id } 
         : {}; 
 
     // Find latest active program
@@ -85,7 +88,7 @@ export class FaqsStrategy implements ILandingPageStrategy {
                     type: 'faq_list',
                     content: {
                         items: [],
-                        pagination: { total: 0, page, limit, total_pages: 0 }
+                        pagination: { total: 0, page: pageNum, limit: limitNum, total_pages: 0 }
                     }
                 }
             ]
@@ -104,7 +107,7 @@ export class FaqsStrategy implements ILandingPageStrategy {
             where: whereCondition,
             orderBy: { order: 'asc' },
             skip,
-            take: Number(limit), // Ensure number
+            take: limitNum,
         }),
         this.prisma.programFaq.count({ where: whereCondition }),
     ]);
@@ -133,9 +136,9 @@ export class FaqsStrategy implements ILandingPageStrategy {
             })),
             pagination: {
                 total,
-                page: Number(page),
-                limit: Number(limit),
-                total_pages: Math.ceil(total / limit)
+                page: pageNum,
+                limit: limitNum,
+                total_pages: Math.ceil(total / limitNum)
             }
         }
     };

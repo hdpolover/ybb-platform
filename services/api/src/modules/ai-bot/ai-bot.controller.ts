@@ -31,10 +31,10 @@ export class AiBotController {
 
   @Get('active')
   @ApiOperation({ summary: 'Get active bot config for frontend' })
-  @ApiQuery({ name: 'categoryId', required: false, description: 'Program Category ID context' })
+  @ApiQuery({ name: 'brandId', required: false, description: 'Brand ID context' })
   // @Public()
-  async getActive(@Query('categoryId') categoryId?: string) {
-    return this.aiBotService.getActiveConfig(categoryId);
+  async getActive(@Query('brandId') brandId?: string) {
+    return this.aiBotService.getActiveConfig(brandId);
   }
 
   @Get(':id')

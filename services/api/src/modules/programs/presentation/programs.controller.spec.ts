@@ -107,11 +107,11 @@ describe('ProgramsController', () => {
 
     describe('findAll', () => {
         it('should execute ListProgramsQuery', async () => {
-            const dto = { programCategoryId: 'cat-1', year: 2024, isPublished: true, page: 1, limit: 10 };
+            const dto = { brandId: 'cat-1', year: 2024, isPublished: true, page: 1, limit: 10 };
             await controller.findAll(dto);
             expect(mockExecute.execute).toHaveBeenCalledWith(expect.any(ListProgramsQuery));
             const query = mockExecute.execute.mock.calls[0][0];
-            expect(query.programCategoryId).toBe('cat-1');
+            expect(query.brandId).toBe('cat-1');
             expect(query.year).toBe(2024);
         });
     });
@@ -120,7 +120,7 @@ describe('ProgramsController', () => {
         it('should execute CreateProgramCommand', async () => {
             const dto = { 
                 name: 'New Program', 
-                programCategoryId: 'cat-1',
+                brandId: 'cat-1',
                 slug: "new-program",
                 year: 2024,
                 startDate: new Date().toISOString(),

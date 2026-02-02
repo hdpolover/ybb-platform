@@ -21,8 +21,8 @@ export async function cleanDatabase() {
   await prisma.admin.deleteMany({});
   await prisma.user.deleteMany({});
 
-  // 4. Brands (ProgramCategory)
-  await prisma.programCategory.deleteMany({});
+  // 4. Brands
+  await prisma.brand.deleteMany({});
   
   log('✨ Database cleaned');
 }

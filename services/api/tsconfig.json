@@ -23,8 +23,9 @@
       "@modules/*": ["src/modules/*"],
       "@shared/*": ["src/shared/*"],
       "@common/*": ["src/common/*"]
-    }
+    },
+    "rootDir": "src"
   },
-  "include": ["src/**/*", "prisma/**/*", "prisma.config.ts", "test/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "test", "prisma", "prisma.config.ts"]
 }

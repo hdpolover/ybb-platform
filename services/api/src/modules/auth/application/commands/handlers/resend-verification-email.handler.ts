@@ -13,14 +13,14 @@ export class ResendVerificationEmailHandler {
     private readonly authLoggingService: AuthLoggingService,
   ) {}
 
-  private async resolveProgramCategoryId(programCategoryId?: string, domain?: string): Promise<string> {
-    if (programCategoryId) {
-      return programCategoryId;
+  private async resolveBrandId(brandId?: string, domain?: string): Promise<string> {
+    if (brandId) {
+      return brandId;
     }
 
     if (!domain) {
       // Fallback to default
-      const defaultCategory = await this.prisma.programCategory.findFirst({
+      const defaultCategory = await this.prisma.brand.findFirst({
         where: { isActive: true },
         orderBy: { createdAt: 'asc' },
         select: { id: true }
@@ -30,13 +30,13 @@ export class ResendVerificationEmailHandler {
     }
 
     // Try finding by domain
-    let category = await this.prisma.programCategory.findFirst({
+    let category = await this.prisma.brand.findFirst({
       where: { websiteUrl: domain, isActive: true },
       select: { id: true }
     });
 
     if (!category) {
-      category = await this.prisma.programCategory.findFirst({
+      category = await this.prisma.brand.findFirst({
         where: { websiteUrl: { contains: domain, mode: 'insensitive' }, isActive: true },
         select: { id: true }
       });
@@ -47,23 +47,20 @@ export class ResendVerificationEmailHandler {
   }
 
   async execute(command: ResendVerificationEmailCommand, domain?: string): Promise<{ success: boolean; message: string }> {
-    const programCategoryId = await this.resolveProgramCategoryId(command.programCategoryId, domain);
+    const brandId = await this.resolveBrandId(command.brandId, domain);
 
     const user = await this.prisma.user.findUnique({
       where: {
-        email_programCategoryId: {
+        email_brandId: {
           email: command.email,
-          programCategoryId: programCategoryId,
+          brandId: brandId,
         },
       },
     });
 
     if (!user) {
-      // For security reasons, don't reveal if user exists or not, but in this specific flow 
-      // where user is asking for their verification email, it might be confusing. 
-      // Standard practice: return success even if user not found, OR give generic error.
-      // However, to debug this implementation:
-      throw new NotFoundException('User not found in this request context.');
+      // User explicitly asked to check first - so we fail if not found
+      throw new NotFoundException(`User with email ${command.email} not found.`);
     }
 
     if (user.emailVerified) {
@@ -83,8 +80,8 @@ export class ResendVerificationEmailHandler {
     });
 
     // Get Program Category details for email template
-    const programCategory = await this.prisma.programCategory.findUnique({
-      where: { id: programCategoryId },
+    const brand = await this.prisma.brand.findUnique({
+      where: { id: brandId },
     });
 
     // Send notification
@@ -92,13 +89,13 @@ export class ResendVerificationEmailHandler {
       email: user.email,
       name: user.email.split('@')[0],
       token: emailVerificationToken,
-      programCategory: programCategory ? {
-        name: programCategory.name,
-        logoUrl: programCategory.logoUrl,
-        primaryColor: programCategory.primaryColor,
-        websiteUrl: programCategory.websiteUrl,
-        socialMediaLinks: programCategory.socialMediaLinks,
-        contactEmail: programCategory.contactEmail,
+      brand: brand ? {
+        name: brand.name,
+        logoUrl: brand.logoUrl,
+        primaryColor: brand.primaryColor,
+        websiteUrl: brand.websiteUrl,
+        socialMediaLinks: brand.socialMediaLinks,
+        contactEmail: brand.contactEmail,
       } : undefined,
     });
 await this.authLoggingService.logResendVerification(

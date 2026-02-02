@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 
-class ProgramCategoryDto {
+class BrandDto {
   @ApiProperty()
   id: string;
 
@@ -401,8 +401,8 @@ export class ProgramDetailResponseDto {
   @ApiProperty()
   metaDescription?: string;
 
-  @ApiProperty({ type: ProgramCategoryDto })
-  category: ProgramCategoryDto;
+  @ApiProperty({ type: BrandDto })
+  brand: BrandDto;
 
   @ApiProperty({ type: [ProgramPaymentDto] })
   payments?: ProgramPaymentDto[];

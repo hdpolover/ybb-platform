@@ -66,7 +66,36 @@ describe('BrandsController', () => {
     describe('getBrand', () => {
         it('should execute GetBrandDetailQuery', async () => {
             const id = 'brand-1';
-            const expectedResult: BrandResponseDto = { id, name: 'Brand 1', slug: 'brand-1', createdAt: new Date(), updatedAt: new Date() };
+            const expectedResult: BrandResponseDto = {
+                id,
+                name: 'Brand 1',
+                slug: 'brand-1',
+                description: 'Description',
+                logoUrl: null,
+                bannerUrl: null,
+                websiteUrl: null,
+                primaryColor: null,
+                about: null,
+                vision: null,
+                mission: null,
+                contactEmail: null,
+                contactPhone: null,
+                contactWhatsapp: null,
+                contactAddress: null,
+                socialMediaLinks: null,
+                defaultLocation: null,
+                defaultCountry: 'Test Country',
+                defaultTimezone: null,
+                requireEmailVerification: true,
+                defaultCurrency: 'USD',
+                enableMultiCurrency: false,
+                metaTitle: null,
+                metaDescription: null,
+                metaKeywords: null,
+                settings: null,
+                createdAt: new Date(),
+                updatedAt: new Date()
+            };
             mockQueryBus.execute.mockResolvedValue(expectedResult);
 
             const result = await controller.getBrand(id);
@@ -87,6 +116,29 @@ describe('BrandsController', () => {
                 id: 'brand-1', 
                 name: dto.name, 
                 slug: 'brand-1',
+                description: 'Description',
+                logoUrl: null,
+                bannerUrl: null,
+                websiteUrl: null,
+                primaryColor: null,
+                about: null,
+                vision: null,
+                mission: null,
+                contactEmail: null,
+                contactPhone: null,
+                contactWhatsapp: null,
+                contactAddress: null,
+                socialMediaLinks: null,
+                defaultLocation: null,
+                defaultCountry: 'Test Country',
+                defaultTimezone: null,
+                requireEmailVerification: true,
+                defaultCurrency: 'USD',
+                enableMultiCurrency: false,
+                metaTitle: null,
+                metaDescription: null,
+                metaKeywords: null,
+                settings: null,
                 createdAt: new Date(), 
                 updatedAt: new Date() 
             };

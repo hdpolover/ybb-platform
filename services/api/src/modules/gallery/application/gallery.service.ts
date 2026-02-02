@@ -16,14 +16,14 @@ export class GalleryService {
     // 1. Validate Program and get Brand ID (Program Category)
     const program = await this.prisma.program.findUnique({
       where: { id: dto.program_id },
-      include: { programCategory: true } // Assuming relation exists
+      include: { brand: true } // Assuming relation exists
     });
 
     if (!program) {
       throw new NotFoundException('Program not found');
     }
 
-    const brandId = program.programCategoryId;
+    const brandId = program.brandId;
 
     // 2. Upload to File Service
     const uploadResult = await this.storageService.uploadFile(

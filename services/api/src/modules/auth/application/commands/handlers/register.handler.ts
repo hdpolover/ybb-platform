@@ -27,7 +27,7 @@ export class RegisterHandler {
   /**
    * Helper to fetch Registered Programs
    */
-  private async getRegisteredPrograms(userId: string, programCategoryId: string) {
+  private async getRegisteredPrograms(userId: string, brandId: string) {
     const userData = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -36,7 +36,7 @@ export class RegisterHandler {
             applications: {
               where: {
                 program: {
-                  programCategoryId: programCategoryId 
+                  brandId: brandId 
                 }
               },
               include: {
@@ -59,25 +59,25 @@ export class RegisterHandler {
   }
 
   /**
-   * Resolve domain to programCategoryId
+   * Resolve domain to brandId
    * Similar logic to login handler
    */
-  private async resolveProgramCategoryId(programCategoryId?: string, domain?: string): Promise<string> {
-    // If programCategoryId is explicitly provided, use it
-    if (programCategoryId) {
-      return programCategoryId;
+  private async resolveBrandId(brandId?: string, domain?: string): Promise<string> {
+    // If brandId is explicitly provided, use it
+    if (brandId) {
+      return brandId;
     }
 
-    // If no programCategoryId and no domain, try to get default category
+    // If no brandId and no domain, try to get default category
     if (!domain) {
-      const defaultCategory = await this.prisma.programCategory.findFirst({
+      const defaultCategory = await this.prisma.brand.findFirst({
         where: { isActive: true },
         orderBy: { createdAt: 'asc' },
         select: { id: true }
       });
 
       if (!defaultCategory) {
-        throw new BadRequestException('No active program category found. Please provide programCategoryId or use a valid domain.');
+        throw new BadRequestException('No active program category found. Please provide brandId or use a valid domain.');
       }
 
       return defaultCategory.id;
@@ -85,7 +85,7 @@ export class RegisterHandler {
 
     // Try to find category by domain
     // First try exact match
-    let category = await this.prisma.programCategory.findFirst({
+    let category = await this.prisma.brand.findFirst({
       where: { 
         websiteUrl: domain,
         isActive: true 
@@ -95,7 +95,7 @@ export class RegisterHandler {
 
     // If not found, try contains match (handles subdomains and protocols)
     if (!category) {
-      category = await this.prisma.programCategory.findFirst({
+      category = await this.prisma.brand.findFirst({
         where: {
           websiteUrl: { contains: domain, mode: 'insensitive' },
           isActive: true
@@ -105,7 +105,7 @@ export class RegisterHandler {
     }
 
     if (!category) {
-      throw new BadRequestException(`No program category found for domain: ${domain}. Please provide programCategoryId.`);
+      throw new BadRequestException(`No program category found for domain: ${domain}. Please provide brandId.`);
     }
 
     return category.id;
@@ -121,15 +121,15 @@ export class RegisterHandler {
       throw new BadRequestException(`Authentication provider is not available or inactive`);
     }
 
-    // Resolve programCategoryId from command or domain
-    const programCategoryId = await this.resolveProgramCategoryId(command.programCategoryId, domain);
+    // Resolve brandId from command or domain
+    const brandId = await this.resolveBrandId(command.brandId, domain);
 
     // Check if program category exists
-    const programCategory = await this.prisma.programCategory.findUnique({
-      where: { id: programCategoryId },
+    const brand = await this.prisma.brand.findUnique({
+      where: { id: brandId },
     });
 
-    if (!programCategory || !programCategory.isActive) {
+    if (!brand || !brand.isActive) {
       throw new BadRequestException('Invalid program category');
     }
 
@@ -139,8 +139,8 @@ export class RegisterHandler {
     if (command.programSlug) {
         const programBySlug = await this.prisma.program.findUnique({
           where: {
-            programCategoryId_slug: {
-              programCategoryId: programCategoryId,
+            brandId_slug: {
+              brandId: brandId,
               slug: command.programSlug,
             }
           }
@@ -156,7 +156,7 @@ export class RegisterHandler {
     if (!targetProgramId) {
       const latestProgram = await this.prisma.program.findFirst({
         where: {
-          programCategoryId: programCategoryId,
+          brandId: brandId,
           isActive: true,
         },
         orderBy: {
@@ -172,7 +172,7 @@ export class RegisterHandler {
     // Compatibility check (if ID was manually provided)
     if (targetProgramId && command.programId) {
        const confirmProgram = await this.prisma.program.findUnique({ where: { id: targetProgramId }});
-       if (confirmProgram && confirmProgram.programCategoryId !== programCategoryId) {
+       if (confirmProgram && confirmProgram.brandId !== brandId) {
            throw new BadRequestException('Program does not belong to the selected category');
        }
     }
@@ -192,12 +192,12 @@ export class RegisterHandler {
         }
     }
 
-    // Check if user already exists by email + programCategoryId
+    // Check if user already exists by email + brandId
     let user = await this.prisma.user.findUnique({
       where: {
-        email_programCategoryId: {
+        email_brandId: {
           email: command.email,
-          programCategoryId: programCategoryId,
+          brandId: brandId,
         },
       },
       include: {
@@ -273,18 +273,31 @@ export class RegisterHandler {
             }
         });
 
-        // Default priority: Fully Funded -> Self Funded -> Other/First Available
+        // Default: Self Funded if no visible options or logic fails
         let applicationCategory: ApplicationCategory = ApplicationCategory.self_funded;
 
-        const hasFullyFunded = participationInfos.some(pi => pi.category === ApplicationCategory.fully_funded);
-        const hasSelfFunded = participationInfos.some(pi => pi.category === ApplicationCategory.self_funded);
+        if (command.applicationCategory) {
+            // 1. User requested specific category
+            const isAvailable = participationInfos.some(pi => pi.category === command.applicationCategory);
+            if (!isAvailable) {
+                 // Trying to register for a closed or non-existent category
+                 // However, we shouldn't block REGISTRATION entirely if the user just clicked a bad link? 
+                 // But strictly speaking, if they want "Fully Funded" and it's closed, we should tell them.
+                 throw new BadRequestException(`Registration for '${command.applicationCategory.replace('_', ' ')}' is not available for this program.`);
+            }
+            applicationCategory = command.applicationCategory;
+        } else {
+            // 2. Fallback Priority: Fully Funded -> Self Funded -> Other/First Available
+            const hasFullyFunded = participationInfos.some(pi => pi.category === ApplicationCategory.fully_funded);
+            const hasSelfFunded = participationInfos.some(pi => pi.category === ApplicationCategory.self_funded);
 
-        if (hasFullyFunded) {
-            applicationCategory = ApplicationCategory.fully_funded;
-        } else if (hasSelfFunded) {
-             applicationCategory = ApplicationCategory.self_funded;
-        } else if (participationInfos.length > 0) {
-             applicationCategory = participationInfos[0].category;
+            if (hasFullyFunded) {
+                applicationCategory = ApplicationCategory.fully_funded;
+            } else if (hasSelfFunded) {
+                applicationCategory = ApplicationCategory.self_funded;
+            } else if (participationInfos.length > 0) {
+                applicationCategory = participationInfos[0].category;
+            }
         }
 
         await this.prisma.participantApplication.create({
@@ -319,7 +332,7 @@ export class RegisterHandler {
         const payload = {
           sub: existingIdentity.user.id,
           email: existingIdentity.user.email,
-          programCategoryId: existingIdentity.user.programCategoryId,
+          brandId: existingIdentity.user.brandId,
         };
 
         const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
@@ -331,7 +344,7 @@ export class RegisterHandler {
           data: { lastUsedAt: new Date() },
         });
 
-        const registeredPrograms = await this.getRegisteredPrograms(existingIdentity.user.id, existingIdentity.user.programCategoryId);
+        const registeredPrograms = await this.getRegisteredPrograms(existingIdentity.user.id, existingIdentity.user.brandId);
 
         return {
           accessToken,
@@ -339,7 +352,7 @@ export class RegisterHandler {
           user: {
             id: existingIdentity.user.id,
             email: existingIdentity.user.email,
-            programCategoryId: existingIdentity.user.programCategoryId,
+            brandId: existingIdentity.user.brandId,
             isActive: existingIdentity.user.isActive,
             isOnboardingCompleted: existingIdentity.user.isOnboardingCompleted ?? false,
             registeredPrograms,
@@ -387,13 +400,13 @@ export class RegisterHandler {
       const payload = {
         sub: user.id,
         email: user.email,
-        programCategoryId: user.programCategoryId,
+        brandId: user.brandId,
       };
 
       const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
       const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
 
-      const registeredPrograms = await this.getRegisteredPrograms(user.id, user.programCategoryId);
+      const registeredPrograms = await this.getRegisteredPrograms(user.id, user.brandId);
 
       return {
         accessToken,
@@ -401,7 +414,7 @@ export class RegisterHandler {
         user: {
           id: user.id,
           email: user.email,
-          programCategoryId: user.programCategoryId,
+          brandId: user.brandId,
           isActive: user.isActive,
           isOnboardingCompleted: user.isOnboardingCompleted ?? false,
           registeredPrograms,
@@ -428,7 +441,7 @@ export class RegisterHandler {
     let emailVerified = authProvider.isOAuth; 
 
     if (authProvider.name === 'local') {
-      if (programCategory.requireEmailVerification) {
+      if (brand.requireEmailVerification) {
         // Verification Required
         emailVerified = false;
         emailVerificationToken = crypto.randomBytes(32).toString('hex');
@@ -444,7 +457,7 @@ export class RegisterHandler {
       data: {
         email: command.email,
         passwordHash,
-        programCategoryId: programCategoryId,
+        brandId: brandId,
         isActive: true,
         isOnboardingCompleted: false,
         emailVerified: emailVerified,
@@ -470,24 +483,24 @@ export class RegisterHandler {
         email: newUser.email,
         name: newUser.email.split('@')[0], // Use part of email as name since we don't have it yet
         token: emailVerificationToken,
-        programCategory: {
-          name: programCategory.name,
-          logoUrl: programCategory.logoUrl,
-          primaryColor: programCategory.primaryColor,
-          websiteUrl: programCategory.websiteUrl,
-          socialMediaLinks: programCategory.socialMediaLinks,
-          contactEmail: programCategory.contactEmail,
+        brand: {
+          name: brand.name,
+          logoUrl: brand.logoUrl,
+          primaryColor: brand.primaryColor,
+          websiteUrl: brand.websiteUrl,
+          socialMediaLinks: brand.socialMediaLinks,
+          contactEmail: brand.contactEmail,
         },
       });
     } else if (authProvider.isOAuth) {
       this.rabbitmqProducer.emit('user.registered', {
         email: newUser.email,
         name: newUser.email.split('@')[0],
-        programCategory: {
-          name: programCategory.name,
-          logoUrl: programCategory.logoUrl,
-          primaryColor: programCategory.primaryColor,
-          websiteUrl: programCategory.websiteUrl,
+        brand: {
+          name: brand.name,
+          logoUrl: brand.logoUrl,
+          primaryColor: brand.primaryColor,
+          websiteUrl: brand.websiteUrl,
         },
       });
     }
@@ -499,7 +512,7 @@ export class RegisterHandler {
     const payload = {
       sub: newUser.id,
       email: newUser.email,
-      programCategoryId: newUser.programCategoryId,
+      brandId: newUser.brandId,
       jti: accessTokenJti,
     };
 
@@ -557,10 +570,10 @@ export class RegisterHandler {
     }
 // Record Metric
     this.metricsService.userRegistrationsTotal
-        .labels(authProvider.name, programCategory.name)
+        .labels(authProvider.name, brand.name)
         .inc();
 
-    const registeredPrograms = await this.getRegisteredPrograms(newUser.id, newUser.programCategoryId);
+    const registeredPrograms = await this.getRegisteredPrograms(newUser.id, newUser.brandId);
     
     return {
       accessToken,
@@ -568,7 +581,7 @@ export class RegisterHandler {
       user: {
         id: newUser.id,
         email: newUser.email,
-        programCategoryId: newUser.programCategoryId,
+        brandId: newUser.brandId,
         isActive: newUser.isActive,
         isOnboardingCompleted: newUser.isOnboardingCompleted ?? false,
         registeredPrograms,

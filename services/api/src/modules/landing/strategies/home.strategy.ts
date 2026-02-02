@@ -1,14 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { ILandingPageStrategy } from './landing-page.strategy';
 import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
-import { ProgramCategory } from '@prisma/client';
+import { Brand } from '@prisma/client';
 
 @Injectable()
 export class HomeStrategy implements ILandingPageStrategy {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getData(category: ProgramCategory | null) {
-    if (!category) {
+  async getData(brand: Brand | null) {
+    if (!brand) {
        // Return default or throw? returning empty structure for now
        return {
          slug: 'home',
@@ -20,7 +20,7 @@ export class HomeStrategy implements ILandingPageStrategy {
     const [program, brandSponsors, socialFeeds, videoPrograms, testimonials, latestProgramWithAwards] = await Promise.all([
       this.prisma.program.findFirst({
         where: {
-          programCategoryId: category.id, // Scoped to brand
+          brandId: brand.id, // Scoped to brand
           isPublished: true,
           isActive: true,
         },
@@ -48,14 +48,14 @@ export class HomeStrategy implements ILandingPageStrategy {
       }),
       this.prisma.sponsor.findMany({
         where: { 
-            programCategoryId: category.id, // Scoped to brand
+            brandId: brand.id, // Scoped to brand
             isActive: true 
         },
         orderBy: { order: 'asc' },
       }),
-      this.prisma.programSocialFeed.findMany({
+      this.prisma.brandSocialFeed.findMany({
         where: {
-            programCategoryId: category.id,
+            brandId: brand.id,
             isActive: true
         },
         orderBy: { postedAt: 'desc' },
@@ -63,7 +63,7 @@ export class HomeStrategy implements ILandingPageStrategy {
       }),
       this.prisma.program.findMany({
         where: {
-          programCategoryId: category.id,
+          brandId: brand.id,
           isPublished: true,
         },
         orderBy: { year: 'desc' },
@@ -87,7 +87,7 @@ export class HomeStrategy implements ILandingPageStrategy {
       }),
       this.prisma.programTestimonial.findMany({
         where: {
-            programCategoryId: category.id,
+            brandId: brand.id,
             category: 'alumni',
             isActive: true
         },
@@ -100,7 +100,7 @@ export class HomeStrategy implements ILandingPageStrategy {
       // For Awards - Fetch the latest published program and its awards
       this.prisma.program.findFirst({
         where: {
-            programCategoryId: category.id,
+            brandId: brand.id,
             isPublished: true,
             isActive: true
         },
@@ -130,15 +130,15 @@ export class HomeStrategy implements ILandingPageStrategy {
 
     return {
       slug: 'home',
-      title: category.name,
+      title: brand.name,
       sections: [
         {
           type: 'main_banner',
           content: {
-            imageUrl: category.bannerUrl || '',
-            link: category.websiteUrl || '',
-            title: category.name || '',
-            subtitle: category.description || '',
+            imageUrl: brand.bannerUrl || '',
+            link: brand.websiteUrl || '',
+            title: brand.name || '',
+            subtitle: brand.description || '',
           },
         },
         {
@@ -168,10 +168,10 @@ export class HomeStrategy implements ILandingPageStrategy {
         {
           type: 'program_overview',
           content: {
-            about_us: category.about || '',
+            about_us: brand.about || '',
             vision_mission: {
-              vision: category.vision || '',
-              mission: category.mission || '',
+              vision: brand.vision || '',
+              mission: brand.mission || '',
             },
           },
         },
@@ -226,7 +226,7 @@ export class HomeStrategy implements ILandingPageStrategy {
           type: 'program_highlight_videos',
           content: {
             title: 'Experience Our Program in Action',
-            subtitle: `Watch the journey of ${category.name} delegates – from keynote sessions and cultural experiences to collaboration and real impact projects.`,
+            subtitle: `Watch the journey of ${brand.name} delegates – from keynote sessions and cultural experiences to collaboration and real impact projects.`,
             tabs: programsWithVideos.map(p => ({
               year: p.year,
               program_name: p.name,
@@ -261,7 +261,7 @@ export class HomeStrategy implements ILandingPageStrategy {
         {
           type: 'program_awards',
           content: {
-            title: `Awards at ${latestProgramWithAwards?.name || category.name}`,
+            title: `Awards at ${latestProgramWithAwards?.name || brand.name}`,
             subtitle: 'At JYS, we recognize students who lead, speak up, and make an impact. Your teen could be one of them!',
             items: latestProgramWithAwards?.awards.map(a => ({
               id: a.id,

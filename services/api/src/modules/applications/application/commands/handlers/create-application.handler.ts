@@ -58,7 +58,7 @@ export class CreateApplicationHandler {
     const saved = await this.applicationRepository.create(application);
 
     // Record metric
-    this.metricsService.applicationStartedTotal.inc({ program_category: command.applicationCategory });
+    this.metricsService.applicationStartedTotal.inc({ brand: command.applicationCategory });
 
     // Return DTO
     return this.applicationMapper.toDto(saved);

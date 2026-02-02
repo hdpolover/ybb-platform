@@ -21,7 +21,7 @@ export class GetAmbassadorDashboardHandler implements IQueryHandler<GetAmbassado
              include: {
                  program: {
                      include: {
-                         programCategory: true
+                         brand: true
                      }
                  }
              }
@@ -33,7 +33,7 @@ export class GetAmbassadorDashboardHandler implements IQueryHandler<GetAmbassado
 
         // Construct Link
         // Scheme: https://{brandDomain}/programs/{programSlug}?t={referralCode}
-        const brandUrl = ambassador.program.programCategory.websiteUrl || 'ybb.co';
+        const brandUrl = ambassador.program.brand.websiteUrl || 'ybb.co';
         const cleanBrandUrl = brandUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
         const slug = ambassador.program.slug; // Assuming slug exists on Program 
         const shareLink = `https://${cleanBrandUrl}/programs/${slug}?t=${ambassador.referralCode}`;

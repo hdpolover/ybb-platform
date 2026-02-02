@@ -10,7 +10,8 @@ import {
     CreateProgramResourceDto, UpdateProgramResourceDto,
     CreateProgramPricingTierDto, UpdateProgramPricingTierDto,
     CreateProgramRequirementDto, UpdateProgramRequirementDto,
-    CreateProgramEssayDto, UpdateProgramEssayDto
+    CreateProgramEssayDto, UpdateProgramEssayDto,
+    CreateProgramParticipationCategoryDto, UpdateProgramParticipationCategoryDto
 } from '../../presentation/dto/create-update-program-content.dto';
 
 // Timeline
@@ -179,4 +180,27 @@ export class UpdateProgramEssayCommand {
 }
 export class DeleteProgramEssayCommand {
     constructor(public readonly id: string, public readonly userId: string) { }
+}
+
+// Participation Category Commands
+export class CreateProgramParticipationCategoryCommand {
+    constructor(
+        public readonly dto: CreateProgramParticipationCategoryDto,
+        public readonly userId: string,
+    ) { }
+}
+
+export class UpdateProgramParticipationCategoryCommand {
+    constructor(
+        public readonly categoryId: string,
+        public readonly dto: UpdateProgramParticipationCategoryDto,
+        public readonly userId: string,
+    ) { }
+}
+
+export class DeleteProgramParticipationCategoryCommand {
+    constructor(
+        public readonly categoryId: string,
+        public readonly userId: string,
+    ) { }
 }

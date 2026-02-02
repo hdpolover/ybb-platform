@@ -2,10 +2,10 @@ import { IsString, IsOptional, IsBoolean, IsArray, IsEnum, IsUUID } from 'class-
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateAiBotConfigDto {
-  @ApiPropertyOptional({ description: 'Existing Program Category ID (null for global)', example: 'uuid' })
+  @ApiPropertyOptional({ description: 'Existing Brand ID (null for global)', example: 'uuid' })
   @IsUUID()
   @IsOptional()
-  programCategoryId?: string;
+  brandId?: string;
 
   @ApiProperty({ description: 'Name of the bot configuration', example: 'General Support Bot' })
   @IsString()

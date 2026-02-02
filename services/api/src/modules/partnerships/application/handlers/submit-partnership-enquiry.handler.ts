@@ -10,13 +10,13 @@ export class SubmitPartnershipEnquiryHandler implements ICommandHandler<SubmitPa
   async execute(command: SubmitPartnershipEnquiryCommand): Promise<void> {
     const { dto } = command;
 
-    if (!dto.programCategoryId && !dto.programId) {
-       throw new BadRequestException('Either programCategoryId or programId must be provided.');
+    if (!dto.brandId && !dto.programId) {
+       throw new BadRequestException('Either brandId or programId must be provided.');
     }
 
     await this.prisma.partnershipEnquiry.create({
       data: {
-        programCategoryId: dto.programCategoryId,
+        brandId: dto.brandId,
         programId: dto.programId,
         partnershipType: dto.partnershipType,
         subCategory: dto.subCategory,

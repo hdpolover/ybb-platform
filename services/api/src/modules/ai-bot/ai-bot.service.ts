@@ -8,9 +8,11 @@ export class AiBotService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreateAiBotConfigDto) {
+    const { brandId, ...rest } = dto;
     return this.prisma.aiChatBotConfig.create({
       data: {
-        ...dto,
+        ...rest,
+        brandId: brandId,
       },
     });
   }
@@ -22,7 +24,7 @@ export class AiBotService {
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
-        include: { programCategory: { select: { id: true, name: true } } },
+        include: { brand: { select: { id: true, name: true } } },
       }),
       this.prisma.aiChatBotConfig.count(),
     ]);
@@ -40,7 +42,7 @@ export class AiBotService {
   async findOne(id: string) {
     const bot = await this.prisma.aiChatBotConfig.findUnique({
       where: { id },
-      include: { programCategory: { select: { id: true, name: true } } },
+      include: { brand: { select: { id: true, name: true } } },
     });
     if (!bot) throw new NotFoundException('AiChatBotConfig not found');
     return bot;
@@ -48,9 +50,14 @@ export class AiBotService {
 
   async update(id: string, dto: UpdateAiBotConfigDto) {
     await this.findOne(id); // Ensure exists
+    const { brandId, ...rest } = dto;
+    const data: any = { ...rest };
+    if (brandId !== undefined) {
+      data.brandId = brandId;
+    }
     return this.prisma.aiChatBotConfig.update({
       where: { id },
-      data: dto,
+      data,
     });
   }
 
@@ -65,13 +72,13 @@ export class AiBotService {
    * Retrieves the active bot configuration.
    * Priority:
    * 1. Specific Program Category (if provided)
-   * 2. Global Config (programCategoryId is null)
+   * 2. Global Config (brandId is null)
    */
-  async getActiveConfig(programCategoryId?: string) {
-    if (programCategoryId) {
+  async getActiveConfig(brandId?: string) {
+    if (brandId) {
       const categoryBot = await this.prisma.aiChatBotConfig.findFirst({
         where: {
-          programCategoryId,
+          brandId: brandId,
           isActive: true,
         },
       });
@@ -81,7 +88,7 @@ export class AiBotService {
     // Fallback to Global
     const globalBot = await this.prisma.aiChatBotConfig.findFirst({
       where: {
-        programCategoryId: null,
+        brandId: null,
         isActive: true,
       },
     });

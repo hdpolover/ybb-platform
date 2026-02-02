@@ -16,7 +16,7 @@ describe('LandingService', () => {
   let homeStrategy: any;
 
   const mockPrismaService = {
-    programCategory: {
+    brand: {
       findFirst: jest.fn(),
     },
   };
@@ -50,28 +50,28 @@ describe('LandingService', () => {
   describe('resolveCategory', () => {
     it('should find category by exact URL', async () => {
       const mockCategory = { id: 'cat-1', websiteUrl: 'https://ybb.co', isActive: true };
-      mockPrismaService.programCategory.findFirst.mockResolvedValue(mockCategory);
+      mockPrismaService.brand.findFirst.mockResolvedValue(mockCategory);
 
       // We interpret calling a public method that uses private resolveCategory to test it
       await service.getHome('https://ybb.co');
 
-      expect(mockPrismaService.programCategory.findFirst).toHaveBeenCalledWith({
+      expect(mockPrismaService.brand.findFirst).toHaveBeenCalledWith({
         where: { websiteUrl: 'https://ybb.co', isActive: true },
       });
     });
 
     it('should find category by partial URL if exact fails', async () => {
         // First call (Exact) returns null
-        mockPrismaService.programCategory.findFirst
+        mockPrismaService.brand.findFirst
             .mockResolvedValueOnce(null) 
             // Second call (Partial) returns category
             .mockResolvedValueOnce({ id: 'cat-partial', websiteUrl: 'https://other.com', isActive: true });
 
         await service.getHome('other.com');
 
-        expect(mockPrismaService.programCategory.findFirst).toHaveBeenCalledTimes(2);
+        expect(mockPrismaService.brand.findFirst).toHaveBeenCalledTimes(2);
         // Verify second call args
-        expect(mockPrismaService.programCategory.findFirst).toHaveBeenLastCalledWith({
+        expect(mockPrismaService.brand.findFirst).toHaveBeenLastCalledWith({
             where: {
                 websiteUrl: { contains: 'other.com', mode: 'insensitive' },
                 isActive: true
@@ -81,18 +81,18 @@ describe('LandingService', () => {
 
     it('should return default category if no URL provided', async () => {
         const mockDefault = { id: 'default-cat' };
-        mockPrismaService.programCategory.findFirst.mockResolvedValue(mockDefault);
+        mockPrismaService.brand.findFirst.mockResolvedValue(mockDefault);
 
         await service.getHome();
 
-        expect(mockPrismaService.programCategory.findFirst).toHaveBeenCalledWith({
+        expect(mockPrismaService.brand.findFirst).toHaveBeenCalledWith({
             where: { isActive: true },
             orderBy: { createdAt: 'asc' }
         });
     });
 
     it('should throw NotFoundException if no category matches URL', async () => {
-        mockPrismaService.programCategory.findFirst.mockResolvedValue(null);
+        mockPrismaService.brand.findFirst.mockResolvedValue(null);
 
         await expect(service.getHome('unknown.com')).rejects.toThrow(NotFoundException);
     });
@@ -100,13 +100,13 @@ describe('LandingService', () => {
 
   describe('Strategy Delegation', () => {
     it('getHome should call HomeStrategy', async () => {
-        mockPrismaService.programCategory.findFirst.mockResolvedValue({ id: 'cat-1' });
+        mockPrismaService.brand.findFirst.mockResolvedValue({ id: 'cat-1' });
         await service.getHome();
         expect(mockStrategy.getData).toHaveBeenCalledWith({ id: 'cat-1' });
     });
 
     it('getProgramDetail should call ProgramsStrategy.getProgramData', async () => {
-        mockPrismaService.programCategory.findFirst.mockResolvedValue({ id: 'cat-1' });
+        mockPrismaService.brand.findFirst.mockResolvedValue({ id: 'cat-1' });
         await service.getProgramDetail('slug-1');
         expect(mockStrategy.getProgramData).toHaveBeenCalledWith('slug-1', { id: 'cat-1' });
     });

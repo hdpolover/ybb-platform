@@ -202,8 +202,13 @@ func main() {
 
 	paymentMethodHandler := handlers.NewPaymentMethodHandler(paymentMethodRepo)
 
+	// Initialize Intent Handlers
+	createIntentHandler := commandHandlers.NewCreateIntentHandler(intentRepo)
+	confirmIntentHandler := commandHandlers.NewConfirmIntentHandler(intentRepo, txRepo, gatewayFactory)
+	intentHandler := handlers.NewIntentHandler(createIntentHandler, confirmIntentHandler)
+
 	// Setup router
-	r := setupRouter(paymentHandler, paymentMethodHandler)
+	r := setupRouter(paymentHandler, paymentMethodHandler, intentHandler)
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -236,7 +241,11 @@ func main() {
 }
 
 // setupRouter sekarang menerima handler dan mendaftarkan route Swagger
-func setupRouter(paymentHandler *handlers.PaymentHandler, paymentMethodHandler *handlers.PaymentMethodHandler) *gin.Engine {
+func setupRouter(
+	paymentHandler *handlers.PaymentHandler,
+	paymentMethodHandler *handlers.PaymentMethodHandler,
+	intentHandler *handlers.IntentHandler,
+) *gin.Engine {
 	router := gin.Default()
 
 	// Access via browser: http://localhost:8002/swagger/index.html
@@ -256,6 +265,13 @@ func setupRouter(paymentHandler *handlers.PaymentHandler, paymentMethodHandler *
 	// API v1 routes
 	v1 := router.Group("/api/v1")
 	{
+		// New Intent Flow
+		intents := v1.Group("/intents")
+		{
+			intents.POST("", intentHandler.CreateIntent)
+			intents.POST("/:id/confirm", intentHandler.ConfirmIntent)
+		}
+
 		payments := v1.Group("/payments")
 		{
 			payments.POST("", paymentHandler.CreatePayment)

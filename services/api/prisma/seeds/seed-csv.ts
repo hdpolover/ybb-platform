@@ -61,7 +61,7 @@ export async function seedFromCSV() {
         
         if (!slug) continue;
         
-        await prisma.programCategory.upsert({
+        await prisma.brand.upsert({
             where: { slug: slug },
             update: {
                 name: name,
@@ -103,7 +103,7 @@ export async function seedFromCSV() {
              continue;
         }
         
-        const brand = await prisma.programCategory.findUnique({ where: { slug: brandSlug } });
+        const brand = await prisma.brand.findUnique({ where: { slug: brandSlug } });
         if (!brand) continue;
 
         // Generate a slug for the program
@@ -115,7 +115,7 @@ export async function seedFromCSV() {
 
         const program = await prisma.program.upsert({
             where: { 
-                programCategoryId_slug: { programCategoryId: brand.id, slug: programSlug } 
+                brandId_slug: { brandId: brand.id, slug: programSlug } 
             },
             update: {
                 name: name,
@@ -127,7 +127,7 @@ export async function seedFromCSV() {
                 bannerUrl: bannerUrl,
             },
             create: {
-                programCategoryId: brand.id,
+                brandId: brand.id,
                 name: name,
                 slug: programSlug,
                 description: description && description.length > 10 ? description : `Program ${name}`,
@@ -172,7 +172,7 @@ export async function seedFromCSV() {
             // Find manually? 
             // Maybe this announcement is for a program created by seed-programs-iys.ts?
             // "Istanbul Youth Summit 2025" -> ID 3.
-            // If Seed IYS created it, but I didn't update map...
+            // If Seed IYS created it, but I didn't update map.
             
             // Let's try to infer program from legacy ID if not in map
             // Only if I assume I covered all in step 2.

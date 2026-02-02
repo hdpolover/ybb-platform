@@ -63,7 +63,7 @@ export class CacheWarmingService implements OnModuleInit {
                     startDate: true,
                     endDate: true,
                     isPublished: true,
-                    programCategoryId: true,
+                    brandId: true,
                 },
             });
 
@@ -84,7 +84,7 @@ export class CacheWarmingService implements OnModuleInit {
      */
     private async warmCategoriesCache() {
         try {
-            const categories = await this.prisma.programCategory.findMany({
+            const categories = await this.prisma.brand.findMany({
                 where: { deletedAt: null },
                 take: 20,
             });

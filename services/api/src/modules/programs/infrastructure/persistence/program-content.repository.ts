@@ -13,6 +13,7 @@ import {
     ProgramRequirement,
     ApplicationFormField,
     ProgramEssay,
+    ProgramParticipationCategory,
 } from '@prisma/client';
 import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service';
 import { IProgramContentRepository, ProgramPricingTierWithPeriods } from '../../../../core/interfaces/repositories/program-content.repository.interface';
@@ -285,6 +286,13 @@ export class ProgramContentRepository implements IProgramContentRepository {
         });
     }
 
+    async findParticipationCategoriesByProgramId(programId: string): Promise<ProgramParticipationCategory[]> {
+        return this.prisma.programParticipationCategory.findMany({
+            where: { programId, isActive: true },
+            orderBy: { order: 'asc' },
+        });
+    }
+
     // CRUD for Essays
     async createEssay(data: any): Promise<ProgramEssay> {
         return this.prisma.programEssay.create({ data });
@@ -297,5 +305,19 @@ export class ProgramContentRepository implements IProgramContentRepository {
     }
     async findEssayById(id: string): Promise<ProgramEssay | null> {
         return this.prisma.programEssay.findUnique({ where: { id } });
+    }
+
+    // CRUD for Participation Categories
+    async createParticipationCategory(data: any): Promise<ProgramParticipationCategory> {
+        return this.prisma.programParticipationCategory.create({ data });
+    }
+    async updateParticipationCategory(id: string, data: any): Promise<ProgramParticipationCategory> {
+        return this.prisma.programParticipationCategory.update({ where: { id }, data });
+    }
+    async deleteParticipationCategory(id: string): Promise<void> {
+        await this.prisma.programParticipationCategory.delete({ where: { id } });
+    }
+    async findParticipationCategoryById(id: string): Promise<ProgramParticipationCategory | null> {
+        return this.prisma.programParticipationCategory.findUnique({ where: { id } });
     }
 } // Re-closing the class

@@ -5,7 +5,7 @@ export class SubmitEnquiryDto {
   @ApiProperty({ required: false })
   @IsUUID()
   @IsOptional()
-  programCategoryId?: string;
+  brandId?: string;
 
   @ApiProperty({ required: false })
   @IsUUID()

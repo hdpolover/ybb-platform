@@ -27,8 +27,8 @@ export class VerifyEmailHandler {
     }
 
     // Fetch Program Category for email context
-    const programCategory = await this.prisma.programCategory.findUnique({
-      where: { id: user.programCategoryId },
+    const brand = await this.prisma.brand.findUnique({
+      where: { id: user.brandId },
     });
 
     await this.prisma.user.update({
@@ -61,12 +61,12 @@ export class VerifyEmailHandler {
     this.rabbitmqProducer.emit('user.registered', {
       email: user.email,
       name: user.email.split('@')[0],
-      programCategory: programCategory ? {
-          name: programCategory.name,
-          logoUrl: programCategory.logoUrl,
-          primaryColor: programCategory.primaryColor,
-          websiteUrl: programCategory.websiteUrl,
-          socialMediaLinks: programCategory.socialMediaLinks,
+      brand: brand ? {
+          name: brand.name,
+          logoUrl: brand.logoUrl,
+          primaryColor: brand.primaryColor,
+          websiteUrl: brand.websiteUrl,
+          socialMediaLinks: brand.socialMediaLinks,
       } : undefined,
     });
 
@@ -74,12 +74,12 @@ export class VerifyEmailHandler {
     this.rabbitmqProducer.emit('user.email-verified', {
         email: user.email,
         name: user.email.split('@')[0],
-        programCategory: programCategory ? {
-            name: programCategory.name,
-            logoUrl: programCategory.logoUrl,
-            primaryColor: programCategory.primaryColor,
-            websiteUrl: programCategory.websiteUrl,
-            socialMediaLinks: programCategory.socialMediaLinks,
+        brand: brand ? {
+            name: brand.name,
+            logoUrl: brand.logoUrl,
+            primaryColor: brand.primaryColor,
+            websiteUrl: brand.websiteUrl,
+            socialMediaLinks: brand.socialMediaLinks,
         } : undefined,
     });
 

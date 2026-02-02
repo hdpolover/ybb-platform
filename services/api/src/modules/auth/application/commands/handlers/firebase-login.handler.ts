@@ -23,13 +23,13 @@ export class FirebaseLoginHandler {
     private readonly metricsService: MetricsService,
   ) { }
 
-  private async resolveProgramCategoryId(programCategoryId?: string, domain?: string): Promise<string> {
-    if (programCategoryId) {
-      return programCategoryId;
+  private async resolveBrandId(brandId?: string, domain?: string): Promise<string> {
+    if (brandId) {
+      return brandId;
     }
     // Default fallback to first active category if nothing provided
     // Ideally this logic should be shared or more robust
-    const defaultCategory = await this.prisma.programCategory.findFirst({
+    const defaultCategory = await this.prisma.brand.findFirst({
       where: { isActive: true },
       orderBy: { createdAt: 'asc' },
       select: { id: true }
@@ -75,7 +75,7 @@ export class FirebaseLoginHandler {
     }
 
     // 2. Resolve Program Category
-    const programCategoryId = await this.resolveProgramCategoryId(command.programCategoryId, domain);
+    const brandId = await this.resolveBrandId(command.brandId, domain);
 
     // 3. Find Auth Provider by ID (Explicitly passed)
     const authProvider = await this.prisma.authProvider.findUnique({
@@ -106,7 +106,7 @@ export class FirebaseLoginHandler {
         const existingUser = await this.prisma.user.findFirst({
             where: {
                 email: email,
-                programCategoryId: programCategoryId
+                brandId: brandId
             }
         });
 
@@ -132,7 +132,7 @@ export class FirebaseLoginHandler {
             user = await this.prisma.user.create({
                 data: {
                     email: email,
-                    programCategoryId: programCategoryId,
+                    brandId: brandId,
                     emailVerified: decodedToken.email_verified || false,
                     emailVerifiedAt: decodedToken.email_verified ? new Date() : null,
                     isActive: true,
@@ -148,13 +148,13 @@ export class FirebaseLoginHandler {
             });
         } catch (error) {
             if (error.code === 'P2003') { // Prisma Foreign Key Constraint failed
-                 throw new BadRequestException(`Invalid Program Category ID: ${programCategoryId}. Please provide a valid ID or leave it empty to use the default.`);
+                 throw new BadRequestException(`Invalid Program Category ID: ${brandId}. Please provide a valid ID or leave it empty to use the default.`);
             }
             throw error;
         }
         
         // Log registration
-        this.metricsService.userRegistrationsTotal.inc({ provider: providerName, program_category: programCategoryId });
+        this.metricsService.userRegistrationsTotal.inc({ provider: providerName, brand: brandId });
     }
 
     // 6.5. Ensure Participant Exists & Handle Program Linking (Auto-Registration Logic for ALL users)
@@ -218,7 +218,7 @@ export class FirebaseLoginHandler {
         if (!targetProgramId && command.programSlug) {
             const prog = await this.prisma.program.findUnique({
                 where: { 
-                    programCategoryId_slug: { programCategoryId, slug: command.programSlug }
+                    brandId_slug: { brandId, slug: command.programSlug }
                 }
             });
             if (prog) targetProgramId = prog.id;
@@ -231,7 +231,7 @@ export class FirebaseLoginHandler {
                  where: {
                      participantId: participant.id,
                      program: {
-                         programCategoryId: programCategoryId
+                         brandId: brandId
                      }
                  }
              });
@@ -240,7 +240,7 @@ export class FirebaseLoginHandler {
              if (!existingApp) {
                 const activeProgram = await this.prisma.program.findFirst({
                     where: {
-                        programCategoryId: programCategoryId,
+                        brandId: brandId,
                         isActive: true, // Must be active
                         isPublished: true, // Must be published
                     },
@@ -329,14 +329,14 @@ export class FirebaseLoginHandler {
     const accessTokenPayload = {
       sub: user.id,
       email: user.email,
-      programCategoryId: user.programCategoryId,
+      brandId: user.brandId,
       jti: randomUUID(),
     };
 
     const refreshTokenPayload = {
       sub: user.id,
       email: user.email,
-      programCategoryId: user.programCategoryId,
+      brandId: user.brandId,
       jti: randomUUID(),
     };
 
@@ -376,7 +376,7 @@ export class FirebaseLoginHandler {
             applications: {
               where: {
                 program: {
-                  programCategoryId: programCategoryId // Scope to current category context
+                  brandId: brandId // Scope to current category context
                 }
               },
               include: {
@@ -403,7 +403,7 @@ export class FirebaseLoginHandler {
       user: {
         id: user.id,
         email: user.email,
-        programCategoryId: user.programCategoryId,
+        brandId: user.brandId,
         isActive: user.isActive,
         isOnboardingCompleted: user.isOnboardingCompleted ?? false,
         registeredPrograms,

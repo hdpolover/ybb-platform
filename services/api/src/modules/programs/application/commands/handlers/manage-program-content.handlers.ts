@@ -17,7 +17,8 @@ import {
     CreateProgramResourceCommand, UpdateProgramResourceCommand, DeleteProgramResourceCommand,
     CreateProgramPricingTierCommand, UpdateProgramPricingTierCommand, DeleteProgramPricingTierCommand,
     CreateProgramRequirementCommand, UpdateProgramRequirementCommand, DeleteProgramRequirementCommand,
-    CreateProgramEssayCommand, UpdateProgramEssayCommand, DeleteProgramEssayCommand
+    CreateProgramEssayCommand, UpdateProgramEssayCommand, DeleteProgramEssayCommand,
+    CreateProgramParticipationCategoryCommand, UpdateProgramParticipationCategoryCommand, DeleteProgramParticipationCategoryCommand
 } from '../program-content.commands';
    
 // --- Timeline Handlers ---
@@ -99,7 +100,7 @@ export class CreateProgramSpeakerHandler implements ICommandHandler<CreateProgra
             const result = await this.storageService.uploadFile(
                 command.image,
                 command.userId,
-                program.programCategoryId, // brandId
+                program.brandId, // brandId
                 'speakers',
                 program.id
             );
@@ -139,7 +140,7 @@ export class UpdateProgramSpeakerHandler implements ICommandHandler<UpdateProgra
             const result = await this.storageService.uploadFile(
                 command.image,
                 command.userId,
-                program.programCategoryId, 
+                program.brandId, 
                 'speakers',
                 program.id
             );
@@ -190,7 +191,12 @@ export class DeleteProgramGalleryHandler implements ICommandHandler<DeleteProgra
 export class CreateProgramTestimonialHandler implements ICommandHandler<CreateProgramTestimonialCommand> {
     constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
     async execute(command: CreateProgramTestimonialCommand) {
-        return this.repository.createTestimonial(command.dto);
+        const { brandId, ...rest } = command.dto;
+        const dto = {
+            ...rest,
+            brandId: brandId,
+        };
+        return this.repository.createTestimonial(dto);
     }
 }
 @CommandHandler(UpdateProgramTestimonialCommand)
@@ -241,24 +247,25 @@ export class CreateProgramTeamHandler implements ICommandHandler<CreateProgramTe
     ) {}
     async execute(command: CreateProgramTeamCommand) {
         let photoUrl = command.dto.photoUrl;
+        const { brandId, ...restDto } = command.dto;
 
         if (command.image) {
-            let brandId;
+            let activeBrandId;
             if (command.dto.programId) {
                 const program = await this.prisma.program.findUnique({ where: { id: command.dto.programId } });
-                brandId = program?.programCategoryId;
-            } else if (command.dto.programCategoryId) {
-                brandId = command.dto.programCategoryId;
+                activeBrandId = program?.brandId;
+            } else if (brandId) {
+                activeBrandId = brandId;
             }
 
-            if (!brandId) {
+            if (!activeBrandId) {
                  throw new NotFoundException('Program or Brand ID required');
             }
 
              const result = await this.storageService.uploadFile(
                 command.image,
                 command.userId,
-                brandId, 
+                activeBrandId, 
                 'team',
                 command.dto.programId
             );
@@ -266,7 +273,8 @@ export class CreateProgramTeamHandler implements ICommandHandler<CreateProgramTe
         }
 
         const dto = {
-            ...command.dto,
+            ...restDto,
+            brandId: brandId,
             photoUrl
         };
         return this.repository.createTeam(dto);
@@ -301,7 +309,7 @@ export class UpdateProgramTeamHandler implements ICommandHandler<UpdateProgramTe
             const result = await this.storageService.uploadFile(
                 command.image,
                 command.userId,
-                program.programCategoryId, 
+                program.brandId, 
                 'team',
                 program.id
             );
@@ -343,7 +351,7 @@ export class CreateProgramPartnerHandler implements ICommandHandler<CreateProgra
              const result = await this.storageService.uploadFile(
                 command.logo,
                 command.userId,
-                program.programCategoryId, 
+                program.brandId, 
                 'partners',
                 program.id
             );
@@ -386,7 +394,7 @@ export class UpdateProgramPartnerHandler implements ICommandHandler<UpdateProgra
              const result = await this.storageService.uploadFile(
                 command.logo,
                 command.userId,
-                program.programCategoryId, 
+                program.brandId, 
                 'partners',
                 program.id
             );
@@ -427,8 +435,8 @@ export class CreateProgramResourceHandler implements ICommandHandler<CreateProgr
                 throw new NotFoundException('Program not found');
             }
             
-            // Use programCategoryId as brandId for now, similar to Gallery Service logic
-            const brandId = program.programCategoryId; 
+            // Use brandId as brandId for now, similar to Gallery Service logic
+            const brandId = program.brandId; 
             
             const result = await this.storageService.uploadFile(
                 command.file,
@@ -483,7 +491,7 @@ export class UpdateProgramResourceHandler implements ICommandHandler<UpdateProgr
             const result = await this.storageService.uploadFile(
                 command.file,
                 command.userId,
-                program.programCategoryId,
+                program.brandId,
                 'resources',
                 program.id
             );
@@ -644,6 +652,29 @@ export class DeleteProgramEssayHandler implements ICommandHandler<DeleteProgramE
     constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
     async execute(command: DeleteProgramEssayCommand) {
         return this.repository.deleteEssay(command.id);
+    }
+}
+
+// --- Participation Category Handlers ---
+@CommandHandler(CreateProgramParticipationCategoryCommand)
+export class CreateProgramParticipationCategoryHandler implements ICommandHandler<CreateProgramParticipationCategoryCommand> {
+    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    async execute(command: CreateProgramParticipationCategoryCommand) {
+        return this.repository.createParticipationCategory(command.dto);
+    }
+}
+@CommandHandler(UpdateProgramParticipationCategoryCommand)
+export class UpdateProgramParticipationCategoryHandler implements ICommandHandler<UpdateProgramParticipationCategoryCommand> {
+    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    async execute(command: UpdateProgramParticipationCategoryCommand) {
+        return this.repository.updateParticipationCategory(command.categoryId, command.dto);
+    }
+}
+@CommandHandler(DeleteProgramParticipationCategoryCommand)
+export class DeleteProgramParticipationCategoryHandler implements ICommandHandler<DeleteProgramParticipationCategoryCommand> {
+    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    async execute(command: DeleteProgramParticipationCategoryCommand) {
+        return this.repository.deleteParticipationCategory(command.categoryId);
     }
 }
 

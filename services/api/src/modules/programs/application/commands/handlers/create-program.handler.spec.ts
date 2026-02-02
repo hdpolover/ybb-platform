@@ -41,7 +41,7 @@ describe('CreateProgramHandler', () => {
     it('should create program and log activity', async () => {
         const dto: CreateProgramDto = {
             name: 'Test Program',
-            programCategoryId: 'cat-1',
+            brandId: 'cat-1',
             year: 2024,
             startDate: '2024-01-01',
             endDate: '2024-01-10',
@@ -72,7 +72,7 @@ describe('CreateProgramHandler', () => {
     it('should auto-generate slug if missing', async () => {
         const dto: CreateProgramDto = {
             name: 'New Adventure 2024',
-            programCategoryId: 'cat-1',
+            brandId: 'cat-1',
             year: 2024,
             startDate: '2024-01-01',
             endDate: '2024-01-10',

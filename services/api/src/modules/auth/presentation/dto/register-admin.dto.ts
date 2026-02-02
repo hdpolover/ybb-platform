@@ -38,11 +38,11 @@ export class RegisterAdminDto {
 
   @ApiProperty({
     example: '123e4567-e89b-12d3-a456-426614174000',
-    description: 'The primary Program Category ID (home tenant) for this account.'
+    description: 'The primary Brand ID (home tenant) for this account.'
   })
   @IsUUID()
   @IsNotEmpty()
-  programCategoryId: string;
+  brandId: string;
 
   @ApiProperty({
     example: 'super_admin',
@@ -54,12 +54,12 @@ export class RegisterAdminDto {
 
   @ApiProperty({
     example: ['123e4567-e89b-12d3-a456-426614174000'],
-    description: 'A list of additional Program Category IDs to grant multi-tenant access to.',
+    description: 'A list of additional Brand IDs to grant multi-tenant access to.',
     required: false,
     type: [String]
   })
   @IsArray()
   @IsUUID('4', { each: true })
   @IsOptional()
-  additionalCategoryIds?: string[];
+  additionalBrandIds?: string[];
 }

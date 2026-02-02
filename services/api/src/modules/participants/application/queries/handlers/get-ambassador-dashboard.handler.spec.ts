@@ -49,7 +49,7 @@ describe('GetAmbassadorDashboardHandler', () => {
             program: {
                 name: 'YBB Ambassador 2025',
                 slug: 'ybb-ambassador-2025',
-                programCategory: {
+                brand: {
                     websiteUrl: 'https://youthbreaktheboundaries.com'
                 }
             }
@@ -72,7 +72,7 @@ describe('GetAmbassadorDashboardHandler', () => {
             referralCode: 'REF456',
             program: {
                 slug: 'iys-2025',
-                programCategory: {
+                brand: {
                     websiteUrl: 'istanbulyouthsummit.com' // No https://
                 }
             }

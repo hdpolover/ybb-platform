@@ -12,7 +12,7 @@ export class GetPublicPartnershipsHandler implements IQueryHandler<GetPublicPart
     const { brandSlug } = query;
 
     // Find the Program Category ID by Slug
-    const brand = await this.prisma.programCategory.findUnique({
+    const brand = await this.prisma.brand.findUnique({
       where: { slug: brandSlug },
       select: { id: true }
     });
@@ -23,11 +23,11 @@ export class GetPublicPartnershipsHandler implements IQueryHandler<GetPublicPart
 
     const [opportunities, sponsorshipTiers] = await Promise.all([
       this.prisma.partnershipOpportunity.findMany({
-        where: { programCategoryId: brand.id, isActive: true },
+        where: { brandId: brand.id, isActive: true },
         orderBy: { order: 'asc' }
       }),
       this.prisma.sponsorshipTier.findMany({
-        where: { programCategoryId: brand.id, isActive: true },
+        where: { brandId: brand.id, isActive: true },
         orderBy: { order: 'asc' }
       })
     ]);

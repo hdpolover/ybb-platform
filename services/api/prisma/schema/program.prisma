@@ -2,7 +2,7 @@
 // PROGRAM & BRAND STRUCTURE
 // ============================================================================
 
-model ProgramCategory {
+model Brand {
   id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   name        String    @unique @db.VarChar(100)
   description String?   @db.Text
@@ -52,9 +52,9 @@ model ProgramCategory {
   sponsors                 Sponsor[]
   emailTemplates           EmailTemplate[]
   team                     ProgramTeam[]
-  settings                 ProgramCategorySetting?
-  socialFeeds              ProgramSocialFeed[]
-  activeAdmins             AdminProgramCategory[]
+  settings                 BrandSetting?
+  socialFeeds              BrandSocialFeed[]
+  activeAdmins             AdminBrand[]
   legalDocuments           LegalDocument[]
   aiChatBots               AiChatBotConfig[]
   partnershipOpportunities PartnershipOpportunity[]
@@ -63,12 +63,12 @@ model ProgramCategory {
 
   @@index([slug])
   @@index([isActive])
-  @@map("program_categories")
+  @@map("brands")
 }
 
-model ProgramCategorySetting {
+model BrandSetting {
   id                String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programCategoryId String @unique @map("program_category_id") @db.Uuid
+  brandId String @unique @map("brand_id") @db.Uuid
 
   // Maintenance Control
   isMaintenanceMode       Boolean   @default(false) @map("is_maintenance_mode")
@@ -90,14 +90,14 @@ model ProgramCategorySetting {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  programCategory ProgramCategory @relation(fields: [programCategoryId], references: [id], onDelete: Cascade)
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
 
-  @@map("program_category_settings")
+  @@map("brand_settings")
 }
 
-model ProgramSocialFeed {
+model BrandSocialFeed {
   id                String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programCategoryId String   @map("program_category_id") @db.Uuid
+  brandId String   @map("brand_id") @db.Uuid
   platform          String   @default("instagram") @db.VarChar(50) // instagram, tiktok
   postId            String   @map("post_id") @db.VarChar(100) // External ID
   imageUrl          String   @map("image_url") @db.VarChar(500)
@@ -109,17 +109,17 @@ model ProgramSocialFeed {
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  programCategory ProgramCategory @relation(fields: [programCategoryId], references: [id], onDelete: Cascade)
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
 
-  @@index([programCategoryId])
+  @@index([brandId])
   @@index([platform])
   @@index([postedAt])
-  @@map("program_social_feeds")
+  @@map("brand_social_feeds")
 }
 
 model Program {
   id                  String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programCategoryId   String   @map("program_category_id") @db.Uuid
+  brandId   String   @map("brand_id") @db.Uuid
   name                String   @db.VarChar(255)
   slug                String   @db.VarChar(255)
   description         String?  @db.Text
@@ -172,7 +172,7 @@ model Program {
   legacyId  Int?      @unique @map("legacy_id")
 
   // Relations
-  programCategory          ProgramCategory            @relation(fields: [programCategoryId], references: [id])
+  brand          Brand            @relation(fields: [brandId], references: [id])
   applications             ParticipantApplication[]
   ambassadors              Ambassador[]
   adminPrograms            AdminProgram[]
@@ -205,8 +205,8 @@ model Program {
   scoringSchemas           ScoringSchema[]
   participationCategories  ProgramParticipationCategory[]
 
-  @@unique([programCategoryId, slug])
-  @@index([programCategoryId])
+  @@unique([brandId, slug])
+  @@index([brandId])
   @@index([year])
   @@index([isPublished])
   @@index([isVisibleToUsers])

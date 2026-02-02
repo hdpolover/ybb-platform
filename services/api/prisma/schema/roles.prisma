@@ -46,7 +46,7 @@ model Admin {
   user                   User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   role                   AdminRole?               @relation(fields: [roleId], references: [id])
   adminPrograms          AdminProgram[]
-  adminProgramCategories AdminProgramCategory[]
+  adminBrands AdminBrand[]
   verifiedReferrals      AmbassadorReferral[]
   createdAnnouncements   SystemAnnouncement[]     @relation("AnnouncementCreator")
   updatedAnnouncements   SystemAnnouncement[]     @relation("AnnouncementUpdater")
@@ -110,10 +110,10 @@ model AdminProgram {
   @@map("admin_programs")
 }
 
-model AdminProgramCategory {
+model AdminBrand {
   id                String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   adminId           String @map("admin_id") @db.Uuid
-  programCategoryId String @map("program_category_id") @db.Uuid
+  brandId String @map("brand_id") @db.Uuid
 
   // Access Control
   roleInBrand String? @map("role_in_brand") @db.VarChar(50)
@@ -126,12 +126,12 @@ model AdminProgramCategory {
 
   // Relations
   admin           Admin           @relation(fields: [adminId], references: [id], onDelete: Cascade)
-  programCategory ProgramCategory @relation(fields: [programCategoryId], references: [id], onDelete: Cascade)
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
 
-  @@unique([adminId, programCategoryId])
+  @@unique([adminId, brandId])
   @@index([adminId])
-  @@index([programCategoryId])
-  @@map("admin_program_categories")
+  @@index([brandId])
+  @@map("admin_brands")
 }
 
 model Participant {

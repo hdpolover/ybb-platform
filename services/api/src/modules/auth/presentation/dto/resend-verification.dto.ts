@@ -6,8 +6,8 @@ export class ResendVerificationDto {
   @IsEmail()
   email: string;
 
-  @ApiProperty({ example: 'uuid-of-program-category', required: false })
+  @ApiProperty({ example: 'uuid-of-brand', required: false })
   @IsOptional()
   @IsString()
-  programCategoryId?: string;
+  brandId?: string;
 }

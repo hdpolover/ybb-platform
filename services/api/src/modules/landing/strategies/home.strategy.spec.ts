@@ -16,7 +16,7 @@ describe('HomeStrategy', () => {
         sponsor: {
             findMany: jest.fn(),
         },
-        programSocialFeed: {
+        brandSocialFeed: {
             findMany: jest.fn(),
         },
         programTestimonial: {
@@ -97,7 +97,7 @@ describe('HomeStrategy', () => {
         ]);
 
         // 3. Social Feeds
-        mockPrismaService.programSocialFeed.findMany.mockResolvedValue([
+        mockPrismaService.brandSocialFeed.findMany.mockResolvedValue([
             { id: 'feed-1', permalink: 'link', imageUrl: 'feed.jpg' }
         ]);
 

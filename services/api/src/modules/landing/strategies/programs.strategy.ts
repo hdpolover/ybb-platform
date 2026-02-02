@@ -1,21 +1,21 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ILandingPageStrategy } from './landing-page.strategy';
 import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
-import { ProgramCategory } from '@prisma/client';
+import { Brand } from '@prisma/client';
 
 @Injectable()
 export class ProgramsStrategy implements ILandingPageStrategy {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getData(category: ProgramCategory | null) {
-    if (!category) {
+  async getData(brand: Brand | null) {
+    if (!brand) {
         return { slug: 'programs', title: 'Our Programs', sections: [] };
     }
 
-    // 1. Fetch Latest Active Program for this Category
+    // 1. Fetch Latest Active Program for this Brand
     let currentProgram = await this.prisma.program.findFirst({
         where: {
-            programCategoryId: category.id,
+            brandId: brand.id,
             isPublished: true,
             isActive: true,
         },
@@ -59,7 +59,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
     if (!currentProgram) {
         currentProgram = await this.prisma.program.findFirst({
             where: {
-                programCategoryId: category.id,
+                brandId: brand.id,
                 isPublished: true,
             },
             orderBy: { startDate: 'desc' },
@@ -75,10 +75,10 @@ export class ProgramsStrategy implements ILandingPageStrategy {
         });
     }
 
-    // 2. Fetch Previous Programs (Same Category)
+    // 2. Fetch Previous Programs (Same Brand)
     const previousProgramsData = await this.prisma.program.findMany({
         where: {
-            programCategoryId: category.id,
+            brandId: brand.id,
             id: { not: currentProgram?.id }, // Exclude current
             isPublished: true,
             // Logic: Either explicitly completed OR endDate in past
@@ -102,17 +102,17 @@ export class ProgramsStrategy implements ILandingPageStrategy {
         }
     });
 
-    // 3. Fetch Other Programs (Other Categories - Cross Promotion)
+    // 3. Fetch Other Programs (Other Brands - Cross Promotion)
     const otherProgramsData = await this.prisma.program.findMany({
         where: {
-            programCategoryId: { not: category.id },
+            brandId: { not: brand.id },
             isPublished: true,
             // isActive: true, // Removed requirement for program to be active
             // endDate: { gt: new Date() } // Removed requirement for future end date
         },
         orderBy: { startDate: 'desc' }, // Latest first
         take: 3,
-        distinct: ['programCategoryId'], // One per category to show variety
+        distinct: ['brandId'], // One per brand to show variety
         select: {
             id: true,
             name: true,
@@ -121,7 +121,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
             startDate: true,
             endDate: true,
             location: true,
-            programCategory: {
+            brand: {
                 select: {
                     name: true,
                     logoUrl: true
@@ -130,10 +130,10 @@ export class ProgramsStrategy implements ILandingPageStrategy {
         }
     });
     
-    // 4. Fetch Additional Active Programs (Same Category)
+    // 4. Fetch Additional Active Programs (Same Brand)
     const additionalProgramsData = await this.prisma.program.findMany({
         where: {
-            programCategoryId: category.id,
+            brandId: brand.id,
             id: { not: currentProgram?.id },
             isPublished: true,
             isActive: true,
@@ -149,7 +149,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
             endDate: true,
             location: true,
             shortDescription: true,
-            programCategory: {
+            brand: {
                 select: {
                     name: true,
                     logoUrl: true
@@ -377,7 +377,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
         });
     }
     
-    // Section: Additional Programs (Active, same category)
+    // Section: Additional Programs (Active, same brand)
     if (additionalProgramsData.length > 0) {
         sections.push({
             type: 'additional_programs',
@@ -399,7 +399,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
         sections.push({
             type: 'previous_programs',
             content: {
-                title: `Previous ${category.name} Programs`,
+                title: `Previous ${brand.name} Programs`,
                 items: previousProgramsData.map(p => ({
                     id: p.id,
                     name: p.name,
@@ -423,8 +423,8 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                     name: p.name,
                     slug: p.slug,
                     thumbnail: p.thumbnailUrl,
-                    brand_name: p.programCategory.name,
-                    brand_logo: p.programCategory.logoUrl,
+                    brand_name: p.brand.name,
+                    brand_logo: p.brand.logoUrl,
                     start_date: p.startDate,
                     location: p.location
                 }))
@@ -434,24 +434,24 @@ export class ProgramsStrategy implements ILandingPageStrategy {
 
     return {
       slug: 'programs',
-      title: `${category.name} Programs`,
+      title: `${brand.name} Programs`,
       sections: sections,
     };
   }
 
-  async getProgramData(slug: string, category: ProgramCategory | null) {
-    // 1. Resolve Category (Optional but good for validation context)
-    const categoryId = category?.id;
+  async getProgramData(slug: string, brand: Brand | null) {
+    // 1. Resolve Brand (Optional but good for validation context)
+    const brandId = brand?.id;
 
     // Fetch the program with all related data
     const program = await this.prisma.program.findFirst({
       where: {
         slug: slug,
         // If brand context provided, enforce it
-        ...(categoryId ? { programCategoryId: categoryId } : {}),
+        ...(brandId ? { brandId: brandId } : {}),
       },
       include: {
-        programCategory: true,
+        brand: true,
         pricingTiers: {
           where: { isActive: true },
           orderBy: { order: 'asc' },
@@ -583,10 +583,10 @@ export class ProgramsStrategy implements ILandingPageStrategy {
         }))
     };
 
-    // 6.5. Additional Active Programs (Same Category, excluding current)
+    // 6.5. Additional Active Programs (Same Brand, excluding current)
     const additionalProgramsData = await this.prisma.program.findMany({
         where: {
-            programCategoryId: program.programCategoryId,
+            brandId: program.brandId,
             id: { not: program.id },
             isPublished: true,
             isActive: true,
@@ -613,7 +613,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
     // 7. Previous Programs (Same brand)
     const previousProgramsData = await this.prisma.program.findMany({
         where: {
-            programCategoryId: program.programCategoryId,
+            brandId: program.brandId,
             id: { not: program.id },
             // Logic for "previous": end date in past
             endDate: { lt: new Date() },
@@ -637,17 +637,17 @@ export class ProgramsStrategy implements ILandingPageStrategy {
         data: previousProgramsData
     };
 
-    // 8. Other Programs (Ongoing, other brands/categories if applicable, or same brand active)
-    // Show programs from other categories to cross-pollinate traffic
+    // 8. Other Programs (Ongoing, other brands if applicable, or same brand active)
+    // Show programs from other brands to cross-pollinate traffic
     const otherProgramsData = await this.prisma.program.findMany({
         where: {
-             programCategoryId: { not: program.programCategoryId },
+             brandId: { not: program.brandId },
              isPublished: true,
              // isActive: true // Relaxed constraints to show visibility of other brands
         },
         orderBy: { startDate: 'desc' },
         take: 3,
-        distinct: ['programCategoryId'], // Ensure variety of brands
+        distinct: ['brandId'], // Ensure variety of brands
         select: {
             id: true,
             name: true,
@@ -656,7 +656,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
             endDate: true,
             thumbnailUrl: true,
             location: true,
-            programCategory: {
+            brand: {
                 select: {
                     name: true,
                     logoUrl: true

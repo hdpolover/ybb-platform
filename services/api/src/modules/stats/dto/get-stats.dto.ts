@@ -23,10 +23,10 @@ export class GetStatsQueryDto {
   @IsString()
   url?: string;
 
-  @ApiPropertyOptional({ description: 'Specific Program Category ID' })
+  @ApiPropertyOptional({ description: 'Specific Brand ID (formerly Program Category ID)' })
   @IsOptional()
   @IsUUID()
-  programCategoryId?: string;
+  brandId?: string;
 
   @ApiPropertyOptional({ description: 'Page number for pagination lists (e.g. geography)', default: 1 })
   @IsOptional()

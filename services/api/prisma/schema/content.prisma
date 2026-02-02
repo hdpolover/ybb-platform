@@ -132,7 +132,7 @@ model ProgramGallery {
 model ProgramTestimonial {
   id                String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   programId         String?   @map("program_id") @db.Uuid
-  programCategoryId String?   @map("program_category_id") @db.Uuid
+  brandId String?   @map("brand_id") @db.Uuid
   name              String    @db.VarChar(255)
   role              String?   @db.VarChar(255) // e.g., "Participant 2024", "Alumni"
   company           String?   @db.VarChar(255)
@@ -152,10 +152,10 @@ model ProgramTestimonial {
 
   // Relations
   program         Program?         @relation(fields: [programId], references: [id], onDelete: Cascade)
-  programCategory ProgramCategory? @relation(fields: [programCategoryId], references: [id], onDelete: Cascade)
+  brand Brand? @relation(fields: [brandId], references: [id], onDelete: Cascade)
 
   @@index([programId])
-  @@index([programCategoryId])
+  @@index([brandId])
   @@index([type])
   @@index([isFeatured])
   @@index([order])
@@ -164,7 +164,7 @@ model ProgramTestimonial {
 
 model Sponsor {
   id                String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programCategoryId String?   @map("program_category_id") @db.Uuid // Linked to brand
+  brandId String?   @map("brand_id") @db.Uuid // Linked to brand
   name              String    @db.VarChar(255)
   type              String    @db.VarChar(50) // organization, individual, media_partner, etc.
   logoUrl           String?   @map("logo_url") @db.VarChar(500)
@@ -178,9 +178,9 @@ model Sponsor {
   deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
-  programCategory ProgramCategory? @relation(fields: [programCategoryId], references: [id], onDelete: Cascade)
+  brand Brand? @relation(fields: [brandId], references: [id], onDelete: Cascade)
 
-  @@index([programCategoryId])
+  @@index([brandId])
   @@index([type])
   @@index([tier])
   @@index([order])
@@ -189,7 +189,7 @@ model Sponsor {
 
 model EmailTemplate {
   id                String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programCategoryId String?   @map("program_category_id") @db.Uuid
+  brandId String?   @map("brand_id") @db.Uuid
   programId         String?   @map("program_id") @db.Uuid
   name              String    @db.VarChar(100)
   type              String    @db.VarChar(50) // welcome, application_received, accepted, rejected, payment_reminder, etc
@@ -202,10 +202,10 @@ model EmailTemplate {
   deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
-  programCategory ProgramCategory? @relation(fields: [programCategoryId], references: [id], onDelete: Cascade)
+  brand Brand? @relation(fields: [brandId], references: [id], onDelete: Cascade)
   program         Program?         @relation(fields: [programId], references: [id], onDelete: Cascade)
 
-  @@index([programCategoryId])
+  @@index([brandId])
   @@index([programId])
   @@index([type])
   @@map("email_templates")
@@ -213,7 +213,7 @@ model EmailTemplate {
 
 model ProgramTeam {
   id                String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programCategoryId String?   @map("program_category_id") @db.Uuid
+  brandId String?   @map("brand_id") @db.Uuid
   programId         String?   @map("program_id") @db.Uuid
   name              String    @db.VarChar(255)
   role              String    @db.VarChar(100) // Program Director, Coordinator, Marketing Lead
@@ -229,10 +229,10 @@ model ProgramTeam {
   deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
-  programCategory ProgramCategory? @relation(fields: [programCategoryId], references: [id], onDelete: Cascade)
+  brand Brand? @relation(fields: [brandId], references: [id], onDelete: Cascade)
   program         Program?         @relation(fields: [programId], references: [id], onDelete: Cascade)
 
-  @@index([programCategoryId])
+  @@index([brandId])
   @@index([programId])
   @@index([order])
   @@map("program_team")
@@ -465,7 +465,7 @@ model ProgramSubtheme {
 
 model PartnershipOpportunity {
   id                String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programCategoryId String? @map("program_category_id") @db.Uuid
+  brandId String? @map("brand_id") @db.Uuid
   programId         String? @map("program_id") @db.Uuid
 
   title       String  @db.VarChar(255)
@@ -484,10 +484,10 @@ model PartnershipOpportunity {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  programCategory ProgramCategory? @relation(fields: [programCategoryId], references: [id])
+  brand Brand? @relation(fields: [brandId], references: [id])
   program         Program?         @relation(fields: [programId], references: [id])
 
-  @@index([programCategoryId])
+  @@index([brandId])
   @@index([programId])
   @@index([type])
   @@map("partnership_opportunities")
@@ -495,7 +495,7 @@ model PartnershipOpportunity {
 
 model SponsorshipTier {
   id                String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programCategoryId String? @map("program_category_id") @db.Uuid
+  brandId String? @map("brand_id") @db.Uuid
   programId         String? @map("program_id") @db.Uuid
 
   name             String  @db.VarChar(255)
@@ -511,17 +511,17 @@ model SponsorshipTier {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  programCategory ProgramCategory? @relation(fields: [programCategoryId], references: [id])
+  brand Brand? @relation(fields: [brandId], references: [id])
   program         Program?         @relation(fields: [programId], references: [id])
 
-  @@index([programCategoryId])
+  @@index([brandId])
   @@index([programId])
   @@map("sponsorship_tiers")
 }
 
 model PartnershipEnquiry {
   id                String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programCategoryId String? @map("program_category_id") @db.Uuid
+  brandId String? @map("brand_id") @db.Uuid
   programId         String? @map("program_id") @db.Uuid
 
   partnershipType String  @map("partnership_type") @db.VarChar(50)
@@ -540,10 +540,10 @@ model PartnershipEnquiry {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  programCategory ProgramCategory? @relation(fields: [programCategoryId], references: [id])
+  brand Brand? @relation(fields: [brandId], references: [id])
   program         Program?         @relation(fields: [programId], references: [id])
 
-  @@index([programCategoryId])
+  @@index([brandId])
   @@index([programId])
   @@index([partnershipType])
   @@index([status])

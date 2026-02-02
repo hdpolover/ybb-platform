@@ -25,7 +25,7 @@ export class UserRepository implements IUserRepository {
     const user = await this.prisma.user.findFirst({
       where: { 
         id,
-        programCategoryId: brandId,
+        brandId: brandId,
         deletedAt: null,
       },
     });
@@ -37,7 +37,7 @@ export class UserRepository implements IUserRepository {
     const user = await this.prisma.user.findFirst({
       where: { 
         email,
-        programCategoryId: brandId,
+        brandId: brandId,
         deletedAt: null,
       },
     });
@@ -47,7 +47,7 @@ export class UserRepository implements IUserRepository {
 
   async findAll(brandId: string, skip?: number, take?: number, role?: string): Promise<User[]> {
     const where: any = {
-      programCategoryId: brandId,
+      brandId: brandId,
       deletedAt: null,
     };
 
@@ -72,7 +72,7 @@ export class UserRepository implements IUserRepository {
   async create(user: User, passwordHash: string): Promise<User> {
     const createdUser = await this.prisma.user.create({
       data: {
-        programCategoryId: user.brandId,
+        brandId: user.brandId,
         email: user.email,
         passwordHash,
         isActive: user.isActive,
@@ -101,7 +101,7 @@ export class UserRepository implements IUserRepository {
     const result = await this.prisma.user.updateMany({
       where: { 
         id, 
-        programCategoryId: brandId,
+        brandId: brandId,
       },
       data: { deletedAt: new Date() },
     });
@@ -113,7 +113,7 @@ export class UserRepository implements IUserRepository {
     const count = await this.prisma.user.count({
       where: { 
         email,
-        programCategoryId: brandId,
+        brandId: brandId,
         deletedAt: null,
       },
     });
@@ -124,7 +124,7 @@ export class UserRepository implements IUserRepository {
   async count(brandId: string): Promise<number> {
     return this.prisma.user.count({
       where: {
-        programCategoryId: brandId,
+        brandId: brandId,
         deletedAt: null,
       },
     });

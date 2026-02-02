@@ -28,12 +28,38 @@ export class ListBrandsHandler implements IQueryHandler<ListBrandsQuery> {
             logoUrl: brand.logoUrl 
                 ? (brand.logoUrl.startsWith('http') ? brand.logoUrl : `${this.storageUrl}/${brand.logoUrl}`)
                 : null,
+            bannerUrl: brand.bannerUrl 
+                ? (brand.bannerUrl.startsWith('http') ? brand.bannerUrl : `${this.storageUrl}/${brand.bannerUrl}`)
+                : null,
             websiteUrl: brand.websiteUrl || null,
             primaryColor: brand.primaryColor || null,
+
+            about: brand.about || null,
+            vision: brand.vision || null,
+            mission: brand.mission || null,
+
             contactEmail: brand.contactEmail || null,
+            contactPhone: brand.contactPhone || null,
+            contactWhatsapp: brand.contactWhatsapp || null,
+            contactAddress: brand.contactAddress || null,
+            socialMediaLinks: brand.socialMediaLinks || null,
+
+            defaultLocation: brand.defaultLocation || null,
+            defaultCountry: brand.defaultCountry || null,
+            defaultTimezone: brand.defaultTimezone || null,
+
+            requireEmailVerification: brand.requireEmailVerification,
+            defaultCurrency: brand.defaultCurrency,
+            enableMultiCurrency: brand.enableMultiCurrency,
+
+            metaTitle: brand.metaTitle || null,
+            metaDescription: brand.metaDescription || null,
+            metaKeywords: brand.metaKeywords || null,
+
             createdAt: brand.createdAt,
             updatedAt: brand.updatedAt,
             deletedAt: brand.deletedAt || null,
+            settings: brand.settings || null,
         }));
     }
 }

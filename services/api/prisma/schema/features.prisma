@@ -12,7 +12,7 @@ model SystemAnnouncement {
 
   // Targeting
   targetAudience    AnnouncementTarget @default(all) @map("target_audience")
-  programCategoryId String?            @map("program_category_id") @db.Uuid
+  brandId String?            @map("brand_id") @db.Uuid
   programId         String?            @map("program_id") @db.Uuid
 
   // Priority & Type
@@ -48,7 +48,7 @@ model SystemAnnouncement {
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
-  programCategory ProgramCategory?       @relation(fields: [programCategoryId], references: [id])
+  brand Brand?       @relation(fields: [brandId], references: [id])
   program         Program?               @relation(fields: [programId], references: [id], onDelete: Cascade)
   creator         Admin                  @relation("AnnouncementCreator", fields: [createdBy], references: [id])
   updater         Admin?                 @relation("AnnouncementUpdater", fields: [updatedBy], references: [id])
@@ -56,7 +56,7 @@ model SystemAnnouncement {
 
   @@index([isPublished, publishedAt, deletedAt])
   @@index([startDate, endDate, isPublished, deletedAt])
-  @@index([targetAudience, programCategoryId])
+  @@index([targetAudience, brandId])
   @@index([showBanner, isPublished, deletedAt])
   @@map("system_announcements")
 }

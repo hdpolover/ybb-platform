@@ -343,10 +343,10 @@ export class CreateProgramTestimonialDto {
     @IsOptional()
     programId?: string;
 
-    @ApiProperty({ required: false })
+    @ApiProperty({ required: false, description: 'Brand ID' })
     @IsUUID()
     @IsOptional()
-    programCategoryId?: string;
+    brandId?: string;
 
     @ApiProperty()
     @IsString()
@@ -518,10 +518,10 @@ export class CreateProgramTeamDto {
     @IsOptional()
     programId?: string;
 
-    @ApiProperty({ required: false })
+    @ApiProperty({ required: false, description: 'Brand ID' })
     @IsUUID()
     @IsOptional()
-    programCategoryId?: string;
+    brandId?: string;
 
     @ApiProperty()
     @IsString()
@@ -1104,6 +1104,71 @@ export class UpdateProgramEssayDto {
     @IsBoolean()
     @IsOptional()
     isRequired?: boolean;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    order?: number;
+
+    @ApiProperty({ required: false })
+    @IsBoolean()
+    @IsOptional()
+    isActive?: boolean;
+}
+
+// Participation Category DTOs
+export class CreateProgramParticipationCategoryDto {
+    @ApiProperty()
+    @IsUUID()
+    @IsNotEmpty()
+    programId: string;
+
+    @ApiProperty()
+    @IsString()
+    @IsNotEmpty()
+    name: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    description?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    benefits?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    eligibility?: string;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    order?: number;
+}
+
+export class UpdateProgramParticipationCategoryDto {
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    name?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    description?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    benefits?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    eligibility?: string;
 
     @ApiProperty({ required: false })
     @IsNumber()

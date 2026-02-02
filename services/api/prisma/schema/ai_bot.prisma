@@ -2,7 +2,7 @@ model AiChatBotConfig {
   id String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
 
   // Can be null for Global, or linked to a category
-  programCategoryId String? @map("program_category_id") @db.Uuid
+  brandId String? @map("brand_id") @db.Uuid
 
   name      String @db.VarChar(100) // "YBB Main Bot"
   type      String @default("iframe") @db.VarChar(20) // iframe, script, embed
@@ -18,9 +18,9 @@ model AiChatBotConfig {
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
-  programCategory ProgramCategory? @relation(fields: [programCategoryId], references: [id], onDelete: Cascade)
+  brand Brand? @relation(fields: [brandId], references: [id], onDelete: Cascade)
 
-  @@index([programCategoryId])
+  @@index([brandId])
   @@index([isActive])
   @@map("ai_chatbot_configs")
 }

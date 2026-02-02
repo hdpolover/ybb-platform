@@ -29,7 +29,7 @@ describe('RegisterHandler', () => {
     authProvider: {
       findUnique: jest.fn(),
     },
-    programCategory: {
+    brand: {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
     },
@@ -150,7 +150,7 @@ describe('RegisterHandler', () => {
         });
 
         // Mock Category
-        mockPrismaService.programCategory.findUnique.mockResolvedValue({
+        mockPrismaService.brand.findUnique.mockResolvedValue({
             id: 'category-id-123',
             isActive: true,
             name: 'Test Category',
@@ -160,7 +160,7 @@ describe('RegisterHandler', () => {
         // Mock Program (by slug)
         mockPrismaService.program.findUnique.mockResolvedValue({
             id: 'program-id-123',
-            programCategoryId: 'category-id-123',
+            brandId: 'category-id-123',
             isActive: true,
         });
 
@@ -178,7 +178,7 @@ describe('RegisterHandler', () => {
         mockPrismaService.user.create.mockResolvedValue({
             id: 'new-user-id',
             email: 'test@example.com',
-            programCategoryId: 'category-id-123',
+            brandId: 'category-id-123',
             isActive: true,
             isOnboardingCompleted: false,
             identities: [{ providerId: 'provider-id-123' }]
@@ -241,7 +241,7 @@ describe('RegisterHandler', () => {
         });
 
         // Mock Category
-        mockPrismaService.programCategory.findUnique.mockResolvedValue({
+        mockPrismaService.brand.findUnique.mockResolvedValue({
             id: 'category-id-123',
             isActive: true,
         });
@@ -261,7 +261,7 @@ describe('RegisterHandler', () => {
         });
         
          // Mock Category
-         mockPrismaService.programCategory.findUnique.mockResolvedValue({
+         mockPrismaService.brand.findUnique.mockResolvedValue({
             id: 'category-id-123',
             isActive: true,
             name: 'Test Category',
@@ -271,7 +271,7 @@ describe('RegisterHandler', () => {
          // Mock Program (by slug)
          mockPrismaService.program.findUnique.mockResolvedValue({
             id: 'program-id-123',
-            programCategoryId: 'category-id-123',
+            brandId: 'category-id-123',
             isActive: true,
         });
         
@@ -309,7 +309,7 @@ describe('RegisterHandler', () => {
         });
 
         // Mock Category
-        mockPrismaService.programCategory.findUnique.mockResolvedValue({
+        mockPrismaService.brand.findUnique.mockResolvedValue({
             id: 'category-id-123',
             isActive: true,
             name: 'Test Category',
@@ -318,7 +318,7 @@ describe('RegisterHandler', () => {
         // Mock Latest Program
         mockPrismaService.program.findFirst.mockResolvedValue({
             id: 'latest-program-id',
-            programCategoryId: 'category-id-123',
+            brandId: 'category-id-123',
             isActive: true,
         });
 
@@ -329,7 +329,7 @@ describe('RegisterHandler', () => {
         mockPrismaService.user.create.mockResolvedValue({
             id: 'new-user-id',
             email: 'test@example.com',
-            programCategoryId: 'category-id-123',
+            brandId: 'category-id-123',
             identities: [{ providerId: 'provider-id-123' }]
         });
 

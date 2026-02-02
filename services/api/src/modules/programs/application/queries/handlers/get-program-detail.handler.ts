@@ -96,7 +96,7 @@ export class GetProgramDetailHandler {
 
     // Basic includes (always included)
     const basic = {
-      programCategory: {
+      brand: {
         select: {
           id: true,
           name: true,
@@ -236,7 +236,7 @@ export class GetProgramDetailHandler {
       termsAndConditions: program.termsAndConditions,
       metaTitle: program.metaTitle,
       metaDescription: program.metaDescription,
-      category: program.programCategory,
+      brand: program.brand,
       createdAt: program.createdAt,
       updatedAt: program.updatedAt,
     };

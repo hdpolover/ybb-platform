@@ -6,7 +6,7 @@ export async function seedAdmins() {
   log('🌱 Seeding Admins...');
 
   // We attach admins to IYS brand for now as the default context
-  const brand = await prisma.programCategory.findUnique({ where: { slug: BRANDS.IYS } });
+  const brand = await prisma.brand.findUnique({ where: { slug: BRANDS.IYS } });
   if (!brand) return error('IYS Brand not found. Cannot seed admins.');
 
   const passwordHash = await bcrypt.hash('admin123', 10);
@@ -45,7 +45,7 @@ export async function seedAdmins() {
     // 1. Create/Update User
     const user = await prisma.user.upsert({
       where: { 
-        email_programCategoryId: { email: adminData.email, programCategoryId: brand.id } 
+        email_brandId: { email: adminData.email, brandId: brand.id } 
       },
       update: {
         passwordHash, // Reset password
@@ -54,7 +54,7 @@ export async function seedAdmins() {
       },
       create: {
         email: adminData.email,
-        programCategoryId: brand.id,
+        brandId: brand.id,
         passwordHash,
         emailVerified: true,
         isActive: true,

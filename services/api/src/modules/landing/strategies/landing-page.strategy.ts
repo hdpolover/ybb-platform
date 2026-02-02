@@ -1,5 +1,5 @@
-import { ProgramCategory } from '@prisma/client';
+import { Brand } from '@prisma/client';
 
 export interface ILandingPageStrategy {
-  getData(programCategory: ProgramCategory | null): Promise<any>;
+  getData(brand: Brand | null): Promise<any>;
 }

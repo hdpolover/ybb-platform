@@ -19,7 +19,6 @@ export enum ApplicationStatus {
 export enum ApplicationCategory {
   FULLY_FUNDED = 'fully_funded',
   SELF_FUNDED = 'self_funded',
-  PARTIAL_FUNDED = 'partial_funded',
 }
 
 export enum ScoreStatus {

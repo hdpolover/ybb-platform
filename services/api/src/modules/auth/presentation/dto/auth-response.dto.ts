@@ -12,7 +12,7 @@ export class AuthResponseDto {
   user: {
     id: string;
     email: string;
-    programCategoryId: string;
+    brandId: string;
     isActive: boolean;
     isOnboardingCompleted: boolean;
     registeredPrograms?: RegisteredProgramDto[];

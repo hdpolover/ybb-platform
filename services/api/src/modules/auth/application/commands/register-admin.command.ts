@@ -4,7 +4,7 @@ export class RegisterAdminCommand {
     public readonly password: string,
     public readonly fullName: string,
     public readonly secretKey: string,
-    public readonly programCategoryId: string,
+    public readonly brandId: string,
     public readonly role: string,
     public readonly additionalCategoryIds?: string[],
   ) {}

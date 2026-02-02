@@ -22,20 +22,20 @@ export class RegisterAdminHandler {
     }
 
     // 2. Check if program category exists
-    const programCategory = await this.prisma.programCategory.findUnique({
-      where: { id: command.programCategoryId },
+    const brand = await this.prisma.brand.findUnique({
+      where: { id: command.brandId },
     });
 
-    if (!programCategory || !programCategory.isActive) {
+    if (!brand || !brand.isActive) {
       throw new BadRequestException('Invalid program category');
     }
 
     // 3. Check if user already exists
     const existingUser = await this.prisma.user.findUnique({
       where: {
-        email_programCategoryId: {
+        email_brandId: {
           email: command.email,
-          programCategoryId: command.programCategoryId,
+          brandId: command.brandId,
         },
       },
     });
@@ -76,7 +76,7 @@ export class RegisterAdminHandler {
         data: {
           email: command.email,
           passwordHash,
-          programCategoryId: command.programCategoryId,
+          brandId: command.brandId,
           isActive: true,
           emailVerified: true, // Auto-verify admin emails
         },
@@ -95,20 +95,20 @@ export class RegisterAdminHandler {
       });
 
       // NEW: Assign to Primary Category
-      await tx.adminProgramCategory.create({
+      await tx.adminBrand.create({
         data: {
           adminId: newAdmin.id,
-          programCategoryId: command.programCategoryId,
+          brandId: command.brandId,
           roleInBrand: command.role,
         },
       });
 
       // NEW: Assign to Additional Categories
       if (command.additionalCategoryIds && command.additionalCategoryIds.length > 0) {
-        await tx.adminProgramCategory.createMany({
+        await tx.adminBrand.createMany({
           data: command.additionalCategoryIds.map((catId) => ({
             adminId: newAdmin.id,
-            programCategoryId: catId,
+            brandId: catId,
             roleInBrand: command.role,
           })),
         });
@@ -121,7 +121,7 @@ export class RegisterAdminHandler {
     const payload = {
       sub: user.id,
       email: user.email,
-      programCategoryId: user.programCategoryId,
+      brandId: user.brandId,
       roles: ['admin', command.role],
       adminId: admin.id,
     };
@@ -140,7 +140,7 @@ export class RegisterAdminHandler {
       user: {
         id: user.id,
         email: user.email,
-        programCategoryId: user.programCategoryId,
+        brandId: user.brandId,
         isActive: user.isActive,
         // @ts-ignore
         isOnboardingCompleted: user.isOnboardingCompleted ?? false,

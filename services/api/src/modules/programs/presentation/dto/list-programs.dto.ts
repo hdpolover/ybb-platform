@@ -1,15 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsUUID, IsOptional, IsInt, Min, IsBoolean } from 'class-validator';
+import { IsUUID, IsOptional, IsInt, Min, IsBoolean, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ListProgramsDto {
   @ApiPropertyOptional({
-    description: 'Program category (brand) ID',
+    description: 'Filter by Brand ID',
     example: '005b17ba-b481-45f5-a945-7723248b6415',
   })
   @IsOptional()
   @IsUUID()
-  programCategoryId?: string;
+  brandId?: string;
 
   @ApiPropertyOptional({
     description: 'Filter by year',
@@ -28,6 +28,24 @@ export class ListProgramsDto {
   @IsBoolean()
   @Type(() => Boolean)
   isPublished?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Filter by active status',
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  isActive?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Filter by program status',
+    enum: ['draft', 'published', 'ongoing', 'completed', 'cancelled'],
+    example: 'ongoing',
+  })
+  @IsOptional()
+  @IsString()
+  status?: string;
 
   @ApiPropertyOptional({
     description: 'Page number for pagination',

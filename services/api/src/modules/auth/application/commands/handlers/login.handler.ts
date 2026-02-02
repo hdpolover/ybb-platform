@@ -22,7 +22,7 @@ export class LoginHandler {
   /**
    * Helper to fetch Registered Programs
    */
-  private async getRegisteredPrograms(userId: string, programCategoryId: string) {
+  private async getRegisteredPrograms(userId: string, brandId: string) {
     const userData = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -31,7 +31,7 @@ export class LoginHandler {
             applications: {
               where: {
                 program: {
-                  programCategoryId: programCategoryId 
+                  brandId: brandId 
                 }
               },
               include: {
@@ -54,33 +54,33 @@ export class LoginHandler {
   }
 
   /**
-   * Resolve domain to programCategoryId
-   * Similar logic to landing.service.ts resolveCategory method
+   * Resolve domain to brandId
+   * Similar logic to landing.service.ts resolveBrand method
    */
-  private async resolveProgramCategoryId(programCategoryId?: string, domain?: string): Promise<string> {
-    // If programCategoryId is explicitly provided, use it
-    if (programCategoryId) {
-      return programCategoryId;
+  private async resolveBrandId(brandId?: string, domain?: string): Promise<string> {
+    // If brandId is explicitly provided, use it
+    if (brandId) {
+      return brandId;
     }
 
-    // If no programCategoryId and no domain, try to get default category
+    // If no brandId and no domain, try to get default brand
     if (!domain) {
-      const defaultCategory = await this.prisma.programCategory.findFirst({
+      const defaultBrand = await this.prisma.brand.findFirst({
         where: { isActive: true },
         orderBy: { createdAt: 'asc' },
         select: { id: true }
       });
 
-      if (!defaultCategory) {
-        throw new BadRequestException('No active program category found. Please provide programCategoryId or use a valid domain.');
+      if (!defaultBrand) {
+        throw new BadRequestException('No active brand found. Please provide brandId or use a valid domain.');
       }
 
-      return defaultCategory.id;
+      return defaultBrand.id;
     }
 
-    // Try to find category by domain
+    // Try to find brand by domain
     // First try exact match
-    let category = await this.prisma.programCategory.findFirst({
+    let brand = await this.prisma.brand.findFirst({
       where: { 
         websiteUrl: domain,
         isActive: true 
@@ -89,8 +89,8 @@ export class LoginHandler {
     });
 
     // If not found, try contains match (handles subdomains and protocols)
-    if (!category) {
-      category = await this.prisma.programCategory.findFirst({
+    if (!brand) {
+      brand = await this.prisma.brand.findFirst({
         where: {
           websiteUrl: { contains: domain, mode: 'insensitive' },
           isActive: true
@@ -99,11 +99,11 @@ export class LoginHandler {
       });
     }
 
-    if (!category) {
-      throw new BadRequestException(`No program category found for domain: ${domain}. Please provide programCategoryId.`);
+    if (!brand) {
+      throw new BadRequestException(`No brand found for domain: ${domain}. Please provide brandId.`);
     }
 
-    return category.id;
+    return brand.id;
   }
 
   private parseUserAgent(ua: string) {
@@ -129,19 +129,19 @@ export class LoginHandler {
   }
 
   async execute(command: LoginCommand, domain?: string): Promise<AuthResponseDto> {
-    // Resolve programCategoryId from command or domain
-    const programCategoryId = await this.resolveProgramCategoryId(command.programCategoryId, domain);
+    // Resolve brandId from command or domain
+    const brandId = await this.resolveBrandId(command.brandId, domain);
     
-    // Find user by email and programCategoryId (brand-scoped)
+    // Find user by email and brandId (brand-scoped)
     const user = await this.prisma.user.findUnique({
       where: {
-        email_programCategoryId: {
+        email_brandId: {
           email: command.email,
-          programCategoryId: programCategoryId,
+          brandId: brandId,
         },
       },
       include: {
-        programCategory: true,
+        brand: true,
         identities: {
           include: {
             provider: true,
@@ -149,7 +149,7 @@ export class LoginHandler {
         },
         admin: {
           include: {
-            adminProgramCategories: true
+            adminBrands: true
           }
         },
       },
@@ -165,7 +165,7 @@ export class LoginHandler {
     }
 
     // Check if email is verified (if required by program category)
-    if (user.programCategory.requireEmailVerification && !user.emailVerified) {
+    if (user.brand.requireEmailVerification && !user.emailVerified) {
       throw new UnauthorizedException('Email not verified. Please verify your email before logging in.');
     }
 
@@ -225,8 +225,8 @@ export class LoginHandler {
     const roles: string[] = [];
     if (user.admin) {
       roles.push('admin');
-      const brandRole = user.admin.adminProgramCategories.find(
-        (apc) => apc.programCategoryId === user.programCategoryId,
+      const brandRole = user.admin.adminBrands.find(
+        (apc) => apc.brandId === user.brandId,
       );
       if (brandRole && brandRole.roleInBrand) {
         roles.push(brandRole.roleInBrand);
@@ -237,7 +237,7 @@ export class LoginHandler {
     const accessTokenPayload = {
       sub: user.id,
       email: user.email,
-      programCategoryId: user.programCategoryId,
+      brandId: user.brandId,
       jti: randomUUID(), // Unique token ID for blacklisting
       roles: roles,
     };
@@ -245,7 +245,7 @@ export class LoginHandler {
     const refreshTokenPayload = {
       sub: user.id,
       email: user.email,
-      programCategoryId: user.programCategoryId,
+      brandId: user.brandId,
       jti: randomUUID(), // Different JTI for refresh token
     };
 
@@ -281,7 +281,7 @@ export class LoginHandler {
       }
     });
 
-    const registeredPrograms = await this.getRegisteredPrograms(user.id, user.programCategoryId);
+    const registeredPrograms = await this.getRegisteredPrograms(user.id, user.brandId);
 
     return {
       accessToken,
@@ -289,7 +289,7 @@ export class LoginHandler {
       user: {
         id: user.id,
         email: user.email,
-        programCategoryId: user.programCategoryId,
+        brandId: user.brandId,
         isActive: user.isActive,
         // @ts-ignore
         isOnboardingCompleted: user.isOnboardingCompleted ?? false,

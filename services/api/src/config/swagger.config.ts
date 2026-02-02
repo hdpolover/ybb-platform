@@ -1,5 +1,45 @@
 import { INestApplication } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import * as fs from 'fs';
+import * as path from 'path';
+
+// Helper to safely read documentation files
+const getDocContent = (filename: string): string => {
+  try {
+    // 1. Try finding relative to this config file (Works for src/docs in Dev and dist/src/docs if copied)
+    // __dirname is .../src/config
+    // Target is .../src/docs
+    const localPath = path.join(__dirname, '..', 'docs', filename);
+    if (fs.existsSync(localPath)) {
+      return fs.readFileSync(localPath, 'utf8');
+    }
+
+    // 2. Try finding in src/docs (Explicit Source check for Docker Dev with Volumes)
+    const srcPath = path.join(process.cwd(), 'src', 'docs', filename);
+    if (fs.existsSync(srcPath)) {
+      return fs.readFileSync(srcPath, 'utf8');
+    }
+
+    // 3. Try finding in project root/docs (Legacy/Fallback)
+    // Assumes CWD is the service root
+    const rootPath = path.join(process.cwd(), 'docs', filename);
+    if (fs.existsSync(rootPath)) {
+      return fs.readFileSync(rootPath, 'utf8');
+    }
+    
+    // 4. Try finding in dist/docs (Previous Strategy)
+    const distPath = path.join(__dirname, '..', '..', 'docs', filename);
+    if (fs.existsSync(distPath)) {
+        return fs.readFileSync(distPath, 'utf8');
+    }
+
+    console.warn(`[Swagger] Documentation file not found: ${filename}. Checked: ${localPath}, ${srcPath}, ${rootPath}, ${distPath}`);
+    return '';
+  } catch (error) {
+    console.warn(`Failed to load documentation file ${filename}:`, error.message);
+    return '';
+  }
+};
 
 export const SWAGGER_TAGS = [
   { name: 'Achievements', description: 'Awards & Achievements' },
@@ -7,7 +47,7 @@ export const SWAGGER_TAGS = [
   { name: 'Ambassadors', description: 'Ambassador program management' },
   { name: 'Applications', description: 'Application management' },
   { name: 'Auth', description: 'Authentication endpoints' },
-  { name: 'Brands', description: 'Brand & Sponsor management' },
+  { name: 'Brands', description: getDocContent('BRANDS_API.md') || 'Brand & Sponsor management' },
   { name: 'Documents', description: 'Document generation & exports' },
   { name: 'Files', description: 'File operations' },
   { name: 'Gallery', description: 'Photo & Video gallery' },
