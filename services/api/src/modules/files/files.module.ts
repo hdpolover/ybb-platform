@@ -26,7 +26,7 @@ import { StorageService } from './application/storage.service';
           transport: Transport.GRPC,
           options: {
             package: 'file',
-            protoPath: join(__dirname, '../../protos/file_service.proto'),
+            protoPath: join(process.cwd(), 'dist/protos/file_service.proto'),
             url: configService.get('FILE_GRPC_URL') || 'host.docker.internal:50052',
             loader: {
               keepCase: true,
