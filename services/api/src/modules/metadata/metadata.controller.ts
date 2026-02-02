@@ -41,9 +41,10 @@ export class MetadataController {
   @Public()
   @Get('timezones')
   @ApiOperation({ summary: 'Get list of timezones' })
+  @ApiQuery({ name: 'search', required: false, description: 'Filter timezones by name (e.g., "Jakarta")' })
   @ApiResponse({ status: 200, description: 'Return list of valid timezones' })
-  getTimezones() {
-    return this.metadataService.getTimezones();
+  getTimezones(@Query('search') search?: string) {
+    return this.metadataService.getTimezones(search);
   }
 
   @Public()
@@ -92,5 +93,13 @@ export class MetadataController {
   @ApiResponse({ status: 200, description: 'Return list of knowledge sources' })
   getKnowledgeSources() {
     return this.metadataService.getKnowledgeSources();
+  }
+
+  @Public()
+  @Get('enums')
+  @ApiOperation({ summary: 'Get all system enums (statuses, types, etc.)' })
+  @ApiResponse({ status: 200, description: 'Return object containing all system enums' })
+  getSystemEnums() {
+    return this.metadataService.getSystemEnums();
   }
 }

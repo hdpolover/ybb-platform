@@ -105,7 +105,7 @@ export class ApplicationRepository implements IApplicationRepository {
   ): Promise<{ applications: ParticipantApplication[]; total: number }> {
     const where: any = {
       program: {
-        programCategory: {
+        brand: {
           id: brandId,
         },
       },

@@ -17,7 +17,7 @@ export class UserMapper {
   static toDomain(prismaUser: PrismaUser): User {
     return new User(
       prismaUser.id,
-      prismaUser.programCategoryId,
+      prismaUser.brandId,
       prismaUser.email,
       prismaUser.isActive,
       prismaUser.emailVerified,

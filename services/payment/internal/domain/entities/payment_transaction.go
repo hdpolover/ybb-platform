@@ -18,9 +18,9 @@ const (
 
 type PaymentTransaction struct {
 	ID                 string `gorm:"primaryKey;type:uuid;default:gen_random_uuid()" json:"id"`
-	IntentID           string `gorm:"type:uuid;not null;index" json:"intent_id"`
+	IntentID           string `gorm:"column:payment_intent_id;type:uuid;not null;index" json:"intent_id"`
 	GatewayReferenceID string `gorm:"type:varchar(100);index" json:"gateway_reference_id"`
-	PaymentMethodID    string `gorm:"type:varchar(50);not null" json:"payment_method_id"` // e.g. "bca_va", "credit_card"
+	PaymentMethodID    string `gorm:"column:payment_method_id;type:varchar(50);not null" json:"payment_method_id"` // e.g. "bca_va", "credit_card"
 
 	// Financial Breakdown
 	Currency       string  `gorm:"type:varchar(3)" json:"currency"`

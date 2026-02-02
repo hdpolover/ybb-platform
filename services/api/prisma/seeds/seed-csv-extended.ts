@@ -79,7 +79,7 @@ async function seedProgramCategories() {
     const slug = slugify(name);
     
     // Check if category exists by legacyId or slug
-    const existing = await prisma.programCategory.findFirst({
+    const existing = await prisma.brand.findFirst({
         where: { OR: [{ legacyId }, { slug }] }
     });
 
@@ -100,13 +100,13 @@ async function seedProgramCategories() {
 
     if (existing) {
         // Update
-        await prisma.programCategory.update({
+        await prisma.brand.update({
             where: { id: existing.id },
             data
         });
     } else {
         // Create
-        await prisma.programCategory.create({
+        await prisma.brand.create({
             data
         });
     }

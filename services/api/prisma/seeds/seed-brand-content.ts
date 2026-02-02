@@ -5,15 +5,15 @@ export async function seedBrandContent() {
   log('🌱 Seeding Brand Content (Settings, Socials, Sponsors)...');
 
   // We are focusing on IYS for now as the main brand
-  const iys = await prisma.programCategory.findUnique({ where: { slug: BRANDS.IYS } });
+  const iys = await prisma.brand.findUnique({ where: { slug: BRANDS.IYS } });
   if (!iys) return error('IYS Brand not found');
 
   // 1. Category Settings
-  await prisma.programCategorySetting.upsert({
-    where: { programCategoryId: iys.id },
+  await prisma.brandSetting.upsert({
+    where: { brandId: iys.id },
     update: {},
     create: {
-      programCategoryId: iys.id,
+      brandId: iys.id,
       isMaintenanceMode: false,
       usdInIdr: 16000,
       supportEmail: 'admin@istanbulyouthsummit.com',
@@ -37,11 +37,11 @@ export async function seedBrandContent() {
   });
 
   // 2. Social Feeds (Instagram Placeholders)
-  await prisma.programSocialFeed.deleteMany({ where: { programCategoryId: iys.id } });
-  await prisma.programSocialFeed.createMany({
+  await prisma.brandSocialFeed.deleteMany({ where: { brandId: iys.id } });
+  await prisma.brandSocialFeed.createMany({
     data: [
       {
-        programCategoryId: iys.id,
+        brandId: iys.id,
         platform: 'instagram',
         postId: 'ig_001',
         imageUrl: 'https://placehold.co/400x400?text=IG+Post+1',
@@ -51,7 +51,7 @@ export async function seedBrandContent() {
         isActive: true
       },
       {
-        programCategoryId: iys.id,
+        brandId: iys.id,
         platform: 'instagram',
         postId: 'ig_002',
         imageUrl: 'https://placehold.co/400x400?text=IG+Post+2',
@@ -64,11 +64,11 @@ export async function seedBrandContent() {
   });
 
   // 3. Sponsorship Tiers (Brand Level)
-  await prisma.sponsorshipTier.deleteMany({ where: { programCategoryId: iys.id } });
+  await prisma.sponsorshipTier.deleteMany({ where: { brandId: iys.id } });
   await prisma.sponsorshipTier.createMany({
     data: [
       {
-        programCategoryId: iys.id,
+        brandId: iys.id,
         name: 'Platinum Sponsor',
         priceDescription: '$10,000+',
         description: 'Maximum visibility and keynote speech opportunity.',
@@ -77,7 +77,7 @@ export async function seedBrandContent() {
         isActive: true
       },
       {
-        programCategoryId: iys.id,
+        brandId: iys.id,
         name: 'Gold Sponsor',
         priceDescription: '$5,000+',
         description: 'High visibility and booth.',
@@ -89,11 +89,11 @@ export async function seedBrandContent() {
   });
 
   // 4. Partnership Opportunities
-  await prisma.partnershipOpportunity.deleteMany({ where: { programCategoryId: iys.id } });
+  await prisma.partnershipOpportunity.deleteMany({ where: { brandId: iys.id } });
   await prisma.partnershipOpportunity.createMany({
     data: [
       {
-        programCategoryId: iys.id,
+        brandId: iys.id,
         type: 'ambassador',
         title: 'Campus Ambassador',
         description: 'Represent IYS in your university.',
@@ -103,7 +103,7 @@ export async function seedBrandContent() {
         isActive: true
       },
       {
-        programCategoryId: iys.id,
+        brandId: iys.id,
         type: 'media_partner',
         title: 'Media Partner',
         description: 'Cover our event and get exclusive access.',
@@ -116,11 +116,11 @@ export async function seedBrandContent() {
   });
 
   // 5. Program Team (Brand Executives)
-  await prisma.programTeam.deleteMany({ where: { programCategoryId: iys.id } });
+  await prisma.programTeam.deleteMany({ where: { brandId: iys.id } });
   await prisma.programTeam.createMany({
     data: [
       {
-        programCategoryId: iys.id,
+        brandId: iys.id,
         name: 'John Doe',
         role: 'Founder & CEO',
         bio: 'Visionary leader with 10+ years in youth empowerment.',
@@ -129,7 +129,7 @@ export async function seedBrandContent() {
         isActive: true
       },
       {
-        programCategoryId: iys.id,
+        brandId: iys.id,
         name: 'Jane Smith',
         role: 'Director of Partnerships',
         bio: 'Connecting global organizations for impact.',
@@ -141,11 +141,11 @@ export async function seedBrandContent() {
   });
 
   // 6. Brand Testimonials (General Alumni)
-  await prisma.programTestimonial.deleteMany({ where: { programCategoryId: iys.id } });
+  await prisma.programTestimonial.deleteMany({ where: { brandId: iys.id } });
   await prisma.programTestimonial.createMany({
     data: [
       {
-        programCategoryId: iys.id,
+        brandId: iys.id,
         name: 'Alice Johnson',
         role: 'Alumni 2020',
         testimonial: 'YBB changed my life and career trajectory.',
@@ -159,11 +159,11 @@ export async function seedBrandContent() {
   });
 
   // 7. Legal Documents
-  await prisma.legalDocument.deleteMany({ where: { programCategoryId: iys.id } });
+  await prisma.legalDocument.deleteMany({ where: { brandId: iys.id } });
   await prisma.legalDocument.createMany({
     data: [
       {
-        programCategoryId: iys.id,
+        brandId: iys.id,
         title: 'Privacy Policy',
         slug: 'privacy-policy',
         version: '1.0',
@@ -181,7 +181,7 @@ export async function seedBrandContent() {
         isActive: true
       },
       {
-        programCategoryId: iys.id,
+        brandId: iys.id,
         title: 'Terms of Service',
         slug: 'terms-of-service',
         version: '1.0',
@@ -199,7 +199,7 @@ export async function seedBrandContent() {
         isActive: true
       },
       {
-        programCategoryId: iys.id,
+        brandId: iys.id,
         title: 'Refund Policy',
         slug: 'refund-policy',
         version: '1.0',

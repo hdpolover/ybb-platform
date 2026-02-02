@@ -7,6 +7,10 @@
       {
         "include": "**/*.proto",
         "watchAssets": true
+      },
+      {
+        "include": "src/docs/*.md",
+        "watchAssets": true
       }
     ]
   }

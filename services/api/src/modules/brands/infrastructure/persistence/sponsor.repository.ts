@@ -9,7 +9,7 @@ export class SponsorRepository implements ISponsorRepository {
 
     async findByBrandId(brandId: string): Promise<Sponsor[]> {
         const sponsors = await this.prisma.sponsor.findMany({
-            where: { programCategoryId: brandId, isActive: true },
+            where: { brandId: brandId, isActive: true },
             orderBy: { order: 'asc' },
         });
         return sponsors.map(this.mapToEntity);

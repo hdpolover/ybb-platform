@@ -1,7 +1,7 @@
 export class Program {
     constructor(
         public readonly id: string,
-        public readonly programCategoryId: string,
+        public readonly brandId: string,
         public readonly name: string,
         public readonly slug: string,
         public readonly description: string | null,

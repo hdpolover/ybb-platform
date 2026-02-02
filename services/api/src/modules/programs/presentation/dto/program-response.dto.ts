@@ -5,7 +5,7 @@ export class ProgramResponseDto {
   id: string;
 
   @ApiProperty({ example: '005b17ba-b481-45f5-a945-7723248b6415' })
-  programCategoryId: string;
+  brandId: string;
 
   @ApiProperty({ example: 'Young Entrepreneur Program 2025' })
   name: string;
@@ -36,6 +36,16 @@ export class ProgramResponseDto {
 
   @ApiProperty({ example: true })
   isPublished: boolean;
+
+  @ApiProperty({ example: true })
+  isActive: boolean;
+
+  @ApiProperty({ 
+    description: 'Program status',
+    enum: ['draft', 'published', 'ongoing', 'completed', 'cancelled'],
+    example: 'ongoing' 
+  })
+  status: string;
 
   @ApiProperty({ example: '2025-11-25T16:00:00.000Z' })
   createdAt: Date;

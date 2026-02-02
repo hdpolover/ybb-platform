@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsOptional, IsString, IsUUID, MinLength, IsIn } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, IsUUID, MinLength, IsIn, IsEnum } from 'class-validator';
+import { ApplicationCategory } from '@prisma/client';
 
 export class RegisterDto {
   @ApiProperty({
@@ -28,7 +29,7 @@ export class RegisterDto {
   })
   @IsUUID()
   @IsOptional()
-  programCategoryId?: string;
+  brandId?: string;
 
   @ApiProperty({
     example: '123e4567-e89b-12d3-a456-426614174000',
@@ -74,4 +75,14 @@ export class RegisterDto {
   @IsString()
   @IsOptional()
   referralCode?: string;
+
+  @ApiProperty({
+    example: 'fully_funded',
+    description: 'The category of registration (e.g. self_funded, fully_funded). Validates against available program options.',
+    required: false,
+    enum: ApplicationCategory
+  })
+  @IsEnum(ApplicationCategory)
+  @IsOptional()
+  applicationCategory?: ApplicationCategory;
 }

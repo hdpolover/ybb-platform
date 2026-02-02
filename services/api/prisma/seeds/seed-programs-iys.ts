@@ -5,7 +5,7 @@ import { ApplicationCategory, PricingFeeType, FaqCategory } from '@prisma/client
 export async function seedIYSPrograms() {
   log('🌱 Seeding IYS Programs...');
 
-  const brand = await prisma.programCategory.findUnique({ where: { slug: BRANDS.IYS } });
+  const brand = await prisma.brand.findUnique({ where: { slug: BRANDS.IYS } });
   if (!brand) return error('IYS Brand not found');
 
   // ==========================================
@@ -13,7 +13,7 @@ export async function seedIYSPrograms() {
   // ==========================================
   await prisma.program.upsert({
     where: {
-      programCategoryId_slug: { programCategoryId: brand.id, slug: 'istanbul-youth-summit-2025' },
+      brandId_slug: { brandId: brand.id, slug: 'istanbul-youth-summit-2025' },
     },
     update: {
       isActive: false,
@@ -23,7 +23,7 @@ export async function seedIYSPrograms() {
       registrationFee: null,
     },
     create: {
-      programCategoryId: brand.id,
+      brandId: brand.id,
       name: 'Istanbul Youth Summit 2025',
       slug: 'istanbul-youth-summit-2025',
       description: 'The 8th Istanbul Youth Summit (IYS 2025) was a massive success.',
@@ -50,7 +50,7 @@ export async function seedIYSPrograms() {
   // ==========================================
   const iys2026 = await prisma.program.upsert({
     where: {
-      programCategoryId_slug: { programCategoryId: brand.id, slug: 'istanbul-youth-summit-2026' },
+      brandId_slug: { brandId: brand.id, slug: 'istanbul-youth-summit-2026' },
     },
     update: {
       isActive: true,
@@ -59,7 +59,7 @@ export async function seedIYSPrograms() {
       allowRegistration: true,
     },
     create: {
-      programCategoryId: brand.id,
+      brandId: brand.id,
       name: 'Istanbul Youth Summit 2026',
       slug: 'istanbul-youth-summit-2026',
       description: 'The 9th Istanbul Youth Summit (IYS 2026) aims to connect youth leaders worldwide in the historical city of Istanbul. Theme: "Innovating for a Sustainable Future".',

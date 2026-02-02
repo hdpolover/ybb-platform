@@ -5,7 +5,7 @@ export class LegalDocumentResponseDto {
     id: string;
 
     @ApiProperty()
-    programCategoryId: string;
+    brandId: string;
 
     @ApiProperty()
     title: string;

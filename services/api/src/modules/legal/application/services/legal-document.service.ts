@@ -26,7 +26,7 @@ export class LegalDocumentService {
 
     async create(brandSlug: string, dto: CreateLegalDocumentDto): Promise<LegalDocument> {
         // Resolve brand ID
-        const brand = await this.prisma.programCategory.findUnique({
+        const brand = await this.prisma.brand.findUnique({
             where: { slug: brandSlug },
         });
 

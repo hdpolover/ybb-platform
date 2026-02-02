@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { ForgotPasswordCommand } from '../forgot-password.command';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { randomBytes } from 'crypto';
@@ -16,25 +16,25 @@ export class ForgotPasswordHandler {
     ) { }
 
     /**
-     * Resolve domain to programCategoryId
+     * Resolve domain to brandId
      * Similar logic to login/register handlers
      */
-    private async resolveProgramCategoryId(programCategoryId?: string, domain?: string): Promise<string> {
-        // If programCategoryId is explicitly provided, use it
-        if (programCategoryId) {
-            return programCategoryId;
+    private async resolveBrandId(brandId?: string, domain?: string): Promise<string> {
+        // If brandId is explicitly provided, use it
+        if (brandId) {
+            return brandId;
         }
 
-        // If no programCategoryId and no domain, try to get default category
+        // If no brandId and no domain, try to get default category
         if (!domain) {
-            const defaultCategory = await this.prisma.programCategory.findFirst({
+            const defaultCategory = await this.prisma.brand.findFirst({
                 where: { isActive: true },
                 orderBy: { createdAt: 'asc' },
                 select: { id: true }
             });
 
             if (!defaultCategory) {
-                throw new BadRequestException('No active program category found. Please provide programCategoryId or use a valid domain.');
+                throw new BadRequestException('No active program category found. Please provide brandId or use a valid domain.');
             }
 
             return defaultCategory.id;
@@ -42,7 +42,7 @@ export class ForgotPasswordHandler {
 
         // Try to find category by domain
         // First try exact match
-        let category = await this.prisma.programCategory.findFirst({
+        let category = await this.prisma.brand.findFirst({
             where: { 
                 websiteUrl: domain,
                 isActive: true 
@@ -52,7 +52,7 @@ export class ForgotPasswordHandler {
 
         // If not found, try contains match (handles subdomains and protocols)
         if (!category) {
-            category = await this.prisma.programCategory.findFirst({
+            category = await this.prisma.brand.findFirst({
                 where: {
                     websiteUrl: { contains: domain, mode: 'insensitive' },
                     isActive: true
@@ -62,50 +62,51 @@ export class ForgotPasswordHandler {
         }
 
         if (!category) {
-            throw new BadRequestException(`No program category found for domain: ${domain}. Please provide programCategoryId.`);
+            throw new BadRequestException(`No program category found for domain: ${domain}. Please provide brandId.`);
         }
 
         return category.id;
     }
 
     async execute(command: ForgotPasswordCommand, domain?: string): Promise<{ message: string }> {
-        // Resolve programCategoryId from command or domain
-        const programCategoryId = await this.resolveProgramCategoryId(command.programCategoryId, domain);
+        // Resolve brandId from command or domain
+        const brandId = await this.resolveBrandId(command.brandId, domain);
 
         const user = await this.prisma.user.findUnique({
             where: {
-                email_programCategoryId: {
+                email_brandId: {
                     email: command.email,
-                    programCategoryId: programCategoryId,
+                    brandId: brandId,
                 },
             },
         });
 
-        if (user) {
-            // Generate a fake reset token for simulation
-            const token = randomBytes(32).toString('hex');
-            const expires = new Date();
-            expires.setHours(expires.getHours() + 1); // Token valid for 1 hour
-
-            // Save token to database
-            await this.prisma.user.update({
-                where: { id: user.id },
-                data: {
-                    passwordResetToken: token,
-                    passwordResetExpires: expires,
-                },
-            });
-
-            this.logger.log(`Emitting user.forgot-password for ${command.email}`);
-            await this.rabbitmqProducer.emit('user.forgot-password', {
-                email: user.email,
-                name: user.email.split('@')[0], // Fallback name
-                token,
-                programCategoryId, // Pass category ID for email customization
-            });
-        } else {
+        if (!user) {
             this.logger.warn(`Forgot password requested for non-existent email: ${command.email}`);
+            throw new NotFoundException(`User with email ${command.email} not found.`);
         }
+
+        // Generate a fake reset token for simulation
+        const token = randomBytes(32).toString('hex');
+        const expires = new Date();
+        expires.setHours(expires.getHours() + 1); // Token valid for 1 hour
+
+        // Save token to database
+        await this.prisma.user.update({
+            where: { id: user.id },
+            data: {
+                passwordResetToken: token,
+                passwordResetExpires: expires,
+            },
+        });
+
+        this.logger.log(`Emitting user.forgot-password for ${command.email}`);
+        await this.rabbitmqProducer.emit('user.forgot-password', {
+            email: user.email,
+            name: user.email.split('@')[0], // Fallback name
+            token,
+            brandId, // Pass category ID for email customization
+        });
 
         await this.authLoggingService.logForgotPasswordRequest(
             command.email,
@@ -113,9 +114,8 @@ export class ForgotPasswordHandler {
             command.userAgent || 'unknown',
         );
 
-        // Always return success to prevent user enumeration
         return {
-            message: 'If the email exists, a password reset link has been sent.',
+            message: 'A password reset link has been sent to your email.',
         };
     }
 }

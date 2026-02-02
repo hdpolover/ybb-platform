@@ -1,9 +1,10 @@
 
-import { Controller, Get, Query, Headers } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags, ApiHeader } from '@nestjs/swagger';
 import { StatsService } from './stats.service';
 import { GetStatsQueryDto } from './dto/get-stats.dto';
 import { StatsResponseDto } from './dto/stats-response.dto';
+import { BrandDomain } from '../../shared/decorators/brand-domain.decorator';
 
 @ApiTags('Stats')
 @Controller('stats')
@@ -20,9 +21,8 @@ export class StatsController {
   @ApiResponse({ status: 200, type: StatsResponseDto })
   async getStats(
     @Query() query: GetStatsQueryDto,
-    @Headers() headers?: Record<string, string>,
+    @BrandDomain() brandDomain?: string,
   ): Promise<StatsResponseDto> {
-    const brandDomain = headers?.['x-brand-domain'];
     if (!query.url && brandDomain) {
       query.url = brandDomain;
     }

@@ -308,3 +308,29 @@ export class ProgramEssayResponseDto {
     @ApiProperty()
     order: number;
 }
+
+export class ProgramParticipationCategoryResponseDto {
+    @ApiProperty()
+    id: string;
+
+    @ApiProperty()
+    programId: string;
+
+    @ApiProperty()
+    name: string;
+
+    @ApiProperty({ required: false })
+    description?: string;
+
+    @ApiProperty({ required: false })
+    benefits?: string;
+
+    @ApiProperty({ required: false })
+    eligibility?: string;
+
+    @ApiProperty()
+    order: number;
+
+    @ApiProperty()
+    isActive: boolean;
+}

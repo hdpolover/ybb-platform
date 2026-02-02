@@ -25,5 +25,5 @@ export class LoginDto {
   })
   @IsUUID()
   @IsOptional()
-  programCategoryId?: string;
+  brandId?: string;
 }

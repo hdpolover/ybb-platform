@@ -14,7 +14,7 @@ export class UpdateProgramHandler implements ICommandHandler<UpdateProgramComman
         private readonly activityLogRepository: IUserActivityLogRepository,
     ) {}
 
-    async execute(command: UpdateProgramCommand): Promise<Program> {
+    async execute(command: UpdateProgramCommand): Promise<any> {
         const { programId, updateProgramDto, userId } = command;
 
         const existingProgram = await this.programRepository.findById(programId);
@@ -32,6 +32,12 @@ export class UpdateProgramHandler implements ICommandHandler<UpdateProgramComman
         if (programData.applicationDeadline) programData.applicationDeadline = new Date(programData.applicationDeadline);
         if (programData.registrationOpenDate) programData.registrationOpenDate = new Date(programData.registrationOpenDate);
         if (programData.registrationCloseDate) programData.registrationCloseDate = new Date(programData.registrationCloseDate);
+
+        // Map brandId to brandId
+        if (programData.brandId) {
+            programData.brandId = programData.brandId;
+            delete programData.brandId;
+        }
 
         const updatedProgram = await this.programRepository.update(programId, programData);
 
@@ -55,7 +61,11 @@ export class UpdateProgramHandler implements ICommandHandler<UpdateProgramComman
             createdAt: new Date(),
         } as any);
 
-        return updatedProgram;
+        const { brandId, ...rest } = updatedProgram as any;
+        return {
+            ...rest,
+            brandId: brandId,
+        };
     }
 
     private generateSlug(text: string): string {

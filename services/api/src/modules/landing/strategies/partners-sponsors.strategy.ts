@@ -1,15 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { ILandingPageStrategy } from './landing-page.strategy';
 import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
-import { ProgramCategory } from '@prisma/client';
+import { Brand } from '@prisma/client';
 
 @Injectable()
 export class PartnersSponsorsStrategy implements ILandingPageStrategy {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getData(category: ProgramCategory | null) {
+  async getData(category: Brand | null) {
     const sponsors = category ? await this.prisma.sponsor.findMany({
-        where: { programCategoryId: category.id, isActive: true },
+        where: { brandId: category.id, isActive: true },
         orderBy: { order: 'asc' }
     }) : [];
 
@@ -18,7 +18,7 @@ export class PartnersSponsorsStrategy implements ILandingPageStrategy {
          // but we can fetch partners from all active programs of this category
          where: { 
              program: {
-                 programCategoryId: category.id,
+                 brandId: category.id,
                  isActive: true
              },
              isActive: true

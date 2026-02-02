@@ -3,7 +3,7 @@ import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 export interface CurrentUserData {
   userId: string;
   email: string;
-  programCategoryId: string;
+  brandId: string;
   jti?: string; // JWT unique token ID for blacklisting
   exp?: number; // Token expiration timestamp
 }

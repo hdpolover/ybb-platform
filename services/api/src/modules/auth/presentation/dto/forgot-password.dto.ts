@@ -9,10 +9,10 @@ export class ForgotPasswordDto {
 
     @ApiProperty({
         example: '123e4567-e89b-12d3-a456-426614174000',
-        description: 'Program Category ID (brand scope) - Optional if domain is provided in request header',
+        description: 'Brand ID - Optional if domain is provided in request header',
         required: false
     })
     @IsUUID()
     @IsOptional()
-    programCategoryId?: string;
+    brandId?: string;
 }

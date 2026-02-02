@@ -11,7 +11,7 @@ export class LegalDocumentRepository {
     async findByBrandSlug(brandSlug: string): Promise<LegalDocument[]> {
         return this.prisma.legalDocument.findMany({
             where: {
-                programCategory: {
+                brand: {
                     slug: brandSlug,
                 },
                 isActive: true, // Public only sees active
@@ -26,7 +26,7 @@ export class LegalDocumentRepository {
     async findByBrandSlugAndType(brandSlug: string, slug: string): Promise<LegalDocument | null> {
         return this.prisma.legalDocument.findFirst({
             where: {
-                programCategory: {
+                brand: {
                     slug: brandSlug,
                 },
                 slug: slug,
@@ -39,11 +39,11 @@ export class LegalDocumentRepository {
         });
     }
 
-    async create(programCategoryId: string, data: CreateLegalDocumentDto): Promise<LegalDocument> {
+    async create(brandId: string, data: CreateLegalDocumentDto): Promise<LegalDocument> {
         return this.prisma.legalDocument.create({
             data: {
                 ...data,
-                programCategoryId,
+                brandId,
             },
         });
     }

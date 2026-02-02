@@ -8,7 +8,7 @@ export class GetUserProfileHandler {
   constructor(private readonly prisma: PrismaService) {}
 
   async execute(query: GetUserProfileQuery): Promise<UserProfileDto> {
-    const { userId, programCategoryId } = query;
+    const { userId, brandId } = query;
 
     // Fetch fresh user data with identities and participant info
     const userData = await this.prisma.user.findUnique({
@@ -24,7 +24,7 @@ export class GetUserProfileHandler {
             applications: {
               where: {
                 program: {
-                  programCategoryId: programCategoryId
+                  brandId: brandId
                 }
               },
               include: {
@@ -54,7 +54,7 @@ export class GetUserProfileHandler {
                       return {
                         userId: user.userId,
                         email: user.email,
-                        programCategoryId: user.programCategoryId,
+                        brandId: user.brandId,
                         identities: [],
                         participantId: null,
                         registeredPrograms: [],
@@ -76,12 +76,12 @@ export class GetUserProfileHandler {
                    // If I move this to handler, I lose the fallback values from token unless I pass them in query.
                    // Let's pass email in query too just in case? No, the ID is enough to fetch. 
                    // If fetch fails, the user is deleted or invalid.
-        programCategoryId: programCategoryId,
+        brandId: brandId,
         identities: [],
         participantId: undefined,
         registeredPrograms: [],
         isProfileCompleted: false
-      } as UserProfileDto;
+      } as unknown as UserProfileDto;
     }
 
     const registeredPrograms = userData.participant?.applications.map(app => ({
@@ -100,7 +100,7 @@ export class GetUserProfileHandler {
     return {
       userId: userData.id,
       email: userData.email,
-      programCategoryId: userData.programCategoryId,
+      brandId: userData.brandId,
       identities: userData.identities.map(i => ({
         provider: i.provider.name,
         lastUsedAt: i.lastUsedAt

@@ -25,7 +25,6 @@ enum Gender {
 enum ApplicationCategory {
   fully_funded
   self_funded
-  partial_funded
 }
 
 enum ApplicationStatus {
@@ -143,7 +142,6 @@ enum PricingFeeType {
 enum PricingTarget {
   self_funded
   fully_funded
-  partial_funded
   all
 }
 

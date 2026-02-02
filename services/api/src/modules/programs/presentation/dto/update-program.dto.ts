@@ -2,10 +2,10 @@ import { IsString, IsOptional, IsNumber, IsDateString, IsBoolean, IsUUID } from 
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateProgramDto {
-    @ApiProperty({ description: 'Brand ID (Program Category ID)', required: false })
+    @ApiProperty({ description: 'Brand ID', required: false })
     @IsUUID()
     @IsOptional()
-    programCategoryId?: string;
+    brandId?: string;
 
     @ApiProperty({ description: 'Program name', required: false })
     @IsString()

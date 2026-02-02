@@ -56,7 +56,7 @@ describe('ManageProgramContentHandlers', () => {
             const command = new CreateProgramSpeakerCommand(dto, 'user-1', file);
 
             // Mock Program existence for Brand ID lookup
-            mockPrismaService.program.findUnique.mockResolvedValue({ id: 'prog-1', programCategoryId: 'brand-1' });
+            mockPrismaService.program.findUnique.mockResolvedValue({ id: 'prog-1', brandId: 'brand-1' });
             
             // Mock Upload
             mockStorageService.uploadFile.mockResolvedValue({ url: 'http://cdn/photo.jpg' });
@@ -109,7 +109,7 @@ describe('ManageProgramContentHandlers', () => {
             mockRepository.findSpeakerById.mockResolvedValue({ id: 'spk-1', programId: 'prog-1' });
 
             // Mock Program Lookup
-            mockPrismaService.program.findUnique.mockResolvedValue({ id: 'prog-1', programCategoryId: 'brand-1' });
+            mockPrismaService.program.findUnique.mockResolvedValue({ id: 'prog-1', brandId: 'brand-1' });
 
             // Mock Upload
             mockStorageService.uploadFile.mockResolvedValue({ url: 'http://cdn/new.jpg' });

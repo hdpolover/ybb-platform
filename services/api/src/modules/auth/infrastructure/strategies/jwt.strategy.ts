@@ -7,7 +7,7 @@ import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.s
 export interface JwtPayload {
   sub: string;
   email: string;
-  programCategoryId: string;
+  brandId: string;
   jti?: string; // JWT unique token ID for blacklisting
   exp?: number; // Token expiration timestamp
   roles?: string[]; // Roles from token
@@ -41,7 +41,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     return {
       userId: payload.sub,
       email: payload.email,
-      programCategoryId: payload.programCategoryId,
+      brandId: payload.brandId,
       jti: payload.jti,
       exp: payload.exp,
       role: payload.roles || [], // Map roles to role for RolesGuard compatibility

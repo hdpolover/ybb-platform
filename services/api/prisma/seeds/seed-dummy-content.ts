@@ -39,7 +39,7 @@ export async function seedDummyContent() {
   ];
 
   for (const cat of categoriesData) {
-    const brand = await prisma.programCategory.upsert({
+    const brand = await prisma.brand.upsert({
       where: { slug: cat.slug },
       update: {},
       create: {
@@ -53,7 +53,7 @@ export async function seedDummyContent() {
   }
 
   // Also seed dummy content for existing brands (WYF, YAF, JYS) if they exist
-  const existingBrands = await prisma.programCategory.findMany({
+  const existingBrands = await prisma.brand.findMany({
       where: {
           slug: { in: [BRANDS.WYF, BRANDS.YAF, BRANDS.JYS] }
       }
@@ -75,11 +75,11 @@ async function seedDummyProgram(brandId: string, brandSlug: string, brandName: s
     // Create/Upsert Program
     const program = await prisma.program.upsert({
         where: {
-            programCategoryId_slug: { programCategoryId: brandId, slug: programSlug }
+            brandId_slug: { brandId: brandId, slug: programSlug }
         },
         update: {},
         create: {
-            programCategoryId: brandId,
+            brandId: brandId,
             name: programName,
             slug: programSlug,
             year: year,

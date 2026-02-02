@@ -5,18 +5,28 @@ import { CreateLegalDocumentDto } from './dto/create-legal-document.dto';
 import { UpdateLegalDocumentDto } from './dto/update-legal-document.dto';
 import { LegalDocumentResponseDto } from './dto/legal-document-response.dto';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
+import { LegalDocument } from '@prisma/client';
 
 @ApiTags('Legal')
 @Controller('brands/:brandSlug/legal-documents')
 export class LegalDocumentController {
     constructor(private readonly service: LegalDocumentService) {}
 
+    private toDto(doc: LegalDocument): LegalDocumentResponseDto {
+        const { brandId, ...rest } = doc;
+        return {
+            ...rest,
+            brandId: brandId,
+        };
+    }
+
     @Get()
     @ApiOperation({ summary: 'List all active legal documents for a brand (Public)' })
     @ApiParam({ name: 'brandSlug', description: 'The slug of the brand (e.g., ybb, iys)' })
     @ApiResponse({ status: 200, description: 'List of legal documents', type: [LegalDocumentResponseDto] })
     async list(@Param('brandSlug') brandSlug: string) {
-        return this.service.findAllByBrand(brandSlug);
+        const docs = await this.service.findAllByBrand(brandSlug);
+        return docs.map(doc => this.toDto(doc));
     }
 
     @Get(':typeSlug')
@@ -26,7 +36,8 @@ export class LegalDocumentController {
     @ApiResponse({ status: 200, description: 'The legal document', type: LegalDocumentResponseDto })
     @ApiNotFoundResponse({ description: 'Document not found' })
     async get(@Param('brandSlug') brandSlug: string, @Param('typeSlug') typeSlug: string) {
-        return this.service.findOneByBrandAndType(brandSlug, typeSlug);
+        const doc = await this.service.findOneByBrandAndType(brandSlug, typeSlug);
+        return this.toDto(doc);
     }
 
     @Post()
@@ -41,7 +52,8 @@ export class LegalDocumentController {
         @Param('brandSlug') brandSlug: string,
         @Body() dto: CreateLegalDocumentDto
     ) {
-        return this.service.create(brandSlug, dto);
+        const doc = await this.service.create(brandSlug, dto);
+        return this.toDto(doc);
     }
 
     @Put(':id')
@@ -57,7 +69,8 @@ export class LegalDocumentController {
         @Param('id') id: string,
         @Body() dto: UpdateLegalDocumentDto
     ) {
-        return this.service.update(id, dto);
+        const doc = await this.service.update(id, dto);
+        return this.toDto(doc);
     }
 
     @Delete(':id')

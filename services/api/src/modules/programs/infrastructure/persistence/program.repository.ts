@@ -8,10 +8,10 @@ export class ProgramRepository implements IProgramRepository {
     constructor(private readonly prisma: PrismaService) { }
 
     async findAll(params: FindAllProgramsParams): Promise<FindAllProgramsResult> {
-        const { programCategoryId, year, isPublished, page = 1, limit = 10 } = params;
+        const { brandId, year, isPublished, isActive, status, page = 1, limit = 10 } = params;
         
         const where: any = {
-            programCategoryId,
+            brandId,
             deletedAt: null,
         };
 
@@ -21,6 +21,14 @@ export class ProgramRepository implements IProgramRepository {
 
         if (isPublished !== undefined) {
             where.isPublished = isPublished;
+        }
+
+        if (isActive !== undefined) {
+            where.isActive = isActive;
+        }
+
+        if (status !== undefined) {
+            where.status = status;
         }
 
         const skip = (page - 1) * limit;
@@ -51,13 +59,13 @@ export class ProgramRepository implements IProgramRepository {
         return program ? this.mapToEntity(program) : null;
     }
 
-    async findBySlug(slug: string, programCategoryId?: string): Promise<Program | null> {
+    async findBySlug(slug: string, brandId?: string): Promise<Program | null> {
         const where: any = { slug };
-        if (programCategoryId) {
-            where.programCategoryId = programCategoryId;
+        if (brandId) {
+            where.brandId = brandId;
         }
         
-        // If programCategoryId is provided, we can use the compound unique index if it exists, 
+        // If brandId is provided, we can use the compound unique index if it exists, 
         // but since slug is usually unique globally or we want to find by slug regardless, 
         // we might need to adjust. Assuming slug is unique per category or globally.
         // If slug is unique globally, just { slug } is enough.
@@ -65,13 +73,13 @@ export class ProgramRepository implements IProgramRepository {
         
         // Let's assume we search by slug and optionally filter by category if provided.
         // But findUnique requires a unique constraint.
-        // If the schema has @@unique([programCategoryId, slug]), we should use that if both are present.
+        // If the schema has @@unique([brandId, slug]), we should use that if both are present.
         
-        if (programCategoryId) {
+        if (brandId) {
              const program = await this.prisma.program.findUnique({
                 where: {
-                    programCategoryId_slug: {
-                        programCategoryId,
+                    brandId_slug: {
+                        brandId,
                         slug,
                     },
                 },
@@ -89,7 +97,7 @@ export class ProgramRepository implements IProgramRepository {
     async create(data: Partial<Program>): Promise<Program> {
         const program = await this.prisma.program.create({
             data: {
-                programCategoryId: data.programCategoryId!,
+                brandId: data.brandId!,
                 name: data.name!,
                 slug: data.slug!,
                 description: data.description,
@@ -179,7 +187,7 @@ export class ProgramRepository implements IProgramRepository {
     private mapToEntity(prismaEntity: any): Program {
         return new Program(
             prismaEntity.id,
-            prismaEntity.programCategoryId,
+            prismaEntity.brandId,
             prismaEntity.name,
             prismaEntity.slug,
             prismaEntity.description,

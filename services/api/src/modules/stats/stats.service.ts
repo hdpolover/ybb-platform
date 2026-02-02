@@ -2,7 +2,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../shared/infrastructure/prisma/prisma.service';
 import { GetStatsQueryDto, StatSection } from './dto/get-stats.dto';
-import { ProgramCategory } from '@prisma/client';
+import { Brand } from '@prisma/client';
 import { StatsResponseDto, ParticipantGeographyItemDto } from './dto/stats-response.dto';
 
 @Injectable()
@@ -35,19 +35,19 @@ export class StatsService {
     return response;
   }
 
-  private async resolveContext(query: GetStatsQueryDto): Promise<ProgramCategory | null> {
-    if (query.programCategoryId) {
-      return this.prisma.programCategory.findUnique({ where: { id: query.programCategoryId } });
+  private async resolveContext(query: GetStatsQueryDto): Promise<Brand | null> {
+    if (query.brandId) {
+      return this.prisma.brand.findUnique({ where: { id: query.brandId } });
     }
 
     if (query.url) {
       // Reusing logic from landing service strategy - find by url
-      let category = await this.prisma.programCategory.findFirst({
+      let category = await this.prisma.brand.findFirst({
         where: { websiteUrl: query.url, isActive: true },
       });
 
       if (!category) {
-        category = await this.prisma.programCategory.findFirst({
+        category = await this.prisma.brand.findFirst({
           where: { websiteUrl: { contains: query.url, mode: 'insensitive' }, isActive: true },
         });
       }
@@ -55,7 +55,7 @@ export class StatsService {
     }
 
     // Default fallbacks if needed, or return null
-    return this.prisma.programCategory.findFirst({
+    return this.prisma.brand.findFirst({
       where: { isActive: true },
       orderBy: { createdAt: 'asc' }
     });
@@ -63,12 +63,12 @@ export class StatsService {
 
   private async getImpactStats(categoryId: string) {
     const totalParticipants = await this.prisma.participant.count({
-      where: { user: { programCategoryId: categoryId } },
+      where: { user: { brandId: categoryId } },
     });
 
     const alumni = await this.prisma.participantApplication.count({
       where: {
-        program: { programCategoryId: categoryId },
+        program: { brandId: categoryId },
         status: { in: ['accepted', 'interview_scheduled'] },
       },
     });
@@ -78,7 +78,7 @@ export class StatsService {
     // Optimization: Depending on DB size, could assume geography list length if page limit is high, but distinct count is better.
     const distinctCountries = await this.prisma.participant.findMany({
       where: {
-        user: { programCategoryId: categoryId },
+        user: { brandId: categoryId },
         originCountry: { not: null },
       },
       distinct: ['originCountry'],
@@ -97,7 +97,7 @@ export class StatsService {
 
     // 1. Get Totals first for percentage calculation
     const totalParticipants = await this.prisma.participant.count({
-      where: { user: { programCategoryId: categoryId } },
+      where: { user: { brandId: categoryId } },
     });
 
     if (totalParticipants === 0) return { items: [], meta: { total: 0, page, limit, totalPages: 0 } };
@@ -109,7 +109,7 @@ export class StatsService {
     const grouped = await this.prisma.participant.groupBy({
       by: ['originCountry'],
       where: {
-        user: { programCategoryId: categoryId },
+        user: { brandId: categoryId },
         originCountry: { not: null },
       },
       _count: { id: true },
@@ -128,7 +128,7 @@ export class StatsService {
     // Prisma:
      const distinctCountriesCount = (await this.prisma.participant.findMany({
       where: {
-        user: { programCategoryId: categoryId },
+        user: { brandId: categoryId },
         originCountry: { not: null },
       },
       distinct: ['originCountry'],

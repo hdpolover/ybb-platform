@@ -37,12 +37,12 @@ describe('LandingController', () => {
 
   describe('getSettings', () => {
     it('should prefer URL query param', async () => {
-      await controller.getSettings('ybb.co', { 'x-brand-domain': 'other.com' });
+      await controller.getSettings('ybb.co');
       expect(mockService.getSettings).toHaveBeenCalledWith('ybb.co');
     });
 
     it('should fallback to header if URL missing', async () => {
-        await controller.getSettings(undefined, { 'x-brand-domain': 'other.com' });
+        await controller.getSettings('other.com');
         expect(mockService.getSettings).toHaveBeenCalledWith('other.com');
     });
   });

@@ -32,6 +32,7 @@ import {
   ListProgramPricingTiersHandler,
   ListProgramRequirementsHandler,
   ListProgramEssaysHandler,
+  ListProgramParticipationCategoriesHandler,
 } from './application/queries/handlers/list-program-content.handlers';
 import {
   CreateProgramTimelineHandler, UpdateProgramTimelineHandler, DeleteProgramTimelineHandler,
@@ -46,6 +47,7 @@ import {
   CreateProgramPricingTierHandler, UpdateProgramPricingTierHandler, DeleteProgramPricingTierHandler,
   CreateProgramRequirementHandler, UpdateProgramRequirementHandler, DeleteProgramRequirementHandler,
   CreateProgramEssayHandler, UpdateProgramEssayHandler, DeleteProgramEssayHandler,
+  CreateProgramParticipationCategoryHandler, UpdateProgramParticipationCategoryHandler, DeleteProgramParticipationCategoryHandler,
 } from './application/commands/handlers/manage-program-content.handlers';
 import {
   CreateApplicationFormFieldHandler,
@@ -84,6 +86,7 @@ import { CacheService } from '../../shared/infrastructure/cache/cache.service';
     ListProgramPricingTiersHandler,
     ListProgramRequirementsHandler,
     ListProgramEssaysHandler,
+    ListProgramParticipationCategoriesHandler,
     // Content Management Handlers
     CreateProgramTimelineHandler, UpdateProgramTimelineHandler, DeleteProgramTimelineHandler,
     CreateProgramScheduleHandler, UpdateProgramScheduleHandler, DeleteProgramScheduleHandler,
@@ -97,6 +100,7 @@ import { CacheService } from '../../shared/infrastructure/cache/cache.service';
     CreateProgramPricingTierHandler, UpdateProgramPricingTierHandler, DeleteProgramPricingTierHandler,
     CreateProgramRequirementHandler, UpdateProgramRequirementHandler, DeleteProgramRequirementHandler,
     CreateProgramEssayHandler, UpdateProgramEssayHandler, DeleteProgramEssayHandler,
+    CreateProgramParticipationCategoryHandler, UpdateProgramParticipationCategoryHandler, DeleteProgramParticipationCategoryHandler,
     // Form Field Handlers
     CreateApplicationFormFieldHandler,
     UpdateApplicationFormFieldHandler,
@@ -119,6 +123,6 @@ import { CacheService } from '../../shared/infrastructure/cache/cache.service';
       useClass: ProgramRepository,
     },
   ],
-  exports: ['IProgramContentRepository', 'IProgramRepository'],
+  exports: ['IProgramContentRepository', 'IProgramRepository', ListProgramsHandler],
 })
 export class ProgramsModule { }

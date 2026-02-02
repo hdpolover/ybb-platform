@@ -16,14 +16,14 @@ export class UpdateProgramBrandingHandler implements ICommandHandler<UpdateProgr
 
         const program = await this.prisma.program.findUnique({
              where: { id: programId },
-             include: { programCategory: true } 
+             include: { brand: true } 
         });
 
         if (!program) {
             throw new NotFoundException(`Program with ID ${programId} not found`);
         }
 
-        const brandId = program.programCategoryId;
+        const brandId = program.brandId;
         const updates: any = {};
 
         if (files.logo) {

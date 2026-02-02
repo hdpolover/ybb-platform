@@ -131,14 +131,14 @@ export class PaymentAdminController {
      * If the icon string is already a URL or not a UUID, it is returned as is.
      */
     private async resolveIconUrl(icon: string, user: CurrentUserData): Promise<string> {
-        this.logger.log(`Resolving icon UUID: ${icon}. User: ${user.userId}, Brand: ${user.programCategoryId}`);
+        this.logger.log(`Resolving icon UUID: ${icon}. User: ${user.userId}, Brand: ${user.brandId}`);
         if (!this.isValidUUID(icon)) {
             this.logger.debug(`Icon ${icon} is not a valid UUID, returning as is`);
             return icon;
         }
 
         try {
-            const fileInfo = await this.fileService.getFile(icon, user.userId, user.programCategoryId);
+            const fileInfo = await this.fileService.getFile(icon, user.userId, user.brandId);
             this.logger.log(`Resolved file info received`);
             
             // Handle various possible response structures from File Service

@@ -55,7 +55,7 @@ export class MetricsService implements OnModuleInit {
         this.userRegistrationsTotal = new Counter({
             name: 'business_user_registrations_total',
             help: 'Total number of user registrations',
-            labelNames: ['provider', 'program_category'],
+            labelNames: ['provider', 'brand'],
             registers: [this.registry],
         });
 
@@ -88,14 +88,14 @@ export class MetricsService implements OnModuleInit {
         this.applicationStartedTotal = new Counter({
             name: 'business_applications_started_total',
             help: 'Total number of applications started (draft)',
-            labelNames: ['program_category'],
+            labelNames: ['brand'],
             registers: [this.registry],
         });
 
         this.applicationSubmittedTotal = new Counter({
             name: 'business_applications_submitted_total',
             help: 'Total number of applications submitted',
-            labelNames: ['program_category'],
+            labelNames: ['brand'],
             registers: [this.registry],
         });
 

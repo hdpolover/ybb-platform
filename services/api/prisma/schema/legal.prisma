@@ -4,7 +4,7 @@
 
 model LegalDocument {
   id                String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programCategoryId String @map("program_category_id") @db.Uuid
+  brandId String @map("brand_id") @db.Uuid
 
   title   String @db.VarChar(255) // "Privacy Policy", "Terms of Service"
   slug    String @db.VarChar(255) // "privacy-policy", "terms-of-service"
@@ -21,10 +21,10 @@ model LegalDocument {
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
-  programCategory ProgramCategory @relation(fields: [programCategoryId], references: [id], onDelete: Cascade)
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
 
-  @@unique([programCategoryId, slug, version])
-  @@index([programCategoryId])
+  @@unique([brandId, slug, version])
+  @@index([brandId])
   @@index([slug])
   @@map("legal_documents")
 }

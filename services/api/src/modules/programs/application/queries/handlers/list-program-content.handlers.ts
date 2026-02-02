@@ -14,6 +14,7 @@ import {
     ListProgramPricingTiersQuery,
     ListProgramRequirementsQuery,
     ListProgramEssaysQuery,
+    ListProgramParticipationCategoriesQuery,
 } from '../list-program-content.queries';
 
 async function resolveProgramId(
@@ -309,6 +310,29 @@ export class ListProgramEssaysHandler {
             ...item,
             description: item.description ?? undefined,
             wordLimit: item.wordLimit ?? undefined,
+        }));
+    }
+}
+
+@Injectable()
+export class ListProgramParticipationCategoriesHandler {
+    constructor(
+        @Inject('IProgramContentRepository')
+        private readonly repository: IProgramContentRepository,
+        @Inject('IProgramRepository')
+        private readonly programRepository: IProgramRepository,
+    ) { }
+
+    async execute(query: ListProgramParticipationCategoriesQuery) {
+        const programId = await resolveProgramId(this.programRepository, query.programId);
+        if (!programId) return [];
+
+        const items = await this.repository.findParticipationCategoriesByProgramId(programId);
+        return items.map(item => ({
+            ...item,
+            description: item.description ?? undefined,
+            benefits: item.benefits ?? undefined,
+            eligibility: item.eligibility ?? undefined,
         }));
     }
 }

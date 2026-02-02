@@ -12,7 +12,7 @@ export async function seedBrands() {
   log('🌱 Seeding Brands...');
 
   // 1. IYS (Primary Brand for this seed)
-  const iys = await prisma.programCategory.upsert({
+  const iys = await prisma.brand.upsert({
     where: { slug: BRANDS.IYS },
     update: {},
     create: {
@@ -29,7 +29,7 @@ export async function seedBrands() {
   });
 
   // 2. YAF
-  const yaf = await prisma.programCategory.upsert({
+  const yaf = await prisma.brand.upsert({
     where: { slug: BRANDS.YAF },
     update: {},
     create: {
@@ -46,7 +46,7 @@ export async function seedBrands() {
   });
 
   // 3. WYF
-  await prisma.programCategory.upsert({
+  await prisma.brand.upsert({
     where: { slug: BRANDS.WYF },
     update: {},
     create: {
@@ -62,7 +62,7 @@ export async function seedBrands() {
   });
 
   // 4. JYS
-  await prisma.programCategory.upsert({
+  await prisma.brand.upsert({
     where: { slug: BRANDS.JYS },
     update: {},
     create: {

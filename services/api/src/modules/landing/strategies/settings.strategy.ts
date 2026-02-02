@@ -1,13 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
-import { ProgramCategory } from '@prisma/client';
+import { Brand } from '@prisma/client';
 import { LandingSettingsResponseDto } from '../dto/landing-settings.dto';
 
 @Injectable()
 export class SettingsStrategy {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getData(category: ProgramCategory | null): Promise<LandingSettingsResponseDto> {
+  async getData(category: Brand | null): Promise<LandingSettingsResponseDto> {
     if (!category) {
         return {
             maintenance: { is_maintenance_mode: false },
@@ -17,8 +17,8 @@ export class SettingsStrategy {
         };
     }
 
-    const settings = await this.prisma.programCategorySetting.findUnique({
-        where: { programCategoryId: category.id }
+    const settings = await this.prisma.brandSetting.findUnique({
+        where: { brandId: category.id }
     });
 
     return {
