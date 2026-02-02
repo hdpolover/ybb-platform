@@ -139,6 +139,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     // We patch ALL models to ensure monitoring logic applies to everything
     // Not just soft-delete models
     const models = Prisma.dmmf.datamodel.models;
+    console.log('Available Models in DMMF:', models.map(m => m.name).join(', '));
     for (const model of models) {
       // Always patch the model to use the extended client (which includes monitoring)
       const camelCaseName = toCamelCase(model.name);
