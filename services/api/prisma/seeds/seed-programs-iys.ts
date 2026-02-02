@@ -127,42 +127,50 @@ export async function seedIYSPrograms() {
       await prisma.programSubtheme.create({ data: { programId: iys2026.id, ...s, isActive: true } });
   }
 
-  // Pricing
-  await prisma.programPricingTier.deleteMany({ where: { programId: iys2026.id } });
+  // Pricing - UPSERT STRATEGY (Avoid deleting tiers referenced by invoices)
+  const existingTiers = await prisma.programPricingTier.findMany({ where: { programId: iys2026.id } });
+  
+  const upsertTier = async (data: any, feeType: PricingFeeType) => {
+      const existing = existingTiers.find(t => t.feeType === feeType);
+      if (existing) {
+          return prisma.programPricingTier.update({
+              where: { id: existing.id },
+              data
+          });
+      } else {
+          return prisma.programPricingTier.create({ data });
+      }
+  };
   
   // Tier 1: Fully Funded
-  await prisma.programPricingTier.create({
-      data: {
-          programId: iys2026.id,
-          name: 'Fully Funded Scholarship',
-          description: 'Highly competitive scholarship covering all costs.',
-          price: 15.00,
-          currency: 'USD',
-          feeType: PricingFeeType.registration_fee,
-          allowedCategories: [ApplicationCategory.fully_funded],
-          benefits: ['Flight Ticket', 'Accommodation', 'All Meals', 'Gala Dinner', 'Conference Kit'],
-          requirements: ['Essay Submission', 'Interview', 'Eligible Age 17-30'],
-          order: 1,
-          isActive: true
-      }
-  });
+  await upsertTier({
+      programId: iys2026.id,
+      name: 'Fully Funded Scholarship',
+      description: 'Highly competitive scholarship covering all costs.',
+      price: 15.00,
+      currency: 'USD',
+      feeType: PricingFeeType.registration_fee,
+      allowedCategories: [ApplicationCategory.fully_funded],
+      benefits: ['Flight Ticket', 'Accommodation', 'All Meals', 'Gala Dinner', 'Conference Kit'],
+      requirements: ['Essay Submission', 'Interview', 'Eligible Age 17-30'],
+      order: 1,
+      isActive: true
+  }, PricingFeeType.registration_fee);
 
   // Tier 2: Self Funded
-  await prisma.programPricingTier.create({
-      data: {
-          programId: iys2026.id,
-          name: 'Self Funded',
-          description: 'Guaranteed entry for self-funded delegates.',
-          price: 450.00,
-          currency: 'USD',
-          feeType: PricingFeeType.full_fee,
-          allowedCategories: [ApplicationCategory.self_funded],
-          benefits: ['Accommodation (4 Days)', 'Meals during session', 'Conference Kit', 'Gala Dinner'],
-          requirements: ['Proof of Payment', 'Valid Passport'],
-          order: 2,
-          isActive: true
-      }
-  });
+  await upsertTier({
+      programId: iys2026.id,
+      name: 'Self Funded',
+      description: 'Guaranteed entry for self-funded delegates.',
+      price: 450.00,
+      currency: 'USD',
+      feeType: PricingFeeType.full_fee,
+      allowedCategories: [ApplicationCategory.self_funded],
+      benefits: ['Accommodation (4 Days)', 'Meals during session', 'Conference Kit', 'Gala Dinner'],
+      requirements: ['Proof of Payment', 'Valid Passport'],
+      order: 2,
+      isActive: true
+  }, PricingFeeType.full_fee);
 
   // Speakers
   await prisma.programSpeaker.deleteMany({ where: { programId: iys2026.id } });
@@ -390,26 +398,51 @@ export async function seedIYSPrograms() {
     ]
   });
 
-  // Participation Categories
-  await prisma.programParticipationCategory.deleteMany({ where: { programId: iys2026.id } });
-  await prisma.programParticipationCategory.createMany({
-    data: [
-      {
-        programId: iys2026.id,
-        name: "Delegate",
-        description: "Active participants involved in all sessions and projects.",
-        order: 1,
-        isActive: true
-      },
-      {
-        programId: iys2026.id,
-        name: "Observer",
-        description: "Participants who attend sessions but do not compete in projects.",
-        order: 2,
-        isActive: true
+  // Participation Categories - Upsert Strategy
+  const participationCats = [
+    {
+      name: "High School Students",
+      description: "Targeted for students currently enrolled in high school.",
+      order: 1,
+      isActive: true
+    },
+    {
+      name: "Future Innovators",
+      description: "Open for public (University Students, Fresh Graduates, General).",
+      order: 2,
+      isActive: true
+    }
+  ];
+
+  // Avoid deleteMany due to FK
+  const existingCats = await prisma.programParticipationCategory.findMany({ where: { programId: iys2026.id } });
+
+  // Deactivate Legacy Categories (Delegate, Observer) if they exist
+  // This ensures we switch to the new naming without breaking FK constraints on old invoices/applications
+  const legacyNames = ["Delegate", "Observer"];
+  for (const name of legacyNames) {
+      const legacy = existingCats.find(c => c.name === name);
+      if (legacy) {
+          await prisma.programParticipationCategory.update({
+              where: { id: legacy.id },
+              data: { isActive: false }
+          });
       }
-    ]
-  });
+  }
+
+  for (const cat of participationCats) {
+      const existing = existingCats.find(c => c.name === cat.name);
+      if (existing) {
+          await prisma.programParticipationCategory.update({
+              where: { id: existing.id },
+              data: cat
+          });
+      } else {
+          await prisma.programParticipationCategory.create({
+              data: { ...cat, programId: iys2026.id }
+          });
+      }
+  }
 
   // Program Testimonials
   await prisma.programTestimonial.deleteMany({ where: { programId: iys2026.id } });
@@ -497,34 +530,44 @@ export async function seedIYSPrograms() {
     ]
   });
 
-  // Awards
-  await prisma.programAward.deleteMany({ where: { programId: iys2026.id } });
-  await prisma.programAward.createMany({
-    data: [
-      {
-        programId: iys2026.id,
-        name: "Best Delegate",
-        category: "Individual",
-        tier: "gold",
-        description: "Awarded to the most active and contributing delegate.",
-        tags: ["Trophy", "Certificate"],
-        iconUrl: "https://placehold.co/100x100?text=Best+Delegate",
-        order: 1,
-        isActive: true
-      },
-      {
-        programId: iys2026.id,
-        name: "Best Social Project",
-        category: "Group",
-        tier: "gold",
-        description: "Awarded to the group with the most impactful project proposal.",
-        tags: ["Funding", "Mentorship"],
-        iconUrl: "https://placehold.co/100x100?text=Best+Project",
-        order: 2,
-        isActive: true
+  // Awards - Upsert Strategy
+  const awardsData = [
+    {
+      name: "Best Delegate",
+      category: "Individual",
+      tier: "gold",
+      description: "Awarded to the most active and contributing delegate.",
+      tags: ["Trophy", "Certificate"],
+      iconUrl: "https://placehold.co/100x100?text=Best+Delegate",
+      order: 1,
+      isActive: true
+    },
+    {
+      name: "Best Social Project",
+      category: "Group",
+      tier: "gold",
+      description: "Awarded to the group with the most impactful project proposal.",
+      tags: ["Funding", "Mentorship"],
+      iconUrl: "https://placehold.co/100x100?text=Best+Project",
+      order: 2,
+      isActive: true
+    }
+  ];
+
+  const existingAwards = await prisma.programAward.findMany({ where: { programId: iys2026.id } });
+  for (const award of awardsData) {
+      const existing = existingAwards.find(a => a.name === award.name);
+      if (existing) {
+          await prisma.programAward.update({
+              where: { id: existing.id },
+              data: award
+          });
+      } else {
+          await prisma.programAward.create({
+              data: { ...award, programId: iys2026.id }
+          });
       }
-    ]
-  });
+  }
 
   // Program Committee
   await prisma.programTeam.deleteMany({ where: { programId: iys2026.id } });
@@ -686,32 +729,42 @@ export async function seedIYSPrograms() {
   // Program Participation Info (Handling Categories: Fully Funded / Self Funded)
   // This is CRITICAL for the registration handler to allow these categories
   // ==========================================
-  await prisma.programParticipationInfo.deleteMany({ where: { programId: iys2026.id } });
+  // await prisma.programParticipationInfo.deleteMany({ where: { programId: iys2026.id } });
+
+  const existingInfos = await prisma.programParticipationInfo.findMany({ where: { programId: iys2026.id } });
   
-  // 1. Fully Funded Info
-  await prisma.programParticipationInfo.create({
-      data: {
-          programId: iys2026.id,
-          category: ApplicationCategory.fully_funded,
-          heroTitle: "Fully Funded Scholarship",
-          heroDescription: "Compete for a fully funded chance to attend IYS 2026.",
-          benefits: ["Flight Ticket (Round Trip)", "Hotel Accommodation", "Airport Transfer", "Meals & Kits"],
-          requirements: ["Submit Essay", "Pass Interview", "Social Project Presentation"],
-          isActive: true
+  const upsertInfo = async (infoData: any) => {
+      const existing = existingInfos.find(i => i.category === infoData.category);
+      if (existing) {
+          await prisma.programParticipationInfo.update({
+              where: { id: existing.id },
+              data: infoData // exclude ID
+          });
+      } else {
+          await prisma.programParticipationInfo.create({
+              data: { ...infoData, programId: iys2026.id }
+          });
       }
+  };
+
+  // 1. Fully Funded Info
+  await upsertInfo({
+      category: ApplicationCategory.fully_funded,
+      heroTitle: "Fully Funded Scholarship",
+      heroDescription: "Compete for a fully funded chance to attend IYS 2026.",
+      benefits: ["Flight Ticket (Round Trip)", "Hotel Accommodation", "Airport Transfer", "Meals & Kits"],
+      requirements: ["Submit Essay", "Pass Interview", "Social Project Presentation"],
+      isActive: true
   });
 
   // 2. Self Funded Info
-  await prisma.programParticipationInfo.create({
-      data: {
-          programId: iys2026.id,
-          category: ApplicationCategory.self_funded,
-          heroTitle: "Self Funded Delegate",
-          heroDescription: "Secure your spot at the summit with guaranteed entry.",
-          benefits: ["Hotel Accommodation", "Conference Meals", "Certificate", "Networking"],
-          requirements: ["Pay Registration Fee", "Valid Passport"],
-          isActive: true
-      }
+  await upsertInfo({
+      category: ApplicationCategory.self_funded,
+      heroTitle: "Self Funded Delegate",
+      heroDescription: "Secure your spot at the summit with guaranteed entry.",
+      benefits: ["Hotel Accommodation", "Conference Meals", "Certificate", "Networking"],
+      requirements: ["Pay Registration Fee", "Valid Passport"],
+      isActive: true
   });
 
   log('✅ IYS Programs seeded (2025: Inactive, 2026: Active with content)');

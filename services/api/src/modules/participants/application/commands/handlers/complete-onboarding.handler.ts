@@ -28,6 +28,8 @@ export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboar
                     fullName: dto.fullName,
                     gender: dto.gender as Gender,
                     originCountry: country.isoCode, // Ensure we save the standardized code
+                    originCity: dto.originCity,
+                    birthdate: new Date(dto.birthDate),
                     knowledgeSource: dto.knowledgeSource,
                     referralCode: dto.referralCode,
                     profileCompletedAt: new Date(),
@@ -38,6 +40,8 @@ export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboar
                     fullName: dto.fullName,
                     gender: dto.gender as Gender,
                     originCountry: country.isoCode,
+                    originCity: dto.originCity,
+                    birthdate: new Date(dto.birthDate),
                     knowledgeSource: dto.knowledgeSource,
                     // Only set profileCompletedAt if it wasn't set before
                     profileCompletedAt: new Date(), 

@@ -23,6 +23,16 @@ export class OnboardingDto {
     @IsNotEmpty()
     originCountry: string;
 
+    @ApiProperty({ example: 'Jakarta', description: 'Origin city' })
+    @IsString()
+    @IsNotEmpty()
+    originCity: string;
+
+    @ApiProperty({ example: '2000-01-01', description: 'Date of birth (YYYY-MM-DD)' })
+    @IsDateString()
+    @IsNotEmpty()
+    birthDate: string;
+
     @ApiProperty({ example: 'Instagram', description: 'Where did you hear about us?' })
     @IsString()
     @IsNotEmpty()
