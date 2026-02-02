@@ -4,6 +4,10 @@ import { AuthModule } from '@modules/auth/auth.module';
 import { UsersModule } from '@modules/users/users.module';
 import { FilesModule } from '@modules/files/files.module';
 import { ProgramsController } from './presentation/programs.controller';
+import { ProgramScheduleController } from './presentation/program-schedule.controller';
+import { ProgramPeopleController } from './presentation/program-people.controller';
+import { ProgramContentController } from './presentation/program-content.controller';
+import { ProgramApplicationConfigController } from './presentation/program-application.controller';
 import { ProgramParticipationController } from './presentation/program-participation.controller';
 import { ProgramLandingController } from './presentation/program-landing.controller';
 import {
@@ -63,7 +67,15 @@ import { CacheService } from '../../shared/infrastructure/cache/cache.service';
 
 @Module({
   imports: [CqrsModule, AuthModule, UsersModule, FilesModule],
-  controllers: [ProgramsController, ProgramParticipationController, ProgramLandingController],
+  controllers: [
+    ProgramsController,
+    ProgramScheduleController,
+    ProgramPeopleController,
+    ProgramContentController,
+    ProgramApplicationConfigController,
+    ProgramParticipationController,
+    ProgramLandingController,
+  ],
   providers: [
     ListProgramsHandler,
     GetProgramDetailHandler,

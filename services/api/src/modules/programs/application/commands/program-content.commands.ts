@@ -58,10 +58,19 @@ export class DeleteProgramSpeakerCommand {
 
 // Gallery
 export class CreateProgramGalleryCommand {
-    constructor(public readonly dto: CreateProgramGalleryDto, public readonly userId: string) { }
+    constructor(
+        public readonly dto: CreateProgramGalleryDto, 
+        public readonly userId: string,
+        public readonly image?: any
+    ) { }
 }
 export class UpdateProgramGalleryCommand {
-    constructor(public readonly id: string, public readonly dto: UpdateProgramGalleryDto, public readonly userId: string) { }
+    constructor(
+        public readonly id: string, 
+        public readonly dto: UpdateProgramGalleryDto, 
+        public readonly userId: string,
+        public readonly image?: any
+    ) { }
 }
 export class DeleteProgramGalleryCommand {
     constructor(public readonly id: string, public readonly userId: string) { }
