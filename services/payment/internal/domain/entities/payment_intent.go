@@ -20,7 +20,7 @@ const (
 type PaymentIntent struct {
 	ID            string              `gorm:"primaryKey;type:uuid;default:gen_random_uuid()" json:"id"`
 	UserID        string              `gorm:"type:uuid;not null;index" json:"user_id"`
-	ParticipantID string              `gorm:"type:uuid" json:"participant_id"`
+	ParticipantID *string             `gorm:"type:uuid" json:"participant_id"`
 	ReferenceType string              `gorm:"type:varchar(50);not null" json:"reference_type"`
 	ReferenceID   string              `gorm:"type:varchar(100);not null;index" json:"reference_id"`
 	Amount        float64             `gorm:"type:decimal(15,2);not null" json:"amount"`
@@ -29,8 +29,8 @@ type PaymentIntent struct {
 	Metadata      json.RawMessage     `gorm:"type:jsonb" json:"metadata"`
 	ClientSecret  string              `gorm:"type:varchar(255)" json:"client_secret"` // For some gateways
 
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 

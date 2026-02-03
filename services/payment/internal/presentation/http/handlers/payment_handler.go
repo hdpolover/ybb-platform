@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/ybb-platform/payment/internal/application/dto"
 
+	"github.com/ybb-platform/payment/internal/domain/entities"
 	"github.com/ybb-platform/payment/internal/domain/events"
 	"github.com/ybb-platform/payment/internal/domain/repositories"
 	infraGateways "github.com/ybb-platform/payment/internal/infrastructure/gateways"
@@ -40,6 +42,8 @@ type PaymentHandler struct {
 	retryPaymentHandler  *commandHandlers.RetryPaymentHandler
 
 	paymentRepo    repositories.PaymentRepository
+	intentRepo     repositories.PaymentIntentRepository
+	txRepo         repositories.PaymentTransactionRepository
 	eventPublisher messaging.EventPublisher
 	gatewayFactory *infraGateways.GatewayFactory
 }
@@ -55,6 +59,8 @@ func NewPaymentHandler(
 	retryHandler *commandHandlers.RetryPaymentHandler,
 
 	paymentRepo repositories.PaymentRepository,
+	intentRepo repositories.PaymentIntentRepository,
+	txRepo repositories.PaymentTransactionRepository,
 	eventPublisher messaging.EventPublisher,
 	gatewayFactory *infraGateways.GatewayFactory,
 ) *PaymentHandler {
@@ -68,6 +74,8 @@ func NewPaymentHandler(
 		retryPaymentHandler:  retryHandler,
 
 		paymentRepo:    paymentRepo,
+		intentRepo:     intentRepo,
+		txRepo:         txRepo,
 		eventPublisher: eventPublisher,
 		gatewayFactory: gatewayFactory,
 	}
@@ -220,33 +228,38 @@ func (h *PaymentHandler) HandleWebhook(c *gin.Context) {
 	}
 
 	// 3. Ambil Gateway yang sesuai dari Factory
-	// (Otomatis memilih MidtransGateway atau XenditGateway sesuai URL)
 	gateway, err := h.gatewayFactory.GetGateway(gatewayName)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported gateway"})
 		return
 	}
 
-	// 4. Suruh Gateway Memproses Data
-	// (Di sini letak 'Generic'-nya. Gateway akan validasi signature & parsing status sendiri-sendiri)
+	// 4. Suruh Gateway Memproses Data (Returns Legacy Entity 'Payment')
+	// updatedData.ID here corresponds to Order ID sent to gateway
 	updatedData, err := gateway.HandleWebhook(c.Request.Context(), payload)
 	if err != nil {
-		// Log error di server, tapi jangan kasih detail error sensitif ke public response
 		fmt.Printf("[WEBHOOK ERROR] Gateway: %s, Error: %v\n", gatewayName, err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Webhook processing failed", "details": err.Error()})
 		return
 	}
 
-	// 5. Cari Data Asli di Database berdasarkan ID yang didapat dari gateway
-	payment, err := h.paymentRepo.FindByID(c.Request.Context(), updatedData.ID)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Order ID not found"})
+	// 5. Try to handle as NEW FLOW (Transaction) first
+	tx, err := h.txRepo.FindByID(c.Request.Context(), updatedData.ID)
+	if err == nil {
+		// Found in Transaction Repo! Use new flow.
+		h.handleTransactionWebhook(c, tx, updatedData)
 		return
 	}
 
-	// 6. Cek apakah status berubah? (Supaya tidak spam update/notifikasi jika gateway kirim berkali-kali)
+	// 6. Fallback: Legacy Flow (Find in 'payments' table)
+	payment, err := h.paymentRepo.FindByID(c.Request.Context(), updatedData.ID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Order ID not found in transactions or legacy payments"})
+		return
+	}
+
+	// 7. Legacy Logic (Unchanged)
 	if payment.Status != updatedData.Status {
-		// Update data di object memory
 		payment.Status = updatedData.Status
 		payment.GatewayResponse = updatedData.GatewayResponse
 		payment.UpdatedAt = time.Now()
@@ -260,20 +273,18 @@ func (h *PaymentHandler) HandleWebhook(c *gin.Context) {
 			payment.FailedAt = &now
 		}
 
-		// Simpan perubahan ke Database
 		if err := h.paymentRepo.Update(c.Request.Context(), payment); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update payment status"})
 			return
 		}
 
-		// KIRIM NOTIFIKASI (RabbitMQ)
+		// Publish Legacy Event
 		go func() {
 			eventType := events.PaymentSucceededEvent
 			if string(payment.Status) == "failed" {
 				eventType = events.PaymentFailedEvent
 			}
 
-			// Buat Event object
 			event := events.NewPaymentEvent(
 				eventType,
 				payment.ID,
@@ -286,23 +297,114 @@ func (h *PaymentHandler) HandleWebhook(c *gin.Context) {
 				payment.GatewayName,
 			)
 
-			// Tambahkan Metadata
 			event.Metadata["customer_email"] = payment.CustomerEmail
 			event.Metadata["customer_name"] = payment.CustomerName
 			event.Metadata["source"] = "webhook"
 
-			// Kirim ke RabbitMQ (Gunakan context.Background karena request HTTP utama mungkin sudah selesai)
 			err := h.eventPublisher.Publish(context.Background(), event)
 			if err != nil {
 				fmt.Printf("[RABBITMQ] ERROR sending webhook event: %v\n", err)
-			} else {
-				fmt.Printf("[RABBITMQ] Webhook Event Sent: %s -> %s\n", eventType, payment.ID)
 			}
 		}()
 	}
 
-	// 8. Return 200 OK ke Gateway (Midtrans/dll) agar mereka tahu kita sudah terima datanya
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+func (h *PaymentHandler) handleTransactionWebhook(c *gin.Context, tx *entities.PaymentTransaction, updatedData *entities.Payment) {
+	// Map Status
+	var newStatus entities.TransactionStatus
+	switch updatedData.Status {
+	case entities.PaymentStatusSuccess:
+		newStatus = entities.TransactionStatusSuccess
+	case entities.PaymentStatusFailed, entities.PaymentStatusCancelled:
+		newStatus = entities.TransactionStatusFailed
+	default:
+		newStatus = entities.TransactionStatusPending
+	}
+
+	// Check change
+	if tx.Status == newStatus {
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "no change"})
+		return
+	}
+
+	// Update Transaction
+	tx.Status = newStatus
+	if rawBytes, err := json.Marshal(updatedData.GatewayResponse); err == nil {
+		tx.GatewayResponse = rawBytes
+	}
+	if err := h.txRepo.Update(c.Request.Context(), tx); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update transaction"})
+		return
+	}
+
+	// Find associated Intent
+	intent, err := h.intentRepo.FindByID(c.Request.Context(), tx.IntentID)
+	if err != nil {
+		// Log error but assume success for gateway
+		fmt.Printf("Intent not found for tx %s: %v\n", tx.ID, err)
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "warning": "intent not found"})
+		return
+	}
+
+	// Update Intent if Success
+	if newStatus == entities.TransactionStatusSuccess {
+		intent.Status = entities.PaymentIntentStatusSucceeded
+		h.intentRepo.Update(c.Request.Context(), intent)
+
+		// Publish Succeeded Event (New Format)
+		go h.publishIntentEvent(intent, tx, events.PaymentSucceededEvent)
+	} else if newStatus == entities.TransactionStatusFailed {
+		// We don't fail the INTENT immediately, because user might retry (create new transaction).
+		// But we publish a transaction failure event.
+		// h.intentRepo.Update(c.Request.Context(), intent) // Keep intent as PROCESSING
+		go h.publishIntentEvent(intent, tx, events.PaymentFailedEvent)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+func (h *PaymentHandler) publishIntentEvent(intent *entities.PaymentIntent, tx *entities.PaymentTransaction, eventType events.EventType) {
+	// Extract email
+	email := ""
+	if len(intent.Metadata) > 0 {
+		var meta map[string]interface{}
+		if err := json.Unmarshal(intent.Metadata, &meta); err == nil {
+			if e, ok := meta["email"].(string); ok {
+				email = e
+			}
+			if e, ok := meta["customer_email"].(string); ok && email == "" {
+				email = e
+			}
+		}
+	}
+
+	event := events.NewPaymentEvent(
+		eventType,
+		tx.ID,
+		intent.ReferenceID,
+		intent.UserID,
+		email,
+		intent.Amount,
+		intent.Currency,
+		string(tx.Status),
+		tx.PaymentMethodID,
+	)
+
+	// Populate metadata
+	if len(intent.Metadata) > 0 {
+		var meta map[string]interface{}
+		if err := json.Unmarshal(intent.Metadata, &meta); err == nil {
+			event.Metadata = meta
+		}
+	}
+	event.Metadata["source"] = "webhook"
+	event.Metadata["intent_id"] = intent.ID
+
+	if err := h.eventPublisher.Publish(context.Background(), event); err != nil {
+		fmt.Printf("[RABBITMQ] Failed to publish intent event: %v\n", err)
+	}
 }
 
 // UploadProof godoc

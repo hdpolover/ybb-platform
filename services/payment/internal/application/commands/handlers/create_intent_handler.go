@@ -32,7 +32,9 @@ func (h *CreateIntentHandler) Handle(ctx context.Context, cmd *commands.CreateIn
 		cmd.Metadata,
 	)
 
-	intent.ParticipantID = cmd.ParticipantID
+	if cmd.ParticipantID != "" {
+		intent.ParticipantID = &cmd.ParticipantID
+	}
 
 	// 2. Save to DB
 	if err := h.intentRepo.Create(ctx, intent); err != nil {

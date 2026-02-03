@@ -73,7 +73,9 @@ export class PaymentGrpcClient implements OnModuleInit {
 
   async processPayment(req: any): Promise<any> {
       try {
-          return await lastValueFrom(this.paymentService.ProcessPayment(req));
+          const resp = await lastValueFrom(this.paymentService.ProcessPayment(req));
+          this.logger.log(`ProcessPayment response: ${JSON.stringify(resp)}`);
+          return resp;
       } catch (error) {
           this.logger.error(`Failed to process payment: ${error.message}`, error.stack);
           throw error;
