@@ -177,6 +177,7 @@ message ProcessPaymentResponse {
   string status = 1; // "PENDING", "SUCCESS", "FAILED"
   string transaction_id = 2;
   ProcessPaymentAction action = 3;
+  map<string, string> metadata = 4;
 }
 
 message FeeConfig {

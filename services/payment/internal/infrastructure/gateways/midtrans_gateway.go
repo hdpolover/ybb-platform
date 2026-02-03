@@ -56,113 +56,113 @@ func (g *MidtransGateway) GetName() string {
 
 // CreatePayment creates a payment with Midtrans Snap
 func (g *MidtransGateway) CreatePayment(ctx context.Context, req *domainGateways.CreatePaymentRequest) (*domainGateways.CreatePaymentResponse, error) {
-    
-    // 1. Tentukan Payment Method (Logic diperbaiki)
-    // Default-nya nil (kosong/null), agar Midtrans menampilkan SEMUA.
-    var enabledPayments []snap.SnapPaymentType
 
-    // Jika user minta SPESIFIK (bukan automatic), baru kita isi list-nya.
-    if req.PaymentMethod != "" && req.PaymentMethod != "automatic" {
-        enabledPayments = []snap.SnapPaymentType{
-            snap.SnapPaymentType(req.PaymentMethod),
-        }
-    }
+	// 1. Tentukan Payment Method (Logic diperbaiki)
+	// Default-nya nil (kosong/null), agar Midtrans menampilkan SEMUA.
+	var enabledPayments []snap.SnapPaymentType
 
-    // 2. Build Snap request
-    snapReq := &snap.Request{
-        TransactionDetails: midtrans.TransactionDetails{
-            OrderID:  req.Payment.ID,
-            GrossAmt: int64(req.Payment.Amount),
-        },
-        CustomerDetail: &midtrans.CustomerDetails{
-            FName: req.CustomerName,
-            Email: req.CustomerEmail,
-            Phone: req.CustomerPhone,
-        },
-        
-        EnabledPayments: enabledPayments, 
+	// Jika user minta SPESIFIK (bukan automatic), baru kita isi list-nya.
+	if req.PaymentMethod != "" && req.PaymentMethod != "automatic" {
+		enabledPayments = []snap.SnapPaymentType{
+			snap.SnapPaymentType(req.PaymentMethod),
+		}
+	}
 
-        Callbacks: &snap.Callbacks{
-            Finish: req.CallbackURL,
-        },
-    }
+	// 2. Build Snap request
+	snapReq := &snap.Request{
+		TransactionDetails: midtrans.TransactionDetails{
+			OrderID:  req.Payment.ID,
+			GrossAmt: int64(req.Payment.Amount),
+		},
+		CustomerDetail: &midtrans.CustomerDetails{
+			FName: req.CustomerName,
+			Email: req.CustomerEmail,
+			Phone: req.CustomerPhone,
+		},
 
-    // Create transaction
-    snapResp, err := g.snapClient.CreateTransaction(snapReq)
-    if err != nil {
-        log.Printf("Midtrans CreateTransaction failed: %v", err)
-        return nil, fmt.Errorf("midtrans create transaction failed: %w", err)
-    }
+		EnabledPayments: enabledPayments,
 
-    return &domainGateways.CreatePaymentResponse{
-        RedirectURL:    snapResp.RedirectURL,
-        Token:          snapResp.Token,
-        GatewayOrderID: req.Payment.ID,
-        Raw:            snapResp,
-    }, nil
+		Callbacks: &snap.Callbacks{
+			Finish: req.CallbackURL,
+		},
+	}
+
+	// Create transaction
+	snapResp, err := g.snapClient.CreateTransaction(snapReq)
+	if err != nil {
+		log.Printf("Midtrans CreateTransaction failed: %v", err)
+		return nil, fmt.Errorf("midtrans create transaction failed: %w", err)
+	}
+
+	return &domainGateways.CreatePaymentResponse{
+		RedirectURL:    snapResp.RedirectURL,
+		Token:          snapResp.Token,
+		GatewayOrderID: req.Payment.ID,
+		Raw:            snapResp,
+	}, nil
 }
 
 // VerifyPayment verifies payment status with Midtrans Core API
 func (g *MidtransGateway) VerifyPayment(ctx context.Context, gatewayOrderID string) (*entities.Payment, error) {
-    // 1. Panggil Core API CheckTransaction
-    resp, err := g.coreApiClient.CheckTransaction(gatewayOrderID)
-    
-    // --- BAGIAN PERBAIKAN DIMULAI DARI SINI ---
-    if err != nil {
-        // Kita cek pesan errornya. Jika isinya "404" atau "Transaction doesn't exist",
-        // Itu artinya user belum memilih metode pembayaran di halaman Snap.
-        // KITA JANGAN RETURN ERROR, tapi return status PENDING.
-        errMessage := err.Error()
-        if strings.Contains(errMessage, "404") || strings.Contains(errMessage, "Transaction doesn't exist") {
-            return &entities.Payment{
-                ID:              gatewayOrderID,
-                Status:          entities.PaymentStatusPending, // Paksa jadi Pending
-                GatewayOrderID:  gatewayOrderID,
-                GatewayResponse: map[string]interface{}{"status_message": "Transaction not found in Midtrans (Not started yet)"},
-            }, nil
-        }
+	// 1. Panggil Core API CheckTransaction
+	resp, err := g.coreApiClient.CheckTransaction(gatewayOrderID)
 
-        // Jika errornya BUKAN 404 (misal: koneksi putus), baru kita return error beneran
-        return nil, fmt.Errorf("midtrans check transaction failed: %w", err)
-    }
-    // --- BAGIAN PERBAIKAN SELESAI ---
+	// --- BAGIAN PERBAIKAN DIMULAI DARI SINI ---
+	if err != nil {
+		// Kita cek pesan errornya. Jika isinya "404" atau "Transaction doesn't exist",
+		// Itu artinya user belum memilih metode pembayaran di halaman Snap.
+		// KITA JANGAN RETURN ERROR, tapi return status PENDING.
+		errMessage := err.Error()
+		if strings.Contains(errMessage, "404") || strings.Contains(errMessage, "Transaction doesn't exist") {
+			return &entities.Payment{
+				ID:              gatewayOrderID,
+				Status:          entities.PaymentStatusPending, // Paksa jadi Pending
+				GatewayOrderID:  gatewayOrderID,
+				GatewayResponse: map[string]interface{}{"status_message": "Transaction not found in Midtrans (Not started yet)"},
+			}, nil
+		}
 
-    // 2. Mapping Status dari Midtrans ke Entity Aplikasi (Kode lama tetap sama)
-    var status entities.PaymentStatus
-    
-    transactionStatus := resp.TransactionStatus
-    fraudStatus := resp.FraudStatus
+		// Jika errornya BUKAN 404 (misal: koneksi putus), baru kita return error beneran
+		return nil, fmt.Errorf("midtrans check transaction failed: %w", err)
+	}
+	// --- BAGIAN PERBAIKAN SELESAI ---
 
-    switch transactionStatus {
-    case "capture":
-        switch fraudStatus {
-        case "challenge":
-            status = entities.PaymentStatusProcessing
-        case "accept":
-            status = entities.PaymentStatusSuccess
-        }
-    case "settlement":
-        status = entities.PaymentStatusSuccess
-    case "deny", "cancel", "expire":
-        status = entities.PaymentStatusFailed
-    case "pending":
-        status = entities.PaymentStatusPending
-    default:
-        status = entities.PaymentStatusProcessing
-    }
+	// 2. Mapping Status dari Midtrans ke Entity Aplikasi (Kode lama tetap sama)
+	var status entities.PaymentStatus
 
-    // Konversi Struct Response Midtrans ke map
-    var rawResponse map[string]interface{}
-    if data, err := json.Marshal(resp); err == nil {
-        _ = json.Unmarshal(data, &rawResponse)
-    }
+	transactionStatus := resp.TransactionStatus
+	fraudStatus := resp.FraudStatus
 
-    return &entities.Payment{
-        ID:              gatewayOrderID,
-        Status:          status,
-        GatewayOrderID:  gatewayOrderID,
-        GatewayResponse: rawResponse,
-    }, nil
+	switch transactionStatus {
+	case "capture":
+		switch fraudStatus {
+		case "challenge":
+			status = entities.PaymentStatusProcessing
+		case "accept":
+			status = entities.PaymentStatusSuccess
+		}
+	case "settlement":
+		status = entities.PaymentStatusSuccess
+	case "deny", "cancel", "expire":
+		status = entities.PaymentStatusFailed
+	case "pending":
+		status = entities.PaymentStatusPending
+	default:
+		status = entities.PaymentStatusProcessing
+	}
+
+	// Konversi Struct Response Midtrans ke map
+	var rawResponse map[string]interface{}
+	if data, err := json.Marshal(resp); err == nil {
+		_ = json.Unmarshal(data, &rawResponse)
+	}
+
+	return &entities.Payment{
+		ID:              gatewayOrderID,
+		Status:          status,
+		GatewayOrderID:  gatewayOrderID,
+		GatewayResponse: rawResponse,
+	}, nil
 }
 
 // HandleWebhook processes Midtrans webhook notification
@@ -246,7 +246,7 @@ func (g *MidtransGateway) RefundPayment(ctx context.Context, gatewayOrderID stri
 	if err != nil {
 		return fmt.Errorf("midtrans refund transaction failed: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -266,15 +266,15 @@ func (g *MidtransGateway) ChargePayment(ctx context.Context, req *domainGateways
 
 	// Map Payment Method
 	switch req.PaymentMethodID {
-	case "credit_card":
+	case "credit_card", "midtrans_cc":
 		chargeReq.PaymentType = coreapi.PaymentTypeCreditCard
 		chargeReq.CreditCard = &coreapi.CreditCardDetails{
 			TokenID:        req.GatewayToken,
 			Authentication: true, // 3DS
 		}
-	case "gopay":
+	case "gopay", "midtrans_gopay":
 		chargeReq.PaymentType = coreapi.PaymentTypeGopay
-	case "shopeepay":
+	case "shopeepay", "midtrans_shopeepay":
 		chargeReq.PaymentType = coreapi.PaymentTypeShopeepay
 	case "bca_va":
 		chargeReq.PaymentType = coreapi.PaymentTypeBankTransfer
@@ -305,9 +305,23 @@ func (g *MidtransGateway) ChargePayment(ctx context.Context, req *domainGateways
 		}
 	}
 
+	// Logging Request for Debugging
+	if reqBytes, err := json.Marshal(chargeReq); err == nil {
+		fmt.Printf("Midtrans Charge Request: %s\n", string(reqBytes))
+	} else {
+		fmt.Printf("Midtrans Charge Request (Partial): %+v\n", chargeReq)
+	}
+
 	resp, err := g.coreApiClient.ChargeTransaction(chargeReq)
 	if err != nil {
 		return nil, fmt.Errorf("midtrans charge failed: %w", err)
+	}
+
+	// Logging Response for Debugging
+	if respBytes, err := json.Marshal(resp); err == nil {
+		fmt.Printf("Midtrans Charge Response: %s\n", string(respBytes))
+	} else {
+		fmt.Printf("Midtrans Charge Response (Partial): %+v\n", resp)
 	}
 
 	// Map Response
@@ -331,6 +345,28 @@ func (g *MidtransGateway) ChargePayment(ctx context.Context, req *domainGateways
 	if resp.RedirectURL != "" {
 		actionType = "redirect"
 		actionURL = resp.RedirectURL
+	} else if len(resp.Actions) > 0 {
+		// Handle CoreAPI Action/DeepLink response
+		// Priority: DeepLink (Simulator in Sandbox) > QR Code
+		var qrCodeURL, deeplinkURL string
+
+		for _, action := range resp.Actions {
+			if action.Name == "generate-qr-code-v2" {
+				qrCodeURL = action.URL // Prefer V2
+			} else if action.Name == "generate-qr-code" && qrCodeURL == "" {
+				qrCodeURL = action.URL // Fallback to V1
+			} else if action.Name == "deeplink-redirect" {
+				deeplinkURL = action.URL
+			}
+		}
+
+		if deeplinkURL != "" {
+			actionType = "redirect"
+			actionURL = deeplinkURL
+		} else if qrCodeURL != "" {
+			actionType = "qr_code"
+			actionURL = qrCodeURL
+		}
 	}
 
 	// Capture Metadata (VA numbers, etc)

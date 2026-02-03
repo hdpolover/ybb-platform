@@ -1303,6 +1303,7 @@ type ProcessPaymentResponse struct {
 	Status        string                 `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // "PENDING", "SUCCESS", "FAILED"
 	TransactionId string                 `protobuf:"bytes,2,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
 	Action        *ProcessPaymentAction  `protobuf:"bytes,3,opt,name=action,proto3" json:"action,omitempty"`
+	Metadata      map[string]string      `protobuf:"bytes,4,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1354,6 +1355,13 @@ func (x *ProcessPaymentResponse) GetTransactionId() string {
 func (x *ProcessPaymentResponse) GetAction() *ProcessPaymentAction {
 	if x != nil {
 		return x.Action
+	}
+	return nil
+}
+
+func (x *ProcessPaymentResponse) GetMetadata() map[string]string {
+	if x != nil {
+		return x.Metadata
 	}
 	return nil
 }
@@ -2423,11 +2431,15 @@ const file_payment_service_proto_rawDesc = "" +
 	"\x14ProcessPaymentAction\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x10\n" +
 	"\x03url\x18\x02 \x01(\tR\x03url\x12\x1b\n" +
-	"\tqr_string\x18\x03 \x01(\tR\bqrString\"\x8e\x01\n" +
+	"\tqr_string\x18\x03 \x01(\tR\bqrString\"\x96\x02\n" +
 	"\x16ProcessPaymentResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12%\n" +
 	"\x0etransaction_id\x18\x02 \x01(\tR\rtransactionId\x125\n" +
-	"\x06action\x18\x03 \x01(\v2\x1d.payment.ProcessPaymentActionR\x06action\"\xa7\x01\n" +
+	"\x06action\x18\x03 \x01(\v2\x1d.payment.ProcessPaymentActionR\x06action\x12I\n" +
+	"\bmetadata\x18\x04 \x03(\v2-.payment.ProcessPaymentResponse.MetadataEntryR\bmetadata\x1a;\n" +
+	"\rMetadataEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xa7\x01\n" +
 	"\tFeeConfig\x12\x1b\n" +
 	"\tfixed_fee\x18\x01 \x01(\x01R\bfixedFee\x12%\n" +
 	"\x0epercentage_fee\x18\x02 \x01(\x01R\rpercentageFee\x12\x17\n" +
@@ -2537,7 +2549,7 @@ func file_payment_service_proto_rawDescGZIP() []byte {
 	return file_payment_service_proto_rawDescData
 }
 
-var file_payment_service_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
+var file_payment_service_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
 var file_payment_service_proto_goTypes = []any{
 	(*AdminListPaymentsRequest)(nil),         // 0: payment.AdminListPaymentsRequest
 	(*AdminListPaymentsResponse)(nil),        // 1: payment.AdminListPaymentsResponse
@@ -2572,6 +2584,7 @@ var file_payment_service_proto_goTypes = []any{
 	(*AdminListPaymentMethodsResponse)(nil),  // 30: payment.AdminListPaymentMethodsResponse
 	nil,                                      // 31: payment.PaymentIntent.MetadataEntry
 	nil,                                      // 32: payment.CreateIntentRequest.MetadataEntry
+	nil,                                      // 33: payment.ProcessPaymentResponse.MetadataEntry
 }
 var file_payment_service_proto_depIdxs = []int32{
 	3,  // 0: payment.AdminListPaymentsResponse.payments:type_name -> payment.PaymentIntent
@@ -2583,40 +2596,41 @@ var file_payment_service_proto_depIdxs = []int32{
 	13, // 6: payment.GetPaymentMethodsResponse.methods:type_name -> payment.PaymentMethod
 	15, // 7: payment.ProcessPaymentRequest.payment_details:type_name -> payment.PaymentDetails
 	17, // 8: payment.ProcessPaymentResponse.action:type_name -> payment.ProcessPaymentAction
-	19, // 9: payment.AdminPaymentMethod.config:type_name -> payment.FeeConfig
-	19, // 10: payment.AdminCreatePaymentMethodRequest.config:type_name -> payment.FeeConfig
-	19, // 11: payment.AdminUpdatePaymentMethodRequest.config:type_name -> payment.FeeConfig
-	20, // 12: payment.AdminGetPaymentMethodResponse.method:type_name -> payment.AdminPaymentMethod
-	20, // 13: payment.AdminListPaymentMethodsResponse.methods:type_name -> payment.AdminPaymentMethod
-	6,  // 14: payment.PaymentService.CreateIntent:input_type -> payment.CreateIntentRequest
-	12, // 15: payment.PaymentService.GetPaymentMethods:input_type -> payment.GetPaymentMethodsRequest
-	16, // 16: payment.PaymentService.ProcessPayment:input_type -> payment.ProcessPaymentRequest
-	8,  // 17: payment.PaymentService.SubmitManualPayment:input_type -> payment.SubmitManualPaymentRequest
-	10, // 18: payment.PaymentService.VerifyManualPayment:input_type -> payment.VerifyManualPaymentRequest
-	2,  // 19: payment.PaymentService.GetIntentsByReference:input_type -> payment.GetIntentsByReferenceRequest
-	21, // 20: payment.PaymentService.AdminCreatePaymentMethod:input_type -> payment.AdminCreatePaymentMethodRequest
-	23, // 21: payment.PaymentService.AdminUpdatePaymentMethod:input_type -> payment.AdminUpdatePaymentMethodRequest
-	25, // 22: payment.PaymentService.AdminDeletePaymentMethod:input_type -> payment.AdminDeletePaymentMethodRequest
-	27, // 23: payment.PaymentService.AdminGetPaymentMethod:input_type -> payment.AdminGetPaymentMethodRequest
-	29, // 24: payment.PaymentService.AdminListPaymentMethods:input_type -> payment.AdminListPaymentMethodsRequest
-	0,  // 25: payment.PaymentService.AdminListPayments:input_type -> payment.AdminListPaymentsRequest
-	7,  // 26: payment.PaymentService.CreateIntent:output_type -> payment.CreateIntentResponse
-	14, // 27: payment.PaymentService.GetPaymentMethods:output_type -> payment.GetPaymentMethodsResponse
-	18, // 28: payment.PaymentService.ProcessPayment:output_type -> payment.ProcessPaymentResponse
-	9,  // 29: payment.PaymentService.SubmitManualPayment:output_type -> payment.SubmitManualPaymentResponse
-	11, // 30: payment.PaymentService.VerifyManualPayment:output_type -> payment.VerifyManualPaymentResponse
-	5,  // 31: payment.PaymentService.GetIntentsByReference:output_type -> payment.GetIntentsByReferenceResponse
-	22, // 32: payment.PaymentService.AdminCreatePaymentMethod:output_type -> payment.AdminCreatePaymentMethodResponse
-	24, // 33: payment.PaymentService.AdminUpdatePaymentMethod:output_type -> payment.AdminUpdatePaymentMethodResponse
-	26, // 34: payment.PaymentService.AdminDeletePaymentMethod:output_type -> payment.AdminDeletePaymentMethodResponse
-	28, // 35: payment.PaymentService.AdminGetPaymentMethod:output_type -> payment.AdminGetPaymentMethodResponse
-	30, // 36: payment.PaymentService.AdminListPaymentMethods:output_type -> payment.AdminListPaymentMethodsResponse
-	1,  // 37: payment.PaymentService.AdminListPayments:output_type -> payment.AdminListPaymentsResponse
-	26, // [26:38] is the sub-list for method output_type
-	14, // [14:26] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	33, // 9: payment.ProcessPaymentResponse.metadata:type_name -> payment.ProcessPaymentResponse.MetadataEntry
+	19, // 10: payment.AdminPaymentMethod.config:type_name -> payment.FeeConfig
+	19, // 11: payment.AdminCreatePaymentMethodRequest.config:type_name -> payment.FeeConfig
+	19, // 12: payment.AdminUpdatePaymentMethodRequest.config:type_name -> payment.FeeConfig
+	20, // 13: payment.AdminGetPaymentMethodResponse.method:type_name -> payment.AdminPaymentMethod
+	20, // 14: payment.AdminListPaymentMethodsResponse.methods:type_name -> payment.AdminPaymentMethod
+	6,  // 15: payment.PaymentService.CreateIntent:input_type -> payment.CreateIntentRequest
+	12, // 16: payment.PaymentService.GetPaymentMethods:input_type -> payment.GetPaymentMethodsRequest
+	16, // 17: payment.PaymentService.ProcessPayment:input_type -> payment.ProcessPaymentRequest
+	8,  // 18: payment.PaymentService.SubmitManualPayment:input_type -> payment.SubmitManualPaymentRequest
+	10, // 19: payment.PaymentService.VerifyManualPayment:input_type -> payment.VerifyManualPaymentRequest
+	2,  // 20: payment.PaymentService.GetIntentsByReference:input_type -> payment.GetIntentsByReferenceRequest
+	21, // 21: payment.PaymentService.AdminCreatePaymentMethod:input_type -> payment.AdminCreatePaymentMethodRequest
+	23, // 22: payment.PaymentService.AdminUpdatePaymentMethod:input_type -> payment.AdminUpdatePaymentMethodRequest
+	25, // 23: payment.PaymentService.AdminDeletePaymentMethod:input_type -> payment.AdminDeletePaymentMethodRequest
+	27, // 24: payment.PaymentService.AdminGetPaymentMethod:input_type -> payment.AdminGetPaymentMethodRequest
+	29, // 25: payment.PaymentService.AdminListPaymentMethods:input_type -> payment.AdminListPaymentMethodsRequest
+	0,  // 26: payment.PaymentService.AdminListPayments:input_type -> payment.AdminListPaymentsRequest
+	7,  // 27: payment.PaymentService.CreateIntent:output_type -> payment.CreateIntentResponse
+	14, // 28: payment.PaymentService.GetPaymentMethods:output_type -> payment.GetPaymentMethodsResponse
+	18, // 29: payment.PaymentService.ProcessPayment:output_type -> payment.ProcessPaymentResponse
+	9,  // 30: payment.PaymentService.SubmitManualPayment:output_type -> payment.SubmitManualPaymentResponse
+	11, // 31: payment.PaymentService.VerifyManualPayment:output_type -> payment.VerifyManualPaymentResponse
+	5,  // 32: payment.PaymentService.GetIntentsByReference:output_type -> payment.GetIntentsByReferenceResponse
+	22, // 33: payment.PaymentService.AdminCreatePaymentMethod:output_type -> payment.AdminCreatePaymentMethodResponse
+	24, // 34: payment.PaymentService.AdminUpdatePaymentMethod:output_type -> payment.AdminUpdatePaymentMethodResponse
+	26, // 35: payment.PaymentService.AdminDeletePaymentMethod:output_type -> payment.AdminDeletePaymentMethodResponse
+	28, // 36: payment.PaymentService.AdminGetPaymentMethod:output_type -> payment.AdminGetPaymentMethodResponse
+	30, // 37: payment.PaymentService.AdminListPaymentMethods:output_type -> payment.AdminListPaymentMethodsResponse
+	1,  // 38: payment.PaymentService.AdminListPayments:output_type -> payment.AdminListPaymentsResponse
+	27, // [27:39] is the sub-list for method output_type
+	15, // [15:27] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_payment_service_proto_init() }
@@ -2630,7 +2644,7 @@ func file_payment_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_payment_service_proto_rawDesc), len(file_payment_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   33,
+			NumMessages:   34,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -39,7 +39,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // Return user info to be attached to request object
     // Include jti and exp for token blacklisting support
     return {
-      userId: payload.sub,
+      id: payload.sub, // Standardize on 'id'
+      userId: payload.sub, // Keep for backward compatibility
+      sub: payload.sub, // Keep for backward compatibility
       email: payload.email,
       brandId: payload.brandId,
       jti: payload.jti,

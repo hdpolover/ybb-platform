@@ -74,7 +74,10 @@ func (s *PaymentGrpcServer) CreateIntent(ctx context.Context, req *pb.CreateInte
 		req.ReferenceId,
 		metadata,
 	)
-	intent.ParticipantID = req.ParticipantId
+
+	if req.ParticipantId != "" {
+		intent.ParticipantID = &req.ParticipantId
+	}
 
 	if err := s.intentRepo.Create(ctx, intent); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to create intent: %v", err)
@@ -153,6 +156,39 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 
 	if err := s.txRepo.Create(ctx, tx); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to create transaction: %v", err)
+	}
+
+	// Special Handling for Manual Methods
+	if method.Type == entities.MethodTypeManual {
+		// Create metadata with bank info
+		meta := map[string]string{
+			"is_manual":      "true",
+			"bank_name":      method.BankName,
+			"account_number": method.AccountNumber,
+			"account_name":   method.AccountName,
+			"instructions":   method.Instructions,
+		}
+
+		// Update tx status
+		tx.Status = entities.TransactionStatusPending
+
+		// Save metadata to tx.GatewayResponse
+		gwRespMap := map[string]interface{}{}
+		for k, v := range meta {
+			gwRespMap[k] = v
+		}
+		rawBytes, _ := json.Marshal(gwRespMap)
+		tx.GatewayResponse = rawBytes
+		s.txRepo.Update(ctx, tx)
+
+		return &pb.ProcessPaymentResponse{
+			Status:        "PENDING",
+			TransactionId: tx.ID,
+			Action: &pb.ProcessPaymentAction{
+				Type: "manual_transfer",
+			},
+			Metadata: meta,
+		}, nil
 	}
 
 	// 4. Call Gateway
@@ -272,7 +308,13 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 	resp, err := gateway.ChargePayment(ctx, chargeReq)
 	if err != nil {
 		tx.Status = entities.TransactionStatusFailed
-		tx.ErrorCode = err.Error()
+
+		errMsg := err.Error()
+		if len(errMsg) > 250 {
+			errMsg = errMsg[:250]
+		}
+		tx.ErrorCode = errMsg
+
 		s.txRepo.Update(ctx, tx)
 		return nil, status.Errorf(codes.Internal, "payment gateway error: %v", err)
 	}
@@ -365,6 +407,15 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 		tx.GatewayResponse = rawBytes
 	}
 
+	// Prepare metadata for proto response
+	var protoMetadata map[string]string
+	if resp.Metadata != nil {
+		protoMetadata = make(map[string]string)
+		for k, v := range resp.Metadata {
+			protoMetadata[k] = fmt.Sprintf("%v", v)
+		}
+	}
+
 	s.txRepo.Update(ctx, tx)
 
 	return &pb.ProcessPaymentResponse{
@@ -374,6 +425,7 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 			Type: resp.ActionType,
 			Url:  resp.ActionURL,
 		},
+		Metadata: protoMetadata,
 	}, nil
 }
 

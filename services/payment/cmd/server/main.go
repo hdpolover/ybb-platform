@@ -196,6 +196,8 @@ func main() {
 		retryPaymentHandler,
 
 		paymentRepo,
+		intentRepo,
+		txRepo,
 		eventPublisher,
 		gatewayFactory,
 	)
