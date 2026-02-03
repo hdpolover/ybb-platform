@@ -179,33 +179,33 @@ export class EmailService {
         }
     }
 
-    async sendWelcomeEmail(to: string, name: string, programCategory?: any) {
+    async sendWelcomeEmail(to: string, name: string, brand?: any) {
         let baseUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
-        if (programCategory?.websiteUrl) {
-            baseUrl = programCategory.websiteUrl.replace(/\/$/, '');
+        if (brand?.websiteUrl) {
+            baseUrl = brand.websiteUrl.replace(/\/$/, '');
         }
 
         const html = await this.compileTemplate('welcome', {
             name,
             loginUrl: `${baseUrl}/login`,
-            programCategory,
+            brand,
         });
-        const subject = programCategory ? `Welcome to ${programCategory.name}` : 'Welcome to YBB Platform';
+        const subject = brand ? `Welcome to ${brand.name}` : 'Welcome to YBB Platform';
         return this.sendRawEmail(to, subject, html);
     }
 
-    async sendEmailVerifiedEmail(to: string, name: string, programCategory?: any) {
+    async sendEmailVerifiedEmail(to: string, name: string, brand?: any) {
         let baseUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
-        if (programCategory?.websiteUrl) {
-            baseUrl = programCategory.websiteUrl.replace(/\/$/, '');
+        if (brand?.websiteUrl) {
+            baseUrl = brand.websiteUrl.replace(/\/$/, '');
         }
         
         const html = await this.compileTemplate('email-verified', {
             name,
             loginUrl: `${baseUrl}/login`,
-            programCategory,
+            brand,
         });
-        const subject = programCategory ? `Email Verified - ${programCategory.name}` : 'Email Verified';
+        const subject = brand ? `Email Verified - ${brand.name}` : 'Email Verified';
         return this.sendRawEmail(to, subject, html);
     }
 
@@ -228,10 +228,10 @@ export class EmailService {
         return this.sendRawEmail(to, 'Payment Confirmation', html, attachments);
     }
 
-    async sendForgotPasswordEmail(to: string, name: string, token: string, programCategory?: any) {
+    async sendForgotPasswordEmail(to: string, name: string, token: string, brand?: any) {
         let baseUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
-        if (programCategory?.websiteUrl) {
-            baseUrl = programCategory.websiteUrl.replace(/\/$/, '');
+        if (brand?.websiteUrl) {
+            baseUrl = brand.websiteUrl.replace(/\/$/, '');
         }
 
         const resetUrl = `${baseUrl}/auth/reset-password?token=${token}`;
@@ -239,21 +239,21 @@ export class EmailService {
         const html = await this.compileTemplate('forgot-password', {
             name,
             resetUrl,
-            programCategory
+            brand
         });
         
-        const subject = programCategory ? `Reset Your Password - ${programCategory.name}` : 'Reset Your Password';
+        const subject = brand ? `Reset Your Password - ${brand.name}` : 'Reset Your Password';
         return this.sendRawEmail(to, subject, html);
     }
 
-    async sendVerificationEmail(to: string, name: string, token: string, programCategory?: any) {
+    async sendVerificationEmail(to: string, name: string, token: string, brand?: any) {
         this.logger.log(`[sendVerificationEmail] Preparing verification email for ${to} (name: ${name})`);
-        // Determine base URL: modify logic to prioritize programCategory.websiteUrl
+        // Determine base URL: modify logic to prioritize brand.websiteUrl
         let baseUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
         
-        if (programCategory?.websiteUrl) {
+        if (brand?.websiteUrl) {
             // Remove trailing slash if present
-            baseUrl = programCategory.websiteUrl.replace(/\/$/, '');
+            baseUrl = brand.websiteUrl.replace(/\/$/, '');
         }
 
         this.logger.log(`[sendVerificationEmail] Using base URL for link: ${baseUrl}`);
@@ -261,9 +261,9 @@ export class EmailService {
         const html = await this.compileTemplate('verify-email', {
             name,
             verificationUrl: `${baseUrl}/auth/verify-email?token=${token}`,
-            programCategory,
+            brand,
         });
-        const subject = programCategory ? `Verify Your Email for ${programCategory.name}` : 'Verify Your Email Address';
+        const subject = brand ? `Verify Your Email for ${brand.name}` : 'Verify Your Email Address';
         return this.sendRawEmail(to, subject, html);
     }
 
