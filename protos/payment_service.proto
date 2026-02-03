@@ -27,6 +27,26 @@ service PaymentService {
   rpc AdminDeletePaymentMethod (AdminDeletePaymentMethodRequest) returns (AdminDeletePaymentMethodResponse) {}
   rpc AdminGetPaymentMethod (AdminGetPaymentMethodRequest) returns (AdminGetPaymentMethodResponse) {}
   rpc AdminListPaymentMethods (AdminListPaymentMethodsRequest) returns (AdminListPaymentMethodsResponse) {}
+
+  // Admin list payments
+  rpc AdminListPayments (AdminListPaymentsRequest) returns (AdminListPaymentsResponse) {}
+}
+
+message AdminListPaymentsRequest {
+  int32 page = 1;
+  int32 limit = 2;
+  string user_id = 3;
+  string program_id = 4;
+  string status = 5;
+  string from_date = 6;
+  string to_date = 7;
+}
+
+message AdminListPaymentsResponse {
+  repeated PaymentIntent payments = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 total_pages = 4;
 }
 
 message GetIntentsByReferenceRequest {

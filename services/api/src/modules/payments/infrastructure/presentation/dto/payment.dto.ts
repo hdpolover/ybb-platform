@@ -66,3 +66,39 @@ export class VerifyManualPaymentDto {
     @IsOptional()
     reason?: string;
 }
+
+export class AdminListPaymentsDto {
+    @ApiProperty({ description: 'Page number', required: false, default: 1 })
+    @IsOptional()
+    page?: number;
+
+    @ApiProperty({ description: 'Items per page', required: false, default: 10 })
+    @IsOptional()
+    limit?: number;
+
+    @ApiProperty({ description: 'Filter by User ID', required: false })
+    @IsString()
+    @IsOptional()
+    user_id?: string;
+
+    @ApiProperty({ description: 'Filter by Program ID', required: false })
+    @IsString()
+    @IsOptional()
+    program_id?: string;
+
+    @ApiProperty({ description: 'Filter by Status', required: false })
+    @IsString()
+    @IsOptional()
+    status?: string;
+
+    @ApiProperty({ description: 'From Date (ISO)', required: false })
+    @IsString()
+    @IsOptional()
+    from_date?: string;
+
+    @ApiProperty({ description: 'To Date (ISO)', required: false })
+    @IsString()
+    @IsOptional()
+    to_date?: string;
+}
+

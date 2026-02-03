@@ -54,3 +54,38 @@ func (r *GormPaymentIntentRepository) Update(ctx context.Context, intent *entiti
 	}
 	return nil
 }
+
+func (r *GormPaymentIntentRepository) FindAll(ctx context.Context, filter repositories.PaymentIntentFilter) ([]*entities.PaymentIntent, int64, error) {
+	var intents []*entities.PaymentIntent
+	var total int64
+
+	query := r.db.WithContext(ctx).Model(&entities.PaymentIntent{})
+
+	if filter.UserID != "" {
+		query = query.Where("user_id = ?", filter.UserID)
+	}
+	if filter.Status != "" {
+		query = query.Where("status = ?", filter.Status)
+	}
+	if filter.ProgramID != "" {
+		// Postgres JSONB query
+		query = query.Where("metadata ->> 'program' = ? OR metadata ->> 'program_id' = ?", filter.ProgramID, filter.ProgramID)
+	}
+	if filter.FromDate != "" {
+		query = query.Where("created_at >= ?", filter.FromDate)
+	}
+	if filter.ToDate != "" {
+		query = query.Where("created_at <= ?", filter.ToDate)
+	}
+
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to count intents: %w", err)
+	}
+
+	offset := (filter.Page - 1) * filter.Limit
+	if err := query.Order("created_at desc").Limit(filter.Limit).Offset(offset).Find(&intents).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to find intents: %w", err)
+	}
+
+	return intents, total, nil
+}
