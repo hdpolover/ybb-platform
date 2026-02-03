@@ -100,12 +100,36 @@ export class ForgotPasswordHandler {
             },
         });
 
+        // Fetch full brand details for email customization
+        const brand = await this.prisma.brand.findUnique({
+            where: { id: brandId },
+            include: {
+                settings: true
+            }
+        });
+
+        const programCategory = brand ? {
+            name: brand.name,
+            primaryColor: brand.primaryColor,
+            logoUrl: brand.logoUrl,
+            websiteUrl: brand.websiteUrl,
+            contactEmail: brand.contactEmail,
+            contactAddress: brand.contactAddress, // Send address
+            socialMediaLinks: brand.socialMediaLinks,
+            website: brand.websiteUrl, // for legacy templates using .website
+            settings: brand.settings ? {
+                footerNavigation: brand.settings.footerNavigation,
+                supportEmail: brand.settings.supportEmail
+            } : null
+        } : null;
+
         this.logger.log(`Emitting user.forgot-password for ${command.email}`);
         await this.rabbitmqProducer.emit('user.forgot-password', {
             email: user.email,
             name: user.email.split('@')[0], // Fallback name
             token,
-            brandId, // Pass category ID for email customization
+            brandId, 
+            brand: programCategory // Pass full brand object
         });
 
         await this.authLoggingService.logForgotPasswordRequest(

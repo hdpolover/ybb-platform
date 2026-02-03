@@ -82,6 +82,9 @@ export class ResendVerificationEmailHandler {
     // Get Program Category details for email template
     const brand = await this.prisma.brand.findUnique({
       where: { id: brandId },
+      include: {
+        settings: true
+      }
     });
 
     // Send notification
@@ -89,14 +92,7 @@ export class ResendVerificationEmailHandler {
       email: user.email,
       name: user.email.split('@')[0],
       token: emailVerificationToken,
-      brand: brand ? {
-        name: brand.name,
-        logoUrl: brand.logoUrl,
-        primaryColor: brand.primaryColor,
-        websiteUrl: brand.websiteUrl,
-        socialMediaLinks: brand.socialMediaLinks,
-        contactEmail: brand.contactEmail,
-      } : undefined,
+      brand: brand
     });
 await this.authLoggingService.logResendVerification(
         user.id,

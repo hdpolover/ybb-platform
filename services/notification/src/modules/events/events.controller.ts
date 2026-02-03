@@ -100,7 +100,7 @@ export class EventsController {
             await this.emailService.sendWelcomeEmail(
                 data.email,
                 data.first_name || data.name || 'User',
-                data.programCategory
+                data.brand
             );
         }
     }
@@ -114,7 +114,7 @@ export class EventsController {
                 data.email,
                 data.name || 'User',
                 data.token,
-                data.programCategory
+                data.brand
             );
         }
     }
@@ -131,7 +131,7 @@ export class EventsController {
                     data.email,
                     data.name || 'User',
                     data.token,
-                    data.programCategory
+                    data.brand
                 );
                 this.logger.log(`Email service returned successfully for ${data.email}. Result: ${JSON.stringify(result)}`);
             } else {
@@ -151,7 +151,7 @@ export class EventsController {
             await this.emailService.sendEmailVerifiedEmail(
                 data.email,
                 data.name || 'User',
-                data.programCategory
+                data.brand
             );
         }
     }

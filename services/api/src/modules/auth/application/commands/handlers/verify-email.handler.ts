@@ -29,6 +29,9 @@ export class VerifyEmailHandler {
     // Fetch Program Category for email context
     const brand = await this.prisma.brand.findUnique({
       where: { id: user.brandId },
+      include: {
+        settings: true
+      }
     });
 
     await this.prisma.user.update({
@@ -61,26 +64,14 @@ export class VerifyEmailHandler {
     this.rabbitmqProducer.emit('user.registered', {
       email: user.email,
       name: user.email.split('@')[0],
-      brand: brand ? {
-          name: brand.name,
-          logoUrl: brand.logoUrl,
-          primaryColor: brand.primaryColor,
-          websiteUrl: brand.websiteUrl,
-          socialMediaLinks: brand.socialMediaLinks,
-      } : undefined,
+      brand: brand,
     });
 
     // Emit user.email-verified for explicit confirmation
     this.rabbitmqProducer.emit('user.email-verified', {
         email: user.email,
         name: user.email.split('@')[0],
-        brand: brand ? {
-            name: brand.name,
-            logoUrl: brand.logoUrl,
-            primaryColor: brand.primaryColor,
-            websiteUrl: brand.websiteUrl,
-            socialMediaLinks: brand.socialMediaLinks,
-        } : undefined,
+        brand: brand,
     });
 
     return { success: true, message: 'Email successfully verified' };

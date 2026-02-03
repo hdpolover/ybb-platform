@@ -127,6 +127,9 @@ export class RegisterHandler {
     // Check if program category exists
     const brand = await this.prisma.brand.findUnique({
       where: { id: brandId },
+      include: {
+        settings: true
+      }
     });
 
     if (!brand || !brand.isActive) {
@@ -483,25 +486,13 @@ export class RegisterHandler {
         email: newUser.email,
         name: newUser.email.split('@')[0], // Use part of email as name since we don't have it yet
         token: emailVerificationToken,
-        brand: {
-          name: brand.name,
-          logoUrl: brand.logoUrl,
-          primaryColor: brand.primaryColor,
-          websiteUrl: brand.websiteUrl,
-          socialMediaLinks: brand.socialMediaLinks,
-          contactEmail: brand.contactEmail,
-        },
+        brand: brand,
       });
     } else if (authProvider.isOAuth) {
       this.rabbitmqProducer.emit('user.registered', {
         email: newUser.email,
         name: newUser.email.split('@')[0],
-        brand: {
-          name: brand.name,
-          logoUrl: brand.logoUrl,
-          primaryColor: brand.primaryColor,
-          websiteUrl: brand.websiteUrl,
-        },
+        brand: brand,
       });
     }
 
