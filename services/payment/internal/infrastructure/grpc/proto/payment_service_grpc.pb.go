@@ -30,6 +30,7 @@ const (
 	PaymentService_AdminDeletePaymentMethod_FullMethodName = "/payment.PaymentService/AdminDeletePaymentMethod"
 	PaymentService_AdminGetPaymentMethod_FullMethodName    = "/payment.PaymentService/AdminGetPaymentMethod"
 	PaymentService_AdminListPaymentMethods_FullMethodName  = "/payment.PaymentService/AdminListPaymentMethods"
+	PaymentService_AdminListPayments_FullMethodName        = "/payment.PaymentService/AdminListPayments"
 )
 
 // PaymentServiceClient is the client API for PaymentService service.
@@ -53,6 +54,8 @@ type PaymentServiceClient interface {
 	AdminDeletePaymentMethod(ctx context.Context, in *AdminDeletePaymentMethodRequest, opts ...grpc.CallOption) (*AdminDeletePaymentMethodResponse, error)
 	AdminGetPaymentMethod(ctx context.Context, in *AdminGetPaymentMethodRequest, opts ...grpc.CallOption) (*AdminGetPaymentMethodResponse, error)
 	AdminListPaymentMethods(ctx context.Context, in *AdminListPaymentMethodsRequest, opts ...grpc.CallOption) (*AdminListPaymentMethodsResponse, error)
+	// Admin list payments
+	AdminListPayments(ctx context.Context, in *AdminListPaymentsRequest, opts ...grpc.CallOption) (*AdminListPaymentsResponse, error)
 }
 
 type paymentServiceClient struct {
@@ -173,6 +176,16 @@ func (c *paymentServiceClient) AdminListPaymentMethods(ctx context.Context, in *
 	return out, nil
 }
 
+func (c *paymentServiceClient) AdminListPayments(ctx context.Context, in *AdminListPaymentsRequest, opts ...grpc.CallOption) (*AdminListPaymentsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AdminListPaymentsResponse)
+	err := c.cc.Invoke(ctx, PaymentService_AdminListPayments_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PaymentServiceServer is the server API for PaymentService service.
 // All implementations must embed UnimplementedPaymentServiceServer
 // for forward compatibility.
@@ -194,6 +207,8 @@ type PaymentServiceServer interface {
 	AdminDeletePaymentMethod(context.Context, *AdminDeletePaymentMethodRequest) (*AdminDeletePaymentMethodResponse, error)
 	AdminGetPaymentMethod(context.Context, *AdminGetPaymentMethodRequest) (*AdminGetPaymentMethodResponse, error)
 	AdminListPaymentMethods(context.Context, *AdminListPaymentMethodsRequest) (*AdminListPaymentMethodsResponse, error)
+	// Admin list payments
+	AdminListPayments(context.Context, *AdminListPaymentsRequest) (*AdminListPaymentsResponse, error)
 	mustEmbedUnimplementedPaymentServiceServer()
 }
 
@@ -236,6 +251,9 @@ func (UnimplementedPaymentServiceServer) AdminGetPaymentMethod(context.Context, 
 }
 func (UnimplementedPaymentServiceServer) AdminListPaymentMethods(context.Context, *AdminListPaymentMethodsRequest) (*AdminListPaymentMethodsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AdminListPaymentMethods not implemented")
+}
+func (UnimplementedPaymentServiceServer) AdminListPayments(context.Context, *AdminListPaymentsRequest) (*AdminListPaymentsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AdminListPayments not implemented")
 }
 func (UnimplementedPaymentServiceServer) mustEmbedUnimplementedPaymentServiceServer() {}
 func (UnimplementedPaymentServiceServer) testEmbeddedByValue()                        {}
@@ -456,6 +474,24 @@ func _PaymentService_AdminListPaymentMethods_Handler(srv interface{}, ctx contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PaymentService_AdminListPayments_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminListPaymentsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaymentServiceServer).AdminListPayments(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PaymentService_AdminListPayments_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaymentServiceServer).AdminListPayments(ctx, req.(*AdminListPaymentsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PaymentService_ServiceDesc is the grpc.ServiceDesc for PaymentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -506,6 +542,10 @@ var PaymentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AdminListPaymentMethods",
 			Handler:    _PaymentService_AdminListPaymentMethods_Handler,
+		},
+		{
+			MethodName: "AdminListPayments",
+			Handler:    _PaymentService_AdminListPayments_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

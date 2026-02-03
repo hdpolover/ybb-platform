@@ -9,7 +9,8 @@ import {
   AdminUpdatePaymentMethodRequest,
   AdminDeletePaymentMethodRequest,
   AdminGetPaymentMethodRequest,
-  AdminListPaymentMethodsRequest
+  AdminListPaymentMethodsRequest,
+  AdminListPaymentsRequest
 } from '../../common/proto/payment.interface';
 
 @Injectable()
@@ -121,6 +122,15 @@ export class PaymentGrpcClient implements OnModuleInit {
         return await lastValueFrom(this.paymentService.AdminListPaymentMethods(req));
     } catch (error) {
         this.logger.error(`Failed to list payment methods: ${error.message}`, error.stack);
+        throw error;
+    }
+  }
+
+  async adminListPayments(req: AdminListPaymentsRequest) {
+    try {
+        return await lastValueFrom(this.paymentService.AdminListPayments(req));
+    } catch (error) {
+        this.logger.error(`Failed to list payments: ${error.message}`, error.stack);
         throw error;
     }
   }

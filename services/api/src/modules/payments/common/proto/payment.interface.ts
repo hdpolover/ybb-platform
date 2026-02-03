@@ -14,6 +14,7 @@ export interface PaymentService {
   AdminDeletePaymentMethod(req: AdminDeletePaymentMethodRequest): Observable<AdminDeletePaymentMethodResponse>;
   AdminGetPaymentMethod(req: AdminGetPaymentMethodRequest): Observable<AdminGetPaymentMethodResponse>;
   AdminListPaymentMethods(req: AdminListPaymentMethodsRequest): Observable<AdminListPaymentMethodsResponse>;
+  AdminListPayments(req: AdminListPaymentsRequest): Observable<AdminListPaymentsResponse>;
 }
 
 export interface SubmitManualPaymentRequest {
@@ -158,4 +159,21 @@ export interface AdminListPaymentMethodsRequest {}
 
 export interface AdminListPaymentMethodsResponse {
   methods: AdminPaymentMethod[];
+}
+
+export interface AdminListPaymentsRequest {
+  page: number;
+  limit: number;
+  user_id?: string;
+  program_id?: string;
+  status?: string;
+  from_date?: string;
+  to_date?: string;
+}
+
+export interface AdminListPaymentsResponse {
+  payments: PaymentIntent[];
+  total: number;
+  page: number;
+  total_pages: number;
 }

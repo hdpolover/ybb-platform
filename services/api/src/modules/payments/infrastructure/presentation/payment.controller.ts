@@ -5,7 +5,7 @@ import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard
 import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { UserRole } from '@core/entities/user.entity';
-import { CreateIntentDto, SubmitManualPaymentDto, VerifyManualPaymentDto } from './dto/payment.dto';
+import { CreateIntentDto, SubmitManualPaymentDto, VerifyManualPaymentDto, AdminListPaymentsDto } from './dto/payment.dto';
 import { Request } from 'express';
 
 @ApiTags('Payments')
@@ -56,6 +56,22 @@ export class PaymentController {
           status: dto.status,
           admin_id: adminId,
           reason: dto.reason
+      });
+  }
+
+  @Get('admin/list')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'List Payments (Admin)' })
+  async adminListPayments(@Query() query: AdminListPaymentsDto) {
+      return this.paymentClient.adminListPayments({
+          page: query.page || 1,
+          limit: query.limit || 10,
+          user_id: query.user_id,
+          program_id: query.program_id,
+          status: query.status,
+          from_date: query.from_date,
+          to_date: query.to_date
       });
   }
 

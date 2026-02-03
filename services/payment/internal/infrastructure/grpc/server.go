@@ -726,3 +726,92 @@ func (s *PaymentGrpcServer) AdminDeletePaymentMethod(ctx context.Context, req *p
 	}
 	return &pb.AdminDeletePaymentMethodResponse{Success: true}, nil
 }
+
+func (s *PaymentGrpcServer) AdminListPayments(ctx context.Context, req *pb.AdminListPaymentsRequest) (*pb.AdminListPaymentsResponse, error) {
+	limit := int(req.Limit)
+	if limit <= 0 {
+		limit = 10
+	}
+	page := int(req.Page)
+	if page <= 0 {
+		page = 1
+	}
+
+	filter := repositories.PaymentIntentFilter{
+		UserID:    req.UserId,
+		Status:    req.Status,
+		ProgramID: req.ProgramId,
+		FromDate:  req.FromDate,
+		ToDate:    req.ToDate,
+		Page:      page,
+		Limit:     limit,
+	}
+
+	intents, total, err := s.intentRepo.FindAll(ctx, filter)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to list payments: %v", err)
+	}
+
+	var pbPayments []*pb.PaymentIntent
+	for _, intent := range intents {
+		var metaMap map[string]interface{}
+		metadata := make(map[string]string)
+
+		if len(intent.Metadata) > 0 {
+			if err := json.Unmarshal(intent.Metadata, &metaMap); err == nil {
+				for k, v := range metaMap {
+					if strVal, ok := v.(string); ok {
+						metadata[k] = strVal
+					}
+				}
+			}
+		}
+
+		var cName, cEmail, cPhone, desc string
+		if s, ok := metaMap["customer_name"].(string); ok {
+			cName = s
+		}
+		if s, ok := metaMap["customer_email"].(string); ok {
+			cEmail = s
+		}
+		if s, ok := metaMap["customer_phone"].(string); ok {
+			cPhone = s
+		}
+		if s, ok := metaMap["description"].(string); ok {
+			desc = s
+		}
+
+		var pbItems []*pb.ItemDetail
+		if itemsRaw, ok := metaMap["item_details"]; ok {
+			if b, err := json.Marshal(itemsRaw); err == nil {
+				_ = json.Unmarshal(b, &pbItems)
+			}
+		}
+
+		pbPayments = append(pbPayments, &pb.PaymentIntent{
+			Id:            intent.ID,
+			UserId:        intent.UserID,
+			Amount:        int64(intent.Amount),
+			Currency:      intent.Currency,
+			Status:        string(intent.Status),
+			CreatedAt:     intent.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			ReferenceType: intent.ReferenceType,
+			ReferenceId:   intent.ReferenceID,
+			Metadata:      metadata,
+			CustomerName:  cName,
+			CustomerEmail: cEmail,
+			CustomerPhone: cPhone,
+			Description:   desc,
+			ItemDetails:   pbItems,
+		})
+	}
+
+	totalPages := (int(total) + limit - 1) / limit
+
+	return &pb.AdminListPaymentsResponse{
+		Payments:   pbPayments,
+		Total:      int32(total),
+		Page:       int32(page),
+		TotalPages: int32(totalPages),
+	}, nil
+}
