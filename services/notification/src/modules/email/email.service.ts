@@ -228,12 +228,22 @@ export class EmailService {
         return this.sendRawEmail(to, 'Payment Confirmation', html, attachments);
     }
 
-    async sendForgotPasswordEmail(to: string, name: string, token: string) {
+    async sendForgotPasswordEmail(to: string, name: string, token: string, programCategory?: any) {
+        let baseUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
+        if (programCategory?.websiteUrl) {
+            baseUrl = programCategory.websiteUrl.replace(/\/$/, '');
+        }
+
+        const resetUrl = `${baseUrl}/auth/reset-password?token=${token}`;
+
         const html = await this.compileTemplate('forgot-password', {
             name,
-            token,
+            resetUrl,
+            programCategory
         });
-        return this.sendRawEmail(to, 'Reset Your Password', html);
+        
+        const subject = programCategory ? `Reset Your Password - ${programCategory.name}` : 'Reset Your Password';
+        return this.sendRawEmail(to, subject, html);
     }
 
     async sendVerificationEmail(to: string, name: string, token: string, programCategory?: any) {

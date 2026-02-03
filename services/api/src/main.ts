@@ -9,12 +9,26 @@ import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Connect Microservice for Event Consumption
+  // Connect Microservice for Event Consumption (Audit Logging)
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.RMQ,
     options: {
       urls: [process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672/'],
-      queue: 'api-service-payment-events',
+      queue: 'audit_log_queue',
+      queueOptions: {
+        durable: true,
+      },
+      noAck: false,
+      prefetchCount: 1,
+    },
+  });
+
+  // Connect Microservice for Reporting Queue
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.RMQ,
+    options: {
+      urls: [process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672/'],
+      queue: 'reporting_queue',
       queueOptions: {
         durable: true,
       },
