@@ -45,4 +45,3 @@ import { StorageService } from './application/storage.service';
   exports: [FileServiceClient, FileGrpcClient, StorageService],
 })
 export class FilesModule { }
-
