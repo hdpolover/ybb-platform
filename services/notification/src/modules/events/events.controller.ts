@@ -113,7 +113,8 @@ export class EventsController {
             await this.emailService.sendForgotPasswordEmail(
                 data.email,
                 data.name || 'User',
-                data.token
+                data.token,
+                data.programCategory
             );
         }
     }

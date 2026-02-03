@@ -4,6 +4,7 @@ import { PrismaModule } from '@shared/infrastructure/prisma/prisma.module';
 import { CacheModule } from '@shared/infrastructure/cache/cache.module';
 import { ThrottlerModule } from '@shared/infrastructure/throttler/throttler.module';
 import { RabbitMQModule } from '@shared/infrastructure/rabbitmq/rabbitmq.module';
+import { ExcelModule } from '@shared/infrastructure/excel/excel.module';
 import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.module';
 import { GeoIpModule } from '@shared/infrastructure/geoip/geoip.module';
 import { CacheController } from '@shared/presentation/cache.controller';
@@ -33,6 +34,8 @@ import { SystemModule } from '@modules/system/system.module';
 import { UsersModule } from '@modules/users/users.module';
 import { GalleryModule } from '@modules/gallery/gallery.module';
 import { PortalModule } from '@modules/portal/portal.module';
+import { AuditModule } from '@modules/audit/audit.module';
+import { ReportingModule } from '@modules/reporting/reporting.module';
 
 @Module({
   imports: [
@@ -79,6 +82,7 @@ import { PortalModule } from '@modules/portal/portal.module';
     CacheModule,
     ThrottlerModule,
     RabbitMQModule,
+    ExcelModule,
     MonitoringModule,
     GeoIpModule,
 
@@ -104,6 +108,8 @@ import { PortalModule } from '@modules/portal/portal.module';
     UsersModule,
     GalleryModule,
     PortalModule,
+    AuditModule,
+    ReportingModule,
   ],
   controllers: [CacheController, MetricsController],
 })
