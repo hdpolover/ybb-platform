@@ -7,6 +7,7 @@ import KeyvRedis from '@keyv/redis';
 import { CacheService } from './cache.service';
 import { CacheMetricsService } from './cache-metrics.service';
 import { CacheWarmingService } from './cache-warming.service';
+import { RedisPubSubService } from '../redis/redis-pubsub.service';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Global()
@@ -35,8 +36,8 @@ import { PrismaModule } from '../prisma/prisma.module';
       isGlobal: true,
     }),
   ],
-  providers: [CacheService, CacheMetricsService, CacheWarmingService],
-  exports: [NestCacheModule, CacheService, CacheMetricsService, CacheWarmingService],
+  providers: [CacheService, CacheMetricsService, CacheWarmingService, RedisPubSubService],
+  exports: [NestCacheModule, CacheService, CacheMetricsService, CacheWarmingService, RedisPubSubService],
 })
 export class CacheModule { }
 

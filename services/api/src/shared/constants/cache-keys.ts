@@ -24,6 +24,12 @@ export const CACHE_KEYS = {
   LANDING_FAQS: (brandId: string, page: number, limit: number, search: string) => `landing:faqs:${brandId}:${page}:${limit}:${search}`,
   LANDING_SETTINGS: (brandId: string) => `landing:settings:${brandId}`,
 
+  // Portal cache keys
+  PORTAL_DASHBOARD: (userId: string) => `portal:dashboard:${userId}`,
+  PORTAL_SUBMISSIONS: (userId: string) => `portal:submissions:${userId}`,
+  PORTAL_PAYMENTS: (userId: string) => `portal:payments:${userId}`,
+  PORTAL_DOCUMENTS: (userId: string) => `portal:documents:${userId}`,
+
   // Admin cache keys
   STATS_DASHBOARD: (brandId: string, params: string) => `stats:dashboard:${brandId}:${params}`,
   PARTICIPANT_LIST: (programId: string) => `participants:program:${programId}`,

@@ -1,6 +1,8 @@
 import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { GetPortalSubmissionsQuery } from '../portal-queries';
 import { 
     PortalSubmissionResponseDto, 
@@ -10,11 +12,22 @@ import {
 @Injectable()
 @QueryHandler(GetPortalSubmissionsQuery)
 export class GetPortalSubmissionsHandler implements IQueryHandler<GetPortalSubmissionsQuery> {
-    constructor(private readonly prisma: PrismaService) {}
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly cacheService: CacheService,
+    ) {}
 
     async execute(query: GetPortalSubmissionsQuery): Promise<PortalSubmissionResponseDto> {
         const { userId } = query;
 
+        // Check cache first
+        const cacheKey = CACHE_KEYS.PORTAL_SUBMISSIONS(userId);
+        const cached = await this.cacheService.get<PortalSubmissionResponseDto>(cacheKey);
+        if (cached) {
+            return cached;
+        }
+
+        // Cache miss - fetch from database
         const participant = await this.prisma.participant.findUnique({ where: { userId } });
         if (!participant) throw new NotFoundException('Participant not found');
 
@@ -86,12 +99,17 @@ export class GetPortalSubmissionsHandler implements IQueryHandler<GetPortalSubmi
         const completedSections = sections.filter(s => s.status === 'completed').length;
         const progress = totalSections > 0 ? Math.round((completedSections / totalSections) * 100) : 0;
 
-        return {
+        const result = {
             applicationId: application.id,
             programName: application.program.name,
             status: application.status,
             overallProgress: progress,
             sections
         };
+
+        // Cache the result for 5 minutes
+        await this.cacheService.set(cacheKey, result, CACHE_TTL.MEDIUM);
+
+        return result;
     }
 }

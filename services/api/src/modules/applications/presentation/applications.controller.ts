@@ -16,6 +16,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@ne
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
+import { CacheInvalidate } from '@shared/decorators/cache-invalidate.decorator';
 
 // Commands
 import { CreateApplicationHandler } from '../application/commands/handlers/create-application.handler';
@@ -82,6 +83,7 @@ export class ApplicationsController {
   @ApiOperation({ summary: 'Create a new application' })
   @ApiResponse({ status: 201, description: 'Application created successfully', type: ApplicationResponseDto })
   @ApiResponse({ status: 409, description: 'Application already exists' })
+  @CacheInvalidate(['portal:*:${userId}'])
   async create(@Body() dto: CreateApplicationRequestDto): Promise<ApplicationResponseDto> {
     this.logger.log(`Creating application for participant ${dto.participantId} in program ${dto.programId}`);
 
@@ -216,6 +218,7 @@ export class ApplicationsController {
   @ApiResponse({ status: 200, description: 'Application updated successfully', type: ApplicationResponseDto })
   @ApiResponse({ status: 400, description: 'Cannot edit non-draft application' })
   @ApiResponse({ status: 404, description: 'Application not found' })
+  @CacheInvalidate(['portal:*:${userId}'])
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateApplicationRequestDto,
@@ -232,6 +235,7 @@ export class ApplicationsController {
   @ApiResponse({ status: 200, description: 'Application category switched successfully', type: ApplicationResponseDto })
   @ApiResponse({ status: 400, description: 'Cannot switch category due to status or payments' })
   @ApiResponse({ status: 404, description: 'Application not found' })
+  @CacheInvalidate(['portal:*:${userId}'])
   async switchCategory(
     @Param('id') id: string,
     @Body() dto: SwitchApplicationCategoryRequestDto,
@@ -249,6 +253,7 @@ export class ApplicationsController {
   @ApiResponse({ status: 200, description: 'Application submitted successfully', type: ApplicationResponseDto })
   @ApiResponse({ status: 400, description: 'Application cannot be submitted' })
   @ApiResponse({ status: 404, description: 'Application not found' })
+  @CacheInvalidate(['portal:*:${userId}'])
   async submit(
     @Param('id') id: string,
     @Body('participantId') participantId: string,
@@ -263,6 +268,7 @@ export class ApplicationsController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create Registration Payment Intent' })
   @ApiResponse({ status: 201, description: 'Payment Intent created' })
+  @CacheInvalidate(['portal:*:${userId}'])
   async createPaymentIntent(
     @Param('id') id: string,
     @Body('userId') userId: string
@@ -304,6 +310,7 @@ export class ApplicationsController {
   @ApiResponse({ status: 200, description: 'Application withdrawn successfully', type: ApplicationResponseDto })
   @ApiResponse({ status: 400, description: 'Application cannot be withdrawn' })
   @ApiResponse({ status: 404, description: 'Application not found' })
+  @CacheInvalidate(['portal:*:${userId}'])
   async withdraw(
     @Param('id') id: string,
     @Body('userId') userId: string,

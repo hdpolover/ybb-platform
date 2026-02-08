@@ -46,10 +46,14 @@ export class CacheInvalidationInterceptor implements NestInterceptor {
 
     // Get request params for dynamic pattern resolution
     const request = context.switchToHttp().getRequest();
+    const user = request.user;
+    const userId = user?.userId || user?.id;
+
     const params = {
       ...request.params,
       ...request.body,
       ...request.query,
+      userId, // Expose userId for patterns like 'user:${userId}'
     };
 
     return next.handle().pipe(

@@ -5,6 +5,8 @@ import { ReviewApplicationCommand } from '../review-application.command';
 import { ApplicationResponseDto } from '../../dto/application-response.dto';
 import { ApplicationMapper } from '@modules/applications/infrastructure/mappers/application.mapper';
 import { APPLICATION_REPOSITORY } from '@modules/applications/infrastructure/tokens';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS } from '@shared/constants/cache-keys';
 
 /**
  * Review Application Handler
@@ -18,6 +20,7 @@ export class ReviewApplicationHandler {
     @Inject(APPLICATION_REPOSITORY)
     private readonly applicationRepository: IApplicationRepository,
     private readonly applicationMapper: ApplicationMapper,
+    private readonly cacheService: CacheService,
   ) {}
 
   async execute(command: ReviewApplicationCommand): Promise<ApplicationResponseDto> {
@@ -82,7 +85,32 @@ export class ReviewApplicationHandler {
     // Save to database
     const updated = await this.applicationRepository.update(application);
 
+    // Invalidate portal cache for the participant
+    // When admin reviews, the participant should see status change immediately
+    if (updated.participant?.userId) {
+      await this.invalidateParticipantCache(updated.participant.userId);
+    }
+
     // Return DTO
     return this.applicationMapper.toDto(updated);
+  }
+
+  /**
+   * Invalidate portal cache for participant when their application is reviewed
+   */
+  private async invalidateParticipantCache(userId: string): Promise<void> {
+    try {
+      const patterns = [
+        CACHE_KEYS.PORTAL_DASHBOARD(userId),
+        CACHE_KEYS.PORTAL_SUBMISSIONS(userId),
+        CACHE_KEYS.PORTAL_PAYMENTS(userId),
+        CACHE_KEYS.PORTAL_DOCUMENTS(userId),
+      ];
+
+      await Promise.all(patterns.map(key => this.cacheService.invalidateKey(key)));
+    } catch (error) {
+      // Log but don't throw - cache invalidation failures shouldn't break the review
+      console.error(`Failed to invalidate cache for user ${userId}:`, error);
+    }
   }
 }

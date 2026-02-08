@@ -1,6 +1,8 @@
 import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { GetPortalDashboardQuery } from '../portal-queries';
 import { 
     PortalDashboardResponseDto, 
@@ -13,11 +15,20 @@ import {
 export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboardQuery> {
     constructor(
         private readonly prisma: PrismaService,
+        private readonly cacheService: CacheService,
     ) {}
 
     async execute(query: GetPortalDashboardQuery): Promise<PortalDashboardResponseDto> {
         const { userId } = query;
 
+        // Check cache first
+        const cacheKey = CACHE_KEYS.PORTAL_DASHBOARD(userId);
+        const cached = await this.cacheService.get<PortalDashboardResponseDto>(cacheKey);
+        if (cached) {
+            return cached;
+        }
+
+        // Cache miss - fetch from database
         // 1. Fetch Participant and latest application
         const participant = await this.prisma.participant.findUnique({
             where: { userId },
@@ -104,13 +115,18 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
              });
         }
 
-        return {
+        const result = {
             greeting: `Welcome back, ${participant.fullName.split(' ')[0]}`,
             activeApplication: activeAppSummary,
             alerts,
             recentAnnouncements: announcements,
             stats
         };
+
+        // Cache the result for 5 minutes
+        await this.cacheService.set(cacheKey, result, CACHE_TTL.MEDIUM);
+
+        return result;
     }
 
     private buildOnboardingDashboard(): PortalDashboardResponseDto {
