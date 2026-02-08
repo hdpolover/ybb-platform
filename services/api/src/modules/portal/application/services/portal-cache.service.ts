@@ -34,9 +34,8 @@ export class PortalCacheService {
                 id: true,
                 userId: true,
                 fullName: true,
-                email: true,
                 phoneNumber: true,
-                dateOfBirth: true,
+                birthdate: true,
                 nationality: true,
                 createdAt: true,
                 updatedAt: true,
@@ -44,7 +43,6 @@ export class PortalCacheService {
                     select: {
                         id: true,
                         email: true,
-                        role: true,
                     }
                 }
             }
@@ -136,7 +134,6 @@ export class PortalCacheService {
             where: { programId, isActive: true },
             select: {
                 id: true,
-                title: true,
                 question: true,
                 isRequired: true,
                 wordLimit: true,

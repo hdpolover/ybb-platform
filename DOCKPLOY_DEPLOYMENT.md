@@ -35,6 +35,11 @@ Each service requires accessing `dokploy-network` to communicate internally and 
     *   `JWT_SECRET`
     *   `APP_DOMAINS_RULE`: `Host(\`api.ybbhub.com\`)`
     *   (Plus RabbitMQ creds to connect to shared-rabbitmq)
+    *   **Optional Advanced Features**:
+        *   `READ_REPLICA_URL` - Read replica database URL for improved performance
+        *   `CIRCUIT_BREAKER_FAILURE_THRESHOLD` - Failures before circuit opens (default: 5)
+        *   `CIRCUIT_BREAKER_SUCCESS_THRESHOLD` - Successes to close circuit (default: 3)
+        *   `CIRCUIT_BREAKER_TIMEOUT` - Reset timeout in ms (default: 60000)
 
 ## 3. Payment Service
 *   **Name**: `payment`

@@ -5,6 +5,8 @@ import { ReplySupportTicketCommand } from '../reply-support-ticket.command';
 import { ISupportTicketRepository } from '@core/interfaces/repositories/support-ticket.repository.interface';
 import { IParticipantRepository } from '@core/interfaces/repositories/participant.repository.interface';
 import { SupportTicketMessage } from '@core/entities/support-ticket.entity';
+import { UnitOfWork } from '@shared/infrastructure/database/unit-of-work.service';
+import { SupportTicketStatus } from '@prisma/client';
 
 @CommandHandler(ReplySupportTicketCommand)
 export class ReplySupportTicketHandler implements ICommandHandler<ReplySupportTicketCommand> {
@@ -13,6 +15,7 @@ export class ReplySupportTicketHandler implements ICommandHandler<ReplySupportTi
         private readonly repository: ISupportTicketRepository,
         @Inject('IParticipantRepository')
         private readonly participantRepository: IParticipantRepository,
+        private readonly unitOfWork: UnitOfWork,
     ) { }
 
     async execute(command: ReplySupportTicketCommand): Promise<void> {
@@ -43,11 +46,35 @@ export class ReplySupportTicketHandler implements ICommandHandler<ReplySupportTi
             dto.attachments || [],
         );
 
-        await this.repository.addMessage(message);
+        // ========================================
+        // Unit of Work: Support Ticket Reply
+        // Message creation and status update must succeed together
+        // ========================================
+        await this.unitOfWork.execute(
+            async (repos) => {
+                // Add message to ticket
+                await repos.tx.supportTicketMessage.create({
+                    data: {
+                        id: message.id,
+                        ticketId: message.ticketId,
+                        message: message.message,
+                        isFromAdmin: message.isFromAdmin,
+                        senderId: message.senderId,
+                        senderName: message.senderName,
+                        attachments: message.attachments,
+                        isRead: message.isRead,
+                    },
+                });
 
-        // Update ticket status to open if it was waiting
-        if (ticket.status === 'waiting_response' || ticket.status === 'resolved') {
-            await this.repository.updateStatus(ticket.id, 'open');
-        }
+                // Update ticket status to open if it was waiting
+                if (ticket.status === 'waiting_response' || ticket.status === 'resolved') {
+                    await repos.tx.supportTicket.update({
+                        where: { id: ticket.id },
+                        data: { status: SupportTicketStatus.open },
+                    });
+                }
+            },
+            { name: 'support-ticket-reply', timeout: 3000 }
+        );
     }
 }

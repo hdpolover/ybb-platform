@@ -2,6 +2,7 @@ import { Inject, Injectable, ConflictException, BadRequestException, NotFoundExc
 import { RegisterCommand } from '../register.command';
 import { AuthResponseDto } from '../../../presentation/dto/auth-response.dto';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
+import { UnitOfWork } from '../../../../../shared/infrastructure/database/unit-of-work.service';
 import { RabbitMQProducerService } from '../../../../../shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { Ambassador, ApplicationCategory } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
@@ -17,6 +18,7 @@ export class RegisterHandler {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly unitOfWork: UnitOfWork,
     private readonly jwtService: JwtService,
     private readonly rabbitmqProducer: RabbitMQProducerService,
     private readonly authLoggingService: AuthLoggingService,
@@ -455,30 +457,127 @@ export class RegisterHandler {
       }
     }
 
-    // Create user with identity
-    const newUser = await this.prisma.user.create({
-      data: {
-        email: command.email,
-        passwordHash,
-        brandId: brandId,
-        isActive: true,
-        isOnboardingCompleted: false,
-        emailVerified: emailVerified,
-        emailVerificationToken,
-        emailVerificationExpires,
-        identities: {
-          create: {
-            providerId: authProvider.id,
-            providerUserId: providerUserIdToUse,
-            providerEmail: command.email,
-            isPrimary: true,
-            lastUsedAt: new Date(),
+    // ========================================
+    // Unit of Work: User Registration with Full Profile Setup
+    // All user creation, participant setup, and referral linking must succeed together
+    // or rollback completely to prevent orphaned records
+    // ========================================
+    const newUser = await this.unitOfWork.execute(async (repos) => {
+      const tx = repos.tx;
+      
+      // Create user with identity
+      const user = await tx.user.create({
+        data: {
+          email: command.email,
+          passwordHash,
+          brandId: brandId,
+          isActive: true,
+          isOnboardingCompleted: false,
+          emailVerified: emailVerified,
+          emailVerificationToken,
+          emailVerificationExpires,
+          identities: {
+            create: {
+              providerId: authProvider.id,
+              providerUserId: providerUserIdToUse,
+              providerEmail: command.email,
+              isPrimary: true,
+              lastUsedAt: new Date(),
+            },
           },
         },
-      },
-    });
+      });
 
-    await handleProgramRegistration(newUser.id, newUser.email);
+      // Create participant profile
+      const participant = await tx.participant.create({
+        data: {
+          userId: user.id,
+          fullName: command.email.split('@')[0], // Default name from email prefix
+          referralCode: ambassador?.referralCode, // Store valid referral code
+        },
+      });
+
+      // Link ambassador referral if valid
+      if (ambassador) {
+        try {
+          await repos.createAmbassadorReferral({
+            participantId: participant.id,
+            ambassadorId: ambassador.id,
+            referralCode: ambassador.referralCode,
+            referredAt: new Date(),
+          });
+
+          // Increment ambassador stats
+          await repos.incrementAmbassadorReferrals(ambassador.id);
+        } catch (e) {
+          // Log but don't fail the transaction for referral issues
+          this.logger.error(`Failed to link ambassador: ${e.message}`);
+          // Still continue - user registration is more important than referral
+        }
+      }
+
+      // Create application if target program exists
+      if (targetProgramId) {
+        // Check if already registered (shouldn't happen, but defensive)
+        const existingApp = await tx.participantApplication.findFirst({
+          where: {
+            participantId: participant.id,
+            programId: targetProgramId,
+          },
+        });
+
+        if (!existingApp) {
+          // Determine application category
+          const participationInfos = await tx.programParticipationInfo.findMany({
+            where: {
+              programId: targetProgramId,
+              isActive: true,
+            },
+          });
+
+          let applicationCategory: ApplicationCategory = ApplicationCategory.self_funded;
+
+          if (command.applicationCategory) {
+            const isAvailable = participationInfos.some(
+              (pi) => pi.category === command.applicationCategory,
+            );
+            if (!isAvailable) {
+              throw new BadRequestException(
+                `Registration for '${command.applicationCategory.replace('_', ' ')}' is not available for this program.`,
+              );
+            }
+            applicationCategory = command.applicationCategory;
+          } else {
+            // Fallback priority: Fully Funded -> Self Funded -> First Available
+            const hasFullyFunded = participationInfos.some(
+              (pi) => pi.category === ApplicationCategory.fully_funded,
+            );
+            const hasSelfFunded = participationInfos.some(
+              (pi) => pi.category === ApplicationCategory.self_funded,
+            );
+
+            if (hasFullyFunded) {
+              applicationCategory = ApplicationCategory.fully_funded;
+            } else if (hasSelfFunded) {
+              applicationCategory = ApplicationCategory.self_funded;
+            } else if (participationInfos.length > 0) {
+              applicationCategory = participationInfos[0].category;
+            }
+          }
+
+          await tx.participantApplication.create({
+            data: {
+              participantId: participant.id,
+              programId: targetProgramId,
+              status: 'draft',
+              applicationCategory: applicationCategory,
+            },
+          });
+        }
+      }
+
+      return user;
+    }, { name: 'user-registration', timeout: 10000 });
 
     // Send notifications
     if (authProvider.name === 'local' && emailVerificationToken) {

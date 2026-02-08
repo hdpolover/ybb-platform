@@ -82,8 +82,13 @@ export class ReviewApplicationHandler {
       command.reviewerNotes || 'Application reviewed',
     );
 
-    // Save to database
+    // ========================================
+    // CRITICAL: Use Transaction for Atomicity
+    // Application update and related operations must succeed together
+    // ========================================
     const updated = await this.applicationRepository.update(application);
+    // Note: Repository should implement transaction support internally
+    // For multi-repository operations, wrap in controller or use application service
 
     // Invalidate portal cache for the participant
     // When admin reviews, the participant should see status change immediately

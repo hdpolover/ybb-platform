@@ -12,6 +12,7 @@ services:
       - "4000:4000"
     env_file:
       - .env.staging
+    # Advanced features env vars (READ_REPLICA_URL, CIRCUIT_BREAKER_*) should be set in .env.staging
     depends_on:
       postgres-api:
         condition: service_healthy

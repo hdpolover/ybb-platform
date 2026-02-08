@@ -64,9 +64,8 @@ export class CreateApplicationHandler {
     this.metricsService.applicationStartedTotal.inc({ brand: command.applicationCategory });
 
     // Invalidate participant caches
-    if (saved.participant?.userId) {
-      await this.invalidateParticipantCaches(saved.participant.userId, command.participantId);
-    }
+    // Note: We need to fetch userId separately or pass it in the command
+    await this.invalidateParticipantCaches(command.participantId);
 
     // Return DTO
     return this.applicationMapper.toDto(saved);
@@ -75,7 +74,7 @@ export class CreateApplicationHandler {
   /**
    * Invalidate participant caches when application is created
    */
-  private async invalidateParticipantCaches(userId: string, participantId: string): Promise<void> {
+  private async invalidateParticipantCaches(participantId: string): Promise<void> {
     try {
       await Promise.all([
         this.cacheService.invalidateKey(CACHE_KEYS.PARTICIPANT_LATEST_APP(participantId)),

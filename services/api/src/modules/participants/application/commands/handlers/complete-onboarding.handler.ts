@@ -1,5 +1,6 @@
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { UnitOfWork } from '@shared/infrastructure/database/unit-of-work.service';
 import { CompleteOnboardingCommand } from '../complete-onboarding.command';
 import { Gender } from '@prisma/client';
 import { Country } from 'country-state-city';
@@ -9,7 +10,10 @@ import { Logger, BadRequestException } from '@nestjs/common';
 export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboardingCommand> {
     private readonly logger = new Logger(CompleteOnboardingHandler.name);
 
-    constructor(private readonly prisma: PrismaService) {}
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly unitOfWork: UnitOfWork,
+    ) {}
 
     async execute(command: CompleteOnboardingCommand) {
         const { userId, dto } = command;
@@ -20,7 +24,8 @@ export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboar
             throw new BadRequestException(`Invalid country code: ${dto.originCountry}`);
         }
 
-        const result = await this.prisma.$transaction(async (tx) => {
+        const result = await this.unitOfWork.execute(async (repos) => {
+            const tx = repos.tx;
             let participant = await tx.participant.upsert({
                 where: { userId },
                 create: {
@@ -113,7 +118,7 @@ export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboar
             });
 
             return participant;
-        });
+        }, { name: 'complete-onboarding', timeout: 5000 });
 
         return result;
     }

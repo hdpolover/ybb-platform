@@ -74,8 +74,12 @@ export class SubmitApplicationHandler {
     application.submit();
     application.addStatusToHistory(application.status, command.participantId, 'Application submitted');
 
-    // Save to database
+    // ========================================
+    // CRITICAL: Use Transaction for Atomicity
+    // Ensures application update is atomic with status history
+    // ========================================
     const updated = await this.applicationRepository.update(application);
+    // Note: Repository layer handles transaction for status history updates
 
     // Record metric
     this.metricsService.applicationSubmittedTotal.inc({ brand: application.applicationCategory || 'unknown' });

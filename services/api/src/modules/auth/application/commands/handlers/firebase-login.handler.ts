@@ -4,6 +4,7 @@ import { Ambassador, ApplicationCategory } from '@prisma/client';
 import { FirebaseLoginCommand } from '../firebase-login.command';
 import { AuthResponseDto } from '../../../presentation/dto/auth-response.dto';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
+import { UnitOfWork } from '../../../../../shared/infrastructure/database/unit-of-work.service';
 import { JwtService } from '@nestjs/jwt';
 import { FirebaseAuthService } from '../../../infrastructure/services/firebase-auth.service';
 import { AuthLoggingService } from '../../services/auth-logging.service';
@@ -16,6 +17,7 @@ export class FirebaseLoginHandler {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly unitOfWork: UnitOfWork,
     private readonly jwtService: JwtService,
     private readonly firebaseAuthService: FirebaseAuthService,
     private readonly authLoggingService: AuthLoggingService,
@@ -181,31 +183,50 @@ export class FirebaseLoginHandler {
             // Parse Name from Email if not provided elsewhere
             const fullName = decodedToken.name || email.split('@')[0];
 
-            participant = await this.prisma.participant.create({
-                data: {
-                    userId: user.id,
-                    fullName: fullName,
-                    referralCode: command.referralCode,
-                    profileCompletionPercentage: 0,
-                    knowledgeSource: 'Other',
-                }
-            });
-
-            // Link Ambassador Relationship
-            if (ambassador) {
-                await this.prisma.ambassadorReferral.create({
+            // ========================================
+            // Unit of Work: Participant Creation with Referral
+            // Participant creation + ambassador referral must be atomic
+            // ========================================
+            participant = await this.unitOfWork.execute(async (repos) => {
+                const newParticipant = await repos.tx.participant.create({
                     data: {
-                            ambassadorId: ambassador.id,
-                            participantId: participant.id,
-                            status: 'referred'
+                        userId: user.id,
+                        fullName: fullName,
+                        referralCode: command.referralCode,
+                        profileCompletionPercentage: 0,
+                        knowledgeSource: 'Other',
                     }
                 });
-                
-                await this.prisma.ambassador.update({
-                    where: { id: ambassador.id },
-                    data: { totalReferrals: { increment: 1 }, lastReferralAt: new Date() }
-                });
-            }
+
+                // Link Ambassador Relationship
+                if (ambassador) {
+                    await repos.createAmbassadorReferral({
+                        participantId: newParticipant.id,
+                        ambassadorId: ambassador.id,
+                        referralCode: command.referralCode!,
+                        referredAt: new Date(),
+                    });
+
+                    await repos.incrementAmbassadorReferrals(ambassador.id);
+                }
+
+                return newParticipant;
+            }, { name: 'firebase-login-participant-creation', timeout: 5000 });
+                        data: {
+                            ambassadorId: ambassador.id,
+                            participantId: newParticipant.id,
+                            status: 'referred'
+                        }
+                    });
+                    
+                    await tx.ambassador.update({
+                        where: { id: ambassador.id },
+                        data: { totalReferrals: { increment: 1 }, lastReferralAt: new Date() }
+                    });
+                }
+
+                return newParticipant;
+            });
         }
 
         // Handle Program Auto-Registration
