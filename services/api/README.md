@@ -59,7 +59,19 @@ Edit `.env` with your database credentials:
 ```env
 DATABASE_URL="postgresql://user:password@localhost:5432/ybb_platform?schema=public"
 JWT_SECRET="your-secret-key"
+
+# Optional: Advanced Features for Production
+READ_REPLICA_URL="postgresql://user:password@replica:5432/ybb_platform"
+CIRCUIT_BREAKER_FAILURE_THRESHOLD=5
+CIRCUIT_BREAKER_SUCCESS_THRESHOLD=3
+CIRCUIT_BREAKER_TIMEOUT=60000
 ```
+
+**Advanced Features:**
+- `READ_REPLICA_URL` - Optional read replica database for improved read performance
+- `CIRCUIT_BREAKER_*` - Circuit breaker configuration for database reliability (defaults shown above)
+
+See [ADVANCED_FEATURES_SETUP.md](./docs/ADVANCED_FEATURES_SETUP.md) for detailed configuration.
 
 ### 3. Database Setup
 

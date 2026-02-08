@@ -2,6 +2,7 @@ import { Injectable, ConflictException, BadRequestException, ForbiddenException 
 import { RegisterAdminCommand } from '../register-admin.command';
 import { AuthResponseDto } from '../../../presentation/dto/auth-response.dto';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
+import { UnitOfWork } from '../../../../../shared/infrastructure/database/unit-of-work.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { ConfigService } from '@nestjs/config';
@@ -10,6 +11,7 @@ import { ConfigService } from '@nestjs/config';
 export class RegisterAdminHandler {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly unitOfWork: UnitOfWork,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {}
@@ -67,55 +69,58 @@ export class RegisterAdminHandler {
     else if (['news_writer', 'editor'].includes(command.role)) accessLevel = 3;
 
     // 5. Create User and Admin in transaction
-    const { user, admin } = await this.prisma.$transaction(async (tx) => {
-      // Hash password
-      const passwordHash = await bcrypt.hash(command.password, 10);
+    const { user, admin } = await this.unitOfWork.execute(
+      async (repos) => {
+        // Hash password
+        const passwordHash = await bcrypt.hash(command.password, 10);
 
-      // Create User
-      const newUser = await tx.user.create({
-        data: {
-          email: command.email,
-          passwordHash,
-          brandId: command.brandId,
-          isActive: true,
-          emailVerified: true, // Auto-verify admin emails
-        },
-      });
-
-      // Create Admin Profile
-      const newAdmin = await tx.admin.create({
-        data: {
-          userId: newUser.id,
-          fullName: command.fullName,
-          accessLevel: accessLevel,
-          canManageAdmins: accessLevel >= 10,
-          canAssignRoles: accessLevel >= 10,
-          roleId: role.id,
-        },
-      });
-
-      // NEW: Assign to Primary Category
-      await tx.adminBrand.create({
-        data: {
-          adminId: newAdmin.id,
-          brandId: command.brandId,
-          roleInBrand: command.role,
-        },
-      });
-
-      // NEW: Assign to Additional Categories
-      if (command.additionalCategoryIds && command.additionalCategoryIds.length > 0) {
-        await tx.adminBrand.createMany({
-          data: command.additionalCategoryIds.map((catId) => ({
-            adminId: newAdmin.id,
-            brandId: catId,
-            roleInBrand: command.role,
-          })),
+        // Create User
+        const newUser = await repos.tx.user.create({
+          data: {
+            email: command.email,
+            passwordHash,
+            brandId: command.brandId,
+            isActive: true,
+            emailVerified: true, // Auto-verify admin emails
+          },
         });
-      }
 
-      return { user: newUser, admin: newAdmin };
-    });
+        // Create Admin Profile
+        const newAdmin = await repos.createAdmin({
+          userId: newUser.id,
+          firstName: command.fullName.split(' ')[0] || command.fullName,
+          lastName: command.fullName.split(' ').slice(1).join(' ') || '',
+          accessLevel: accessLevel,
+          permissions: {
+            canManageAdmins: accessLevel >= 10,
+            canAssignRoles: accessLevel >= 10,
+          },
+        });
+
+        // NEW: Assign to Primary Category
+        await repos.tx.adminBrand.create({
+          data: {
+            adminId: newAdmin.id,
+            brandId: command.brandId,
+            roleInBrand: command.role,
+          },
+        });
+
+        // NEW: Assign to Additional Categories
+        if (command.additionalCategoryIds && command.additionalCategoryIds.length > 0) {
+          await repos.tx.adminBrand.createMany({
+            data: command.additionalCategoryIds.map((catId) => ({
+              adminId: newAdmin.id,
+              brandId: catId,
+              roleInBrand: command.role,
+            })),
+          });
+        }
+
+        return { user: newUser, admin: newAdmin };
+      },
+      { name: 'register-admin', timeout: 5000 }
+    );
 
     // 6. Generate Tokens
     const payload = {

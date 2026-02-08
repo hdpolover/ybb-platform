@@ -2,6 +2,7 @@ import { Controller, Logger, Optional } from '@nestjs/common';
 import { EventPattern, Payload } from '@nestjs/microservices';
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { UnitOfWork } from '@shared/infrastructure/database/unit-of-work.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { RedisPubSubService } from '@shared/infrastructure/redis/redis-pubsub.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
@@ -14,6 +15,7 @@ export class PaymentEventsController {
     constructor(
         private readonly metricsService: MetricsService,
         private readonly prisma: PrismaService,
+        private readonly unitOfWork: UnitOfWork,
         private readonly cacheService: CacheService,
         @Optional() private readonly pubSubService?: RedisPubSubService,
     ) {}
@@ -110,33 +112,36 @@ export class PaymentEventsController {
         // If pricing tier is missing (edge case), we can't create a valid invoice relation easily
         // But preventing the status update would be worse.
         // We will try to create invoice if tier exists.
-        const ops: any[] = [
-            this.prisma.participantApplication.update({
-                where: { id: applicationId },
-                data: updateData
-            })
-        ];
+        
+        // Unit of Work: Application Payment Status Update + Invoice Creation
+        await this.unitOfWork.execute(
+            async (repos) => {
+                // Update application payment status
+                await repos.tx.participantApplication.update({
+                    where: { id: applicationId },
+                    data: updateData
+                });
 
-        if (application.pricingTierId) {
-            ops.push(
-                this.prisma.applicationInvoice.create({
-                    data: {
-                        applicationId: applicationId,
-                        pricingTierId: application.pricingTierId,
-                        amount: amount,
-                        currency: currency,
-                        status: PaymentStatus.paid,
-                        paidAt: new Date(),
-                        externalTransactionId: transactionId,
-                        paymentMethod: method
-                    }
-                })
-            );
-        } else {
-            this.logger.warn(`Skipping invoice creation for app ${applicationId} - no pricingTierId`);
-        }
-
-        await this.prisma.$transaction(ops);
+                // Create invoice if pricing tier exists
+                if (application.pricingTierId) {
+                    await repos.tx.applicationInvoice.create({
+                        data: {
+                            applicationId: applicationId,
+                            pricingTierId: application.pricingTierId,
+                            amount: amount,
+                            currency: currency,
+                            status: PaymentStatus.paid,
+                            paidAt: new Date(),
+                            externalTransactionId: transactionId,
+                            paymentMethod: method
+                        }
+                    });
+                } else {
+                    this.logger.warn(`Skipping invoice creation for app ${applicationId} - no pricingTierId`);
+                }
+            },
+            { name: 'payment-success-application-update', timeout: 5000 }
+        );
         this.logger.log(`Application ${applicationId} updated to PAID (Category: ${category})`);
 
         // Return userId for cache invalidation
