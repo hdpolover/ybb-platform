@@ -3,6 +3,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
+import { PortalCacheService } from '../../services/portal-cache.service';
 import { GetPortalDocumentsQuery } from '../portal-queries';
 import { 
     PortalDocumentResponseDto, 
@@ -15,6 +16,7 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
     constructor(
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
+        private readonly portalCacheService: PortalCacheService,
     ) {}
 
     async execute(query: GetPortalDocumentsQuery): Promise<PortalDocumentResponseDto> {
@@ -28,16 +30,41 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
         }
 
         // Cache miss - fetch from database
-        const participant = await this.prisma.participant.findUnique({ where: { userId } });
+        const participant = await this.portalCacheService.getParticipantProfile(userId);
         if (!participant) throw new NotFoundException('Participant not found');
 
         const application = await this.prisma.participantApplication.findFirst({
             where: { participantId: participant.id },
-            include: { 
-                program: { 
-                    include: { resources: true } 
+            select: {
+                id: true,
+                status: true,
+                program: {
+                    select: {
+                        id: true,
+                        resources: {
+                            where: { isActive: true },
+                            select: {
+                                id: true,
+                                title: true,
+                                description: true,
+                                type: true,
+                                fileUrl: true,
+                                isPublic: true,
+                                updatedAt: true
+                            },
+                            orderBy: { order: 'asc' }
+                        }
+                    }
                 },
-                documents: true // Uploaded documents
+                documents: {
+                    select: {
+                        id: true,
+                        name: true,
+                        type: true,
+                        fileUrl: true,
+                        generatedAt: true
+                    }
+                }
             }
         });
 

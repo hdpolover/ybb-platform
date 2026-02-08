@@ -3,12 +3,15 @@ import { Inject } from '@nestjs/common';
 import { UpdateParticipantProfileCommand } from '../update-participant-profile.command';
 import { IParticipantRepository } from '../../../../../core/interfaces/repositories/participant.repository.interface';
 import { ParticipantResponseDto } from '../../../presentation/dto/participant.dto';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS } from '@shared/constants/cache-keys';
 
 @CommandHandler(UpdateParticipantProfileCommand)
 export class UpdateParticipantProfileHandler implements ICommandHandler<UpdateParticipantProfileCommand> {
     constructor(
         @Inject('IParticipantRepository')
         private readonly participantRepository: IParticipantRepository,
+        private readonly cacheService: CacheService,
     ) { }
 
     async execute(command: UpdateParticipantProfileCommand): Promise<ParticipantResponseDto> {
@@ -44,6 +47,9 @@ export class UpdateParticipantProfileHandler implements ICommandHandler<UpdatePa
         updateData.lastProfileUpdate = new Date(); // Track when it was last updated
 
         participant = await this.participantRepository.update(userId, updateData);
+
+        // Invalidate all related caches
+        await this.invalidateParticipantCaches(userId, participant.id);
 
         // Return updated DTO
         return {
@@ -98,5 +104,26 @@ export class UpdateParticipantProfileHandler implements ICommandHandler<UpdatePa
         if (data.emergencyContactName && data.emergencyContactPhone) score += 10;
 
         return Math.min(score, 100);
+    }
+
+    /**
+     * Invalidate all participant-related caches when profile is updated
+     */
+    private async invalidateParticipantCaches(userId: string, participantId: string): Promise<void> {
+        try {
+            await Promise.all([
+                // Portal caches
+                this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_DASHBOARD(userId)),
+                this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_SUBMISSIONS(userId)),
+                this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_PAYMENTS(userId)),
+                this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_DOCUMENTS(userId)),
+                // Participant data caches
+                this.cacheService.invalidateKey(CACHE_KEYS.PARTICIPANT_PROFILE(userId)),
+                this.cacheService.invalidateKey(CACHE_KEYS.PARTICIPANT_STATS(participantId)),
+            ]);
+        } catch (error) {
+            // Log but don't throw - cache invalidation failures shouldn't break updates
+            console.error(`Failed to invalidate caches for participant ${participantId}:`, error);
+        }
     }
 }

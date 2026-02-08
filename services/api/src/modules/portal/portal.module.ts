@@ -6,11 +6,13 @@ import { GetPortalDashboardHandler } from './application/queries/handlers/get-po
 import { GetPortalSubmissionsHandler } from './application/queries/handlers/get-portal-submissions.handler';
 import { GetPortalPaymentsHandler } from './application/queries/handlers/get-portal-payments.handler';
 import { GetPortalDocumentsHandler } from './application/queries/handlers/get-portal-documents.handler';
+import { PortalCacheService } from './application/services/portal-cache.service';
 
 @Module({
     imports: [CqrsModule, AuthModule],
     controllers: [PortalController],
     providers: [
+        PortalCacheService,
         GetPortalDashboardHandler,
         GetPortalSubmissionsHandler,
         GetPortalPaymentsHandler,

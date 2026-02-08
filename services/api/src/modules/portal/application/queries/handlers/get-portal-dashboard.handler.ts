@@ -3,6 +3,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
+import { PortalCacheService } from '../../services/portal-cache.service';
 import { GetPortalDashboardQuery } from '../portal-queries';
 import { 
     PortalDashboardResponseDto, 
@@ -16,6 +17,7 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
     constructor(
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
+        private readonly portalCacheService: PortalCacheService,
     ) {}
 
     async execute(query: GetPortalDashboardQuery): Promise<PortalDashboardResponseDto> {
@@ -29,11 +31,8 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
         }
 
         // Cache miss - fetch from database
-        // 1. Fetch Participant and latest application
-        const participant = await this.prisma.participant.findUnique({
-            where: { userId },
-            include: { user: true }
-        });
+        // 1. Fetch Participant (using cached lookup)
+        const participant = await this.portalCacheService.getParticipantProfile(userId);
 
         if (!participant) {
             return this.buildOnboardingDashboard();
@@ -42,29 +41,62 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
         const latestApplication = await this.prisma.participantApplication.findFirst({
             where: { participantId: participant.id },
             orderBy: { updatedAt: 'desc' },
-            include: {
+            select: {
+                id: true,
+                status: true,
+                applicationCategory: true,
+                updatedAt: true,
                 program: {
-                    include: {
+                    select: {
+                        id: true,
+                        name: true,
+                        applicationDeadline: true,
                         programAnnouncements: {
+                            where: { isActive: true },
                             orderBy: { createdAt: 'desc' },
                             take: 3,
-                            where: { isActive: true },
-                            include: { reads: { where: { userId } } }
+                            select: {
+                                id: true,
+                                title: true,
+                                content: true,
+                                createdAt: true,
+                                reads: {
+                                    where: { userId },
+                                    select: { id: true }
+                                }
+                            }
                         },
-                        announcements: { // System Announcements
+                        announcements: {
                             where: { isPublished: true },
                             orderBy: { createdAt: 'desc' },
                             take: 5,
-                            include: { reads: { where: { userId } } }
+                            select: {
+                                id: true,
+                                title: true,
+                                content: true,
+                                summary: true,
+                                publishedAt: true,
+                                createdAt: true,
+                                reads: {
+                                    where: { userId },
+                                    select: { id: true }
+                                }
+                            }
                         }
                     }
                 },
-                invoices: true
+                invoices: {
+                    select: {
+                        id: true,
+                        status: true,
+                        amount: true
+                    }
+                }
             }
         });
 
-        // 2. Stats
-        const stats = await this.getStats(participant.id);
+        // 2. Stats (using cached lookup)
+        const stats = await this.portalCacheService.getParticipantStats(participant.id);
 
         // 3. Application Summary & Alerts
         let activeAppSummary: PortalApplicationSummaryDto | null = null;
@@ -144,18 +176,6 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
             recentAnnouncements: [],
             stats: { applicationsCount: 0, completedProgramsCount: 0, certificatesCount: 0 }
          };
-    }
-
-    private async getStats(participantId: string) {
-        const appCount = await this.prisma.participantApplication.count({ where: { participantId } });
-        const certCount = await this.prisma.participantDocument.count({
-            where: { application: { participantId }, type: 'certificate' }
-        });
-        return {
-            applicationsCount: appCount,
-            completedProgramsCount: 0, // Placeholder
-            certificatesCount: certCount
-        };
     }
 
     private generateAlerts(application: any): PortalDashboardAlertDto[] {

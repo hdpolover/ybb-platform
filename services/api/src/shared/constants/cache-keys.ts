@@ -30,6 +30,18 @@ export const CACHE_KEYS = {
   PORTAL_PAYMENTS: (userId: string) => `portal:payments:${userId}`,
   PORTAL_DOCUMENTS: (userId: string) => `portal:documents:${userId}`,
 
+  // Participant cache keys (for optimized lookups)
+  PARTICIPANT_PROFILE: (userId: string) => `participant:profile:${userId}`,
+  PARTICIPANT_STATS: (participantId: string) => `participant:stats:${participantId}`,
+  PARTICIPANT_LATEST_APP: (participantId: string) => `participant:latest-app:${participantId}`,
+
+  // Program data cache keys (static/semi-static data)
+  PROGRAM_ESSAYS: (programId: string) => `program:essays:${programId}`,
+  PROGRAM_REQUIREMENTS: (programId: string) => `program:requirements:${programId}`,
+  PROGRAM_PRICING: (programId: string) => `program:pricing:${programId}`,
+  PROGRAM_RESOURCES: (programId: string) => `program:resources:${programId}`,
+  PROGRAM_ANNOUNCEMENTS: (programId: string, userId: string) => `program:announcements:${programId}:user:${userId}`,
+
   // Admin cache keys
   STATS_DASHBOARD: (brandId: string, params: string) => `stats:dashboard:${brandId}:${params}`,
   PARTICIPANT_LIST: (programId: string) => `participants:program:${programId}`,

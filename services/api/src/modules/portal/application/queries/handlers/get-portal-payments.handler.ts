@@ -3,6 +3,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
+import { PortalCacheService } from '../../services/portal-cache.service';
 import { GetPortalPaymentsQuery } from '../portal-queries';
 import { 
     PortalPaymentResponseDto, 
@@ -16,6 +17,7 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
     constructor(
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
+        private readonly portalCacheService: PortalCacheService,
     ) {}
 
     async execute(query: GetPortalPaymentsQuery): Promise<PortalPaymentResponseDto> {
@@ -29,13 +31,46 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
         }
 
         // Cache miss - fetch from database
-        const participant = await this.prisma.participant.findUnique({ where: { userId } });
+        const participant = await this.portalCacheService.getParticipantProfile(userId);
         if (!participant) throw new NotFoundException('Participant not found');
 
         // Get latest application
         const application = await this.prisma.participantApplication.findFirst({
             where: { participantId: participant.id },
-            include: { invoices: true, program: { include: { pricingTiers: true } } }
+            select: {
+                id: true,
+                applicationCategory: true,
+                invoices: {
+                    select: {
+                        id: true,
+                        amount: true,
+                        currency: true,
+                        status: true,
+                        paidAt: true,
+                        paymentMethod: true,
+                        pricingTierId: true
+                    }
+                },
+                program: {
+                    select: {
+                        id: true,
+                        currency: true,
+                        pricingTiers: {
+                            where: { isActive: true },
+                            select: {
+                                id: true,
+                                name: true,
+                                description: true,
+                                price: true,
+                                currency: true,
+                                feeType: true,
+                                allowedCategories: true
+                            },
+                            orderBy: { order: 'asc' }
+                        }
+                    }
+                }
+            }
         });
 
         const history: PaymentItemDto[] = [];
