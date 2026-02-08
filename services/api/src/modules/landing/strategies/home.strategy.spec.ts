@@ -1,7 +1,7 @@
-
 import { Test, TestingModule } from '@nestjs/testing';
 import { HomeStrategy } from './home.strategy';
 import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
+import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
 
 describe('HomeStrategy', () => {
     let strategy: HomeStrategy;
@@ -27,17 +27,24 @@ describe('HomeStrategy', () => {
         },
     };
 
+    const mockCacheService = {
+        get: jest.fn().mockResolvedValue(null), // Always return null (cache miss) for tests
+        set: jest.fn().mockResolvedValue(undefined),
+        invalidateByPattern: jest.fn().mockResolvedValue(undefined),
+    };
+
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
             providers: [
                 HomeStrategy,
                 { provide: PrismaService, useValue: mockPrismaService },
+                { provide: CacheService, useValue: mockCacheService },
             ],
         }).compile();
 
         strategy = module.get<HomeStrategy>(HomeStrategy);
         prismaService = module.get<PrismaService>(PrismaService);
-        
+
         jest.clearAllMocks();
     });
 
@@ -118,7 +125,7 @@ describe('HomeStrategy', () => {
             { id: 'test-1', name: 'Alumni', testimonial: 'Great!' }
         ]);
 
-        const result = await strategy.getData(category as any);
+        const result: any = await strategy.getData(category as any);
 
         expect(result.title).toBe('Test Brand');
         const sections = result.sections;
@@ -139,7 +146,7 @@ describe('HomeStrategy', () => {
         const objectives = sections.find(s => s.type === 'program_objectives');
         expect(objectives).toBeDefined();
         expect(objectives?.content?.items).toHaveLength(1);
-        
+
         // Check Awards (from Latest Program)
         const awards = sections.find(s => s.type === 'program_awards');
         expect(awards).toBeDefined();

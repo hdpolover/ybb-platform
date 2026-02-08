@@ -23,7 +23,7 @@ export class LandingService {
     private readonly announcementsStrategy: AnnouncementsStrategy,
     private readonly settingsStrategy: SettingsStrategy,
     private readonly faqsStrategy: FaqsStrategy,
-  ) {}
+  ) { }
 
   private async resolveBrand(url?: string): Promise<Brand | null> {
     if (!url) {
@@ -39,17 +39,17 @@ export class LandingService {
     // Check if input is UUID (Brand ID)
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(url);
     if (isUuid) {
-       const brand = await this.prisma.brand.findFirst({
-           where: { id: url, isActive: true }
-       });
-       if (brand) return brand;
+      const brand = await this.prisma.brand.findFirst({
+        where: { id: url, isActive: true }
+      });
+      if (brand) return brand;
     }
 
     // Try to find by exact URL match (most reliable)
     let brand = await this.prisma.brand.findFirst({
-      where: { 
+      where: {
         websiteUrl: url,
-        isActive: true 
+        isActive: true
       },
     });
 
@@ -70,42 +70,43 @@ export class LandingService {
     return brand;
   }
 
-  async getHome(url?: string) {
+  async getHome(url?: string): Promise<any> {
     const brand = await this.resolveBrand(url);
     return this.homeStrategy.getData(brand);
   }
 
-  async getAbout(url?: string) {
+  async getAbout(url?: string): Promise<any> {
     const brand = await this.resolveBrand(url);
     return this.aboutStrategy.getData(brand);
   }
 
-  async getPrograms(url?: string) {
+  async getPrograms(url?: string): Promise<any> {
     const brand = await this.resolveBrand(url);
     return this.programsStrategy.getData(brand);
   }
 
-  async getProgramDetail(slug: string, url?: string) {
+  async getProgramDetail(slug: string, url?: string): Promise<any> {
     const brand = await this.resolveBrand(url);
     return this.programsStrategy.getProgramData(slug, brand);
   }
 
-  async getPartnersSponsors(url?: string) {
+  async getPartnersSponsors(url?: string): Promise<any> {
     const brand = await this.resolveBrand(url);
     return this.partnersSponsorsStrategy.getData(brand);
   }
 
-  async getAnnouncements(url?: string) {
+  async getAnnouncements(url?: string): Promise<any> {
     const brand = await this.resolveBrand(url);
     return this.announcementsStrategy.getData(brand);
   }
 
-  async getFaqs(url?: string, page: number = 1, limit: number = 10, search?: string) {
+  async getFaqs(url?: string, page: number = 1, limit: number = 10, search?: string): Promise<any> {
     const brand = await this.resolveBrand(url);
+    // FaqsStrategy has a specific getFaqs method with pagination
     return this.faqsStrategy.getFaqs(brand, page, limit, search);
   }
 
-  async getSettings(url?: string) {
+  async getSettings(url?: string): Promise<any> {
     const brand = await this.resolveBrand(url);
     return this.settingsStrategy.getData(brand);
   }
