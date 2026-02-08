@@ -5,6 +5,7 @@ export async function seedAuth() {
   log('🌱 Seeding Auth...');
 
   // 1. Auth Providers
+  // We prioritize 'local' to ensure it's established as the default foundation
   const providers = [
     { name: 'local', displayName: 'Email & Password', icon: 'email', buttonColor: '#4A5568', order: 1, isOAuth: false },
     { name: 'google', displayName: 'Google', icon: 'google', buttonColor: '#4285F4', order: 2, isOAuth: true },
@@ -13,9 +14,12 @@ export async function seedAuth() {
   ];
 
   for (const p of providers) {
-    await prisma.authProvider.upsert({
+    const provider = await prisma.authProvider.upsert({
       where: { name: p.name },
-      update: {},
+      update: {
+        order: p.order,
+        isActive: true,
+      },
       create: {
         name: p.name,
         displayName: p.displayName,
@@ -27,8 +31,12 @@ export async function seedAuth() {
         order: p.order,
       },
     });
+
+    if (p.name === 'local') {
+      log('✅ Default Auth Provider (local) established');
+    }
   }
-  log('✅ Auth Providers created');
+  log('✅ All Auth Providers synced');
 
   // 2. Roles
   const roles = [

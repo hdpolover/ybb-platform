@@ -35,6 +35,7 @@ services:
       FIREBASE_APP_ID: ${FIREBASE_APP_ID}
       FIREBASE_MEASUREMENT_ID: ${FIREBASE_MEASUREMENT_ID}
       # Use the JSON file for authentication (Simpler and more robust)
+      IS_DOCKER: "true"
       GOOGLE_APPLICATION_CREDENTIALS: /app/service-account.json
     volumes:
       - ./src:/app/src
@@ -69,7 +70,7 @@ services:
     volumes:
       - postgres_api_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -87,7 +88,7 @@ services:
     volumes:
       - redis_api_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5

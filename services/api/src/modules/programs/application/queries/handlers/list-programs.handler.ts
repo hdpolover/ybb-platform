@@ -9,16 +9,17 @@ export class ListProgramsHandler implements IQueryHandler<ListProgramsQuery> {
     constructor(
         @Inject('IProgramRepository')
         private readonly programRepository: IProgramRepository,
-    ) {}
+    ) { }
 
     async execute(query: ListProgramsQuery): Promise<ProgramListResponseDto> {
-        const { brandId, year, isPublished, page, limit, isActive, status } = query;
+        const { brandId, year, isPublished, page, limit, isActive, isVisibleToUsers, status } = query;
 
         const { programs, total } = await this.programRepository.findAll({
             brandId: brandId,
             year,
             isPublished,
             isActive,
+            isVisibleToUsers,
             status,
             page,
             limit,

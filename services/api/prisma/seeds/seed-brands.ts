@@ -2,10 +2,13 @@ import { prisma, log } from './utils';
 import * as bcrypt from 'bcrypt';
 
 export const BRANDS = {
-  IYS: 'iys',
-  YAF: 'yaf',
-  WYF: 'wyf',
-  JYS: 'jys',
+  IYS: 'istanbul-youth-summit',
+  YAF: 'youth-academic-forum',
+  WYF: 'world-youth-fest',
+  JYS: 'japan-youth-summit',
+  MEYS: 'middle-east-youth-summit',
+  KYS: 'korea-youth-summit',
+  VYS: 'vietnam-youth-summit',
 };
 
 export async function seedBrands() {
@@ -57,7 +60,7 @@ export async function seedBrands() {
       contactEmail: 'admin@worldyouthfest.com',
       primaryColor: '#F59E0B',
       isActive: true,
-      logoUrl: 'https://placehold.co/400x100/F59E0B/FFF?text=WYF+Logo', 
+      logoUrl: 'https://placehold.co/400x100/F59E0B/FFF?text=WYF+Logo',
     },
   });
 

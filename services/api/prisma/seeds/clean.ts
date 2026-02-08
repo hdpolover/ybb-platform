@@ -1,28 +1,65 @@
 import { prisma, log } from './utils';
 
 export async function cleanDatabase() {
-  log('🧹 Cleaning database...');
+  log('🧹 Cleaning database using TRUNCATE CASCADE (Super Fast)...');
 
-  // 1. Child tables of Program
-  await prisma.participantApplication.deleteMany({});
-  await prisma.programPricingTier.deleteMany({});
-  await prisma.programEssay.deleteMany({});
-  await prisma.programSubtheme.deleteMany({});
-  await prisma.programSpeaker.deleteMany({});
-  await prisma.programGallery.deleteMany({});
-  await prisma.programSchedule.deleteMany({});
-  await prisma.programFaq.deleteMany({});
-  // Add other program related tables if necessary
-  
-  // 2. Program
-  await prisma.program.deleteMany({});
+  // These are the main tables that will cascade to everything else
+  const tables = [
+    'application_assessments',
+    'application_invoices',
+    'participant_awards',
+    'participant_documents',
+    'participant_applications',
+    'program_pricing_tiers',
+    'program_essays',
+    'program_subthemes',
+    'program_speakers',
+    'program_gallery',
+    'program_schedules',
+    'program_faqs',
+    'programs',
+    'admins',
+    'user_identities',
+    'users',
+    'brands',
+    'auth_providers'
+  ];
 
-  // 3. Admin & User (Linked to Brands)
-  await prisma.admin.deleteMany({});
-  await prisma.user.deleteMany({});
+  try {
+    const query = `TRUNCATE TABLE ${tables.map(t => `"${t}"`).join(', ')} RESTART IDENTITY CASCADE;`;
+    await prisma.$executeRawUnsafe(query);
+    log('✨ Database cleaned successfully');
+  } catch (e) {
+    log('⚠️ TRUNCATE failed. Falling back to deleteMany (slower)...');
 
-  // 4. Brands
-  await prisma.brand.deleteMany({});
-  
-  log('✨ Database cleaned');
+    // Fallback if TRUNCATE fails for some reason
+    const modelNames = [
+      'applicationAssessment',
+      'applicationInvoice',
+      'participantAward',
+      'participantDocument',
+      'participantApplication',
+      'programPricingTier',
+      'programEssay',
+      'programSubtheme',
+      'programSpeaker',
+      'programGallery',
+      'programSchedule',
+      'programFaq',
+      'program',
+      'admin',
+      'userIdentity',
+      'user',
+      'brand'
+    ];
+
+    for (const model of modelNames) {
+      try {
+        // @ts-ignore
+        await prisma[model].deleteMany({});
+      } catch (err) {
+        // Skip if table doesn't exist or other minor error
+      }
+    }
+  }
 }
