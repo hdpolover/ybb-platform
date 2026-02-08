@@ -2,13 +2,24 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies for WeasyPrint/Pango
+# Install system dependencies for WeasyPrint/Pango and Pillow-SIMD
 RUN apt-get update && apt-get install -y \
+    # WeasyPrint dependencies
     libpango-1.0-0 \
     libpangoft2-1.0-0 \
     libharfbuzz0b \
     libpango1.0-dev \
     libcairo2 \
+    # Pillow-SIMD build dependencies
+    gcc \
+    python3-dev \
+    libjpeg-dev \
+    zlib1g-dev \
+    libtiff-dev \
+    libfreetype6-dev \
+    liblcms2-dev \
+    libwebp-dev \
+    libopenjp2-7-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies

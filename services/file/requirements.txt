@@ -20,8 +20,8 @@ reportlab>=4.0.7
 PyPDF2>=3.0.1
 weasyprint>=60.1
 
-# Image Processing for Certificates (SIMD for 4-6x faster processing)
-pillow-simd>=10.1.0
+# Image Processing (Pillow 10+ includes SIMD optimizations by default)
+Pillow>=10.1.0
 
 # Template Engine
 jinja2>=3.1.2
