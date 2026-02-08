@@ -1,12 +1,12 @@
-import { 
-    Controller, 
-    Get, 
-    Post, 
-    Put, 
-    Delete, 
-    Body, 
-    Param, 
-    UseGuards, 
+import {
+    Controller,
+    Get,
+    Post,
+    Put,
+    Delete,
+    Body,
+    Param,
+    UseGuards,
     Query,
     HttpException,
     Logger
@@ -23,6 +23,9 @@ import { CreatePaymentMethodDto, UpdatePaymentMethodDto } from './dto/admin-paym
 import { FileServiceClient } from '@modules/files/infrastructure/clients/file-service.client';
 import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
+
 @ApiTags('Admin Payments')
 @Controller('admin/payments')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -35,7 +38,8 @@ export class PaymentAdminController {
     constructor(
         private readonly httpService: HttpService,
         private readonly configService: ConfigService,
-        private readonly fileService: FileServiceClient
+        private readonly fileService: FileServiceClient,
+        private readonly cacheService: CacheService,
     ) {
         this.logger.log("Using HTTP Payment Admin Controller");
         this.paymentServiceUrl = this.configService.get<string>('PAYMENT_SERVICE_URL', 'http://payment-service:8002');
@@ -47,9 +51,18 @@ export class PaymentAdminController {
     @ApiResponse({ status: 200, description: 'List of payment methods' })
     async listMethods(@Query() query: any) {
         try {
+            const queryParams = JSON.stringify(query);
+            const cacheKey = CACHE_KEYS.PAYMENT_METHODS(queryParams);
+
+            const cached = await this.cacheService.get(cacheKey);
+            if (cached) return cached;
+
             const { data } = await firstValueFrom(
                 this.httpService.get(`${this.paymentServiceUrl}/api/v1/payment-methods`, { params: query })
             );
+
+            await this.cacheService.set(cacheKey, data, CACHE_TTL.HOUR);
+
             return data;
         } catch (error) {
             this.handleError(error);
@@ -65,12 +78,15 @@ export class PaymentAdminController {
             if (body.icon) {
                 body.icon = await this.resolveIconUrl(body.icon, user);
             }
-            
+
             this.logger.log(`Creating payment method with icon: ${body.icon}`);
 
             const { data } = await firstValueFrom(
                 this.httpService.post(`${this.paymentServiceUrl}/api/v1/payment-methods`, body)
             );
+
+            await this.cacheService.invalidateByPattern('payment:methods:*');
+
             return data;
         } catch (error) {
             this.logger.error(`Create method failed: ${error.message}`, error.stack);
@@ -106,6 +122,9 @@ export class PaymentAdminController {
             const { data } = await firstValueFrom(
                 this.httpService.put(`${this.paymentServiceUrl}/api/v1/payment-methods/${id}`, body)
             );
+
+            await this.cacheService.invalidateByPattern('payment:methods:*');
+
             return data;
         } catch (error) {
             this.handleError(error);
@@ -120,6 +139,9 @@ export class PaymentAdminController {
             const { data } = await firstValueFrom(
                 this.httpService.delete(`${this.paymentServiceUrl}/api/v1/payment-methods/${id}`)
             );
+
+            await this.cacheService.invalidateByPattern('payment:methods:*');
+
             return data;
         } catch (error) {
             this.handleError(error);
@@ -140,22 +162,22 @@ export class PaymentAdminController {
         try {
             const fileInfo = await this.fileService.getFile(icon, user.userId, user.brandId);
             this.logger.log(`Resolved file info received`);
-            
+
             // Handle various possible response structures from File Service
             // It might return { data: { url: ... } } or just { url: ... }
             const data = fileInfo.data || fileInfo;
             const resolvedUrl = data.url || data.display_url;
-            
+
             if (resolvedUrl) {
                 this.logger.log(`Resolved URL: ${resolvedUrl}`);
                 return resolvedUrl;
             }
-            
+
             if (data.download_url) {
                 this.logger.log(`Using download URL: ${data.download_url}`);
                 return data.download_url;
             }
-            
+
             this.logger.warn(`File info found but no URL property. Keys: ${Object.keys(data)}`);
             return icon;
 

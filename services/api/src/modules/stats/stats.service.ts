@@ -5,20 +5,36 @@ import { GetStatsQueryDto, StatSection } from './dto/get-stats.dto';
 import { Brand } from '@prisma/client';
 import { StatsResponseDto, ParticipantGeographyItemDto } from './dto/stats-response.dto';
 
+import { CacheService } from '../../shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS, CACHE_TTL } from '../../shared/constants/cache-keys';
+
 @Injectable()
 export class StatsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cacheService: CacheService,
+  ) { }
 
   async getStats(query: GetStatsQueryDto): Promise<StatsResponseDto> {
     const category = await this.resolveContext(query);
-    
+
     // If no context found and not global admin (which we assume isn't the case for public endpoint), 
     // return empty stats or throw. For now, returning zeros if no category found.
     if (!category) {
-       return {
-         impact: { total_participants: 0, total_countries: 0, alumni: 0 },
-         geography: { items: [], meta: { total: 0, page: 1, limit: 20, totalPages: 0 } },
-       };
+      return {
+        impact: { total_participants: 0, total_countries: 0, alumni: 0 },
+        geography: { items: [], meta: { total: 0, page: 1, limit: 20, totalPages: 0 } },
+      };
+    }
+
+    // Generate cache key based on brand and query parameters
+    const queryParams = JSON.stringify(query);
+    const cacheKey = CACHE_KEYS.STATS_DASHBOARD(category.id, queryParams);
+
+    // Try to get from cache
+    const cachedStats = await this.cacheService.get<StatsResponseDto>(cacheKey);
+    if (cachedStats) {
+      return cachedStats;
     }
 
     const response: StatsResponseDto = {};
@@ -31,6 +47,9 @@ export class StatsService {
     if (sections.includes(StatSection.GEOGRAPHY)) {
       response.geography = await this.getGeographyStats(category.id, query.page || 1, query.limit || 20);
     }
+
+    // Cache the result for 5 minutes (MEDIUM TTL)
+    await this.cacheService.set(cacheKey, response, CACHE_TTL.MEDIUM);
 
     return response;
   }
@@ -126,7 +145,7 @@ export class StatsService {
     // This is essentially "total_countries" from impact, but let's re-query to be safe/isolated
     // Usually standard SQL: SELECT COUNT(DISTINCT country) ...
     // Prisma:
-     const distinctCountriesCount = (await this.prisma.participant.findMany({
+    const distinctCountriesCount = (await this.prisma.participant.findMany({
       where: {
         user: { brandId: categoryId },
         originCountry: { not: null },
@@ -147,13 +166,13 @@ export class StatsService {
     });
 
     return {
-        items,
-        meta: {
-            total: distinctCountriesCount,
-            page,
-            limit,
-            totalPages: Math.ceil(distinctCountriesCount / limit)
-        }
+      items,
+      meta: {
+        total: distinctCountriesCount,
+        page,
+        limit,
+        totalPages: Math.ceil(distinctCountriesCount / limit)
+      }
     }
   }
 }

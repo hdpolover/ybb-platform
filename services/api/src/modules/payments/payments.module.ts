@@ -16,6 +16,8 @@ import { GetPaymentDetailHandler } from './application/queries/handlers/get-paym
 import { CreateIntentHandler } from './application/commands/handlers/create-intent.handler';
 import { ProcessPaymentHandler } from './application/commands/handlers/process-payment.handler';
 
+import { CacheModule } from '@shared/infrastructure/cache/cache.module';
+
 @Module({
     imports: [
         CqrsModule,
@@ -24,6 +26,7 @@ import { ProcessPaymentHandler } from './application/commands/handlers/process-p
         MonitoringModule,
         HttpModule,
         ConfigModule,
+        CacheModule,
     ],
     controllers: [PaymentsController, PaymentAdminController, PaymentEventsController, WebhooksController],
     providers: [

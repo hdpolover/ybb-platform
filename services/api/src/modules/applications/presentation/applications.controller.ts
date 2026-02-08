@@ -14,6 +14,8 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 
 // Commands
 import { CreateApplicationHandler } from '../application/commands/handlers/create-application.handler';
@@ -35,8 +37,11 @@ import { CreateRegistrationPaymentIntentCommand } from '../application/commands/
 // Queries
 import { GetApplicationHandler } from '../application/queries/handlers/get-application.handler';
 import { ListApplicationsHandler } from '../application/queries/handlers/list-applications.handler';
+import { ExportApplicationsHandler } from '../application/queries/handlers/export-applications.handler';
 import { GetApplicationQuery } from '../application/queries/get-application.query';
 import { ListApplicationsQuery } from '../application/queries/list-applications.query';
+import { ExportApplicationsQuery } from '../application/queries/export-applications.query';
+import { StreamableFile } from '@nestjs/common';
 
 // DTOs
 import { CreateApplicationRequestDto } from './dto/create-application-request.dto';
@@ -69,7 +74,9 @@ export class ApplicationsController {
     private readonly createRegistrationPaymentIntentHandler: CreateRegistrationPaymentIntentHandler,
     private readonly getApplicationHandler: GetApplicationHandler,
     private readonly listApplicationsHandler: ListApplicationsHandler,
-  ) {}
+    private readonly exportApplicationsHandler: ExportApplicationsHandler,
+    private readonly cacheService: CacheService,
+  ) { }
 
   @Post()
   @ApiOperation({ summary: 'Create a new application' })
@@ -94,6 +101,32 @@ export class ApplicationsController {
     return this.createApplicationHandler.execute(command);
   }
 
+  @Get('export')
+  @ApiOperation({ summary: 'Export applications to CSV' })
+  @ApiQuery({ name: 'brandId', required: true })
+  @ApiQuery({ name: 'programId', required: false })
+  @ApiQuery({ name: 'status', enum: ApplicationStatus, required: false })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiResponse({ status: 200, description: 'CSV file stream' })
+  async export(
+    @Query('brandId') brandId: string,
+    @Query('programId') programId?: string,
+    @Query('status') status?: ApplicationStatus,
+    @Query('search') search?: string,
+  ): Promise<StreamableFile> {
+    this.logger.log(`Exporting applications: brandId=${brandId}, programId=${programId}`);
+
+    // We do NOT use query bus for StreamableFile return types usually, 
+    // but we can if the handler returns StreamableFile. 
+    // However, QueryBus execute return type is generic. 
+    // Let's inject the handler directly or use the query bus.
+    // QueryBus is cleaner for CQRS but type inference might be tricky.
+    // Given the previous pattern uses handlers injected in constructor (which is NOT standard CQRS but practical),
+    // I will inject the handler directly.
+    const query = new ExportApplicationsQuery(brandId, programId, status, search);
+    return this.exportApplicationsHandler.execute(query);
+  }
+
   @Get()
   @ApiOperation({ summary: 'List applications with filters' })
   @ApiQuery({ name: 'brandId', required: false })
@@ -115,17 +148,53 @@ export class ApplicationsController {
   ): Promise<ApplicationListResponseDto> {
     this.logger.log(`Listing applications with filters: brandId=${brandId}, programId=${programId}`);
 
+    const actualLimit = limit ? Number(limit) : 20;
+    const actualOffset = offset ? Number(offset) : 0;
+
+    // Cache strategy: Only cache the first 5 pages to avoid cache pollution with deep pagination
+    // 5 pages * 20 items = 100 items. Roughly covering "recent" items.
+    const shouldCache = actualOffset < (actualLimit * 5);
+    let cacheKey = '';
+
+    if (shouldCache) {
+      // Create a deterministic cache key based on all filters
+      const filterParams = JSON.stringify({ participantId, status, search, limit: actualLimit, offset: actualOffset });
+      // We hash the params to keep the key length manageable, or just use stringified if short enough. 
+      // For simplicity/readability in redis, we'll use a simple string representation if it's not too long, 
+      // but here we can just use the stringified JSON.
+      cacheKey = CACHE_KEYS.APPLICATION_LIST(brandId, programId, filterParams);
+
+      try {
+        const cached = await this.cacheService.get<ApplicationListResponseDto>(cacheKey);
+        if (cached) {
+          return cached;
+        }
+      } catch (e) {
+        this.logger.error('Cache get error', e);
+      }
+    }
+
     const query = new ListApplicationsQuery({
       brandId,
       programId,
       participantId,
       status,
       search,
-      limit: limit ? Number(limit) : 20,
-      offset: offset ? Number(offset) : 0,
+      limit: actualLimit,
+      offset: actualOffset,
     });
 
-    return this.listApplicationsHandler.execute(query);
+    const result = await this.listApplicationsHandler.execute(query);
+
+    if (shouldCache) {
+      try {
+        await this.cacheService.set(cacheKey, result, CACHE_TTL.MEDIUM); // 5 minutes TTL
+      } catch (e) {
+        this.logger.error('Cache set error', e);
+      }
+    }
+
+    return result;
   }
 
   @Get(':id')
@@ -195,12 +264,12 @@ export class ApplicationsController {
   @ApiOperation({ summary: 'Create Registration Payment Intent' })
   @ApiResponse({ status: 201, description: 'Payment Intent created' })
   async createPaymentIntent(
-      @Param('id') id: string,
-      @Body('userId') userId: string
+    @Param('id') id: string,
+    @Body('userId') userId: string
   ) {
-      this.logger.log(`Creating payment intent for application ${id}`);
-      const command = new CreateRegistrationPaymentIntentCommand(id, userId);
-      return this.createRegistrationPaymentIntentHandler.execute(command);
+    this.logger.log(`Creating payment intent for application ${id}`);
+    const command = new CreateRegistrationPaymentIntentCommand(id, userId);
+    return this.createRegistrationPaymentIntentHandler.execute(command);
   }
 
   @Post(':id/review')
