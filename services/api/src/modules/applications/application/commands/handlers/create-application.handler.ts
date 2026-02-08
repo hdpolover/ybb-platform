@@ -6,6 +6,8 @@ import { ApplicationResponseDto } from '../../dto/application-response.dto';
 import { ApplicationMapper } from '@modules/applications/infrastructure/mappers/application.mapper';
 import { APPLICATION_REPOSITORY } from '@modules/applications/infrastructure/tokens';
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS } from '@shared/constants/cache-keys';
 
 /**
  * Create Application Handler
@@ -20,6 +22,7 @@ export class CreateApplicationHandler {
     private readonly applicationRepository: IApplicationRepository,
     private readonly applicationMapper: ApplicationMapper,
     private readonly metricsService: MetricsService,
+    private readonly cacheService: CacheService,
   ) {}
 
   async execute(command: CreateApplicationCommand): Promise<ApplicationResponseDto> {
@@ -60,7 +63,26 @@ export class CreateApplicationHandler {
     // Record metric
     this.metricsService.applicationStartedTotal.inc({ brand: command.applicationCategory });
 
+    // Invalidate participant caches
+    if (saved.participant?.userId) {
+      await this.invalidateParticipantCaches(saved.participant.userId, command.participantId);
+    }
+
     // Return DTO
     return this.applicationMapper.toDto(saved);
+  }
+
+  /**
+   * Invalidate participant caches when application is created
+   */
+  private async invalidateParticipantCaches(userId: string, participantId: string): Promise<void> {
+    try {
+      await Promise.all([
+        this.cacheService.invalidateKey(CACHE_KEYS.PARTICIPANT_LATEST_APP(participantId)),
+        this.cacheService.invalidateKey(CACHE_KEYS.PARTICIPANT_STATS(participantId)),
+      ]);
+    } catch (error) {
+      console.error(`Failed to invalidate caches for participant ${participantId}:`, error);
+    }
   }
 }

@@ -3,6 +3,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
+import { PortalCacheService } from '../../services/portal-cache.service';
 import { GetPortalSubmissionsQuery } from '../portal-queries';
 import { 
     PortalSubmissionResponseDto, 
@@ -15,6 +16,7 @@ export class GetPortalSubmissionsHandler implements IQueryHandler<GetPortalSubmi
     constructor(
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
+        private readonly portalCacheService: PortalCacheService,
     ) {}
 
     async execute(query: GetPortalSubmissionsQuery): Promise<PortalSubmissionResponseDto> {
@@ -28,17 +30,35 @@ export class GetPortalSubmissionsHandler implements IQueryHandler<GetPortalSubmi
         }
 
         // Cache miss - fetch from database
-        const participant = await this.prisma.participant.findUnique({ where: { userId } });
+        const participant = await this.portalCacheService.getParticipantProfile(userId);
         if (!participant) throw new NotFoundException('Participant not found');
 
         const application = await this.prisma.participantApplication.findFirst({
             where: { participantId: participant.id },
             orderBy: { updatedAt: 'desc' },
-            include: {
+            select: {
+                id: true,
+                status: true,
+                essayAnswers: true,
+                uploadedFiles: true,
                 program: {
-                    include: {
-                        essays: true,
-                        requirements: true // Document requirements
+                    select: {
+                        id: true,
+                        name: true,
+                        essays: {
+                            where: { isActive: true },
+                            select: {
+                                id: true,
+                                isRequired: true
+                            }
+                        },
+                        requirements: {
+                            where: { isActive: true },
+                            select: {
+                                id: true,
+                                isRequired: true
+                            }
+                        }
                     }
                 }
             }

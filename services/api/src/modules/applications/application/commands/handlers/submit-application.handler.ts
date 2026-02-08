@@ -7,6 +7,8 @@ import { APPLICATION_REPOSITORY } from '@modules/applications/infrastructure/tok
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
 import { PaymentGrpcClient } from '@modules/payments/infrastructure/services/payment-grpc.client';
 import { ApplicationCategory } from '@core/entities/participant-application.entity';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS } from '@shared/constants/cache-keys';
 
 /**
  * Submit Application Handler
@@ -22,6 +24,7 @@ export class SubmitApplicationHandler {
     private readonly applicationMapper: ApplicationMapper,
     private readonly metricsService: MetricsService,
     private readonly paymentClient: PaymentGrpcClient,
+    private readonly cacheService: CacheService,
   ) {}
 
   async execute(command: SubmitApplicationCommand): Promise<ApplicationResponseDto> {
@@ -77,7 +80,20 @@ export class SubmitApplicationHandler {
     // Record metric
     this.metricsService.applicationSubmittedTotal.inc({ brand: application.applicationCategory || 'unknown' });
 
+    // Invalidate participant latest app cache
+    if (updated.participant?.userId) {
+      await this.invalidateParticipantCache(updated.participant.userId, application.participantId);
+    }
+
     // Return DTO
     return this.applicationMapper.toDto(updated);
+  }
+
+  private async invalidateParticipantCache(userId: string, participantId: string): Promise<void> {
+    try {
+      await this.cacheService.invalidateKey(CACHE_KEYS.PARTICIPANT_LATEST_APP(participantId));
+    } catch (error) {
+      console.error(`Failed to invalidate cache for participant ${participantId}:`, error);
+    }
   }
 }
