@@ -94,7 +94,7 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
 
                 offset += BATCH_SIZE;
                 // Safety break to prevent infinite loops in dev
-                if (offset > 100000) { }
+                if (offset > 100000) break;
             }
         }
 

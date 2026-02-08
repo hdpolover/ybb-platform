@@ -6,12 +6,11 @@
     "deleteOutDir": true,
     "assets": [
       {
-        "include": "src/**/*.proto",
-        "watchAssets": true,
-        "outDir": "dist"
+        "include": "**/*.proto",
+        "watchAssets": true
       },
       {
-        "include": "src/docs/*.md",
+        "include": "docs/*.md",
         "watchAssets": true
       }
     ]
