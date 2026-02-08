@@ -88,13 +88,18 @@ export class RegisterAdminHandler {
         // Create Admin Profile
         const newAdmin = await repos.createAdmin({
           userId: newUser.id,
-          firstName: command.fullName.split(' ')[0] || command.fullName,
-          lastName: command.fullName.split(' ').slice(1).join(' ') || '',
-          accessLevel: accessLevel,
-          permissions: {
+          fullName: command.fullName,
+          phoneNumber: undefined,
+        });
+
+        // Update access level and permissions separately if needed
+        await repos.tx.admin.update({
+          where: { id: newAdmin.id },
+          data: {
+            accessLevel: accessLevel,
             canManageAdmins: accessLevel >= 10,
             canAssignRoles: accessLevel >= 10,
-          },
+          }
         });
 
         // NEW: Assign to Primary Category

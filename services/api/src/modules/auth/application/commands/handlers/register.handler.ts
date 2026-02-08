@@ -503,7 +503,6 @@ export class RegisterHandler {
           await repos.createAmbassadorReferral({
             participantId: participant.id,
             ambassadorId: ambassador.id,
-            referralCode: ambassador.referralCode,
             referredAt: new Date(),
           });
 

@@ -203,7 +203,6 @@ export class FirebaseLoginHandler {
                     await repos.createAmbassadorReferral({
                         participantId: newParticipant.id,
                         ambassadorId: ambassador.id,
-                        referralCode: command.referralCode!,
                         referredAt: new Date(),
                     });
 
@@ -212,21 +211,6 @@ export class FirebaseLoginHandler {
 
                 return newParticipant;
             }, { name: 'firebase-login-participant-creation', timeout: 5000 });
-                        data: {
-                            ambassadorId: ambassador.id,
-                            participantId: newParticipant.id,
-                            status: 'referred'
-                        }
-                    });
-                    
-                    await tx.ambassador.update({
-                        where: { id: ambassador.id },
-                        data: { totalReferrals: { increment: 1 }, lastReferralAt: new Date() }
-                    });
-                }
-
-                return newParticipant;
-            });
         }
 
         // Handle Program Auto-Registration

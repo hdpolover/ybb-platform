@@ -74,7 +74,7 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
         if (application) {
             // 1. Program Resources (Guidebooks etc)
             for (const res of application.program.resources) {
-                if (!res.isActive || (!res.isPublic && application.status === 'draft')) continue;
+                if (!res.isPublic && application.status === 'draft') continue;
 
                 programResources.push({
                     id: res.id,

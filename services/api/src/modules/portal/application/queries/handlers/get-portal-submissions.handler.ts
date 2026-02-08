@@ -39,6 +39,7 @@ export class GetPortalSubmissionsHandler implements IQueryHandler<GetPortalSubmi
             select: {
                 id: true,
                 status: true,
+                personalData: true,
                 essayAnswers: true,
                 uploadedFiles: true,
                 program: {
@@ -70,7 +71,7 @@ export class GetPortalSubmissionsHandler implements IQueryHandler<GetPortalSubmi
         const sections: SubmissionSectionDto[] = [];
 
         // 1. Personal Info
-        const personalInfoFilled = !!application.personalData;
+        const personalInfoFilled = application.personalData && Object.keys(application.personalData as any).length > 0;
         sections.push({
             id: 'personal_info',
             title: 'Personal Information',

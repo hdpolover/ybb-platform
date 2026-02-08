@@ -96,7 +96,11 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
         });
 
         // 2. Stats (using cached lookup)
-        const stats = await this.portalCacheService.getParticipantStats(participant.id);
+        const stats = await this.portalCacheService.getParticipantStats(participant.id) || {
+            applicationsCount: 0,
+            completedProgramsCount: 0,
+            certificatesCount: 0
+        };
 
         // 3. Application Summary & Alerts
         let activeAppSummary: PortalApplicationSummaryDto | null = null;
