@@ -28,12 +28,14 @@ import { ReviewDeletionRequestHandler } from './application/commands/handlers/re
 import { ListDeletionRequestsHandler } from './application/queries/handlers/list-deletion-requests.handler';
 import { DeletionRequestsController } from './presentation/deletion-requests.controller';
 import { RabbitMQModule } from '@shared/infrastructure/rabbitmq/rabbitmq.module';
+import { CacheModule } from '@shared/infrastructure/cache/cache.module';
 
 @Module({
   imports: [
     PrismaModule,
     AuthModule,
     RabbitMQModule,
+    CacheModule,
   ],
   controllers: [UsersController, DeletionRequestsController],
   providers: [

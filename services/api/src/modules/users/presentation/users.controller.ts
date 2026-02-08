@@ -30,6 +30,8 @@ import { JwtAuthGuard } from '../../auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/infrastructure/guards/roles.guard';
 import { Roles } from '../../auth/application/decorators/roles.decorator';
 import { UserRole } from '../../../core/entities/user.entity';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 
 @ApiTags('Users')
 @Controller('users')
@@ -47,6 +49,7 @@ export class UsersController {
     private readonly listUserActivityLogsHandler: ListUserActivityLogsHandler,
     private readonly listUserSecurityLogsHandler: ListUserSecurityLogsHandler,
     private readonly createDeletionRequestHandler: CreateDeletionRequestHandler,
+    private readonly cacheService: CacheService,
   ) { }
 
   @Get('me/preferences')
@@ -196,12 +199,35 @@ export class UsersController {
     @Query('take') take?: string,
     @Query('role') role?: string,
   ): Promise<UserResponseDto[]> {
+    const skipNum = skip ? parseInt(skip, 10) : 0;
+    const takeNum = take ? parseInt(take, 10) : 20;
+
+    // Cache key includes role now
+    const cacheKey = CACHE_KEYS.USER_LIST(brandId, skipNum, takeNum, role);
+
+    try {
+      const cached = await this.cacheService.get<UserResponseDto[]>(cacheKey);
+      if (cached) {
+        return cached;
+      }
+    } catch (e) {
+      // ignore cache error
+    }
+
     const query = new GetUsersQuery(
       brandId,
-      skip ? parseInt(skip, 10) : undefined,
-      take ? parseInt(take, 10) : undefined,
+      skipNum,
+      takeNum,
       role,
     );
-    return this.getUsersHandler.execute(query);
+    const result = await this.getUsersHandler.execute(query);
+
+    try {
+      await this.cacheService.set(cacheKey, result, CACHE_TTL.MEDIUM);
+    } catch (e) {
+      // ignore cache error
+    }
+
+    return result;
   }
 }

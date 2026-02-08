@@ -16,6 +16,7 @@ import { CreateRegistrationPaymentIntentHandler } from './application/commands/h
 // Query Handlers
 import { GetApplicationHandler } from './application/queries/handlers/get-application.handler';
 import { ListApplicationsHandler } from './application/queries/handlers/list-applications.handler';
+import { ExportApplicationsHandler } from './application/queries/handlers/export-applications.handler';
 
 // Infrastructure
 import { ApplicationRepository } from './infrastructure/persistence/application.repository';
@@ -24,8 +25,10 @@ import { PrismaModule } from '@shared/infrastructure/prisma/prisma.module';
 import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.module';
 import { APPLICATION_REPOSITORY } from './infrastructure/tokens';
 
+import { CacheModule } from '@shared/infrastructure/cache/cache.module';
+
 @Module({
-  imports: [PrismaModule, AuthModule, MonitoringModule, PaymentModule],
+  imports: [PrismaModule, AuthModule, MonitoringModule, PaymentModule, CacheModule],
   controllers: [ApplicationsController],
   providers: [
     // Command Handlers
@@ -40,6 +43,7 @@ import { APPLICATION_REPOSITORY } from './infrastructure/tokens';
     // Query Handlers
     GetApplicationHandler,
     ListApplicationsHandler,
+    ExportApplicationsHandler,
 
     // Infrastructure
     ApplicationMapper,

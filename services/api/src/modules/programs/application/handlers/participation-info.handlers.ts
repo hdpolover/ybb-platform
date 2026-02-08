@@ -3,10 +3,12 @@ import { NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { UpsertParticipationInfoCommand, DeleteParticipationInfoCommand } from '../commands/participation-info.commands';
 import { GetParticipationInfoQuery, ListParticipationInfoQuery } from '../queries/participation-info.queries';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 
 @CommandHandler(UpsertParticipationInfoCommand)
 export class UpsertParticipationInfoHandler implements ICommandHandler<UpsertParticipationInfoCommand> {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async execute(command: UpsertParticipationInfoCommand) {
     const { programId, dto } = command;
@@ -36,7 +38,7 @@ export class UpsertParticipationInfoHandler implements ICommandHandler<UpsertPar
 
 @CommandHandler(DeleteParticipationInfoCommand)
 export class DeleteParticipationInfoHandler implements ICommandHandler<DeleteParticipationInfoCommand> {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async execute(command: DeleteParticipationInfoCommand) {
     const { infoId } = command;
@@ -50,7 +52,7 @@ export class DeleteParticipationInfoHandler implements ICommandHandler<DeletePar
 
 @QueryHandler(GetParticipationInfoQuery)
 export class GetParticipationInfoHandler implements IQueryHandler<GetParticipationInfoQuery> {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async execute(query: GetParticipationInfoQuery) {
     const { programId, category } = query;
@@ -67,12 +69,24 @@ export class GetParticipationInfoHandler implements IQueryHandler<GetParticipati
 
 @QueryHandler(ListParticipationInfoQuery)
 export class ListParticipationInfoHandler implements IQueryHandler<ListParticipationInfoQuery> {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cacheService: CacheService,
+  ) { }
 
   async execute(query: ListParticipationInfoQuery) {
     const { programId } = query;
-    return this.prisma.programParticipationInfo.findMany({
+    const cacheKey = CACHE_KEYS.PARTICIPANT_LIST(programId);
+
+    const cached = await this.cacheService.get(cacheKey);
+    if (cached) return cached;
+
+    const result = await this.prisma.programParticipationInfo.findMany({
       where: { programId },
     });
+
+    await this.cacheService.set(cacheKey, result, CACHE_TTL.MEDIUM);
+
+    return result;
   }
 }

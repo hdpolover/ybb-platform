@@ -4,6 +4,8 @@ import { UserResponseDto } from '@modules/users/presentation/dto/user-response.d
 import { IUserRepository } from '@core/interfaces/repositories/user.repository.interface';
 import { User } from '@core/entities/user.entity';
 import { RabbitMQProducerService } from '../../../../../shared/infrastructure/rabbitmq/rabbitmq-producer.service';
+import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS } from '../../../../../shared/constants/cache-keys';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -12,6 +14,7 @@ export class CreateUserHandler {
     @Inject(IUserRepository)
     private readonly userRepository: IUserRepository,
     private readonly rabbitmqProducer: RabbitMQProducerService,
+    private readonly cacheService: CacheService,
   ) { }
 
   async execute(command: CreateUserCommand): Promise<UserResponseDto> {
@@ -45,6 +48,10 @@ export class CreateUserHandler {
       email: createdUser.email,
       name: 'User',
     });
+
+    // Invalidate user list cache for this brand
+    // We use a wildcard pattern to match all pagination pages and roles
+    await this.cacheService.invalidateByPattern(`user:list:${command.brandId}:*`);
 
     // Return DTO
     return this.toDto(createdUser);
