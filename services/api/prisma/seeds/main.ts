@@ -14,10 +14,10 @@ import { seedScoring } from './seed-scoring';
 async function main() {
   log('🚀 Starting Full Database Seed...');
   try {
-    // Only clean database in development or if env variable FORCE_CLEAN is set
-    // In staging/production, we generally want to UPSERT data, not wipe it.
-    if (process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'staging') {
-      log('ℹ️ Environment is ' + process.env.NODE_ENV + '. Skipping cleanDatabase() to preserve data.');
+    // Only clean database in development/staging or if env variable FORCE_CLEAN is set
+    // In production, we generally want to UPSERT data, not wipe it.
+    if (process.env.NODE_ENV === 'production') {
+      log('ℹ️ Environment is production. Skipping cleanDatabase() to preserve data.');
     } else {
       await cleanDatabase();
     }
