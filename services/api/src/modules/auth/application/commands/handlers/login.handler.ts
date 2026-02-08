@@ -291,7 +291,6 @@ export class LoginHandler {
         email: user.email,
         brandId: user.brandId,
         isActive: user.isActive,
-        // @ts-ignore
         isOnboardingCompleted: user.isOnboardingCompleted ?? false,
         registeredPrograms,
       },

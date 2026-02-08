@@ -274,7 +274,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                         subtitle: 'Detailed schedule of activities for this program',
                         items: currentProgram.schedules.map((schedule) => {
                             // Calculate Date: "Day N" logic
-                            let scheduleDate = new Date(startDate);
+                            const scheduleDate = new Date(startDate);
                             const dayMatch = schedule.day.match(/Day (\d+)/i);
                             if (dayMatch) {
                                 const dayOffset = parseInt(dayMatch[1]) - 1;
@@ -299,7 +299,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                                 const [startH, startM] = schedule.startTime.split(':').map(Number);
                                 const [endH, endM] = schedule.endTime.split(':').map(Number);
                                 if (!isNaN(startH) && !isNaN(endH)) {
-                                    let diffMins = (endH * 60 + endM) - (startH * 60 + startM);
+                                    const diffMins = (endH * 60 + endM) - (startH * 60 + startM);
                                     const diffHrs = Math.floor(diffMins / 60);
                                     const remMins = diffMins % 60;
                                     duration = `${diffHrs}h ${remMins}m`;
