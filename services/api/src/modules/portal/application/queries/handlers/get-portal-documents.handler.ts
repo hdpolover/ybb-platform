@@ -1,6 +1,8 @@
 import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { GetPortalDocumentsQuery } from '../portal-queries';
 import { 
     PortalDocumentResponseDto, 
@@ -10,10 +12,22 @@ import {
 @Injectable()
 @QueryHandler(GetPortalDocumentsQuery)
 export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumentsQuery> {
-    constructor(private readonly prisma: PrismaService) {}
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly cacheService: CacheService,
+    ) {}
 
     async execute(query: GetPortalDocumentsQuery): Promise<PortalDocumentResponseDto> {
         const { userId } = query;
+
+        // Check cache first
+        const cacheKey = CACHE_KEYS.PORTAL_DOCUMENTS(userId);
+        const cached = await this.cacheService.get<PortalDocumentResponseDto>(cacheKey);
+        if (cached) {
+            return cached;
+        }
+
+        // Cache miss - fetch from database
         const participant = await this.prisma.participant.findUnique({ where: { userId } });
         if (!participant) throw new NotFoundException('Participant not found');
 
@@ -60,9 +74,14 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
             }
         }
 
-        return {
+        const result = {
             programResources,
             myDocuments
         };
+
+        // Cache the result for 5 minutes
+        await this.cacheService.set(cacheKey, result, CACHE_TTL.MEDIUM);
+
+        return result;
     }
 }

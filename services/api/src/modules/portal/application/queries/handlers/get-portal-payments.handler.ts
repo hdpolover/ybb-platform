@@ -1,6 +1,8 @@
 import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { GetPortalPaymentsQuery } from '../portal-queries';
 import { 
     PortalPaymentResponseDto, 
@@ -11,10 +13,22 @@ import {
 @Injectable()
 @QueryHandler(GetPortalPaymentsQuery)
 export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPaymentsQuery> {
-    constructor(private readonly prisma: PrismaService) {}
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly cacheService: CacheService,
+    ) {}
 
     async execute(query: GetPortalPaymentsQuery): Promise<PortalPaymentResponseDto> {
         const { userId } = query;
+
+        // Check cache first
+        const cacheKey = CACHE_KEYS.PORTAL_PAYMENTS(userId);
+        const cached = await this.cacheService.get<PortalPaymentResponseDto>(cacheKey);
+        if (cached) {
+            return cached;
+        }
+
+        // Cache miss - fetch from database
         const participant = await this.prisma.participant.findUnique({ where: { userId } });
         if (!participant) throw new NotFoundException('Participant not found');
 
@@ -76,11 +90,16 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
             }
         }
 
-        return {
+        const result = {
             history,
             outstanding,
             availableMethods,
             stats: { totalPaid, totalDue, currency }
         };
+
+        // Cache the result for 5 minutes
+        await this.cacheService.set(cacheKey, result, CACHE_TTL.MEDIUM);
+
+        return result;
     }
 }
