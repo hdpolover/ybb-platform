@@ -4,6 +4,7 @@ import { UpdateProgramCommand } from '../update-program.command';
 import { IProgramRepository } from '@core/interfaces/repositories/program.repository.interface';
 import { Program } from '@core/entities/program.entity';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
+import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
 
 @CommandHandler(UpdateProgramCommand)
 export class UpdateProgramHandler implements ICommandHandler<UpdateProgramCommand> {
@@ -12,7 +13,8 @@ export class UpdateProgramHandler implements ICommandHandler<UpdateProgramComman
         private readonly programRepository: IProgramRepository,
         @Inject(IUserActivityLogRepository)
         private readonly activityLogRepository: IUserActivityLogRepository,
-    ) {}
+        private readonly cacheService: CacheService,
+    ) { }
 
     async execute(command: UpdateProgramCommand): Promise<any> {
         const { programId, updateProgramDto, userId } = command;
@@ -61,11 +63,29 @@ export class UpdateProgramHandler implements ICommandHandler<UpdateProgramComman
             createdAt: new Date(),
         } as any);
 
+        // Invalidate all landing page caches for this brand
+        await this.invalidateLandingCaches(updatedProgram.brandId);
+
         const { brandId, ...rest } = updatedProgram as any;
         return {
             ...rest,
             brandId: brandId,
         };
+    }
+
+    /**
+     * Invalidate all landing page caches when program is updated
+     */
+    private async invalidateLandingCaches(brandId: string): Promise<void> {
+        try {
+            await this.cacheService.invalidateByPatterns([
+                `landing:*:${brandId}`,      // All landing pages for this brand
+                `program:*`,                  // All program caches
+            ]);
+        } catch (error) {
+            // Log but don't throw - cache invalidation failures shouldn't break updates
+            console.error('Failed to invalidate landing caches:', error);
+        }
     }
 
     private generateSlug(text: string): string {

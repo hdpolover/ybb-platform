@@ -1,21 +1,35 @@
 import { Injectable } from '@nestjs/common';
 import { ILandingPageStrategy } from './landing-page.strategy';
 import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
+import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
 import { Brand } from '@prisma/client';
 
 @Injectable()
 export class HomeStrategy implements ILandingPageStrategy {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cacheService: CacheService,
+  ) { }
 
   async getData(brand: Brand | null) {
     if (!brand) {
-       // Return default or throw? returning empty structure for now
-       return {
-         slug: 'home',
-         title: 'Youth Break the Boundaries', // Default fallback
-         sections: [],
-       };
+      // Return default or throw? returning empty structure for now
+      return {
+        slug: 'home',
+        title: 'Youth Break the Boundaries', // Default fallback
+        sections: [],
+      };
     }
+
+    // Check cache first
+    const cacheKey = CACHE_KEYS.LANDING_HOME(brand.id);
+    const cached = await this.cacheService.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    // Cache miss - fetch from database
 
     const [program, brandSponsors, socialFeeds, videoPrograms, testimonials, latestProgramWithAwards] = await Promise.all([
       this.prisma.program.findFirst({
@@ -47,16 +61,16 @@ export class HomeStrategy implements ILandingPageStrategy {
         },
       }),
       this.prisma.sponsor.findMany({
-        where: { 
-            brandId: brand.id, // Scoped to brand
-            isActive: true 
+        where: {
+          brandId: brand.id, // Scoped to brand
+          isActive: true
         },
         orderBy: { order: 'asc' },
       }),
       this.prisma.brandSocialFeed.findMany({
         where: {
-            brandId: brand.id,
-            isActive: true
+          brandId: brand.id,
+          isActive: true
         },
         orderBy: { postedAt: 'desc' },
         take: 6
@@ -69,48 +83,48 @@ export class HomeStrategy implements ILandingPageStrategy {
         orderBy: { year: 'desc' },
         take: 5,
         select: {
-            id: true,
-            name: true,
-            year: true,
-            gallery: {
-                where: { type: 'video', isActive: true },
-                orderBy: { order: 'asc' },
-                select: {
-                    id: true,
-                    title: true,
-                    description: true,
-                    imageUrl: true,
-                    videoUrl: true,
-                }
+          id: true,
+          name: true,
+          year: true,
+          gallery: {
+            where: { type: 'video', isActive: true },
+            orderBy: { order: 'asc' },
+            select: {
+              id: true,
+              title: true,
+              description: true,
+              imageUrl: true,
+              videoUrl: true,
             }
+          }
         }
       }),
       this.prisma.programTestimonial.findMany({
         where: {
-            brandId: brand.id,
-            category: 'alumni',
-            isActive: true
+          brandId: brand.id,
+          category: 'alumni',
+          isActive: true
         },
         orderBy: [
-            { isFeatured: 'desc' }, // Featured first
-            { order: 'asc' }
+          { isFeatured: 'desc' }, // Featured first
+          { order: 'asc' }
         ],
         take: 10
       }),
       // For Awards - Fetch the latest published program and its awards
       this.prisma.program.findFirst({
         where: {
-            brandId: brand.id,
-            isPublished: true,
-            isActive: true
+          brandId: brand.id,
+          isPublished: true,
+          isActive: true
         },
         orderBy: { startDate: 'desc' }, // Latest program first
         select: {
-            name: true,
-            awards: {
-                where: { isActive: true },
-                orderBy: { order: 'asc' }
-            }
+          name: true,
+          awards: {
+            where: { isActive: true },
+            orderBy: { order: 'asc' }
+          }
         }
       })
     ]);
@@ -121,14 +135,14 @@ export class HomeStrategy implements ILandingPageStrategy {
     // Get images for objectives (random 4 from gallery)
     const galleryImages = program?.gallery.filter(g => g.type === 'image') || [];
     const objectiveImages = galleryImages
-        .sort(() => 0.5 - Math.random())
-        .slice(0, 4)
-        .map(img => ({
-             url: img.imageUrl,
-             caption: img.title
-        }));
+      .sort(() => 0.5 - Math.random())
+      .slice(0, 4)
+      .map(img => ({
+        url: img.imageUrl,
+        caption: img.title
+      }));
 
-    return {
+    const result = {
       slug: 'home',
       title: brand.name,
       sections: [
@@ -243,19 +257,19 @@ export class HomeStrategy implements ILandingPageStrategy {
         {
           type: 'alumni_stories',
           content: {
-             title: 'What our Alumni says...',
-             subtitle: 'MORE ALUMNI MOMENTS',
-             items: testimonials.map(t => ({
-                 id: t.id,
-                 name: t.name,
-                 role: t.role,
-                 testimonial: t.testimonial,
-                 type: t.type, // video or text
-                 video_url: t.videoUrl,
-                 thumbnail_url: t.thumbnailUrl,
-                 avatar_url: t.avatarUrl,
-                 is_featured: t.isFeatured
-             }))
+            title: 'What our Alumni says...',
+            subtitle: 'MORE ALUMNI MOMENTS',
+            items: testimonials.map(t => ({
+              id: t.id,
+              name: t.name,
+              role: t.role,
+              testimonial: t.testimonial,
+              type: t.type, // video or text
+              video_url: t.videoUrl,
+              thumbnail_url: t.thumbnailUrl,
+              avatar_url: t.avatarUrl,
+              is_featured: t.isFeatured
+            }))
           }
         },
         {
@@ -287,6 +301,11 @@ export class HomeStrategy implements ILandingPageStrategy {
         },
       ],
     };
+
+    // Cache the result for 1 hour
+    await this.cacheService.set(cacheKey, result, CACHE_TTL.HOUR);
+
+    return result;
   }
 
   private async getStats() {
