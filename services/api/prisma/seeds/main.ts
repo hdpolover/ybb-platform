@@ -17,23 +17,38 @@ async function main() {
     // Only clean database in development or if env variable FORCE_CLEAN is set
     // In staging/production, we generally want to UPSERT data, not wipe it.
     if (process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'staging') {
-        log('ℹ️ Environment is ' + process.env.NODE_ENV + '. Skipping cleanDatabase() to preserve data.');
+      log('ℹ️ Environment is ' + process.env.NODE_ENV + '. Skipping cleanDatabase() to preserve data.');
     } else {
-        await cleanDatabase();
+      await cleanDatabase();
     }
-    
+
     await seedAuth();
-    await seedBrands();
+
+    // Remote Migration for Brands & Programs
+    log('🌏 Running Remote Data Migration (Brands & Programs)...');
+    try {
+      const { migrateBrands } = require('./internal/migrate-brands');
+      const { migratePrograms } = require('./internal/migrate-programs');
+      const { migrateMetadata } = require('./internal/migrate-metadata');
+
+      await migrateBrands();
+      await migratePrograms();
+      await migrateMetadata();
+      log('✅ Remote Migration Completed');
+    } catch (err) {
+      error('Remote Migration failed, falling back to manual seeds');
+      console.error(err);
+      await seedBrands();
+      await seedIYSPrograms();
+    }
+
     await seedBrandContent();
     await seedAdmins();
-    
-    // Seed Programs
-    // await seedYBBPrograms(); // Removed
-    // await seedFromCSV();
-    // await seedExtendedCSV();
+
+    // Seed Dummy/Standard Content
     await seedDummyContent();
-    await seedIYSPrograms();
-    
+    // await seedIYSPrograms(); // Replaced by migratePrograms
+
     // Seed Participants & Apps
     await seedParticipants();
 

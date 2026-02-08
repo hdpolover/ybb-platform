@@ -26,6 +26,7 @@
     "prisma:migrate:prod": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "prisma:seed": "ts-node prisma/seeds/main.ts",
+    "prisma:migrate:remote": "ts-node prisma/seeds/internal/run-remote-migration.ts",
     "prisma:reset": "prisma migrate reset"
   },
   "dependencies": {
@@ -48,8 +49,6 @@
     "@nestjs/throttler": "^6.5.0",
     "@prisma/adapter-pg": "^7.2.0",
     "@prisma/client": "^7.2.0",
-    "@types/csv-parse": "^1.1.12",
-    "@types/csv-stringify": "^1.4.3",
     "@types/form-data": "^2.2.1",
     "@types/multer": "^2.0.0",
     "@types/pg": "^8.16.0",
@@ -71,6 +70,7 @@
     "geoip-lite": "^1.4.10",
     "ioredis": "^5.8.2",
     "keyv": "^5.2.3",
+    "mysql2": "^3.16.3",
     "nest-winston": "^1.10.2",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",

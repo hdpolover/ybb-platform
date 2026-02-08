@@ -84,8 +84,9 @@ async function main() {
     });
     console.log(`Brand ID: ${brand.id}`);
 
-    // 1. Users
-    console.log('Migrating Users...');
+    // 1. Users - SKIPPING (already done)
+    console.log('Skipping Users migration (already done)...');
+    /*
     const users = await readCsv<UserRow>('users.csv');
     for (const row of users) {
         try {
@@ -119,6 +120,7 @@ async function main() {
             console.error(`Error migrating user ${row[0]}:`, e);
         }
     }
+    */
 
     // 2. Programs
     console.log('Migrating Programs...');
@@ -178,8 +180,9 @@ async function main() {
         }
     }
 
-    // 4. Participants & Applications
-    console.log('Migrating Participants & Applications...');
+    // 4. Participants & Applications - SKIPPING for payment fix run (already mostly done)
+    console.log('Skipping Participants & Applications migration (already done)...');
+    /*
     const participants = await readCsv<ParticipantRow>('participants.csv');
 
     for (const row of participants) {
@@ -239,74 +242,87 @@ async function main() {
             console.error(`Error migrating participant ${row[0]}:`, e);
         }
     }
+    */
 
     // 5. Payments -> ApplicationInvoice
     console.log('Migrating Payments...');
     const payments = await readCsv<PaymentRow>('payments.csv');
     for (const row of payments) {
         try {
-            // payments.csv: id, user_id, program_id, amount, status(0/1), proof_url, ...
-            // We need to map this to the ApplicationInvoice, linked to the Application
+            const legacyProgramId = parseInt(row[8] || row[3]); // Try index 8 first, then fallback to 3
+            let legacyUserId = parseInt(row[5]);
+            const amount = parseFloat(row[11]);
+            const proofUrl = row[15];
+            const email = row[14];
+            const statusRaw = row[17];
 
-            const legacyUserId = parseInt(row[1]);
-            const legacyProgramId = parseInt(row[2]);
-            const amount = parseFloat(row[3]);
-            const statusRaw = row[5]; // 1 = paid?
-            const proofUrl = row[4];
-
-            const user = await prisma.user.findUnique({ where: { legacyId: legacyUserId } });
+            // Fallback for user lookup
+            let user = !isNaN(legacyUserId) ? await prisma.user.findUnique({ where: { legacyId: legacyUserId } }) : null;
+            if (!user && email) {
+                user = await prisma.user.findUnique({ where: { email_brandId: { email, brandId: brand.id } } });
+            }
             const programId = programMap.get(legacyProgramId);
 
-            if (user && programId) {
-                // Find the application
-                // We need the participant ID first
-                const participant = await prisma.participant.findUnique({ where: { userId: user.id } });
-                if (participant) {
-                    const application = await prisma.participantApplication.findUnique({
-                        where: { participantId_programId: { participantId: participant.id, programId } }
+            if (!user || !programId) {
+                if (payments.indexOf(row) < 50) {
+                    console.log(`[SKIP] Payment row ${payments.indexOf(row)}: user=${!!user} (v=${legacyUserId}, e=${email}), program=${!!programId} (v=${legacyProgramId})`);
+                }
+                continue;
+            }
+
+            // Find the application
+            const participant = await prisma.participant.findUnique({ where: { userId: user.id } });
+            if (participant) {
+                const application = await prisma.participantApplication.findUnique({
+                    where: { participantId_programId: { participantId: participant.id, programId } }
+                });
+
+                if (!application) {
+                    if (payments.indexOf(row) < 50) {
+                        console.log(`[SKIP] No application for user ${email} in program ${legacyProgramId}`);
+                    }
+                    continue;
+                }
+
+                if (application) {
+                    // Find or create a pricing tier for this amount
+                    let pricingTier = await prisma.programPricingTier.findFirst({
+                        where: { programId, price: amount }
                     });
 
-                    if (application) {
-                        // Find or create a pricing tier for this amount
-                        let pricingTier = await prisma.programPricingTier.findFirst({
-                            where: { programId, price: amount }
-                        });
-
-                        if (!pricingTier) {
-                            // Create a legacy tier for this amount
-                            pricingTier = await prisma.programPricingTier.create({
-                                data: {
-                                    programId,
-                                    name: `Legacy Payment Tier (${amount})`,
-                                    price: amount,
-                                    description: 'Auto-generated during migration',
-                                }
-                            });
-                        }
-
-                        await prisma.applicationInvoice.create({
+                    if (!pricingTier) {
+                        // Create a legacy tier for this amount
+                        pricingTier = await prisma.programPricingTier.create({
                             data: {
-                                applicationId: application.id,
-                                pricingTierId: pricingTier.id,
-                                amount: amount || 0,
-                                currency: 'IDR',
-                                status: statusRaw === '1' ? 'paid' : 'unpaid',
-                                paymentMethod: 'manual_transfer',
-                                externalTransactionId: proofUrl ? proofUrl.substring(0, 100) : null,
+                                programId,
+                                name: `Legacy Payment Tier (${amount})`,
+                                price: amount,
+                                description: 'Auto-generated during migration',
                             }
                         });
+                    }
 
-                        // Update application status
-                        if (statusRaw === '1') {
-                            await prisma.participantApplication.update({
-                                where: { id: application.id },
-                                data: { registrationPaymentStatus: 'paid' }
-                            });
+                    await prisma.applicationInvoice.create({
+                        data: {
+                            applicationId: application.id,
+                            pricingTierId: pricingTier.id,
+                            amount: amount || 0,
+                            currency: 'IDR',
+                            status: statusRaw === '1' ? 'paid' : 'unpaid',
+                            paymentMethod: 'manual_transfer',
+                            externalTransactionId: proofUrl ? proofUrl.substring(0, 100) : null,
                         }
+                    });
+
+                    // Update application status
+                    if (statusRaw === '1') {
+                        await prisma.participantApplication.update({
+                            where: { id: application.id },
+                            data: { registrationPaymentStatus: 'paid' }
+                        });
                     }
                 }
             }
-
         } catch (e) {
             console.error(`Error migrating payment ${row[0]}:`, e);
         }

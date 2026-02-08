@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, UseInterceptors, UploadedFile, UploadedFiles, Query } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, UseInterceptors, UploadedFile, UploadedFiles, Query, ParseUUIDPipe } from '@nestjs/common';
 import { FileInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiQuery } from '@nestjs/swagger';
@@ -50,7 +50,7 @@ export class BrandsController {
     @ApiOperation({ summary: 'List brand programs' })
     @ApiResponse({ status: 200, description: 'Return list of brand programs', type: ProgramListResponseDto })
     async listBrandPrograms(
-        @Param('id') id: string,
+        @Param('id', ParseUUIDPipe) id: string,
         @Query() dto: ListProgramsDto,
     ): Promise<ProgramListResponseDto> {
         return this.queryBus.execute(new ListProgramsQuery(
@@ -60,6 +60,7 @@ export class BrandsController {
             dto.page,
             dto.limit,
             dto.isActive,
+            dto.isVisibleToUsers,
             dto.status
         ));
     }

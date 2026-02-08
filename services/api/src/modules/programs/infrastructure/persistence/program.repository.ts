@@ -8,8 +8,8 @@ export class ProgramRepository implements IProgramRepository {
     constructor(private readonly prisma: PrismaService) { }
 
     async findAll(params: FindAllProgramsParams): Promise<FindAllProgramsResult> {
-        const { brandId, year, isPublished, isActive, status, page = 1, limit = 10 } = params;
-        
+        const { brandId, year, isPublished, isActive, isVisibleToUsers, status, page = 1, limit = 10 } = params;
+
         const where: any = {
             brandId,
             deletedAt: null,
@@ -29,6 +29,10 @@ export class ProgramRepository implements IProgramRepository {
 
         if (status !== undefined) {
             where.status = status;
+        }
+
+        if (isVisibleToUsers !== undefined) {
+            where.isVisibleToUsers = isVisibleToUsers;
         }
 
         const skip = (page - 1) * limit;
@@ -64,19 +68,19 @@ export class ProgramRepository implements IProgramRepository {
         if (brandId) {
             where.brandId = brandId;
         }
-        
+
         // If brandId is provided, we can use the compound unique index if it exists, 
         // but since slug is usually unique globally or we want to find by slug regardless, 
         // we might need to adjust. Assuming slug is unique per category or globally.
         // If slug is unique globally, just { slug } is enough.
         // If slug is unique per category, we need both.
-        
+
         // Let's assume we search by slug and optionally filter by category if provided.
         // But findUnique requires a unique constraint.
         // If the schema has @@unique([brandId, slug]), we should use that if both are present.
-        
+
         if (brandId) {
-             const program = await this.prisma.program.findUnique({
+            const program = await this.prisma.program.findUnique({
                 where: {
                     brandId_slug: {
                         brandId,
@@ -86,8 +90,8 @@ export class ProgramRepository implements IProgramRepository {
             });
             return program ? this.mapToEntity(program) : null;
         } else {
-             // Fallback to findFirst if we don't have the category ID, or if slug is unique globally
-             const program = await this.prisma.program.findFirst({
+            // Fallback to findFirst if we don't have the category ID, or if slug is unique globally
+            const program = await this.prisma.program.findFirst({
                 where: { slug },
             });
             return program ? this.mapToEntity(program) : null;

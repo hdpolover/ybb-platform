@@ -50,6 +50,7 @@ export class ProgramsController {
       dto.page,
       dto.limit,
       dto.isActive,
+      dto.isVisibleToUsers,
       dto.status,
     );
     return this.listProgramsHandler.execute(query);
@@ -163,9 +164,9 @@ export class ProgramsController {
       banner: files?.banner?.[0],
       thumbnail: files?.thumbnail?.[0],
     };
-    
+
     const program = await this.updateProgramBrandingHandler.execute(
-        new UpdateProgramBrandingCommand(id, dto, req.user.id, uploadedFiles)
+      new UpdateProgramBrandingCommand(id, dto, req.user.id, uploadedFiles)
     );
 
     return this.mapToResponse(program);
@@ -196,6 +197,6 @@ export class ProgramsController {
   @ApiOperation({ summary: 'Get participant progress tracking from timeline' })
   @ApiResponse({ status: 200, type: [ProgressStepDto] })
   async getParticipantProgress(@Param('id') id: string, @Request() req: any): Promise<ProgressStepDto[]> {
-     return this.getParticipantProgressHandler.execute(new GetParticipantProgressQuery(id, req.user.id));
+    return this.getParticipantProgressHandler.execute(new GetParticipantProgressQuery(id, req.user.id));
   }
 }

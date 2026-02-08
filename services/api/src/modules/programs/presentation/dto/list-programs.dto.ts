@@ -48,6 +48,15 @@ export class ListProgramsDto {
   status?: string;
 
   @ApiPropertyOptional({
+    description: 'Filter by visibility status',
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  isVisibleToUsers?: boolean;
+
+  @ApiPropertyOptional({
     description: 'Page number for pagination',
     example: 1,
     default: 1,
