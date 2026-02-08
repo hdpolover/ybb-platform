@@ -85,15 +85,13 @@ export class SubmitApplicationHandler {
     this.metricsService.applicationSubmittedTotal.inc({ brand: application.applicationCategory || 'unknown' });
 
     // Invalidate participant latest app cache
-    if (updated.participant?.userId) {
-      await this.invalidateParticipantCache(updated.participant.userId, application.participantId);
-    }
+    await this.invalidateParticipantCache(application.participantId);
 
     // Return DTO
     return this.applicationMapper.toDto(updated);
   }
 
-  private async invalidateParticipantCache(userId: string, participantId: string): Promise<void> {
+  private async invalidateParticipantCache(participantId: string): Promise<void> {
     try {
       await this.cacheService.invalidateKey(CACHE_KEYS.PARTICIPANT_LATEST_APP(participantId));
     } catch (error) {

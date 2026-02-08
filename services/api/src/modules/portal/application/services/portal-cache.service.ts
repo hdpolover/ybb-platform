@@ -3,6 +3,27 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 
+type ParticipantProfile = {
+    id: string;
+    userId: string;
+    fullName: string;
+    phoneNumber: string | null;
+    birthdate: Date | null;
+    nationality: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+    user: {
+        id: string;
+        email: string;
+    };
+};
+
+type ParticipantStats = {
+    applicationsCount: number;
+    completedProgramsCount: number;
+    certificatesCount: number;
+};
+
 /**
  * Portal Cache Service
  * 
@@ -20,9 +41,9 @@ export class PortalCacheService {
      * Get participant profile with caching
      * This is called by all 4 portal endpoints, so caching saves 4 DB queries per page load
      */
-    async getParticipantProfile(userId: string) {
+    async getParticipantProfile(userId: string): Promise<ParticipantProfile | null> {
         const cacheKey = CACHE_KEYS.PARTICIPANT_PROFILE(userId);
-        const cached = await this.cacheService.get(cacheKey);
+        const cached = await this.cacheService.get<ParticipantProfile>(cacheKey);
         
         if (cached) {
             return cached;
@@ -60,9 +81,9 @@ export class PortalCacheService {
      * Get participant stats with caching
      * Aggregated counts that are expensive to compute
      */
-    async getParticipantStats(participantId: string) {
+    async getParticipantStats(participantId: string): Promise<ParticipantStats> {
         const cacheKey = CACHE_KEYS.PARTICIPANT_STATS(participantId);
-        const cached = await this.cacheService.get(cacheKey);
+        const cached = await this.cacheService.get<ParticipantStats>(cacheKey);
         
         if (cached) {
             return cached;

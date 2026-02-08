@@ -92,9 +92,7 @@ export class ReviewApplicationHandler {
 
     // Invalidate portal cache for the participant
     // When admin reviews, the participant should see status change immediately
-    if (updated.participant?.userId) {
-      await this.invalidateParticipantCache(updated.participant.userId);
-    }
+    await this.invalidateParticipantCache(application.participantId);
 
     // Return DTO
     return this.applicationMapper.toDto(updated);
@@ -103,19 +101,27 @@ export class ReviewApplicationHandler {
   /**
    * Invalidate portal cache for participant when their application is reviewed
    */
-  private async invalidateParticipantCache(userId: string): Promise<void> {
+  private async invalidateParticipantCache(participantId: string): Promise<void> {
     try {
+      // Fetch participant to get userId for cache invalidation
+      const participant = await this.applicationRepository['prisma'].participant.findUnique({
+        where: { id: participantId },
+        select: { userId: true }
+      });
+      
+      if (!participant) return;
+      
       const patterns = [
-        CACHE_KEYS.PORTAL_DASHBOARD(userId),
-        CACHE_KEYS.PORTAL_SUBMISSIONS(userId),
-        CACHE_KEYS.PORTAL_PAYMENTS(userId),
-        CACHE_KEYS.PORTAL_DOCUMENTS(userId),
+        CACHE_KEYS.PORTAL_DASHBOARD(participant.userId),
+        CACHE_KEYS.PORTAL_SUBMISSIONS(participant.userId),
+        CACHE_KEYS.PORTAL_PAYMENTS(participant.userId),
+        CACHE_KEYS.PORTAL_DOCUMENTS(participant.userId),
       ];
 
       await Promise.all(patterns.map(key => this.cacheService.invalidateKey(key)));
     } catch (error) {
       // Log but don't throw - cache invalidation failures shouldn't break the review
-      console.error(`Failed to invalidate cache for user ${userId}:`, error);
+      console.error(`Failed to invalidate cache for participant ${participantId}:`, error);
     }
   }
 }
