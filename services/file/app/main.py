@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 from app.presentation.api.routes import files, documents, images
 from app.infrastructure.persistence.postgres.database import connect_db, disconnect_db
+from app.middleware.cache_headers import CacheControlMiddleware
 
 
 app = FastAPI(
@@ -11,6 +12,9 @@ app = FastAPI(
     description="File upload/download, Excel export, PDF generation, and certificate generation service",
     version="2.0.0"
 )
+
+# Cache control middleware (must be before CORS)
+app.add_middleware(CacheControlMiddleware)
 
 # CORS middleware
 app.add_middleware(
