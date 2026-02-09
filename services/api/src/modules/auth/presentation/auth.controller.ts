@@ -11,8 +11,11 @@ import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { FirebaseLoginDto } from './dto/firebase-login.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
+import { AdminAuthResponseDto } from './dto/admin-auth-response.dto'; // [NEW]
 import { UserProfileDto } from './dto/user-profile.dto';
+import { AdminLoginDto } from './dto/admin-login.dto'; // [NEW]
 import { LoginHandler } from '../application/commands/handlers/login.handler';
+import { AdminLoginHandler } from '../application/commands/handlers/admin-login.handler'; // [NEW]
 import { RegisterHandler } from '../application/commands/handlers/register.handler';
 import { RegisterAdminHandler } from '../application/commands/handlers/register-admin.handler';
 import { LogoutHandler } from '../application/commands/handlers/logout.handler';
@@ -24,6 +27,7 @@ import { FirebaseLoginHandler } from '../application/commands/handlers/firebase-
 import { GetUserProfileHandler } from '../application/queries/handlers/get-user-profile.handler';
 import { GetAuthProvidersHandler } from '../application/queries/handlers/get-auth-providers.handler';
 import { LoginCommand } from '../application/commands/login.command';
+import { AdminLoginCommand } from '../application/commands/admin-login.command'; // [NEW]
 import { RegisterCommand } from '../application/commands/register.command';
 import { RegisterAdminCommand } from '../application/commands/register-admin.command';
 import { LogoutCommand } from '../application/commands/logout.command';
@@ -49,6 +53,7 @@ import { JwtAuthGuard } from '../infrastructure/guards/jwt-auth.guard';
 export class AuthController {
   constructor(
     private readonly loginHandler: LoginHandler,
+    private readonly adminLoginHandler: AdminLoginHandler, // [NEW]
     private readonly registerHandler: RegisterHandler,
     private readonly registerAdminHandler: RegisterAdminHandler,
     private readonly logoutHandler: LogoutHandler,
@@ -111,9 +116,29 @@ export class AuthController {
   }
 
   @Public()
+  @Post('admin/login')
+  @Throttle({ default: { limit: 5, ttl: 900000 } })
+  @ApiOperation({ summary: 'Admin Login' })
+  @ApiResponse({ status: 200, description: 'Admin successfully logged in', type: AdminAuthResponseDto })
+  async adminLogin(
+    @Body() dto: AdminLoginDto,
+    @Ip() ip?: string,
+    @Req() req?: Request,
+  ): Promise<AdminAuthResponseDto> {
+    const userAgent = req?.headers['user-agent'] || 'unknown';
+    const command = new AdminLoginCommand(
+      dto.email,
+      dto.password,
+      ip || '0.0.0.0',
+      userAgent,
+    );
+    return this.adminLoginHandler.execute(command);
+  }
+
+  @Public()
   @Post('register')
   @Throttle({ default: { limit: 3, ttl: 3600000 } }) // 3 attempts per hour
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Register User',
     description: `
       Registers a new user with support for "Smart Registration" features:

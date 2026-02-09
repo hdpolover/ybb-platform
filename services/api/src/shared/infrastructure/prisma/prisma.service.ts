@@ -24,7 +24,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
 
     super({
       adapter,
-      log: process.env.NODE_ENV === 'development' 
+      log: process.env.NODE_ENV === 'development'
         ? ['query', 'info', 'warn', 'error']
         : ['error'],
     });
@@ -57,7 +57,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
               try {
                 const result = await query(args);
                 const duration = (Date.now() - start) / 1000;
-                
+
                 metricsService.prismaQueryDuration.observe({ model, operation }, duration);
                 metricsService.prismaQueryTotal.inc({ model, operation });
 
@@ -73,67 +73,67 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
         },
       })
       .$extends({
-      query: {
-        $allModels: {
-          async findUnique({ model, operation, args, query }) {
-            if (modelHasDeletedAt(model)) {
-              const where = args.where || {};
-              const newWhere: any = { deletedAt: null };
-              
-              // Flatten compound unique keys for findFirst compatibility
-              // findUnique({ where: { compound_key: { a: 1, b: 2 } } }) -> findFirst({ where: { a: 1, b: 2, deletedAt: null } })
-              for (const key of Object.keys(where)) {
-                const value = where[key];
-                if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
-                  Object.assign(newWhere, value);
-                } else {
-                  newWhere[key] = value;
+        query: {
+          $allModels: {
+            async findUnique({ model, operation, args, query }) {
+              if (modelHasDeletedAt(model)) {
+                const where = args.where || {};
+                const newWhere: any = { deletedAt: null };
+
+                // Flatten compound unique keys for findFirst compatibility
+                // findUnique({ where: { compound_key: { a: 1, b: 2 } } }) -> findFirst({ where: { a: 1, b: 2, deletedAt: null } })
+                for (const key of Object.keys(where)) {
+                  const value = where[key];
+                  if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+                    Object.assign(newWhere, value);
+                  } else {
+                    newWhere[key] = value;
+                  }
+                }
+
+                return (extendedClient as any)[toCamelCase(model)].findFirst({
+                  ...args,
+                  where: newWhere,
+                });
+              }
+              return query(args);
+            },
+            async findFirst({ model, operation, args, query }) {
+              if (modelHasDeletedAt(model)) {
+                args.where = { deletedAt: null, ...args.where };
+              }
+              return query(args);
+            },
+            async findMany({ model, operation, args, query }) {
+              if (modelHasDeletedAt(model)) {
+                const safeWhere = args.where as any;
+                if (safeWhere?.deletedAt === undefined) {
+                  args.where = { deletedAt: null, ...(args.where as any) };
                 }
               }
-              
-              return (extendedClient as any)[toCamelCase(model)].findFirst({
-                ...args,
-                where: newWhere,
-              });
-            }
-            return query(args);
-          },
-          async findFirst({ model, operation, args, query }) {
-            if (modelHasDeletedAt(model)) {
-              args.where = { deletedAt: null, ...args.where };
-            }
-            return query(args);
-          },
-          async findMany({ model, operation, args, query }) {
-            if (modelHasDeletedAt(model)) {
-              const safeWhere = args.where as any;
-              if (safeWhere?.deletedAt === undefined) {
-                args.where = { deletedAt: null, ...(args.where as any) };
+              return query(args);
+            },
+            async delete({ model, operation, args, query }) {
+              if (modelHasDeletedAt(model)) {
+                return (extendedClient as any)[toCamelCase(model)].update({
+                  ...args,
+                  data: { deletedAt: new Date() },
+                });
               }
-            }
-            return query(args);
-          },
-          async delete({ model, operation, args, query }) {
-            if (modelHasDeletedAt(model)) {
-              return (extendedClient as any)[toCamelCase(model)].update({
-                ...args,
-                data: { deletedAt: new Date() },
-              });
-            }
-            return query(args);
-          },
-          async deleteMany({ model, operation, args, query }) {
-            if (modelHasDeletedAt(model)) {
-              return (extendedClient as any)[toCamelCase(model)].updateMany({
-                ...args,
-                data: { deletedAt: new Date() },
-              });
-            }
-            return query(args);
+              return query(args);
+            },
+            async deleteMany({ model, operation, args, query }) {
+              if (modelHasDeletedAt(model)) {
+                return (extendedClient as any)[toCamelCase(model)].updateMany({
+                  ...args,
+                  data: { deletedAt: new Date() },
+                });
+              }
+              return query(args);
+            },
           },
         },
-      },
-    });
+      });
 
     // Patch the current instance to use the extended client methods
     // We patch ALL models to ensure monitoring logic applies to everything

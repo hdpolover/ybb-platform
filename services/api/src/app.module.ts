@@ -36,6 +36,7 @@ import { GalleryModule } from '@modules/gallery/gallery.module';
 import { PortalModule } from '@modules/portal/portal.module';
 import { AuditModule } from '@modules/audit/audit.module';
 import { ReportingModule } from '@modules/reporting/reporting.module';
+import { AdminsModule } from '@modules/admins/admins.module';
 
 @Module({
   imports: [
@@ -110,6 +111,7 @@ import { ReportingModule } from '@modules/reporting/reporting.module';
     PortalModule,
     AuditModule,
     ReportingModule,
+    AdminsModule,
   ],
   controllers: [CacheController, MetricsController],
 })
