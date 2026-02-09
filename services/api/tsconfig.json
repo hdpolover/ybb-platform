@@ -35,7 +35,8 @@
     "rootDir": "./",
     "types": [
       "jest",
-      "node"
+      "node",
+      "multer"
     ]
   },
   "include": [
