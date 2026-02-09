@@ -65,6 +65,8 @@ services:
       POSTGRES_USER: ${DATABASE_USER}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
       POSTGRES_DB: ${DATABASE_NAME}
+      # Safety switch for automatic seeding (Default: false)
+      ENABLE_DB_SEEDING: ${ENABLE_DB_SEEDING:-false}
     volumes:
       - postgres_api_data_prod:/var/lib/postgresql/data
       - ../../deploy/database-dump:/tmp/dumps:ro
