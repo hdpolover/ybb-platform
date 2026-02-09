@@ -1,11 +1,16 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Starting automatic database seeding..."
+echo "🚀 Starting automatic database seeding (v1.1)..."
+echo "📂 Script Location: $0"
+echo "👤 Current User: $(whoami)"
+echo "📅 Date: $(date)"
 
 if [ "$1" == "--force" ]; then
     echo "⚠️ Force flag detected. Bypassing safety check."
     echo "🧹 Clearing existing database schema..."
+    # Explicitly print the action to verify the script version
+    echo "DEBUG: Running DROP SCHEMA public CASCADE;"
     psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
 elif [ "$ENABLE_DB_SEEDING" != "true" ]; then
     echo "🚫 DB Seeding is disabled (ENABLE_DB_SEEDING is not 'true'). Skipping."
