@@ -3,6 +3,11 @@ set -e
 
 echo "🚀 Starting automatic database seeding..."
 
+if [ "$ENABLE_DB_SEEDING" != "true" ]; then
+    echo "🚫 DB Seeding is disabled (ENABLE_DB_SEEDING is not 'true'). Skipping."
+    exit 0
+fi
+
 DUMP_DIR="/tmp/dumps"
 DB_USER="$POSTGRES_USER"
 DB_NAME="$POSTGRES_DB"
