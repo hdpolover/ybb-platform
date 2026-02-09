@@ -67,8 +67,7 @@ services:
       ENABLE_DB_SEEDING: ${ENABLE_DB_SEEDING:-false}
     volumes:
       - postgres_api_data_prod:/var/lib/postgresql/data
-      - ./database-dump:/tmp/dumps
-      - ./database-dump/init-seeding.sh:/docker-entrypoint-initdb.d/init-seeding.sh
+      - ./database-dump:/docker-entrypoint-initdb.d:rw
     networks:
       - dokploy-network
     healthcheck:
