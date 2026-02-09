@@ -17,13 +17,13 @@ elif [ "$ENABLE_DB_SEEDING" != "true" ]; then
     exit 0
 fi
 
-DUMP_DIR="/tmp/dumps"
+DUMP_DIR=$(dirname "$0")
 DB_USER="$POSTGRES_USER"
 DB_NAME="$POSTGRES_DB"
 DUMP_PREFIX="ybb_platform_db_backup_cutoff_20260208.sql.gz.part-"
 
-echo "🔍 Debugging: Contents of $DUMP_DIR:"
-ls -la "$DUMP_DIR" || echo "❌ Cannot list $DUMP_DIR"
+echo "🔍 Searching for files in: $DUMP_DIR"
+ls -la "$DUMP_DIR"
 
 # Check if we have the split files
 if ls "$DUMP_DIR/$DUMP_PREFIX"* 1> /dev/null 2>&1; then
