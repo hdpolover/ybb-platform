@@ -29,8 +29,8 @@ ls -la "$DUMP_DIR" || echo "❌ Cannot list $DUMP_DIR"
 if ls "$DUMP_DIR/$DUMP_PREFIX"* 1> /dev/null 2>&1; then
     echo "🧩 Found split gzipped SQL parts: $DUMP_DIR/$DUMP_PREFIX*"
     
-    echo "📥 Importing dump from split files..."
-    cat "$DUMP_DIR/$DUMP_PREFIX"* | gunzip -c | psql -v ON_ERROR_STOP=1 --username "$DB_USER" --dbname "$DB_NAME"
+    echo "📥 Importing dump from split files (with role mapping)..."
+    cat "$DUMP_DIR/$DUMP_PREFIX"* | gunzip -c | sed "s/ybb_user/$DB_USER/g" | psql -v ON_ERROR_STOP=1 --username "$DB_USER" --dbname "$DB_NAME"
     
     echo "✅ Database seeded successfully from split dump."
 else
