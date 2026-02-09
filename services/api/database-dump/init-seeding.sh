@@ -5,6 +5,8 @@ echo "🚀 Starting automatic database seeding..."
 
 if [ "$1" == "--force" ]; then
     echo "⚠️ Force flag detected. Bypassing safety check."
+    echo "🧹 Clearing existing database schema..."
+    psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
 elif [ "$ENABLE_DB_SEEDING" != "true" ]; then
     echo "🚫 DB Seeding is disabled (ENABLE_DB_SEEDING is not 'true'). Skipping."
     exit 0
