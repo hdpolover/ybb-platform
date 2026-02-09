@@ -3,7 +3,9 @@ set -e
 
 echo "🚀 Starting automatic database seeding..."
 
-if [ "$ENABLE_DB_SEEDING" != "true" ]; then
+if [ "$1" == "--force" ]; then
+    echo "⚠️ Force flag detected. Bypassing safety check."
+elif [ "$ENABLE_DB_SEEDING" != "true" ]; then
     echo "🚫 DB Seeding is disabled (ENABLE_DB_SEEDING is not 'true'). Skipping."
     exit 0
 fi
