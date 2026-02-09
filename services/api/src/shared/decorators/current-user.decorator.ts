@@ -6,6 +6,7 @@ export interface CurrentUserData {
   brandId: string;
   jti?: string; // JWT unique token ID for blacklisting
   exp?: number; // Token expiration timestamp
+  adminId?: string; // Admin ID for admin users
 }
 
 export const CurrentUser = createParamDecorator(

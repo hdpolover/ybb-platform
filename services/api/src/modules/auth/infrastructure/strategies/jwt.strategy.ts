@@ -11,6 +11,7 @@ export interface JwtPayload {
   jti?: string; // JWT unique token ID for blacklisting
   exp?: number; // Token expiration timestamp
   roles?: string[]; // Roles from token
+  adminId?: string; // Admin ID
 }
 
 @Injectable()
@@ -27,6 +28,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
+    console.error('[JwtStrategy DEBUG] Validate payload:', JSON.stringify(payload));
     // Verify user still exists and is active
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
@@ -47,6 +49,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       jti: payload.jti,
       exp: payload.exp,
       role: payload.roles || [], // Map roles to role for RolesGuard compatibility
+      adminId: payload.adminId,
     };
   }
 }
