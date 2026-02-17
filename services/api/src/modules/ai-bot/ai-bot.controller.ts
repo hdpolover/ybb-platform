@@ -3,15 +3,18 @@ import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { AiBotService } from './ai-bot.service';
 import { CreateAiBotConfigDto } from './dtos/create-ai-bot.dto';
 import { UpdateAiBotConfigDto } from './dtos/update-ai-bot.dto';
+import { ChangeType } from '@prisma/client';
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 // import { AdminGuard } from '../../core/guards/admin.guard';
 // import { Public } from '../../core/decorators/public.decorator';
 
 @ApiTags('AI Bot')
 @Controller('ai-bot')
 export class AiBotController {
-  constructor(private readonly aiBotService: AiBotService) {}
+  constructor(private readonly aiBotService: AiBotService) { }
 
   @Post()
+  @AuditTrail({ entityType: 'AiChatBotConfig', action: ChangeType.create })
   @ApiOperation({ summary: 'Create new AI Bot configuration (Admin)' })
   @ApiResponse({ status: HttpStatus.CREATED, description: 'Created successfully' })
   // @UseGuards(JwtAuthGuard, AdminGuard)
@@ -44,12 +47,14 @@ export class AiBotController {
   }
 
   @Patch(':id')
+  @AuditTrail({ entityType: 'AiChatBotConfig', action: ChangeType.update })
   @ApiOperation({ summary: 'Update configuration' })
   update(@Param('id') id: string, @Body() dto: UpdateAiBotConfigDto) {
     return this.aiBotService.update(id, dto);
   }
 
   @Delete(':id')
+  @AuditTrail({ entityType: 'AiChatBotConfig', action: ChangeType.delete })
   @ApiOperation({ summary: 'Delete configuration' })
   remove(@Param('id') id: string) {
     return this.aiBotService.remove(id);

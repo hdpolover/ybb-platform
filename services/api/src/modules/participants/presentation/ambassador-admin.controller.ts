@@ -12,6 +12,8 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@ne
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { GetAmbassadorsListQuery, UpdateAmbassadorStatusCommand } from '../application/commands/ambassador-admin.commands';
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 
 @ApiTags('Ambassadors')
 @Controller('admin/ambassadors')
@@ -19,9 +21,9 @@ import { GetAmbassadorsListQuery, UpdateAmbassadorStatusCommand } from '../appli
 @ApiBearerAuth()
 export class AmbassadorAdminController {
   constructor(
-      private readonly queryBus: QueryBus,
-      private readonly commandBus: CommandBus,
-  ) {}
+    private readonly queryBus: QueryBus,
+    private readonly commandBus: CommandBus,
+  ) { }
 
   @Get()
   @ApiOperation({ summary: 'List all ambassadors (Admin)' })
@@ -29,22 +31,24 @@ export class AmbassadorAdminController {
   @ApiQuery({ name: 'search', required: false })
   @ApiQuery({ name: 'page', required: false })
   async findAll(
-      @Query('programId') programId?: string,
-      @Query('search') search?: string,
-      @Query('page') page: number = 1,
+    @Query('programId') programId?: string,
+    @Query('search') search?: string,
+    @Query('page') page: number = 1,
   ) {
-      return this.queryBus.execute(new GetAmbassadorsListQuery(programId, search, page));
+    return this.queryBus.execute(new GetAmbassadorsListQuery(programId, search, page));
   }
 
   @Patch(':id/activate')
+  @AuditTrail({ entityType: 'Ambassador', action: ChangeType.update })
   @ApiOperation({ summary: 'Activate an ambassador' })
   async activate(@Param('id') id: string) {
-      return this.commandBus.execute(new UpdateAmbassadorStatusCommand(id, true));
+    return this.commandBus.execute(new UpdateAmbassadorStatusCommand(id, true));
   }
 
   @Patch(':id/deactivate')
+  @AuditTrail({ entityType: 'Ambassador', action: ChangeType.update })
   @ApiOperation({ summary: 'Deactivate an ambassador' })
   async deactivate(@Param('id') id: string) {
-     return this.commandBus.execute(new UpdateAmbassadorStatusCommand(id, false));
+    return this.commandBus.execute(new UpdateAmbassadorStatusCommand(id, false));
   }
 }

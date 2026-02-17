@@ -3,6 +3,7 @@ import { MonitoringModule } from '../monitoring/monitoring.module';
 import { PrismaService } from './prisma.service';
 import { TransactionService } from '../database/transaction.service';
 import { UnitOfWork } from '../database/unit-of-work.service';
+import { DataChangeLogService } from '../../services/data-change-log.service';
 
 /**
  * Prisma Module
@@ -10,15 +11,16 @@ import { UnitOfWork } from '../database/unit-of-work.service';
  * Infrastructure Layer - Database Module
  * 
  * This module is marked as @Global() to make PrismaService, TransactionService,
- * and UnitOfWork available throughout the application without needing to import
- * it in every module.
+ * UnitOfWork, and DataChangeLogService available throughout the application
+ * without needing to import it in every module.
  * 
  * This follows NestJS best practices for shared infrastructure services.
  */
 @Global()
 @Module({
   imports: [MonitoringModule],
-  providers: [PrismaService, TransactionService, UnitOfWork],
-  exports: [PrismaService, TransactionService, UnitOfWork],
+  providers: [PrismaService, TransactionService, UnitOfWork, DataChangeLogService],
+  exports: [PrismaService, TransactionService, UnitOfWork, DataChangeLogService],
 })
-export class PrismaModule {}
+export class PrismaModule { }
+

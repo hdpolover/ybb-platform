@@ -38,22 +38,4 @@ model MigrationTracking {
   @@map("migration_tracking")
 }
 
-model AuditLog {
-  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  event          String   @db.VarChar(255) // e.g., "user.verify-email", "payment.succeeded"
-  payload        Json?    @db.JsonB        // Full event payload
-  entityType     String?  @map("entity_type") @db.VarChar(50)
-  entityId       String?  @map("entity_id") @db.VarChar(255)
-  actorId        String?  @map("actor_id") @db.Uuid // If initiated by a user
-  ipAddress      String?  @map("ip_address") @db.VarChar(45)
-  userAgent      String?  @map("user_agent") @db.Text
-  status         String?  @db.VarChar(50) // SUCCESS, FAILURE
-  errorMessage   String?  @map("error_message") @db.Text
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-
-  @@index([event])
-  @@index([entityType, entityId])
-  @@index([actorId])
-  @@index([createdAt])
-  @@map("audit_logs")
-}
+// AuditLog model has been consolidated into DataChangeLog (see audit.prisma)

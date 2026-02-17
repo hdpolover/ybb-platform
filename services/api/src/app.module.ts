@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaModule } from '@shared/infrastructure/prisma/prisma.module';
 import { CacheModule } from '@shared/infrastructure/cache/cache.module';
 import { ThrottlerModule } from '@shared/infrastructure/throttler/throttler.module';
@@ -80,6 +81,7 @@ import { AdminsModule } from '@modules/admins/admins.module';
 
     // Infrastructure
     PrismaModule,
+    ScheduleModule.forRoot(),
     CacheModule,
     ThrottlerModule,
     RabbitMQModule,

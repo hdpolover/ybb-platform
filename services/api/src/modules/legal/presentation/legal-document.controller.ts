@@ -5,12 +5,13 @@ import { CreateLegalDocumentDto } from './dto/create-legal-document.dto';
 import { UpdateLegalDocumentDto } from './dto/update-legal-document.dto';
 import { LegalDocumentResponseDto } from './dto/legal-document-response.dto';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
-import { LegalDocument } from '@prisma/client';
+import { LegalDocument, ChangeType } from '@prisma/client';
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 
 @ApiTags('Legal')
 @Controller('brands/:brandSlug/legal-documents')
 export class LegalDocumentController {
-    constructor(private readonly service: LegalDocumentService) {}
+    constructor(private readonly service: LegalDocumentService) { }
 
     private toDto(doc: LegalDocument): LegalDocumentResponseDto {
         const { brandId, ...rest } = doc;
@@ -43,6 +44,7 @@ export class LegalDocumentController {
     @Post()
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
+    @AuditTrail({ entityType: 'LegalDocument', action: ChangeType.create })
     @ApiOperation({ summary: 'Create a new legal document (Admin Only)' })
     @ApiParam({ name: 'brandSlug', description: 'The slug of the brand' })
     @ApiResponse({ status: 201, description: 'Document created successfully', type: LegalDocumentResponseDto })
@@ -59,6 +61,7 @@ export class LegalDocumentController {
     @Put(':id')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
+    @AuditTrail({ entityType: 'LegalDocument', action: ChangeType.update })
     @ApiOperation({ summary: 'Update a legal document (Admin Only)' })
     @ApiParam({ name: 'brandSlug', description: 'The slug of the brand' })
     @ApiParam({ name: 'id', description: 'The ID of the document to update' })
@@ -76,6 +79,7 @@ export class LegalDocumentController {
     @Delete(':id')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
+    @AuditTrail({ entityType: 'LegalDocument', action: ChangeType.delete })
     @ApiOperation({ summary: 'Delete a legal document (Admin Only)' })
     @ApiParam({ name: 'brandSlug', description: 'The slug of the brand' })
     @ApiParam({ name: 'id', description: 'The ID of the document to delete' })

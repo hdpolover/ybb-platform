@@ -17,6 +17,8 @@ import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { CacheInvalidate } from '@shared/decorators/cache-invalidate.decorator';
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 
 // Commands
 import { CreateApplicationHandler } from '../application/commands/handlers/create-application.handler';
@@ -84,6 +86,7 @@ export class ApplicationsController {
   @ApiResponse({ status: 201, description: 'Application created successfully', type: ApplicationResponseDto })
   @ApiResponse({ status: 409, description: 'Application already exists' })
   @CacheInvalidate(['portal:*:${userId}'])
+  @AuditTrail({ entityType: 'ParticipantApplication', action: ChangeType.create })
   async create(@Body() dto: CreateApplicationRequestDto): Promise<ApplicationResponseDto> {
     this.logger.log(`Creating application for participant ${dto.participantId} in program ${dto.programId}`);
 
@@ -219,6 +222,7 @@ export class ApplicationsController {
   @ApiResponse({ status: 400, description: 'Cannot edit non-draft application' })
   @ApiResponse({ status: 404, description: 'Application not found' })
   @CacheInvalidate(['portal:*:${userId}'])
+  @AuditTrail({ entityType: 'ParticipantApplication', action: ChangeType.update })
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateApplicationRequestDto,
@@ -236,6 +240,7 @@ export class ApplicationsController {
   @ApiResponse({ status: 400, description: 'Cannot switch category due to status or payments' })
   @ApiResponse({ status: 404, description: 'Application not found' })
   @CacheInvalidate(['portal:*:${userId}'])
+  @AuditTrail({ entityType: 'ParticipantApplication', action: ChangeType.update })
   async switchCategory(
     @Param('id') id: string,
     @Body() dto: SwitchApplicationCategoryRequestDto,
@@ -254,6 +259,7 @@ export class ApplicationsController {
   @ApiResponse({ status: 400, description: 'Application cannot be submitted' })
   @ApiResponse({ status: 404, description: 'Application not found' })
   @CacheInvalidate(['portal:*:${userId}'])
+  @AuditTrail({ entityType: 'ParticipantApplication', action: ChangeType.status_change })
   async submit(
     @Param('id') id: string,
     @Body('participantId') participantId: string,
@@ -284,6 +290,7 @@ export class ApplicationsController {
   @ApiResponse({ status: 200, description: 'Application reviewed successfully', type: ApplicationResponseDto })
   @ApiResponse({ status: 400, description: 'Application cannot be reviewed' })
   @ApiResponse({ status: 404, description: 'Application not found' })
+  @AuditTrail({ entityType: 'ParticipantApplication', action: ChangeType.status_change })
   async review(
     @Param('id') id: string,
     @Body() dto: ReviewApplicationRequestDto,
@@ -311,6 +318,7 @@ export class ApplicationsController {
   @ApiResponse({ status: 400, description: 'Application cannot be withdrawn' })
   @ApiResponse({ status: 404, description: 'Application not found' })
   @CacheInvalidate(['portal:*:${userId}'])
+  @AuditTrail({ entityType: 'ParticipantApplication', action: ChangeType.status_change })
   async withdraw(
     @Param('id') id: string,
     @Body('userId') userId: string,
