@@ -15,6 +15,8 @@ import { GetAdminHandler } from '../application/queries/handlers/get-admin.handl
 import { JwtAuthGuard } from '../../auth/infrastructure/guards/jwt-auth.guard';
 import { CurrentUser, CurrentUserData } from '../../../shared/decorators/current-user.decorator';
 import { UpdateAdminDto } from './dto/update-admin.dto';
+import { AuditTrail } from '../../../shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 
 @ApiTags('admins')
 @Controller('admins')
@@ -32,6 +34,7 @@ export class AdminsController {
     @Post()
     @ApiOperation({ summary: 'Create New Admin' })
     @ApiResponse({ status: 201, description: 'Admin created successfully' })
+    @AuditTrail({ entityType: 'Admin', action: ChangeType.create })
     async create(
         @Body() dto: CreateAdminDto,
         @CurrentUser() currentUser: CurrentUserData
@@ -77,6 +80,7 @@ export class AdminsController {
     @Patch(':id')
     @ApiOperation({ summary: 'Update Admin' })
     @ApiResponse({ status: 200, description: 'Admin updated' })
+    @AuditTrail({ entityType: 'Admin', action: ChangeType.update })
     async update(
         @Param('id') id: string,
         @Body() dto: UpdateAdminDto,
@@ -90,6 +94,7 @@ export class AdminsController {
     @Delete(':id')
     @ApiOperation({ summary: 'Delete/Deactivate Admin' })
     @ApiResponse({ status: 200, description: 'Admin deactivated' })
+    @AuditTrail({ entityType: 'Admin', action: ChangeType.delete })
     async remove(
         @Param('id') id: string,
         @CurrentUser() currentUser: CurrentUserData

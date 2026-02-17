@@ -3,7 +3,9 @@ import { FileInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express
 import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiQuery } from '@nestjs/swagger';
 import { QueryBus, CommandBus } from '@nestjs/cqrs';
+import { ChangeType } from '@prisma/client';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { ListBrandsQuery } from '../application/queries/list-brands.query';
 import { GetBrandDetailQuery } from '../application/queries/get-brand-detail.query';
@@ -75,6 +77,7 @@ export class BrandsController {
     @Post()
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
+    @AuditTrail({ entityType: 'Brand', action: ChangeType.create })
     @ApiOperation({ summary: 'Create a new brand' })
     @ApiConsumes('multipart/form-data')
     @UseInterceptors(FileFieldsInterceptor([
@@ -97,6 +100,7 @@ export class BrandsController {
     @Put(':id')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
+    @AuditTrail({ entityType: 'Brand', action: ChangeType.update })
     @ApiOperation({ summary: 'Update a brand' })
     @ApiConsumes('multipart/form-data')
     @UseInterceptors(FileFieldsInterceptor([
@@ -121,6 +125,7 @@ export class BrandsController {
     @Put(':id/details')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
+    @AuditTrail({ entityType: 'Brand', action: ChangeType.update })
     @ApiOperation({ summary: 'Update brand details' })
     @ApiConsumes('multipart/form-data')
     @UseInterceptors(FileFieldsInterceptor([
@@ -145,6 +150,7 @@ export class BrandsController {
     @Put(':id/settings')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
+    @AuditTrail({ entityType: 'Brand', action: ChangeType.update })
     @ApiOperation({ summary: 'Update brand settings' })
     @ApiResponse({ status: 200, description: 'Brand settings updated successfully', type: BrandResponseDto })
     @ApiResponse({ status: 404, description: 'Brand not found' })
@@ -159,6 +165,7 @@ export class BrandsController {
     @Delete(':id')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
+    @AuditTrail({ entityType: 'Brand', action: ChangeType.delete })
     @ApiOperation({ summary: 'Delete a brand' })
     @ApiResponse({ status: 200, description: 'Brand deleted successfully' })
     @ApiResponse({ status: 404, description: 'Brand not found' })

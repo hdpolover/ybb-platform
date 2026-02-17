@@ -32,6 +32,8 @@ import { Roles } from '../../auth/application/decorators/roles.decorator';
 import { UserRole } from '../../../core/entities/user.entity';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
+import { AuditTrail } from '../../../shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 
 @ApiTags('Users')
 @Controller('users')
@@ -149,6 +151,7 @@ export class UsersController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Request Account Deletion' })
   @ApiResponse({ status: 201, description: 'Deletion request successfully created', type: DeletionRequestResponseDto })
+  @AuditTrail({ entityType: 'User', action: ChangeType.delete })
   async requestDeletion(
     @CurrentUser() user: any,
     @Body() dto: CreateDeletionRequestDto,
@@ -163,6 +166,7 @@ export class UsersController {
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Create New User' })
   @ApiResponse({ status: 201, description: 'User successfully created', type: UserResponseDto })
+  @AuditTrail({ entityType: 'User', action: ChangeType.create })
   async create(@Body() dto: CreateUserDto): Promise<UserResponseDto> {
     const command = new CreateUserCommand(
       dto.brandId,

@@ -1,12 +1,12 @@
-import { 
-  Controller, 
-  Post, 
-  UseGuards, 
-  UseInterceptors, 
-  UploadedFile, 
-  Body, 
-  Get, 
-  Query, 
+import {
+  Controller,
+  Post,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  Body,
+  Get,
+  Query,
   Req,
   Logger
 } from '@nestjs/common';
@@ -15,13 +15,15 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { CreateGalleryItemDto } from '../dto/create-gallery-item.dto';
 import { GalleryService } from '../application/gallery.service';
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 
 @ApiTags('Gallery')
 @Controller('gallery')
 export class GalleryController {
   private readonly logger = new Logger(GalleryController.name);
 
-  constructor(private readonly galleryService: GalleryService) {}
+  constructor(private readonly galleryService: GalleryService) { }
 
   @Post()
   @UseGuards(JwtAuthGuard)
@@ -46,10 +48,11 @@ export class GalleryController {
     },
   })
   @UseInterceptors(FileInterceptor('file'))
+  @AuditTrail({ entityType: 'ProgramGallery', action: ChangeType.create })
   async uploadGalleryItem(
     @UploadedFile() file: any,
     @Body() dto: CreateGalleryItemDto,
-    @Req() req: any, 
+    @Req() req: any,
   ) {
     this.logger.log(`Uploading gallery item for program ${dto.program_id}`);
     const userId = req.user?.userId; // Assumes JwtAuthGuard populates request.user with { userId }

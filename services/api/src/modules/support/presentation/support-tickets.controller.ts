@@ -4,6 +4,8 @@ import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { CurrentUser } from '@shared/decorators/current-user.decorator';
 import { CreateSupportTicketDto, ReplySupportTicketDto, SupportTicketResponseDto } from './dto/support-ticket.dto';
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 import { CreateSupportTicketCommand } from '../application/commands/create-support-ticket.command';
 import { ReplySupportTicketCommand } from '../application/commands/reply-support-ticket.command';
 import { ListSupportTicketsQuery } from '../application/queries/list-support-tickets.query';
@@ -20,6 +22,7 @@ export class SupportTicketsController {
     ) { }
 
     @Post()
+    @AuditTrail({ entityType: 'SupportTicket', action: ChangeType.create })
     @ApiOperation({ summary: 'Create a new support ticket' })
     @ApiResponse({ status: 201, description: 'Ticket created successfully' })
     async createTicket(
@@ -50,6 +53,7 @@ export class SupportTicketsController {
     }
 
     @Post(':id/messages')
+    @AuditTrail({ entityType: 'SupportTicketMessage', action: ChangeType.create })
     @ApiOperation({ summary: 'Reply to a ticket' })
     @ApiResponse({ status: 201, description: 'Reply added successfully' })
     async replyTicket(

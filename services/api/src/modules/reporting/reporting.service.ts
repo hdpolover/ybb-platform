@@ -10,11 +10,10 @@ export class ReportingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly excelService: ExcelService,
-  ) {}
+  ) { }
 
   async exportAuditLogs(res: Response) {
-    // @ts-ignore
-    const logs = await this.prisma.auditLog.findMany({
+    const logs = await this.prisma.dataChangeLog.findMany({
       orderBy: { createdAt: 'desc' },
       take: 5000,
     });
@@ -22,23 +21,39 @@ export class ReportingService {
     const data = logs.map((log: any) => ({
       id: log.id,
       timestamp: log.createdAt,
-      event: log.event,
-      entity: `${log.entityType || ''}:${log.entityId || ''}`,
-      actor: log.actorId,
+      action: log.action,
+      entityType: log.entityType,
+      entityId: log.entityId || '',
+      event: log.event || '',
+      actorType: log.actorType,
+      actorId: log.actorId || '',
+      riskLevel: log.riskLevel,
+      source: log.source || '',
+      endpoint: log.endpoint || '',
       status: log.status,
+      changedFields: (log.changedFields || []).join(', '),
+      beforeState: log.beforeState ? JSON.stringify(log.beforeState) : '',
+      afterState: log.afterState ? JSON.stringify(log.afterState) : '',
       ip: log.ipAddress,
-      details: JSON.stringify(log.payload)
     }));
 
     const columns = [
       { header: 'ID', key: 'id', width: 36 },
       { header: 'Timestamp', key: 'timestamp', width: 20 },
+      { header: 'Action', key: 'action', width: 15 },
+      { header: 'Entity Type', key: 'entityType', width: 25 },
+      { header: 'Entity ID', key: 'entityId', width: 36 },
       { header: 'Event', key: 'event', width: 30 },
-      { header: 'Entity', key: 'entity', width: 30 },
-      { header: 'Actor ID', key: 'actor', width: 36 },
-      { header: 'Status', key: 'status', width: 15 },
+      { header: 'Actor Type', key: 'actorType', width: 12 },
+      { header: 'Actor ID', key: 'actorId', width: 36 },
+      { header: 'Risk Level', key: 'riskLevel', width: 12 },
+      { header: 'Source', key: 'source', width: 12 },
+      { header: 'Endpoint', key: 'endpoint', width: 40 },
+      { header: 'Status', key: 'status', width: 12 },
+      { header: 'Changed Fields', key: 'changedFields', width: 30 },
+      { header: 'Before State', key: 'beforeState', width: 50 },
+      { header: 'After State', key: 'afterState', width: 50 },
       { header: 'IP Address', key: 'ip', width: 15 },
-      { header: 'Details', key: 'details', width: 50 },
     ];
 
     await this.excelService.streamExcel(res, data, columns, 'audit-logs');

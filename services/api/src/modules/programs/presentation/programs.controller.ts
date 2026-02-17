@@ -24,6 +24,8 @@ import { GetParticipantProgressQuery } from '../application/queries/get-particip
 import { ProgressStepDto } from './dto/participant-progress-response.dto';
 import { Public } from '../../../shared/decorators/public.decorator';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
+import { AuditTrail } from '../../../shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 
 @ApiTags('Programs')
 @Controller('programs')
@@ -88,6 +90,7 @@ export class ProgramsController {
   @ApiOperation({ summary: 'Create program (Admin only)' })
   @ApiResponse({ status: 201, description: 'Program created successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @AuditTrail({ entityType: 'Program', action: ChangeType.create })
   async create(
     @Body() dto: CreateProgramDto,
     @Request() req: any,
@@ -108,6 +111,7 @@ export class ProgramsController {
   @ApiResponse({ status: 200, description: 'Program updated successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Program not found' })
+  @AuditTrail({ entityType: 'Program', action: ChangeType.update })
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateProgramDto,
@@ -179,6 +183,7 @@ export class ProgramsController {
   @ApiResponse({ status: 200, description: 'Program deleted successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Program not found' })
+  @AuditTrail({ entityType: 'Program', action: ChangeType.delete })
   async delete(
     @Param('id') id: string,
     @Request() req: any,

@@ -22,6 +22,8 @@ import { UserRole } from '@core/entities/user.entity';
 import { CreatePaymentMethodDto, UpdatePaymentMethodDto } from './dto/admin-payment-method.dto';
 import { FileServiceClient } from '@modules/files/infrastructure/clients/file-service.client';
 import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
@@ -70,6 +72,7 @@ export class PaymentAdminController {
     }
 
     @Post('methods')
+    @AuditTrail({ entityType: 'PaymentMethod', action: ChangeType.create })
     @ApiOperation({ summary: 'Create payment method' })
     @ApiBody({ type: CreatePaymentMethodDto })
     @ApiResponse({ status: 201, description: 'Payment method created' })
@@ -110,6 +113,7 @@ export class PaymentAdminController {
     }
 
     @Put('methods/:id')
+    @AuditTrail({ entityType: 'PaymentMethod', action: ChangeType.update })
     @ApiOperation({ summary: 'Update payment method' })
     @ApiBody({ type: UpdatePaymentMethodDto })
     @ApiResponse({ status: 200, description: 'Payment method updated' })
@@ -132,6 +136,7 @@ export class PaymentAdminController {
     }
 
     @Delete('methods/:id')
+    @AuditTrail({ entityType: 'PaymentMethod', action: ChangeType.delete })
     @ApiOperation({ summary: 'Delete payment method' })
     @ApiResponse({ status: 200, description: 'Payment method deleted' })
     async deleteMethod(@Param('id') id: string) {

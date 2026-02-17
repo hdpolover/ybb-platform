@@ -123,12 +123,14 @@ enum ChangeType {
   update
   delete
   status_change
+  bulk_update
 }
 
 enum ChangedByType {
   participant
   admin
   system
+  webhook
 }
 
 enum PricingFeeType {
