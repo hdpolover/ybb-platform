@@ -18,6 +18,10 @@ services:
       MINIO_SECURE: "true"
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
       MINIO_PUBLIC_SECURE: "true"
+      # Observability
+      LOKI_URL: ${LOKI_URL}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_LOG_LEVEL: ${OTEL_LOG_LEVEL:-info}
     depends_on:
       postgres-file:
         condition: service_healthy

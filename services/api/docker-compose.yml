@@ -45,6 +45,7 @@ services:
       # Observability
       LOKI_URL: ${LOKI_URL}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_LOG_LEVEL: info
     volumes:
       - ./src:/app/src
       - ./prisma:/app/prisma
