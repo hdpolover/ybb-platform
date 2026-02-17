@@ -7,7 +7,7 @@ services:
       - ./prometheus/prometheus.local.yml:/etc/prometheus/prometheus.yml.tpl
       - ./prometheus/docker-entrypoint.sh:/etc/prometheus/docker-entrypoint.sh
       - prometheus_data_staging:/prometheus
-    entrypoint: ["/bin/sh", "/etc/prometheus/docker-entrypoint.sh"]
+    entrypoint: [ "/bin/sh", "/etc/prometheus/docker-entrypoint.sh" ]
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
@@ -40,6 +40,43 @@ services:
       - "traefik.http.routers.grafana-staging.tls.certresolver=myresolver"
       - "traefik.http.services.grafana-staging.loadbalancer.server.port=3000"
 
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: ybb-loki-staging
+    restart: always
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/local-config.yaml
+      - loki_data_staging:/tmp/loki
+    env_file:
+      - .env.staging
+    networks:
+      - ybb-network-staging
+
+  tempo:
+    image: grafana/tempo:2.4.1
+    container_name: ybb-tempo-staging
+    command: [ "-config.file=/etc/tempo.yaml" ]
+    volumes:
+      - ./tempo/tempo-config.yml:/etc/tempo.yaml
+      - tempo_data_staging:/tmp/tempo
+    env_file:
+      - .env.staging
+    networks:
+      - ybb-network-staging
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.96.0
+    container_name: ybb-otel-collector-staging
+    command: [ "--config=/etc/otel-collector-config.yaml" ]
+    volumes:
+      - ./otel/otel-collector-config.yml:/etc/otel-collector-config.yaml
+    env_file:
+      - .env.staging
+    networks:
+      - ybb-network-staging
+    depends_on:
+      - tempo
+
 networks:
   ybb-network-staging:
     name: ybb-network-staging
@@ -48,3 +85,5 @@ networks:
 volumes:
   prometheus_data_staging:
   grafana_data_staging:
+  loki_data_staging:
+  tempo_data_staging:

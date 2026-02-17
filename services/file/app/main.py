@@ -5,6 +5,8 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from app.presentation.api.routes import files, documents, images
 from app.infrastructure.persistence.postgres.database import connect_db, disconnect_db
 from app.middleware.cache_headers import CacheControlMiddleware
+from app.infrastructure.telemetry.otel import init_telemetry
+from app.infrastructure.telemetry.loki import init_loki_logging
 
 
 app = FastAPI(
@@ -12,6 +14,10 @@ app = FastAPI(
     description="File upload/download, Excel export, PDF generation, and certificate generation service",
     version="2.0.0"
 )
+
+# Initialize Telemetry
+init_telemetry(app, service_name="ybb-file")
+init_loki_logging(service_name="ybb-file")
 
 # Cache control middleware (must be before CORS)
 app.add_middleware(CacheControlMiddleware)

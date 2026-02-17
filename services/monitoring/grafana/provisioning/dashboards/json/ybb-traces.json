@@ -1,0 +1,179 @@
+{
+    "annotations": {
+        "list": [
+            {
+                "builtIn": 1,
+                "datasource": "-- Grafana --",
+                "enable": true,
+                "hide": true,
+                "iconColor": "rgba(0, 211, 255, 1)",
+                "name": "Annotations & Alerts",
+                "type": "dashboard"
+            }
+        ]
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 0,
+    "id": null,
+    "links": [],
+    "liveNow": false,
+    "panels": [
+        {
+            "datasource": {
+                "type": "tempo",
+                "uid": "tempo"
+            },
+            "gridPos": {
+                "h": 10,
+                "w": 24,
+                "x": 0,
+                "y": 0
+            },
+            "id": 1,
+            "options": {
+                "footer": {
+                    "fields": "",
+                    "reducer": [
+                        "sum"
+                    ],
+                    "show": false
+                },
+                "showHeader": true
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "tempo",
+                        "uid": "tempo"
+                    },
+                    "queryType": "traceql",
+                    "refId": "A",
+                    "limit": 20,
+                    "query": "{ .service.name = \"${service}\" }"
+                }
+            ],
+            "title": "Traces for Service: $service",
+            "type": "table",
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "align": "auto",
+                        "displayMode": "auto",
+                        "inspect": false
+                    }
+                },
+                "overrides": []
+            }
+        },
+        {
+            "datasource": {
+                "type": "tempo",
+                "uid": "tempo"
+            },
+            "gridPos": {
+                "h": 10,
+                "w": 24,
+                "x": 0,
+                "y": 10
+            },
+            "id": 2,
+            "options": {
+                "footer": {
+                    "fields": "",
+                    "reducer": [
+                        "sum"
+                    ],
+                    "show": false
+                },
+                "showHeader": true
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "tempo",
+                        "uid": "tempo"
+                    },
+                    "queryType": "traceql",
+                    "refId": "A",
+                    "limit": 20,
+                    "query": "{ .service.name = \"${service}\" && .http.status_code >= 400 }"
+                }
+            ],
+            "title": "🔥 Error Traces (Failed Requests)",
+            "type": "table",
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "align": "auto",
+                        "displayMode": "auto",
+                        "inspect": false
+                    }
+                },
+                "overrides": []
+            }
+        }
+    ],
+    "refresh": "5s",
+    "schemaVersion": 38,
+    "style": "dark",
+    "tags": [
+        "ybb",
+        "traces"
+    ],
+    "templating": {
+        "list": [
+            {
+                "current": {},
+                "datasource": {
+                    "type": "tempo",
+                    "uid": "tempo"
+                },
+                "definition": "ybb-api,ybb-payment,ybb-notification,ybb-file",
+                "hide": 0,
+                "includeAll": false,
+                "label": "Service",
+                "multi": false,
+                "name": "service",
+                "options": [
+                    {
+                        "selected": true,
+                        "text": "ybb-api",
+                        "value": "ybb-api"
+                    },
+                    {
+                        "selected": false,
+                        "text": "ybb-payment",
+                        "value": "ybb-payment"
+                    },
+                    {
+                        "selected": false,
+                        "text": "ybb-notification",
+                        "value": "ybb-notification"
+                    },
+                    {
+                        "selected": false,
+                        "text": "ybb-file",
+                        "value": "ybb-file"
+                    }
+                ],
+                "query": "ybb-api,ybb-payment,ybb-notification,ybb-file",
+                "refresh": 1,
+                "regex": "",
+                "skipUrlSync": false,
+                "sort": 1,
+                "type": "custom"
+            }
+        ]
+    },
+    "time": {
+        "from": "now-3h",
+        "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "",
+    "title": "YBB Traces Explorer",
+    "uid": "ybb-traces",
+    "version": 1,
+    "weekStart": ""
+}

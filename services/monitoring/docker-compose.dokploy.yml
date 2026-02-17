@@ -29,6 +29,37 @@ services:
       - "traefik.http.routers.ybb-grafana.tls.certresolver=letsencrypt"
       - "traefik.http.services.ybb-grafana.loadbalancer.server.port=3000"
 
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: ybb-loki
+    restart: always
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/local-config.yaml
+      - loki_data:/tmp/loki
+    networks:
+      - dokploy-network
+
+  tempo:
+    image: grafana/tempo:2.4.1
+    container_name: ybb-tempo
+    command: [ "-config.file=/etc/tempo.yaml" ]
+    volumes:
+      - ./tempo/tempo-config.yml:/etc/tempo.yaml
+      - tempo_data:/tmp/tempo
+    networks:
+      - dokploy-network
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.96.0
+    container_name: ybb-otel-collector
+    command: [ "--config=/etc/otel-collector-config.yaml" ]
+    volumes:
+      - ./otel/otel-collector-config.yml:/etc/otel-collector-config.yaml
+    networks:
+      - dokploy-network
+    depends_on:
+      - tempo
+
 networks:
   dokploy-network:
     external: true
@@ -36,3 +67,5 @@ networks:
 volumes:
   prometheus_data:
   grafana_data:
+  loki_data:
+  tempo_data:
