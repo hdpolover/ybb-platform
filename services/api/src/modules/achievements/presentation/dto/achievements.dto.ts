@@ -1,38 +1,38 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 export class ParticipantDocumentResponseDto {
-    @ApiProperty()
+    @ApiProperty({ example: '123e4567-e89b-12d3-a456-426614174000' })
     id: string;
 
-    @ApiProperty()
+    @ApiProperty({ example: 'CERT-2026-001', required: false })
     documentNumber: string | null;
 
-    @ApiProperty()
+    @ApiProperty({ example: 'https://storage.ybb.center/docs/cert.pdf', description: 'Public URL to download the document' })
     documentUrl: string;
 
-    @ApiProperty()
+    @ApiProperty({ example: '2026-02-17T07:00:00Z' })
     generatedAt: Date;
 
-    @ApiProperty()
+    @ApiProperty({ example: 'Official Certificate of Participation' })
     templateName: string;
 }
 
 export class ParticipantAwardResponseDto {
-    @ApiProperty()
+    @ApiProperty({ example: 'award-uuid-123' })
     id: string;
 
-    @ApiProperty()
+    @ApiProperty({ example: 'Best Delegate' })
     awardName: string;
 
-    @ApiProperty({ required: false })
+    @ApiProperty({ example: 'Awarded for exceptional performance in the summit.', required: false })
     awardDescription: string | null;
 
-    @ApiProperty({ required: false })
+    @ApiProperty({ example: 'https://storage.ybb.center/badges/best-delegate.png', required: false })
     badgeUrl: string | null;
 
-    @ApiProperty()
+    @ApiProperty({ example: '2026-02-17T07:00:00Z' })
     awardedAt: Date;
 
-    @ApiProperty({ required: false })
+    @ApiProperty({ example: 'https://storage.ybb.center/certs/best-delegate.pdf', required: false })
     certificateUrl: string | null;
 }
