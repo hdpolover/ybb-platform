@@ -16,6 +16,10 @@ services:
       MIDTRANS_SERVER_KEY: ${MIDTRANS_SERVER_KEY}
       MIDTRANS_CLIENT_KEY: ${MIDTRANS_CLIENT_KEY}
       MIDTRANS_IS_PRODUCTION: "${MIDTRANS_IS_PRODUCTION:-true}"
+      # Observability
+      LOKI_URL: ${LOKI_URL}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_LOG_LEVEL: ${OTEL_LOG_LEVEL:-info}
     depends_on:
       postgres-payment:
         condition: service_healthy

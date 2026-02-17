@@ -18,6 +18,10 @@ services:
       # Resend
       RESEND_API_KEY: ${RESEND_API_KEY}
       RESEND_FROM: ${RESEND_FROM}
+      # Observability
+      LOKI_URL: ${LOKI_URL}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_LOG_LEVEL: ${OTEL_LOG_LEVEL:-info}
     networks:
       - dokploy-network
     # Notification might not need a public domain if it only consumes events
