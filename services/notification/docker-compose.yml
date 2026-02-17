@@ -17,10 +17,12 @@ services:
       RABBITMQ_URL: amqp://guest:guest@host.docker.internal:5672/
       RESEND_API_KEY: ${RESEND_API_KEY}
       RESEND_FROM: ${RESEND_FROM}
+      # Observability
+      LOKI_URL: ${LOKI_URL}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
     volumes:
       - .:/app
       - /app/node_modules
       - /app/dist
     networks:
       - default
-

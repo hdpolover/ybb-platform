@@ -36,3 +36,36 @@ datasources:
       postgresVersion: 1500
     isDefault: false
     editable: true
+
+  - name: Loki
+    type: loki
+    uid: loki
+    access: proxy
+    url: http://loki:3100
+    jsonData:
+      timeout: 60
+      maxLines: 1000
+    isDefault: false
+    editable: false
+
+  - name: Tempo
+    type: tempo
+    uid: tempo
+    access: proxy
+    url: http://tempo:3200
+    jsonData:
+      httpMethod: GET
+      nodeGraph:
+        enabled: false
+      lokiSearch:
+        datasourceUid: 'loki'
+      tracesToLogsV2:
+        datasourceUid: 'loki'
+        spanStartTimeShift: '-1h'
+        spanEndTimeShift: '1h'
+        filterByTraceID: true
+        filterBySpanID: false
+        customQuery: true
+        query: '{job="ybb-api"} |= "$${__span.traceId}"'
+    isDefault: false
+    editable: false

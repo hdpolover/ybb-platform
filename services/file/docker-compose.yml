@@ -6,6 +6,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: file-file
     container_name: ybb-file
     restart: unless-stopped
     ports:
@@ -16,6 +17,8 @@ services:
       PYTHON_ENV: development
       # Database
       DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres-file:5432/${DATABASE_NAME}
+      # RabbitMQ
+      RABBITMQ_URL: amqp://guest:guest@host.docker.internal:5672/
       # MinIO (Remote/Staging by default as per root config)
       MINIO_ENDPOINT: ${MINIO_ENDPOINT}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
@@ -24,6 +27,9 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET}
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
       MINIO_PUBLIC_SECURE: ${MINIO_PUBLIC_SECURE}
+      # Observability
+      LOKI_URL: ${LOKI_URL}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
     volumes:
       - .:/app
     depends_on:
@@ -49,7 +55,7 @@ services:
       - postgres_file_data:/var/lib/postgresql/data
       - ./database/init:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -72,9 +78,9 @@ services:
     volumes:
       - minio_data:/data
     command: server /data --console-address ":9001"
-    profiles: ["offline"] # Only start if explicitly requested
+    profiles: [ "offline" ] # Only start if explicitly requested
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 30s
       timeout: 20s
       retries: 3

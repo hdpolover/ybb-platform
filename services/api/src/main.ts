@@ -1,3 +1,4 @@
+import './tracing';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
@@ -84,7 +85,7 @@ async function bootstrap() {
   });
 
   const port = process.env.PORT || 3000;
-  
+
   await app.startAllMicroservices();
   await app.listen(port);
 

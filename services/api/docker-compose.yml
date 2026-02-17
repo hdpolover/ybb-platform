@@ -42,6 +42,9 @@ services:
       # Use the JSON file for authentication (Simpler and more robust)
       IS_DOCKER: "true"
       GOOGLE_APPLICATION_CREDENTIALS: /app/service-account.json
+      # Observability
+      LOKI_URL: ${LOKI_URL}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
     volumes:
       - ./src:/app/src
       - ./prisma:/app/prisma

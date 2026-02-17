@@ -33,8 +33,6 @@
     "@grpc/grpc-js": "^1.14.3",
     "@grpc/proto-loader": "^0.8.0",
     "@keyv/redis": "^4.0.3",
-    "@logtail/node": "^0.5.6",
-    "@logtail/winston": "^0.5.6",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/cache-manager": "^3.0.1",
     "@nestjs/common": "^10.3.0",
@@ -48,6 +46,12 @@
     "@nestjs/schedule": "^6.1.1",
     "@nestjs/swagger": "^7.1.17",
     "@nestjs/throttler": "^6.5.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.50.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.55.0",
+    "@opentelemetry/resources": "^1.26.0",
+    "@opentelemetry/sdk-node": "^0.55.0",
+    "@opentelemetry/semantic-conventions": "^1.27.0",
     "@prisma/adapter-pg": "^7.2.0",
     "@prisma/client": "^7.2.0",
     "@types/form-data": "^2.2.1",
@@ -82,7 +86,8 @@
     "rxjs": "^7.8.1",
     "swagger-ui-express": "^5.0.0",
     "uuid": "^13.0.0",
-    "winston": "^3.19.0"
+    "winston": "^3.19.0",
+    "winston-loki": "^6.1.4"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.2.1",

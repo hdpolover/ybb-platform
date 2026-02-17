@@ -40,3 +40,10 @@ grpcio>=1.62.0
 grpcio-tools>=1.62.0
 
 aio-pika>=9.4.0
+
+# Observability
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-instrumentation-fastapi
+opentelemetry-exporter-otlp
+python-logging-loki>=0.3.1

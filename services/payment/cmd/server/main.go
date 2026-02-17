@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
 	"google.golang.org/grpc"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -33,6 +34,11 @@ import (
 	"github.com/ybb-platform/payment/internal/infrastructure/messaging"
 	"github.com/ybb-platform/payment/internal/infrastructure/persistence"
 	"github.com/ybb-platform/payment/internal/presentation/http/handlers"
+
+	"github.com/ybb-platform/payment/internal/infrastructure/telemetry"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // @title           YBB Payment Service API
@@ -61,19 +67,47 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	log.Printf("Starting Payment Service on port %s", cfg.Port)
-	log.Printf("Environment: %s", cfg.Environment)
+	// Initialize Logger (Custom Loki Core + Console)
+	lokiUrl := os.Getenv("LOKI_URL")
+	if lokiUrl == "" {
+		lokiUrl = "http://localhost:3100"
+	}
+
+	lokiLabels := map[string]string{"job": "ybb-payment"}
+	lokiCore := telemetry.NewLokiCore(lokiUrl, lokiLabels, zap.InfoLevel)
+
+	consoleEncoder := zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig())
+	consoleCore := zapcore.NewCore(consoleEncoder, zapcore.AddSync(os.Stdout), zap.InfoLevel)
+
+	core := zapcore.NewTee(lokiCore, consoleCore)
+	zLogger := zap.New(core)
+	zap.ReplaceGlobals(zLogger)
+	logger := zLogger.Sugar()
+
+	// Initialize Telemetry
+	tp, err := telemetry.InitTracer(context.Background())
+	if err != nil {
+		logger.Fatalf("Failed to initialize OTel: %v", err)
+	}
+	defer func() {
+		if err := tp.Shutdown(context.Background()); err != nil {
+			logger.Errorf("Error shutting down OTel: %v", err)
+		}
+	}()
+
+	logger.Infof("Starting Payment Service on port %s", cfg.Port)
+	logger.Infof("Environment: %s", cfg.Environment)
 
 	// Connect to database with GORM
 	db, err := connectDatabase(cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		logger.Fatalf("Failed to connect to database: %v", err)
 	}
 
 	// Run SQL Migrations (from migrations/ folder)
 	// This ensures triggers, indexes, and seeded data are present
 	if err := persistence.RunRawSqlMigrations(db, "migrations"); err != nil {
-		log.Fatalf("Failed to run SQL migrations: %v", err)
+		logger.Fatalf("Failed to run SQL migrations: %v", err)
 	}
 
 	// Auto-migrate database schema (GORM Structs)
@@ -86,21 +120,21 @@ func main() {
 		&entities.PaymentIntent{},
 		&entities.PaymentTransaction{},
 	); err != nil {
-		log.Fatalf("Failed to migrate database: %v", err)
+		logger.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	log.Println("Connected to database successfully")
+	logger.Info("Connected to database successfully")
 
 	// Initialize event publisher
 	var eventPublisher messaging.EventPublisher
 	if cfg.RabbitMQURL != "" {
 		eventPublisher, err = messaging.NewRabbitMQPublisher(cfg.RabbitMQURL, cfg.RabbitMQExchange)
 		if err != nil {
-			log.Printf("Failed to connect to RabbitMQ, using NoOp publisher: %v", err)
+			logger.Errorf("Failed to connect to RabbitMQ, using NoOp publisher: %v", err)
 			eventPublisher = messaging.NewNoOpPublisher()
 		}
 	} else {
-		log.Println("RabbitMQ URL not configured, using NoOp publisher")
+		logger.Info("RabbitMQ URL not configured, using NoOp publisher")
 		eventPublisher = messaging.NewNoOpPublisher()
 	}
 	defer eventPublisher.Close()
@@ -115,17 +149,17 @@ func main() {
 		cfg.Environment,
 	)
 	gatewayFactory.Register(midtransGateway)
-	log.Println("Registered payment gateways: Midtrans")
+	logger.Info("Registered payment gateways: Midtrans")
 
 	// Register Manual Gateway
 	manualGateway := infraGateways.NewManualGateway()
 	gatewayFactory.Register(manualGateway)
-	log.Println("Registered payment gateways: Manual")
+	logger.Info("Registered payment gateways: Manual")
 
 	// Initialize repositories
 	sqlDB, err := db.DB()
 	if err != nil {
-		log.Fatalf("Failed to get SQL DB from GORM: %v", err)
+		logger.Fatalf("Failed to get SQL DB from GORM: %v", err)
 	}
 	paymentRepo := persistence.NewPostgresPaymentRepository(sqlDB)
 	// paymentRepo := persistence.NewGormPaymentRepository(db)
@@ -138,7 +172,7 @@ func main() {
 		grpcPort := "50053" // TODO: Move to config
 		lis, err := net.Listen("tcp", ":"+grpcPort)
 		if err != nil {
-			log.Fatalf("failed to listen for gRPC: %v", err)
+			logger.Fatalf("failed to listen for gRPC: %v", err)
 		}
 		s := grpc.NewServer()
 		paymentGrpcService := grpcServer.NewPaymentGrpcServer(
@@ -149,9 +183,9 @@ func main() {
 			eventPublisher,
 		)
 		pb.RegisterPaymentServiceServer(s, paymentGrpcService)
-		log.Printf("gRPC server listening at %v", lis.Addr())
+		logger.Infof("gRPC server listening at %v", lis.Addr())
 		if err := s.Serve(lis); err != nil {
-			log.Fatalf("failed to serve gRPC: %v", err)
+			logger.Fatalf("failed to serve gRPC: %v", err)
 		}
 	}()
 
@@ -220,9 +254,9 @@ func main() {
 
 	// Start server in goroutine
 	go func() {
-		log.Printf("Server starting on port %s", cfg.Port)
+		logger.Infof("Server starting on port %s", cfg.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Failed to start server: %v", err)
+			logger.Fatalf("Failed to start server: %v", err)
 		}
 	}()
 
@@ -230,16 +264,16 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	log.Println("Shutting down server...")
+	logger.Info("Shutting down server...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatal("Server forced to shutdown:", err)
+		logger.Fatal("Server forced to shutdown:", err)
 	}
 
-	log.Println("Server exited")
+	logger.Info("Server exited")
 }
 
 // setupRouter sekarang menerima handler dan mendaftarkan route Swagger
@@ -249,6 +283,7 @@ func setupRouter(
 	intentHandler *handlers.IntentHandler,
 ) *gin.Engine {
 	router := gin.Default()
+	router.Use(otelgin.Middleware("ybb-payment"))
 
 	// Access via browser: http://localhost:8002/swagger/index.html
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
@@ -314,6 +349,10 @@ func connectDatabase(databaseURL string) (*gorm.DB, error) {
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
+	}
+
+	if err := db.Use(otelgorm.NewPlugin()); err != nil {
+		return nil, fmt.Errorf("failed to use otelgorm plugin: %w", err)
 	}
 
 	sqlDB, err := db.DB()

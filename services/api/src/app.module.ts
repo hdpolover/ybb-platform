@@ -12,8 +12,8 @@ import { CacheController } from '@shared/presentation/cache.controller';
 import { MetricsController } from '@shared/presentation/metrics.controller';
 import { WinstonModule } from 'nest-winston';
 import * as winston from 'winston';
-import { Logtail } from '@logtail/node';
-import { LogtailTransport } from '@logtail/winston';
+const LokiTransport = require('winston-loki');
+import { trace, context } from '@opentelemetry/api';
 import { AchievementsModule } from '@modules/achievements/achievements.module';
 import { ApplicationsModule } from '@modules/applications/applications.module';
 import { AuthModule } from '@modules/auth/auth.module';
@@ -58,18 +58,37 @@ import { AdminsModule } from '@modules/admins/admins.module';
               winston.format.timestamp(),
               winston.format.ms(),
               winston.format.colorize(),
-              winston.format.printf(({ timestamp, level, message, context, ...meta }) => {
+              winston.format.printf(({ timestamp, level, message, context, ...meta }: any) => {
                 return `${timestamp} [${context || 'Application'}] ${level}: ${message} ${Object.keys(meta).length ? JSON.stringify(meta) : ''}`;
               }),
             ),
           }),
         ];
 
-        const logtailToken = configService.get<string>('LOGTAIL_SOURCE_TOKEN');
-        if (logtailToken) {
-          const logtail = new Logtail(logtailToken);
-          transports.push(new LogtailTransport(logtail));
-        }
+        const lokiUrl = configService.get<string>('LOKI_URL') || 'http://loki:3100';
+        const LokiTransportConstructor = (LokiTransport as any).default || LokiTransport;
+        transports.push(
+          new LokiTransportConstructor({
+            host: lokiUrl,
+            labels: { job: 'ybb-api' },
+            json: true,
+            format: winston.format.combine(
+              winston.format.timestamp(),
+              winston.format((info: any) => {
+                const span = trace.getSpan(context.active());
+                if (span) {
+                  const spanContext = span.spanContext();
+                  info.traceId = spanContext.traceId;
+                  info.spanId = spanContext.spanId;
+                }
+                return info;
+              })(),
+              winston.format.json(),
+            ),
+            replaceTimestamp: true,
+            onConnectionError: (err) => console.error('Loki connection error:', err),
+          }),
+        );
 
         return {
           transports,
