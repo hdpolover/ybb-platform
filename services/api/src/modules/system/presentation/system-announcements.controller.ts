@@ -8,7 +8,7 @@ import { GetSystemAnnouncementQuery } from '../application/queries/get-system-an
 import { MarkAnnouncementReadCommand } from '../application/commands/mark-announcement-read.command';
 import { SystemAnnouncementResponseDto } from './dto/system-announcement.dto';
 
-@ApiTags('System')
+@ApiTags('Announcements')
 @Controller('system/announcements')
 export class SystemAnnouncementsController {
     constructor(

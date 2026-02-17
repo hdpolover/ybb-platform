@@ -25,7 +25,7 @@ import { ProgressStepDto } from './dto/participant-progress-response.dto';
 import { Public } from '../../../shared/decorators/public.decorator';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
 
-@ApiTags('programs')
+@ApiTags('Programs')
 @Controller('programs')
 export class ProgramsController {
   constructor(

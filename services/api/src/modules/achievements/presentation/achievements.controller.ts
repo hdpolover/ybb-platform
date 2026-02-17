@@ -7,7 +7,7 @@ import { ParticipantDocumentResponseDto, ParticipantAwardResponseDto } from './d
 import { ListApplicationDocumentsQuery } from '../application/queries/list-application-documents.query';
 import { ListParticipantAwardsQuery } from '../application/queries/list-participant-awards.query';
 
-@ApiTags('achievements')
+@ApiTags('Achievements')
 @Controller('achievements')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
@@ -15,7 +15,7 @@ export class AchievementsController {
     constructor(private readonly queryBus: QueryBus) { }
 
     @Get('applications/:applicationId/documents')
-    @ApiOperation({ summary: 'List generated documents for an application' })
+    @ApiOperation({ summary: 'List generated documents for an application', operationId: 'listDocuments' })
     @ApiResponse({ status: 200, description: 'Return list of documents', type: [ParticipantDocumentResponseDto] })
     async listDocuments(
         @CurrentUser() user: any,
@@ -25,7 +25,7 @@ export class AchievementsController {
     }
 
     @Get('applications/:applicationId/awards')
-    @ApiOperation({ summary: 'List awards for an application' })
+    @ApiOperation({ summary: 'List awards for an application', operationId: 'listAwards' })
     @ApiResponse({ status: 200, description: 'Return list of awards', type: [ParticipantAwardResponseDto] })
     async listAwards(
         @CurrentUser() user: any,
