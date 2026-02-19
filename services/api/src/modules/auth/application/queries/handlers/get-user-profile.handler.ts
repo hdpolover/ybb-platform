@@ -93,9 +93,10 @@ export class GetUserProfileHandler {
       applicationStatus: app.status
     })) || [];
 
-    // Determine if onboarding is needed (isFirstTime)
-    // We consider it completed if we have a participant record AND profileCompletedAt is set
+    // isProfileCompleted: participant exists AND profileCompletedAt is set
     const isProfileCompleted = !!(userData.participant?.profileCompletedAt);
+    // isOnboardingCompleted: authoritative flag on the user record (set by completeOnboarding handler)
+    const isOnboardingCompleted = userData.isOnboardingCompleted;
 
     return {
       userId: userData.id,
@@ -107,7 +108,8 @@ export class GetUserProfileHandler {
       })),
       participantId: userData.participant?.id,
       registeredPrograms,
-      isProfileCompleted
+      isProfileCompleted,
+      isOnboardingCompleted,
     };
   }
 }

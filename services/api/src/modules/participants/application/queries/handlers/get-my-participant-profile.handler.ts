@@ -1,5 +1,5 @@
 import { QueryHandler, IQueryHandler } from '@nestjs/cqrs';
-import { Inject } from '@nestjs/common';
+import { Inject, NotFoundException } from '@nestjs/common';
 import { GetMyParticipantProfileQuery } from '../get-my-participant-profile.query';
 import { IParticipantRepository } from '../../../../../core/interfaces/repositories/participant.repository.interface';
 import { ParticipantResponseDto } from '../../../presentation/dto/participant.dto';
@@ -11,12 +11,12 @@ export class GetMyParticipantProfileHandler implements IQueryHandler<GetMyPartic
         private readonly participantRepository: IParticipantRepository,
     ) { }
 
-    async execute(query: GetMyParticipantProfileQuery): Promise<ParticipantResponseDto | null> {
+    async execute(query: GetMyParticipantProfileQuery): Promise<ParticipantResponseDto> {
         const { userId } = query;
         const participant = await this.participantRepository.findByUserId(userId);
 
         if (!participant) {
-            return null;
+            throw new NotFoundException('Participant profile not found for this user.');
         }
 
         // Map to DTO

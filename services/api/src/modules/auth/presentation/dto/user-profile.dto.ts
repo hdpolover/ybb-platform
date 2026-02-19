@@ -47,7 +47,10 @@ export class UserProfileDto {
   @ApiProperty({ type: [RegisteredProgramDto] })
   registeredPrograms: RegisteredProgramDto[];
 
-  @ApiProperty({ example: true, description: 'True if user has effectively completed onboarding' })
+  @ApiProperty({ example: true, description: 'True if participant profile has profileCompletedAt set' })
   isProfileCompleted: boolean;
+
+  @ApiProperty({ example: true, description: 'True if user has completed onboarding (authoritative flag from users table)' })
+  isOnboardingCompleted: boolean;
 }
 
