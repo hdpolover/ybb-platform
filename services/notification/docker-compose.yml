@@ -24,5 +24,7 @@ services:
       - .:/app
       - /app/node_modules
       - /app/dist
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - default
