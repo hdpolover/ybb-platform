@@ -60,6 +60,7 @@ export const SWAGGER_TAGS = [
   { name: 'Participants', description: 'Participant management' },
   { name: 'Partnerships', description: 'Partnership opportunities' },
   { name: 'Payments', description: 'Payment management' },
+  { name: 'Portal', description: 'Participant portal — submissions, certificates, dashboard' },
   { name: 'Admin Payments', description: 'Admin payment management' },
   { name: 'Programs', description: 'Program management' },
   { name: 'Reporting', description: 'Data export & Reporting (Admin)' },

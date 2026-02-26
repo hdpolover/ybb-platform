@@ -29,6 +29,8 @@ export const CACHE_KEYS = {
   PORTAL_SUBMISSIONS: (userId: string) => `portal:submissions:${userId}`,
   PORTAL_PAYMENTS: (userId: string) => `portal:payments:${userId}`,
   PORTAL_DOCUMENTS: (userId: string) => `portal:documents:${userId}`,
+  PORTAL_SUBMISSION_DETAIL: (userId: string) => `portal:submission-detail:${userId}`,
+  PORTAL_CERTIFICATES: (userId: string) => `portal:certificates:${userId}`,
 
   // Participant cache keys (for optimized lookups)
   PARTICIPANT_PROFILE: (userId: string) => `participant:profile:${userId}`,

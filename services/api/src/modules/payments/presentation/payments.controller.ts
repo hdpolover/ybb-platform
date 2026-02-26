@@ -4,10 +4,11 @@ import {
     Post,
     Body,
     Param,
+    Query,
     UseGuards,
     UnauthorizedException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { CurrentUser } from '@shared/decorators/current-user.decorator';
@@ -18,6 +19,7 @@ import { CreateIntentDto } from './dto/create-intent.dto';
 import { ConfirmPaymentDto } from './dto/confirm-payment.dto';
 import { CreateIntentCommand } from '../application/commands/create-intent.command';
 import { ProcessPaymentCommand } from '../application/commands/process-payment.command';
+import { PaymentGrpcClient } from '../infrastructure/services/payment-grpc.client';
 
 @ApiTags('Payments')
 @Controller('payments')
@@ -27,6 +29,7 @@ export class PaymentsController {
     constructor(
         private readonly commandBus: CommandBus,
         private readonly queryBus: QueryBus,
+        private readonly paymentClient: PaymentGrpcClient,
     ) { }
 
     @Post('intents')
@@ -60,6 +63,24 @@ export class PaymentsController {
         return this.queryBus.execute(new ListUserPaymentsQuery(user.id));
     }
 
+    @Get('methods')
+    @ApiOperation({
+        summary: 'Get available payment methods',
+        description: 'Returns all available payment methods for the participant. Optionally filter by amount and currency.',
+    })
+    @ApiQuery({ name: 'amount', required: false, type: Number, description: 'Payment amount to filter applicable methods' })
+    @ApiQuery({ name: 'currency', required: false, type: String, description: 'Currency code (default: IDR)', example: 'IDR' })
+    @ApiResponse({ status: 200, description: 'List of available payment methods' })
+    async getPaymentMethods(
+        @Query('amount') amount?: number,
+        @Query('currency') currency?: string,
+    ): Promise<any> {
+        return this.paymentClient.getPaymentMethods({
+            amount: amount ? Number(amount) : 0,
+            currency: currency || 'IDR',
+        });
+    }
+
     @Get(':id')
     @ApiOperation({ summary: 'Get payment detail' })
     @ApiResponse({ status: 200, description: 'Return payment detail', type: PaymentResponseDto })
@@ -72,3 +93,4 @@ export class PaymentsController {
         return this.queryBus.execute(new GetPaymentDetailQuery(id, user.id));
     }
 }
+
