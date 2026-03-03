@@ -1,47 +1,74 @@
-"use client";
+import { VideoTestimonialsTable, type VideoTestimonyRow } from "@/app/components/videoTestimonialsMasterData/VideoTestimonialsTable";
 
-import { use } from "react";
-import { VideoTestimonialsTable } from "@/app/components/videoTestimonialsMasterData/VideoTestimonialsTable";
-
+// --- UTILITY ---
 function formatProgramName(programId: string | null): string {
   if (!programId) return "Selected Program";
   const cleaned = programId.replace(/[-_]+/g, " ");
   const words = cleaned.split(" ").filter(Boolean);
   if (words.length === 0) return "Selected Program";
-  const titled = words
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-  return titled;
+  return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 }
 
-export default function VideoTestimonialsPage({
+// --- MOCK DATA ---
+const MOCK_VIDEO_TESTIMONIALS: VideoTestimonyRow[] = [
+  {
+    id: 1,
+    thumbnailUrl: "/img/mock/video-thumb-1.jpg",
+    youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    description: "A short highlight video from delegates sharing their experience at Japan Youth Summit.",
+    status: "active",
+  },
+  {
+    id: 2,
+    thumbnailUrl: "/img/mock/video-thumb-2.jpg",
+    youtubeUrl: "https://www.youtube.com/watch?v=oHg5SJYRHA0",
+    description: "Alumni stories on how the program helped them build an international network.",
+    status: "inactive",
+  },
+];
+
+export default async function VideoTestimonialsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ programId: string }>;
+  searchParams: Promise<{ search?: string }>;
 }) {
-  const { programId } = use(params);
-  const programName = formatProgramName(programId);
+  const resolvedParams = await params;
+  const resolvedSearchParams = await searchParams;
+
+  const programName = formatProgramName(resolvedParams.programId);
+  const searchQuery = resolvedSearchParams.search?.toLowerCase() || "";
+
+  const filteredData = MOCK_VIDEO_TESTIMONIALS.filter((row) => {
+    if (!searchQuery) return true;
+    return (
+      row.youtubeUrl.toLowerCase().includes(searchQuery) ||
+      row.description.toLowerCase().includes(searchQuery) ||
+      row.status.toLowerCase().includes(searchQuery)
+    );
+  });
 
   return (
-    <main className="space-y-4 text-sm md:text-base">
-      <section className="rounded-md border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 shadow-sm md:text-base">
+    <main className="space-y-4">
+      <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1">
-            <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-0.5 text-xs font-semibold uppercase tracking-wide text-blue-700">
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-blue-700">
               <span>Master Data</span>
             </div>
-            <h1 className="text-base font-semibold text-zinc-900 md:text-lg">
+            <h1 className="text-lg font-bold text-zinc-900">
               {programName} Video Testimonials
             </h1>
-            <p className="text-xs text-zinc-500 md:text-sm">
+            <p className="text-sm text-zinc-500">
               Manage video testimonial content shown on the program landing pages.
             </p>
           </div>
         </div>
       </section>
 
-      <section className="rounded-md border border-zinc-200 bg-white px-3 py-3 text-sm text-zinc-700 shadow-sm md:text-base">
-        <VideoTestimonialsTable />
+      <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+        <VideoTestimonialsTable data={filteredData} currentSearch={searchQuery} />
       </section>
     </main>
   );

@@ -1,5 +1,5 @@
 import { use } from "react";
-import { FullyFundedParticipantsTable } from "@/app/components/scoring/FullyFundedParticipantsTable";
+import { FullyFundedParticipantsAll } from "@/app/components/scoring/FullyFundedParticipantsAll";
 
 export default function FullyFundedScoringPage({
   params,
@@ -17,7 +17,7 @@ export default function FullyFundedScoringPage({
         </p>
       </div>
 
-      <FullyFundedParticipantsTable />
+      <FullyFundedParticipantsAll />
     </div>
   );
 }
