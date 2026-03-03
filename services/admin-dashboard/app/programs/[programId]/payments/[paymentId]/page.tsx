@@ -1,97 +1,156 @@
 "use client";
 
-import { useRouter, useSearchParams, useParams } from "next/navigation";
-import { useState, Suspense } from "react";
-import { Sidebar } from "@/app/components/layout/Sidebar";
-import { Navbar } from "@/app/components/layout/Navbar";
+import { useSearchParams, useParams } from "next/navigation";
+import { useState } from "react";
+import Link from "next/link";
 import { PaymentDetailHeader } from "@/app/components/payments/details/PaymentDetailHeader";
-import { ParticipantCard } from "@/app/components/payments/details/ParticipantCard";
-import { PaymentMethodCard } from "@/app/components/payments/details/PaymentMethodCard";
-import { ProgramPaymentCard } from "@/app/components/payments/details/ProgramPaymentCard";
-import { PaymentNotesSection } from "@/app/components/payments/details/PaymentNotesSection";
-import { PaymentBreakdownSection } from "@/app/components/payments/details/PaymentBreakdownSection";
-import { UpdatePaymentStatusModal } from "@/app/components/payments/details/UpdatePaymentStatusModal";
+import { PaymentInfoSection } from "@/app/components/payments/details/PaymentInfoSection";
+import { PaymentChartSection } from "@/app/components/payments/details/PaymentChartSection";
+import { PaymentHistorySection, HistoryItem } from "@/app/components/payments/details/PaymentHistorySection";
+import { ParticipantStatusSection, ParticipantStatusItem } from "@/app/components/payments/details/ParticipantStatusSection";
 
-function PaymentDetailContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const params = useParams();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [showUpdateStatusModal, setShowUpdateStatusModal] = useState(false);
+const MOCK_DATA = {
+  transactionId: "20099",
+  status: "Success",
+  participantName: "YAWSON SAMUEL",
+  email: "ahagpi2002@gmail.com",
+  phone: "+6182392830282",
+  orderId: "225671768483559976901",
+  transactionCode: "TR-20099-1766421681",
+  dateCreated: "Jan 15, 2026 20:25",
+  paymentVia: "Credit/Debit Card",
+  registrationType: "Self-Funded",
+  paymentDesc: "Registration Fee (Self-Funded)",
+  programEarnings: 165958,
+  adminFee: 3042,
+  totalPayment: 169000,
+};
 
-  const selectedProgramId = searchParams.get("program");
-  const paymentId = params?.paymentId as string | undefined;
+const MOCK_HISTORY: HistoryItem[] = [
+  { id: 1, statusLabel: "Completed", title: "Payment Status Updated", description: "Payment status updated to success.", date: "Completed on: 21 January 2026" },
+  { id: 2, statusLabel: "Completed", title: "Payment Created", description: "Payment record was created in the system.", date: "Completed on: 18 January 2026" },
+];
 
-  const handleBack = () => {
-    const query = searchParams.toString();
-    router.push(query ? `/payments?${query}` : "/payments");
-  };
-
-  return (
-    <div className="flex h-screen overflow-hidden bg-white text-zinc-900">
-      <Sidebar collapsed={sidebarCollapsed} selectedProgramId={selectedProgramId} />
-
-      <div className="flex h-screen flex-1 flex-col">
-        <Navbar
-          onToggleSidebar={() => setSidebarCollapsed((previous) => !previous)}
-          selectedProgramId={selectedProgramId}
-          onChangeProgram={() => { }}
-          onResetProgram={() => { }}
-        />
-
-        <main className="flex-1 overflow-y-auto bg-white px-8 py-6">
-          <div className="space-y-4">
-            <PaymentDetailHeader
-              transactionId={paymentId ?? "18502"}
-              amountLabel="Rp 169.000"
-              statusLabel="Cancelled"
-              statusVariant="cancelled"
-              transactionCode="TR-18502-1764320001"
-              orderId="185021764320001958756"
-              createdAt="30 Nov 2025"
-              onOpenUpdateStatus={() => setShowUpdateStatusModal(true)}
-            />
-
-            <section className="grid gap-4 md:grid-cols-3">
-              <ParticipantCard
-                name="SAMYIA AZIZAHMED MAKRANI"
-                email="samyiaazizahmed79@gmail.com"
-                participantId="#17061B"
-                phone={null}
-              />
-
-              <PaymentMethodCard
-                title="Debit or Credit Card ( Visa or Mastercard )"
-                provider="Midtrans"
-                description="Debit or Credit Card (Visa or Mastercard) - after selecting this method on the checkout page, you will be directed to the Midtrans payment page. Follow the instructions on the screen to complete the payment using your card."
-              />
-
-              <ProgramPaymentCard
-                title="Fully Funded Registration Fee"
-                tagLabel="Registration"
-                idrPrice="Rp 3.000.000"
-                usdPrice="$ 100.00"
-                validPeriod="N/A - N/A"
-                description="Fully Funded Registration Fee untuk program yang dipilih."
-              />
-            </section>
-            <PaymentNotesSection />
-            <PaymentBreakdownSection />
-            <UpdatePaymentStatusModal
-              open={showUpdateStatusModal}
-              onClose={() => setShowUpdateStatusModal(false)}
-            />
-          </div>
-        </main>
-      </div>
-    </div>
-  );
-}
+const MOCK_PARTICIPANT_STATUS: ParticipantStatusItem[] = [
+  {
+    step: 1,
+    state: "Completed",
+    title: "Participant Registration Fully Funded",
+    description: "Your registration has been successfully submitted and verified by the YBB team.",
+    date: "Completed on: 21 January 2026",
+  },
+  {
+    step: 2,
+    state: "In Progress",
+    title: "LoA Announcement",
+    description: "Your application has passed the registration review stage. The Letter of Acceptance (LoA) is currently being prepared by the YBB team.",
+    processing: "Processing period: 22-24 January 2026",
+    release: "Estimated release: 24 January 2026",
+  },
+  {
+    step: 3,
+    state: "Not Yet",
+    title: "First Installment Payment",
+    description: "This payment step will be available after the LoA is officially issued. Completing the first installment is required to continue to the next stage.",
+    date: "Payment window: 25-28 January 2026",
+  },
+  {
+    step: 4,
+    state: "Not Yet",
+    title: "Second Installment Payment",
+    description: "The second installment payment is required after the mentoring session to proceed with final preparation.",
+    opening: "Estimated opening: Early February 2026",
+  },
+  {
+    step: 5,
+    state: "Not Yet",
+    title: "Interview Announcement for Fully Funded Candidates",
+    description: "Eligible participants will be shortlisted and invited for the fully funded interview stage.",
+    announcement: "Estimated announcement: 26-28 January 2026",
+  },
+  {
+    step: 6,
+    state: "Not Yet",
+    title: "Final Announcement for Fully Funded Participants",
+    description: "This payment step will be available after the LoA is officially issued. Completing the first installment is required to continue to the next stage.",
+    date: "Payment window: 25-28 January 2026",
+  },
+  {
+    step: 7,
+    state: "Not Yet",
+    title: "Korea Youth Summit Program",
+    description: "You are scheduled to participate in the Korea Youth Summit program.",
+    programDates: "Program dates: 02-05 February 2026",
+    location: "Location: Seoul, South Korea",
+  },
+];
 
 export default function PaymentDetailPage() {
+  const searchParams = useSearchParams();
+  const params = useParams();
+  
+  const [activeTab, setActiveTab] = useState("Payment");
+  const programId = params?.programId as string;
+
+  const query = searchParams.toString();
+  const backUrl = query ? `/programs/${programId}/payments?${query}` : `/programs/${programId}/payments`;
+
   return (
-    <Suspense fallback={<div className="flex h-screen items-center justify-center">Loading...</div>}>
-      <PaymentDetailContent />
-    </Suspense>
+    <div className="mx-auto w-full  space-y-6">
+      
+      <div className="text-sm px-1">
+        <Link href={backUrl} className="text-zinc-500 hover:text-blue-600 font-medium transition-colors">
+          Dashboard
+        </Link>
+        <span className="text-zinc-400 mx-2">&gt;</span>
+        <span className="font-semibold text-blue-600">Detail Payment</span>
+      </div>
+
+      <div className="rounded-md border border-zinc-200 bg-white p-6 md:p-8 shadow-sm">
+        
+        <PaymentDetailHeader data={MOCK_DATA} programId={programId} />
+
+        {/* TABS NAVIGATION */}
+        <div className="mt-8 border-b border-zinc-200">
+          <nav className="-mb-px flex gap-6" aria-label="Tabs">
+            {["Payment", "History", "Status"].map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`whitespace-nowrap border-b-2 py-3 px-1 text-sm font-medium transition-colors ${
+                  activeTab === tab
+                    ? "border-blue-600 text-blue-600"
+                    : "border-transparent text-zinc-500 hover:border-zinc-300 hover:text-zinc-700"
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        {/* TABS CONTENT */}
+        <div className="mt-8">
+          {activeTab === "Payment" && (
+            <div className="grid grid-cols-1 gap-8 lg:grid-cols-3 lg:items-stretch">
+              <div className="lg:col-span-2">
+                 <PaymentInfoSection data={MOCK_DATA} />
+              </div>
+              <div className="lg:col-span-1 h-full">
+                 <PaymentChartSection data={MOCK_DATA} />
+              </div>
+            </div>
+          )}
+
+          {activeTab === "History" && (
+            <PaymentHistorySection histories={MOCK_HISTORY} />
+          )}
+          
+          {activeTab === "Status" && (
+            <ParticipantStatusSection statuses={MOCK_PARTICIPANT_STATUS} />
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

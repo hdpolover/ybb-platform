@@ -1,5 +1,3 @@
-"use client";
-
 import React from "react";
 import { BanknotesIcon } from "@heroicons/react/24/solid";
 

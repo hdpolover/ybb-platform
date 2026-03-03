@@ -1,111 +1,73 @@
-"use client";
-
 import React from "react";
-import {
-  ArrowUturnLeftIcon,
-  CheckCircleIcon,
-  ExclamationTriangleIcon,
-  XCircleIcon,
-} from "@heroicons/react/24/solid";
+import Link from "next/link";
+import { EnvelopeIcon, PhoneIcon } from "@heroicons/react/24/outline";
+import { PaymentHeaderActions } from "./PaymentHeaderActions";
+import { NotifyParticipantButton } from "./NotifyParticipantButton";
 
-interface PaymentDetailHeaderProps {
+export interface PaymentHeaderData {
   transactionId: string;
-  amountLabel: string;
-  statusLabel: string;
-  statusVariant: "success" | "pending" | "cancelled";
-  transactionCode: string;
-  orderId: string;
-  createdAt: string;
-  onOpenUpdateStatus?: () => void;
+  status: "Created" | "Pending" | "Success" | "Cancelled" | "Rejected" | string;
+  participantName: string;
+  email: string;
+  phone: string;
 }
 
-export function PaymentDetailHeader({
-  transactionId,
-  amountLabel,
-  statusLabel,
-  statusVariant,
-  transactionCode,
-  orderId,
-  createdAt,
-  onOpenUpdateStatus,
-}: PaymentDetailHeaderProps) {
-  const statusClasses =
-    statusVariant === "success"
-      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-      : statusVariant === "pending"
-      ? "bg-amber-50 text-amber-700 border-amber-200"
-      : "bg-rose-50 text-rose-700 border-rose-200";
+interface PaymentDetailHeaderProps {
+  data: PaymentHeaderData;
+  programId: string;
+}
 
-  const StatusIcon =
-    statusVariant === "success"
-      ? CheckCircleIcon
-      : statusVariant === "pending"
-      ? ExclamationTriangleIcon
-      : XCircleIcon;
+export function PaymentDetailHeader({ data, programId }: PaymentDetailHeaderProps) {
+  const getStatusColor = (status: string) => {
+    const s = status.toLowerCase();
+    if (s === "success") return "bg-emerald-500 text-emerald-600";
+    if (s === "pending") return "bg-amber-500 text-amber-600";
+    if (s === "cancelled" || s === "rejected") return "bg-rose-500 text-rose-600";
+    return "bg-zinc-500 text-zinc-600";
+  };
+
+  const statusStyle = getStatusColor(data.status);
 
   return (
-    <section className="rounded-md border border-zinc-200 bg-white px-6 py-5 text-sm shadow-sm">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <div className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
-            Transaction #{transactionId}
-          </div>
-          <div className="mt-2 flex flex-wrap items-end gap-3">
-            <span className="text-3xl font-semibold text-zinc-900">{amountLabel}</span>
-            <span className="text-sm font-medium text-zinc-500">
-              Payment for Program
-            </span>
+    <div className="flex flex-col justify-between gap-6 md:flex-row md:items-start">
+      <div>
+        <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide">
+          <span className="text-zinc-500">Transaction #{data.transactionId}</span>
+          <span className="text-zinc-300">•</span>
+          <div className={`flex items-center gap-1.5 ${statusStyle.split(' ')[1]}`}>
+            <div className={`h-1.5 w-1.5 rounded-full ${statusStyle.split(' ')[0]}`}></div>
+            <span>{data.status}</span>
           </div>
         </div>
-
-        <div className="flex flex-wrap items-center gap-3 text-[12px]">
-          <span
-            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-semibold ${statusClasses}`}
+        
+        <h1 className="mt-1 text-2xl font-bold uppercase text-zinc-900">
+          {data.participantName}
+        </h1>
+        
+        <div className="mt-3 flex flex-wrap items-center gap-6 text-[11px] text-zinc-600">
+          <div className="flex items-center gap-1.5">
+            <EnvelopeIcon className="h-4 w-4" />
+            <span>{data.email}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <PhoneIcon className="h-4 w-4" />
+            <span>{data.phone}</span>
+          </div>
+        </div>
+        <div className="mt-6 flex items-center gap-2">
+          <NotifyParticipantButton email={data.email} />
+          <Link 
+            href={`/programs/${programId}/participants/${data.transactionId}`}
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-sm transition-all hover:bg-zinc-50 focus:ring-2 focus:ring-zinc-200"
           >
-            <StatusIcon className="h-3.5 w-3.5" />
-            {statusLabel}
-          </span>
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-[11px] font-medium text-zinc-700 shadow-sm hover:bg-zinc-50"
-          >
-            <ArrowUturnLeftIcon className="h-3.5 w-3.5" />
-            Back to Payments
-          </button>
+            See Profile
+          </Link>
         </div>
       </div>
-
-      <div className="grid gap-4 border-t border-zinc-100 pt-4 text-[12px] text-zinc-700 md:grid-cols-4">
-        <div>
-          <div className="text-[11px] uppercase tracking-wide text-zinc-500">
-            Transaction Code
-          </div>
-          <div className="mt-1 font-semibold text-zinc-900">{transactionCode}</div>
-        </div>
-        <div>
-          <div className="text-[11px] uppercase tracking-wide text-zinc-500">Order ID</div>
-          <div className="mt-1 font-semibold text-zinc-900 break-all">{orderId}</div>
-        </div>
-        <div>
-          <div className="text-[11px] uppercase tracking-wide text-zinc-500">Created</div>
-          <div className="mt-1 font-semibold text-zinc-900">{createdAt}</div>
-        </div>
-        <div className="flex items-end justify-end gap-2">
-          <button
-            type="button"
-            className="rounded-md border border-blue-500 bg-blue-500 px-3.5 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-blue-600"
-            onClick={onOpenUpdateStatus}
-          >
-            Update Status
-          </button>
-          <button
-            type="button"
-            className="rounded-md border border-zinc-200 bg-white px-3.5 py-1.5 text-[11px] font-medium text-zinc-700 shadow-sm hover:bg-zinc-50"
-          >
-            Edit
-          </button>
-        </div>
-      </div>
-    </section>
+      <PaymentHeaderActions 
+        programId={programId} 
+        transactionId={data.transactionId} 
+      />
+    </div>
   );
 }

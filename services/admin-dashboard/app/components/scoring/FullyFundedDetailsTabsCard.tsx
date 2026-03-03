@@ -1,13 +1,7 @@
+// services/admin-dashboard/app/components/scoring/FullyFundedDetailsTabsCard.tsx
 "use client";
 
 import React, { useState } from "react";
-import {
-  UserIcon,
-  AcademicCapIcon,
-  PhoneArrowDownLeftIcon,
-  PencilSquareIcon,
-  ChartBarIcon,
-} from "@heroicons/react/24/solid";
 
 const tabs = [
   "Personal Details",
@@ -18,14 +12,6 @@ const tabs = [
 ] as const;
 
 type TabKey = (typeof tabs)[number];
-
-function TabIcon({ tab }: { tab: TabKey }) {
-  if (tab === "Personal Details") return <UserIcon className="h-3.5 w-3.5" />;
-  if (tab === "Education & Experience") return <AcademicCapIcon className="h-3.5 w-3.5" />;
-  if (tab === "Emergency Contact") return <PhoneArrowDownLeftIcon className="h-3.5 w-3.5" />;
-  if (tab === "Essays") return <PencilSquareIcon className="h-3.5 w-3.5" />;
-  return <ChartBarIcon className="h-3.5 w-3.5" />;
-}
 
 interface FullyFundedDetailsTabsCardProps {
   hideScores?: boolean;
@@ -39,9 +25,10 @@ export function FullyFundedDetailsTabsCard({ hideScores }: FullyFundedDetailsTab
   const [activeTab, setActiveTab] = useState<TabKey>("Personal Details");
 
   return (
-    <section className="rounded-md border border-zinc-200 bg-white px-5 py-4 text-sm shadow-sm">
-      <div className="border-b border-zinc-200 pb-2">
-        <nav className="flex flex-wrap gap-2 text-xs md:text-sm">
+    <section className="rounded-xl border border-zinc-200 bg-white shadow-sm overflow-hidden">
+      {/* Bagian Tab Navigation */}
+      <div className="border-b border-zinc-200 bg-zinc-50/30 px-6">
+        <nav className="-mb-px flex gap-6 overflow-x-auto text-sm no-scrollbar">
           {visibleTabs.map((tab) => {
             const isActive = activeTab === tab;
             return (
@@ -49,23 +36,20 @@ export function FullyFundedDetailsTabsCard({ hideScores }: FullyFundedDetailsTab
                 key={tab}
                 type="button"
                 onClick={() => setActiveTab(tab)}
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors md:text-xs ${
+                className={`whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium transition-colors ${
                   isActive
-                    ? "bg-blue-600 text-white shadow-sm"
-                    : "bg-zinc-50 text-zinc-600 hover:bg-zinc-100"
+                    ? "border-blue-600 text-blue-700"
+                    : "border-transparent text-zinc-500 hover:border-zinc-300 hover:text-zinc-700"
                 }`}
               >
-                <span className="flex h-4 w-4 items-center justify-center">
-                  <TabIcon tab={tab} />
-                </span>
-                <span>{tab}</span>
+                {tab}
               </button>
             );
           })}
         </nav>
       </div>
 
-      <div className="mt-4 text-xs text-zinc-700 md:text-sm">
+      <div className="p-6 md:p-8">
         {activeTab === "Personal Details" && <PersonalDetailsContent />}
         {activeTab === "Education & Experience" && <EducationExperienceContent />}
         {activeTab === "Emergency Contact" && <EmergencyContactContent />}
@@ -76,17 +60,9 @@ export function FullyFundedDetailsTabsCard({ hideScores }: FullyFundedDetailsTab
   );
 }
 
-function SectionTitle({ label }: { label: string }) {
-  return (
-    <div className="inline-flex items-center rounded-full bg-zinc-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-600">
-      {label}
-    </div>
-  );
-}
-
 function BadgeValue({ value }: { value: string }) {
   return (
-    <span className="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+    <span className="inline-flex rounded-md bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 border border-blue-100">
       {value}
     </span>
   );
@@ -94,68 +70,64 @@ function BadgeValue({ value }: { value: string }) {
 
 function PersonalDetailsContent() {
   return (
-    <div className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-2">
-        <section>
-          <SectionTitle label="Personal Information" />
-          <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-3">
-            <Field label="Birth Date" value="12 March 2004" />
-            <Field label="Gender" value="Female" />
-            <Field label="Origin Address" value="Ahmedabad, Gujarat, India" />
-            <Field label="Current Address" value="Ahmedabad, Gujarat, India" />
-            <Field label="T-Shirt Size" value="M" asBadge />
-            <Field label="Disease History" value="-" />
-          </dl>
-        </section>
+    <div className="grid gap-10 md:grid-cols-2">
+      <section>
+        <h3 className="mb-5 text-base font-semibold text-zinc-900">Personal Information</h3>
+        <dl className="space-y-4">
+          <Field label="Birth Date" value="25 Nov 2007" />
+          <Field label="Gender" value="female" className="capitalize" />
+          <Field label="Origin Address" value="Dhaka, munshiganj Bangladesh" />
+          <Field label="Current Address" value="Block 2, Street 16, Building 10 Al-Ahmadi, Abu halifa Kuwait" />
+          <Field label="T-Shirt Size" value="M" className="uppercase" />
+          <Field label="Disease History" value="None" />
+        </dl>
+      </section>
 
-        <section>
-          <SectionTitle label="Social Media & Others" />
-          <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-3">
-            <Field label="Instagram" value="@samyia.azizahmed" />
-            <Field label="Twibbon Link" value="https://twb.nz/jys-2026-samyia" isLink />
-            <Field label="Knowledge Source" value="Instagram" />
-            <Field label="Source Account" value="@youthbreaktheboundaries" />
-            <Field label="Account Created" value="21 August 2024, 14:32 GMT+7" />
-          </dl>
-        </section>
-      </div>
+      <section>
+        <h3 className="mb-5 text-base font-semibold text-zinc-900">Social Media & Others</h3>
+        <dl className="space-y-4">
+          <Field label="Instagram" value="@af.rah_f13" />
+          <Field label="Twibbon Link" value="N/A" />
+          <Field label="Knowledge Source" value="instagram" className="capitalize" />
+          <Field label="Source Account" value="" />
+          <Field label="Account Created" value="18 Aug 2025 19:28" />
+        </dl>
+      </section>
     </div>
   );
 }
 
 function EducationExperienceContent() {
   return (
-    <div className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-2">
-        <section>
-          <SectionTitle label="Education" />
-          <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-3">
-            <Field label="Education Level" value="Undergraduate" asBadge />
-            <Field label="Major" value="International Relations" />
-            <Field label="Institution / Occupation" value="ABC International School" />
-          </dl>
-        </section>
+    <div className="grid gap-10 md:grid-cols-2">
+      <section>
+        <h3 className="mb-5 text-base font-semibold text-zinc-900">Education</h3>
+        <dl className="space-y-4">
+          <Field label="Education Level" value="Undergraduate" asBadge />
+          <Field label="Major" value="International Relations" />
+          <Field label="Institution" value="ABC International School" />
+        </dl>
+      </section>
 
-        <section>
-          <SectionTitle label="Experience & Achievements" />
-          <dl className="mt-3 space-y-3">
-            <Field
-              label="Organizations"
-              value="Member of Youth Climate Action Network, Campus Debate Society"
-            />
-            <Field
-              label="Experiences"
-              value="Project lead for community clean-water campaign (2023), volunteer tutor for underprivileged students (2022–2024)."
-            />
-            <Field
-              label="Achievement"
-              value="Top 10 Best Delegate, Model United Nations Ahmedabad 2023."
-              asBadge
-            />
-            <Field label="Resume" value="resume_samyia_jys2026.pdf" isLink />
-          </dl>
-        </section>
-      </div>
+      <section>
+        <h3 className="mb-5 text-base font-semibold text-zinc-900">Experience & Achievements</h3>
+        <dl className="space-y-4">
+          <Field
+            label="Organizations"
+            value="Member of Youth Climate Action Network, Campus Debate Society"
+          />
+          <Field
+            label="Experiences"
+            value="Project lead for community clean-water campaign."
+          />
+          <Field
+            label="Achievement"
+            value="Top 10 Best Delegate, Model UN Ahmedabad 2023."
+            asBadge
+          />
+          <Field label="Resume" value="resume_afrah.pdf" isLink />
+        </dl>
+      </section>
     </div>
   );
 }
@@ -163,10 +135,8 @@ function EducationExperienceContent() {
 function EmergencyContactContent() {
   return (
     <section>
-      <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-600">
-        Emergency Contact Information
-      </h3>
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-3">
+      <h3 className="mb-5 text-base font-semibold text-zinc-900">Emergency Contact Information</h3>
+      <dl className="max-w-xl space-y-4">
         <Field label="Emergency Contact" value="Aziz Ahmed" />
         <Field label="Relation" value="Father" />
         <Field label="Phone Number" value="+91 98765 00000" />
@@ -177,28 +147,24 @@ function EmergencyContactContent() {
 
 function EssaysContent() {
   return (
-    <div className="space-y-4">
+    <div className="space-y-8">
       <section>
-        <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-600">
-          Selected Subtheme
-        </h3>
-        <p className="text-sm text-zinc-800">
+        <h3 className="mb-3 text-base font-semibold text-zinc-900">Selected Subtheme</h3>
+        <p className="text-sm font-semibold text-zinc-900">
           SDG 13 – Climate Action: Youth-led community initiatives for resilient cities.
         </p>
       </section>
 
-      <section className="space-y-2">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-600">
-          Essay Responses
-        </h3>
-        <dl className="space-y-3">
+      <section>
+        <h3 className="mb-5 text-base font-semibold text-zinc-900">Essay Responses</h3>
+        <dl className="space-y-6">
           <Field
             label="Title of your essay"
             value="From Local Rivers to Global Action: Empowering Youth for Climate Resilience"
           />
           <Field
             label="Main Essay"
-            value="As a youth leader, I initiated a cross-school collaboration to reduce single-use plastics in our local markets, combining awareness campaigns, community clean-up events, and partnership with small businesses. Over the next year, I plan to expand this initiative by working with local government to introduce youth-designed guidelines for sustainable practices in public schools and community centers."
+            value="As a youth leader, I initiated a cross-school collaboration to reduce single-use plastics in our local markets..."
           />
           <Field
             label="References"
@@ -213,8 +179,8 @@ function EssaysContent() {
 function ScoresContent() {
   return (
     <section>
-      <SectionTitle label="Scores Summary" />
-      <dl className="mt-3 grid grid-cols-3 gap-x-6 gap-y-3">
+      <h3 className="mb-5 text-base font-semibold text-zinc-900">Scores Summary</h3>
+      <dl className="max-w-xl space-y-4">
         <Field label="Score" value="89 / 100" />
         <Field label="Total" value="A-" asBadge />
         <Field label="Status" value="Recommended as Fully Funded" asBadge />
@@ -223,31 +189,37 @@ function ScoresContent() {
   );
 }
 
+// Komponen Inti: Sudah dikonsistenkan mengikuti Design System
 function Field({
   label,
   value,
   isLink,
   asBadge,
+  className = "",
 }: {
   label: string;
   value: string;
   isLink?: boolean;
   asBadge?: boolean;
+  className?: string;
 }) {
   return (
-    <div>
-      <dt className="text-[11px] uppercase tracking-wide text-zinc-500">{label}</dt>
+    <div className="flex flex-col sm:grid sm:grid-cols-[160px_1fr] sm:items-start sm:gap-4">
+      <dt className="mt-0.5 text-xs font-medium text-zinc-500">
+        {label}
+      </dt>
+      
       {asBadge ? (
-        <dd className="mt-0.5 text-sm font-semibold text-zinc-900">
-          <BadgeValue value={value} />
+        <dd className="mt-1 sm:mt-0">
+          <BadgeValue value={value || "-"} />
         </dd>
       ) : (
         <dd
-          className={`mt-0.5 text-sm font-semibold ${
+          className={`mt-1 text-sm font-semibold sm:mt-0 ${className} ${
             isLink ? "cursor-pointer text-blue-600 hover:underline" : "text-zinc-900"
           }`}
         >
-          {value}
+          {value || "-"}
         </dd>
       )}
     </div>
