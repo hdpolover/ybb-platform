@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { Button } from "@/app/components/ui/Button";
 
 interface UpdatePaymentStatusModalProps {
   open: boolean;
@@ -26,13 +27,15 @@ export function UpdatePaymentStatusModal({ open, onClose }: UpdatePaymentStatusM
               Choose a new status for this payment and optionally add additional notes.
             </p>
           </div>
-          <button
-            type="button"
-            className="text-[11px] font-semibold text-zinc-400 hover:text-zinc-700"
+          
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0 text-zinc-400 hover:text-zinc-700"
             onClick={onClose}
           >
             ✕
-          </button>
+          </Button>
         </div>
 
         <form className="space-y-3 text-[13px]">
@@ -62,19 +65,21 @@ export function UpdatePaymentStatusModal({ open, onClose }: UpdatePaymentStatusM
           </div>
 
           <div className="mt-2 flex justify-end gap-2">
-            <button
-              type="button"
-              className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-[11px] font-medium text-zinc-700 shadow-sm hover:bg-zinc-50"
+            <Button 
+              variant="secondary" 
+              size="sm" 
               onClick={onClose}
             >
               Cancel
-            </button>
-            <button
-              type="submit"
-              className="rounded-md bg-blue-600 px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-blue-700"
+            </Button>
+            
+            <Button 
+              type="submit" 
+              variant="blue" 
+              size="sm"
             >
               Update Status
-            </button>
+            </Button>
           </div>
         </form>
       </div>

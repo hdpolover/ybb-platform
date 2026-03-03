@@ -12,6 +12,7 @@ import {
   ChartBarIcon,
   Cog6ToothIcon,
   Bars3Icon,
+  UserIcon,
 } from "@heroicons/react/24/solid";
 import {
   MagnifyingGlassIcon,
@@ -58,7 +59,7 @@ const menuItems: MenuItem[] = [
     id: "admins",
     label: "Admins",
     href: "/platform/admins",
-    icon: UserGroupIcon,
+    icon: UserIcon,
   },
   {
     id: "analytics",
@@ -121,7 +122,10 @@ export default function PlatformLayout({
         <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-4">
           {menuItems.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname === item.href || pathname?.startsWith(item.href + "/");
+            const isActive =
+              item.href === "/platform"
+                ? pathname === item.href
+                : pathname === item.href || pathname?.startsWith(item.href + "/");  
 
             return (
               <Link

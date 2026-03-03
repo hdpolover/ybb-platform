@@ -1,13 +1,16 @@
-"use client";
+import { PaymentsSummary } from "@/app/components/payments/PaymentsSummary"; 
 
-import { use } from "react";
-import { PaymentsSummary } from "../../../components/payments/PaymentsSummary";
-
-export default function PaymentsPage({
+export default async function PaymentsPage({
   params,
 }: {
   params: Promise<{ programId: string }>;
 }) {
-  const { programId } = use(params);
-  return <PaymentsSummary selectedProgramId={programId} />;
+  const { programId } = await params;
+  // const data = await getData(programId);
+
+  return (
+    <main>
+      <PaymentsSummary selectedProgramId={programId} />
+    </main>
+  );
 }
