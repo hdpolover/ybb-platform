@@ -1,47 +1,74 @@
-"use client";
+import { ProgramPhotosGallery, type ProgramPhoto } from "@/app/components/programPhotosMasterData/ProgramPhotosGallery";
 
-import { use } from "react";
-import { ProgramPhotosGallery } from "@/app/components/programPhotosMasterData/ProgramPhotosGallery";
-
+// --- UTILITY ---
 function formatProgramName(programId: string | null): string {
   if (!programId) return "Selected Program";
   const cleaned = programId.replace(/[-_]+/g, " ");
   const words = cleaned.split(" ").filter(Boolean);
   if (words.length === 0) return "Selected Program";
-  const titled = words
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-  return titled;
+  return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 }
 
-export default function ProgramPhotosPage({
+// --- MOCK DATA ---
+const MOCK_PHOTOS: ProgramPhoto[] = [
+  {
+    id: 1,
+    title: "Opening Plenary - Global Youth Leaders",
+    year: "2025",
+    imageUrl: "/img/mock/program-photo-1.jpg",
+    description: "A global gathering of young leaders, innovators, and change-makers, focused on fostering cross-cultural collaboration.",
+  },
+  {
+    id: 2,
+    title: "Collaborative Sharing Session",
+    year: "2025",
+    imageUrl: "/img/mock/program-photo-2.jpg",
+    description: "A collaborative session where delegates shared their experiences, insights, and ideas, fostering mutual learning.",
+  },
+  {
+    id: 3,
+    title: "Delegates Group Photo",
+    year: "2025",
+    imageUrl: "/img/mock/program-photo-3.jpg",
+    description: "A special moment for delegates to capture memories and celebrate their participation in the summit.",
+  },
+  {
+    id: 4,
+    title: "Certificate Awarding Ceremony",
+    year: "2025",
+    imageUrl: "/img/mock/program-photo-4.jpg",
+    description: "A formal ceremony where delegates were recognized and awarded certificates for their active participation.",
+  },
+];
+
+export default async function ProgramPhotosPage({
   params,
 }: {
   params: Promise<{ programId: string }>;
 }) {
-  const { programId } = use(params);
-  const programName = formatProgramName(programId);
+  const resolvedParams = await params;
+  const programName = formatProgramName(resolvedParams.programId);
 
   return (
-    <main className="space-y-4 text-sm md:text-base">
-      <section className="rounded-md border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 shadow-sm md:text-base">
+    <main className="space-y-4">
+      <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1">
-            <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-0.5 text-xs font-semibold uppercase tracking-wide text-blue-700">
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-blue-700">
               <span>Master Data</span>
             </div>
-            <h1 className="text-base font-semibold text-zinc-900 md:text-lg">
+            <h1 className="text-lg font-bold text-zinc-900">
               {programName} Program Photos
             </h1>
-            <p className="text-xs text-zinc-500 md:text-sm">
+            <p className="text-sm text-zinc-500">
               Manage photo gallery content displayed on the program landing pages.
             </p>
           </div>
         </div>
       </section>
 
-      <section className="rounded-md border border-zinc-200 bg-white px-3 py-3 text-sm text-zinc-700 shadow-sm md:text-base">
-        <ProgramPhotosGallery />
+      <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+        <ProgramPhotosGallery data={MOCK_PHOTOS} />
       </section>
     </main>
   );

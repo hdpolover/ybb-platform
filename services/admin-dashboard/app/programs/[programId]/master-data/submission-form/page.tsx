@@ -1,93 +1,65 @@
-"use client";
-
-import { use, useState } from "react";
-import { GeneralCategoriesTable } from "@/app/components/submissionsMasterData/ParticipationCategoriesTable";
-import { SubThemesTable } from "@/app/components/submissionsMasterData/SubThemesTable";
-import { SubmissionEssaysTable } from "@/app/components/submissionsMasterData/SubmissionEssaysTable";
+import { HeaderSection } from "@/app/components/submissionsMasterData/HeaderSection";
+import { TabNavigation } from "@/app/components/submissionsMasterData/TabNavigation";
+import { ParticipationCategoriesTable, ParticipationCategoryRow } from "@/app/components/submissionsMasterData/categories/ParticipationCategoriesTable";
+import { SubThemesTable, SubThemeRow } from "@/app/components/submissionsMasterData/subthemes/SubThemesTable";
+import { SubmissionEssaysTable, SubmissionEssayRow } from "@/app/components/submissionsMasterData/essays/SubmissionEssaysTable";
 
 function formatProgramName(programId: string | null): string {
   if (!programId) return "Selected Program";
   const cleaned = programId.replace(/[-_]+/g, " ");
   const words = cleaned.split(" ").filter(Boolean);
   if (words.length === 0) return "Selected Program";
-  const titled = words
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-  return titled;
+  return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 }
 
-export default function SubmissionFormPage({
+const MOCK_CATEGORIES: ParticipationCategoryRow[] = [
+  { id: 1, name: "Fully Funded", description: "Delegates who receive full funding for program fee and accommodation.", status: "Active" },
+  { id: 2, name: "Self Funded", description: "Delegates who cover their own program fee and travel expenses.", status: "Active" },
+  { id: 3, name: "Observer", description: "Participants who join selected sessions without full delegate privileges.", status: "Inactive" },
+];
+
+const MOCK_SUBTHEMES: SubThemeRow[] = [
+  { id: 1, name: "Sustainable Development & Climate Action", description: "Youth-led initiatives on SDGs, climate resilience, and green innovation.", status: "Active" },
+  { id: 2, name: "Innovation, Technology & Future of Work", description: "Discussions on digital transformation, AI, and future skills.", status: "Active" },
+  { id: 3, name: "Cultural Diplomacy & Global Citizenship", description: "Exploring cross-cultural collaboration, peace-building, and youth diplomacy.", status: "Inactive" },
+];
+
+const MOCK_ESSAYS: SubmissionEssayRow[] = [
+  { id: 1, question: "Describe a youth-led initiative you have been involved in and its impact.", wordLimit: 400, status: "Active" },
+  { id: 2, question: "Why do you want to join the Japan Youth Summit and how will you contribute?", wordLimit: 350, status: "Active" },
+  { id: 3, question: "What is one global challenge you care about and what solution would you propose?", wordLimit: 450, status: "Inactive" },
+];
+
+export default async function SubmissionFormPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ programId: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }) {
-  const { programId } = use(params);
+  const resolvedParams = await params;
+  const resolvedSearchParams = await searchParams;
+  
+  const programId = resolvedParams.programId;
   const programName = formatProgramName(programId);
+  const activeTab = resolvedSearchParams.tab || "categories";
 
-  const [activeTab, setActiveTab] = useState<"categories" | "subthemes" | "essays">("categories");
+  // Nantinya: const categories = await fetchCategories(programId);
 
   return (
-    <main className="space-y-4 text-sm md:text-base">
-      {/* Header */}
-      <section className="rounded-md border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 shadow-sm md:text-base">
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-1">
-            <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-0.5 text-xs font-semibold uppercase tracking-wide text-blue-700">
-              <span>Master Data</span>
-            </div>
-            <h1 className="text-base font-semibold text-zinc-900 md:text-lg">
-              {programName} Submission Form
-            </h1>
-            <p className="text-xs text-zinc-500 md:text-sm">
-              Configure participation categories, sub themes, and essay questions for this program.
-            </p>
-          </div>
-        </div>
-      </section>
+    <main className="space-y-4">
+      <HeaderSection programName={programName} />
 
-      {/* Tabs + content */}
-      <section className="rounded-md border border-zinc-200 bg-white px-3 py-3 text-sm text-zinc-700 shadow-sm md:text-base">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div className="inline-flex gap-1 rounded-md bg-zinc-100 p-0.5 text-xs md:text-sm">
-            <button
-              type="button"
-              className={`rounded-[6px] px-3 py-1.5 text-xs md:text-sm font-semibold shadow-sm transition-colors ${
-                activeTab === "categories"
-                  ? "bg-white text-zinc-900"
-                  : "bg-transparent text-zinc-500 hover:text-zinc-700"
-              }`}
-              onClick={() => setActiveTab("categories")}
-            >
-              Participation Categories
-            </button>
-            <button
-              type="button"
-              className={`rounded-[6px] px-3 py-1.5 text-xs md:text-sm font-semibold shadow-sm transition-colors ${
-                activeTab === "subthemes"
-                  ? "bg-white text-zinc-900"
-                  : "bg-transparent text-zinc-500 hover:text-zinc-700"
-              }`}
-              onClick={() => setActiveTab("subthemes")}
-            >
-              Sub Theme
-            </button>
-            <button
-              type="button"
-              className={`rounded-[6px] px-3 py-1.5 text-xs md:text-sm font-semibold shadow-sm transition-colors ${
-                activeTab === "essays"
-                  ? "bg-white text-zinc-900"
-                  : "bg-transparent text-zinc-500 hover:text-zinc-700"
-              }`}
-              onClick={() => setActiveTab("essays")}
-            >
-              Essays
-            </button>
-          </div>
+      <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-4 border-b border-zinc-200 pb-4">
+          <TabNavigation activeTab={activeTab} />
         </div>
 
-        {activeTab === "categories" && <GeneralCategoriesTable />}
-        {activeTab === "subthemes" && <SubThemesTable />}
-        {activeTab === "essays" && <SubmissionEssaysTable />}
+        <div className="pt-2">
+          {activeTab === "categories" && <ParticipationCategoriesTable data={MOCK_CATEGORIES} />}
+          {activeTab === "subthemes" && <SubThemesTable data={MOCK_SUBTHEMES} />}
+          {activeTab === "essays" && <SubmissionEssaysTable data={MOCK_ESSAYS} />}
+        </div>
       </section>
     </main>
   );
