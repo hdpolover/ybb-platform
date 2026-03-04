@@ -1,7 +1,7 @@
 export class FirebaseLoginCommand {
   constructor(
     public readonly idToken: string,
-    public readonly providerId: string,
+    public readonly providerId: string | undefined,
     public readonly ipAddress: string,
     public readonly userAgent: string,
     public readonly brandId?: string,
