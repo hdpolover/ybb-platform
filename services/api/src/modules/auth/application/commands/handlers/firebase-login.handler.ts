@@ -79,13 +79,21 @@ export class FirebaseLoginHandler {
     // 2. Resolve Program Category
     const brandId = await this.resolveBrandId(command.brandId, domain);
 
-    // 3. Find Auth Provider by ID (Explicitly passed)
-    const authProvider = await this.prisma.authProvider.findUnique({
-      where: { id: command.providerId },
-    });
+    // 3. Find Auth Provider (By ID or Name from token)
+    let authProvider;
+    if (command.providerId) {
+        authProvider = await this.prisma.authProvider.findUnique({
+            where: { id: command.providerId },
+        });
+    } else {
+        // Fallback: Resolve from token's provider name
+        authProvider = await this.prisma.authProvider.findUnique({
+            where: { name: providerName },
+        });
+    }
 
     if (!authProvider) {
-      throw new BadRequestException(`Authentication provider not found or unsupported.`);
+      throw new BadRequestException(`Authentication provider ${command.providerId || providerName} not found or unsupported.`);
     }
 
     // Optional: Validate that the token provider matches the DB provider name if necessary
