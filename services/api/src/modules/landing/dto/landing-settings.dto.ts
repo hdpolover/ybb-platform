@@ -18,6 +18,15 @@ export class BrandSettingsDto {
   @ApiProperty({ example: 'https://example.com/logo.png', description: 'URL to the brand logo' })
   logo_url: string;
 
+  @ApiProperty({ example: 'https://example.com/logo-white.png', required: false, description: 'White logo variant for dark backgrounds' })
+  logo_white_url?: string;
+
+  @ApiProperty({ example: 'https://example.com/logo-color.png', required: false, description: 'Alternative colored logo variant' })
+  logo_color_url?: string;
+
+  @ApiProperty({ example: 'https://example.com/icon.png', required: false, description: 'Icon logo variant' })
+  logo_icon_url?: string;
+
   @ApiProperty({ example: '#123456', required: false, description: 'Primary brand color code (hex)' })
   primary_color?: string;
 
@@ -67,6 +76,17 @@ export class CurrencySettingsDto {
   rate_to_idr: number;
 }
 
+export class ActiveProgramDto {
+  @ApiProperty({ example: 'id' }) id: string;
+  @ApiProperty({ example: 'name' }) name: string;
+  @ApiProperty({ example: 'slug' }) slug: string;
+  @ApiProperty({ required: false }) year?: number;
+  @ApiProperty({ required: false }) logo_url?: string;
+  @ApiProperty({ required: false }) logo_white_url?: string;
+  @ApiProperty({ required: false }) logo_color_url?: string;
+  @ApiProperty({ required: false }) logo_icon_url?: string;
+}
+
 export class LandingSettingsResponseDto {
   @ApiProperty({ type: MaintenanceSettingsDto, description: 'Maintenance configuration' })
   maintenance: MaintenanceSettingsDto;
@@ -78,5 +98,5 @@ export class LandingSettingsResponseDto {
   footer_navigation: FooterColumnDto[];
 
   @ApiProperty({ type: CurrencySettingsDto, description: 'Currency configuration' })
-  currency: CurrencySettingsDto;
+  currency: CurrencySettingsDto; @ApiProperty({ type: ActiveProgramDto, required: false }) active_program?: ActiveProgramDto;
 }

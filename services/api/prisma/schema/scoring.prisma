@@ -3,21 +3,21 @@
 // ============================================================================
 
 model ScoringSchema {
-  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId   String    @map("program_id") @db.Uuid
-  name        String    @db.VarChar(255) // e.g., "IYS 2026 Selection Rubric"
-  description String?   @db.Text
-  isActive    Boolean   @default(true) @map("is_active")
-  
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
-  legacyId    Int?      @unique @map("legacy_id")
+  id          String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId   String  @map("program_id") @db.Uuid
+  name        String  @db.VarChar(255) // e.g., "IYS 2026 Selection Rubric"
+  description String? @db.Text
+  isActive    Boolean @default(true) @map("is_active")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  legacyId  Int?      @unique @map("legacy_id")
 
   // Relations
-  program     Program            @relation(fields: [programId], references: [id], onDelete: Cascade)
-  categories  ScoringCategory[]
-  reviews     ApplicationReview[]
+  program    Program             @relation(fields: [programId], references: [id], onDelete: Cascade)
+  categories ScoringCategory[]
+  reviews    ApplicationReview[]
 
   @@index([programId])
   @@index([isActive])
@@ -25,59 +25,59 @@ model ScoringSchema {
 }
 
 model ScoringCategory {
-  id              String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  schemaId        String    @map("schema_id") @db.Uuid
-  name            String    @db.VarChar(100) // "Essay", "Achievement"
-  description     String?   @db.Text
-  weight          Decimal   @db.Decimal(5, 2) // e.g. 0.60 (60%)
-  order           Int       @default(0)
-  legacyId        String?   @map("legacy_reference") // e.g. "score_essay" from CSV
+  id          String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  schemaId    String  @map("schema_id") @db.Uuid
+  name        String  @db.VarChar(100) // "Essay", "Achievement"
+  description String? @db.Text
+  weight      Decimal @db.Decimal(5, 2) // e.g. 0.60 (60%)
+  order       Int     @default(0)
+  legacyId    String? @map("legacy_reference") // e.g. "score_essay" from CSV
 
   // Relations
-  schema          ScoringSchema      @relation(fields: [schemaId], references: [id], onDelete: Cascade)
-  criteria        ScoringCriterion[]
+  schema   ScoringSchema      @relation(fields: [schemaId], references: [id], onDelete: Cascade)
+  criteria ScoringCriterion[]
 
   @@index([schemaId])
   @@map("scoring_categories")
 }
 
 model ScoringCriterion {
-  id              String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  categoryId      String    @map("category_id") @db.Uuid
-  name            String    @db.VarChar(255) // "Topic Relevance", "Leadership"
-  description     String?   @db.Text
-  weight          Decimal   @db.Decimal(5, 2) // e.g. 0.30 (30% of the category)
-  maxScore        Decimal   @default(100.00) @map("max_score") @db.Decimal(5, 2)
-  order           Int       @default(0)
-  legacyId        Int?      @unique @map("legacy_id")
+  id          String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  categoryId  String  @map("category_id") @db.Uuid
+  name        String  @db.VarChar(255) // "Topic Relevance", "Leadership"
+  description String? @db.Text
+  weight      Decimal @db.Decimal(5, 2) // e.g. 0.30 (30% of the category)
+  maxScore    Decimal @default(100.00) @map("max_score") @db.Decimal(5, 2)
+  order       Int     @default(0)
+  legacyId    Int?    @unique @map("legacy_id")
 
   // Relations
-  category        ScoringCategory        @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  scoreItems      ApplicationScoreItem[]
+  category   ScoringCategory        @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  scoreItems ApplicationScoreItem[]
 
   @@index([categoryId])
   @@map("scoring_criteria")
 }
 
 model ApplicationReview {
-  id              String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  applicationId   String    @map("application_id") @db.Uuid
-  schemaId        String    @map("schema_id") @db.Uuid
-  reviewerId      String    @map("reviewer_id") @db.Uuid
-  
-  totalScore      Decimal   @map("total_score") @db.Decimal(5, 2) // Calculated total
-  notes           String?   @db.Text
-  status          String    @default("draft") @db.VarChar(50) // draft, submitted
+  id            String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  applicationId String @map("application_id") @db.Uuid
+  schemaId      String @map("schema_id") @db.Uuid
+  reviewerId    String @map("reviewer_id") @db.Uuid
 
-  startedAt       DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
-  completedAt     DateTime? @map("completed_at") @db.Timestamptz(6)
+  totalScore Decimal @map("total_score") @db.Decimal(5, 2) // Calculated total
+  notes      String? @db.Text
+  status     String  @default("draft") @db.VarChar(50) // draft, submitted
+
+  startedAt   DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(6)
 
   // Relations
-  application     ParticipantApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  schema          ScoringSchema          @relation(fields: [schemaId], references: [id])
-  reviewer        Admin                  @relation(fields: [reviewerId], references: [id])
-  
-  items           ApplicationScoreItem[]
+  application ParticipantApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  schema      ScoringSchema          @relation(fields: [schemaId], references: [id])
+  reviewer    Admin                  @relation(fields: [reviewerId], references: [id])
+
+  items ApplicationScoreItem[]
 
   @@index([applicationId])
   @@index([reviewerId])
@@ -86,17 +86,17 @@ model ApplicationReview {
 }
 
 model ApplicationScoreItem {
-  id              String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  reviewId        String    @map("review_id") @db.Uuid
-  criterionId     String    @map("criterion_id") @db.Uuid
-  
-  score           Decimal   @db.Decimal(5, 2) // e.g. 85.00
-  notes           String?   @db.Text
-  legacyId        Int?      @unique @map("legacy_id")
-  
+  id          String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  reviewId    String @map("review_id") @db.Uuid
+  criterionId String @map("criterion_id") @db.Uuid
+
+  score    Decimal @db.Decimal(5, 2) // e.g. 85.00
+  notes    String? @db.Text
+  legacyId Int?    @unique @map("legacy_id")
+
   // Relations
-  review          ApplicationReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
-  criterion       ScoringCriterion  @relation(fields: [criterionId], references: [id])
+  review    ApplicationReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  criterion ScoringCriterion  @relation(fields: [criterionId], references: [id])
 
   @@unique([reviewId, criterionId])
   @@index([reviewId])

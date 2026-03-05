@@ -111,25 +111,25 @@ model ApplicationFormField {
 }
 
 model ParticipantApplication {
-  id                  String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId           String               @map("program_id") @db.Uuid
-  participantId       String               @map("participant_id") @db.Uuid
-  status              ApplicationStatus    @default(draft)
-  
+  id            String            @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId     String            @map("program_id") @db.Uuid
+  participantId String            @map("participant_id") @db.Uuid
+  status        ApplicationStatus @default(draft)
+
   // Payment Status Overview (Detailed tracking in ApplicationInvoice)
   registrationPaymentStatus PaymentStatus @default(unpaid) @map("registration_payment_status")
   programPaymentStatus      PaymentStatus @default(unpaid) @map("program_payment_status")
 
-  ticketStatus        String               @default("regular") @map("ticket_status")
-  referralCode          String?                       @map("referral_code") @db.VarChar(50)
-  applicationCategory   ApplicationCategory?          @map("application_category")
-  participationCategoryId String?                     @map("participation_category_id") @db.Uuid
-  participationCategory ProgramParticipationCategory? @relation(fields: [participationCategoryId], references: [id])
-  
-  pricingTierId       String?                       @map("pricing_tier_id") @db.Uuid
-  pricingTier         ProgramPricingTier?           @relation(fields: [pricingTierId], references: [id])
-  
-  submittedAt           DateTime?                     @map("submission_date") @db.Timestamptz(6)
+  ticketStatus            String                        @default("regular") @map("ticket_status")
+  referralCode            String?                       @map("referral_code") @db.VarChar(50)
+  applicationCategory     ApplicationCategory?          @map("application_category")
+  participationCategoryId String?                       @map("participation_category_id") @db.Uuid
+  participationCategory   ProgramParticipationCategory? @relation(fields: [participationCategoryId], references: [id])
+
+  pricingTierId String?             @map("pricing_tier_id") @db.Uuid
+  pricingTier   ProgramPricingTier? @relation(fields: [pricingTierId], references: [id])
+
+  submittedAt DateTime? @map("submission_date") @db.Timestamptz(6)
 
   // Application Data (Flexible Store)
   personalData  Json @default("{}") @map("personal_data") @db.Json
@@ -138,7 +138,7 @@ model ParticipantApplication {
 
   // Deprecated Hardcoded Fields (Migrating to ApplicationAssessment)
   // reviewScore, adminNotes, interviewScore etc. are replaced by assessments relation
-  
+
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   deletedBy   String?   @map("deleted_by") @db.Uuid
   withdrawnBy String?   @map("withdrawn_by") @db.Uuid
@@ -148,16 +148,16 @@ model ParticipantApplication {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   // Relations
-  program     Program                  @relation(fields: [programId], references: [id], onDelete: Cascade)
-  participant Participant              @relation(fields: [participantId], references: [id], onDelete: Cascade)
-  deleter     User?                    @relation("ApplicationDeleter", fields: [deletedBy], references: [id])
-  withdrawer  User?                    @relation("ApplicationWithdrawer", fields: [withdrawnBy], references: [id])
-  
+  program     Program     @relation(fields: [programId], references: [id], onDelete: Cascade)
+  participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  deleter     User?       @relation("ApplicationDeleter", fields: [deletedBy], references: [id])
+  withdrawer  User?       @relation("ApplicationWithdrawer", fields: [withdrawnBy], references: [id])
+
   editHistory ApplicationEditHistory[]
   awards      ParticipantAward[]
   documents   ParticipantDocument[]
   reviews     ApplicationReview[]
-  
+
   // New Modular Relations
   invoices    ApplicationInvoice[]
   assessments ApplicationAssessment[]
@@ -171,23 +171,23 @@ model ParticipantApplication {
 }
 
 model ApplicationInvoice {
-  id            String             @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  applicationId String             @map("application_id") @db.Uuid
-  pricingTierId String             @map("pricing_tier_id") @db.Uuid
-  amount        Decimal            @db.Decimal(10, 2)
-  currency      String             @default("IDR") @db.VarChar(3)
-  status        PaymentStatus      @default(unpaid)
-  paidAt        DateTime?          @map("paid_at") @db.Timestamptz(6)
-  
-  // Link to external transaction ID from Payment Service for reference
-  externalTransactionId String?    @map("external_transaction_id") @db.VarChar(100)
-  paymentMethod         String?    @map("payment_method") @db.VarChar(50)
-  
-  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id            String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  applicationId String        @map("application_id") @db.Uuid
+  pricingTierId String        @map("pricing_tier_id") @db.Uuid
+  amount        Decimal       @db.Decimal(10, 2)
+  currency      String        @default("IDR") @db.VarChar(3)
+  status        PaymentStatus @default(unpaid)
+  paidAt        DateTime?     @map("paid_at") @db.Timestamptz(6)
 
-  application   ParticipantApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  pricingTier   ProgramPricingTier     @relation(fields: [pricingTierId], references: [id])
+  // Link to external transaction ID from Payment Service for reference
+  externalTransactionId String? @map("external_transaction_id") @db.VarChar(100)
+  paymentMethod         String? @map("payment_method") @db.VarChar(50)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  application ParticipantApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  pricingTier ProgramPricingTier     @relation(fields: [pricingTierId], references: [id])
 
   @@index([applicationId])
   @@index([status])
@@ -195,23 +195,23 @@ model ApplicationInvoice {
 }
 
 model ApplicationAssessment {
-  id            String             @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  applicationId String             @map("application_id") @db.Uuid
-  type          AssessmentType     @default(document_review)
-  status        AssessmentStatus   @default(pending)
-  
-  score         Decimal?           @db.Decimal(5, 2) // e.g. 85.50
-  notes         String?            @db.Text          // Internal notes
-  feedback      String?            @db.Text          // Feedback for participant (optional)
-  
-  assessorId    String?            @map("assessor_id") @db.Uuid
-  assessedAt    DateTime?          @map("assessed_at") @db.Timestamptz(6)
-  
-  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id            String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  applicationId String           @map("application_id") @db.Uuid
+  type          AssessmentType   @default(document_review)
+  status        AssessmentStatus @default(pending)
 
-  application   ParticipantApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  assessor      User?                  @relation(fields: [assessorId], references: [id])
+  score    Decimal? @db.Decimal(5, 2) // e.g. 85.50
+  notes    String?  @db.Text // Internal notes
+  feedback String?  @db.Text // Feedback for participant (optional)
+
+  assessorId String?   @map("assessor_id") @db.Uuid
+  assessedAt DateTime? @map("assessed_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  application ParticipantApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  assessor    User?                  @relation(fields: [assessorId], references: [id])
 
   @@index([applicationId])
   @@index([type])

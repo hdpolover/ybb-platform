@@ -24,10 +24,10 @@ export async function seedBrands() {
       description: 'Istanbul Youth Summit connects future leaders.',
       websiteUrl: 'https://istanbulyouthsummit.com',
       contactEmail: 'admin@istanbulyouthsummit.com',
-      primaryColor: '#E31E24',
+      primaryColor: '#023e8a',
       isActive: true,
-      logoUrl: "https://placehold.co/400x100/E31E24/FFF?text=IYS+Logo",
-      bannerUrl: "https://placehold.co/1200x400/E31E24/FFF?text=IYS+Banner",
+      logoUrl: "https://placehold.co/400x100/023e8a/FFF?text=IYS+Logo",
+      bannerUrl: "https://placehold.co/1200x400/023e8a/FFF?text=IYS+Banner",
     },
   });
 

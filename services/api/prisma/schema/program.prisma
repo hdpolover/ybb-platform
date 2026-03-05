@@ -19,6 +19,9 @@ model Brand {
   vision       String? @db.Text
   mission      String? @db.Text
   logoUrl      String? @map("logo_url") @db.VarChar(500)
+  logoWhiteUrl String? @map("logo_white_url") @db.VarChar(500)
+  logoColorUrl String? @map("logo_color_url") @db.VarChar(500)
+  logoIconUrl  String? @map("logo_icon_url") @db.VarChar(500)
   bannerUrl    String? @map("banner_url") @db.VarChar(500)
   primaryColor String? @map("primary_color") @db.VarChar(7) // Hex color
 
@@ -67,7 +70,7 @@ model Brand {
 }
 
 model BrandSetting {
-  id                String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id      String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   brandId String @unique @map("brand_id") @db.Uuid
 
   // Maintenance Control
@@ -96,14 +99,14 @@ model BrandSetting {
 }
 
 model BrandSocialFeed {
-  id                String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  brandId String   @map("brand_id") @db.Uuid
-  platform          String   @default("instagram") @db.VarChar(50) // instagram, tiktok
-  postId            String   @map("post_id") @db.VarChar(100) // External ID
-  imageUrl          String   @map("image_url") @db.VarChar(500)
-  permalink         String   @db.VarChar(500)
-  caption           String?  @db.Text
-  postedAt          DateTime @map("posted_at") @db.Timestamptz(6)
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  brandId   String   @map("brand_id") @db.Uuid
+  platform  String   @default("instagram") @db.VarChar(50) // instagram, tiktok
+  postId    String   @map("post_id") @db.VarChar(100) // External ID
+  imageUrl  String   @map("image_url") @db.VarChar(500)
+  permalink String   @db.VarChar(500)
+  caption   String?  @db.Text
+  postedAt  DateTime @map("posted_at") @db.Timestamptz(6)
 
   isActive  Boolean   @default(true) @map("is_active")
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -119,7 +122,7 @@ model BrandSocialFeed {
 
 model Program {
   id                  String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  brandId   String   @map("brand_id") @db.Uuid
+  brandId             String   @map("brand_id") @db.Uuid
   name                String   @db.VarChar(255)
   slug                String   @db.VarChar(255)
   description         String?  @db.Text
@@ -148,6 +151,9 @@ model Program {
   currency                 String  @default("USD") @map("currency") @db.VarChar(3)
   enableCurrencyConversion Boolean @default(false) @map("enable_currency_conversion")
   logoUrl                  String? @map("logo_url") @db.VarChar(500)
+  logoWhiteUrl             String? @map("logo_white_url") @db.VarChar(500)
+  logoColorUrl             String? @map("logo_color_url") @db.VarChar(500)
+  logoIconUrl              String? @map("logo_icon_url") @db.VarChar(500)
 
   // Registration Settings
   allowRegistration     Boolean   @default(true) @map("allow_registration")
@@ -172,7 +178,7 @@ model Program {
   legacyId  Int?      @unique @map("legacy_id")
 
   // Relations
-  brand          Brand            @relation(fields: [brandId], references: [id])
+  brand                    Brand                          @relation(fields: [brandId], references: [id])
   applications             ParticipantApplication[]
   ambassadors              Ambassador[]
   adminPrograms            AdminProgram[]
@@ -266,18 +272,18 @@ model ProgramWaitlist {
 }
 
 model ProgramEssay {
-  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId   String    @map("program_id") @db.Uuid
-  question    String    @db.Text
-  description String?   @db.Text
-  wordLimit   Int?      @map("word_limit")
-  isRequired  Boolean   @default(true) @map("is_required")
-  order       Int       @default(0)
-  isActive    Boolean   @default(true) @map("is_active")
+  id          String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId   String  @map("program_id") @db.Uuid
+  question    String  @db.Text
+  description String? @db.Text
+  wordLimit   Int?    @map("word_limit")
+  isRequired  Boolean @default(true) @map("is_required")
+  order       Int     @default(0)
+  isActive    Boolean @default(true) @map("is_active")
 
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
 
@@ -287,17 +293,17 @@ model ProgramEssay {
 }
 
 model ProgramParticipationCategory {
-  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId   String   @map("program_id") @db.Uuid
-  name        String   @db.VarChar(255) // "Future Innovators", "High School Students"
-  description String?  @db.Text
-  benefits    String?  @db.Text
-  eligibility String?  @db.Text
-  
-  order       Int      @default(0)
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id          String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId   String  @map("program_id") @db.Uuid
+  name        String  @db.VarChar(255) // "Future Innovators", "High School Students"
+  description String? @db.Text
+  benefits    String? @db.Text
+  eligibility String? @db.Text
+
+  order     Int      @default(0)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   // Relations
   program      Program                  @relation(fields: [programId], references: [id], onDelete: Cascade)

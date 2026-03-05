@@ -11,9 +11,9 @@ model SystemAnnouncement {
   summary String? @db.Text
 
   // Targeting
-  targetAudience    AnnouncementTarget @default(all) @map("target_audience")
-  brandId String?            @map("brand_id") @db.Uuid
-  programId         String?            @map("program_id") @db.Uuid
+  targetAudience AnnouncementTarget @default(all) @map("target_audience")
+  brandId        String?            @map("brand_id") @db.Uuid
+  programId      String?            @map("program_id") @db.Uuid
 
   // Priority & Type
   priority AnnouncementPriority @default(normal)
@@ -48,11 +48,11 @@ model SystemAnnouncement {
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
-  brand Brand?       @relation(fields: [brandId], references: [id])
-  program         Program?               @relation(fields: [programId], references: [id], onDelete: Cascade)
-  creator         Admin                  @relation("AnnouncementCreator", fields: [createdBy], references: [id])
-  updater         Admin?                 @relation("AnnouncementUpdater", fields: [updatedBy], references: [id])
-  reads           UserAnnouncementRead[]
+  brand   Brand?                 @relation(fields: [brandId], references: [id])
+  program Program?               @relation(fields: [programId], references: [id], onDelete: Cascade)
+  creator Admin                  @relation("AnnouncementCreator", fields: [createdBy], references: [id])
+  updater Admin?                 @relation("AnnouncementUpdater", fields: [updatedBy], references: [id])
+  reads   UserAnnouncementRead[]
 
   @@index([isPublished, publishedAt, deletedAt])
   @@index([startDate, endDate, isPublished, deletedAt])
