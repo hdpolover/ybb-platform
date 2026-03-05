@@ -40,8 +40,8 @@ model AuthProvider {
 }
 
 model User {
-  id                String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  email             String @db.VarChar(255)
+  id      String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  email   String @db.VarChar(255)
   brandId String @map("brand_id") @db.Uuid
 
   // Authentication - passwordHash kept for backward compatibility
@@ -73,7 +73,7 @@ model User {
   legacyType String? @map("legacy_type") @db.VarChar(20)
 
   // Relations
-  brand          Brand          @relation(fields: [brandId], references: [id])
+  brand                    Brand                     @relation(fields: [brandId], references: [id])
   identities               UserIdentity[] // Multiple auth providers
   admin                    Admin?
   participant              Participant?
@@ -89,18 +89,18 @@ model User {
   announcementReads        UserAnnouncementRead[]
   programAnnouncementReads ProgramAnnouncementRead[]
   // applications          ParticipantApplication[] // Main submission relation (Moved to Participant)
-  editHistoryChangedBy     ApplicationEditHistory[] @relation("EditHistoryChangedBy")
-  deletedParticipants      Participant[]            @relation("ParticipantDeleter")
-  deletedApplications      ParticipantApplication[] @relation("ApplicationDeleter")
-  deletedAmbassadors       Ambassador[]             @relation("AmbassadorDeleter")
-  withdrawnApplications    ParticipantApplication[] @relation("ApplicationWithdrawer")
+  editHistoryChangedBy     ApplicationEditHistory[]  @relation("EditHistoryChangedBy")
+  deletedParticipants      Participant[]             @relation("ParticipantDeleter")
+  deletedApplications      ParticipantApplication[]  @relation("ApplicationDeleter")
+  deletedAmbassadors       Ambassador[]              @relation("AmbassadorDeleter")
+  withdrawnApplications    ParticipantApplication[]  @relation("ApplicationWithdrawer")
   awardedParticipantAwards ParticipantAward[]
   files                    File[]
   waitlist                 ProgramWaitlist[]
   newsletterSubscription   NewsletterSubscriber[]
-  
+
   // Relations for new modular tables
-  assessments              ApplicationAssessment[]
+  assessments ApplicationAssessment[]
 
   @@unique([email, brandId])
   @@index([email])

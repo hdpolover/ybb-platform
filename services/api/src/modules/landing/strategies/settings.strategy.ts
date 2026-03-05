@@ -23,12 +23,13 @@ export class SettingsStrategy {
         if (!category) {
             return {
                 maintenance: { is_maintenance_mode: false },
-                brand: { name: 'Youth Break the Boundaries', logo_url: '' },
+                brand: { name: 'Youth Break the Boundaries', logo_url: '', logo_white_url: undefined, logo_color_url: undefined, logo_icon_url: undefined },
                 footer_navigation: [],
                 currency: { code: 'USD', rate_to_idr: 16000 }
             };
         }
 
+        const program = await this.prisma.program.findFirst({ where: { brandId: category.id, isPublished: true, isActive: true }, orderBy: [{ year: 'desc' }, { createdAt: 'desc' }] });
         const settings = await this.prisma.brandSetting.findUnique({
             where: { brandId: category.id }
         });
@@ -42,6 +43,9 @@ export class SettingsStrategy {
             brand: {
                 name: category.name,
                 logo_url: category.logoUrl || '',
+                logo_white_url: category.logoWhiteUrl || undefined,
+                logo_color_url: category.logoColorUrl || undefined,
+                logo_icon_url: category.logoIconUrl || undefined,
                 primary_color: category.primaryColor || undefined,
                 support_email: settings?.supportEmail || category.contactEmail || undefined,
                 google_analytics_id: settings?.googleAnalyticsId || undefined,
@@ -55,7 +59,17 @@ export class SettingsStrategy {
             currency: {
                 code: category.defaultCurrency || 'USD',
                 rate_to_idr: settings?.usdInIdr ? Number(settings.usdInIdr) : 16000
-            }
+            },
+            active_program: program ? { 
+                id: program.id, 
+                name: program.name, 
+                slug: program.slug,
+                year: program.year || undefined,
+                logo_url: program.logoUrl || undefined,
+                logo_white_url: program.logoWhiteUrl || undefined,
+                logo_color_url: program.logoColorUrl || undefined,
+                logo_icon_url: program.logoIconUrl || undefined
+            } : undefined
         };
 
         // Cache for 1 hour
@@ -64,3 +78,4 @@ export class SettingsStrategy {
         return result;
     }
 }
+console.log('Testing sync');

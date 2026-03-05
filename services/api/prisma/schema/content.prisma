@@ -130,29 +130,29 @@ model ProgramGallery {
 }
 
 model ProgramTestimonial {
-  id                String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId         String?   @map("program_id") @db.Uuid
-  brandId String?   @map("brand_id") @db.Uuid
-  name              String    @db.VarChar(255)
-  role              String?   @db.VarChar(255) // e.g., "Participant 2024", "Alumni"
-  company           String?   @db.VarChar(255)
-  testimonial       String    @db.Text
-  category          String    @default("alumni") @db.VarChar(50) // alumni, speaker, mentor, partner
-  type              String    @default("text") @db.VarChar(20) // text, video
-  videoUrl          String?   @map("video_url") @db.VarChar(500) // For video testimonials
-  thumbnailUrl      String?   @map("thumbnail_url") @db.VarChar(500) // Video thumbnail
-  avatarUrl         String?   @map("avatar_url") @db.VarChar(500)
-  rating            Int?      @db.SmallInt // Optional 1-5 rating
-  isFeatured        Boolean   @default(false) @map("is_featured") // Highlight on homepage
-  isActive          Boolean   @default(true) @map("is_active")
-  order             Int       @default(0)
-  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
+  id           String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId    String?   @map("program_id") @db.Uuid
+  brandId      String?   @map("brand_id") @db.Uuid
+  name         String    @db.VarChar(255)
+  role         String?   @db.VarChar(255) // e.g., "Participant 2024", "Alumni"
+  company      String?   @db.VarChar(255)
+  testimonial  String    @db.Text
+  category     String    @default("alumni") @db.VarChar(50) // alumni, speaker, mentor, partner
+  type         String    @default("text") @db.VarChar(20) // text, video
+  videoUrl     String?   @map("video_url") @db.VarChar(500) // For video testimonials
+  thumbnailUrl String?   @map("thumbnail_url") @db.VarChar(500) // Video thumbnail
+  avatarUrl    String?   @map("avatar_url") @db.VarChar(500)
+  rating       Int?      @db.SmallInt // Optional 1-5 rating
+  isFeatured   Boolean   @default(false) @map("is_featured") // Highlight on homepage
+  isActive     Boolean   @default(true) @map("is_active")
+  order        Int       @default(0)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
-  program         Program?         @relation(fields: [programId], references: [id], onDelete: Cascade)
-  brand Brand? @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  program Program? @relation(fields: [programId], references: [id], onDelete: Cascade)
+  brand   Brand?   @relation(fields: [brandId], references: [id], onDelete: Cascade)
 
   @@index([programId])
   @@index([brandId])
@@ -163,19 +163,19 @@ model ProgramTestimonial {
 }
 
 model Sponsor {
-  id                String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  brandId String?   @map("brand_id") @db.Uuid // Linked to brand
-  name              String    @db.VarChar(255)
-  type              String    @db.VarChar(50) // organization, individual, media_partner, etc.
-  logoUrl           String?   @map("logo_url") @db.VarChar(500)
-  websiteUrl        String?   @map("website_url") @db.VarChar(500)
-  description       String?   @db.Text
-  tier              String?   @db.VarChar(50) // platinum, gold, silver, bronze, partner
-  isActive          Boolean   @default(true) @map("is_active")
-  order             Int       @default(0)
-  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  brandId     String?   @map("brand_id") @db.Uuid // Linked to brand
+  name        String    @db.VarChar(255)
+  type        String    @db.VarChar(50) // organization, individual, media_partner, etc.
+  logoUrl     String?   @map("logo_url") @db.VarChar(500)
+  websiteUrl  String?   @map("website_url") @db.VarChar(500)
+  description String?   @db.Text
+  tier        String?   @db.VarChar(50) // platinum, gold, silver, bronze, partner
+  isActive    Boolean   @default(true) @map("is_active")
+  order       Int       @default(0)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
   brand Brand? @relation(fields: [brandId], references: [id], onDelete: Cascade)
@@ -188,22 +188,22 @@ model Sponsor {
 }
 
 model EmailTemplate {
-  id                String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  brandId String?   @map("brand_id") @db.Uuid
-  programId         String?   @map("program_id") @db.Uuid
-  name              String    @db.VarChar(100)
-  type              String    @db.VarChar(50) // welcome, application_received, accepted, rejected, payment_reminder, etc
-  subject           String    @db.VarChar(255)
-  body              String    @db.Text // HTML content
-  variables         Json?     @default("[]") @db.Json // ["{{name}}", "{{program_name}}", "{{deadline}}"]
-  isActive          Boolean   @default(true) @map("is_active")
-  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
+  id        String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  brandId   String?   @map("brand_id") @db.Uuid
+  programId String?   @map("program_id") @db.Uuid
+  name      String    @db.VarChar(100)
+  type      String    @db.VarChar(50) // welcome, application_received, accepted, rejected, payment_reminder, etc
+  subject   String    @db.VarChar(255)
+  body      String    @db.Text // HTML content
+  variables Json?     @default("[]") @db.Json // ["{{name}}", "{{program_name}}", "{{deadline}}"]
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
-  brand Brand? @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  program         Program?         @relation(fields: [programId], references: [id], onDelete: Cascade)
+  brand   Brand?   @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  program Program? @relation(fields: [programId], references: [id], onDelete: Cascade)
 
   @@index([brandId])
   @@index([programId])
@@ -212,25 +212,25 @@ model EmailTemplate {
 }
 
 model ProgramTeam {
-  id                String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  brandId String?   @map("brand_id") @db.Uuid
-  programId         String?   @map("program_id") @db.Uuid
-  name              String    @db.VarChar(255)
-  role              String    @db.VarChar(100) // Program Director, Coordinator, Marketing Lead
-  bio               String?   @db.Text
-  photoUrl          String?   @map("photo_url") @db.VarChar(500)
-  email             String?   @db.VarChar(255)
-  phone             String?   @db.VarChar(50)
-  linkedinUrl       String?   @map("linkedin_url") @db.VarChar(500)
-  order             Int       @default(0)
-  isActive          Boolean   @default(true) @map("is_active")
-  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  brandId     String?   @map("brand_id") @db.Uuid
+  programId   String?   @map("program_id") @db.Uuid
+  name        String    @db.VarChar(255)
+  role        String    @db.VarChar(100) // Program Director, Coordinator, Marketing Lead
+  bio         String?   @db.Text
+  photoUrl    String?   @map("photo_url") @db.VarChar(500)
+  email       String?   @db.VarChar(255)
+  phone       String?   @db.VarChar(50)
+  linkedinUrl String?   @map("linkedin_url") @db.VarChar(500)
+  order       Int       @default(0)
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
-  brand Brand? @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  program         Program?         @relation(fields: [programId], references: [id], onDelete: Cascade)
+  brand   Brand?   @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  program Program? @relation(fields: [programId], references: [id], onDelete: Cascade)
 
   @@index([brandId])
   @@index([programId])
@@ -307,7 +307,7 @@ model ProgramAnnouncement {
   deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
-  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+  program Program                   @relation(fields: [programId], references: [id], onDelete: Cascade)
   reads   ProgramAnnouncementRead[]
 
   @@index([programId])
@@ -464,9 +464,9 @@ model ProgramSubtheme {
 }
 
 model PartnershipOpportunity {
-  id                String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  brandId String? @map("brand_id") @db.Uuid
-  programId         String? @map("program_id") @db.Uuid
+  id        String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  brandId   String? @map("brand_id") @db.Uuid
+  programId String? @map("program_id") @db.Uuid
 
   title       String  @db.VarChar(255)
   subtitle    String? @db.VarChar(255)
@@ -484,8 +484,8 @@ model PartnershipOpportunity {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  brand Brand? @relation(fields: [brandId], references: [id])
-  program         Program?         @relation(fields: [programId], references: [id])
+  brand   Brand?   @relation(fields: [brandId], references: [id])
+  program Program? @relation(fields: [programId], references: [id])
 
   @@index([brandId])
   @@index([programId])
@@ -494,9 +494,9 @@ model PartnershipOpportunity {
 }
 
 model SponsorshipTier {
-  id                String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  brandId String? @map("brand_id") @db.Uuid
-  programId         String? @map("program_id") @db.Uuid
+  id        String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  brandId   String? @map("brand_id") @db.Uuid
+  programId String? @map("program_id") @db.Uuid
 
   name             String  @db.VarChar(255)
   priceDescription String? @map("price_description") @db.VarChar(255)
@@ -511,8 +511,8 @@ model SponsorshipTier {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  brand Brand? @relation(fields: [brandId], references: [id])
-  program         Program?         @relation(fields: [programId], references: [id])
+  brand   Brand?   @relation(fields: [brandId], references: [id])
+  program Program? @relation(fields: [programId], references: [id])
 
   @@index([brandId])
   @@index([programId])
@@ -520,9 +520,9 @@ model SponsorshipTier {
 }
 
 model PartnershipEnquiry {
-  id                String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  brandId String? @map("brand_id") @db.Uuid
-  programId         String? @map("program_id") @db.Uuid
+  id        String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  brandId   String? @map("brand_id") @db.Uuid
+  programId String? @map("program_id") @db.Uuid
 
   partnershipType String  @map("partnership_type") @db.VarChar(50)
   subCategory     String? @map("sub_category") @db.VarChar(50)
@@ -540,8 +540,8 @@ model PartnershipEnquiry {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  brand Brand? @relation(fields: [brandId], references: [id])
-  program         Program?         @relation(fields: [programId], references: [id])
+  brand   Brand?   @relation(fields: [brandId], references: [id])
+  program Program? @relation(fields: [programId], references: [id])
 
   @@index([brandId])
   @@index([programId])
