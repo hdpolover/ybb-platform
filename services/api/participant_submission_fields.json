@@ -1,0 +1,341 @@
+{
+  "description": "Fields required for a participant submission form in the YBB Platform. Divided into 4 sections: Personal Details, Contact Information, Entry Information, Miscellaneous.",
+  "source": "Derived from remote DB schema (participants, participant_essays, participant_subthemes tables)",
+  "note": "Documents are handled in a separate flow and are not part of this form.",
+  "sections": [
+    {
+      "section": "1. Personal Details",
+      "description": "Basic personal and background information about the participant",
+      "fields": [
+        {
+          "field": "full_name",
+          "db_column": "full_name",
+          "type": "string",
+          "max_length": 255,
+          "required": true,
+          "label": "Full Name",
+          "hint": "Enter your full legal name exactly as it appears on your official documents"
+        },
+        {
+          "field": "nickname",
+          "db_column": "nickname",
+          "type": "string",
+          "max_length": 100,
+          "required": false,
+          "label": "ID Card Name",
+          "hint": "The shorter version of your name that fits on your ID card — use this if your full name is too long for an official name tag or ID"
+        },
+        {
+          "field": "birthdate",
+          "db_column": "birthdate",
+          "type": "date",
+          "format": "YYYY-MM-DD",
+          "required": false,
+          "label": "Date of Birth",
+          "hint": "Select your date of birth"
+        },
+        {
+          "field": "gender",
+          "db_column": "gender",
+          "type": "enum",
+          "options": ["male", "female", "prefer-not", "other"],
+          "required": true,
+          "label": "Gender",
+          "hint": "Select the option that best describes you"
+        },
+        {
+          "field": "nationality",
+          "db_columns": {
+            "name": "nationality",
+            "code": "nationality_code",
+            "flag": "nationality_flag"
+          },
+          "type": "country_select",
+          "country_reference": "country ISO code (e.g. ID) from the countries table",
+          "required": false,
+          "label": "Nationality",
+          "hint": "Select your nationality from the list. The country name, code, and flag will be saved automatically."
+        },
+        {
+          "field": "picture_url",
+          "db_column": "picture_url",
+          "type": "file_upload",
+          "accepted_formats": ["jpg", "jpeg", "png"],
+          "required": false,
+          "label": "Profile Photo",
+          "hint": "Upload a recent passport-style photo. Use a clear, front-facing photo with a plain background."
+        },
+        {
+          "field": "origin_address",
+          "db_column": "origin_address",
+          "type": "text",
+          "required": false,
+          "label": "Home Address",
+          "hint": "Your permanent home / origin address"
+        },
+        {
+          "field": "current_address",
+          "db_column": "current_address",
+          "type": "text",
+          "required": false,
+          "label": "Current Address",
+          "hint": "Your current domicile address, if different from your home address"
+        },
+        {
+          "field": "occupation",
+          "db_column": "occupation",
+          "type": "string",
+          "max_length": 100,
+          "required": false,
+          "label": "Occupation",
+          "hint": "E.g. Student, Employee, Freelancer"
+        },
+        {
+          "field": "education_level",
+          "db_column": "education_level",
+          "type": "string",
+          "max_length": 100,
+          "required": false,
+          "label": "Education Level",
+          "hint": "E.g. Senior High School, Undergraduate (S1), Graduate (S2)"
+        },
+        {
+          "field": "institution",
+          "db_column": "institution",
+          "type": "string",
+          "max_length": 100,
+          "required": false,
+          "label": "Institution / School / Company",
+          "hint": "Name of your school, university, or place of work"
+        },
+        {
+          "field": "major",
+          "db_column": "major",
+          "type": "string",
+          "max_length": 100,
+          "required": false,
+          "label": "Major / Field of Study",
+          "hint": "Your academic major or field of study"
+        },
+        {
+          "field": "organizations",
+          "db_column": "organizations",
+          "type": "text",
+          "required": false,
+          "label": "Organizations",
+          "hint": "List any organizations, communities, or clubs you are currently or were previously involved in"
+        },
+        {
+          "field": "experiences",
+          "db_column": "experiences",
+          "type": "text",
+          "required": false,
+          "label": "Experience",
+          "hint": "Describe relevant experience such as leadership roles, volunteering, research, or notable projects"
+        },
+        {
+          "field": "achievements",
+          "db_column": "achievements",
+          "type": "text",
+          "required": false,
+          "label": "Achievements",
+          "hint": "List any awards, competitions won, or notable accomplishments"
+        },
+        {
+          "field": "resume_url",
+          "db_column": "resume_url",
+          "type": "file_upload",
+          "accepted_formats": ["pdf"],
+          "required": false,
+          "label": "CV / Resume",
+          "hint": "Upload your latest CV or resume in PDF format"
+        },
+        {
+          "field": "disease_history",
+          "db_column": "disease_history",
+          "type": "text",
+          "required": false,
+          "label": "Medical / Disease History",
+          "hint": "Disclose any medical conditions or allergies that the organizing team should be aware of during the event. Type 'None' if not applicable."
+        },
+        {
+          "field": "tshirt_size",
+          "db_column": "tshirt_size",
+          "type": "enum",
+          "options": ["XS", "S", "M", "L", "XL", "XXL"],
+          "required": false,
+          "label": "T-Shirt Size",
+          "hint": "Select your t-shirt size for event merchandise"
+        }
+      ]
+    },
+    {
+      "section": "2. Contact Information",
+      "description": "The participant's own phone number and emergency contact details",
+      "fields": [
+        {
+          "field": "phone",
+          "db_columns": {
+            "country_code": "country_code",
+            "phone_flag": "phone_flag",
+            "phone_number": "phone_number"
+          },
+          "type": "phone",
+          "country_reference": "country ISO code from the countries table — used to derive the dial code and flag stored in DB",
+          "required": false,
+          "label": "Phone Number",
+          "hint": "Select your country code first, then enter your phone number without the country code (e.g. 08123456789 → 8123456789)"
+        },
+        {
+          "field": "instagram_account",
+          "db_column": "instagram_account",
+          "type": "string",
+          "max_length": 50,
+          "required": false,
+          "label": "Instagram Username",
+          "hint": "Enter your Instagram username without the @ symbol"
+        },
+        {
+          "field": "emergency_contact_name",
+          "db_column": "emergency_account",
+          "type": "string",
+          "max_length": 50,
+          "required": false,
+          "label": "Emergency Contact Name",
+          "hint": "Full name of the person to contact in case of emergency"
+        },
+        {
+          "field": "contact_relation",
+          "db_column": "contact_relation",
+          "type": "string",
+          "max_length": 50,
+          "required": false,
+          "label": "Relationship to Emergency Contact",
+          "hint": "E.g. Parent, Sibling, Spouse, Friend"
+        },
+        {
+          "field": "emergency_phone",
+          "db_columns": {
+            "country_code": "emergency_country_code",
+            "phone_flag": "emergency_phone_flag"
+          },
+          "type": "phone",
+          "country_reference": "country ISO code from the countries table — used to derive the dial code and flag stored in DB",
+          "required": false,
+          "label": "Emergency Contact Phone Number",
+          "hint": "Select the country code for your emergency contact, then enter their phone number without the country code"
+        }
+      ]
+    },
+    {
+      "section": "3. Entry Information",
+      "description": "Program-specific information: participation category, subtheme selection, and essay answers",
+      "fields": [
+        {
+          "field": "program_id",
+          "db_column": "program_id",
+          "type": "integer",
+          "required": true,
+          "label": "Program",
+          "hint": "The program you are registering for — typically pre-selected from the registration page"
+        },
+        {
+          "field": "category",
+          "db_column": "category",
+          "type": "enum",
+          "options": ["fully_funded", "self_funded"],
+          "default": "fully_funded",
+          "required": true,
+          "label": "Participation Category",
+          "hint": "Select 'Fully Funded' if you are applying for a scholarship. Select 'Self-Funded' if you will cover your own participation costs."
+        },
+        {
+          "field": "subtheme",
+          "db_column": "program_subtheme_id",
+          "db_table": "participant_subthemes",
+          "type": "relation",
+          "related_table": "program_subthemes",
+          "required": true,
+          "label": "Subtheme / SDG Focus Area",
+          "hint": "Select the SDG (Sustainable Development Goal) topic that best aligns with your interests and essay. Each program offers a set of available subthemes.",
+          "example_options_jys2026": ["SDG 4 – Quality Education", "SDG 8 – Decent Work and Economic Growth", "SDG 9 – Industry, Innovation and Infrastructure", "SDG 11 – Sustainable Cities and Communities", "SDG 13 – Climate Action"]
+        },
+        {
+          "field": "essays",
+          "db_table": "participant_essays",
+          "type": "essay_group",
+          "note": "Each program defines its own essay questions (program_essays). Answers are stored per question in participant_essays linked by program_essay_id.",
+          "example_questions_jys2026": [
+            {
+              "program_essay_id": 33,
+              "label": "Essay Title",
+              "max_word_count": 150,
+              "hint": "Write a concise title for your essay (max 150 words)"
+            },
+            {
+              "program_essay_id": 34,
+              "label": "Main Essay",
+              "max_word_count": 800,
+              "hint": "As a youth leader, how have you contributed — or how do you plan to contribute — to advancing solutions within your chosen SDG focus area? Elaborate on your ideas, experiences, or initiatives (max 800 words)"
+            },
+            {
+              "program_essay_id": 35,
+              "label": "References",
+              "max_word_count": 250,
+              "hint": "List the references used in your essay, formatted consistently (e.g. APA, MLA) (max 250 words)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "section": "4. Miscellaneous",
+      "description": "Referral source, social media proof, and ambassador referral code",
+      "fields": [
+        {
+          "field": "knowledge_source",
+          "db_column": "knowledge_source",
+          "type": "string",
+          "max_length": 50,
+          "required": false,
+          "label": "How Did You Hear About Us?",
+          "hint": "E.g. Instagram, TikTok, Friend, Campus, Website"
+        },
+        {
+          "field": "source_account_name",
+          "db_column": "source_account_name",
+          "type": "string",
+          "max_length": 100,
+          "required": false,
+          "label": "Account / Person Name",
+          "hint": "If you heard about us through a specific social media account or person, enter their name or username here"
+        },
+        {
+          "field": "twibbon_link",
+          "db_column": "twibbon_link",
+          "type": "url",
+          "required": false,
+          "label": "Twibbon Post Link",
+          "hint": "Paste the URL of your twibbon post on Instagram or other social media platforms"
+        },
+        {
+          "field": "requirement_link",
+          "db_column": "requirement_link",
+          "type": "url",
+          "required": false,
+          "label": "Requirement Evidence Link",
+          "hint": "Paste the Google Drive or social media link containing your required post (e.g. story screenshot or repost)"
+        },
+        {
+          "field": "ref_code_ambassador",
+          "db_column": "ref_code_ambassador",
+          "type": "string",
+          "max_length": 10,
+          "required": false,
+          "label": "Ambassador Referral Code",
+          "hint": "If you were referred by a YBB ambassador, enter their referral code here (optional)"
+        }
+      ]
+    }
+  ]
+}

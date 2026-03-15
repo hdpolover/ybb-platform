@@ -33,6 +33,9 @@ export class BrandSettingsDto {
   @ApiProperty({ example: 'help@ybb.com', required: false, description: 'Support email address' })
   support_email?: string;
 
+  @ApiProperty({ example: 'Empowering youth to break boundaries and shape a sustainable future.', required: false, description: 'Short brand description for footer and about sections' })
+  description?: string;
+
   @ApiProperty({ example: 'UA-123456-1', required: false, description: 'Google Analytics Tracking ID' })
   google_analytics_id?: string;
 
