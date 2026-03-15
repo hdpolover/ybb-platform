@@ -16,6 +16,7 @@ services:
       # Override DATABASE_URL to use the container name instead of the host's localhost value
       DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres-api:5432/${DATABASE_NAME}?schema=public&connection_limit=5
       JWT_SECRET: ${JWT_SECRET}
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
       REDIS_URL: ${REDIS_URL}
       REDIS_HOST: ${REDIS_HOST}

@@ -8,6 +8,7 @@ import { seedDummyContent } from './seed-dummy-content';
 import { seedBrandContent } from './seed-brand-content';
 import { seedAdmins } from './seed-admins';
 import { seedIYSPrograms } from './seed-programs-iys';
+import { seedJYSPrograms } from './seed-programs-jys';
 import { seedParticipants } from './seed-participants';
 import { seedScoring } from './seed-scoring';
 
@@ -40,6 +41,7 @@ async function main() {
       console.error(err);
       await seedBrands();
       await seedIYSPrograms();
+      await seedJYSPrograms();
     }
 
     await seedBrandContent();
@@ -48,6 +50,7 @@ async function main() {
     // Seed Dummy/Standard Content
     await seedDummyContent();
     // await seedIYSPrograms(); // Replaced by migratePrograms
+    await seedJYSPrograms();
 
     // Seed Participants & Apps
     await seedParticipants();

@@ -143,6 +143,10 @@ export class GetProgramDetailHandler {
         where: { isActive: true },
         orderBy: { order: 'asc' },
       };
+      includes.schedules = {
+        where: { isActive: true },
+        orderBy: { order: 'asc' },
+      };
       includes.gallery = {
         where: { isActive: true },
         orderBy: { order: 'asc' },
@@ -302,6 +306,10 @@ export class GetProgramDetailHandler {
 
     if (program.timeline) {
       response.timeline = program.timeline;
+    }
+
+    if (program.schedules) {
+      response.schedules = program.schedules;
     }
 
     if (program.testimonials) {
