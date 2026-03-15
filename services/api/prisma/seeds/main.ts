@@ -9,6 +9,7 @@ import { seedBrandContent } from './seed-brand-content';
 import { seedAdmins } from './seed-admins';
 import { seedIYSPrograms } from './seed-programs-iys';
 import { seedJYSPrograms } from './seed-programs-jys';
+import { seedCYSPrograms } from './seed-programs-cys';
 import { seedParticipants } from './seed-participants';
 import { seedScoring } from './seed-scoring';
 
@@ -42,8 +43,10 @@ async function main() {
       await seedBrands();
       await seedIYSPrograms();
       await seedJYSPrograms();
+      await seedCYSPrograms();
     }
 
+    await seedBrands(); // Ensure all brands (including new ones like CYS) are seeded
     await seedBrandContent();
     await seedAdmins();
 
@@ -51,6 +54,7 @@ async function main() {
     await seedDummyContent();
     // await seedIYSPrograms(); // Replaced by migratePrograms
     await seedJYSPrograms();
+    await seedCYSPrograms();
 
     // Seed Participants & Apps
     await seedParticipants();

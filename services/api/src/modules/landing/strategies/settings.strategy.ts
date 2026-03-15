@@ -23,7 +23,7 @@ export class SettingsStrategy {
         if (!category) {
             return {
                 maintenance: { is_maintenance_mode: false },
-                brand: { name: 'Youth Break the Boundaries', logo_url: '', logo_white_url: undefined, logo_color_url: undefined, logo_icon_url: undefined },
+                brand: { name: 'Youth Break the Boundaries', logo_url: '', description: undefined, logo_white_url: undefined, logo_color_url: undefined, logo_icon_url: undefined },
                 footer_navigation: [],
                 currency: { code: 'USD', rate_to_idr: 16000 }
             };
@@ -47,6 +47,7 @@ export class SettingsStrategy {
                 logo_color_url: category.logoColorUrl || undefined,
                 logo_icon_url: category.logoIconUrl || undefined,
                 primary_color: category.primaryColor || undefined,
+                description: category.about || category.description || undefined,
                 support_email: settings?.supportEmail || category.contactEmail || undefined,
                 google_analytics_id: settings?.googleAnalyticsId || undefined,
                 pixel_id: settings?.pixelId || undefined,
@@ -78,4 +79,3 @@ export class SettingsStrategy {
         return result;
     }
 }
-console.log('Testing sync');

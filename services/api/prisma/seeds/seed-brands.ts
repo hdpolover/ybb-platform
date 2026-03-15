@@ -9,6 +9,7 @@ export const BRANDS = {
   MEYS: 'middle-east-youth-summit',
   KYS: 'korea-youth-summit',
   VYS: 'vietnam-youth-summit',
+  CYS: 'china-youth-summit',
 };
 
 export async function seedBrands() {
@@ -80,7 +81,56 @@ export async function seedBrands() {
     },
   });
 
-  // Removed YBB and AYIMUN 
+  // Removed YBB and AYIMUN
+
+  // 8. CYS
+  await prisma.brand.upsert({
+    where: { slug: BRANDS.CYS },
+    update: {
+      contactPhone: '+8615000000000',
+      contactWhatsapp: '+8615000000000',
+      contactAddress: 'Beijing, China',
+      contactEmail: 'info@chinayouthsummit.com',
+      primaryColor: '#E62C4F',
+      logoUrl: 'https://placehold.co/400x100/E62C4F/FFF?text=CYS+Logo',
+      logoWhiteUrl: 'https://placehold.co/400x100/FFF/E62C4F?text=CYS+Logo',
+      logoColorUrl: 'https://placehold.co/400x100/E62C4F/FFF?text=CYS+Logo',
+      logoIconUrl: 'https://placehold.co/100x100/E62C4F/FFF?text=CYS',
+      bannerUrl: 'https://placehold.co/1200x400/E62C4F/FFF?text=China+Youth+Summit',
+      socialMediaLinks: {
+        instagram: 'https://instagram.com/chinayouthsummit',
+        tiktok: 'https://www.tiktok.com/@chinayouthsummit',
+        youtube: 'https://www.youtube.com/@chinayouthsummit',
+        telegram: 'https://t.me/chinayouthsummit',
+      },
+    },
+    create: {
+      id: 'c1a2e3f4-0000-4000-8000-111122223333',
+      name: 'China Youth Summit',
+      slug: BRANDS.CYS,
+      description: 'Connecting young leaders across China and Asia.',
+      about: 'China Youth Summit (CYS) is a premier youth leadership program dedicated to empowering young people across China and Asia.',
+      websiteUrl: 'chinayouthsummit.com',
+      contactEmail: 'info@chinayouthsummit.com',
+      contactPhone: '+8615000000000',
+      contactWhatsapp: '+8615000000000',
+      contactAddress: 'Beijing, China',
+      primaryColor: '#E62C4F',
+      defaultCurrency: 'CNY',
+      isActive: true,
+      logoUrl: 'https://placehold.co/400x100/E62C4F/FFF?text=CYS+Logo',
+      logoWhiteUrl: 'https://placehold.co/400x100/FFF/E62C4F?text=CYS+Logo',
+      logoColorUrl: 'https://placehold.co/400x100/E62C4F/FFF?text=CYS+Logo',
+      logoIconUrl: 'https://placehold.co/100x100/E62C4F/FFF?text=CYS',
+      bannerUrl: 'https://placehold.co/1200x400/E62C4F/FFF?text=China+Youth+Summit',
+      socialMediaLinks: {
+        instagram: 'https://instagram.com/chinayouthsummit',
+        tiktok: 'https://www.tiktok.com/@chinayouthsummit',
+        youtube: 'https://www.youtube.com/@chinayouthsummit',
+        telegram: 'https://t.me/chinayouthsummit',
+      },
+    },
+  });
 
   log('✅ Brands created');
 }

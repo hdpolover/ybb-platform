@@ -65,7 +65,7 @@ import { AdminsModule } from '@modules/admins/admins.module';
           }),
         ];
 
-        const lokiUrl = configService.get<string>('LOKI_URL') || 'http://loki:3100';
+        const lokiUrl = configService.get<string>('LOKI_URL') || 'http://host.docker.internal:3110';
         const LokiTransportConstructor = (LokiTransport as any).default || LokiTransport;
         transports.push(
           new LokiTransportConstructor({
