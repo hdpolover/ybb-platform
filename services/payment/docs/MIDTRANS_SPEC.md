@@ -28,7 +28,7 @@ Midtrans **does not** provide a runtime API to fetch "Enabled Payment Methods" f
 
 ## 3. Outbound Calls (Payment Service -> Midtrans)
 
-These calls happen inside the `POST /internal/v1/intents/{id}/confirm` handler.
+These calls happen inside the `POST /api/v1/intents/{id}/confirm` handler.
 
 ### 3.1. Create Transaction (Charge)
 The primary endpoint to initiate any payment.
@@ -128,7 +128,7 @@ Used for Credit Cards (Pre-Settlement) or Pending E-Wallets.
 ### 4.1. Webhook Notification
 Midtrans sends a POST request to the URL configured in MAP Dashboard.
 
-*   **Flow**: Midtrans -> Main API (`/webhooks`) -> Internal Relay -> Payment Service.
+*   **Flow**: Midtrans -> Payment Service (`/api/v1/payments/webhook/midtrans`).
 *   **Payload**:
     ```json
     {

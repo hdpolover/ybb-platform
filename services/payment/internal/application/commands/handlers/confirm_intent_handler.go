@@ -10,6 +10,7 @@ import (
 
 	"github.com/ybb-platform/payment/internal/application/commands"
 	"github.com/ybb-platform/payment/internal/application/dto"
+	"github.com/ybb-platform/payment/internal/application/requestcontext"
 	"github.com/ybb-platform/payment/internal/domain/entities"
 	"github.com/ybb-platform/payment/internal/domain/exceptions"
 	"github.com/ybb-platform/payment/internal/domain/gateways"
@@ -46,6 +47,8 @@ func NewConfirmIntentHandler(
 }
 
 func (h *ConfirmIntentHandler) Handle(ctx context.Context, cmd *commands.ConfirmIntentCommand) (*dto.ConfirmPaymentResponse, error) {
+	requestID := requestcontext.RequestIDFromContext(ctx)
+	log.Printf("confirm_intent_handler request_id=%s intent_id=%s payment_method=%s", requestID, cmd.IntentID, cmd.PaymentMethodID)
 	// 1. Fetch Intent
 	intent, err := h.intentRepo.FindByID(ctx, cmd.IntentID)
 	if err != nil {
@@ -215,6 +218,7 @@ func (h *ConfirmIntentHandler) Handle(ctx context.Context, cmd *commands.Confirm
 		},
 		GatewayResp: chargeResp.Metadata, // or raw
 	}
+	log.Printf("confirm_intent_handler completed request_id=%s intent_id=%s transaction_id=%s status=%s", requestID, cmd.IntentID, tx.ID, tx.Status)
 	h.completeIdempotency(ctx, idempotencyRecord, tx.ID, response)
 	return response, nil
 }

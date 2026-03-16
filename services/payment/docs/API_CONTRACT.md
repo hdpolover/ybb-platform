@@ -8,6 +8,7 @@ This document defines the strict contracts between the three key players in the 
 graph LR
     FE[FrontEnd (Next.js)] -- "Public HTTPS (Auth: Bearer Token)" --> API[Main API Service]
     API -- "Internal HTTP/gRPC (Auth: Service Key)" --> PAY[Payment Service]
+  GW[Payment Gateway] -- "Public HTTPS Webhook" --> PAY
 ```
 
 *   **Public API**: Exposed to the internet, consumed by Next.js clients. Secured by User Session (JWT).
@@ -17,7 +18,7 @@ graph LR
 
 ## 2. Public API Contract (Consumed by Frontend)
 
-**Base URL**: `https://payments.ybbhub.com/v1`
+**Base URL**: Frontend requests are handled by the Main API Service, not the Payment Service directly.
 **Authentication**: `Authorization: Bearer <User_JWT>`
 
 ### 2.1. Get Payment Methods
@@ -130,7 +131,7 @@ Called after the user selects a method (and optionally tokenizes their card).
 This contract governs how the **Main API Service** talks to the **Payment Domain Service**.
 
 **Protocol**: HTTP REST (JSON)
-**Network**: Private VPC Only (Payment Service does NOT expose port 80/443 to the internet)
+**Network**: Private VPC for operational APIs. Only the gateway webhook endpoint is exposed publicly.
 **Content-Type**: `application/json`
 
 ### 3.1. Security & Authentication
@@ -157,7 +158,7 @@ Both services must agree on these values (Protobuf or Shared Go Structs recommen
 
 ### 3.4. Endpoints (Payment Service Internal API)
 
-#### `POST /internal/v1/intents`
+#### `POST /api/v1/intents`
 Orchestrated by Facade API.
 *   **Input**:
     ```json
@@ -169,7 +170,7 @@ Orchestrated by Facade API.
     ```
 *   **Output**: Returns the raw `PaymentIntent` object.
 
-#### `POST /internal/v1/intents/{id}/confirm`
+#### `POST /api/v1/intents/{id}/confirm`
 The Main API forwards the user's confirmation to the Payment Service to trigger the Gateway Charge.
 *   **Input**:
     ```json
@@ -180,17 +181,14 @@ The Main API forwards the user's confirmation to the Payment Service to trigger 
     ```
 *   **Output**: Result of the charge (same structure as Public API 2.3).
 
-#### `POST /internal/v1/webhook/handler`
-The Main API might receive the public webhook from Midtrans, verify the signature, and then forward the *parsed event* to the Payment Service.
-*   **Why?** To keep the Payment Service completely private (no public ingress).
-*   **Input**:
-    ```json
-    {
-      "provider": "midtrans",
-      "event_type": "capture",
-      "payload": { ...raw_json... }
-    }
-    ```
+#### `GET /api/v1/payments/{id}`
+Returns either a transaction record or an intent record with embedded transactions.
+
+#### `GET /api/v1/payments/user/{userId}`
+Returns a paginated list of payment intents with embedded transactions.
+
+#### `POST /api/v1/payments/webhook/{gateway}`
+This route is called directly by Midtrans or other gateways. It is the only Payment Service route that should be publicly reachable.
 
 ### 3.5. Error Handling Contract
 
@@ -222,6 +220,7 @@ The Payment Service will return errors in this standardized format so the API Se
 
 ## 5. Backend Developer Checklist
 
-1.  **Private Subnets**: Ensure `Payment Service` is NOT accessible from the public internet.
+1.  **Ingress Rules**: Keep all Payment Service routes private except `/api/v1/payments/webhook/:gateway`.
 2.  **Facade Pattern**: The `API Service` should simple passthrough requests but **MUST** inject the `user_id` from the JWT into the Internal Request body (Trust boundaries).
-3.  **Circuit Breaker**: If Payment Service is down, fail fast.
+3.  **Webhook Verification**: Validate the gateway signature in the Payment Service before updating records.
+4.  **Circuit Breaker**: If Payment Service is down, fail fast.

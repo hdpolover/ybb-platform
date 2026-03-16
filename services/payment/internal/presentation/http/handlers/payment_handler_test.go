@@ -13,7 +13,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"github.com/ybb-platform/payment/internal/domain/entities"
+	"github.com/ybb-platform/payment/internal/domain/gateways"
 	"github.com/ybb-platform/payment/internal/domain/repositories"
+	infraGateways "github.com/ybb-platform/payment/internal/infrastructure/gateways"
 	"github.com/ybb-platform/payment/internal/infrastructure/messaging"
 )
 
@@ -200,6 +202,127 @@ func TestGetPaymentsByUserRejectsInvalidLimit(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
+func TestGetPaymentReturnsIntentWhenTransactionMissing(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	intent := &entities.PaymentIntent{
+		ID:            "intent-1",
+		UserID:        "user-1",
+		ReferenceType: "application",
+		ReferenceID:   "app-1",
+		Amount:        150000,
+		Currency:      "IDR",
+		Status:        entities.PaymentIntentStatusProcessing,
+		CreatedAt:     time.Unix(100, 0),
+		UpdatedAt:     time.Unix(200, 0),
+	}
+	handler := NewPaymentHandler(&stubIntentRepository{byID: map[string]*entities.PaymentIntent{intent.ID: intent}}, &stubTransactionRepository{}, messaging.NewNoOpPublisher(), nil)
+
+	router := gin.New()
+	router.GET("/payments/:id", handler.GetPayment)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/payments/intent-1", nil)
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var body map[string]interface{}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.Equal(t, "intent", body["type"])
+	require.Equal(t, "intent-1", body["id"])
+}
+
+func TestVerifyPaymentRejectUpdatesTransactionAndIntent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	intent := &entities.PaymentIntent{
+		ID:            "intent-1",
+		UserID:        "user-1",
+		ReferenceType: "application",
+		ReferenceID:   "app-1",
+		Amount:        100000,
+		Currency:      "IDR",
+		Status:        entities.PaymentIntentStatusProcessing,
+		CreatedAt:     time.Unix(100, 0),
+		UpdatedAt:     time.Unix(200, 0),
+	}
+	tx := &entities.PaymentTransaction{
+		ID:              "tx-1",
+		IntentID:        intent.ID,
+		PaymentMethodID: "manual_transfer",
+		Currency:        "IDR",
+		AmountTotal:     100000,
+		AmountSubtotal:  100000,
+		NetAmount:       100000,
+		Status:          entities.TransactionStatusNeedsReview,
+		CreatedAt:       time.Unix(100, 0),
+		UpdatedAt:       time.Unix(200, 0),
+	}
+
+	intentRepo := &stubIntentRepository{byID: map[string]*entities.PaymentIntent{intent.ID: intent}}
+	txRepo := &stubTransactionRepository{byID: map[string]*entities.PaymentTransaction{tx.ID: tx}}
+	handler := NewPaymentHandler(intentRepo, txRepo, messaging.NewNoOpPublisher(), nil)
+
+	router := gin.New()
+	router.POST("/payments/:id/verify", handler.VerifyPayment)
+
+	body := bytes.NewBufferString(`{"action":"reject","admin_id":"admin-1","reason":"proof invalid"}`)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/payments/tx-1/verify", body)
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, entities.TransactionStatusRejected, txRepo.updated.Status)
+	require.Equal(t, entities.PaymentIntentStatusRequiresMethod, intentRepo.updated.Status)
+	require.Equal(t, "MANUAL_REJECTED", txRepo.updated.ErrorCode)
+}
+
+func TestHandleWebhookUpdatesTransactionByGatewayReference(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	intent := &entities.PaymentIntent{
+		ID:            "intent-1",
+		UserID:        "user-1",
+		ReferenceType: "application",
+		ReferenceID:   "app-1",
+		Amount:        100000,
+		Currency:      "IDR",
+		Status:        entities.PaymentIntentStatusProcessing,
+		Metadata:      json.RawMessage(`{"customer_email":"user@example.com"}`),
+	}
+	tx := &entities.PaymentTransaction{
+		ID:                 "tx-1",
+		IntentID:           intent.ID,
+		GatewayReferenceID: "order-123",
+		PaymentMethodID:    "bca_va",
+		Currency:           "IDR",
+		AmountTotal:        100000,
+		AmountSubtotal:     100000,
+		NetAmount:          100000,
+		Status:             entities.TransactionStatusPending,
+	}
+	intentRepo := &stubIntentRepository{byID: map[string]*entities.PaymentIntent{intent.ID: intent}}
+	txRepo := &stubTransactionRepository{
+		byID:      map[string]*entities.PaymentTransaction{tx.ID: tx},
+		byGateway: map[string]*entities.PaymentTransaction{"order-123": tx},
+	}
+	factory := infraGateways.NewGatewayFactory()
+	factory.Register(&stubPaymentGateway{webhookPayment: &entities.Payment{ID: "order-123", GatewayOrderID: "order-123", Status: entities.PaymentStatusSuccess, GatewayResponse: map[string]interface{}{"transaction_status": "settlement"}}})
+	handler := NewPaymentHandler(intentRepo, txRepo, messaging.NewNoOpPublisher(), factory)
+
+	router := gin.New()
+	router.POST("/payments/webhook/:gateway", handler.HandleWebhook)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/payments/webhook/stub", bytes.NewBufferString(`{"order_id":"order-123"}`))
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, entities.TransactionStatusSuccess, txRepo.updated.Status)
+	require.Equal(t, entities.PaymentIntentStatusSucceeded, intentRepo.updated.Status)
+}
+
 type stubIntentRepository struct {
 	byID          map[string]*entities.PaymentIntent
 	findAllResult []*entities.PaymentIntent
@@ -284,4 +407,39 @@ func (s *stubTransactionRepository) FindByGatewayReferenceID(ctx context.Context
 		return tx, nil
 	}
 	return nil, errors.New("not found")
+}
+
+type stubPaymentGateway struct {
+	webhookPayment *entities.Payment
+}
+
+func (s *stubPaymentGateway) GetName() string {
+	return "stub"
+}
+
+func (s *stubPaymentGateway) CreatePayment(ctx context.Context, req *gateways.CreatePaymentRequest) (*gateways.CreatePaymentResponse, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (s *stubPaymentGateway) ChargePayment(ctx context.Context, req *gateways.ChargePaymentRequest) (*gateways.ChargePaymentResponse, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (s *stubPaymentGateway) VerifyPayment(ctx context.Context, gatewayOrderID string) (*entities.Payment, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (s *stubPaymentGateway) HandleWebhook(ctx context.Context, payload []byte) (*entities.Payment, error) {
+	if s.webhookPayment == nil {
+		return nil, errors.New("not implemented")
+	}
+	return s.webhookPayment, nil
+}
+
+func (s *stubPaymentGateway) CancelPayment(ctx context.Context, gatewayOrderID string) error {
+	return errors.New("not implemented")
+}
+
+func (s *stubPaymentGateway) RefundPayment(ctx context.Context, gatewayOrderID string, amount float64) error {
+	return errors.New("not implemented")
 }

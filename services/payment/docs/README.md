@@ -17,8 +17,8 @@ Welcome to the Payment Service documentation. This guide lists the recommended r
 ### 3. API Specifications (The "Contract")
 **For Implementation:** [API_CONTRACT.md](API_CONTRACT.md)
 *   **What it covers:** The strict JSON payloads, endpoints, and error codes used by:
-    *   **Frontend Developers**: (Public API: `/v1/intents`, `/v1/methods`)
-    *   **Backend Developers**: (Internal Service API: `/internal/v1/intents`)
+    *   **Frontend Developers**: Public payment flows mediated by the Main API Service.
+    *   **Backend Developers**: Internal Payment Service APIs under `/api/v1/*` plus the direct public webhook endpoint.
 
 ### 4. Midtrans Integration Details
 **For Backend Integration:** [MIDTRANS_SPEC.md](MIDTRANS_SPEC.md)
@@ -36,7 +36,7 @@ Welcome to the Payment Service documentation. This guide lists the recommended r
 | :--- | :--- | :--- |
 | **Database** | [`CUSTOM_PAYMENT_FLOW.md`](CUSTOM_PAYMENT_FLOW.md#3-database-schema-restructuring) | Prisma Schema definitions (PaymentIntent, Transaction). |
 | **Auth** | [`API_CONTRACT.md`](API_CONTRACT.md#31-security--authentication) | Service-to-Service Keys (`X-Internal-Service-Key`). |
-| **Webhooks** | [`MIDTRANS_SPEC.md`](MIDTRANS_SPEC.md#41-webhook-notification) | Payload structure and Security Hashing. |
+| **Webhooks** | [`MIDTRANS_SPEC.md`](MIDTRANS_SPEC.md#41-webhook-notification) | Direct gateway-to-payment webhook flow and signature verification. |
 | **Diagrams** | [`PAYMENT_GATEWAY_JOURNEY.md`](PAYMENT_GATEWAY_JOURNEY.md#11-sequence-diagram) | Mermaid charts for Charge & Webhook flows. |
 
 ## 🗑 Legacy Documentation
