@@ -16,6 +16,7 @@ type ConfirmIntentCommand struct {
 	IntentID        string
 	PaymentMethodID string
 	GatewayToken    string
+	IdempotencyKey  string
 	PaymentDetails  json.RawMessage
 	IpAddress       string
 	UserAgent       string

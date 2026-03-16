@@ -34,6 +34,7 @@ import (
 	"github.com/ybb-platform/payment/internal/infrastructure/messaging"
 	"github.com/ybb-platform/payment/internal/infrastructure/persistence"
 	"github.com/ybb-platform/payment/internal/presentation/http/handlers"
+	httpMiddleware "github.com/ybb-platform/payment/internal/presentation/http/middleware"
 
 	"github.com/ybb-platform/payment/internal/infrastructure/telemetry"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
@@ -119,6 +120,7 @@ func main() {
 		&entities.GatewayConfig{},
 		&entities.PaymentIntent{},
 		&entities.PaymentTransaction{},
+		&entities.PaymentIdempotencyKey{},
 	); err != nil {
 		logger.Fatalf("Failed to migrate database: %v", err)
 	}
@@ -141,20 +143,7 @@ func main() {
 
 	// Initialize gateway factory
 	gatewayFactory := infraGateways.NewGatewayFactory()
-
-	// Register Midtrans gateway
-	midtransGateway := infraGateways.NewMidtransGateway(
-		cfg.MidtransServerKey,
-		cfg.MidtransClientKey,
-		cfg.Environment,
-	)
-	gatewayFactory.Register(midtransGateway)
-	logger.Info("Registered payment gateways: Midtrans")
-
-	// Register Manual Gateway
-	manualGateway := infraGateways.NewManualGateway()
-	gatewayFactory.Register(manualGateway)
-	logger.Info("Registered payment gateways: Manual")
+	registerGateways(cfg, gatewayFactory, logger)
 
 	// Initialize repositories
 	sqlDB, err := db.DB()
@@ -166,6 +155,7 @@ func main() {
 	paymentMethodRepo := persistence.NewPaymentMethodRepository(db)
 	intentRepo := persistence.NewGormPaymentIntentRepository(db)
 	txRepo := persistence.NewGormPaymentTransactionRepository(db)
+	idempotencyRepo := persistence.NewGormPaymentIdempotencyRepository(db)
 
 	// Start gRPC Server
 	go func() {
@@ -174,13 +164,15 @@ func main() {
 		if err != nil {
 			logger.Fatalf("failed to listen for gRPC: %v", err)
 		}
-		s := grpc.NewServer()
+		s := grpc.NewServer(grpc.UnaryInterceptor(grpcServer.InternalServiceKeyInterceptor(cfg.InternalServiceKey)))
 		paymentGrpcService := grpcServer.NewPaymentGrpcServer(
 			intentRepo,
 			txRepo,
 			paymentMethodRepo,
+			idempotencyRepo,
 			gatewayFactory,
 			eventPublisher,
+			cfg.DefaultGateway,
 		)
 		pb.RegisterPaymentServiceServer(s, paymentGrpcService)
 		logger.Infof("gRPC server listening at %v", lis.Addr())
@@ -240,11 +232,11 @@ func main() {
 
 	// Initialize Intent Handlers
 	createIntentHandler := commandHandlers.NewCreateIntentHandler(intentRepo)
-	confirmIntentHandler := commandHandlers.NewConfirmIntentHandler(intentRepo, txRepo, gatewayFactory)
+	confirmIntentHandler := commandHandlers.NewConfirmIntentHandler(intentRepo, txRepo, paymentMethodRepo, idempotencyRepo, gatewayFactory, cfg.DefaultGateway)
 	intentHandler := handlers.NewIntentHandler(createIntentHandler, confirmIntentHandler)
 
 	// Setup router
-	r := setupRouter(paymentHandler, paymentMethodHandler, intentHandler)
+	r := setupRouter(paymentHandler, paymentMethodHandler, intentHandler, cfg.InternalServiceKey)
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -276,11 +268,45 @@ func main() {
 	logger.Info("Server exited")
 }
 
+func registerGateways(cfg *config.Config, gatewayFactory *infraGateways.GatewayFactory, logger *zap.SugaredLogger) {
+	registered := []string{}
+
+	gatewayFactory.Register(infraGateways.NewManualGateway())
+	registered = append(registered, "manual")
+
+	if cfg.MidtransServerKey != "" {
+		gatewayFactory.Register(infraGateways.NewMidtransGateway(
+			cfg.MidtransServerKey,
+			cfg.MidtransClientKey,
+			cfg.Environment,
+		))
+		registered = append(registered, "midtrans")
+	}
+
+	if cfg.XenditSecretKey != "" {
+		gatewayFactory.Register(infraGateways.NewXenditGateway(cfg.XenditSecretKey))
+		registered = append(registered, "xendit")
+	}
+
+	if cfg.StripeSecretKey != "" {
+		gatewayFactory.Register(infraGateways.NewStripeGateway(cfg.StripeSecretKey))
+		registered = append(registered, "stripe")
+	}
+
+	if cfg.PayPalClientID != "" && cfg.PayPalSecret != "" {
+		gatewayFactory.Register(infraGateways.NewPayPalGateway(cfg.PayPalClientID, cfg.PayPalSecret, cfg.PayPalMode))
+		registered = append(registered, "paypal")
+	}
+
+	logger.Infof("Registered payment gateways: %v", registered)
+}
+
 // setupRouter sekarang menerima handler dan mendaftarkan route Swagger
 func setupRouter(
 	paymentHandler *handlers.PaymentHandler,
 	paymentMethodHandler *handlers.PaymentMethodHandler,
 	intentHandler *handlers.IntentHandler,
+	internalServiceKey string,
 ) *gin.Engine {
 	router := gin.Default()
 	router.Use(otelgin.Middleware("ybb-payment"))
@@ -302,19 +328,26 @@ func setupRouter(
 	// API v1 routes
 	v1 := router.Group("/api/v1")
 	{
+		paymentsPublic := v1.Group("/payments")
+		{
+			paymentsPublic.POST("/webhook/:gateway", paymentHandler.HandleWebhook)
+		}
+
+		protected := v1.Group("")
+		protected.Use(httpMiddleware.RequireInternalServiceKey(internalServiceKey))
+
 		// New Intent Flow
-		intents := v1.Group("/intents")
+		intents := protected.Group("/intents")
 		{
 			intents.POST("", intentHandler.CreateIntent)
 			intents.POST("/:id/confirm", intentHandler.ConfirmIntent)
 		}
 
-		payments := v1.Group("/payments")
+		payments := protected.Group("/payments")
 		{
 			payments.POST("", paymentHandler.CreatePayment)
 			payments.GET("/:id", paymentHandler.GetPayment)
 			payments.GET("/user/:userId", paymentHandler.GetPaymentsByUser)
-			payments.POST("/webhook/:gateway", paymentHandler.HandleWebhook)
 
 			payments.POST("/:id/verify-status", paymentHandler.VerifyPaymentStatus)
 			payments.POST("/:id/refund", paymentHandler.RefundPayment)
@@ -327,7 +360,7 @@ func setupRouter(
 		}
 
 		// Payment Methods (CRUD)
-		methods := v1.Group("/payment-methods")
+		methods := protected.Group("/payment-methods")
 		{
 			methods.GET("", paymentMethodHandler.GetAll)
 			methods.GET("/:id", paymentMethodHandler.GetByID)

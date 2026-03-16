@@ -237,7 +237,7 @@ export default function ProgramsPage() {
       <div>
         <h1 className="text-2xl font-bold text-zinc-900">Programs</h1>
         <p className="mt-1 text-sm text-zinc-600">
-          Manage all programs across brands
+          Manage top-level program shells across brands. Fees, capacity, location, and registration windows are handled inside each program admin workspace.
         </p>
       </div>
 

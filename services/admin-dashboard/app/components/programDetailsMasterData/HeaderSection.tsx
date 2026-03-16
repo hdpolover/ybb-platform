@@ -14,7 +14,7 @@ export function HeaderSection({ programName }: HeaderSectionProps) {
             {programName} Program Details
           </h1>
           <p className="text-sm text-zinc-500">
-            Configure core information, identity, and key communication assets for this program.
+            Review live program data and manage program-admin operational settings for this program.
           </p>
         </div>
       </div>

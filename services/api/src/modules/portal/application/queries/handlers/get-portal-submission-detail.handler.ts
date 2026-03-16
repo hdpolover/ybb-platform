@@ -32,9 +32,9 @@ export class GetPortalSubmissionDetailHandler
     async execute(
         query: GetPortalSubmissionDetailQuery,
     ): Promise<PortalSubmissionDetailResponseDto> {
-        const { userId } = query;
+        const { userId, programId } = query;
 
-        const cacheKey = CACHE_KEYS.PORTAL_SUBMISSION_DETAIL(userId);
+        const cacheKey = CACHE_KEYS.PORTAL_SUBMISSION_DETAIL(userId, programId);
         const cached =
             await this.cacheService.get<PortalSubmissionDetailResponseDto>(cacheKey);
         if (cached) return cached;
@@ -43,7 +43,7 @@ export class GetPortalSubmissionDetailHandler
             await this.portalCacheService.getParticipantProfile(userId);
         if (!participant) throw new NotFoundException('Participant not found');
 
-        const application = await this.findLatestApplication(participant.id);
+        const application = await this.findApplication(participant.id, programId);
         if (!application) throw new NotFoundException('No active application found');
 
         const sections = this.buildSections(application);
@@ -66,9 +66,12 @@ export class GetPortalSubmissionDetailHandler
         return result;
     }
 
-    private async findLatestApplication(participantId: string) {
+    private async findApplication(participantId: string, programId?: string) {
         return this.prisma.participantApplication.findFirst({
-            where: { participantId },
+            where: {
+                participantId,
+                ...(programId ? { programId } : {}),
+            },
             orderBy: { updatedAt: 'desc' },
             select: {
                 id: true,

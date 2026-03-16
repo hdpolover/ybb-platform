@@ -35,12 +35,6 @@ export class UpdateProgramHandler implements ICommandHandler<UpdateProgramComman
         if (programData.registrationOpenDate) programData.registrationOpenDate = new Date(programData.registrationOpenDate);
         if (programData.registrationCloseDate) programData.registrationCloseDate = new Date(programData.registrationCloseDate);
 
-        // Map brandId to brandId
-        if (programData.brandId) {
-            programData.brandId = programData.brandId;
-            delete programData.brandId;
-        }
-
         const updatedProgram = await this.programRepository.update(programId, programData);
 
         // Log activity

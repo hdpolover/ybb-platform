@@ -2,14 +2,29 @@
 
 import { useState } from "react";
 import { PencilSquareIcon } from "@heroicons/react/24/solid";
-import { EditProgramSpecificsModal } from "./EditProgramSpecificsModal";
+import { EditProgramSpecificsModal, type ProgramSpecificsFormValues } from "./EditProgramSpecificsModal";
 
 interface EditSpecificsActionProps {
   programName: string;
+  initialValues: ProgramSpecificsFormValues;
+  onSave: (values: ProgramSpecificsFormValues) => Promise<void>;
+  isSaving: boolean;
+  errorMessage: string | null;
 }
 
-export function EditSpecificsAction({ programName }: EditSpecificsActionProps) {
+export function EditSpecificsAction({
+  programName,
+  initialValues,
+  onSave,
+  isSaving,
+  errorMessage,
+}: EditSpecificsActionProps) {
   const [isOpen, setIsOpen] = useState<boolean>(false);
+
+  const handleSubmit = async (values: ProgramSpecificsFormValues) => {
+    await onSave(values);
+    setIsOpen(false);
+  };
 
   return (
     <>
@@ -21,12 +36,16 @@ export function EditSpecificsAction({ programName }: EditSpecificsActionProps) {
         aria-controls="edit-specifics-modal"
       >
         <PencilSquareIcon className="h-4 w-4" aria-hidden="true" />
-        <span>Edit Program Specifics</span>
+        <span>Edit Operational Settings</span>
       </button>
 
       {isOpen && (
         <EditProgramSpecificsModal
           programName={programName}
+          initialValues={initialValues}
+          onSubmit={handleSubmit}
+          isSaving={isSaving}
+          errorMessage={errorMessage}
           onClose={() => setIsOpen(false)}
         />
       )}

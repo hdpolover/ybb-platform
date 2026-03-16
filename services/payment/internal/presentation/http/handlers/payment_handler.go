@@ -438,6 +438,46 @@ func (h *PaymentHandler) UploadProof(c *gin.Context) {
 		return
 	}
 
+	// New flow: proof is attached to a payment transaction.
+	if tx, err := h.txRepo.FindByID(c.Request.Context(), paymentID); err == nil {
+		tx.ProofFileURL = req.FileURL
+		tx.Status = entities.TransactionStatusNeedsReview
+		tx.UpdatedAt = time.Now()
+
+		responsePayload := map[string]interface{}{
+			"file_id":  req.FileID,
+			"file_url": req.FileURL,
+		}
+		if len(tx.GatewayResponse) > 0 {
+			var existing map[string]interface{}
+			if err := json.Unmarshal(tx.GatewayResponse, &existing); err == nil {
+				for key, value := range existing {
+					responsePayload[key] = value
+				}
+			}
+		}
+		if rawBytes, marshalErr := json.Marshal(responsePayload); marshalErr == nil {
+			tx.GatewayResponse = rawBytes
+		}
+
+		if err := h.txRepo.Update(c.Request.Context(), tx); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update transaction proof"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"status":  "success",
+			"message": "Proof uploaded successfully. Waiting for admin review.",
+			"data": gin.H{
+				"transaction_id": tx.ID,
+				"status":         tx.Status,
+				"file_id":        req.FileID,
+				"file_url":       req.FileURL,
+			},
+		})
+		return
+	}
+
 	// Update Database
 	err := h.paymentRepo.UpdateProof(c.Request.Context(), paymentID, req.FileID, req.FileURL)
 	if err != nil {
@@ -479,6 +519,70 @@ func (h *PaymentHandler) VerifyPayment(c *gin.Context) {
 	var req VerifyPaymentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	if tx, err := h.txRepo.FindByID(c.Request.Context(), paymentID); err == nil {
+		intent, intentErr := h.intentRepo.FindByID(c.Request.Context(), tx.IntentID)
+		if intentErr != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Intent not found"})
+			return
+		}
+
+		now := time.Now()
+		tx.ReviewedAt = &now
+		tx.UpdatedAt = now
+		if req.AdminID != "" {
+			adminID := req.AdminID
+			tx.ReviewedBy = &adminID
+		}
+
+		switch req.Action {
+		case "approve":
+			tx.Status = entities.TransactionStatusSuccess
+			intent.Status = entities.PaymentIntentStatusSucceeded
+			tx.AdminNotes = ""
+		case "reject":
+			if req.Reason == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Reason is required for rejection"})
+				return
+			}
+			tx.Status = entities.TransactionStatusRejected
+			tx.AdminNotes = req.Reason
+			tx.ErrorCode = "MANUAL_REJECTED"
+			intent.Status = entities.PaymentIntentStatusRequiresMethod
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid action. Use 'approve' or 'reject'"})
+			return
+		}
+
+		if err := h.txRepo.Update(c.Request.Context(), tx); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update transaction"})
+			return
+		}
+		if err := h.intentRepo.Update(c.Request.Context(), intent); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update payment intent"})
+			return
+		}
+
+		go func() {
+			eventType := events.PaymentSucceededEvent
+			if tx.Status == entities.TransactionStatusRejected {
+				eventType = events.PaymentFailedEvent
+			}
+			h.publishIntentEvent(intent, tx, eventType)
+		}()
+
+		c.JSON(http.StatusOK, gin.H{
+			"status":  "success",
+			"message": "Manual transaction verification processed successfully",
+			"data": gin.H{
+				"transaction_id":     tx.ID,
+				"transaction_status": tx.Status,
+				"intent_id":          intent.ID,
+				"intent_status":      intent.Status,
+			},
+		})
 		return
 	}
 

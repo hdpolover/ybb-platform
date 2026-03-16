@@ -22,7 +22,7 @@ export class SaveSubmissionSectionHandler {
     ) { }
 
     async execute(command: SaveSubmissionSectionCommand): Promise<{ success: boolean; section: string }> {
-        const { userId, section, data } = command;
+        const { userId, section, data, programId } = command;
 
         this.validateSection(section);
 
@@ -30,7 +30,10 @@ export class SaveSubmissionSectionHandler {
         if (!participant) throw new NotFoundException('Participant not found');
 
         const application = await this.prisma.participantApplication.findFirst({
-            where: { participantId: participant.id },
+            where: {
+                participantId: participant.id,
+                ...(programId ? { programId } : {}),
+            },
             orderBy: { updatedAt: 'desc' },
             select: {
                 id: true,
@@ -57,7 +60,7 @@ export class SaveSubmissionSectionHandler {
             data: updateData,
         });
 
-        await this.invalidateCaches(userId);
+        await this.invalidateCaches(userId, programId);
 
         return { success: true, section };
     }
@@ -127,9 +130,9 @@ export class SaveSubmissionSectionHandler {
         return value === ApplicationCategory.fully_funded || value === ApplicationCategory.self_funded;
     }
 
-    private async invalidateCaches(userId: string): Promise<void> {
+    private async invalidateCaches(userId: string, programId?: string): Promise<void> {
         await Promise.all([
-            this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_SUBMISSION_DETAIL(userId)),
+            this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_SUBMISSION_DETAIL(userId, programId)),
             this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_SUBMISSIONS(userId)),
             this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_DASHBOARD(userId)),
         ]);

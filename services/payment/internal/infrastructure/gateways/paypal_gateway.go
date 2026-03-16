@@ -43,6 +43,39 @@ func (g *PayPalGateway) GetName() string {
 	return "paypal"
 }
 
+func (g *PayPalGateway) ChargePayment(ctx context.Context, req *domainGateways.ChargePaymentRequest) (*domainGateways.ChargePaymentResponse, error) {
+	payment := &entities.Payment{
+		ID:            req.TransactionID,
+		Amount:        req.Amount,
+		Currency:      req.Currency,
+		Description:   req.IntentID,
+		CustomerEmail: req.CustomerDetails.Email,
+	}
+
+	createResp, err := g.CreatePayment(ctx, &domainGateways.CreatePaymentRequest{
+		Payment:       payment,
+		PaymentMethod: entities.PaymentMethod(req.PaymentMethodID),
+		CallbackURL:   paypalStringValue(req.PaymentDetails, "callback_url"),
+		CustomerName:  req.CustomerDetails.Name,
+		CustomerEmail: req.CustomerDetails.Email,
+		CustomerPhone: req.CustomerDetails.Phone,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &domainGateways.ChargePaymentResponse{
+		Status:             "PENDING",
+		GatewayReferenceID: createResp.GatewayOrderID,
+		ActionType:         "redirect",
+		ActionURL:          createResp.RedirectURL,
+		Metadata: map[string]interface{}{
+			"provider": "paypal",
+			"token":    createResp.Token,
+		},
+	}, nil
+}
+
 func (g *PayPalGateway) CreatePayment(ctx context.Context, req *domainGateways.CreatePaymentRequest) (*domainGateways.CreatePaymentResponse, error) {
 	// 1. Setup URL
 	returnURL := req.CallbackURL
@@ -78,7 +111,7 @@ func (g *PayPalGateway) CreatePayment(ctx context.Context, req *domainGateways.C
 				BrandName:               "YBB Platform", // Ganti dengan nama aplikasi Anda
 				Locale:                  "en-US",        // Wajib format xx-YY
 				LandingPage:             "LOGIN",
-				ShippingPreference:      "NO_SHIPPING",  // Agar user tidak ditanya alamat pengiriman
+				ShippingPreference:      "NO_SHIPPING", // Agar user tidak ditanya alamat pengiriman
 			},
 		},
 	}, nil)
@@ -124,4 +157,14 @@ func (g *PayPalGateway) CancelPayment(ctx context.Context, gatewayOrderID string
 
 func (g *PayPalGateway) RefundPayment(ctx context.Context, gatewayOrderID string, amount float64) error {
 	return fmt.Errorf("not implemented yet")
+}
+
+func paypalStringValue(values map[string]interface{}, key string) string {
+	if values == nil {
+		return ""
+	}
+	if value, ok := values[key].(string); ok {
+		return value
+	}
+	return ""
 }

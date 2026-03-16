@@ -46,7 +46,7 @@ func (r *GormPaymentTransactionRepository) Update(ctx context.Context, tx *entit
 
 func (r *GormPaymentTransactionRepository) FindByIntentID(ctx context.Context, intentID string) ([]*entities.PaymentTransaction, error) {
 	var txs []*entities.PaymentTransaction
-	if err := r.db.WithContext(ctx).Where("intent_id = ?", intentID).Order("created_at desc").Find(&txs).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("payment_intent_id = ?", intentID).Order("created_at desc").Find(&txs).Error; err != nil {
 		return nil, err
 	}
 	return txs, nil

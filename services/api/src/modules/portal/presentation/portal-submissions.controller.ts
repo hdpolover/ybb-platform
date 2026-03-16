@@ -5,6 +5,7 @@ import {
     Post,
     Param,
     Body,
+    Query,
     UseGuards,
     UnauthorizedException,
 } from '@nestjs/common';
@@ -15,6 +16,7 @@ import {
     ApiBearerAuth,
     ApiParam,
     ApiBody,
+    ApiQuery,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { CurrentUser } from '@shared/decorators/current-user.decorator';
@@ -55,16 +57,22 @@ export class PortalSubmissionsController {
         summary: 'Get full submission form data with saved values',
         description: 'Returns the complete form definition (fields, essays, requirements) from the program, merged with the participant\'s saved values. Used to render the submission form on the FE.',
     })
+    @ApiQuery({
+        name: 'programId',
+        required: false,
+        description: 'Optional program ID to load submission data for a specific registered program. Falls back to the latest application when omitted.',
+    })
     @ApiResponse({ status: 200, type: PortalSubmissionDetailResponseDto, description: 'Submission detail returned successfully' })
     @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid JWT' })
     @ApiResponse({ status: 404, description: 'Participant or active application not found' })
     async getSubmissionDetail(
         @CurrentUser() user: any,
+        @Query('programId') programId?: string,
     ): Promise<PortalSubmissionDetailResponseDto> {
         const userId = user?.userId || user?.id;
         if (!userId) throw new UnauthorizedException();
         return this.getSubmissionDetailHandler.execute(
-            new GetPortalSubmissionDetailQuery(userId),
+            new GetPortalSubmissionDetailQuery(userId, programId),
         );
     }
 
@@ -88,11 +96,12 @@ export class PortalSubmissionsController {
         @CurrentUser() user: any,
         @Param('section') section: string,
         @Body() dto: SaveSubmissionSectionDto,
+        @Query('programId') programId?: string,
     ): Promise<SaveSectionResponseDto> {
         const userId = user?.userId || user?.id;
         if (!userId) throw new UnauthorizedException();
         return this.saveSubmissionSectionHandler.execute(
-            new SaveSubmissionSectionCommand(userId, section, dto.data),
+            new SaveSubmissionSectionCommand(userId, section, dto.data, programId),
         );
     }
 

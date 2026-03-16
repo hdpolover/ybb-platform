@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 
 	"fmt"
+	"log"
+	"time"
 
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	"github.com/ybb-platform/payment/internal/domain/entities"
@@ -20,26 +23,32 @@ import (
 
 type PaymentGrpcServer struct {
 	pb.UnimplementedPaymentServiceServer
-	intentRepo  repositories.PaymentIntentRepository
-	txRepo      repositories.PaymentTransactionRepository
-	methodRepo  repositories.PaymentMethodRepository
-	gatewayFact gateways.GatewayFactory
-	publisher   messaging.EventPublisher
+	intentRepo      repositories.PaymentIntentRepository
+	txRepo          repositories.PaymentTransactionRepository
+	methodRepo      repositories.PaymentMethodRepository
+	idempotencyRepo repositories.PaymentIdempotencyRepository
+	gatewayFact     gateways.GatewayFactory
+	publisher       messaging.EventPublisher
+	defaultGateway  string
 }
 
 func NewPaymentGrpcServer(
 	intentRepo repositories.PaymentIntentRepository,
 	txRepo repositories.PaymentTransactionRepository,
 	methodRepo repositories.PaymentMethodRepository,
+	idempotencyRepo repositories.PaymentIdempotencyRepository,
 	gatewayFact gateways.GatewayFactory,
 	publisher messaging.EventPublisher,
+	defaultGateway string,
 ) *PaymentGrpcServer {
 	return &PaymentGrpcServer{
-		intentRepo:  intentRepo,
-		txRepo:      txRepo,
-		methodRepo:  methodRepo,
-		gatewayFact: gatewayFact,
-		publisher:   publisher,
+		intentRepo:      intentRepo,
+		txRepo:          txRepo,
+		methodRepo:      methodRepo,
+		idempotencyRepo: idempotencyRepo,
+		gatewayFact:     gatewayFact,
+		publisher:       publisher,
+		defaultGateway:  defaultGateway,
 	}
 }
 
@@ -110,7 +119,7 @@ func (s *PaymentGrpcServer) GetPaymentMethods(ctx context.Context, req *pb.GetPa
 		category := "bank_transfer" // fallback
 		if m.GatewayType != "" {
 			category = m.GatewayType
-		} else if m.Type == "manual" {
+		} else if m.Type.IsManual() {
 			category = "manual"
 		}
 
@@ -128,15 +137,56 @@ func (s *PaymentGrpcServer) GetPaymentMethods(ctx context.Context, req *pb.GetPa
 }
 
 func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessPaymentRequest) (*pb.ProcessPaymentResponse, error) {
+	var idempotencyRecord *entities.PaymentIdempotencyKey
+	if idempotencyKey := grpcIdempotencyKey(ctx); idempotencyKey != "" && s.idempotencyRepo != nil {
+		requestHash, hashErr := services.BuildIdempotencyRequestHash(map[string]interface{}{
+			"intent_id":         req.IntentId,
+			"payment_method_id": req.PaymentMethodId,
+			"gateway_token":     req.GatewayToken,
+			"payment_details":   req.PaymentDetails,
+		})
+		if hashErr != nil {
+			return nil, status.Errorf(codes.Internal, "failed to compute idempotency hash: %v", hashErr)
+		}
+
+		var err error
+		idempotencyRecord, err = s.idempotencyRepo.FindByKey(ctx, idempotencyKey, "grpc_process_payment")
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to load idempotency key: %v", err)
+		}
+		if validationErr := services.ValidateIdempotencyRecord(idempotencyRecord, req.IntentId, requestHash); validationErr != nil {
+			return nil, status.Error(codes.AlreadyExists, validationErr.Error())
+		}
+		if idempotencyRecord != nil {
+			if idempotencyRecord.Status == entities.PaymentIdempotencyStatusCompleted && len(idempotencyRecord.ResponseBody) > 0 {
+				var resp pb.ProcessPaymentResponse
+				if err := json.Unmarshal(idempotencyRecord.ResponseBody, &resp); err == nil {
+					return &resp, nil
+				}
+			}
+			if idempotencyRecord.Status == entities.PaymentIdempotencyStatusFailed {
+				return nil, status.Error(codes.FailedPrecondition, idempotencyRecord.ErrorMessage)
+			}
+		}
+		if idempotencyRecord == nil {
+			idempotencyRecord = entities.NewPaymentIdempotencyKey(idempotencyKey, "grpc_process_payment", req.IntentId, requestHash)
+			if err := s.idempotencyRepo.Create(ctx, idempotencyRecord); err != nil {
+				return nil, status.Error(codes.AlreadyExists, "request with this idempotency key is already processing")
+			}
+		}
+	}
+
 	// 1. Get Intent
 	intent, err := s.intentRepo.FindByID(ctx, req.IntentId)
 	if err != nil {
+		s.failIdempotency(ctx, idempotencyRecord, err)
 		return nil, status.Errorf(codes.NotFound, "intent not found")
 	}
 
 	// 2. Fetch Payment Method for Fee Calculation
 	method, err := s.methodRepo.FindByCode(ctx, req.PaymentMethodId)
 	if err != nil {
+		s.failIdempotency(ctx, idempotencyRecord, err)
 		// Fallback or Error?
 		// Ideally we should strict check. But if manual ID was passed...
 		// Let's assume passed ID is 'code'
@@ -155,11 +205,12 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 	tx.Currency = intent.Currency
 
 	if err := s.txRepo.Create(ctx, tx); err != nil {
+		s.failIdempotency(ctx, idempotencyRecord, err)
 		return nil, status.Errorf(codes.Internal, "failed to create transaction: %v", err)
 	}
 
 	// Special Handling for Manual Methods
-	if method.Type == entities.MethodTypeManual {
+	if method.Type.IsManual() {
 		// Create metadata with bank info
 		meta := map[string]string{
 			"is_manual":      "true",
@@ -169,8 +220,8 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 			"instructions":   method.Instructions,
 		}
 
-		// Update tx status
-		tx.Status = entities.TransactionStatusPending
+		// Manual payments are waiting for proof/admin review.
+		tx.Status = entities.TransactionStatusNeedsReview
 
 		// Save metadata to tx.GatewayResponse
 		gwRespMap := map[string]interface{}{}
@@ -181,24 +232,27 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 		tx.GatewayResponse = rawBytes
 		s.txRepo.Update(ctx, tx)
 
-		return &pb.ProcessPaymentResponse{
-			Status:        "PENDING",
+		response := &pb.ProcessPaymentResponse{
+			Status:        string(tx.Status),
 			TransactionId: tx.ID,
 			Action: &pb.ProcessPaymentAction{
 				Type: "manual_transfer",
 			},
 			Metadata: meta,
-		}, nil
+		}
+		s.completeIdempotency(ctx, idempotencyRecord, tx.ID, response)
+		return response, nil
 	}
 
-	// 4. Call Gateway
-	gatewayName := "midtrans"
-	if method.GatewayName != "" {
-		gatewayName = method.GatewayName
+	gatewayName, err := services.ResolveGatewayName(method, s.defaultGateway)
+	if err != nil {
+		s.failIdempotency(ctx, idempotencyRecord, err)
+		return nil, status.Errorf(codes.InvalidArgument, "invalid payment method gateway: %v", err)
 	}
 
 	gateway, err := s.gatewayFact.GetGateway(gatewayName)
 	if err != nil {
+		s.failIdempotency(ctx, idempotencyRecord, err)
 		return nil, status.Errorf(codes.Internal, "gateway configuration error: %s", gatewayName)
 	}
 
@@ -316,6 +370,7 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 		tx.ErrorCode = errMsg
 
 		s.txRepo.Update(ctx, tx)
+		s.failIdempotency(ctx, idempotencyRecord, err)
 		return nil, status.Errorf(codes.Internal, "payment gateway error: %v", err)
 	}
 
@@ -418,7 +473,7 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 
 	s.txRepo.Update(ctx, tx)
 
-	return &pb.ProcessPaymentResponse{
+	response := &pb.ProcessPaymentResponse{
 		Status:        resp.Status,
 		TransactionId: tx.ID,
 		Action: &pb.ProcessPaymentAction{
@@ -426,7 +481,51 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 			Url:  resp.ActionURL,
 		},
 		Metadata: protoMetadata,
-	}, nil
+	}
+	s.completeIdempotency(ctx, idempotencyRecord, tx.ID, response)
+	return response, nil
+}
+
+func grpcIdempotencyKey(ctx context.Context) string {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return ""
+	}
+	for _, header := range []string{"idempotency-key", "x-idempotency-key"} {
+		values := md.Get(header)
+		if len(values) > 0 && values[0] != "" {
+			return values[0]
+		}
+	}
+	return ""
+}
+
+func (s *PaymentGrpcServer) completeIdempotency(ctx context.Context, record *entities.PaymentIdempotencyKey, transactionID string, response *pb.ProcessPaymentResponse) {
+	if record == nil || s.idempotencyRepo == nil || response == nil {
+		return
+	}
+	record.Status = entities.PaymentIdempotencyStatusCompleted
+	record.TransactionID = transactionID
+	record.ErrorMessage = ""
+	record.UpdatedAt = time.Now().UTC()
+	if rawBytes, err := json.Marshal(response); err == nil {
+		record.ResponseBody = rawBytes
+	}
+	if err := s.idempotencyRepo.Update(ctx, record); err != nil {
+		log.Printf("failed to update grpc idempotency record: %v", err)
+	}
+}
+
+func (s *PaymentGrpcServer) failIdempotency(ctx context.Context, record *entities.PaymentIdempotencyKey, idempotencyErr error) {
+	if record == nil || s.idempotencyRepo == nil || idempotencyErr == nil {
+		return
+	}
+	record.Status = entities.PaymentIdempotencyStatusFailed
+	record.ErrorMessage = idempotencyErr.Error()
+	record.UpdatedAt = time.Now().UTC()
+	if err := s.idempotencyRepo.Update(ctx, record); err != nil {
+		log.Printf("failed to update grpc idempotency failure: %v", err)
+	}
 }
 
 func (s *PaymentGrpcServer) SubmitManualPayment(ctx context.Context, req *pb.SubmitManualPaymentRequest) (*pb.SubmitManualPaymentResponse, error) {

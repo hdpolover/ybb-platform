@@ -27,6 +27,39 @@ func (g *StripeGateway) GetName() string {
 	return "stripe"
 }
 
+func (g *StripeGateway) ChargePayment(ctx context.Context, req *domainGateways.ChargePaymentRequest) (*domainGateways.ChargePaymentResponse, error) {
+	payment := &entities.Payment{
+		ID:            req.TransactionID,
+		Amount:        req.Amount,
+		Currency:      req.Currency,
+		Description:   req.IntentID,
+		CustomerEmail: req.CustomerDetails.Email,
+	}
+
+	createResp, err := g.CreatePayment(ctx, &domainGateways.CreatePaymentRequest{
+		Payment:       payment,
+		PaymentMethod: entities.PaymentMethod(req.PaymentMethodID),
+		CallbackURL:   stripeStringValue(req.PaymentDetails, "callback_url"),
+		CustomerName:  req.CustomerDetails.Name,
+		CustomerEmail: req.CustomerDetails.Email,
+		CustomerPhone: req.CustomerDetails.Phone,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &domainGateways.ChargePaymentResponse{
+		Status:             "PENDING",
+		GatewayReferenceID: createResp.GatewayOrderID,
+		ActionType:         "redirect",
+		ActionURL:          createResp.RedirectURL,
+		Metadata: map[string]interface{}{
+			"provider": "stripe",
+			"token":    createResp.Token,
+		},
+	}, nil
+}
+
 func (g *StripeGateway) CreatePayment(ctx context.Context, req *domainGateways.CreatePaymentRequest) (*domainGateways.CreatePaymentResponse, error) {
 	// 1. Setup URL (Defensive)
 	successURL := req.CallbackURL
@@ -43,20 +76,20 @@ func (g *StripeGateway) CreatePayment(ctx context.Context, req *domainGateways.C
 	// 3. Konversi Amount ke "Cents" (Satuan Terkecil)
 	// PENTING: Stripe menganggap IDR punya 2 desimal.
 	// Input 50000 harus dikirim sebagai 5000000 agar terbaca Rp 50.000
-	stripeAmount := int64(req.Payment.Amount * 100) 
+	stripeAmount := int64(req.Payment.Amount * 100)
 
 	// 4. Siapkan Parameter Checkout Session
 	params := &stripe.CheckoutSessionParams{
-		PaymentMethodTypes: stripe.StringSlice([]string{"card"}), 
+		PaymentMethodTypes: stripe.StringSlice([]string{"card"}),
 		LineItems: []*stripe.CheckoutSessionLineItemParams{
 			{
 				PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
 					Currency: stripe.String(req.Payment.Currency),
 					ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
-						Name: stripe.String(productName), 
+						Name: stripe.String(productName),
 					},
 					// PERBAIKAN: Gunakan nilai yang sudah dikali 100
-					UnitAmount: stripe.Int64(stripeAmount), 
+					UnitAmount: stripe.Int64(stripeAmount),
 				},
 				Quantity: stripe.Int64(1),
 			},
@@ -64,7 +97,7 @@ func (g *StripeGateway) CreatePayment(ctx context.Context, req *domainGateways.C
 		Mode:              stripe.String(string(stripe.CheckoutSessionModePayment)),
 		SuccessURL:        stripe.String(successURL),
 		CancelURL:         stripe.String(successURL),
-		ClientReferenceID: stripe.String(req.Payment.ID), 
+		ClientReferenceID: stripe.String(req.Payment.ID),
 		CustomerEmail:     stripe.String(req.CustomerEmail),
 	}
 
@@ -98,4 +131,14 @@ func (g *StripeGateway) CancelPayment(ctx context.Context, gatewayOrderID string
 
 func (g *StripeGateway) RefundPayment(ctx context.Context, gatewayOrderID string, amount float64) error {
 	return fmt.Errorf("not implemented yet")
+}
+
+func stripeStringValue(values map[string]interface{}, key string) string {
+	if values == nil {
+		return ""
+	}
+	if value, ok := values[key].(string); ok {
+		return value
+	}
+	return ""
 }

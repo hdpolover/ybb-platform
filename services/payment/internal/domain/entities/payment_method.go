@@ -1,6 +1,7 @@
 package entities
 
 import (
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,8 +12,8 @@ import (
 type PaymentMethodType string
 
 const (
-	MethodTypeAutomatic PaymentMethodType = "automatic" // Via payment gateway
-	MethodTypeManual    PaymentMethodType = "manual"    // Manual verification
+	MethodTypeAutomatic PaymentMethodType = "AUTOMATIC" // Via payment gateway
+	MethodTypeManual    PaymentMethodType = "MANUAL"    // Manual verification
 )
 
 type FeeConfig struct {
@@ -60,6 +61,14 @@ type PaymentMethodEntity struct {
 // TableName specifies the table name for GORM
 func (PaymentMethodEntity) TableName() string {
 	return "payment_methods"
+}
+
+func (t PaymentMethodType) IsManual() bool {
+	return strings.EqualFold(string(t), string(MethodTypeManual))
+}
+
+func (t PaymentMethodType) IsAutomatic() bool {
+	return strings.EqualFold(string(t), string(MethodTypeAutomatic))
 }
 
 // // BeforeCreate hook to generate UUID
