@@ -5,16 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ybb-platform/payment/internal/application/commands"
-	commandHandlers "github.com/ybb-platform/payment/internal/application/commands/handlers"
-	"github.com/ybb-platform/payment/internal/application/queries"
-	queryHandlers "github.com/ybb-platform/payment/internal/application/queries/handlers"
-
-	"github.com/ybb-platform/payment/internal/application/dto"
-
 	"github.com/ybb-platform/payment/internal/domain/entities"
 	"github.com/ybb-platform/payment/internal/domain/events"
 	"github.com/ybb-platform/payment/internal/domain/repositories"
@@ -33,15 +27,6 @@ type FileServiceResponse struct {
 
 // PaymentHandler handles payment-related HTTP requests
 type PaymentHandler struct {
-	createPaymentHandler *commandHandlers.CreatePaymentHandler
-	getPaymentHandler    *queryHandlers.GetPaymentHandler
-
-	verifyStatusHandler  *commandHandlers.VerifyStatusHandler
-	cancelPaymentHandler *commandHandlers.CancelPaymentHandler
-	refundPaymentHandler *commandHandlers.RefundPaymentHandler
-	retryPaymentHandler  *commandHandlers.RetryPaymentHandler
-
-	paymentRepo    repositories.PaymentRepository
 	intentRepo     repositories.PaymentIntentRepository
 	txRepo         repositories.PaymentTransactionRepository
 	eventPublisher messaging.EventPublisher
@@ -50,30 +35,12 @@ type PaymentHandler struct {
 
 // NewPaymentHandler creates a new PaymentHandler
 func NewPaymentHandler(
-	createPaymentHandler *commandHandlers.CreatePaymentHandler,
-	getPaymentHandler *queryHandlers.GetPaymentHandler,
-
-	verifyStatusHandler *commandHandlers.VerifyStatusHandler,
-	cancelHandler *commandHandlers.CancelPaymentHandler,
-	refundPaymentHandler *commandHandlers.RefundPaymentHandler,
-	retryHandler *commandHandlers.RetryPaymentHandler,
-
-	paymentRepo repositories.PaymentRepository,
 	intentRepo repositories.PaymentIntentRepository,
 	txRepo repositories.PaymentTransactionRepository,
 	eventPublisher messaging.EventPublisher,
 	gatewayFactory *infraGateways.GatewayFactory,
 ) *PaymentHandler {
 	return &PaymentHandler{
-		createPaymentHandler: createPaymentHandler,
-		getPaymentHandler:    getPaymentHandler,
-
-		verifyStatusHandler:  verifyStatusHandler,
-		cancelPaymentHandler: cancelHandler,
-		refundPaymentHandler: refundPaymentHandler,
-		retryPaymentHandler:  retryHandler,
-
-		paymentRepo:    paymentRepo,
 		intentRepo:     intentRepo,
 		txRepo:         txRepo,
 		eventPublisher: eventPublisher,
@@ -81,61 +48,9 @@ func NewPaymentHandler(
 	}
 }
 
-// CreatePayment godoc
-// @Summary      Create Payment Intent
-// @Description  Create a new payment intent and get checkout information
-// @Tags         Payments
-// @Accept       json
-// @Produce      json
-// @Param        request body dto.CreatePaymentDTO true "Payment Request Data"
-// @Success      201  {object}  map[string]interface{}
-// @Failure      400  {object}  map[string]interface{}
-// @Failure      500  {object}  map[string]interface{}
-// @Router       /payments [post]
-func (h *PaymentHandler) CreatePayment(c *gin.Context) {
-	// 1. Gunakan DTO untuk menangkap JSON (Pastikan import dto sudah ada)
-	var req dto.CreatePaymentDTO
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "Invalid request body",
-			"details": err.Error(),
-		})
-		return
-	}
-
-	// 2. MAPPING DARI DTO KE COMMAND (Ini langkah krusial yang sebelumnya hilang/salah)
-	cmd := commands.CreatePaymentCommand{
-		ApplicationID: req.ApplicationID,
-		UserID:        req.UserID,
-		Amount:        req.Amount,
-		Currency:      req.Currency,
-		PaymentMethod: req.PaymentMethod,
-		GatewayName:   req.GatewayName,
-
-		// Data yang kemarin kosong, sekarang kita isi manual:
-		Description:   req.Description,   // Sekarang Command sudah punya field ini
-		CustomerName:  req.CustomerName,  // Pindahkan dari req ke cmd
-		CustomerEmail: req.CustomerEmail, // Pindahkan dari req ke cmd
-		CustomerPhone: req.CustomerPhone, // Pindahkan dari req ke cmd
-		CallbackURL:   req.CallbackURL,   // Pindahkan dari req ke cmd
-	}
-
-	// 3. Eksekusi Command
-	response, err := h.createPaymentHandler.Handle(c.Request.Context(), &cmd)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to create payment",
-			"details": err.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusCreated, response)
-}
-
 // GetPayment godoc
 // @Summary      Get Payment Details
-// @Description  Get payment details by its ID
+// @Description  Get a payment transaction or payment intent by its ID
 // @Tags         Payments
 // @Produce      json
 // @Param        id   path      string  true  "Payment ID"
@@ -152,17 +67,19 @@ func (h *PaymentHandler) GetPayment(c *gin.Context) {
 		return
 	}
 
-	query := queries.NewGetPaymentByIDQuery(paymentID)
-	response, err := h.getPaymentHandler.HandleGetByID(c.Request.Context(), query)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error":   "Payment not found",
-			"details": err.Error(),
-		})
+	if tx, err := h.txRepo.FindByID(c.Request.Context(), paymentID); err == nil {
+		c.JSON(http.StatusOK, h.buildTransactionResponse(c.Request.Context(), tx))
 		return
 	}
 
-	c.JSON(http.StatusOK, response)
+	if intent, err := h.intentRepo.FindByID(c.Request.Context(), paymentID); err == nil {
+		c.JSON(http.StatusOK, h.buildIntentResponse(c.Request.Context(), intent))
+		return
+	}
+
+	c.JSON(http.StatusNotFound, gin.H{
+		"error": "Payment resource not found",
+	})
 }
 
 // GetPaymentsByUser godoc
@@ -186,18 +103,36 @@ func (h *PaymentHandler) GetPaymentsByUser(c *gin.Context) {
 		return
 	}
 
-	// Get pagination parameters
 	limit := 10
-	offset := 0
-	if l := c.Query("limit"); l != "" {
-		// Parse limit
-	}
-	if o := c.Query("offset"); o != "" {
-		// Parse offset
+	if value := c.Query("limit"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid limit query parameter"})
+			return
+		}
+		limit = parsed
 	}
 
-	query := queries.NewGetPaymentsByUserIDQuery(userID, limit, offset)
-	response, err := h.getPaymentHandler.HandleGetByUserID(c.Request.Context(), query)
+	offset := 0
+	if value := c.Query("offset"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid offset query parameter"})
+			return
+		}
+		offset = parsed
+	}
+
+	page := 1
+	if limit > 0 {
+		page = (offset / limit) + 1
+	}
+
+	intents, total, err := h.intentRepo.FindAll(c.Request.Context(), repositories.PaymentIntentFilter{
+		UserID: userID,
+		Page:   page,
+		Limit:  limit,
+	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "Failed to get payments",
@@ -207,10 +142,11 @@ func (h *PaymentHandler) GetPaymentsByUser(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"payments": response,
+		"payments": buildIntentResponses(c.Request.Context(), h.txRepo, intents),
 		"pagination": gin.H{
 			"limit":  limit,
 			"offset": offset,
+			"total":  total,
 		},
 	})
 }
@@ -243,72 +179,22 @@ func (h *PaymentHandler) HandleWebhook(c *gin.Context) {
 		return
 	}
 
-	// 5. Try to handle as NEW FLOW (Transaction) first
+	// Webhooks only target the new transaction flow.
 	tx, err := h.txRepo.FindByID(c.Request.Context(), updatedData.ID)
 	if err == nil {
-		// Found in Transaction Repo! Use new flow.
 		h.handleTransactionWebhook(c, tx, updatedData)
 		return
 	}
 
-	// 6. Fallback: Legacy Flow (Find in 'payments' table)
-	payment, err := h.paymentRepo.FindByID(c.Request.Context(), updatedData.ID)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Order ID not found in transactions or legacy payments"})
-		return
-	}
-
-	// 7. Legacy Logic (Unchanged)
-	if payment.Status != updatedData.Status {
-		payment.Status = updatedData.Status
-		payment.GatewayResponse = updatedData.GatewayResponse
-		payment.UpdatedAt = time.Now()
-
-		switch payment.Status {
-		case "success":
-			now := time.Now()
-			payment.PaidAt = &now
-		case "failed":
-			now := time.Now()
-			payment.FailedAt = &now
-		}
-
-		if err := h.paymentRepo.Update(c.Request.Context(), payment); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update payment status"})
+	if updatedData.GatewayOrderID != "" {
+		tx, err = h.txRepo.FindByGatewayReferenceID(c.Request.Context(), updatedData.GatewayOrderID)
+		if err == nil {
+			h.handleTransactionWebhook(c, tx, updatedData)
 			return
 		}
-
-		// Publish Legacy Event
-		go func() {
-			eventType := events.PaymentSucceededEvent
-			if string(payment.Status) == "failed" {
-				eventType = events.PaymentFailedEvent
-			}
-
-			event := events.NewPaymentEvent(
-				eventType,
-				payment.ID,
-				payment.ApplicationID,
-				payment.UserID,
-				payment.CustomerEmail,
-				payment.Amount,
-				payment.Currency,
-				string(payment.Status),
-				payment.GatewayName,
-			)
-
-			event.Metadata["customer_email"] = payment.CustomerEmail
-			event.Metadata["customer_name"] = payment.CustomerName
-			event.Metadata["source"] = "webhook"
-
-			err := h.eventPublisher.Publish(context.Background(), event)
-			if err != nil {
-				fmt.Printf("[RABBITMQ] ERROR sending webhook event: %v\n", err)
-			}
-		}()
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	c.JSON(http.StatusNotFound, gin.H{"error": "Order ID not found in payment transactions"})
 }
 
 func (h *PaymentHandler) handleTransactionWebhook(c *gin.Context, tx *entities.PaymentTransaction, updatedData *entities.Payment) {
@@ -478,22 +364,7 @@ func (h *PaymentHandler) UploadProof(c *gin.Context) {
 		return
 	}
 
-	// Update Database
-	err := h.paymentRepo.UpdateProof(c.Request.Context(), paymentID, req.FileID, req.FileURL)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal update database"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"status":  "success",
-		"message": "Bukti transfer berhasil disubmit",
-		"data": gin.H{
-			"payment_id": paymentID,
-			"file_id":    req.FileID,
-			"file_url":   req.FileURL,
-		},
-	})
+	c.JSON(http.StatusNotFound, gin.H{"error": "Payment transaction not found"})
 }
 
 type UploadProofReq struct {
@@ -586,86 +457,7 @@ func (h *PaymentHandler) VerifyPayment(c *gin.Context) {
 		return
 	}
 
-	payment, err := h.paymentRepo.FindByID(c.Request.Context(), paymentID)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Payment not found"})
-		return
-	}
-
-	status := string(payment.Status)
-	if status != "pending" && status != "processing" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Payment status is not pending or processing. Current status: " + status,
-		})
-		return
-	}
-
-	// if payment.PaymentType != "manual" {
-	//     c.JSON(http.StatusBadRequest, gin.H{
-	//         "error": "This endpoint is for manual payment verification only. For automatic gateways, use verify-status.",
-	//     })
-	//     return
-	// }
-
-	switch req.Action {
-	case "approve":
-		payment.VerifyManual(req.AdminID)
-	case "reject":
-		if req.Reason == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Reason is required for rejection"})
-			return
-		}
-		payment.RejectManual(req.AdminID, req.Reason)
-	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid action. Use 'approve' or 'reject'"})
-		return
-	}
-
-	if err := h.paymentRepo.Update(c.Request.Context(), payment); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update payment"})
-		return
-	}
-
-	// --- FITUR NOTIFIKASI (RABBITMQ) ---
-	go func() {
-		eventType := events.PaymentSucceededEvent
-		if string(payment.Status) == "failed" {
-			eventType = events.PaymentFailedEvent
-		}
-
-		event := events.NewPaymentEvent(
-			eventType,
-			payment.ID,
-			payment.ApplicationID,
-			payment.UserID,
-			payment.CustomerEmail,
-			payment.Amount,
-			payment.Currency,
-			string(payment.Status),
-			payment.GatewayName,
-		)
-
-		event.Metadata["customer_email"] = payment.CustomerEmail
-		event.Metadata["customer_name"] = payment.CustomerName
-
-		if payment.RejectedReason != "" {
-			event.Metadata["reason"] = payment.RejectedReason
-		}
-
-		err := h.eventPublisher.Publish(context.Background(), event)
-
-		if err != nil {
-			fmt.Printf("[RABBITMQ] ERROR sending event: %v\n", err)
-		} else {
-			fmt.Printf("[RABBITMQ] Success! Sent event type: %s for Payment ID: %s\n", eventType, payment.ID)
-		}
-	}()
-
-	c.JSON(http.StatusOK, gin.H{
-		"status":  "success",
-		"message": "Payment verification processed successfully",
-		"data":    payment,
-	})
+	c.JSON(http.StatusNotFound, gin.H{"error": "Payment transaction not found"})
 }
 
 // VerifyPaymentRequest represents the admin verification payload
@@ -675,75 +467,78 @@ type VerifyPaymentRequest struct {
 	AdminID string `json:"admin_id"` // Simulated Admin ID
 }
 
-// RefundPayment handles payment refund requests
-// @Summary      Refund Payment
-// @Description  Refunds a successful payment
-// @Tags         Payments
-// @Param        id   path      string  true  "Payment ID"
-// @Success      200  {object}  dto.PaymentResponseDTO
-// @Router       /payments/{id}/refund [post]
-func (h *PaymentHandler) RefundPayment(c *gin.Context) {
-	// TODO: Implement refund logic with Midtrans Core API.
-	// Currently disabled due to unfinished testing and error handling.
-	// See: payment_service/issues/refund-bug
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Fitur refund dinonaktifkan sementara (silakan cek Dashboard Midtrans)",
-	})
-}
-
-// CancelPayment godoc
-// @Summary      Cancel Payment
-// @Description  Cancel a pending payment
-// @Tags         Payments
-// @Param        id   path      string  true  "Payment ID"
-// @Success      200  {object}  map[string]interface{}
-// @Failure      500  {object}  map[string]interface{}
-// @Router       /payments/{id}/cancel [post]
-func (h *PaymentHandler) CancelPayment(c *gin.Context) {
-	id := c.Param("id")
-	resp, err := h.cancelPaymentHandler.Handle(c.Request.Context(), id)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+func buildIntentResponses(ctx context.Context, txRepo repositories.PaymentTransactionRepository, intents []*entities.PaymentIntent) []gin.H {
+	responses := make([]gin.H, 0, len(intents))
+	for _, intent := range intents {
+		responses = append(responses, buildIntentResponse(ctx, txRepo, intent))
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "Payment cancelled", "data": resp})
+	return responses
 }
 
-// VerifyPaymentStatus godoc
-// @Summary      Verify Payment Status
-// @Description  Check payment status from Gateway (now disabled/noop)
-// @Tags         Payments
-// @Param        id   path      string  true  "Payment ID"
-// @Success      200  {object}  map[string]interface{}
-// @Router       /payments/{id}/verify-status [post]
-func (h *PaymentHandler) VerifyPaymentStatus(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Fitur verify status otomatis dinonaktifkan (Silakan cek Dashboard Midtrans)",
-	})
+func (h *PaymentHandler) buildIntentResponse(ctx context.Context, intent *entities.PaymentIntent) gin.H {
+	return buildIntentResponse(ctx, h.txRepo, intent)
 }
 
-// RetryPayment godoc
-// @Summary      Retry Payment
-// @Description  Create a new transaction based on failed/expired payment
-// @Tags         Payments
-// @Accept       json
-// @Produce      json
-// @Param        id   path      string  true  "Old Transaction ID"
-// @Success      200  {object}  dto.PaymentResponseDTO
-// @Failure      400  {object}  map[string]interface{}
-// @Router       /payments/{id}/retry [post]
-func (h *PaymentHandler) RetryPayment(c *gin.Context) {
-	id := c.Param("id")
-
-	// Panggil Application Layer
-	resp, err := h.retryPaymentHandler.Handle(c.Request.Context(), id)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+func buildIntentResponse(ctx context.Context, txRepo repositories.PaymentTransactionRepository, intent *entities.PaymentIntent) gin.H {
+	transactions := []gin.H{}
+	if txRepo != nil {
+		if txs, err := txRepo.FindByIntentID(ctx, intent.ID); err == nil {
+			transactions = make([]gin.H, 0, len(txs))
+			for _, tx := range txs {
+				transactions = append(transactions, buildTransactionResponse(ctx, txRepo, tx))
+			}
+		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Payment retried successfully",
-		"data":    resp,
-	})
+	return gin.H{
+		"id":             intent.ID,
+		"type":           "intent",
+		"user_id":        intent.UserID,
+		"participant_id": intent.ParticipantID,
+		"reference_type": intent.ReferenceType,
+		"reference_id":   intent.ReferenceID,
+		"amount":         intent.Amount,
+		"currency":       intent.Currency,
+		"status":         intent.Status,
+		"metadata":       json.RawMessage(intent.Metadata),
+		"created_at":     intent.CreatedAt,
+		"updated_at":     intent.UpdatedAt,
+		"transactions":   transactions,
+	}
+}
+
+func (h *PaymentHandler) buildTransactionResponse(ctx context.Context, tx *entities.PaymentTransaction) gin.H {
+	return buildTransactionResponse(ctx, h.txRepo, tx)
+}
+
+func buildTransactionResponse(ctx context.Context, txRepo repositories.PaymentTransactionRepository, tx *entities.PaymentTransaction) gin.H {
+	var gatewayResponse interface{}
+	if len(tx.GatewayResponse) > 0 {
+		var raw map[string]interface{}
+		if err := json.Unmarshal(tx.GatewayResponse, &raw); err == nil {
+			gatewayResponse = raw
+		}
+	}
+
+	return gin.H{
+		"id":                   tx.ID,
+		"type":                 "transaction",
+		"intent_id":            tx.IntentID,
+		"payment_method_id":    tx.PaymentMethodID,
+		"gateway_reference_id": tx.GatewayReferenceID,
+		"currency":             tx.Currency,
+		"amount_total":         tx.AmountTotal,
+		"amount_subtotal":      tx.AmountSubtotal,
+		"fee_provider":         tx.FeeProvider,
+		"net_amount":           tx.NetAmount,
+		"status":               tx.Status,
+		"gateway_response":     gatewayResponse,
+		"error_code":           tx.ErrorCode,
+		"proof_file_url":       tx.ProofFileURL,
+		"admin_notes":          tx.AdminNotes,
+		"reviewed_by":          tx.ReviewedBy,
+		"reviewed_at":          tx.ReviewedAt,
+		"created_at":           tx.CreatedAt,
+		"updated_at":           tx.UpdatedAt,
+	}
 }

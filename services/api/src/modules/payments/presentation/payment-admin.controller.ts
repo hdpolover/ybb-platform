@@ -35,6 +35,7 @@ import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 @ApiBearerAuth()
 export class PaymentAdminController {
     private readonly paymentServiceUrl: string;
+    private readonly paymentServiceInternalKey: string;
     private readonly logger = new Logger(PaymentAdminController.name);
 
     constructor(
@@ -45,6 +46,7 @@ export class PaymentAdminController {
     ) {
         this.logger.log("Using HTTP Payment Admin Controller");
         this.paymentServiceUrl = this.configService.get<string>('PAYMENT_SERVICE_URL', 'http://payment-service:8002');
+        this.paymentServiceInternalKey = this.configService.get<string>('PAYMENT_SERVICE_INTERNAL_KEY', '');
     }
 
     @Get('methods')
@@ -60,7 +62,10 @@ export class PaymentAdminController {
             if (cached) return cached;
 
             const { data } = await firstValueFrom(
-                this.httpService.get(`${this.paymentServiceUrl}/api/v1/payment-methods`, { params: query })
+                this.httpService.get(`${this.paymentServiceUrl}/api/v1/payment-methods`, {
+                    params: query,
+                    headers: this.buildInternalHeaders(),
+                })
             );
 
             await this.cacheService.set(cacheKey, data, CACHE_TTL.HOUR);
@@ -85,7 +90,9 @@ export class PaymentAdminController {
             this.logger.log(`Creating payment method with icon: ${body.icon}`);
 
             const { data } = await firstValueFrom(
-                this.httpService.post(`${this.paymentServiceUrl}/api/v1/payment-methods`, body)
+                this.httpService.post(`${this.paymentServiceUrl}/api/v1/payment-methods`, body, {
+                    headers: this.buildInternalHeaders(),
+                })
             );
 
             await this.cacheService.invalidateByPattern('payment:methods:*');
@@ -104,7 +111,9 @@ export class PaymentAdminController {
     async getMethod(@Param('id') id: string) {
         try {
             const { data } = await firstValueFrom(
-                this.httpService.get(`${this.paymentServiceUrl}/api/v1/payment-methods/${id}`)
+                this.httpService.get(`${this.paymentServiceUrl}/api/v1/payment-methods/${id}`, {
+                    headers: this.buildInternalHeaders(),
+                })
             );
             return data;
         } catch (error) {
@@ -124,7 +133,9 @@ export class PaymentAdminController {
             }
 
             const { data } = await firstValueFrom(
-                this.httpService.put(`${this.paymentServiceUrl}/api/v1/payment-methods/${id}`, body)
+                this.httpService.put(`${this.paymentServiceUrl}/api/v1/payment-methods/${id}`, body, {
+                    headers: this.buildInternalHeaders(),
+                })
             );
 
             await this.cacheService.invalidateByPattern('payment:methods:*');
@@ -142,7 +153,9 @@ export class PaymentAdminController {
     async deleteMethod(@Param('id') id: string) {
         try {
             const { data } = await firstValueFrom(
-                this.httpService.delete(`${this.paymentServiceUrl}/api/v1/payment-methods/${id}`)
+                this.httpService.delete(`${this.paymentServiceUrl}/api/v1/payment-methods/${id}`, {
+                    headers: this.buildInternalHeaders(),
+                })
             );
 
             await this.cacheService.invalidateByPattern('payment:methods:*');
@@ -207,5 +220,15 @@ export class PaymentAdminController {
         }
         this.logger.error(`Internal Error: ${error.message}`);
         throw new HttpException(error.message, 500);
+    }
+
+    private buildInternalHeaders(): Record<string, string> {
+        if (!this.paymentServiceInternalKey) {
+            return {};
+        }
+
+        return {
+            'X-Internal-Service-Key': this.paymentServiceInternalKey,
+        };
     }
 }
