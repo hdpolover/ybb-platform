@@ -179,7 +179,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                 content: {
                     id: currentProgram.id,
                     title: currentProgram.name,
-                    subtitle: `Connecting Generations Through Cultural Collaboration`, // Static or dynamic if added to schema
+                    subtitle: currentProgram.shortDescription || `${currentProgram.name} — International Youth Program`,
                     bg_image: currentProgram.bannerUrl,
                     thumbnail: currentProgram.thumbnailUrl,
                     status: currentProgram.status
@@ -190,6 +190,8 @@ export class ProgramsStrategy implements ILandingPageStrategy {
             sections.push({
                 type: 'program_overview',
                 content: {
+                    program_name: currentProgram.name,
+                    program_slug: currentProgram.slug,
                     description: currentProgram.description,
                     theme: currentProgram.theme || currentProgram.shortDescription,
                     subthemes: currentProgram.subthemes.map(sub => ({
@@ -204,7 +206,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                     end_date: currentProgram.endDate,
                     duration: `${Math.ceil((currentProgram.endDate.getTime() - currentProgram.startDate.getTime()) / (1000 * 60 * 60 * 24))} Days`,
                     guidebooks: currentProgram.resources.map(r => ({
-                        label: `Read Guidebook (${r.title})`, // e.g. "Read Guidebook (Eng)"
+                        label: `Read Guidebook (${r.title})`,
                         url: r.fileUrl
                     }))
                 }

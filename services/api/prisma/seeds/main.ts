@@ -48,13 +48,13 @@ async function main() {
 
     await seedBrands(); // Ensure all brands (including new ones like CYS) are seeded
     await seedBrandContent();
-    await seedAdmins();
 
     // Seed Dummy/Standard Content
     await seedDummyContent();
     // await seedIYSPrograms(); // Replaced by migratePrograms
     await seedJYSPrograms();
     await seedCYSPrograms();
+    await seedAdmins();
 
     // Seed Participants & Apps
     await seedParticipants();

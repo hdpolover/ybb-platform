@@ -47,6 +47,9 @@ model Brand {
   metaDescription String? @map("meta_description") @db.Text
   metaKeywords    String? @map("meta_keywords") @db.Text
 
+  // Flexible brand-scoped content (impact stats, features, recognition, etc.)
+  metadata Json @default("{}") @db.Json
+
   // Relations
   testimonials             ProgramTestimonial[]
   users                    User[]

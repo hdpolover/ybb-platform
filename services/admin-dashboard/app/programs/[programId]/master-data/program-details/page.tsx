@@ -1,4 +1,7 @@
+"use client";
+
 import { use } from "react";
+import { useAuth } from "@/app/contexts/AuthContext";
 import { HeaderSection } from "@/app/components/programDetailsMasterData/HeaderSection";
 import { TabNavigation } from "@/app/components/programDetailsMasterData/TabNavigation";
 import { EditGeneralAction } from "@/app/components/programDetailsMasterData/general-information/EditGeneralAction";
@@ -11,23 +14,6 @@ import {
   ProgramSpecificsTab,
   ProgramSpecificsData,
 } from "@/app/components/programDetailsMasterData/program-specifics/ProgramSpecificsTab";
-
-const MOCK_PROGRAMS = [
-  { id: "iys-2026", name: "Istanbul Youth Summit 2026" },
-  { id: "iys-2025", name: "Istanbul Youth Summit 2025" },
-  { id: "jys-2026", name: "Japan Youth Summit 2026" },
-  { id: "kys-2026", name: "Korea Youth Summit 2026" },
-  { id: "meys-2026", name: "Middle East Youth Summit 2026" },
-  { id: "wys-2025", name: "World Youth Summit 2025" },
-  { id: "yaf-2025", name: "Youth Academic Forum 2025" },
-];
-
-function getProgramName(programId: string | null): string {
-  if (!programId) return "Selected Program";
-
-  const program = MOCK_PROGRAMS.find((item) => item.id === programId);
-  return program?.name ?? "Selected Program";
-}
 
 const MOCK_GENERAL_DATA: GeneralInformationData = {
   categoryName: "Youth Leadership & Cultural Immersion",
@@ -109,18 +95,21 @@ const MOCK_SPECIFICS_DATA: ProgramSpecificsData = {
   },
 };
 
-export default async function ProgramDetailsPage({
+export default function ProgramDetailsPage({
   params,
   searchParams,
 }: {
   params: Promise<{ programId: string }>;
   searchParams: Promise<{ tab?: string }>;
 }) {
-  const resolvedParams = await params;
-  const resolvedSearchParams = await searchParams;
+  const resolvedParams = use(params);
+  const resolvedSearchParams = use(searchParams);
+  const { accessiblePrograms } = useAuth();
 
   const programId = resolvedParams.programId;
-  const programName = getProgramName(programId);
+  const programName =
+    accessiblePrograms.find((program) => program.programId === programId)?.programName ??
+    "Selected Program";
   const activeTab = resolvedSearchParams.tab || "general";
 
   return (

@@ -1,14 +1,349 @@
-import { UsersIcon } from "@heroicons/react/24/solid";
-import { AddCategoryAction, EditCategoryAction, DeleteCategoryAction } from "./CategoryActions";
+"use client";
+
+import { useEffect, useState } from "react";
+import {
+  ExclamationTriangleIcon,
+  PencilSquareIcon,
+  PlusIcon,
+  TrashIcon,
+  UsersIcon,
+} from "@heroicons/react/24/solid";
+import { buildApiUrl, getAccessToken, readErrorMessage } from "@/app/components/submissionsMasterData/api";
 
 export interface ParticipationCategoryRow {
-  id: number;
+  id: string;
   name: string;
-  description: string;
+  programId?: string;
+  description?: string;
+  benefits?: string;
+  eligibility?: string;
+  order: number;
+  isActive?: boolean;
   status: "Active" | "Inactive";
 }
 
-export function ParticipationCategoriesTable({ data }: { data: ParticipationCategoryRow[] }) {
+interface CategoryModalState {
+  id?: string;
+  name: string;
+  description: string;
+  benefits: string;
+  eligibility: string;
+  order: string;
+  status: "Active" | "Inactive";
+}
+
+function createEmptyCategoryState(): CategoryModalState {
+  return {
+    name: "",
+    description: "",
+    benefits: "",
+    eligibility: "",
+    order: "0",
+    status: "Active",
+  };
+}
+
+function toCategoryState(category?: ParticipationCategoryRow): CategoryModalState {
+  if (!category) {
+    return createEmptyCategoryState();
+  }
+
+  return {
+    id: category.id,
+    name: category.name,
+    description: category.description ?? "",
+    benefits: category.benefits ?? "",
+    eligibility: category.eligibility ?? "",
+    order: String(category.order ?? 0),
+    status: category.status,
+  };
+}
+
+function CategoryModal({
+  isOpen,
+  formState,
+  onChange,
+  onClose,
+  onSubmit,
+  isSaving,
+  errorMessage,
+}: {
+  isOpen: boolean;
+  formState: CategoryModalState;
+  onChange: (patch: Partial<CategoryModalState>) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+  isSaving: boolean;
+  errorMessage: string | null;
+}) {
+  if (!isOpen) return null;
+  const isEditing = Boolean(formState.id);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 sm:p-6">
+      <div className="w-full max-w-2xl overflow-hidden rounded-xl border border-zinc-200 bg-white text-left shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-6 py-5">
+          <div>
+            <h3 className="text-lg font-bold text-zinc-900">
+              {isEditing ? "Edit Category" : "Add Category"}
+            </h3>
+            <p className="mt-1 text-sm text-zinc-500">
+              Update category information used in the submission form.
+            </p>
+          </div>
+          <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700">
+            <span className="text-xl leading-none">×</span>
+          </button>
+        </div>
+
+        <div className="space-y-5 px-6 py-6 text-left">
+          {errorMessage ? (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {errorMessage}
+            </div>
+          ) : null}
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Category Name</label>
+            <input
+              type="text"
+              value={formState.name}
+              onChange={(event) => onChange({ name: event.target.value })}
+              className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Description</label>
+            <textarea
+              rows={3}
+              value={formState.description}
+              onChange={(event) => onChange({ description: event.target.value })}
+              className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm leading-relaxed text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
+          </div>
+          <div className="grid gap-5 md:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-zinc-500">Benefits</label>
+              <textarea
+                rows={3}
+                value={formState.benefits}
+                onChange={(event) => onChange({ benefits: event.target.value })}
+                className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm leading-relaxed text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-zinc-500">Eligibility</label>
+              <textarea
+                rows={3}
+                value={formState.eligibility}
+                onChange={(event) => onChange({ eligibility: event.target.value })}
+                className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm leading-relaxed text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+          </div>
+          <div className="grid gap-5 md:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-zinc-500">Display Order</label>
+              <input
+                type="number"
+                value={formState.order}
+                onChange={(event) => onChange({ order: event.target.value })}
+                className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-zinc-500">Status</label>
+              <select
+                value={formState.status}
+                onChange={(event) => onChange({ status: event.target.value as "Active" | "Inactive" })}
+                className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              >
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-3 border-t border-zinc-200 bg-zinc-50 px-6 py-4">
+          <button type="button" onClick={onClose} className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100">Cancel</button>
+          <button type="button" onClick={onSubmit} disabled={isSaving} className="rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60">{isSaving ? "Saving..." : "Save Changes"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function ParticipationCategoriesTable({ programId }: { programId: string }) {
+  const [data, setData] = useState<ParticipationCategoryRow[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [modalErrorMessage, setModalErrorMessage] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [formState, setFormState] = useState<CategoryModalState>(createEmptyCategoryState());
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const loadCategories = async () => {
+    setIsLoading(true);
+    setErrorMessage(null);
+
+    try {
+      const response = await fetch(buildApiUrl(`/programs/${encodeURIComponent(programId)}/participation-categories?includeInactive=true`), {
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response));
+      }
+
+      const payload = (await response.json()) as Array<{
+        id: string;
+        programId: string;
+        name: string;
+        description?: string;
+        benefits?: string;
+        eligibility?: string;
+        order: number;
+        isActive: boolean;
+      }>;
+
+      setData(
+        payload.map((item) => ({
+          id: item.id,
+          programId: item.programId,
+          name: item.name,
+          description: item.description,
+          benefits: item.benefits,
+          eligibility: item.eligibility,
+          order: item.order,
+          isActive: item.isActive,
+          status: item.isActive ? "Active" : "Inactive",
+        })),
+      );
+    } catch (error) {
+      setData([]);
+      setErrorMessage(error instanceof Error ? error.message : "Failed to load categories.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadCategories();
+  }, [programId]);
+
+  const openCreateModal = () => {
+    setFormState(createEmptyCategoryState());
+    setModalErrorMessage(null);
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (category: ParticipationCategoryRow) => {
+    setFormState(toCategoryState(category));
+    setModalErrorMessage(null);
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setModalErrorMessage(null);
+  };
+
+  const handleSave = async () => {
+    const token = getAccessToken();
+    if (!token) {
+      setModalErrorMessage("An admin access token is required to create or update categories.");
+      return;
+    }
+
+    if (!formState.name.trim()) {
+      setModalErrorMessage("Category name is required.");
+      return;
+    }
+
+    const order = Number(formState.order || 0);
+    if (Number.isNaN(order)) {
+      setModalErrorMessage("Display order must be a valid number.");
+      return;
+    }
+
+    const payload = {
+      programId,
+      name: formState.name.trim(),
+      description: formState.description.trim() || undefined,
+      benefits: formState.benefits.trim() || undefined,
+      eligibility: formState.eligibility.trim() || undefined,
+      order,
+      isActive: formState.status === "Active",
+    };
+
+    const isEditing = Boolean(formState.id);
+    const path = isEditing
+      ? `/programs/participation-categories/${encodeURIComponent(formState.id as string)}`
+      : `/programs/${encodeURIComponent(programId)}/participation-categories`;
+
+    setIsSaving(true);
+    setModalErrorMessage(null);
+
+    try {
+      const response = await fetch(buildApiUrl(path), {
+        method: isEditing ? "PUT" : "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response));
+      }
+
+      await loadCategories();
+      closeModal();
+    } catch (error) {
+      setModalErrorMessage(error instanceof Error ? error.message : "Failed to save category.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async (category: ParticipationCategoryRow) => {
+    const token = getAccessToken();
+    if (!token) {
+      setErrorMessage("An admin access token is required to delete categories.");
+      return;
+    }
+
+    const isConfirmed = window.confirm(`Delete the category "${category.name}"?`);
+    if (!isConfirmed) {
+      return;
+    }
+
+    setDeletingId(category.id);
+    setErrorMessage(null);
+
+    try {
+      const response = await fetch(buildApiUrl(`/programs/participation-categories/${encodeURIComponent(category.id)}`), {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response));
+      }
+
+      await loadCategories();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to delete category.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <section className="space-y-4">
       <div className="flex items-center justify-between gap-4">
@@ -21,8 +356,18 @@ export function ParticipationCategoriesTable({ data }: { data: ParticipationCate
             <p className="text-sm text-zinc-500">Define available participation categories for this program.</p>
           </div>
         </div>
-        <AddCategoryAction />
+        <button type="button" onClick={openCreateModal} className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600">
+          <PlusIcon className="h-4 w-4" />
+          <span>Add Category</span>
+        </button>
       </div>
+
+      {errorMessage ? (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <ExclamationTriangleIcon className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{errorMessage}</span>
+        </div>
+      ) : null}
 
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
@@ -32,14 +377,22 @@ export function ParticipationCategoriesTable({ data }: { data: ParticipationCate
                 <th className="w-12 px-6 py-4 font-semibold">No</th>
                 <th className="px-6 py-4 font-semibold">Category Name</th>
                 <th className="px-6 py-4 font-semibold">Description</th>
+                <th className="px-6 py-4 font-semibold">Benefits & Eligibility</th>
+                <th className="px-6 py-4 font-semibold">Order</th>
                 <th className="px-6 py-4 font-semibold">Status</th>
                 <th className="px-6 py-4 text-right font-semibold">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 bg-white">
-              {data.length === 0 ? (
+              {isLoading ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-sm text-zinc-500">
+                  <td colSpan={7} className="px-6 py-12 text-center text-sm text-zinc-500">
+                    Loading participation categories...
+                  </td>
+                </tr>
+              ) : data.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-12 text-center text-sm text-zinc-500">
                     No participation categories configured yet.
                   </td>
                 </tr>
@@ -48,7 +401,14 @@ export function ParticipationCategoriesTable({ data }: { data: ParticipationCate
                   <tr key={row.id} className="transition-colors hover:bg-zinc-50/50">
                     <td className="px-6 py-4 align-top text-xs font-medium text-zinc-500">{index + 1}</td>
                     <td className="px-6 py-4 align-top font-semibold text-zinc-900">{row.name}</td>
-                    <td className="px-6 py-4 align-top text-zinc-600">{row.description}</td>
+                    <td className="px-6 py-4 align-top text-zinc-600">{row.description || "-"}</td>
+                    <td className="px-6 py-4 align-top text-zinc-600">
+                      <div className="space-y-1 text-xs">
+                        <div><span className="font-semibold text-zinc-700">Benefits:</span> {row.benefits || "-"}</div>
+                        <div><span className="font-semibold text-zinc-700">Eligibility:</span> {row.eligibility || "-"}</div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 align-top text-zinc-600">{row.order}</td>
                     <td className="px-6 py-4 align-top">
                       <span className={`inline-flex rounded px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide ${row.status === "Active" ? " bg-emerald-50 text-emerald-700" : " bg-zinc-50 text-zinc-600"}`}>
                         {row.status}
@@ -56,8 +416,21 @@ export function ParticipationCategoriesTable({ data }: { data: ParticipationCate
                     </td>
                     <td className="px-6 py-4 align-top text-right">
                       <div className="inline-flex items-center justify-end gap-2">
-                        <EditCategoryAction category={row} />
-                        <DeleteCategoryAction id={row.id} />
+                        <button 
+                          type="button" 
+                          onClick={() => openEditModal(row)} 
+                          className="flex h-8 w-8 items-center justify-center rounded-md bg-amber-50 text-amber-600 transition hover:bg-amber-100 hover:text-amber-700"
+                        >
+                          <PencilSquareIcon className="h-4 w-4" />
+                        </button>
+                        <button 
+                          type="button" 
+                          onClick={() => void handleDelete(row)}
+                          disabled={deletingId === row.id}
+                          className="flex h-8 w-8 items-center justify-center rounded-md bg-rose-50 text-rose-600 transition hover:bg-rose-100 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <TrashIcon className="h-4 w-4" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -67,6 +440,16 @@ export function ParticipationCategoriesTable({ data }: { data: ParticipationCate
           </table>
         </div>
       </div>
+
+      <CategoryModal
+        isOpen={isModalOpen}
+        formState={formState}
+        onChange={(patch) => setFormState((current) => ({ ...current, ...patch }))}
+        onClose={closeModal}
+        onSubmit={() => void handleSave()}
+        isSaving={isSaving}
+        errorMessage={modalErrorMessage}
+      />
     </section>
   );
 }

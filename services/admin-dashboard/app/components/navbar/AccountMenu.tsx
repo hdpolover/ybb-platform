@@ -12,7 +12,7 @@ export function AccountMenu() {
 
   const handleSignOut = () => {
     logout();
-    router.push("/");
+    router.push("/login");
   };
 
   useEffect(() => {

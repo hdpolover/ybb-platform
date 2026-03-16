@@ -22,6 +22,12 @@ export class SubmissionFormFieldDto {
     @ApiPropertyOptional({ example: 'As shown on your passport' })
     helpText?: string;
 
+    @ApiPropertyOptional({ example: '/img/shirtSize.webp' })
+    mediaUrl?: string;
+
+    @ApiPropertyOptional({ example: 'T-shirt size guide' })
+    mediaAlt?: string;
+
     @ApiPropertyOptional({ example: ['Option 1', 'Option 2'] })
     options?: any;
 

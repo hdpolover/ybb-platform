@@ -43,11 +43,15 @@ export class ListProgramRequirementsQuery {
 }
 
 export class ListProgramEssaysQuery {
-    constructor(public readonly programId: string) { }
+    constructor(
+        public readonly programId: string,
+        public readonly includeInactive = false,
+    ) { }
 }
 
 export class ListProgramParticipationCategoriesQuery {
     constructor(
         public readonly programId: string,
+        public readonly includeInactive = false,
     ) { }
 }

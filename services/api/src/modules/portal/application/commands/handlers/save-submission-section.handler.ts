@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { ApplicationCategory } from '@prisma/client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
@@ -34,6 +35,7 @@ export class SaveSubmissionSectionHandler {
             select: {
                 id: true,
                 status: true,
+                applicationCategory: true,
                 personalData: true,
                 essayAnswers: true,
                 uploadedFiles: true,
@@ -74,10 +76,29 @@ export class SaveSubmissionSectionHandler {
         application: any,
         data: Record<string, any>,
     ): Record<string, any> {
+        const normalizedData = this.normalizePersonalDataPayload(data);
+
         switch (section) {
             case SubmissionSection.PERSONAL_INFO: {
                 const existing = (application.personalData as Record<string, any>) || {};
-                return { personalData: { ...existing, ...data } };
+                return { personalData: { ...existing, ...normalizedData } };
+            }
+            case SubmissionSection.PERSONAL_DETAILS:
+            case SubmissionSection.CONTACT_INFORMATION:
+            case SubmissionSection.PROFESSIONAL_PROFILE:
+            case SubmissionSection.ENTRY_INFORMATION:
+            case SubmissionSection.MISCELLANEOUS:
+            case SubmissionSection.ADDITIONAL_INFO: {
+                const existing = (application.personalData as Record<string, any>) || {};
+                const updateData: Record<string, any> = {
+                    personalData: { ...existing, ...normalizedData },
+                };
+
+                if (typeof data.category === 'string' && this.isApplicationCategory(data.category)) {
+                    updateData.applicationCategory = data.category;
+                }
+
+                return updateData;
             }
             case SubmissionSection.ESSAYS: {
                 const existing = (application.essayAnswers as Record<string, any>) || {};
@@ -90,6 +111,20 @@ export class SaveSubmissionSectionHandler {
             default:
                 throw new BadRequestException(`Unsupported section: ${section}`);
         }
+    }
+
+    private normalizePersonalDataPayload(data: Record<string, any>): Record<string, any> {
+        const normalized = { ...data };
+
+        if (normalized.program_id !== undefined) {
+            delete normalized.program_id;
+        }
+
+        return normalized;
+    }
+
+    private isApplicationCategory(value: string): value is ApplicationCategory {
+        return value === ApplicationCategory.fully_funded || value === ApplicationCategory.self_funded;
     }
 
     private async invalidateCaches(userId: string): Promise<void> {

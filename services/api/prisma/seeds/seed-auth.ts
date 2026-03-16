@@ -40,18 +40,49 @@ export async function seedAuth() {
 
   // 2. Roles
   const roles = [
-    { name: 'Super Admin', permissions: ['*'] },
-    { name: 'Admin', permissions: ['program:read', 'program:write'] },
-    { name: 'Editor', permissions: ['content:write'] },
-    { name: 'Participant', permissions: ['application:read', 'application:write'] }
+    {
+      name: 'Super Admin',
+      description: 'Full platform access across brands, programs, and administrator management.',
+      permissions: ['*', 'admin.*', 'platform.*', 'platform.manage', 'platform_access', 'admin.manage'],
+    },
+    {
+      name: 'Platform Admin',
+      description: 'Platform-wide operational access across brands and programs without super-admin elevation.',
+      permissions: ['platform.manage', 'platform_access', 'brand.manage', 'program:read', 'program:write', 'content:write'],
+    },
+    {
+      name: 'Admin',
+      description: 'Brand or platform administrator with operational program access.',
+      permissions: ['platform_access', 'brand.manage', 'program:read', 'program:write'],
+    },
+    {
+      name: 'Program Admin',
+      description: 'Program-scoped administrator for applications, participants, and program operations.',
+      permissions: ['program:read', 'program:write', 'applications:read', 'applications:write', 'participants:read', 'payments:read'],
+    },
+    {
+      name: 'Editor',
+      description: 'Content editor for program materials and CMS-managed content.',
+      permissions: ['program:read', 'content:write'],
+    },
+    {
+      name: 'Participant',
+      description: 'Participant access to their own application workflow.',
+      permissions: ['application:read', 'application:write'],
+    },
   ];
 
   for (const r of roles) {
     await prisma.adminRole.upsert({
       where: { name: r.name },
-      update: {},
+      update: {
+        description: r.description,
+        permissions: r.permissions,
+        isActive: true,
+      },
       create: {
         name: r.name,
+        description: r.description,
         isActive: true,
         permissions: r.permissions
       }

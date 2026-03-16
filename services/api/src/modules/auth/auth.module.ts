@@ -14,6 +14,7 @@ import { VerifyEmailHandler } from './application/commands/handlers/verify-email
 import { ResendVerificationEmailHandler } from './application/commands/handlers/resend-verification-email.handler';
 import { FirebaseLoginHandler } from './application/commands/handlers/firebase-login.handler';
 import { AdminLoginHandler } from './application/commands/handlers/admin-login.handler';
+import { AdminRefreshHandler } from './application/commands/handlers/admin-refresh.handler';
 import { GetUserProfileHandler } from './application/queries/handlers/get-user-profile.handler';
 import { GetAuthProvidersHandler } from './application/queries/handlers/get-auth-providers.handler';
 import { CreateAuthProviderHandler } from './application/commands/handlers/create-auth-provider.handler';
@@ -57,6 +58,7 @@ import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.m
     ResendVerificationEmailHandler,
     FirebaseLoginHandler,
     AdminLoginHandler,
+    AdminRefreshHandler,
     GetUserProfileHandler,
     GetAuthProvidersHandler,
     CreateAuthProviderHandler,

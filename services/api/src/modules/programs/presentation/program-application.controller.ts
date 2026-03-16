@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Put, Post, Delete, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Param, Put, Post, Delete, Body, UseGuards, Request, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
 import { Public } from '../../../shared/decorators/public.decorator';
@@ -157,8 +157,13 @@ export class ProgramApplicationConfigController {
   @Public()
   @ApiOperation({ summary: 'Get program essays' })
   @ApiResponse({ status: 200, type: [ProgramEssayResponseDto] })
-  async getEssays(@Param('id') id: string) {
-    return this.listProgramEssaysHandler.execute(new ListProgramEssaysQuery(id));
+  async getEssays(
+    @Param('id') id: string,
+    @Query('includeInactive') includeInactive?: string,
+  ) {
+    return this.listProgramEssaysHandler.execute(
+      new ListProgramEssaysQuery(id, includeInactive === 'true'),
+    );
   }
 
   @Post(':id/essays')
@@ -190,8 +195,13 @@ export class ProgramApplicationConfigController {
   @Public()
   @ApiOperation({ summary: 'Get program participation categories' })
   @ApiResponse({ status: 200, type: [ProgramParticipationCategoryResponseDto] })
-  async getParticipationCategories(@Param('id') id: string) {
-    return this.listProgramParticipationCategoriesHandler.execute(new ListProgramParticipationCategoriesQuery(id));
+  async getParticipationCategories(
+    @Param('id') id: string,
+    @Query('includeInactive') includeInactive?: string,
+  ) {
+    return this.listProgramParticipationCategoriesHandler.execute(
+      new ListProgramParticipationCategoriesQuery(id, includeInactive === 'true'),
+    );
   }
 
   @Post(':id/participation-categories')

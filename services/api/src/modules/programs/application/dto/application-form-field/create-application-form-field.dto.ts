@@ -15,6 +15,11 @@ export enum FormFieldType {
 }
 
 export class CreateApplicationFormFieldDto {
+  @ApiPropertyOptional({ description: 'Form section identifier' })
+  @IsOptional()
+  @IsString()
+  section?: string;
+
   @ApiProperty({ description: 'Database field name (key)' })
   @IsString()
   @IsNotEmpty()
@@ -34,6 +39,16 @@ export class CreateApplicationFormFieldDto {
   @IsOptional()
   @IsString()
   helpText?: string;
+
+  @ApiPropertyOptional({ description: 'Optional supporting media URL shown with the field' })
+  @IsOptional()
+  @IsString()
+  mediaUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Alt text for the supporting media' })
+  @IsOptional()
+  @IsString()
+  mediaAlt?: string;
 
   @ApiProperty({ enum: FormFieldType, description: 'Type of the input field' })
   @IsEnum(FormFieldType)

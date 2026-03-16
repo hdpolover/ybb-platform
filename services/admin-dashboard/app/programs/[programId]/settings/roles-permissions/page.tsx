@@ -1,14 +1,8 @@
 "use client";
 
 import { use } from "react";
-import { programs } from "@/app/components/navbar/ProgramSelect";
+import { useAuth } from "@/app/contexts/AuthContext";
 import { RolesPermissionsSettings } from "@/app/components/settings/RolesPermissionsSettings";
-
-function getProgramName(programId: string | null): string {
-  if (!programId) return "Selected Program";
-  const program = programs.find((item) => item.id === programId);
-  return program?.name ?? "Selected Program";
-}
 
 export default function RolesPermissionsSettingsPage({
   params,
@@ -16,7 +10,10 @@ export default function RolesPermissionsSettingsPage({
   params: Promise<{ programId: string }>;
 }) {
   const { programId } = use(params);
-  const programName = getProgramName(programId);
+  const { accessiblePrograms } = useAuth();
+  const programName =
+    accessiblePrograms.find((program) => program.programId === programId)?.programName ??
+    "Selected Program";
 
   return <RolesPermissionsSettings programName={programName} />;
 }

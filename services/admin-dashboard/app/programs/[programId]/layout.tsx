@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, use } from "react";
+import { useState, use, useEffect } from "react";
 import { Sidebar } from "../../components/layout/Sidebar";
 import { Navbar } from "../../components/layout/Navbar";
 import { useRouter } from "next/navigation";
+import { useAuth } from "../../contexts/AuthContext";
 
 export default function ProgramLayout({
   params,
@@ -15,6 +16,36 @@ export default function ProgramLayout({
   const router = useRouter();
   const { programId } = use(params);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const { adminProfile, assignedPrograms, isLoading, isPlatformAdmin } = useAuth();
+
+  const hasProgramAccess =
+    isPlatformAdmin || assignedPrograms.some((program) => program.programId === programId);
+
+  useEffect(() => {
+    if (isLoading) {
+      return;
+    }
+
+    if (!adminProfile) {
+      router.replace("/login");
+      return;
+    }
+
+    if (!hasProgramAccess) {
+      router.replace("/");
+    }
+  }, [adminProfile, hasProgramAccess, isLoading, router]);
+
+  if (isLoading || !adminProfile || !hasProgramAccess) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-50">
+        <div className="text-center">
+          <div className="mb-4 inline-block h-12 w-12 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
+          <p className="text-sm text-zinc-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleChangeProgram = (newProgramId: string | null) => {
     if (newProgramId) {

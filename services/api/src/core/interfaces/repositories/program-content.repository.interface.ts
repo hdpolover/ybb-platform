@@ -31,8 +31,8 @@ export interface IProgramContentRepository {
     findPricingTiersByProgramId(programId: string): Promise<ProgramPricingTierWithPeriods[]>;
     findRequirementsByProgramId(programId: string): Promise<ProgramRequirement[]>;
     findFormFieldsByProgramId(programId: string): Promise<ApplicationFormField[]>;
-    findEssaysByProgramId(programId: string): Promise<ProgramEssay[]>;
-    findParticipationCategoriesByProgramId(programId: string): Promise<ProgramParticipationCategory[]>;
+    findEssaysByProgramId(programId: string, includeInactive?: boolean): Promise<ProgramEssay[]>;
+    findParticipationCategoriesByProgramId(programId: string, includeInactive?: boolean): Promise<ProgramParticipationCategory[]>;
 
     // CRUD for Timeline
     createTimeline(data: Partial<ProgramTimeline>): Promise<ProgramTimeline>;

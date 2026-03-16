@@ -76,7 +76,7 @@ docker-compose up admin-dashboard
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `NEXT_PUBLIC_API_URL` | API Gateway URL | `http://localhost:4000` |
+| `NEXT_PUBLIC_API_URL` | API Gateway base URL | `http://localhost:4000/v1` |
 | `PORT` | Dashboard port | `4001` |
 | `NODE_ENV` | Environment | `development` |
 
@@ -94,7 +94,7 @@ npm run lint     # Run ESLint
 The dashboard communicates with the API Gateway:
 
 ```typescript
-const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/programs`, {
+const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/programs`, {
   headers: {
     'Authorization': `Bearer ${token}`,
     'Content-Type': 'application/json'

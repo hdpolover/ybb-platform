@@ -2,6 +2,13 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
 import { GetAdminQuery } from '../get-admin.query';
+import {
+    buildAccessiblePrograms,
+    getAdminProgramAccessScope,
+    mapAdminBrandAssignment,
+    mapAdminProgramAssignment,
+    normalizePermissions,
+} from '../../../../../shared/admin-access-response';
 
 @Injectable()
 export class GetAdminHandler {
@@ -13,8 +20,55 @@ export class GetAdminHandler {
             include: {
                 user: { select: { email: true, isActive: true, lastLoginAt: true } },
                 role: true,
-                adminBrands: { include: { brand: { select: { name: true } } } },
-                adminPrograms: { include: { program: { select: { name: true } } } }
+                adminBrands: {
+                    include: {
+                        brand: {
+                            select: {
+                                id: true,
+                                name: true,
+                                slug: true,
+                                isActive: true,
+                                logoUrl: true,
+                                logoWhiteUrl: true,
+                                logoColorUrl: true,
+                                logoIconUrl: true,
+                            },
+                        },
+                    },
+                },
+                adminPrograms: {
+                    include: {
+                        program: {
+                            select: {
+                                id: true,
+                                brandId: true,
+                                name: true,
+                                slug: true,
+                                year: true,
+                                status: true,
+                                isActive: true,
+                                startDate: true,
+                                endDate: true,
+                                logoUrl: true,
+                                logoWhiteUrl: true,
+                                logoColorUrl: true,
+                                logoIconUrl: true,
+                                brand: {
+                                    select: {
+                                        id: true,
+                                        name: true,
+                                        slug: true,
+                                        isActive: true,
+                                        logoUrl: true,
+                                        logoWhiteUrl: true,
+                                        logoColorUrl: true,
+                                        logoIconUrl: true,
+                                    },
+                                },
+                            },
+                        },
+                    },
+                }
             }
         });
 
@@ -22,27 +76,69 @@ export class GetAdminHandler {
             throw new NotFoundException('Admin not found');
         }
 
+        const accessScope = getAdminProgramAccessScope(admin);
+        const accessiblePrograms = accessScope === 'assigned'
+            ? admin.adminPrograms.map((assignment) => mapAdminProgramAssignment(assignment))
+            : buildAccessiblePrograms({
+                availablePrograms: await this.prisma.program.findMany({
+                    where: {
+                        deletedAt: null,
+                        ...(accessScope === 'brand_scope'
+                            ? { brandId: { in: admin.adminBrands.map((assignment) => assignment.brandId) } }
+                            : {}),
+                    },
+                    select: {
+                        id: true,
+                        brandId: true,
+                        name: true,
+                        slug: true,
+                        year: true,
+                        status: true,
+                        isActive: true,
+                        startDate: true,
+                        endDate: true,
+                        logoUrl: true,
+                        logoWhiteUrl: true,
+                        logoColorUrl: true,
+                        logoIconUrl: true,
+                        brand: {
+                            select: {
+                                id: true,
+                                name: true,
+                                slug: true,
+                                isActive: true,
+                                logoUrl: true,
+                                logoWhiteUrl: true,
+                                logoColorUrl: true,
+                                logoIconUrl: true,
+                            },
+                        },
+                    },
+                    orderBy: [{ isActive: 'desc' }, { year: 'desc' }, { name: 'asc' }],
+                }),
+                assignments: admin.adminPrograms,
+                unassignedAccessType: accessScope,
+            });
+
         return {
             id: admin.id,
             fullName: admin.fullName,
             email: admin.user.email,
             isActive: admin.user.isActive,
             lastLoginAt: admin.user.lastLoginAt,
+            avatarUrl: admin.avatarUrl,
+            accessLevel: admin.accessLevel,
+            canManageAdmins: admin.canManageAdmins,
+            canAssignRoles: admin.canAssignRoles,
+            customPermissions: normalizePermissions(admin.customPermissions),
             role: {
                 id: admin.roleId,
                 name: admin.role?.name,
-                permissions: admin.role?.permissions
+                permissions: normalizePermissions(admin.role?.permissions)
             },
-            brands: admin.adminBrands.map(ab => ({
-                id: ab.brandId,
-                name: ab.brand.name,
-                role: ab.roleInBrand
-            })),
-            programs: admin.adminPrograms.map(ap => ({
-                id: ap.programId,
-                name: ap.program.name,
-                role: ap.roleInProgram
-            })),
+            brands: admin.adminBrands.map((assignment) => mapAdminBrandAssignment(assignment)),
+            programs: admin.adminPrograms.map((assignment) => mapAdminProgramAssignment(assignment)),
+            accessiblePrograms,
             createdAt: admin.createdAt,
             updatedAt: admin.updatedAt,
         };

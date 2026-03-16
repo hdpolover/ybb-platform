@@ -8,6 +8,13 @@ import { AuthLoggingService } from '../../services/auth-logging.service';
 import { AdminLoginCommand } from '../admin-login.command';
 import { AdminAuthResponseDto } from '../../../presentation/dto/admin-auth-response.dto';
 import { MetricsService } from '../../../../../shared/infrastructure/monitoring/metrics.service';
+import {
+    buildAccessiblePrograms,
+    getAdminProgramAccessScope,
+    mapAdminBrandAssignment,
+    mapAdminProgramAssignment,
+    normalizePermissions,
+} from '../../../../../shared/admin-access-response';
 
 @Injectable()
 export class AdminLoginHandler {
@@ -33,8 +40,55 @@ export class AdminLoginHandler {
             include: {
                 admin: {
                     include: {
-                        adminBrands: true,
-                        adminPrograms: true,
+                        adminBrands: {
+                            include: {
+                                brand: {
+                                    select: {
+                                        id: true,
+                                        name: true,
+                                        slug: true,
+                                        isActive: true,
+                                        logoUrl: true,
+                                        logoWhiteUrl: true,
+                                        logoColorUrl: true,
+                                        logoIconUrl: true,
+                                    },
+                                },
+                            },
+                        },
+                        adminPrograms: {
+                            include: {
+                                program: {
+                                    select: {
+                                        id: true,
+                                        brandId: true,
+                                        name: true,
+                                        slug: true,
+                                        year: true,
+                                        status: true,
+                                        isActive: true,
+                                        startDate: true,
+                                        endDate: true,
+                                        logoUrl: true,
+                                        logoWhiteUrl: true,
+                                        logoColorUrl: true,
+                                        logoIconUrl: true,
+                                        brand: {
+                                            select: {
+                                                id: true,
+                                                name: true,
+                                                slug: true,
+                                                isActive: true,
+                                                logoUrl: true,
+                                                logoWhiteUrl: true,
+                                                logoColorUrl: true,
+                                                logoIconUrl: true,
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
                         role: true,
                     },
                 },
@@ -106,6 +160,7 @@ export class AdminLoginHandler {
         this.metricsService.loginTotal.inc({ method: 'admin_email', result: 'success' });
 
         // 4. Generate Tokens
+        const sessionId = randomUUID();
         const roles: string[] = ['admin'];
         if (user.admin.role) {
             roles.push(user.admin.role.name);
@@ -122,7 +177,8 @@ export class AdminLoginHandler {
             jti: randomUUID(),
             roles: roles,
             isAdmin: true, // Explicit flag
-            adminId: user.admin.id
+            adminId: user.admin.id,
+            sid: sessionId,
         };
 
         const refreshTokenPayload = {
@@ -130,6 +186,9 @@ export class AdminLoginHandler {
             email: user.email,
             brandId: user.brandId,
             jti: randomUUID(),
+            adminId: user.admin.id,
+            isAdmin: true,
+            sid: sessionId,
         };
 
         const accessToken = this.jwtService.sign(accessTokenPayload, {
@@ -139,6 +198,65 @@ export class AdminLoginHandler {
         const refreshToken = this.jwtService.sign(refreshTokenPayload, {
             expiresIn: '7d',
         });
+
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 7);
+
+        await this.prisma.userSession.create({
+            data: {
+                userId: user.id,
+                sessionToken: sessionId,
+                refreshToken,
+                deviceName: command.userAgent.slice(0, 100),
+                browser: command.userAgent.slice(0, 100),
+                ipAddress: command.ipAddress,
+                expiresAt,
+            },
+        });
+
+        const accessScope = getAdminProgramAccessScope(user.admin);
+        const accessiblePrograms = accessScope === 'assigned'
+            ? user.admin.adminPrograms.map((assignment) => mapAdminProgramAssignment(assignment))
+            : buildAccessiblePrograms({
+                availablePrograms: await this.prisma.program.findMany({
+                    where: {
+                        deletedAt: null,
+                        ...(accessScope === 'brand_scope'
+                            ? { brandId: { in: user.admin.adminBrands.map((assignment) => assignment.brandId) } }
+                            : {}),
+                    },
+                    select: {
+                        id: true,
+                        brandId: true,
+                        name: true,
+                        slug: true,
+                        year: true,
+                        status: true,
+                        isActive: true,
+                        startDate: true,
+                        endDate: true,
+                        logoUrl: true,
+                        logoWhiteUrl: true,
+                        logoColorUrl: true,
+                        logoIconUrl: true,
+                        brand: {
+                            select: {
+                                id: true,
+                                name: true,
+                                slug: true,
+                                isActive: true,
+                                logoUrl: true,
+                                logoWhiteUrl: true,
+                                logoColorUrl: true,
+                                logoIconUrl: true,
+                            },
+                        },
+                    },
+                    orderBy: [{ isActive: 'desc' }, { year: 'desc' }, { name: 'asc' }],
+                }),
+                assignments: user.admin.adminPrograms,
+                unassignedAccessType: accessScope,
+            });
 
         // 5. Build Response
         return {
@@ -154,17 +272,17 @@ export class AdminLoginHandler {
             admin: {
                 id: user.admin.id,
                 fullName: user.admin.fullName,
+                avatarUrl: user.admin.avatarUrl || undefined,
+                roleId: user.admin.roleId || '',
                 role: user.admin.role?.name || 'No Role',
                 accessLevel: user.admin.accessLevel,
-                permissions: (user.admin.role?.permissions as string[]) || [], // Type cast JSON
-                programs: user.admin.adminPrograms.map(ap => ({
-                    programId: ap.programId,
-                    role: ap.roleInProgram || 'member'
-                })),
-                brands: user.admin.adminBrands.map(ab => ({
-                    brandId: ab.brandId,
-                    role: ab.roleInBrand || 'member'
-                }))
+                permissions: normalizePermissions(user.admin.role?.permissions),
+                customPermissions: normalizePermissions(user.admin.customPermissions),
+                canManageAdmins: user.admin.canManageAdmins,
+                canAssignRoles: user.admin.canAssignRoles,
+                programs: user.admin.adminPrograms.map((assignment) => mapAdminProgramAssignment(assignment)),
+                accessiblePrograms,
+                brands: user.admin.adminBrands.map((assignment) => mapAdminBrandAssignment(assignment)),
             }
         };
     }

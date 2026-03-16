@@ -19,19 +19,11 @@ export default function LandingPage() {
     isLoading, 
     adminProfile, 
     adminAccessLevel, 
+    accessConfig,
     isPlatformAdmin, 
     assignedPrograms,
-    switchMockAdmin,
     logout,
   } = useAuth();
-
-  // Logic auto-redirect kalau adminnya cuma pegang satu program doang
-  useEffect(() => {
-    if (!isLoading && adminProfile && !isPlatformAdmin && assignedPrograms.length === 1) {
-      // Single program admin - redirect immediately
-      router.push(`/programs/${assignedPrograms[0].programId}`);
-    }
-  }, [isLoading, adminProfile, isPlatformAdmin, assignedPrograms, router]);
 
   const handleSelectProgram = (programId: string | null) => {
     if (programId) {
@@ -121,21 +113,6 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* Switcher buat Admin ( ini baru test aja, blm ada fungsinya ) */}
-            <div className="flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2 py-1">
-              <span className="text-[10px] font-medium text-amber-700">TEST:</span>
-              <select
-                value={adminAccessLevel === "super_admin" ? "super" : assignedPrograms.length > 1 ? "multi" : assignedPrograms.length === 1 ? "single" : "none"}
-                onChange={(e) => switchMockAdmin(e.target.value as "super" | "multi" | "single" | "none")}
-                className="border-none bg-transparent text-[10px] font-medium text-amber-900 focus:outline-none"
-              >
-                <option value="super">Super Admin</option>
-                <option value="multi">Multi-Program Admin</option>
-                <option value="single">Single Program Admin</option>
-                <option value="none">No Access</option>
-              </select>
-            </div>
-
             {/* Tombol Sign Out*/}
             <button
               onClick={() => logout()}
@@ -155,7 +132,7 @@ export default function LandingPage() {
             Welcome back, {adminProfile.fullName.split(' ')[0]}!
           </h1>
           <p className="text-sm text-zinc-600">
-            {isPlatformAdmin 
+            {accessConfig.canAccessPlatform 
               ? "Choose your administration mode to get started"
               : `You have access to ${assignedPrograms.length} program${assignedPrograms.length !== 1 ? 's' : ''}`
             }
@@ -163,7 +140,7 @@ export default function LandingPage() {
         </section>
 
         {/* mode Admin Card ( Khusus buat Admin ) */}
-        {isPlatformAdmin && (
+        {accessConfig.canAccessPlatform && (
           <section className="grid gap-4 md:grid-cols-2">
             {/* Admin Cardnya ( Platformnya ) */}
             <Link
@@ -200,11 +177,15 @@ export default function LandingPage() {
                     Program Administration
                   </h2>
                   <p className="text-sm text-zinc-600">
-                    Manage specific program operations, applications, payments, and participants
+                    {accessConfig.canAccessPrograms
+                      ? "Manage specific program operations, applications, payments, and participants"
+                      : "No program assignments are available for this admin yet."}
                   </p>
-                  <p className="mt-3 text-xs font-medium text-zinc-500">
-                    Select a program below to continue a
-                  </p>
+                  {accessConfig.canAccessPrograms ? (
+                    <p className="mt-3 text-xs font-medium text-zinc-500">
+                      Select a program below to continue.
+                    </p>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -215,10 +196,10 @@ export default function LandingPage() {
         <section className="flex flex-1 flex-col min-h-0">
           <div className="mb-4">
             <h2 className="text-lg font-semibold text-zinc-900">
-              {isPlatformAdmin ? "Select a Program" : "Your Programs"}
+              {accessConfig.canAccessPlatform ? "Select a Program" : "Your Programs"}
             </h2>
             <p className="mt-1 text-sm text-zinc-600">
-              {isPlatformAdmin 
+              {accessConfig.canAccessPlatform 
                 ? "Choose a program to access program-specific administration"
                 : "Click on a program to access its dashboard"
               }
@@ -228,7 +209,7 @@ export default function LandingPage() {
           <div className="flex-1 min-h-0">
             <div className="h-full overflow-y-auto pr-1">
               {/* Nunjukin program yang ke filter buat admin */}
-              {isPlatformAdmin ? (
+              {accessConfig.canAccessPlatform ? (
                 <ProgramList onSelectProgram={handleSelectProgram} />
               ) : (
                 <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">

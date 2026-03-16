@@ -3,5 +3,6 @@ export class LogoutCommand {
         public readonly userId: string,
         public readonly jti: string,
         public readonly tokenExpiresAt: number, // Unix timestamp in seconds
+        public readonly sessionId?: string,
     ) { }
 }

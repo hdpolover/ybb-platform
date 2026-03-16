@@ -1,14 +1,8 @@
-import { use } from "react";
-import { programs } from "@/app/components/navbar/ProgramSelect";
-import { ProgramCertificatesTable, type ProgramCertificate } from "@/app/components/programCertificatesMasterData/ProgramCertificatesTable";
+"use client";
 
-// --- UTILITY ---
-function getProgramName(programId: string | null): string {
-  if (!programId) return "Selected Program";
-  if (!Array.isArray(programs)) return "Selected Program";
-  const program = programs.find((item: any) => item.id === programId);
-  return program?.name ?? "Selected Program";
-}
+import { use } from "react";
+import { useAuth } from "@/app/contexts/AuthContext";
+import { ProgramCertificatesTable, type ProgramCertificate } from "@/app/components/programCertificatesMasterData/ProgramCertificatesTable";
 
 // --- LOCAL MOCK DATA ---
 const MOCK_CERTIFICATES: ProgramCertificate[] = [
@@ -38,17 +32,20 @@ const MOCK_CERTIFICATES: ProgramCertificate[] = [
   },
 ];
 
-export default async function ProgramCertificatesPage({
+export default function ProgramCertificatesPage({
   params,
   searchParams,
 }: {
   params: Promise<{ programId: string }>;
   searchParams: Promise<{ search?: string }>;
 }) {
-  const resolvedParams = await params;
-  const resolvedSearchParams = await searchParams;
+  const resolvedParams = use(params);
+  const resolvedSearchParams = use(searchParams);
+  const { accessiblePrograms } = useAuth();
 
-  const programName = getProgramName(resolvedParams.programId);
+  const programName =
+    accessiblePrograms.find((program) => program.programId === resolvedParams.programId)?.programName ??
+    "Selected Program";
   const searchQuery = resolvedSearchParams.search?.toLowerCase() || "";
 
   const filteredData = MOCK_CERTIFICATES.filter((certificate) => {

@@ -73,6 +73,7 @@ export class GetPortalSubmissionDetailHandler
             select: {
                 id: true,
                 status: true,
+                applicationCategory: true,
                 personalData: true,
                 essayAnswers: true,
                 uploadedFiles: true,
@@ -80,6 +81,15 @@ export class GetPortalSubmissionDetailHandler
                     select: {
                         id: true,
                         name: true,
+                        subthemes: {
+                            where: { isActive: true },
+                            select: {
+                                id: true,
+                                name: true,
+                                description: true,
+                            },
+                            orderBy: { order: 'asc' },
+                        },
                         formFields: {
                             where: { isActive: true },
                             select: {
@@ -90,6 +100,8 @@ export class GetPortalSubmissionDetailHandler
                                 type: true,
                                 placeholder: true,
                                 helpText: true,
+                                mediaUrl: true,
+                                mediaAlt: true,
                                 options: true,
                                 validationRules: true,
                                 isRequired: true,
@@ -146,7 +158,9 @@ export class GetPortalSubmissionDetailHandler
                 type: field.type,
                 placeholder: field.placeholder || undefined,
                 helpText: field.helpText || undefined,
-                options: field.options || undefined,
+                mediaUrl: field.mediaUrl || undefined,
+                mediaAlt: field.mediaAlt || undefined,
+                options: this.resolveFieldOptions(field, application),
                 validationRules: field.validationRules || undefined,
                 isRequired: field.isRequired,
                 order: field.order,
@@ -155,15 +169,38 @@ export class GetPortalSubmissionDetailHandler
 
         const sectionTitles: Record<string, string> = {
             personal_info: 'Personal Information',
+            personal_details: 'Personal Details',
+            contact_information: 'Contact Information',
+            professional_profile: 'Professional Profile',
+            entry_information: 'Entry Information',
+            miscellaneous: 'Miscellaneous',
             additional_info: 'Additional Information',
+        };
+
+        const sectionDescriptions: Record<string, string> = {
+            personal_details: 'Basic personal and background information about the participant.',
+            contact_information: 'Participant and emergency contact details.',
+            professional_profile: 'Education, experience, and supporting profile information.',
+            entry_information: 'Application category, subtheme selection, and essay context.',
+            miscellaneous: 'Referral, campaign, and social proof details.',
+            personal_info: 'Basic participant information.',
+            additional_info: 'Additional participant information.',
+        };
+
+        const sectionOrder: Record<string, number> = {
+            personal_details: 1,
+            contact_information: 2,
+            professional_profile: 3,
+            entry_information: 4,
+            miscellaneous: 5,
+            personal_info: 6,
+            additional_info: 7,
         };
 
         const sections: SubmissionSectionDetailDto[] = [];
         for (const [sectionId, fields] of sectionMap) {
-            const values = sectionId === 'personal_info' ? personalData : {};
-            const filledCount = Object.keys(values).filter(
-                (k) => values[k] !== null && values[k] !== undefined && values[k] !== '',
-            ).length;
+            const values = this.buildSectionValues(sectionId, fields, application, personalData);
+            const filledCount = fields.filter(field => this.hasValue(values[field.name])).length;
             const requiredCount = fields.filter((f) => f.isRequired).length;
 
             let status = 'pending';
@@ -173,7 +210,7 @@ export class GetPortalSubmissionDetailHandler
             sections.push({
                 id: sectionId,
                 title: sectionTitles[sectionId] || sectionId,
-                description: undefined,
+                description: sectionDescriptions[sectionId],
                 fields,
                 values,
                 status,
@@ -185,13 +222,65 @@ export class GetPortalSubmissionDetailHandler
             sections.unshift({
                 id: 'personal_info',
                 title: 'Personal Information',
+                description: sectionDescriptions.personal_info,
                 fields: [],
                 values: personalData,
                 status: Object.keys(personalData).length > 0 ? 'completed' : 'pending',
             });
         }
 
-        return sections;
+        return sections.sort(
+            (left, right) => (sectionOrder[left.id] || Number.MAX_SAFE_INTEGER) - (sectionOrder[right.id] || Number.MAX_SAFE_INTEGER),
+        );
+    }
+
+    private buildSectionValues(
+        sectionId: string,
+        fields: SubmissionFormFieldDto[],
+        application: any,
+        personalData: Record<string, any>,
+    ): Record<string, any> {
+        const values: Record<string, any> = {};
+
+        for (const field of fields) {
+            if (field.name === 'category') {
+                values[field.name] = personalData[field.name] ?? application.applicationCategory ?? undefined;
+                continue;
+            }
+
+            if (field.name === 'program_id') {
+                values[field.name] = application.program.id;
+                continue;
+            }
+
+            values[field.name] = personalData[field.name] ?? undefined;
+        }
+
+        if (sectionId === 'personal_info' && fields.length === 0) {
+            return personalData;
+        }
+
+        return values;
+    }
+
+    private resolveFieldOptions(field: any, application: any): any {
+        if (field.name === 'program_subtheme_id') {
+            return (application.program.subthemes || []).map((subtheme: any) => ({
+                label: subtheme.name,
+                value: subtheme.id,
+                description: subtheme.description || undefined,
+            }));
+        }
+
+        return field.options || undefined;
+    }
+
+    private hasValue(value: unknown): boolean {
+        if (value === null || value === undefined) return false;
+        if (typeof value === 'string') return value.trim().length > 0;
+        if (Array.isArray(value)) return value.length > 0;
+        if (typeof value === 'object') return Object.keys(value as Record<string, unknown>).length > 0;
+        return true;
     }
 
     private buildEssays(application: any): SubmissionEssayDto[] {

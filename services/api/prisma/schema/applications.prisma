@@ -92,6 +92,8 @@ model ApplicationFormField {
   type            String    @db.VarChar(50) // text, email, number, date, textarea, file, select, checkbox, radio
   placeholder     String?   @db.VarChar(255)
   helpText        String?   @map("help_text") @db.Text
+  mediaUrl        String?   @map("media_url") @db.Text
+  mediaAlt        String?   @map("media_alt") @db.VarChar(255)
   options         Json?     @default("[]") @db.Json // For select, radio, checkbox: ["Option 1", "Option 2"]
   validationRules Json?     @default("{}") @map("validation_rules") @db.Json // { required: true, minLength: 10, maxFileSize: 5MB }
   isRequired      Boolean   @default(true) @map("is_required")

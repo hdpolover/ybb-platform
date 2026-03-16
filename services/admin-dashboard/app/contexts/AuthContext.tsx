@@ -1,16 +1,43 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
-// Tipe-tipe data yang dipake buat context otentikasi admin
 export type AdminAccessLevel = "super_admin" | "platform_admin" | "program_admin" | "no_access";
 
 export type AdminProgram = {
   programId: string;
+  brandId: string;
+  brandName: string;
+  brandSlug: string;
   programName: string;
+  programSlug: string;
   programYear: number;
+  programStatus: string;
+  isActive: boolean;
+  startDate: string;
+  endDate: string;
+  logoUrl?: string | null;
   roleInProgram: string;
   permissions: string[];
+  accessType: "assigned" | "brand_scope" | "platform";
+};
+
+export type AdminBrand = {
+  brandId: string;
+  brandSlug: string;
+  brandName: string;
+  isActive: boolean;
+  logoUrl?: string | null;
+  roleInBrand: string;
+  permissions: string[];
+};
+
+export type AdminAccessConfig = {
+  isSuperAdmin: boolean;
+  canAccessPlatform: boolean;
+  canAccessPrograms: boolean;
+  canManageAdmins: boolean;
+  canAssignRoles: boolean;
 };
 
 export type AdminProfile = {
@@ -24,7 +51,10 @@ export type AdminProfile = {
   canAssignRoles: boolean;
   roleId: string;
   roleName: string;
+  permissions: string[];
+  customPermissions: string[];
   assignedPrograms: AdminProgram[];
+  assignedBrands: AdminBrand[];
 };
 
 type AuthContextType = {
@@ -32,163 +62,546 @@ type AuthContextType = {
   isLoading: boolean;
   adminProfile: AdminProfile | null;
   adminAccessLevel: AdminAccessLevel;
+  accessConfig: AdminAccessConfig;
   isPlatformAdmin: boolean;
   assignedPrograms: AdminProgram[];
+  accessiblePrograms: AdminProgram[];
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
-  switchMockAdmin: (type: "super" | "multi" | "single" | "none") => void;
 };
+
+type AdminLoginResponse = {
+  accessToken: string;
+  refreshToken: string;
+  user: {
+    id: string;
+    email: string;
+  };
+  admin: {
+    id: string;
+    fullName: string;
+    avatarUrl?: string;
+    roleId: string;
+    role: string;
+    accessLevel: number;
+    permissions?: string[];
+    customPermissions?: string[];
+    canManageAdmins?: boolean;
+    canAssignRoles?: boolean;
+    programs?: Array<{
+      programId: string;
+      brandId: string;
+      brandName: string;
+      brandSlug: string;
+      programName: string;
+      programSlug: string;
+      programYear: number;
+      programStatus: string;
+      isActive: boolean;
+      startDate: string;
+      endDate: string;
+      logoUrl?: string | null;
+      role: string;
+      permissions?: string[];
+      accessType: "assigned" | "brand_scope" | "platform";
+    }>;
+    accessiblePrograms?: Array<{
+      programId: string;
+      brandId: string;
+      brandName: string;
+      brandSlug: string;
+      programName: string;
+      programSlug: string;
+      programYear: number;
+      programStatus: string;
+      isActive: boolean;
+      startDate: string;
+      endDate: string;
+      logoUrl?: string | null;
+      role: string | null;
+      permissions?: string[];
+      accessType: "assigned" | "brand_scope" | "platform";
+    }>;
+    brands?: Array<{
+      brandId: string;
+      brandName: string;
+      brandSlug: string;
+      isActive: boolean;
+      logoUrl?: string | null;
+      role: string;
+      permissions?: string[];
+    }>;
+  };
+};
+
+type ApiEnvelope<T> = {
+  statusCode: number;
+  message: string;
+  data: T;
+};
+
+type JwtPayload = {
+  exp?: number;
+};
+
+type PersistedAuthSession = {
+  accessToken: string;
+  refreshToken: string;
+  adminProfile: AdminProfile;
+};
+
+const ACCESS_TOKEN_STORAGE_KEY = "access_token";
+const REFRESH_TOKEN_STORAGE_KEY = "refresh_token";
+const AUTH_SESSION_STORAGE_KEY = "admin_auth_session";
+const REFRESH_WINDOW_MS = 5 * 60 * 1000;
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Data dummy buat macem-macem tipe admin (super, multi-program, single, dll.)
-const MOCK_ADMINS = {
-  super: {
-    id: "admin-super-1",
-    userId: "user-super-1",
-    fullName: "Super Admin",
-    email: "super@ybb.com",
-    avatarUrl: undefined,
-    accessLevel: 3,
-    canManageAdmins: true,
-    canAssignRoles: true,
-    roleId: "role-super",
-    roleName: "Super Administrator",
-    assignedPrograms: [] as AdminProgram[], // Super admin has access to all programs
-  },
-  multi: {
-    id: "admin-multi-1",
-    userId: "user-multi-1",
-    fullName: "Program Coordinator",
-    email: "coordinator@ybb.com",
-    avatarUrl: undefined,
-    accessLevel: 2,
-    canManageAdmins: false,
-    canAssignRoles: false,
-    roleId: "role-coordinator",
-    roleName: "Program Coordinator",
-    assignedPrograms: [
-      {
-        programId: "iys-2026",
-        programName: "Istanbul Youth Summit 2026",
-        programYear: 2026,
-        roleInProgram: "coordinator",
-        permissions: ["view_applications", "review_applications", "manage_participants"],
-      },
-      {
-        programId: "jys-2026",
-        programName: "Japan Youth Summit 2026",
-        programYear: 2026,
-        roleInProgram: "coordinator",
-        permissions: ["view_applications", "review_applications"],
-      },
-      {
-        programId: "kys-2026",
-        programName: "Korea Youth Summit 2026",
-        programYear: 2026,
-        roleInProgram: "coordinator",
-        permissions: ["view_applications", "review_applications", "manage_participants"],
-      },
-    ],
-  },
-  single: {
-    id: "admin-single-1",
-    userId: "user-single-1",
-    fullName: "Program Reviewer",
-    email: "reviewer@ybb.com",
-    avatarUrl: undefined,
-    accessLevel: 1,
-    canManageAdmins: false,
-    canAssignRoles: false,
-    roleId: "role-reviewer",
-    roleName: "Program Reviewer",
-    assignedPrograms: [
-      {
-        programId: "iys-2026",
-        programName: "Istanbul Youth Summit 2026",
-        programYear: 2026,
-        roleInProgram: "reviewer",
-        permissions: ["view_applications", "score_applications"],
-      },
-    ],
-  },
-  none: null,
-};
+function buildApiUrl(path: string): string {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (!baseUrl) {
+    throw new Error("NEXT_PUBLIC_API_URL is not configured.");
+  }
+
+  return `${baseUrl}${path}`;
+}
+
+function normalizePermissions(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((item): item is string => typeof item === "string");
+}
+
+function readStoredSession(): PersistedAuthSession | null {
+  if (typeof window === "undefined") return null;
+
+  const rawValue = window.localStorage.getItem(AUTH_SESSION_STORAGE_KEY);
+  if (!rawValue) return null;
+
+  try {
+    const parsed = JSON.parse(rawValue) as PersistedAuthSession;
+    if (!parsed?.accessToken || !parsed?.refreshToken || !parsed?.adminProfile?.id) {
+      return null;
+    }
+
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function persistSession(session: PersistedAuthSession): void {
+  if (typeof window === "undefined") return;
+
+  window.localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, session.accessToken);
+  window.localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, session.refreshToken);
+  window.localStorage.setItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify(session));
+}
+
+function clearStoredSession(): void {
+  if (typeof window === "undefined") return;
+
+  window.localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
+  window.localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
+  window.localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
+}
+
+async function readErrorMessage(response: Response): Promise<string> {
+  try {
+    const payload = (await response.json()) as { message?: string | string[] };
+    if (Array.isArray(payload.message)) {
+      return payload.message.join(", ");
+    }
+    if (typeof payload.message === "string") {
+      return payload.message;
+    }
+  } catch {
+    // Fall through to generic message.
+  }
+
+  return `Request failed with status ${response.status}.`;
+}
+
+async function readApiData<T>(response: Response): Promise<T> {
+  const payload = (await response.json()) as ApiEnvelope<T>;
+  return payload.data;
+}
+
+function decodeJwtPayload(token: string): JwtPayload | null {
+  try {
+    const [, payload] = token.split(".");
+    if (!payload) {
+      return null;
+    }
+
+    const normalizedPayload = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const decodedPayload = window.atob(normalizedPayload);
+    return JSON.parse(decodedPayload) as JwtPayload;
+  } catch {
+    return null;
+  }
+}
+
+function getRefreshDelay(accessToken: string): number {
+  const payload = decodeJwtPayload(accessToken);
+  if (!payload?.exp) {
+    return 0;
+  }
+
+  return payload.exp * 1000 - Date.now() - REFRESH_WINDOW_MS;
+}
+
+function isAccessTokenExpiringSoon(accessToken: string): boolean {
+  return getRefreshDelay(accessToken) <= 0;
+}
+
+function computeAccessConfig(profile: AdminProfile | null): AdminAccessConfig {
+  if (!profile) {
+    return {
+      isSuperAdmin: false,
+      canAccessPlatform: false,
+      canAccessPrograms: false,
+      canManageAdmins: false,
+      canAssignRoles: false,
+    };
+  }
+
+  const permissionSet = new Set(
+    [
+      ...profile.permissions,
+      ...profile.customPermissions,
+      ...profile.assignedPrograms.flatMap((program) => program.permissions),
+      ...profile.assignedBrands.flatMap((brand) => brand.permissions),
+    ].map((permission) => permission.toLowerCase()),
+  );
+
+  const normalizedRoleName = profile.roleName.toLowerCase();
+  const isSuperAdmin =
+    profile.accessLevel >= 10 ||
+    profile.canManageAdmins ||
+    profile.canAssignRoles ||
+    ["super admin", "super_admin", "super-admin", "owner"].includes(normalizedRoleName) ||
+    permissionSet.has("*") ||
+    permissionSet.has("admin.*") ||
+    permissionSet.has("platform.*");
+
+  const canAccessPlatform =
+    isSuperAdmin ||
+    profile.accessLevel >= 5 ||
+    profile.assignedBrands.length > 0 ||
+    permissionSet.has("platform_access") ||
+    permissionSet.has("platform.manage") ||
+    permissionSet.has("admin.manage");
+
+  const canAccessPrograms = isSuperAdmin || profile.accessiblePrograms.length > 0;
+
+  return {
+    isSuperAdmin,
+    canAccessPlatform,
+    canAccessPrograms,
+    canManageAdmins: profile.canManageAdmins || isSuperAdmin,
+    canAssignRoles: profile.canAssignRoles || isSuperAdmin,
+  };
+}
+
+function mapProgramSummary(
+  program: NonNullable<AdminLoginResponse["admin"]["accessiblePrograms"]>[number],
+): AdminProgram {
+  return {
+    programId: program.programId,
+    brandId: program.brandId,
+    brandName: program.brandName,
+    brandSlug: program.brandSlug,
+    programName: program.programName,
+    programSlug: program.programSlug,
+    programYear: program.programYear,
+    programStatus: program.programStatus,
+    isActive: program.isActive,
+    startDate: program.startDate,
+    endDate: program.endDate,
+    logoUrl: program.logoUrl,
+    roleInProgram: program.role ?? "member",
+    permissions: normalizePermissions(program.permissions),
+    accessType: program.accessType,
+  };
+}
+
+function buildAdminProfile(authResponse: AdminLoginResponse): AdminProfile {
+  const permissions = normalizePermissions(authResponse.admin.permissions);
+  const customPermissions = normalizePermissions(authResponse.admin.customPermissions);
+  const programAssignments = authResponse.admin.programs ?? [];
+  const accessiblePrograms = authResponse.admin.accessiblePrograms ?? authResponse.admin.programs ?? [];
+  const brandAssignments = authResponse.admin.brands ?? [];
+
+  return {
+    id: authResponse.admin.id,
+    userId: authResponse.user.id,
+    fullName: authResponse.admin.fullName,
+    email: authResponse.user.email,
+    avatarUrl: authResponse.admin.avatarUrl,
+    accessLevel: authResponse.admin.accessLevel,
+    canManageAdmins: authResponse.admin.canManageAdmins ?? false,
+    canAssignRoles: authResponse.admin.canAssignRoles ?? false,
+    roleId: authResponse.admin.roleId,
+    roleName: authResponse.admin.role,
+    permissions,
+    customPermissions,
+    assignedPrograms: programAssignments.map((program) => mapProgramSummary(program)),
+    accessiblePrograms: accessiblePrograms.map((program) => mapProgramSummary(program)),
+    assignedBrands: brandAssignments.map((brandAssignment) => {
+      return {
+        brandId: brandAssignment.brandId,
+        brandSlug: brandAssignment.brandSlug,
+        brandName: brandAssignment.brandName,
+        isActive: brandAssignment.isActive,
+        logoUrl: brandAssignment.logoUrl,
+        roleInBrand: brandAssignment.role,
+        permissions: normalizePermissions(brandAssignment.permissions),
+      };
+    }),
+  };
+}
+
+async function refreshAdminTokens(refreshToken: string): Promise<AdminLoginResponse> {
+  const response = await fetch(buildApiUrl("/auth/admin/refresh"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ refreshToken }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response));
+  }
+
+  return await readApiData<AdminLoginResponse>(response);
+}
+
+async function hydrateSession(authResponse: AdminLoginResponse): Promise<PersistedAuthSession> {
+  return {
+    accessToken: authResponse.accessToken,
+    refreshToken: authResponse.refreshToken,
+    adminProfile: buildAdminProfile(authResponse),
+  };
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [adminProfile, setAdminProfile] = useState<AdminProfile | null>(null);
 
-  // Inisialisasi state autentikasi pas pertama kali load
   useEffect(() => {
-    // Simulasi loading dikit biar kerasa ada prosesnya
-    const timer = setTimeout(() => {
-      const isAuth = localStorage.getItem("isAuthenticated") === "true";
-      const savedAdminType = localStorage.getItem("mockAdminType") as keyof typeof MOCK_ADMINS;
-      
-      if (isAuth && savedAdminType) {
-        const mockAdmin = MOCK_ADMINS[savedAdminType];
-        if (mockAdmin) {
-          setAdminProfile(mockAdmin);
+    let isMounted = true;
+
+    async function bootstrapAuth() {
+      const storedSession = readStoredSession();
+
+      if (!storedSession) {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      try {
+        const authResponse = isAccessTokenExpiringSoon(storedSession.accessToken)
+          ? await refreshAdminTokens(storedSession.refreshToken)
+          : {
+              accessToken: storedSession.accessToken,
+              refreshToken: storedSession.refreshToken,
+              user: {
+                id: storedSession.adminProfile.userId,
+                email: storedSession.adminProfile.email,
+              },
+              admin: {
+                id: storedSession.adminProfile.id,
+                fullName: storedSession.adminProfile.fullName,
+                avatarUrl: storedSession.adminProfile.avatarUrl,
+                roleId: storedSession.adminProfile.roleId,
+                role: storedSession.adminProfile.roleName,
+                accessLevel: storedSession.adminProfile.accessLevel,
+                permissions: storedSession.adminProfile.permissions,
+                customPermissions: storedSession.adminProfile.customPermissions,
+                canManageAdmins: storedSession.adminProfile.canManageAdmins,
+                canAssignRoles: storedSession.adminProfile.canAssignRoles,
+                programs: storedSession.adminProfile.assignedPrograms.map((program) => ({
+                  programId: program.programId,
+                  brandId: program.brandId,
+                  brandName: program.brandName,
+                  brandSlug: program.brandSlug,
+                  programName: program.programName,
+                  programSlug: program.programSlug,
+                  programYear: program.programYear,
+                  programStatus: program.programStatus,
+                  isActive: program.isActive,
+                  startDate: program.startDate,
+                  endDate: program.endDate,
+                  logoUrl: program.logoUrl,
+                  role: program.roleInProgram,
+                  permissions: program.permissions,
+                  accessType: program.accessType,
+                })),
+                accessiblePrograms: storedSession.adminProfile.accessiblePrograms.map((program) => ({
+                  programId: program.programId,
+                  brandId: program.brandId,
+                  brandName: program.brandName,
+                  brandSlug: program.brandSlug,
+                  programName: program.programName,
+                  programSlug: program.programSlug,
+                  programYear: program.programYear,
+                  programStatus: program.programStatus,
+                  isActive: program.isActive,
+                  startDate: program.startDate,
+                  endDate: program.endDate,
+                  logoUrl: program.logoUrl,
+                  role: program.roleInProgram,
+                  permissions: program.permissions,
+                  accessType: program.accessType,
+                })),
+                brands: storedSession.adminProfile.assignedBrands.map((brand) => ({
+                  brandId: brand.brandId,
+                  brandName: brand.brandName,
+                  brandSlug: brand.brandSlug,
+                  isActive: brand.isActive,
+                  logoUrl: brand.logoUrl,
+                  role: brand.roleInBrand,
+                  permissions: brand.permissions,
+                })),
+              },
+            };
+
+        const hydratedSession = await hydrateSession(authResponse);
+        persistSession(hydratedSession);
+
+        if (isMounted) {
+          setAdminProfile(hydratedSession.adminProfile);
           setIsAuthenticated(true);
         }
+      } catch {
+        clearStoredSession();
+        if (isMounted) {
+          setAdminProfile(null);
+          setIsAuthenticated(false);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
-      
-      setIsLoading(false);
-    }, 500);
+    }
 
-    return () => clearTimeout(timer);
+    void bootstrapAuth();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  // untuk Akses Levelnya
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    const storedSession = readStoredSession();
+    if (!storedSession) {
+      return;
+    }
+
+    const refreshDelay = getRefreshDelay(storedSession.accessToken);
+
+    const timeoutId = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const refreshedAuthResponse = await refreshAdminTokens(storedSession.refreshToken);
+          const hydratedSession = await hydrateSession(refreshedAuthResponse);
+          persistSession(hydratedSession);
+          setAdminProfile(hydratedSession.adminProfile);
+          setIsAuthenticated(true);
+        } catch {
+          clearStoredSession();
+          setAdminProfile(null);
+          setIsAuthenticated(false);
+        }
+      })();
+    }, Math.max(refreshDelay, 0));
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [isAuthenticated, adminProfile?.id]);
+
+  const accessConfig = computeAccessConfig(adminProfile);
+
   const adminAccessLevel: AdminAccessLevel = (() => {
-    if (!adminProfile) return "no_access";
-    
-    if (adminProfile.canManageAdmins || adminProfile.accessLevel >= 3) {
+    if (accessConfig.isSuperAdmin) {
       return "super_admin";
     }
-    
-    if (adminProfile.assignedPrograms.length > 0) {
+
+    if (accessConfig.canAccessPlatform) {
+      return "platform_admin";
+    }
+
+    if (accessConfig.canAccessPrograms) {
       return "program_admin";
     }
-    
+
     return "no_access";
   })();
 
-  const isPlatformAdmin = adminAccessLevel === "super_admin";
+  const isPlatformAdmin = accessConfig.canAccessPlatform;
   const assignedPrograms = adminProfile?.assignedPrograms || [];
+  const accessiblePrograms = adminProfile?.accessiblePrograms || [];
 
   const login = async (email: string, password: string) => {
     setIsLoading(true);
-    // Simulasi manggil API login
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Login dummy - nentuin tipe admin berdasarkan email yang dipake
-    const mockAdmin = email.includes("super") 
-      ? MOCK_ADMINS.super 
-      : email.includes("coordinator")
-      ? MOCK_ADMINS.multi
-      : MOCK_ADMINS.single;
-    
-    setAdminProfile(mockAdmin);
-    setIsAuthenticated(true);
-    setIsLoading(false);
+
+    try {
+      const response = await fetch(buildApiUrl("/auth/admin/login"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response));
+      }
+
+      const authResponse = await readApiData<AdminLoginResponse>(response);
+      const hydratedSession = await hydrateSession(authResponse);
+
+      persistSession(hydratedSession);
+      setAdminProfile(hydratedSession.adminProfile);
+      setIsAuthenticated(true);
+    } catch (error) {
+      clearStoredSession();
+      setAdminProfile(null);
+      setIsAuthenticated(false);
+      throw error instanceof Error ? error : new Error("Unable to sign in.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const logout = () => {
+    const storedSession = readStoredSession();
+
+    clearStoredSession();
     setAdminProfile(null);
     setIsAuthenticated(false);
-    localStorage.removeItem("mockAdminType");
-    localStorage.removeItem("isAuthenticated");
-  };
 
-  const switchMockAdmin = (type: "super" | "multi" | "single" | "none") => {
-    const mockAdmin = MOCK_ADMINS[type];
-    setAdminProfile(mockAdmin);
-    setIsAuthenticated(mockAdmin !== null);
-    localStorage.setItem("mockAdminType", type);
-    localStorage.setItem("isAuthenticated", mockAdmin !== null ? "true" : "false");
+    if (storedSession?.accessToken) {
+      void fetch(buildApiUrl("/auth/logout"), {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${storedSession.accessToken}`,
+        },
+      }).catch(() => undefined);
+    }
   };
 
   return (
@@ -198,11 +611,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         adminProfile,
         adminAccessLevel,
+        accessConfig,
         isPlatformAdmin,
         assignedPrograms,
+        accessiblePrograms,
         login,
         logout,
-        switchMockAdmin,
       }}
     >
       {children}

@@ -1,11 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { LogoutCommand } from '../logout.command';
 import { TokenBlacklistService } from '../../../infrastructure/services/token-blacklist.service';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 
 @Injectable()
 export class LogoutHandler {
     constructor(
         private readonly tokenBlacklistService: TokenBlacklistService,
+        private readonly prisma: PrismaService,
     ) { }
 
     async execute(command: LogoutCommand): Promise<{ success: boolean; message: string }> {
@@ -17,6 +19,18 @@ export class LogoutHandler {
         if (remainingTimeMs > 0) {
             await this.tokenBlacklistService.blacklistToken(command.jti, remainingTimeMs);
         }
+
+        await this.prisma.userSession.updateMany({
+            where: {
+                userId: command.userId,
+                sessionToken: command.sessionId,
+                revokedAt: null,
+            },
+            data: {
+                isActive: false,
+                revokedAt: new Date(),
+            },
+        });
 
         return {
             success: true,
