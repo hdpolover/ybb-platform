@@ -5,12 +5,18 @@ export class GetPortalDashboardQuery {
 
 // Submissions
 export class GetPortalSubmissionsQuery {
-  constructor(public readonly userId: string) { }
+  constructor(
+    public readonly userId: string,
+    public readonly programId?: string,
+  ) { }
 }
 
 // Submission Detail (full form data)
 export class GetPortalSubmissionDetailQuery {
-  constructor(public readonly userId: string) { }
+  constructor(
+    public readonly userId: string,
+    public readonly programId?: string,
+  ) { }
 }
 
 // Payments
@@ -34,6 +40,7 @@ export class SaveSubmissionSectionCommand {
     public readonly userId: string,
     public readonly section: string,
     public readonly data: Record<string, any>,
+    public readonly programId?: string,
   ) { }
 }
 

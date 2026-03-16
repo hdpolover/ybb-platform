@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards, UnauthorizedException } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards, UnauthorizedException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { QueryBus } from '@nestjs/cqrs';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
@@ -33,10 +33,13 @@ export class PortalController {
     @Get('submissions')
     @ApiOperation({ summary: 'Get application submission progress' })
     @ApiResponse({ status: 200, type: PortalSubmissionResponseDto })
-    async getSubmissions(@CurrentUser() user: any): Promise<PortalSubmissionResponseDto> {
+    async getSubmissions(
+        @CurrentUser() user: any,
+        @Query('programId') programId?: string,
+    ): Promise<PortalSubmissionResponseDto> {
         const userId = user?.userId || user?.id;
         if (!userId) throw new UnauthorizedException();
-        return this.queryBus.execute(new GetPortalSubmissionsQuery(userId));
+        return this.queryBus.execute(new GetPortalSubmissionsQuery(userId, programId));
     }
 
     @Get('payments')

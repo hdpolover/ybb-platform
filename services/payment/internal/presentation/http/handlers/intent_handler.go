@@ -95,6 +95,7 @@ func (h *IntentHandler) ConfirmIntent(c *gin.Context) {
 		IntentID:        intentID,
 		PaymentMethodID: req.PaymentMethodID,
 		GatewayToken:    req.GatewayToken,
+		IdempotencyKey:  c.GetHeader("Idempotency-Key"),
 		PaymentDetails:  detailsJSON,
 		IpAddress:       c.ClientIP(),
 		UserAgent:       c.Request.UserAgent(),

@@ -27,6 +27,8 @@ var (
 	ErrPaymentGatewayFailed = NewDomainError("GATEWAY_FAILED", "Payment gateway processing failed")
 	ErrUnsupportedGateway   = NewDomainError("UNSUPPORTED_GATEWAY", "Payment gateway not supported")
 
-	ErrPaymentNotRefundable = NewDomainError("PAYMENT_NOT_REFUNDABLE", "Payment cannot be refunded (status must be success)")
-	ErrGatewayError         = NewDomainError("GATEWAY_PROVIDER_ERROR", "Error from upstream payment provider")
+	ErrPaymentNotRefundable  = NewDomainError("PAYMENT_NOT_REFUNDABLE", "Payment cannot be refunded (status must be success)")
+	ErrGatewayError          = NewDomainError("GATEWAY_PROVIDER_ERROR", "Error from upstream payment provider")
+	ErrIdempotencyConflict   = NewDomainError("IDEMPOTENCY_CONFLICT", "Idempotency key has already been used for a different request")
+	ErrIdempotencyInProgress = NewDomainError("IDEMPOTENCY_IN_PROGRESS", "A request with this idempotency key is already processing")
 )

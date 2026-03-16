@@ -10,10 +10,12 @@ import (
 type TransactionStatus string
 
 const (
-	TransactionStatusPending TransactionStatus = "PENDING"
-	TransactionStatusSuccess TransactionStatus = "SUCCESS"
-	TransactionStatusFailed  TransactionStatus = "FAILED"
-	TransactionStatusVoid    TransactionStatus = "VOID"
+	TransactionStatusPending     TransactionStatus = "PENDING"
+	TransactionStatusNeedsReview TransactionStatus = "NEEDS_REVIEW"
+	TransactionStatusSuccess     TransactionStatus = "SUCCESS"
+	TransactionStatusFailed      TransactionStatus = "FAILED"
+	TransactionStatusVoid        TransactionStatus = "VOID"
+	TransactionStatusRejected    TransactionStatus = "REJECTED"
 )
 
 type PaymentTransaction struct {
@@ -34,11 +36,17 @@ type PaymentTransaction struct {
 	Status          TransactionStatus `gorm:"type:varchar(20);not null" json:"status"`
 	GatewayResponse json.RawMessage   `gorm:"type:jsonb" json:"gateway_response"`
 	ErrorCode       string            `gorm:"type:varchar(50)" json:"error_code"`
+	ProofFileURL    string            `gorm:"type:text" json:"proof_file_url"`
+	AdminNotes      string            `gorm:"type:text" json:"admin_notes"`
+	ReviewedBy      *string           `gorm:"type:uuid" json:"reviewed_by"`
+	ReviewedAt      *time.Time        `json:"reviewed_at"`
 
 	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 func NewPaymentTransaction(intentID, methodID string, amount float64) *PaymentTransaction {
+	now := time.Now()
 	return &PaymentTransaction{
 		ID:              uuid.NewString(),
 		IntentID:        intentID,
@@ -47,6 +55,7 @@ func NewPaymentTransaction(intentID, methodID string, amount float64) *PaymentTr
 		AmountSubtotal:  amount, // Default: Assume Absorb, so Total = Subtotal
 		NetAmount:       amount, // Default: Will be updated after fee calc
 		Status:          TransactionStatusPending,
-		CreatedAt:       time.Now(),
+		CreatedAt:       now,
+		UpdatedAt:       now,
 	}
 }

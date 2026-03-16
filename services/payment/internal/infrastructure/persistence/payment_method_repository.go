@@ -75,6 +75,20 @@ func (r *PaymentMethodRepository) FindByCode(ctx context.Context, code string) (
 	return &method, nil
 }
 
+func (r *PaymentMethodRepository) FindByCodeOrID(ctx context.Context, value string) (*entities.PaymentMethodEntity, error) {
+	var method entities.PaymentMethodEntity
+	if err := r.db.WithContext(ctx).
+		Where("code = ? OR id = ?", value, value).
+		First(&method).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("payment method not found")
+		}
+		return nil, fmt.Errorf("failed to find payment method by code or id: %w", err)
+	}
+
+	return &method, nil
+}
+
 // Delete: Menghapus data (Soft Delete karena ada gorm.DeletedAt di entity)
 func (r *PaymentMethodRepository) Delete(ctx context.Context, id string) error {
 	if err := r.db.WithContext(ctx).Delete(&entities.PaymentMethodEntity{}, "id = ?", id).Error; err != nil {

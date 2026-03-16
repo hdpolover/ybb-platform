@@ -1,10 +1,9 @@
 "use client";
 
-import { use } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { HeaderSection } from "@/app/components/programDetailsMasterData/HeaderSection";
 import { TabNavigation } from "@/app/components/programDetailsMasterData/TabNavigation";
-import { EditGeneralAction } from "@/app/components/programDetailsMasterData/general-information/EditGeneralAction";
 import { EditSpecificsAction } from "@/app/components/programDetailsMasterData/program-specifics/EditSpecificsAction";
 import {
   GeneralInformationTab,
@@ -14,86 +13,200 @@ import {
   ProgramSpecificsTab,
   ProgramSpecificsData,
 } from "@/app/components/programDetailsMasterData/program-specifics/ProgramSpecificsTab";
+import {
+  type ProgramSpecificsFormValues,
+} from "@/app/components/programDetailsMasterData/program-specifics/EditProgramSpecificsModal";
+import { buildApiUrl, getAccessToken, readErrorMessage } from "@/app/components/submissionsMasterData/api";
 
-const MOCK_GENERAL_DATA: GeneralInformationData = {
-  brandName: "Youth Leadership & Cultural Immersion",
-  programType: "Hybrid (Online Preparation + Onsite Program)",
-  tagline:
-    "Empowering young leaders to collaborate, innovate, and create global impact in Japan.",
-  websiteUrl: "https://youthbreaktheboundaries.com/japan-youth-summit-2026",
-  media: {
-    logo: "Logo preview / URL placeholder",
-    mainBanner: "Main banner preview / URL placeholder",
-    mainVideoUrl: "https://youtu.be/example-jys-2026",
-  },
-  description:
-    "Japan Youth Summit 2026 is a global youth forum that brings together emerging leaders from diverse backgrounds to discuss pressing global issues, experience Japanese culture, and collaborate on concrete youth-led initiatives.",
-  contact: {
-    team: "Youth Break the Boundaries (YBB) Program Team",
-    location: "Tokyo, Japan",
-    email: "support@youthbreaktheboundaries.com",
-  },
-  socialMedia: {
-    instagram: "https://instagram.com/japanyouthsummit",
-    tiktok: "https://tiktok.com/@japanyouthsummit",
-    youtube: "https://youtube.com/@youthbreaktheboundaries",
-    telegram: "https://t.me/jys2026_official",
-    sponsorCanva: "https://www.canva.com/design/jys-2026-sponsorship-kit",
-  },
-  additionalInfo:
-    "Japan Youth Summit is part of Youth Break the Boundaries' global flagship programs, designed to create a safe, inclusive, and collaborative space for young leaders who are passionate about SDGs, diplomacy, and cross-cultural understanding.",
-  coreValues: {
-    vision:
-      "To become a leading youth platform that empowers young leaders to collaborate and co-create innovative solutions for global challenges through meaningful engagement in Japan.",
-    mission: [
-      "Facilitate intercultural dialogue and collaboration among youth leaders.",
-      "Promote understanding of Japanese culture, innovation, and diplomacy.",
-      "Encourage youth-led initiatives aligned with the Sustainable Development Goals.",
-    ],
-  },
-  objectives: [
-    "Provide a platform for youth to present and discuss solutions to global challenges.",
-    "Strengthen leadership, negotiation, and public speaking skills of participants.",
-    "Build an international network of young leaders and changemakers.",
-    "Expose participants to Japanese culture, innovation, and best practices.",
-  ],
-  benefits: [
-    "International symposium and panel discussion with experts and practitioners.",
-    "Cultural immersion activities and city tour in Tokyo or surrounding areas.",
-    "Certificate of participation and potential award recognition.",
-    "Access to YBB global alumni network and future program opportunities.",
-  ],
+type ProgramDetail = {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  shortDescription?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  applicationDeadline?: string | null;
+  registrationOpenDate?: string | null;
+  registrationCloseDate?: string | null;
+  location?: string | null;
+  capacity?: number | null;
+  thumbnailUrl?: string | null;
+  bannerUrl?: string | null;
+  videoUrl?: string | null;
+  status: string;
+  isVisibleToUsers: boolean;
+  allowRegistration: boolean;
+  requirePayment: boolean;
+  currency?: string | null;
+  registrationFee?: number | null;
+  requirementsDescription?: string | null;
+  benefitsDescription?: string | null;
+  termsAndConditions?: string | null;
+  metaTitle?: string | null;
+  metaDescription?: string | null;
+  brand: {
+    id: string;
+    name: string;
+    slug: string;
+  };
 };
 
-const MOCK_SPECIFICS_DATA: ProgramSpecificsData = {
-  programName: "Japan Youth Summit 2026",
-  theme: "Empowering Youth Collaboration for Global Impact",
-  description:
-    "Japan Youth Summit 2026 focuses on youth-led innovation, diplomacy, and collaboration to address global challenges through intensive discussions, cultural immersion, and project-based activities in Japan.",
-  datesAndStatus: {
-    startDate: "11 May 2026",
-    endDate: "14 May 2026",
-    status: "Active",
-    registrationStatus: "Open",
-  },
-  media: {
-    bannerImage: "Program-specific banner preview",
-    registrationVideoUrl: "https://youtu.be/registration-video",
-    twibbonVideoUrl: "https://youtu.be/twibbon-video",
-    tshirtChartUrl: "https://ybb.link/jys-2026-tshirt-chart",
-    twibbonUrl: "https://ybb.link/jys-2026-twibbon",
-  },
-  content: {
-    guidelineUrl: "https://ybb.link/jys-2026-guideline",
-    essayGuidelineUrl: "https://ybb.link/jys-2026-essay-guideline",
-    mainEssayQuestion:
-      "How can youth-led collaboration between countries contribute to solving global challenges such as climate change, inequality, and technological disruption? Provide concrete examples and proposed initiatives?",
-    shareDescription:
-      "Note: As mentioned in the Registration Guidelines, you need to complete the following steps...",
-    confirmationDescription:
-      "Japan Youth Summit 2026 — The Japan Youth Summit provides both Fully Funded and Self-Funded Opportunities...",
-  },
+type ApiEnvelope<T> = {
+  message: string;
+  data: T;
 };
+
+function formatDisplayValue(value?: string | number | null): string {
+  if (value === null || value === undefined) {
+    return "Not configured";
+  }
+
+  const normalized = String(value).trim();
+  return normalized === "" ? "Not configured" : normalized;
+}
+
+function formatDate(value?: string | null): string {
+  if (!value) {
+    return "Not configured";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Not configured";
+  }
+
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+}
+
+function toDateInputValue(value?: string | null): string {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toISOString().slice(0, 10);
+}
+
+function getRegistrationStatus(detail: ProgramDetail): string {
+  if (!detail.allowRegistration) {
+    return "Disabled";
+  }
+
+  const now = Date.now();
+  const openDate = detail.registrationOpenDate ? new Date(detail.registrationOpenDate).getTime() : null;
+  const closeDate = detail.registrationCloseDate ? new Date(detail.registrationCloseDate).getTime() : null;
+
+  if (openDate && now < openDate) {
+    return "Scheduled";
+  }
+
+  if (closeDate && now > closeDate) {
+    return "Closed";
+  }
+
+  return "Open";
+}
+
+function getRegistrationWindow(detail: ProgramDetail): string {
+  const openDate = formatDate(detail.registrationOpenDate);
+  const closeDate = formatDate(detail.registrationCloseDate);
+
+  if (openDate === "Not configured" && closeDate === "Not configured") {
+    return "Not configured";
+  }
+
+  return `${openDate} - ${closeDate}`;
+}
+
+function toGeneralInformationData(detail: ProgramDetail): GeneralInformationData {
+  return {
+    brandName: detail.brand.name,
+    programType: "Program cohort",
+    tagline: formatDisplayValue(detail.shortDescription),
+    websiteUrl: detail.slug ? `/programs/${detail.slug}` : "Not configured",
+    media: {
+      logo: formatDisplayValue(detail.thumbnailUrl),
+      mainBanner: formatDisplayValue(detail.bannerUrl),
+      mainVideoUrl: formatDisplayValue(detail.videoUrl),
+    },
+    description: formatDisplayValue(detail.description),
+    contact: {
+      team: "Program admin team",
+      location: formatDisplayValue(detail.location),
+      email: "Not configured",
+    },
+    socialMedia: {
+      instagram: "Not configured",
+      tiktok: "Not configured",
+      youtube: "Not configured",
+      telegram: "Not configured",
+      sponsorCanva: "Not configured",
+    },
+    additionalInfo: formatDisplayValue(detail.metaDescription ?? detail.shortDescription),
+    coreValues: {
+      vision: formatDisplayValue(detail.metaTitle),
+      mission: ["Dedicated program-content APIs are still needed for full general-information editing."],
+    },
+    objectives: ["Program shell and operational settings are now sourced from live program data."],
+    benefits: [formatDisplayValue(detail.benefitsDescription)],
+  };
+}
+
+function toProgramSpecificsData(detail: ProgramDetail): ProgramSpecificsData {
+  return {
+    schedule: {
+      startDate: formatDate(detail.startDate),
+      endDate: formatDate(detail.endDate),
+      applicationDeadline: formatDate(detail.applicationDeadline),
+      status: formatDisplayValue(detail.status),
+      visibility: detail.isVisibleToUsers ? "Visible" : "Hidden",
+    },
+    operations: {
+      location: formatDisplayValue(detail.location),
+      capacity: formatDisplayValue(detail.capacity),
+      registrationStatus: getRegistrationStatus(detail),
+      registrationWindow: getRegistrationWindow(detail),
+      allowRegistration: detail.allowRegistration ? "Enabled" : "Disabled",
+      requirePayment: detail.requirePayment ? "Required" : "Not required",
+      currency: formatDisplayValue(detail.currency ?? "USD"),
+      registrationFee:
+        typeof detail.registrationFee === "number"
+          ? `${detail.currency ?? "USD"} ${detail.registrationFee}`
+          : "Not configured",
+    },
+    participantContent: {
+      requirementsDescription: formatDisplayValue(detail.requirementsDescription),
+      benefitsDescription: formatDisplayValue(detail.benefitsDescription),
+      termsAndConditions: formatDisplayValue(detail.termsAndConditions),
+    },
+  };
+}
+
+function toSpecificsFormValues(detail: ProgramDetail): ProgramSpecificsFormValues {
+  return {
+    location: detail.location ?? "",
+    capacity: detail.capacity !== null && detail.capacity !== undefined ? String(detail.capacity) : "",
+    registrationOpenDate: toDateInputValue(detail.registrationOpenDate),
+    registrationCloseDate: toDateInputValue(detail.registrationCloseDate),
+    allowRegistration: detail.allowRegistration,
+    requirePayment: detail.requirePayment,
+    currency: detail.currency ?? "USD",
+    registrationFee:
+      typeof detail.registrationFee === "number" ? String(detail.registrationFee) : "",
+    requirementsDescription: detail.requirementsDescription ?? "",
+    benefitsDescription: detail.benefitsDescription ?? "",
+    termsAndConditions: detail.termsAndConditions ?? "",
+  };
+}
 
 export default function ProgramDetailsPage({
   params,
@@ -107,10 +220,133 @@ export default function ProgramDetailsPage({
   const { accessiblePrograms } = useAuth();
 
   const programId = resolvedParams.programId;
-  const programName =
+  const fallbackProgramName =
     accessiblePrograms.find((program) => program.programId === programId)?.programName ??
     "Selected Program";
   const activeTab = resolvedSearchParams.tab || "general";
+  const [programDetail, setProgramDetail] = useState<ProgramDetail | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadProgramDetail() {
+      setIsLoading(true);
+      setPageError(null);
+
+      try {
+        const response = await fetch(buildApiUrl(`/programs/${encodeURIComponent(programId)}`), {
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          throw new Error(await readErrorMessage(response));
+        }
+
+        const payload = (await response.json()) as ProgramDetail;
+        if (!isMounted) {
+          return;
+        }
+
+        setProgramDetail(payload);
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setPageError(error instanceof Error ? error.message : "Failed to load program details.");
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void loadProgramDetail();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [programId]);
+
+  const generalInformationData = useMemo(() => {
+    return programDetail ? toGeneralInformationData(programDetail) : null;
+  }, [programDetail]);
+
+  const programSpecificsData = useMemo(() => {
+    return programDetail ? toProgramSpecificsData(programDetail) : null;
+  }, [programDetail]);
+
+  const specificsFormValues = useMemo(() => {
+    return programDetail ? toSpecificsFormValues(programDetail) : null;
+  }, [programDetail]);
+
+  const programName = programDetail?.name ?? fallbackProgramName;
+
+  const handleSaveSpecifics = async (values: ProgramSpecificsFormValues) => {
+    if (!programDetail) {
+      return;
+    }
+
+    const accessToken = getAccessToken();
+    if (!accessToken) {
+      throw new Error("You must be signed in to update program settings.");
+    }
+
+    setIsSaving(true);
+    setSaveError(null);
+
+    try {
+      const payload = {
+        location: values.location.trim() || undefined,
+        capacity: values.capacity.trim() === "" ? undefined : Number(values.capacity),
+        registrationOpenDate: values.registrationOpenDate || undefined,
+        registrationCloseDate: values.registrationCloseDate || undefined,
+        allowRegistration: values.allowRegistration,
+        requirePayment: values.requirePayment,
+        currency: values.currency.trim().toUpperCase() || undefined,
+        registrationFee: values.registrationFee.trim() === "" ? undefined : Number(values.registrationFee),
+        requirementsDescription: values.requirementsDescription.trim() || undefined,
+        benefitsDescription: values.benefitsDescription.trim() || undefined,
+        termsAndConditions: values.termsAndConditions.trim() || undefined,
+      };
+
+      const response = await fetch(buildApiUrl(`/programs/${encodeURIComponent(programDetail.id)}`), {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response));
+      }
+
+      await response.json() as ApiEnvelope<unknown>;
+
+      const refreshedResponse = await fetch(buildApiUrl(`/programs/${encodeURIComponent(programDetail.id)}`), {
+        cache: "no-store",
+      });
+
+      if (!refreshedResponse.ok) {
+        throw new Error(await readErrorMessage(refreshedResponse));
+      }
+
+      const refreshedDetail = (await refreshedResponse.json()) as ProgramDetail;
+      setProgramDetail(refreshedDetail);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to update program settings.";
+      setSaveError(message);
+      throw error;
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <main className="space-y-4">
@@ -120,18 +356,34 @@ export default function ProgramDetailsPage({
         <div className="mb-4 flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <TabNavigation activeTab={activeTab} />
 
-          {activeTab === "general" ? (
-            <EditGeneralAction programName={programName} />
-          ) : (
-            <EditSpecificsAction programName={programName} />
-          )}
+          {activeTab === "specifics" && specificsFormValues ? (
+            <EditSpecificsAction
+              programName={programName}
+              initialValues={specificsFormValues}
+              onSave={handleSaveSpecifics}
+              isSaving={isSaving}
+              errorMessage={saveError}
+            />
+          ) : null}
         </div>
 
         <div className="border-t border-zinc-100 pt-4">
-          {activeTab === "general" ? (
-            <GeneralInformationTab data={MOCK_GENERAL_DATA} />
+          {isLoading ? (
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-6 text-sm text-zinc-600">
+              Loading program details...
+            </div>
+          ) : pageError ? (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-6 text-sm text-rose-700">
+              {pageError}
+            </div>
+          ) : activeTab === "general" && generalInformationData ? (
+            <GeneralInformationTab data={generalInformationData} />
+          ) : programSpecificsData ? (
+            <ProgramSpecificsTab data={programSpecificsData} />
           ) : (
-            <ProgramSpecificsTab data={MOCK_SPECIFICS_DATA} />
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-6 text-sm text-zinc-600">
+              No program details available.
+            </div>
           )}
         </div>
       </section>

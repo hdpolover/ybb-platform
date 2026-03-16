@@ -5,6 +5,10 @@ import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { PortalCacheService } from '../../services/portal-cache.service';
 import { GetPortalDashboardQuery } from '../portal-queries';
+import {
+    calculateSubmissionProgress,
+    determineSubmissionCurrentStep,
+} from '../../services/submission-progress.util';
 import { 
     PortalDashboardResponseDto, 
     PortalDashboardAlertDto,
@@ -46,11 +50,39 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                 status: true,
                 applicationCategory: true,
                 updatedAt: true,
+                personalData: true,
+                essayAnswers: true,
+                uploadedFiles: true,
                 program: {
                     select: {
                         id: true,
                         name: true,
                         applicationDeadline: true,
+                        formFields: {
+                            where: { isActive: true },
+                            select: {
+                                section: true,
+                                name: true,
+                                isRequired: true,
+                            },
+                            orderBy: { order: 'asc' },
+                        },
+                        essays: {
+                            where: { isActive: true },
+                            select: {
+                                id: true,
+                                isRequired: true,
+                            },
+                            orderBy: { order: 'asc' },
+                        },
+                        requirements: {
+                            where: { isActive: true },
+                            select: {
+                                id: true,
+                                isRequired: true,
+                            },
+                            orderBy: { order: 'asc' },
+                        },
                         programAnnouncements: {
                             where: { isActive: true },
                             orderBy: { createdAt: 'desc' },
@@ -116,8 +148,8 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                 status: latestApplication.status,
                 category: latestApplication.applicationCategory || 'general',
                 canSwitchCategory: ['draft', 'submitted'].includes(latestApplication.status),
-                progress: this.calculateProgress(latestApplication),
-                currentStep: this.determineCurrentStep(latestApplication),
+                progress: calculateSubmissionProgress(latestApplication),
+                currentStep: determineSubmissionCurrentStep(latestApplication),
                 daysUntilDeadline: this.calculateDaysUntilDeadline(latestApplication.program.applicationDeadline),
             };
 
@@ -200,23 +232,6 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
 
         return alerts;
     }
-
-    private calculateProgress(application: any): number {
-        if (application.status === 'draft') return 25;
-        if (application.status === 'submitted') return 50;
-        if (application.status === 'accepted') return 100;
-        return 0;
-    }
-
-    private determineCurrentStep(application: any): string {
-        switch (application.status) {
-            case 'draft': return 'Application Drafting';
-            case 'submitted': return 'Documentation Check';
-            case 'accepted': return 'Program Preparation';
-            default: return 'Review';
-        }
-    }
-
     private calculateDaysUntilDeadline(deadline: Date | null): number | undefined {
         if (!deadline) return undefined;
         const diff = new Date(deadline).getTime() - new Date().getTime();

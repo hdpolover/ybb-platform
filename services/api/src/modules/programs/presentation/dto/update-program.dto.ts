@@ -22,6 +22,11 @@ export class UpdateProgramDto {
     @IsOptional()
     description?: string;
 
+    @ApiProperty({ description: 'Short program description', required: false })
+    @IsString()
+    @IsOptional()
+    shortDescription?: string;
+
     @ApiProperty({ description: 'Program year', required: false })
     @IsNumber()
     @IsOptional()
@@ -76,6 +81,36 @@ export class UpdateProgramDto {
     @IsNumber()
     @IsOptional()
     registrationFee?: number;
+
+    @ApiProperty({ description: 'Allow registration', required: false })
+    @IsBoolean()
+    @IsOptional()
+    allowRegistration?: boolean;
+
+    @ApiProperty({ description: 'Require payment', required: false })
+    @IsBoolean()
+    @IsOptional()
+    requirePayment?: boolean;
+
+    @ApiProperty({ description: 'Currency', required: false })
+    @IsString()
+    @IsOptional()
+    currency?: string;
+
+    @ApiProperty({ description: 'Requirements description', required: false })
+    @IsString()
+    @IsOptional()
+    requirementsDescription?: string;
+
+    @ApiProperty({ description: 'Benefits description', required: false })
+    @IsString()
+    @IsOptional()
+    benefitsDescription?: string;
+
+    @ApiProperty({ description: 'Terms and conditions', required: false })
+    @IsString()
+    @IsOptional()
+    termsAndConditions?: string;
 
     @ApiProperty({ description: 'Is active', required: false })
     @IsBoolean()
