@@ -10,9 +10,15 @@ export class BrandRepository implements IBrandRepository {
 
     async findAll(): Promise<Brand[]> {
         const categories = await this.prisma.brand.findMany({
-            where: { isActive: true },
+            where: { deletedAt: null },
             orderBy: { name: 'asc' },
-            include: { settings: true },
+            include: {
+                settings: true,
+                programs: {
+                    where: { deletedAt: null },
+                    select: { id: true },
+                },
+            },
         });
         return categories.map((c) => this.mapToEntity(c));
     }
@@ -188,7 +194,8 @@ export class BrandRepository implements IBrandRepository {
             prismaEntity.updatedAt,
             prismaEntity.deletedAt,
             prismaEntity.isActive,
-            settings
+            settings,
+            prismaEntity.programs?.length ?? 0,
         );
     }
 }

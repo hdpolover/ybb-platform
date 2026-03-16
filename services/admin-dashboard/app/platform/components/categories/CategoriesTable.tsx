@@ -42,10 +42,10 @@ export function CategoriesTable({
           </svg>
         </div>
         <h3 className="mb-2 text-lg font-semibold text-zinc-900">
-          No categories yet
+          No brands yet
         </h3>
         <p className="text-sm text-zinc-600">
-          Get started by creating your first program category
+          Get started by creating your first brand
         </p>
       </div>
     );
@@ -58,7 +58,7 @@ export function CategoriesTable({
           <thead className="border-b border-zinc-200 bg-zinc-50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-600">
-                Name
+                Brand
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-600">
                 Slug
@@ -112,7 +112,7 @@ export function CategoriesTable({
                       type="button"
                       onClick={() => onEdit(category)}
                       className="rounded-md p-2 text-zinc-600 hover:bg-zinc-100 hover:text-blue-600"
-                      title="Edit category"
+                      title="Edit brand"
                     >
                       <PencilIcon className="h-4 w-4" />
                     </button>
@@ -120,7 +120,7 @@ export function CategoriesTable({
                       type="button"
                       onClick={() => onDelete(category)}
                       className="rounded-md p-2 text-zinc-600 hover:bg-red-50 hover:text-red-600"
-                      title="Delete category"
+                      title="Delete brand"
                     >
                       <TrashIcon className="h-4 w-4" />
                     </button>

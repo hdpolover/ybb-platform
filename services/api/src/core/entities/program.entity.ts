@@ -36,5 +36,6 @@ export class Program {
         public readonly createdAt: Date,
         public readonly updatedAt: Date,
         public readonly deletedAt: Date | null,
+        public readonly brandName?: string | null,
     ) { }
 }

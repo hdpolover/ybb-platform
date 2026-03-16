@@ -27,12 +27,6 @@ export class CreateProgramHandler implements ICommandHandler<CreateProgramComman
         if (programData.applicationDeadline) programData.applicationDeadline = new Date(programData.applicationDeadline);
         if (programData.registrationOpenDate) programData.registrationOpenDate = new Date(programData.registrationOpenDate);
         if (programData.registrationCloseDate) programData.registrationCloseDate = new Date(programData.registrationCloseDate);
-        
-        // Map brandId to brandId
-        if (programData.brandId) {
-            programData.brandId = programData.brandId;
-            delete programData.brandId;
-        }
 
         const program = await this.programRepository.create(programData);
 

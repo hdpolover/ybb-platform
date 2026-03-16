@@ -47,6 +47,13 @@ export class ProgramRepository implements IProgramRepository {
                     { year: 'desc' },
                     { createdAt: 'desc' },
                 ],
+                include: {
+                    brand: {
+                        select: {
+                            name: true,
+                        },
+                    },
+                },
             }),
         ]);
 
@@ -134,6 +141,13 @@ export class ProgramRepository implements IProgramRepository {
                 metaTitle: data.metaTitle,
                 metaDescription: data.metaDescription,
             },
+            include: {
+                brand: {
+                    select: {
+                        name: true,
+                    },
+                },
+            },
         });
         return this.mapToEntity(program);
     }
@@ -142,6 +156,7 @@ export class ProgramRepository implements IProgramRepository {
         const program = await this.prisma.program.update({
             where: { id },
             data: {
+                brandId: data.brandId,
                 name: data.name,
                 slug: data.slug,
                 description: data.description,
@@ -173,6 +188,13 @@ export class ProgramRepository implements IProgramRepository {
                 termsAndConditions: data.termsAndConditions,
                 metaTitle: data.metaTitle,
                 metaDescription: data.metaDescription,
+            },
+            include: {
+                brand: {
+                    select: {
+                        name: true,
+                    },
+                },
             },
         });
         return this.mapToEntity(program);
@@ -226,6 +248,7 @@ export class ProgramRepository implements IProgramRepository {
             prismaEntity.createdAt,
             prismaEntity.updatedAt,
             prismaEntity.deletedAt,
+            prismaEntity.brand?.name ?? null,
         );
     }
 }

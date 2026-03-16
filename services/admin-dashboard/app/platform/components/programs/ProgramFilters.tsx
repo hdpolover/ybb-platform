@@ -5,8 +5,8 @@ import { MagnifyingGlassIcon, FunnelIcon } from "@heroicons/react/24/outline";
 type ProgramFiltersProps = {
   searchQuery: string;
   onSearchChange: (query: string) => void;
-  selectedCategory: string;
-  onCategoryChange: (categoryId: string) => void;
+  selectedBrand: string;
+  onBrandChange: (brandId: string) => void;
   selectedStatus: string;
   onStatusChange: (status: string) => void;
   categories: Array<{ id: string; name: string }>;
@@ -15,8 +15,8 @@ type ProgramFiltersProps = {
 export function ProgramFilters({
   searchQuery,
   onSearchChange,
-  selectedCategory,
-  onCategoryChange,
+  selectedBrand,
+  onBrandChange,
   selectedStatus,
   onStatusChange,
   categories,
@@ -42,11 +42,11 @@ export function ProgramFilters({
         <div className="flex items-center gap-2">
           <FunnelIcon className="h-4 w-4 text-zinc-500" />
           <select
-            value={selectedCategory}
-            onChange={(e) => onCategoryChange(e.target.value)}
+            value={selectedBrand}
+            onChange={(e) => onBrandChange(e.target.value)}
             className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
           >
-            <option value="">All Categories</option>
+            <option value="">All Brands</option>
             {categories.map((category) => (
               <option key={category.id} value={category.id}>
                 {category.name}
@@ -64,16 +64,18 @@ export function ProgramFilters({
           <option value="">All Statuses</option>
           <option value="draft">Draft</option>
           <option value="published">Published</option>
-          <option value="archived">Archived</option>
+          <option value="ongoing">Ongoing</option>
+          <option value="completed">Completed</option>
+          <option value="cancelled">Cancelled</option>
         </select>
 
         {/* Tombol buat clear semua filter */}
-        {(searchQuery || selectedCategory || selectedStatus) && (
+        {(searchQuery || selectedBrand || selectedStatus) && (
           <button
             type="button"
             onClick={() => {
               onSearchChange("");
-              onCategoryChange("");
+              onBrandChange("");
               onStatusChange("");
             }}
             className="text-sm font-medium text-blue-600 hover:text-blue-700"

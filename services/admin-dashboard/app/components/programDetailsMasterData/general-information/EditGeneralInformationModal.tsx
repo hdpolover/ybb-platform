@@ -81,7 +81,7 @@ export function EditGeneralInformationModal({
             </div>
             <div className="grid gap-5 md:grid-cols-2">
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-zinc-500">Program Category Name</label>
+                <label className="mb-1.5 block text-xs font-medium text-zinc-500">Brand Name</label>
                 <input
                   type="text"
                   className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"

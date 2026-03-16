@@ -11,7 +11,7 @@ import {
 } from "@heroicons/react/24/solid";
 
 export interface GeneralInformationData {
-  categoryName: string;
+  brandName: string;
   programType: string;
   tagline: string;
   websiteUrl: string;
@@ -64,9 +64,9 @@ export function GeneralInformationTab({ data }: { data: GeneralInformationData }
         
         <dl className="grid gap-5 md:grid-cols-2">
           <div>
-            <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Program Category Name</dt>
+            <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Brand Name</dt>
             <dd className="rounded-md border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 shadow-sm">
-              {data.categoryName}
+              {data.brandName}
             </dd>
           </div>
           <div>

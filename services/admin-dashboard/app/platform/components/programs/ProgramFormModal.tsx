@@ -7,23 +7,25 @@ import type { Program } from "./ProgramsTable";
 type ProgramFormModalProps = {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: ProgramFormData) => void;
+  onSubmit: (data: ProgramFormData) => void | Promise<void>;
   program?: Program | null;
   categories: Array<{ id: string; name: string }>;
+  isSubmitting?: boolean;
+  errorMessage?: string | null;
 };
 
 export type ProgramFormData = {
+  brandId: string;
   name: string;
   description: string;
-  categoryId: string;
   slug: string;
-  status: "draft" | "published" | "archived";
-  registrationStartDate: string;
-  registrationEndDate: string;
-  programStartDate: string;
-  programEndDate: string;
-  registrationFee: number;
-  maxParticipants: number | null;
+  year: number;
+  status: "draft" | "published" | "ongoing" | "completed" | "cancelled";
+  applicationDeadline: string;
+  startDate: string;
+  endDate: string;
+  isPublished: boolean;
+  isActive: boolean;
 };
 
 export function ProgramFormModal({
@@ -32,19 +34,21 @@ export function ProgramFormModal({
   onSubmit,
   program,
   categories,
+  isSubmitting = false,
+  errorMessage,
 }: ProgramFormModalProps) {
   const [formData, setFormData] = useState<ProgramFormData>(() => ({
+    brandId: program?.brandId ?? categories[0]?.id ?? "",
     name: program?.name ?? "",
     description: program?.description ?? "",
-    categoryId: program?.categoryId ?? categories[0]?.id ?? "",
     slug: program?.slug ?? "",
+    year: program?.year ?? new Date().getFullYear(),
     status: program?.status ?? "draft",
-    registrationStartDate: program?.registrationStartDate ?? "",
-    registrationEndDate: program?.registrationEndDate ?? "",
-    programStartDate: program?.programStartDate ?? "",
-    programEndDate: program?.programEndDate ?? "",
-    registrationFee: program?.registrationFee ?? 0,
-    maxParticipants: program?.maxParticipants ?? null,
+    applicationDeadline: program?.applicationDeadline?.slice(0, 10) ?? "",
+    startDate: program?.startDate?.slice(0, 10) ?? "",
+    endDate: program?.endDate?.slice(0, 10) ?? "",
+    isPublished: program?.isPublished ?? false,
+    isActive: program?.isActive ?? true,
   }));
   const [autoGenerateSlug, setAutoGenerateSlug] = useState(() => !program);
 
@@ -68,7 +72,6 @@ export function ProgramFormModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit(formData);
-    onClose();
   };
 
   return (
@@ -91,6 +94,12 @@ export function ProgramFormModal({
         {/* Isi form utama */}
         <form onSubmit={handleSubmit} className="p-6">
           <div className="space-y-6">
+            {errorMessage ? (
+              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {errorMessage}
+              </div>
+            ) : null}
+
             {/* Bagian informasi dasar program */}
             <div>
               <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-zinc-500">
@@ -120,21 +129,21 @@ export function ProgramFormModal({
                   {/* Dropdown kategori program */}
                   <div>
                     <label
-                      htmlFor="categoryId"
+                      htmlFor="brandId"
                       className="mb-1 block text-sm font-medium text-zinc-700"
                     >
-                      Category <span className="text-red-500">*</span>
+                      Brand <span className="text-red-500">*</span>
                     </label>
                     <select
-                      id="categoryId"
-                      value={formData.categoryId}
+                      id="brandId"
+                      value={formData.brandId}
                       onChange={(e) =>
-                        setFormData({ ...formData, categoryId: e.target.value })
+                        setFormData({ ...formData, brandId: e.target.value })
                       }
                       className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       required
                     >
-                      <option value="">Select a category</option>
+                      <option value="">Select a brand</option>
                       {categories.map((category) => (
                         <option key={category.id} value={category.id}>
                           {category.name}
@@ -143,7 +152,27 @@ export function ProgramFormModal({
                     </select>
                   </div>
 
-                  {/* Dropdown status program */}
+                  <div>
+                    <label
+                      htmlFor="year"
+                      className="mb-1 block text-sm font-medium text-zinc-700"
+                    >
+                      Year <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      id="year"
+                      value={formData.year}
+                      onChange={(e) =>
+                        setFormData({ ...formData, year: Number(e.target.value) })
+                      }
+                      min="2000"
+                      max="2100"
+                      className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+
                   <div>
                     <label
                       htmlFor="status"
@@ -157,7 +186,7 @@ export function ProgramFormModal({
                       onChange={(e) =>
                         setFormData({
                           ...formData,
-                          status: e.target.value as "draft" | "published" | "archived",
+                          status: e.target.value as ProgramFormData["status"],
                         })
                       }
                       className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -165,7 +194,9 @@ export function ProgramFormModal({
                     >
                       <option value="draft">Draft</option>
                       <option value="published">Published</option>
-                      <option value="archived">Archived</option>
+                      <option value="ongoing">Ongoing</option>
+                      <option value="completed">Completed</option>
+                      <option value="cancelled">Cancelled</option>
                     </select>
                   </div>
 
@@ -188,7 +219,7 @@ export function ProgramFormModal({
                         }}
                         className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                         placeholder="summer-leadership-camp-2025"
-                        pattern="[a-z0-9-]+"
+                        pattern="^[a-z0-9]+(?:-[a-z0-9]+)*$"
                         required
                       />
                       <label className="flex items-center gap-2 text-xs text-zinc-600">
@@ -230,161 +261,109 @@ export function ProgramFormModal({
                       placeholder="Provide a detailed description of the program..."
                     />
                   </div>
+
+                  <div className="sm:col-span-2 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                    Program-specific settings like fees, capacity, registration windows, and venue details are managed inside the program admin area.
+                  </div>
+
+                  <div className="flex items-end">
+                    <label className="flex items-center gap-2 text-sm text-zinc-700">
+                      <input
+                        type="checkbox"
+                        checked={formData.isPublished}
+                        onChange={(e) =>
+                          setFormData({ ...formData, isPublished: e.target.checked })
+                        }
+                        className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      Publish after save
+                    </label>
+                  </div>
+
+                  <div className="flex items-end">
+                    <label className="flex items-center gap-2 text-sm text-zinc-700">
+                      <input
+                        type="checkbox"
+                        checked={formData.isActive}
+                        onChange={(e) =>
+                          setFormData({ ...formData, isActive: e.target.checked })
+                        }
+                        className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      Mark program as active
+                    </label>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Bagian tanggal registrasi dibuka & ditutup */}
             <div>
               <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-zinc-500">
-                Registration Period
+                Schedule
               </h3>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label
-                    htmlFor="registrationStartDate"
+                    htmlFor="applicationDeadline"
                     className="mb-1 block text-sm font-medium text-zinc-700"
                   >
-                    Registration Start Date
+                    Application Deadline <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="date"
-                    id="registrationStartDate"
-                    value={formData.registrationStartDate}
+                    id="applicationDeadline"
+                    value={formData.applicationDeadline}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        registrationStartDate: e.target.value,
+                        applicationDeadline: e.target.value,
                       })
                     }
-                    className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor="registrationEndDate"
-                    className="mb-1 block text-sm font-medium text-zinc-700"
-                  >
-                    Registration End Date
-                  </label>
-                  <input
-                    type="date"
-                    id="registrationEndDate"
-                    value={formData.registrationEndDate}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        registrationEndDate: e.target.value,
-                      })
-                    }
-                    className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Bagian tanggal pelaksanaan program */}
-            <div>
-              <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-zinc-500">
-                Program Duration
-              </h3>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label
-                    htmlFor="programStartDate"
-                    className="mb-1 block text-sm font-medium text-zinc-700"
-                  >
-                    Program Start Date
-                  </label>
-                  <input
-                    type="date"
-                    id="programStartDate"
-                    value={formData.programStartDate}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        programStartDate: e.target.value,
-                      })
-                    }
-                    className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor="programEndDate"
-                    className="mb-1 block text-sm font-medium text-zinc-700"
-                  >
-                    Program End Date
-                  </label>
-                  <input
-                    type="date"
-                    id="programEndDate"
-                    value={formData.programEndDate}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        programEndDate: e.target.value,
-                      })
-                    }
-                    className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Bagian biaya registrasi & kuota peserta */}
-            <div>
-              <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-zinc-500">
-                Fees & Capacity
-              </h3>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label
-                    htmlFor="registrationFee"
-                    className="mb-1 block text-sm font-medium text-zinc-700"
-                  >
-                    Registration Fee (USD) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    id="registrationFee"
-                    value={formData.registrationFee}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        registrationFee: Number(e.target.value),
-                      })
-                    }
-                    min="0"
-                    step="0.01"
                     className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     required
                   />
                 </div>
                 <div>
                   <label
-                    htmlFor="maxParticipants"
+                    htmlFor="startDate"
                     className="mb-1 block text-sm font-medium text-zinc-700"
                   >
-                    Max Participants
+                    Program Start Date
                   </label>
                   <input
-                    type="number"
-                    id="maxParticipants"
-                    value={formData.maxParticipants || ""}
+                    type="date"
+                    id="startDate"
+                    value={formData.startDate}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        maxParticipants: e.target.value ? Number(e.target.value) : null,
+                        startDate: e.target.value,
                       })
                     }
-                    min="1"
-                    placeholder="Unlimited"
                     className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    required
                   />
-                  <p className="mt-1 text-xs text-zinc-500">
-                    Leave empty for unlimited capacity
-                  </p>
+                </div>
+                <div>
+                  <label
+                    htmlFor="endDate"
+                    className="mb-1 block text-sm font-medium text-zinc-700"
+                  >
+                    Program End Date
+                  </label>
+                  <input
+                    type="date"
+                    id="endDate"
+                    value={formData.endDate}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        endDate: e.target.value,
+                      })
+                    }
+                    className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    required
+                  />
                 </div>
               </div>
             </div>
@@ -395,15 +374,19 @@ export function ProgramFormModal({
             <button
               type="button"
               onClick={onClose}
+              disabled={isSubmitting}
               className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
             >
               Cancel
             </button>
             <button
               type="submit"
+              disabled={isSubmitting}
               className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
             >
-              {program ? "Update Program" : "Create Program"}
+              {isSubmitting
+                ? (program ? "Updating..." : "Creating...")
+                : (program ? "Update Program" : "Create Program")}
             </button>
           </div>
         </form>

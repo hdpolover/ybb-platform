@@ -77,6 +77,12 @@ export class BrandResponseDto {
     metaKeywords?: string | null;
 
     @ApiProperty()
+    isActive: boolean;
+
+    @ApiProperty({ example: 3 })
+    programCount: number;
+
+    @ApiProperty()
     createdAt: Date;
 
     @ApiProperty()

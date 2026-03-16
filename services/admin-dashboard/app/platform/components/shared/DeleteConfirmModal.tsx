@@ -5,11 +5,13 @@ import { ExclamationTriangleIcon, XMarkIcon } from "@heroicons/react/24/outline"
 type DeleteConfirmModalProps = {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   title: string;
   message: string;
   itemName?: string;
   warningMessage?: string;
+  isSubmitting?: boolean;
+  errorMessage?: string | null;
 };
 
 export function DeleteConfirmModal({
@@ -20,12 +22,13 @@ export function DeleteConfirmModal({
   message,
   itemName,
   warningMessage,
+  isSubmitting = false,
+  errorMessage,
 }: DeleteConfirmModalProps) {
   if (!isOpen) return null;
 
   const handleConfirm = () => {
     onConfirm();
-    onClose();
   };
 
   return (
@@ -52,6 +55,12 @@ export function DeleteConfirmModal({
         <div className="px-6 py-4">
           <p className="mb-3 text-sm text-zinc-700">{message}</p>
 
+          {errorMessage ? (
+            <div className="mb-3 rounded-md bg-red-50 px-3 py-2">
+              <p className="text-xs text-red-700">{errorMessage}</p>
+            </div>
+          ) : null}
+
           {itemName && (
             <div className="mb-3 rounded-md bg-zinc-50 px-3 py-2">
               <p className="text-sm font-medium text-zinc-900">{itemName}</p>
@@ -70,6 +79,7 @@ export function DeleteConfirmModal({
           <button
             type="button"
             onClick={onClose}
+            disabled={isSubmitting}
             className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
           >
             Cancel
@@ -77,9 +87,10 @@ export function DeleteConfirmModal({
           <button
             type="button"
             onClick={handleConfirm}
+            disabled={isSubmitting}
             className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
           >
-            Delete
+            {isSubmitting ? "Deleting..." : "Delete"}
           </button>
         </div>
       </div>

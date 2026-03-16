@@ -51,4 +51,34 @@ export class CreateProgramDto {
     @IsNumber()
     @IsOptional()
     capacity?: number;
+
+    @ApiProperty({ description: 'Program status', required: false, example: 'draft' })
+    @IsString()
+    @IsOptional()
+    status?: string;
+
+    @ApiProperty({ description: 'Publish program immediately', required: false, default: false })
+    @IsBoolean()
+    @IsOptional()
+    isPublished?: boolean;
+
+    @ApiProperty({ description: 'Whether the program is currently active', required: false, default: true })
+    @IsBoolean()
+    @IsOptional()
+    isActive?: boolean;
+
+    @ApiProperty({ description: 'Registration open date', required: false })
+    @IsDateString()
+    @IsOptional()
+    registrationOpenDate?: string;
+
+    @ApiProperty({ description: 'Registration close date', required: false })
+    @IsDateString()
+    @IsOptional()
+    registrationCloseDate?: string;
+
+    @ApiProperty({ description: 'Registration fee', required: false })
+    @IsNumber()
+    @IsOptional()
+    registrationFee?: number;
 }
