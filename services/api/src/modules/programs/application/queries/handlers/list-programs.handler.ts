@@ -28,6 +28,7 @@ export class ListProgramsHandler implements IQueryHandler<ListProgramsQuery> {
         const data: ProgramResponseDto[] = programs.map((program) => ({
             id: program.id,
             brandId: program.brandId,
+            brandName: program.brandName ?? null,
             name: program.name,
             slug: program.slug,
             description: program.description,
@@ -37,6 +38,9 @@ export class ListProgramsHandler implements IQueryHandler<ListProgramsQuery> {
             applicationDeadline: program.applicationDeadline,
             location: program.location,
             capacity: program.capacity,
+            registrationOpenDate: program.registrationOpenDate,
+            registrationCloseDate: program.registrationCloseDate,
+            registrationFee: program.registrationFee,
             isPublished: program.isPublished,
             isActive: program.isActive,
             status: program.status,

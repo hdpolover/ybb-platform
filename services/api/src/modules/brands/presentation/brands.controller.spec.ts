@@ -92,6 +92,8 @@ describe('BrandsController', () => {
                 metaTitle: null,
                 metaDescription: null,
                 metaKeywords: null,
+                isActive: true,
+                programCount: 0,
                 settings: null,
                 createdAt: new Date(),
                 updatedAt: new Date()
@@ -138,6 +140,8 @@ describe('BrandsController', () => {
                 metaTitle: null,
                 metaDescription: null,
                 metaKeywords: null,
+                isActive: true,
+                programCount: 0,
                 settings: null,
                 createdAt: new Date(), 
                 updatedAt: new Date() 

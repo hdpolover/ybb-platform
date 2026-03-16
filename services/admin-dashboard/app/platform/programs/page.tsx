@@ -1,214 +1,253 @@
 "use client";
 
-import { PlusIcon, RectangleStackIcon, UserGroupIcon, CheckCircleIcon, ArchiveBoxIcon } from "@heroicons/react/24/outline";
-import { useState, useMemo } from "react";
+import {
+  PlusIcon,
+  RectangleStackIcon,
+  UserGroupIcon,
+  CheckCircleIcon,
+  ArchiveBoxIcon,
+} from "@heroicons/react/24/outline";
+import { useEffect, useMemo, useState } from "react";
 import { ProgramsTable, type Program } from "../components/programs/ProgramsTable";
 import { ProgramFormModal, type ProgramFormData } from "../components/programs/ProgramFormModal";
 import { ProgramFilters } from "../components/programs/ProgramFilters";
 import { DeleteConfirmModal } from "../components/shared/DeleteConfirmModal";
+import {
+  createPlatformProgram,
+  deletePlatformProgram,
+  listPlatformBrands,
+  listPlatformPrograms,
+  type PlatformBrand,
+  type PlatformProgram,
+  updatePlatformProgram,
+} from "../api";
 
-// Data kategori dummy, nanti ujung-ujungnya bakal diganti manggil API beneran
-const mockCategories = [
-  { id: "1", name: "Youth Leadership" },
-  { id: "2", name: "Community Service" },
-  { id: "3", name: "Education & Skills" },
-];
+const brandOptions = (brands: PlatformBrand[]) =>
+  brands.map((brand) => ({ id: brand.id, name: brand.name }));
 
-// Data program dummy, sementara masih hardcoded di sini
-const mockPrograms: Program[] = [
-  {
-    id: "1",
-    name: "Summer Leadership Camp 2025",
-    description: "Intensive leadership training for high school students",
-    categoryId: "1",
-    categoryName: "Youth Leadership",
-    slug: "summer-leadership-camp-2025",
-    status: "published",
-    registrationStartDate: "2025-01-15T00:00:00Z",
-    registrationEndDate: "2025-05-31T00:00:00Z",
-    programStartDate: "2025-06-15T00:00:00Z",
-    programEndDate: "2025-06-30T00:00:00Z",
-    registrationFee: 350,
-    participantCount: 42,
-    maxParticipants: 50,
-    createdAt: "2024-11-01T10:00:00Z",
-    updatedAt: "2024-11-28T14:30:00Z",
-  },
-  {
-    id: "2",
-    name: "Community Builders Workshop",
-    description: "Hands-on workshop for community engagement projects",
-    categoryId: "2",
-    categoryName: "Community Service",
-    slug: "community-builders-workshop",
-    status: "published",
-    registrationStartDate: "2025-02-01T00:00:00Z",
-    registrationEndDate: "2025-03-15T00:00:00Z",
-    programStartDate: "2025-03-20T00:00:00Z",
-    programEndDate: "2025-03-22T00:00:00Z",
-    registrationFee: 150,
-    participantCount: 28,
-    maxParticipants: 30,
-    createdAt: "2024-10-15T09:00:00Z",
-    updatedAt: "2024-11-25T16:20:00Z",
-  },
-  {
-    id: "3",
-    name: "Digital Skills Bootcamp",
-    description: "Learn coding, design, and digital marketing fundamentals",
-    categoryId: "3",
-    categoryName: "Education & Skills",
-    slug: "digital-skills-bootcamp",
-    status: "draft",
-    registrationStartDate: "2025-03-01T00:00:00Z",
-    registrationEndDate: "2025-04-30T00:00:00Z",
-    programStartDate: "2025-05-05T00:00:00Z",
-    programEndDate: "2025-05-25T00:00:00Z",
-    registrationFee: 500,
-    participantCount: 0,
-    maxParticipants: 25,
-    createdAt: "2024-11-20T11:00:00Z",
-    updatedAt: "2024-11-30T10:15:00Z",
-  },
-  {
-    id: "4",
-    name: "Youth Mentorship Program 2024",
-    description: "Connect youth with experienced mentors in various fields",
-    categoryId: "1",
-    categoryName: "Youth Leadership",
-    slug: "youth-mentorship-program-2024",
-    status: "archived",
-    registrationStartDate: "2024-06-01T00:00:00Z",
-    registrationEndDate: "2024-08-31T00:00:00Z",
-    programStartDate: "2024-09-01T00:00:00Z",
-    programEndDate: "2024-12-15T00:00:00Z",
-    registrationFee: 0,
-    participantCount: 65,
-    maxParticipants: null,
-    createdAt: "2024-05-10T08:00:00Z",
-    updatedAt: "2024-12-01T09:30:00Z",
-  },
-];
+function mapProgram(program: PlatformProgram): Program {
+  return {
+    id: program.id,
+    brandId: program.brandId,
+    brandName: program.brandName ?? "Unknown Brand",
+    name: program.name,
+    description: program.description,
+    slug: program.slug,
+    year: program.year,
+    status: program.status as Program["status"],
+    applicationDeadline: program.applicationDeadline,
+    startDate: program.startDate,
+    endDate: program.endDate,
+    isPublished: program.isPublished,
+    isActive: program.isActive,
+    createdAt: program.createdAt,
+    updatedAt: program.updatedAt,
+  };
+}
 
 export default function ProgramsPage() {
-  const [programs, setPrograms] = useState<Program[]>(mockPrograms);
+  const [programs, setPrograms] = useState<Program[]>([]);
+  const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
-  
-  // State buat filter-filter di atas tabel
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("");
+  const [selectedBrand, setSelectedBrand] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("");
 
-  // List program yang udah difilter sesuai query & pilihan user
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadData() {
+      setIsLoading(true);
+      setPageError(null);
+
+      try {
+        const [brands, programList] = await Promise.all([
+          listPlatformBrands(),
+          listPlatformPrograms({ page: 1, limit: 100 }),
+        ]);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setCategories(brandOptions(brands));
+        setPrograms(programList.data.map(mapProgram));
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setPageError(error instanceof Error ? error.message : "Failed to load programs.");
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const filteredPrograms = useMemo(() => {
     return programs.filter((program) => {
       const matchesSearch =
         searchQuery === "" ||
         program.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        program.slug.toLowerCase().includes(searchQuery.toLowerCase());
+        program.slug.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        program.brandName.toLowerCase().includes(searchQuery.toLowerCase());
 
-      const matchesCategory =
-        selectedCategory === "" || program.categoryId === selectedCategory;
+      const matchesBrand = selectedBrand === "" || program.brandId === selectedBrand;
+      const matchesStatus = selectedStatus === "" || program.status === selectedStatus;
 
-      const matchesStatus =
-        selectedStatus === "" || program.status === selectedStatus;
-
-      return matchesSearch && matchesCategory && matchesStatus;
+      return matchesSearch && matchesBrand && matchesStatus;
     });
-  }, [programs, searchQuery, selectedCategory, selectedStatus]);
+  }, [programs, searchQuery, selectedBrand, selectedStatus]);
 
-  const handleCreateProgram = (data: ProgramFormData) => {
-    const category = mockCategories.find((c) => c.id === data.categoryId);
-    const newProgram: Program = {
-      id: String(Date.now()),
-      name: data.name,
-      description: data.description || null,
-      categoryId: data.categoryId,
-      categoryName: category?.name || "Unknown",
-      slug: data.slug,
-      status: data.status,
-      registrationStartDate: data.registrationStartDate || null,
-      registrationEndDate: data.registrationEndDate || null,
-      programStartDate: data.programStartDate || null,
-      programEndDate: data.programEndDate || null,
-      registrationFee: data.registrationFee,
-      participantCount: 0,
-      maxParticipants: data.maxParticipants,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    setPrograms([...programs, newProgram]);
-    setIsFormModalOpen(false);
+  const handleCreateProgram = async (data: ProgramFormData) => {
+    setIsSubmitting(true);
+    setFormError(null);
+
+    try {
+      const createdProgram = await createPlatformProgram({
+        brandId: data.brandId,
+        name: data.name,
+        slug: data.slug,
+        description: data.description || undefined,
+        year: data.year,
+        startDate: data.startDate,
+        endDate: data.endDate,
+        applicationDeadline: data.applicationDeadline,
+        status: data.status,
+        isPublished: data.isPublished,
+        isActive: data.isActive,
+      });
+
+      setPrograms((current) => [mapProgram(createdProgram), ...current]);
+      setIsFormModalOpen(false);
+      setSelectedProgram(null);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Failed to create program.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleUpdateProgram = (data: ProgramFormData) => {
-    if (!selectedProgram) return;
+  const handleUpdateProgram = async (data: ProgramFormData) => {
+    if (!selectedProgram) {
+      return;
+    }
 
-    const category = mockCategories.find((c) => c.id === data.categoryId);
-    setPrograms(
-      programs.map((prog) =>
-        prog.id === selectedProgram.id
-          ? {
-              ...prog,
-              ...data,
-              categoryName: category?.name || prog.categoryName,
-              updatedAt: new Date().toISOString(),
-            }
-          : prog
-      )
-    );
-    setSelectedProgram(null);
-    setIsFormModalOpen(false);
+    setIsSubmitting(true);
+    setFormError(null);
+
+    try {
+      const updatedProgram = await updatePlatformProgram(selectedProgram.id, {
+        brandId: data.brandId,
+        name: data.name,
+        slug: data.slug,
+        description: data.description || undefined,
+        year: data.year,
+        startDate: data.startDate,
+        endDate: data.endDate,
+        applicationDeadline: data.applicationDeadline,
+        status: data.status,
+        isPublished: data.isPublished,
+        isActive: data.isActive,
+      });
+
+      const mappedProgram = mapProgram(updatedProgram);
+      setPrograms((current) =>
+        current.map((program) => (program.id === mappedProgram.id ? mappedProgram : program)),
+      );
+      setIsFormModalOpen(false);
+      setSelectedProgram(null);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Failed to update program.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleDeleteProgram = () => {
-    if (!selectedProgram) return;
+  const handleDeleteProgram = async () => {
+    if (!selectedProgram) {
+      return;
+    }
 
-    setPrograms(programs.filter((prog) => prog.id !== selectedProgram.id));
-    setSelectedProgram(null);
-    setIsDeleteModalOpen(false);
+    setIsDeleting(true);
+    setDeleteError(null);
+
+    try {
+      await deletePlatformProgram(selectedProgram.id);
+      setPrograms((current) => current.filter((program) => program.id !== selectedProgram.id));
+      setSelectedProgram(null);
+      setIsDeleteModalOpen(false);
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : "Failed to delete program.");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const handleEdit = (program: Program) => {
+    setFormError(null);
     setSelectedProgram(program);
     setIsFormModalOpen(true);
   };
 
   const handleDelete = (program: Program) => {
+    setDeleteError(null);
     setSelectedProgram(program);
     setIsDeleteModalOpen(true);
   };
 
   const handleCloseFormModal = () => {
+    if (isSubmitting) {
+      return;
+    }
+
     setIsFormModalOpen(false);
     setSelectedProgram(null);
+    setFormError(null);
   };
 
   const handleCloseDeleteModal = () => {
+    if (isDeleting) {
+      return;
+    }
+
     setIsDeleteModalOpen(false);
     setSelectedProgram(null);
+    setDeleteError(null);
   };
 
   return (
     <div className="space-y-4">
-      {/* Bagian header halaman program */}
       <div>
         <h1 className="text-2xl font-bold text-zinc-900">Programs</h1>
         <p className="mt-1 text-sm text-zinc-600">
-          Manage all programs across categories
+          Manage all programs across brands
         </p>
       </div>
 
-      {/* Grid statistik ringkas buat program */}
       <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-zinc-600">Total Programs</p>
               <p className="mt-1 text-2xl font-bold text-zinc-900">{programs.length}</p>
-              <p className="mt-1 text-[10px] text-zinc-600">All categories</p>
+              <p className="mt-1 text-[10px] text-zinc-600">All brands</p>
             </div>
             <div className="rounded-full bg-blue-100 p-2.5">
               <RectangleStackIcon className="h-5 w-5 text-blue-600" />
@@ -221,9 +260,9 @@ export default function ProgramsPage() {
             <div>
               <p className="text-xs text-zinc-600">Published</p>
               <p className="mt-1 text-2xl font-bold text-zinc-900">
-                {programs.filter(p => p.status === 'published').length}
+                {programs.filter((program) => program.status === "published").length}
               </p>
-              <p className="mt-1 text-[10px] text-emerald-600">Active programs</p>
+              <p className="mt-1 text-[10px] text-emerald-600">Launch-ready programs</p>
             </div>
             <div className="rounded-full bg-emerald-100 p-2.5">
               <CheckCircleIcon className="h-5 w-5 text-emerald-600" />
@@ -234,11 +273,11 @@ export default function ProgramsPage() {
         <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-zinc-600">Total Participants</p>
+              <p className="text-xs text-zinc-600">Active</p>
               <p className="mt-1 text-2xl font-bold text-zinc-900">
-                {programs.reduce((sum, p) => sum + p.participantCount, 0)}
+                {programs.filter((program) => program.isActive).length}
               </p>
-              <p className="mt-1 text-[10px] text-zinc-600">Registered users</p>
+              <p className="mt-1 text-[10px] text-zinc-600">Currently enabled programs</p>
             </div>
             <div className="rounded-full bg-purple-100 p-2.5">
               <UserGroupIcon className="h-5 w-5 text-purple-600" />
@@ -249,11 +288,11 @@ export default function ProgramsPage() {
         <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-zinc-600">Archived</p>
+              <p className="text-xs text-zinc-600">Closed</p>
               <p className="mt-1 text-2xl font-bold text-zinc-900">
-                {programs.filter(p => p.status === 'archived').length}
+                {programs.filter((program) => program.status === "completed" || program.status === "cancelled").length}
               </p>
-              <p className="mt-1 text-[10px] text-zinc-600">Past programs</p>
+              <p className="mt-1 text-[10px] text-zinc-600">Completed or cancelled</p>
             </div>
             <div className="rounded-full bg-zinc-100 p-2.5">
               <ArchiveBoxIcon className="h-5 w-5 text-zinc-600" />
@@ -262,7 +301,6 @@ export default function ProgramsPage() {
         </div>
       </div>
 
-      {/* Tombol aksi utama buat bikin program baru */}
       <div className="flex justify-end">
         <button
           type="button"
@@ -274,35 +312,45 @@ export default function ProgramsPage() {
         </button>
       </div>
 
-      {/* Komponen filter program (search, kategori, status) */}
       <ProgramFilters
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
-        selectedCategory={selectedCategory}
-        onCategoryChange={setSelectedCategory}
+        selectedBrand={selectedBrand}
+        onBrandChange={setSelectedBrand}
         selectedStatus={selectedStatus}
         onStatusChange={setSelectedStatus}
-        categories={mockCategories}
+        categories={categories}
       />
 
-      {/* Tabel utama yang nampilin list program */}
-      <ProgramsTable
-        programs={filteredPrograms}
-        onEdit={handleEdit}
-        onDelete={handleDelete}
-      />
+      {pageError ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {pageError}
+        </div>
+      ) : null}
 
-      {/* Modal form buat create / edit program */}
+      {isLoading ? (
+        <div className="rounded-lg border border-zinc-200 bg-white p-12 text-center text-sm text-zinc-600">
+          Loading programs...
+        </div>
+      ) : (
+        <ProgramsTable
+          programs={filteredPrograms}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+        />
+      )}
+
       <ProgramFormModal
         key={selectedProgram ? selectedProgram.id : "new"}
         isOpen={isFormModalOpen}
         onClose={handleCloseFormModal}
         onSubmit={selectedProgram ? handleUpdateProgram : handleCreateProgram}
         program={selectedProgram}
-        categories={mockCategories}
+        categories={categories}
+        isSubmitting={isSubmitting}
+        errorMessage={formError}
       />
 
-      {/* Modal konfirmasi sebelum hapus program */}
       <DeleteConfirmModal
         isOpen={isDeleteModalOpen}
         onClose={handleCloseDeleteModal}
@@ -310,11 +358,9 @@ export default function ProgramsPage() {
         title="Delete Program"
         message="Are you sure you want to delete this program? This action cannot be undone."
         itemName={selectedProgram?.name}
-        warningMessage={
-          selectedProgram && selectedProgram.participantCount > 0
-            ? `This program has ${selectedProgram.participantCount} registered participant(s). All their data will be preserved but the program will be deleted.`
-            : undefined
-        }
+        isSubmitting={isDeleting}
+        errorMessage={deleteError}
+        warningMessage="Deleting a program removes it from active platform management. Make sure no downstream content still depends on it."
       />
     </div>
   );

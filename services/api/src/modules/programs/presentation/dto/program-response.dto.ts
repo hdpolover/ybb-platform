@@ -7,6 +7,9 @@ export class ProgramResponseDto {
   @ApiProperty({ example: '005b17ba-b481-45f5-a945-7723248b6415' })
   brandId: string;
 
+  @ApiProperty({ example: 'Istanbul Youth Summit', required: false, nullable: true })
+  brandName?: string | null;
+
   @ApiProperty({ example: 'Young Entrepreneur Program 2025' })
   name: string;
 
@@ -33,6 +36,15 @@ export class ProgramResponseDto {
 
   @ApiProperty({ example: 100 })
   capacity: number | null;
+
+  @ApiProperty({ example: '2025-01-01T00:00:00.000Z', required: false, nullable: true })
+  registrationOpenDate?: Date | null;
+
+  @ApiProperty({ example: '2025-02-15T23:59:59.000Z', required: false, nullable: true })
+  registrationCloseDate?: Date | null;
+
+  @ApiProperty({ example: 150.0, required: false, nullable: true })
+  registrationFee?: number | null;
 
   @ApiProperty({ example: true })
   isPublished: boolean;

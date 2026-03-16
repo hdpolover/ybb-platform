@@ -39,8 +39,8 @@ const menuItems: MenuItem[] = [
   },
   {
     id: "categories",
-    label: "Program Categories",
-    href: "/platform/categories",
+    label: "Brands",
+    href: "/platform/brands",
     icon: FolderIcon,
   },
   {

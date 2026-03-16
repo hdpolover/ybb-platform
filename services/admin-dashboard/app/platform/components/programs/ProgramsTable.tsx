@@ -7,17 +7,16 @@ export type Program = {
   id: string;
   name: string;
   description: string | null;
-  categoryId: string;
-  categoryName: string;
+  brandId: string;
+  brandName: string;
   slug: string;
-  status: "draft" | "published" | "archived";
-  registrationStartDate: string | null;
-  registrationEndDate: string | null;
-  programStartDate: string | null;
-  programEndDate: string | null;
-  registrationFee: number;
-  participantCount: number;
-  maxParticipants: number | null;
+  year: number;
+  status: "draft" | "published" | "ongoing" | "completed" | "cancelled";
+  applicationDeadline: string;
+  startDate: string;
+  endDate: string;
+  isPublished: boolean;
+  isActive: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -31,7 +30,9 @@ type ProgramsTableProps = {
 const statusColors = {
   draft: "bg-zinc-100 text-zinc-700",
   published: "bg-green-100 text-green-700",
-  archived: "bg-red-100 text-red-700",
+  ongoing: "bg-blue-100 text-blue-700",
+  completed: "bg-purple-100 text-purple-700",
+  cancelled: "bg-red-100 text-red-700",
 };
 
 export function ProgramsTable({
@@ -77,19 +78,22 @@ export function ProgramsTable({
                 Program Name
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-600">
-                Category
+                Brand
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-600">
+                Year
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-600">
                 Status
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-600">
-                Registration
+                Application Deadline
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-600">
-                Participants
+                Program Dates
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-600">
-                Fee
+                Visibility
               </th>
               <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-zinc-600">
                 Actions
@@ -110,9 +114,10 @@ export function ProgramsTable({
                 </td>
                 <td className="px-6 py-4">
                   <span className="inline-flex rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-700">
-                    {program.categoryName}
+                    {program.brandName}
                   </span>
                 </td>
+                <td className="px-6 py-4 text-sm text-zinc-600">{program.year}</td>
                 <td className="px-6 py-4">
                   <span
                     className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium capitalize ${
@@ -123,32 +128,36 @@ export function ProgramsTable({
                   </span>
                 </td>
                 <td className="px-6 py-4 text-sm text-zinc-600">
-                  {program.registrationStartDate ? (
-                    <div>
-                      {new Date(program.registrationStartDate).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                      })}
-                      {" - "}
-                      {program.registrationEndDate
-                        ? new Date(program.registrationEndDate).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                          })
-                        : "Open"}
-                    </div>
-                  ) : (
-                    "—"
-                  )}
-                </td>
-                <td className="px-6 py-4">
-                  <div className="text-sm font-medium text-zinc-900">
-                    {program.participantCount}
-                    {program.maxParticipants && ` / ${program.maxParticipants}`}
+                  <div>
+                    {new Date(program.applicationDeadline).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
                   </div>
                 </td>
-                <td className="px-6 py-4 text-sm font-medium text-zinc-900">
-                  ${program.registrationFee.toLocaleString()}
+                <td className="px-6 py-4 text-sm text-zinc-600">
+                  <div>
+                    {new Date(program.startDate).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                    })}
+                    {" - "}
+                    {new Date(program.endDate).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </div>
+                </td>
+                <td className="px-6 py-4">
+                  <div className="flex flex-wrap gap-2">
+                    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${program.isPublished ? "bg-emerald-100 text-emerald-700" : "bg-zinc-100 text-zinc-700"}`}>
+                      {program.isPublished ? "Published" : "Hidden"}
+                    </span>
+                    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${program.isActive ? "bg-blue-100 text-blue-700" : "bg-zinc-100 text-zinc-700"}`}>
+                      {program.isActive ? "Active" : "Inactive"}
+                    </span>
+                  </div>
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex items-center justify-end gap-2">

@@ -7,8 +7,10 @@ import type { Category } from "./CategoriesTable";
 type CategoryFormModalProps = {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: CategoryFormData) => void;
+  onSubmit: (data: CategoryFormData) => void | Promise<void>;
   category?: Category | null;
+  isSubmitting?: boolean;
+  errorMessage?: string | null;
 };
 
 export type CategoryFormData = {
@@ -22,6 +24,8 @@ export function CategoryFormModal({
   onClose,
   onSubmit,
   category,
+  isSubmitting = false,
+  errorMessage,
 }: CategoryFormModalProps) {
   const [formData, setFormData] = useState<CategoryFormData>(() => ({
     name: category?.name ?? "",
@@ -48,7 +52,6 @@ export function CategoryFormModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit(formData);
-    onClose();
   };
 
   if (!isOpen) return null;
@@ -59,7 +62,7 @@ export function CategoryFormModal({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-zinc-200 px-6 py-4">
           <h2 className="text-lg font-semibold text-zinc-900">
-            {category ? "Edit Category" : "Create Category"}
+            {category ? "Edit Brand" : "Create Brand"}
           </h2>
           <button
             type="button"
@@ -73,13 +76,19 @@ export function CategoryFormModal({
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6">
           <div className="space-y-4">
+            {errorMessage ? (
+              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {errorMessage}
+              </div>
+            ) : null}
+
             {/* Name */}
             <div>
               <label
                 htmlFor="name"
                 className="mb-1 block text-sm font-medium text-zinc-700"
               >
-                Category Name <span className="text-red-500">*</span>
+                Brand Name <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
@@ -87,7 +96,7 @@ export function CategoryFormModal({
                 value={formData.name}
                 onChange={(e) => handleNameChange(e.target.value)}
                 className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                placeholder="e.g., Youth Leadership"
+                placeholder="e.g., Istanbul Youth Summit"
                 required
               />
             </div>
@@ -111,7 +120,7 @@ export function CategoryFormModal({
                   }}
                   className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   placeholder="youth-leadership"
-                  pattern="[a-z0-9-]+"
+                  pattern="^[a-z0-9]+(?:-[a-z0-9]+)*$"
                   required
                 />
                 <label className="flex items-center gap-2 text-xs text-zinc-600">
@@ -150,7 +159,7 @@ export function CategoryFormModal({
                 }
                 rows={3}
                 className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                placeholder="Brief description of this category..."
+                placeholder="Brief description of this brand..."
               />
             </div>
           </div>
@@ -160,15 +169,19 @@ export function CategoryFormModal({
             <button
               type="button"
               onClick={onClose}
+              disabled={isSubmitting}
               className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
             >
               Cancel
             </button>
             <button
               type="submit"
+              disabled={isSubmitting}
               className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
             >
-              {category ? "Update Category" : "Create Category"}
+              {isSubmitting
+                ? (category ? "Updating..." : "Creating...")
+                : (category ? "Update Brand" : "Create Brand")}
             </button>
           </div>
         </form>

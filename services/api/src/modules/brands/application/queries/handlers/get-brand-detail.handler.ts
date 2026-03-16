@@ -59,6 +59,8 @@ export class GetBrandDetailHandler implements IQueryHandler<GetBrandDetailQuery>
             metaTitle: brand.metaTitle || null,
             metaDescription: brand.metaDescription || null,
             metaKeywords: brand.metaKeywords || null,
+            isActive: brand.isActive,
+            programCount: brand.programCount ?? 0,
 
             createdAt: brand.createdAt,
             updatedAt: brand.updatedAt,

@@ -16,7 +16,7 @@ import {
 } from "@/app/components/programDetailsMasterData/program-specifics/ProgramSpecificsTab";
 
 const MOCK_GENERAL_DATA: GeneralInformationData = {
-  categoryName: "Youth Leadership & Cultural Immersion",
+  brandName: "Youth Leadership & Cultural Immersion",
   programType: "Hybrid (Online Preparation + Onsite Program)",
   tagline:
     "Empowering young leaders to collaborate, innovate, and create global impact in Japan.",
