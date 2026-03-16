@@ -2,12 +2,14 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ybb-platform/payment/internal/application/commands"
 	commandHandlers "github.com/ybb-platform/payment/internal/application/commands/handlers"
 	"github.com/ybb-platform/payment/internal/application/dto"
+	"github.com/ybb-platform/payment/internal/application/requestcontext"
 )
 
 type IntentHandler struct {
@@ -72,6 +74,7 @@ func (h *IntentHandler) CreateIntent(c *gin.Context) {
 // @Router /intents/{id}/confirm [post]
 func (h *IntentHandler) ConfirmIntent(c *gin.Context) {
 	intentID := c.Param("id")
+	requestID := c.GetHeader("X-Request-ID")
 	var req dto.ConfirmPaymentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -107,11 +110,15 @@ func (h *IntentHandler) ConfirmIntent(c *gin.Context) {
 		cmd.CustomerPhone = req.CustomerDetails.Phone
 	}
 
-	resp, err := h.confirmIntentHandler.Handle(c.Request.Context(), cmd)
+	ctx := requestcontext.WithRequestID(c.Request.Context(), requestID)
+	log.Printf("confirm_intent start request_id=%s intent_id=%s payment_method=%s", requestID, intentID, req.PaymentMethodID)
+	resp, err := h.confirmIntentHandler.Handle(ctx, cmd)
 	if err != nil {
+		log.Printf("confirm_intent failed request_id=%s intent_id=%s error=%v", requestID, intentID, err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	log.Printf("confirm_intent success request_id=%s intent_id=%s transaction_id=%s status=%s", requestID, intentID, resp.TransactionID, resp.Status)
 
 	c.JSON(http.StatusOK, resp)
 }

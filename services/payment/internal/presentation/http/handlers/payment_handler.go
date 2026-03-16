@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -155,6 +156,8 @@ func (h *PaymentHandler) GetPaymentsByUser(c *gin.Context) {
 func (h *PaymentHandler) HandleWebhook(c *gin.Context) {
 	// 1. Ambil nama gateway dari URL (contoh: /webhook/midtrans)
 	gatewayName := c.Param("gateway")
+	requestID := c.GetHeader("X-Request-ID")
+	log.Printf("payment_webhook received request_id=%s gateway=%s", requestID, gatewayName)
 
 	// 2. Baca Body Request (Payload Mentah dari Midtrans/Gateway lain)
 	payload, err := c.GetRawData()
@@ -174,7 +177,7 @@ func (h *PaymentHandler) HandleWebhook(c *gin.Context) {
 	// updatedData.ID here corresponds to Order ID sent to gateway
 	updatedData, err := gateway.HandleWebhook(c.Request.Context(), payload)
 	if err != nil {
-		fmt.Printf("[WEBHOOK ERROR] Gateway: %s, Error: %v\n", gatewayName, err)
+		log.Printf("payment_webhook failed request_id=%s gateway=%s error=%v", requestID, gatewayName, err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Webhook processing failed", "details": err.Error()})
 		return
 	}
@@ -194,6 +197,7 @@ func (h *PaymentHandler) HandleWebhook(c *gin.Context) {
 		}
 	}
 
+	log.Printf("payment_webhook transaction_not_found request_id=%s gateway=%s transaction_id=%s gateway_reference=%s", requestID, gatewayName, updatedData.ID, updatedData.GatewayOrderID)
 	c.JSON(http.StatusNotFound, gin.H{"error": "Order ID not found in payment transactions"})
 }
 
@@ -287,9 +291,10 @@ func (h *PaymentHandler) publishIntentEvent(intent *entities.PaymentIntent, tx *
 	}
 	event.Metadata["source"] = "webhook"
 	event.Metadata["intent_id"] = intent.ID
+	event.Metadata["transaction_id"] = tx.ID
 
 	if err := h.eventPublisher.Publish(context.Background(), event); err != nil {
-		fmt.Printf("[RABBITMQ] Failed to publish intent event: %v\n", err)
+		log.Printf("publish_intent_event failed intent_id=%s transaction_id=%s event=%s error=%v", intent.ID, tx.ID, eventType, err)
 	}
 }
 
