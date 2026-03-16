@@ -31,7 +31,9 @@ export class HomeStrategy implements ILandingPageStrategy {
 
     // Cache miss - fetch from database
 
-    const [program, brandSponsors, socialFeeds, videoPrograms, testimonials, latestProgramWithAwards] = await Promise.all([
+    const brandMeta = (brand as any).metadata as Record<string, any> || {};
+
+    const [program, brandSponsors, socialFeeds, videoPrograms, alumniTestimonials, delegateTestimonials, latestProgramWithAwards] = await Promise.all([
       this.prisma.program.findFirst({
         where: {
           brandId: brand.id, // Scoped to brand
@@ -42,7 +44,7 @@ export class HomeStrategy implements ILandingPageStrategy {
         include: {
           gallery: {
             where: { isActive: true },
-            take: 12,
+            take: 30,
             orderBy: { order: 'asc' },
           },
           pricingTiers: {
@@ -106,7 +108,19 @@ export class HomeStrategy implements ILandingPageStrategy {
           isActive: true
         },
         orderBy: [
-          { isFeatured: 'desc' }, // Featured first
+          { isFeatured: 'desc' },
+          { order: 'asc' }
+        ],
+        take: 10
+      }),
+      this.prisma.programTestimonial.findMany({
+        where: {
+          brandId: brand.id,
+          category: 'delegate',
+          isActive: true
+        },
+        orderBy: [
+          { isFeatured: 'desc' },
           { order: 'asc' }
         ],
         take: 10
@@ -132,9 +146,13 @@ export class HomeStrategy implements ILandingPageStrategy {
     // Filter out programs that don't have any videos
     const programsWithVideos = videoPrograms.filter(p => p.gallery && p.gallery.length > 0);
 
-    // Get images for objectives (random 4 from gallery)
-    const galleryImages = program?.gallery.filter(g => g.type === 'image') || [];
-    const objectiveImages = galleryImages
+    // Separate gallery by type
+    const allGallery = program?.gallery || [];
+    const imageGallery = allGallery.filter(g => g.type === 'image');
+    const shortsGallery = allGallery.filter(g => g.type === 'short');
+
+    // Get images for objectives (random 4 from image gallery)
+    const objectiveImages = imageGallery
       .sort(() => 0.5 - Math.random())
       .slice(0, 4)
       .map(img => ({
@@ -204,11 +222,11 @@ export class HomeStrategy implements ILandingPageStrategy {
         {
           type: 'program_highlights',
           content: {
-            image_gallery: program?.gallery.map((img) => ({
+            image_gallery: imageGallery.map((img) => ({
               url: img.imageUrl,
               caption: img.title,
               type: img.type,
-            })) || [],
+            })),
             content: {
               title: 'Program Highlights',
               items: [
@@ -221,11 +239,21 @@ export class HomeStrategy implements ILandingPageStrategy {
           },
         },
         {
+          type: 'payment_info',
+          content: brandMeta.payment_info || {
+            eyebrow: 'Payment & Selection',
+            title: 'Important information before you apply',
+            introText: 'Understand how the payment schedule and fully funded selection work so you can choose the best registration type for you.',
+            items: [],
+            note: 'For payment queries contact our support team.',
+          },
+        },
+        {
           type: 'program_gallery',
           content: {
             title: 'Our Gallery',
             description: 'See the excitement and best moments from our previous programs.',
-            images: galleryImages.slice(0, 6).map((img) => ({
+            images: imageGallery.slice(0, 6).map((img) => ({
               id: img.id,
               url: img.imageUrl,
               caption: img.title,
@@ -255,11 +283,60 @@ export class HomeStrategy implements ILandingPageStrategy {
           }
         },
         {
+          type: 'program_shorts',
+          content: {
+            eyebrow: brandMeta.moments_shorts?.eyebrow || 'Short Highlights',
+            title: brandMeta.moments_shorts?.title || 'Discover Our Moments in 60 Seconds',
+            description: brandMeta.moments_shorts?.description || `Watch bite-sized highlights from ${brand.name}'s workshops and cultural sessions.`,
+            items: shortsGallery.map(s => ({
+              id: s.id,
+              title: s.title,
+              embed_url: s.videoUrl,
+            })),
+          },
+        },
+        {
+          type: 'program_impact',
+          content: {
+            eyebrow: 'Global Reach',
+            title: 'Global Program Impact',
+            stats: brandMeta.impact_stats
+              ? [
+                  { id: 'participants', label: 'Total Participants', value: brandMeta.impact_stats.total_participants, icon: 'participants' },
+                  { id: 'countries', label: 'Total Countries', value: brandMeta.impact_stats.total_countries, icon: 'countries' },
+                  { id: 'alumni', label: 'Total Alumni', value: brandMeta.impact_stats.total_alumni, icon: 'alumni' },
+                ]
+              : [],
+          },
+        },
+        {
+          type: 'program_features',
+          content: {
+            eyebrow: 'What Sets Us Apart',
+            title: `What Makes ${brand.name} Special`,
+            subtitle: `Discover the pillars that make ${brand.name} a truly transformative leadership experience.`,
+            items: (brandMeta.features || []).map((f: any) => ({
+              id: f.id,
+              icon: f.icon,
+              title: f.title,
+              description: f.description,
+            })),
+          },
+        },
+        {
+          type: 'program_benefits',
+          content: brandMeta.benefits || {
+            eyebrow: 'Program Benefits',
+            title: 'Built for Students, University Students & Professionals',
+            groups: [],
+          },
+        },
+        {
           type: 'alumni_stories',
           content: {
             title: 'What our Alumni says...',
             subtitle: 'MORE ALUMNI MOMENTS',
-            items: testimonials.map(t => ({
+            items: alumniTestimonials.map(t => ({
               id: t.id,
               name: t.name,
               role: t.role,
@@ -273,10 +350,24 @@ export class HomeStrategy implements ILandingPageStrategy {
           }
         },
         {
+          type: 'delegate_testimonials',
+          content: {
+            items: delegateTestimonials.map(t => ({
+              id: t.id,
+              name: t.name,
+              role: t.role,
+              quote: t.testimonial,
+              country: t.company || '',
+              photo: t.avatarUrl || '',
+              year: new Date(t.createdAt).getFullYear(),
+            })),
+          },
+        },
+        {
           type: 'program_awards',
           content: {
             title: `Awards at ${latestProgramWithAwards?.name || brand.name}`,
-            subtitle: 'At JYS, we recognize students who lead, speak up, and make an impact. Your teen could be one of them!',
+            subtitle: `At ${brand.name}, we recognize delegates who lead, speak up, and make an impact. Your journey could be celebrated here.`,
             items: latestProgramWithAwards?.awards.map(a => ({
               id: a.id,
               name: a.name,
@@ -284,9 +375,18 @@ export class HomeStrategy implements ILandingPageStrategy {
               winner_count: a.winnerCount,
               tags: a.tags,
               color: a.color,
-              icon_url: a.iconUrl // e.g., trophy icon
+              icon_url: a.iconUrl
             })) || []
           }
+        },
+        {
+          type: 'organization_credentials',
+          content: brandMeta.recognition || {
+            title: 'Recognition & Credibility',
+            subtitle: 'Proof that our program and organization are legitimate and credible.',
+            proofs: [],
+            trademark: null,
+          },
         },
         {
           type: 'supported_by',
@@ -306,20 +406,5 @@ export class HomeStrategy implements ILandingPageStrategy {
     await this.cacheService.set(cacheKey, result, CACHE_TTL.HOUR);
 
     return result;
-  }
-
-  private async getStats() {
-    const [programsCount, participantsCount, countriesCount] = await Promise.all([
-      this.prisma.program.count({ where: { isPublished: true } }),
-      this.prisma.participant.count(),
-      // distinct countries is harder with simple count, approximating or skipping for now
-      Promise.resolve(50), // Placeholder for countries
-    ]);
-
-    return {
-      programs: programsCount,
-      participants: participantsCount,
-      countries: countriesCount,
-    };
   }
 }

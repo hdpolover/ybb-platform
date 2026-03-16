@@ -1,9 +1,9 @@
 "use client";
 
+import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Squares2X2Icon,
   FolderIcon,
@@ -81,15 +81,42 @@ export default function PlatformLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const { adminProfile, logout } = useAuth();
+  const { adminProfile, isLoading, isPlatformAdmin, logout } = useAuth();
+
+  useEffect(() => {
+    if (isLoading) {
+      return;
+    }
+
+    if (!adminProfile) {
+      router.replace("/login");
+      return;
+    }
+
+    if (!isPlatformAdmin) {
+      router.replace("/");
+    }
+  }, [adminProfile, isLoading, isPlatformAdmin, router]);
 
   const handleLogout = () => {
     logout();
-    window.location.href = "/login";
+    router.replace("/login");
   };
+
+  if (isLoading || !adminProfile || !isPlatformAdmin) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-50">
+        <div className="text-center">
+          <div className="mb-4 inline-block h-12 w-12 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
+          <p className="text-sm text-zinc-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-white text-zinc-900">

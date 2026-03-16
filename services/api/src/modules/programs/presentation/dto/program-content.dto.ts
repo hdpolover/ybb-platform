@@ -258,6 +258,9 @@ export class ApplicationFormFieldResponseDto {
     @ApiProperty()
     id: string;
 
+    @ApiProperty({ required: false })
+    section?: string;
+
     @ApiProperty()
     fieldName: string;
 
@@ -269,6 +272,12 @@ export class ApplicationFormFieldResponseDto {
 
     @ApiProperty({ required: false })
     helpText?: string;
+
+    @ApiProperty({ required: false })
+    mediaUrl?: string;
+
+    @ApiProperty({ required: false })
+    mediaAlt?: string;
 
     @ApiProperty()
     fieldType: string;
@@ -307,6 +316,9 @@ export class ProgramEssayResponseDto {
     
     @ApiProperty()
     order: number;
+
+    @ApiProperty()
+    isActive: boolean;
 }
 
 export class ProgramParticipationCategoryResponseDto {

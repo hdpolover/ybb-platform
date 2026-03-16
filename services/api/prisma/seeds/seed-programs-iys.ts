@@ -1,5 +1,6 @@
 import { prisma, log, error } from './utils';
 import { BRANDS } from './seed-brands';
+import { buildLegacySubmissionFormFields } from './data/shared-submission-form-fields';
 import { ApplicationCategory, PricingFeeType, FaqCategory } from '@prisma/client';
 
 export async function seedIYSPrograms() {
@@ -662,67 +663,11 @@ export async function seedIYSPrograms() {
   // Application Form Fields
   await prisma.applicationFormField.deleteMany({ where: { programId: iys2026.id } });
   await prisma.applicationFormField.createMany({
-      data: [
-          // Personal Info Section
-          {
-              programId: iys2026.id,
-              section: "personal_info",
-              label: "Full Name",
-              name: "full_name",
-              type: "text",
-              placeholder: "Enter as written in passport",
-              isRequired: true,
-              order: 1,
-              isActive: true
-          },
-          {
-              programId: iys2026.id,
-              section: "personal_info",
-              label: "WhatsApp Number",
-              name: "whatsapp_number",
-              type: "text",
-              placeholder: "+62...",
-              helpText: "Include country code",
-              isRequired: true,
-              order: 2,
-              isActive: true
-          },
-          {
-              programId: iys2026.id,
-              section: "personal_info",
-              label: "Date of Birth",
-              name: "birth_date",
-              type: "date",
-              isRequired: true,
-              order: 3,
-              isActive: true
-          },
-           {
-              programId: iys2026.id,
-              section: "personal_info",
-              label: "T-Shirt Size",
-              name: "tshirt_size",
-              type: "select",
-              options: ["S", "M", "L", "XL", "XXL"],
-              isRequired: true,
-              order: 4,
-              isActive: true
-          },
-          // Essay Section (Synced with programmed essays if needed, but this table allows custom form building)
-          // Usually essays are handled by ProgramEssay table, but here we can add extra fields if needed.
-          // Let's assume this form builder is for the "Personal Data" step and "Additional Info".
-          {
-              programId: iys2026.id,
-              section: "additional_info",
-              label: "Dietary Restrictions",
-              name: "dietary_restrictions",
-              type: "textarea",
-              placeholder: "Halal, Vegetarian, Allergies...",
-              isRequired: false,
-              order: 1,
-              isActive: true
-          }
-      ]
+      data: buildLegacySubmissionFormFields().map(field => ({
+        programId: iys2026.id,
+        ...field,
+        isActive: true,
+      }))
   });
 
   // ==========================================

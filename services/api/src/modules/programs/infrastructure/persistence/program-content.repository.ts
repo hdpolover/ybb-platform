@@ -279,16 +279,16 @@ export class ProgramContentRepository implements IProgramContentRepository {
         return this.prisma.applicationFormField.findUnique({ where: { id } });
     }
 
-    async findEssaysByProgramId(programId: string): Promise<ProgramEssay[]> {
+    async findEssaysByProgramId(programId: string, includeInactive = false): Promise<ProgramEssay[]> {
         return this.prisma.programEssay.findMany({
-            where: { programId, isActive: true },
+            where: includeInactive ? { programId } : { programId, isActive: true },
             orderBy: { order: 'asc' },
         });
     }
 
-    async findParticipationCategoriesByProgramId(programId: string): Promise<ProgramParticipationCategory[]> {
+    async findParticipationCategoriesByProgramId(programId: string, includeInactive = false): Promise<ProgramParticipationCategory[]> {
         return this.prisma.programParticipationCategory.findMany({
-            where: { programId, isActive: true },
+            where: includeInactive ? { programId } : { programId, isActive: true },
             orderBy: { order: 'asc' },
         });
     }

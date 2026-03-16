@@ -305,7 +305,7 @@ export class ListProgramEssaysHandler {
         const programId = await resolveProgramId(this.programRepository, query.programId);
         if (!programId) return [];
 
-        const items = await this.repository.findEssaysByProgramId(programId);
+        const items = await this.repository.findEssaysByProgramId(programId, query.includeInactive);
         return items.map(item => ({
             ...item,
             description: item.description ?? undefined,
@@ -327,7 +327,7 @@ export class ListProgramParticipationCategoriesHandler {
         const programId = await resolveProgramId(this.programRepository, query.programId);
         if (!programId) return [];
 
-        const items = await this.repository.findParticipationCategoriesByProgramId(programId);
+        const items = await this.repository.findParticipationCategoriesByProgramId(programId, query.includeInactive);
         return items.map(item => ({
             ...item,
             description: item.description ?? undefined,

@@ -1,6 +1,7 @@
 import { prisma, log, error } from './utils';
 import { BRANDS } from './seed-brands';
 import { JYS_2026_DATA } from './data/jys-2026-data';
+import { buildLegacySubmissionFormFields } from './data/shared-submission-form-fields';
 import { 
   PricingFeeType, 
   FaqCategory, 
@@ -23,7 +24,6 @@ export async function seedJYSPrograms() {
     schedule,
     pricingTiers, 
     requirements,
-    formFields,
     essays,
     faqs,
     awards,
@@ -169,7 +169,7 @@ export async function seedJYSPrograms() {
   // ==========================================
   await prisma.applicationFormField.deleteMany({ where: { programId: jys2026.id } });
   await prisma.applicationFormField.createMany({
-    data: formFields.map(f => ({
+    data: buildLegacySubmissionFormFields().map(f => ({
       programId: jys2026.id,
       ...f,
       isActive: true,

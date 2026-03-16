@@ -12,6 +12,8 @@ services:
       - "4000:4000"
     env_file:
       - .env.prod
+    environment:
+      NODE_ENV: production
     # Advanced features env vars (READ_REPLICA_URL, CIRCUIT_BREAKER_*) should be set in .env.prod
     depends_on:
       postgres-api:

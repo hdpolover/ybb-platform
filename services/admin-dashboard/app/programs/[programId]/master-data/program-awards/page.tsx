@@ -1,13 +1,8 @@
-import { programs } from "@/app/components/navbar/ProgramSelect";
-import { ProgramAwardsTable, type ProgramAward } from "@/app/components/programAwardsMasterData/ProgramAwardsTable";
+"use client";
 
-// --- UTILITY ---
-function getProgramName(programId: string | null): string {
-  if (!programId) return "Selected Program";
-  if (!Array.isArray(programs)) return "Selected Program"; 
-  const program = programs.find((item: any) => item.id === programId);
-  return program?.name ?? "Selected Program";
-}
+import { use } from "react";
+import { useAuth } from "@/app/contexts/AuthContext";
+import { ProgramAwardsTable, type ProgramAward } from "@/app/components/programAwardsMasterData/ProgramAwardsTable";
 
 // --- LOCAL MOCK DATA ---
 const MOCK_AWARDS: ProgramAward[] = [
@@ -40,17 +35,20 @@ const MOCK_AWARDS: ProgramAward[] = [
   },
 ];
 
-export default async function ProgramAwardsPage({
+export default function ProgramAwardsPage({
   params,
   searchParams,
 }: {
   params: Promise<{ programId: string }>;
   searchParams: Promise<{ search?: string }>;
 }) {
-  const resolvedParams = await params;
-  const resolvedSearchParams = await searchParams;
+  const resolvedParams = use(params);
+  const resolvedSearchParams = use(searchParams);
+  const { accessiblePrograms } = useAuth();
 
-  const programName = getProgramName(resolvedParams.programId);
+  const programName =
+    accessiblePrograms.find((program) => program.programId === resolvedParams.programId)?.programName ??
+    "Selected Program";
   const searchQuery = resolvedSearchParams.search?.toLowerCase() || "";
 
   // Data filtering dilakukan di Server

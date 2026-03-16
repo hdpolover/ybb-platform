@@ -14,8 +14,10 @@ import { AuthResponseDto } from './dto/auth-response.dto';
 import { AdminAuthResponseDto } from './dto/admin-auth-response.dto'; // [NEW]
 import { UserProfileDto } from './dto/user-profile.dto';
 import { AdminLoginDto } from './dto/admin-login.dto'; // [NEW]
+import { AdminRefreshDto } from './dto/admin-refresh.dto';
 import { LoginHandler } from '../application/commands/handlers/login.handler';
 import { AdminLoginHandler } from '../application/commands/handlers/admin-login.handler'; // [NEW]
+import { AdminRefreshHandler } from '../application/commands/handlers/admin-refresh.handler';
 import { RegisterHandler } from '../application/commands/handlers/register.handler';
 import { RegisterAdminHandler } from '../application/commands/handlers/register-admin.handler';
 import { LogoutHandler } from '../application/commands/handlers/logout.handler';
@@ -54,6 +56,7 @@ export class AuthController {
   constructor(
     private readonly loginHandler: LoginHandler,
     private readonly adminLoginHandler: AdminLoginHandler, // [NEW]
+    private readonly adminRefreshHandler: AdminRefreshHandler,
     private readonly registerHandler: RegisterHandler,
     private readonly registerAdminHandler: RegisterAdminHandler,
     private readonly logoutHandler: LogoutHandler,
@@ -133,6 +136,15 @@ export class AuthController {
       userAgent,
     );
     return this.adminLoginHandler.execute(command);
+  }
+
+  @Public()
+  @Post('admin/refresh')
+  @Throttle({ default: { limit: 20, ttl: 900000 } })
+  @ApiOperation({ summary: 'Refresh Admin Session' })
+  @ApiResponse({ status: 200, description: 'Admin tokens refreshed successfully', type: AdminAuthResponseDto })
+  async adminRefresh(@Body() dto: AdminRefreshDto): Promise<AdminAuthResponseDto> {
+    return this.adminRefreshHandler.execute(dto.refreshToken);
   }
 
   @Public()
@@ -268,7 +280,7 @@ export class AuthController {
       return { success: true, message: 'Logged out (token not trackable)' };
     }
 
-    const command = new LogoutCommand(user.userId, user.jti, user.exp);
+    const command = new LogoutCommand(user.userId, user.jti, user.exp, user.sid);
     return this.logoutHandler.execute(command);
   }
 

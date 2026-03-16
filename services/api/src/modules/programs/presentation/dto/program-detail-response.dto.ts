@@ -195,6 +195,9 @@ class ApplicationFormFieldDto {
   id: string;
 
   @ApiProperty()
+  section?: string;
+
+  @ApiProperty()
   fieldName: string;
 
   @ApiProperty()
@@ -205,6 +208,12 @@ class ApplicationFormFieldDto {
 
   @ApiProperty()
   helpText?: string;
+
+  @ApiProperty()
+  mediaUrl?: string;
+
+  @ApiProperty()
+  mediaAlt?: string;
 
   @ApiProperty()
   fieldType: string;

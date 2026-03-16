@@ -1,13 +1,8 @@
-import { programs } from "@/app/components/navbar/ProgramSelect";
-import { ProgramFaqsTable, type ProgramFaq } from "@/app/components/programFaqsMasterData/ProgramFaqsTable";
+"use client";
 
-// --- UTILITY ---
-function getProgramName(programId: string | null): string {
-  if (!programId) return "Selected Program";
-  if (!Array.isArray(programs)) return "Selected Program"; // Defensive check
-  const program = programs.find((item: any) => item.id === programId);
-  return program?.name ?? "Selected Program";
-}
+import { use } from "react";
+import { useAuth } from "@/app/contexts/AuthContext";
+import { ProgramFaqsTable, type ProgramFaq } from "@/app/components/programFaqsMasterData/ProgramFaqsTable";
 
 // --- LOCAL MOCK DATA ---
 const MOCK_FAQS: ProgramFaq[] = [
@@ -45,17 +40,20 @@ const MOCK_FAQS: ProgramFaq[] = [
   },
 ];
 
-export default async function ProgramFaqsPage({
+export default function ProgramFaqsPage({
   params,
   searchParams,
 }: {
   params: Promise<{ programId: string }>;
   searchParams: Promise<{ search?: string; category?: string }>;
 }) {
-  const resolvedParams = await params;
-  const resolvedSearchParams = await searchParams;
+  const resolvedParams = use(params);
+  const resolvedSearchParams = use(searchParams);
+  const { accessiblePrograms } = useAuth();
 
-  const programName = getProgramName(resolvedParams.programId);
+  const programName =
+    accessiblePrograms.find((program) => program.programId === resolvedParams.programId)?.programName ??
+    "Selected Program";
   const searchQuery = resolvedSearchParams.search?.toLowerCase() || "";
   const categoryQuery = resolvedSearchParams.category || "All";
 

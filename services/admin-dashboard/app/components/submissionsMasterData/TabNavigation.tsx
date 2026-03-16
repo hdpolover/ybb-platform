@@ -10,6 +10,9 @@ export function TabNavigation({ activeTab }: { activeTab: string }) {
 
   return (
     <div className="inline-flex gap-1 rounded-md border border-zinc-200 bg-zinc-50 p-1">
+      <Link href="?tab=fields" className={getLinkStyle("fields")} replace>
+        Form Fields
+      </Link>
       <Link href="?tab=categories" className={getLinkStyle("categories")} replace>
         Participation Categories
       </Link>

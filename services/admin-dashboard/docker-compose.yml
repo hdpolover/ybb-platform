@@ -10,12 +10,12 @@ services:
     restart: unless-stopped
     ports:
       - "4001:4001"
-      - "3002:3000" # Usually next dev runs on 3000 by default unless configured
     env_file:
       - .env
     environment:
       # Overrides or additional vars if needed
       NODE_ENV: development
+      PORT: 4001
     volumes:
       - .:/app
       - /app/node_modules

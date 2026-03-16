@@ -1,14 +1,8 @@
 "use client";
 
 import { use } from "react";
-import { programs } from "@/app/components/navbar/ProgramSelect";
+import { useAuth } from "@/app/contexts/AuthContext";
 import { AdminManagement } from "@/app/components/settings/AdminManagement";
-
-function getProgramName(programId: string | null): string {
-  if (!programId) return "Selected Program";
-  const program = programs.find((item) => item.id === programId);
-  return program?.name ?? "Selected Program";
-}
 
 export default function AdminManagementPage({
   params,
@@ -16,8 +10,11 @@ export default function AdminManagementPage({
   params: Promise<{ programId: string }>;
 }) {
   const { programId } = use(params);
-  const programName = getProgramName(programId);
-  const allPrograms = programs.map((program) => program.name);
+  const { accessiblePrograms } = useAuth();
+  const programName =
+    accessiblePrograms.find((program) => program.programId === programId)?.programName ??
+    "Selected Program";
+  const allPrograms = Array.from(new Set(accessiblePrograms.map((program) => program.programName)));
 
   return <AdminManagement programName={programName} allPrograms={allPrograms} />;
 }

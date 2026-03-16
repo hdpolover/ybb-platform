@@ -12,6 +12,7 @@ export interface JwtPayload {
   exp?: number; // Token expiration timestamp
   roles?: string[]; // Roles from token
   adminId?: string; // Admin ID
+  sid?: string; // Session ID for refresh/logout coordination
 }
 
 @Injectable()
@@ -48,6 +49,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       brandId: payload.brandId,
       jti: payload.jti,
       exp: payload.exp,
+      sid: payload.sid,
       role: payload.roles || [], // Map roles to role for RolesGuard compatibility
       adminId: payload.adminId,
     };
