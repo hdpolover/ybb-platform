@@ -19,12 +19,14 @@ import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 export class WebhooksController {
     private readonly logger = new Logger(WebhooksController.name);
     private readonly paymentServiceUrl: string;
+    private readonly paymentServiceInternalKey: string;
 
     constructor(
         private readonly configService: ConfigService,
         private readonly httpService: HttpService,
     ) {
         this.paymentServiceUrl = this.configService.get<string>('PAYMENT_SERVICE_URL') || '';
+        this.paymentServiceInternalKey = this.configService.get<string>('PAYMENT_SERVICE_INTERNAL_KEY', '');
         if (!this.paymentServiceUrl) {
             this.logger.warn('PAYMENT_SERVICE_URL is not defined');
         }
@@ -53,6 +55,7 @@ export class WebhooksController {
                 this.httpService.post(targetUrl, req.body, {
                     headers: {
                         ...req.headers,
+                        ...this.buildInternalHeaders(),
                         // Override host to avoid confusion if necessary, 
                         // but usually axios handles Host header.
                         // Important: Forward auth or signature headers
@@ -77,5 +80,15 @@ export class WebhooksController {
                 details: error.message,
             });
         }
+    }
+
+    private buildInternalHeaders(): Record<string, string> {
+        if (!this.paymentServiceInternalKey) {
+            return {};
+        }
+
+        return {
+            'X-Internal-Service-Key': this.paymentServiceInternalKey,
+        };
     }
 }

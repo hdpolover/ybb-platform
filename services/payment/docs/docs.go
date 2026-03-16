@@ -224,55 +224,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/payments": {
-            "post": {
-                "description": "Create a new payment intent and get checkout information",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Payments"
-                ],
-                "summary": "Create Payment Intent",
-                "parameters": [
-                    {
-                        "description": "Payment Request Data",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/dto.CreatePaymentDTO"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/payments/user/{userId}": {
             "get": {
                 "description": "Get list of payments for a user with pagination",
@@ -331,7 +282,7 @@ const docTemplate = `{
         },
         "/payments/{id}": {
             "get": {
-                "description": "Get payment details by its ID",
+                "description": "Get a payment transaction or payment intent by its ID",
                 "produces": [
                     "application/json"
                 ],
@@ -365,40 +316,6 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/payments/{id}/cancel": {
-            "post": {
-                "description": "Cancel a pending payment",
-                "tags": [
-                    "Payments"
-                ],
-                "summary": "Cancel Payment",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Payment ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -453,73 +370,8 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/payments/{id}/refund": {
-            "post": {
-                "description": "Refunds a successful payment",
-                "tags": [
-                    "Payments"
-                ],
-                "summary": "Refund Payment",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Payment ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/dto.PaymentResponseDTO"
-                        }
-                    }
-                }
-            }
-        },
-        "/payments/{id}/retry": {
-            "post": {
-                "description": "Create a new transaction based on failed/expired payment",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Payments"
-                ],
-                "summary": "Retry Payment",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Old Transaction ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/dto.PaymentResponseDTO"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -584,142 +436,9 @@ const docTemplate = `{
                 }
             }
         },
-        "/payments/{id}/verify-status": {
-            "post": {
-                "description": "Check payment status from Gateway (now disabled/noop)",
-                "tags": [
-                    "Payments"
-                ],
-                "summary": "Verify Payment Status",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Payment ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
         }
     },
     "definitions": {
-        "dto.CreatePaymentDTO": {
-            "type": "object",
-            "required": [
-                "amount",
-                "application_id",
-                "currency",
-                "customer_email",
-                "customer_name",
-                "gateway_name",
-                "payment_method",
-                "user_id"
-            ],
-            "properties": {
-                "amount": {
-                    "type": "number"
-                },
-                "application_id": {
-                    "type": "string"
-                },
-                "callback_url": {
-                    "description": "Optional: Callback URL for frontend redirect",
-                    "type": "string"
-                },
-                "currency": {
-                    "description": "\"IDR\", \"USD\", etc.",
-                    "type": "string"
-                },
-                "customer_email": {
-                    "type": "string"
-                },
-                "customer_name": {
-                    "description": "Customer information",
-                    "type": "string"
-                },
-                "customer_phone": {
-                    "type": "string"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "gateway_name": {
-                    "description": "\"midtrans\", \"stripe\", etc.",
-                    "type": "string"
-                },
-                "payment_method": {
-                    "description": "\"credit_card\", \"bank_transfer\", etc.",
-                    "type": "string"
-                },
-                "user_id": {
-                    "type": "string"
-                }
-            }
-        },
-        "dto.PaymentResponseDTO": {
-            "type": "object",
-            "properties": {
-                "amount": {
-                    "type": "number"
-                },
-                "application_id": {
-                    "type": "string"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "currency": {
-                    "type": "string"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "gateway_name": {
-                    "type": "string"
-                },
-                "gateway_order_id": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "paid_at": {
-                    "type": "string"
-                },
-                "payment_method": {
-                    "type": "string"
-                },
-                "payment_type": {
-                    "type": "string"
-                },
-                "redirect_url": {
-                    "description": "URL to complete payment",
-                    "type": "string"
-                },
-                "status": {
-                    "type": "string"
-                },
-                "token": {
-                    "type": "string"
-                },
-                "updated_at": {
-                    "type": "string"
-                },
-                "user_id": {
-                    "type": "string"
-                }
-            }
-        },
         "entities.PaymentMethodEntity": {
             "type": "object",
             "properties": {

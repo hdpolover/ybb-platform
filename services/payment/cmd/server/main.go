@@ -25,7 +25,6 @@ import (
 	_ "github.com/ybb-platform/payment/docs"
 
 	commandHandlers "github.com/ybb-platform/payment/internal/application/commands/handlers"
-	queryHandlers "github.com/ybb-platform/payment/internal/application/queries/handlers"
 	"github.com/ybb-platform/payment/internal/domain/entities"
 	"github.com/ybb-platform/payment/internal/infrastructure/config"
 	infraGateways "github.com/ybb-platform/payment/internal/infrastructure/gateways"
@@ -146,12 +145,6 @@ func main() {
 	registerGateways(cfg, gatewayFactory, logger)
 
 	// Initialize repositories
-	sqlDB, err := db.DB()
-	if err != nil {
-		logger.Fatalf("Failed to get SQL DB from GORM: %v", err)
-	}
-	paymentRepo := persistence.NewPostgresPaymentRepository(sqlDB)
-	// paymentRepo := persistence.NewGormPaymentRepository(db)
 	paymentMethodRepo := persistence.NewPaymentMethodRepository(db)
 	intentRepo := persistence.NewGormPaymentIntentRepository(db)
 	txRepo := persistence.NewGormPaymentTransactionRepository(db)
@@ -181,47 +174,7 @@ func main() {
 		}
 	}()
 
-	// Initialize handlers
-	createPaymentHandler := commandHandlers.NewCreatePaymentHandler(
-		paymentRepo,
-		gatewayFactory,
-		eventPublisher,
-	)
-
-	verifyStatusHandler := commandHandlers.NewVerifyStatusHandler(
-		paymentRepo,
-		gatewayFactory,
-	)
-
-	cancelPaymentHandler := commandHandlers.NewCancelPaymentHandler(
-		paymentRepo,
-		gatewayFactory,
-	)
-
-	retryPaymentHandler := commandHandlers.NewRetryPaymentHandler(
-		paymentRepo,
-		gatewayFactory,
-	)
-
-	// Refund Handler
-	refundPaymentHandler := commandHandlers.NewRefundPaymentHandler(
-		paymentRepo,
-		gatewayFactory,
-		eventPublisher,
-	)
-
-	getPaymentHandler := queryHandlers.NewGetPaymentHandler(paymentRepo)
-
 	paymentHandler := handlers.NewPaymentHandler(
-		createPaymentHandler,
-		getPaymentHandler,
-
-		verifyStatusHandler,
-		cancelPaymentHandler,
-		refundPaymentHandler,
-		retryPaymentHandler,
-
-		paymentRepo,
 		intentRepo,
 		txRepo,
 		eventPublisher,
@@ -345,14 +298,8 @@ func setupRouter(
 
 		payments := protected.Group("/payments")
 		{
-			payments.POST("", paymentHandler.CreatePayment)
 			payments.GET("/:id", paymentHandler.GetPayment)
 			payments.GET("/user/:userId", paymentHandler.GetPaymentsByUser)
-
-			payments.POST("/:id/verify-status", paymentHandler.VerifyPaymentStatus)
-			payments.POST("/:id/refund", paymentHandler.RefundPayment)
-			payments.POST("/:id/cancel", paymentHandler.CancelPayment)
-			payments.POST("/:id/retry", paymentHandler.RetryPayment)
 
 			// Manual Payment Features
 			payments.POST("/:id/proof", paymentHandler.UploadProof)

@@ -8,6 +8,7 @@ import { Payment } from '@core/entities/payment.entity';
 @Injectable()
 export class PaymentRepository implements IPaymentRepository {
     private readonly paymentServiceUrl: string;
+    private readonly paymentServiceInternalKey: string;
     private readonly logger = new Logger(PaymentRepository.name);
 
     constructor(
@@ -18,6 +19,10 @@ export class PaymentRepository implements IPaymentRepository {
             'PAYMENT_SERVICE_URL',
             'http://payment-service:8080',
         );
+        this.paymentServiceInternalKey = this.configService.get<string>(
+            'PAYMENT_SERVICE_INTERNAL_KEY',
+            '',
+        );
     }
 
     async findByUserId(userId: string): Promise<Payment[]> {
@@ -25,6 +30,7 @@ export class PaymentRepository implements IPaymentRepository {
             const { data } = await firstValueFrom(
                 this.httpService.get(`${this.paymentServiceUrl}/v1/payments`, {
                     params: { user_id: userId },
+                    headers: this.buildInternalHeaders(),
                 }),
             );
             
@@ -43,7 +49,9 @@ export class PaymentRepository implements IPaymentRepository {
     async findById(id: string): Promise<Payment | null> {
         try {
             const { data } = await firstValueFrom(
-                this.httpService.get(`${this.paymentServiceUrl}/v1/payments/${id}`),
+                this.httpService.get(`${this.paymentServiceUrl}/v1/payments/${id}`, {
+                    headers: this.buildInternalHeaders(),
+                }),
             );
             return this.mapToEntity(data);
         } catch (error) {
@@ -78,5 +86,15 @@ export class PaymentRepository implements IPaymentRepository {
             new Date(dto.created_at),
             new Date(dto.updated_at),
         );
+    }
+
+    private buildInternalHeaders(): Record<string, string> {
+        if (!this.paymentServiceInternalKey) {
+            return {};
+        }
+
+        return {
+            'X-Internal-Service-Key': this.paymentServiceInternalKey,
+        };
     }
 }

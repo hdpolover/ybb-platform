@@ -1,80 +1,5 @@
 basePath: /api/v1
 definitions:
-  dto.CreatePaymentDTO:
-    properties:
-      amount:
-        type: number
-      application_id:
-        type: string
-      callback_url:
-        description: 'Optional: Callback URL for frontend redirect'
-        type: string
-      currency:
-        description: '"IDR", "USD", etc.'
-        type: string
-      customer_email:
-        type: string
-      customer_name:
-        description: Customer information
-        type: string
-      customer_phone:
-        type: string
-      description:
-        type: string
-      gateway_name:
-        description: '"midtrans", "stripe", etc.'
-        type: string
-      payment_method:
-        description: '"credit_card", "bank_transfer", etc.'
-        type: string
-      user_id:
-        type: string
-    required:
-    - amount
-    - application_id
-    - currency
-    - customer_email
-    - customer_name
-    - gateway_name
-    - payment_method
-    - user_id
-    type: object
-  dto.PaymentResponseDTO:
-    properties:
-      amount:
-        type: number
-      application_id:
-        type: string
-      created_at:
-        type: string
-      currency:
-        type: string
-      description:
-        type: string
-      gateway_name:
-        type: string
-      gateway_order_id:
-        type: string
-      id:
-        type: string
-      paid_at:
-        type: string
-      payment_method:
-        type: string
-      payment_type:
-        type: string
-      redirect_url:
-        description: URL to complete payment
-        type: string
-      status:
-        type: string
-      token:
-        type: string
-      updated_at:
-        type: string
-      user_id:
-        type: string
-    type: object
   entities.PaymentMethodEntity:
     properties:
       account_name:
@@ -318,42 +243,9 @@ paths:
       summary: Update Payment Method
       tags:
       - Payment Methods
-  /payments:
-    post:
-      consumes:
-      - application/json
-      description: Create a new payment intent and get checkout information
-      parameters:
-      - description: Payment Request Data
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/dto.CreatePaymentDTO'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Create Payment Intent
-      tags:
-      - Payments
   /payments/{id}:
     get:
-      description: Get payment details by its ID
+      description: Get a payment transaction or payment intent by its ID
       parameters:
       - description: Payment ID
         in: path
@@ -379,29 +271,6 @@ paths:
             additionalProperties: true
             type: object
       summary: Get Payment Details
-      tags:
-      - Payments
-  /payments/{id}/cancel:
-    post:
-      description: Cancel a pending payment
-      parameters:
-      - description: Payment ID
-        in: path
-        name: id
-        required: true
-        type: string
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Cancel Payment
       tags:
       - Payments
   /payments/{id}/proof:
@@ -434,7 +303,7 @@ paths:
           schema:
             additionalProperties: true
             type: object
-        "500":
+        "404":
           description: Internal Server Error
           schema:
             additionalProperties: true
@@ -442,49 +311,6 @@ paths:
       summary: Upload Bukti Transfer (Submit URL)
       tags:
       - Manual Payment
-  /payments/{id}/refund:
-    post:
-      description: Refunds a successful payment
-      parameters:
-      - description: Payment ID
-        in: path
-        name: id
-        required: true
-        type: string
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/dto.PaymentResponseDTO'
-      summary: Refund Payment
-      tags:
-      - Payments
-  /payments/{id}/retry:
-    post:
-      consumes:
-      - application/json
-      description: Create a new transaction based on failed/expired payment
-      parameters:
-      - description: Old Transaction ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/dto.PaymentResponseDTO'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Retry Payment
-      tags:
-      - Payments
   /payments/{id}/verify:
     post:
       consumes:
@@ -523,24 +349,6 @@ paths:
       summary: Verifikasi Pembayaran (Admin)
       tags:
       - Manual Payment
-  /payments/{id}/verify-status:
-    post:
-      description: Check payment status from Gateway (now disabled/noop)
-      parameters:
-      - description: Payment ID
-        in: path
-        name: id
-        required: true
-        type: string
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Verify Payment Status
-      tags:
-      - Payments
   /payments/user/{userId}:
     get:
       description: Get list of payments for a user with pagination
