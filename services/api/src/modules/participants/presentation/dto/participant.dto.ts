@@ -172,6 +172,9 @@ export class ParticipantResponseDto {
     @ApiPropertyOptional({ example: 'https://linkedin.com/in/johndoe' })
     linkedinUrl?: string;
 
+    @ApiPropertyOptional({ example: 'https://cdn.ybbhub.com/participants/profile.jpg' })
+    profilePictureUrl?: string;
+
     // Misc
     @ApiPropertyOptional({ example: 'L' })
     tshirtSize?: string;

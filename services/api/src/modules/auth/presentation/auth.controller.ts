@@ -114,6 +114,8 @@ export class AuthController {
       ip || '0.0.0.0',
       userAgent,
       dto.brandId,
+      dto.programId,
+      dto.programSlug,
     );
     return this.loginHandler.execute(command, brandDomain);
   }

@@ -89,6 +89,7 @@ export async function seedParticipants() {
             await prisma.userIdentity.create({
                 data: {
                     userId: user.id,
+                    brandId: iys.id,
                     providerId: localProvider.id,
                     isPrimary: true
                 }

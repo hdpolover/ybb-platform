@@ -1,7 +1,9 @@
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { RegisterHandler } from './register.handler';
+import { ApplicationCategory } from '@prisma/client';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
+import { UnitOfWork } from '../../../../../shared/infrastructure/database/unit-of-work.service';
 import { JwtService } from '@nestjs/jwt';
 import { RabbitMQProducerService } from '../../../../../shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { AuthLoggingService } from '../../services/auth-logging.service';
@@ -19,6 +21,7 @@ jest.mock('bcrypt', () => ({
 describe('RegisterHandler', () => {
   let handler: RegisterHandler;
   let prismaService: any;
+  let unitOfWork: any;
   let jwtService: any;
   let rabbitmqProducer: any;
   let authLoggingService: any;
@@ -54,17 +57,26 @@ describe('RegisterHandler', () => {
       create: jest.fn(),
     },
     participantApplication: {
+      findUnique: jest.fn(),
       findFirst: jest.fn(),
       create: jest.fn(),
     },
+    programParticipationInfo: {
+      findMany: jest.fn(),
+    },
     userIdentity: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
     },
     userSession: {
       create: jest.fn()
     }
+  };
+
+  const mockUnitOfWork = {
+    execute: jest.fn(),
   };
 
   const mockJwtService = {
@@ -103,6 +115,7 @@ describe('RegisterHandler', () => {
       providers: [
         RegisterHandler,
         { provide: PrismaService, useValue: mockPrismaService },
+        { provide: UnitOfWork, useValue: mockUnitOfWork },
         { provide: JwtService, useValue: mockJwtService },
         { provide: RabbitMQProducerService, useValue: mockRabbitMQProducer },
         { provide: AuthLoggingService, useValue: mockAuthLoggingService },
@@ -113,6 +126,7 @@ describe('RegisterHandler', () => {
 
     handler = module.get<RegisterHandler>(RegisterHandler);
     prismaService = module.get<PrismaService>(PrismaService);
+    unitOfWork = module.get<UnitOfWork>(UnitOfWork);
     jwtService = module.get<JwtService>(JwtService);
     rabbitmqProducer = module.get<RabbitMQProducerService>(RabbitMQProducerService);
     authLoggingService = module.get<AuthLoggingService>(AuthLoggingService);
@@ -120,6 +134,36 @@ describe('RegisterHandler', () => {
     geoIpService = module.get<GeoIpService>(GeoIpService);
 
     jest.clearAllMocks();
+    mockUnitOfWork.execute.mockImplementation(async (work: any) =>
+      work({
+        tx: {
+          user: {
+            create: mockPrismaService.user.create,
+          },
+          participant: {
+            create: mockPrismaService.participant.create,
+          },
+        },
+        createAmbassadorReferral: async ({ participantId, ambassadorId }: { participantId: string; ambassadorId: string }) =>
+          mockPrismaService.ambassadorReferral.create({
+            data: {
+              ambassadorId,
+              participantId,
+              status: 'referred',
+            },
+          }),
+        incrementAmbassadorReferrals: async (ambassadorId: string) =>
+          mockPrismaService.ambassador.update({
+            where: { id: ambassadorId },
+            data: {
+              totalReferrals: { increment: 1 },
+              lastReferralAt: new Date(),
+            },
+          }),
+      }),
+    );
+    mockPrismaService.participantApplication.findUnique.mockResolvedValue(null);
+    mockPrismaService.programParticipationInfo.findMany.mockResolvedValue([]);
   });
 
   it('should be defined', () => {
@@ -162,6 +206,10 @@ describe('RegisterHandler', () => {
             id: 'program-id-123',
             brandId: 'category-id-123',
             isActive: true,
+          isPublished: true,
+          allowRegistration: true,
+          registrationOpenDate: null,
+          registrationCloseDate: null,
         });
 
         // Mock Ambassador (Referral)
@@ -185,14 +233,17 @@ describe('RegisterHandler', () => {
         });
         
         // Mock Participant (create)
-        mockPrismaService.participant.findUnique.mockResolvedValue(null);
+        mockPrismaService.participant.findUnique.mockResolvedValue({
+          id: 'participant-id-123',
+          userId: 'new-user-id',
+        });
         mockPrismaService.participant.create.mockResolvedValue({
             id: 'participant-id-123',
             userId: 'new-user-id',
         });
 
         // Mock Application (Not exists)
-        mockPrismaService.participantApplication.findFirst.mockResolvedValue(null);
+        mockPrismaService.participantApplication.findUnique.mockResolvedValue(null);
 
         const result = await handler.execute(command);
 
@@ -216,6 +267,7 @@ describe('RegisterHandler', () => {
                 participantId: 'participant-id-123',
                 programId: 'program-id-123',
                 status: 'draft',
+            applicationCategory: ApplicationCategory.self_funded,
             }
         });
 
@@ -320,6 +372,19 @@ describe('RegisterHandler', () => {
             id: 'latest-program-id',
             brandId: 'category-id-123',
             isActive: true,
+          isPublished: true,
+          allowRegistration: true,
+          registrationOpenDate: null,
+          registrationCloseDate: null,
+        });
+        mockPrismaService.program.findUnique.mockResolvedValue({
+          id: 'latest-program-id',
+          brandId: 'category-id-123',
+          isActive: true,
+          isPublished: true,
+          allowRegistration: true,
+          registrationOpenDate: null,
+          registrationCloseDate: null,
         });
 
         // Mock User (Not exists)
@@ -334,14 +399,17 @@ describe('RegisterHandler', () => {
         });
 
          // Mock Participant (create)
-         mockPrismaService.participant.findUnique.mockResolvedValue(null);
+         mockPrismaService.participant.findUnique.mockResolvedValue({
+           id: 'participant-id-123',
+           userId: 'new-user-id',
+         });
          mockPrismaService.participant.create.mockResolvedValue({
              id: 'participant-id-123',
              userId: 'new-user-id',
          });
  
          // Mock Application (Not exists)
-         mockPrismaService.participantApplication.findFirst.mockResolvedValue(null);
+         mockPrismaService.participantApplication.findUnique.mockResolvedValue(null);
 
         await handler.execute(minimalCommand);
 
@@ -351,6 +419,7 @@ describe('RegisterHandler', () => {
                 participantId: 'participant-id-123',
                 programId: 'latest-program-id',
                 status: 'draft',
+            applicationCategory: ApplicationCategory.self_funded,
             }
         });
     });
