@@ -8,6 +8,7 @@ import * as bcrypt from 'bcrypt';
 import { AuthLoggingService } from '../../services/auth-logging.service';
 import { GeoIpService } from '@shared/infrastructure/geoip/geoip.service';
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
+import { ensureParticipantExists, ensureProgramApplication } from '../../services/auth-program-linking.util';
 
 @Injectable()
 export class LoginHandler {
@@ -206,6 +207,14 @@ export class LoginHandler {
         failedLoginAttempts: 0,
         lastLoginAt: new Date(),
       },
+    });
+
+    const participant = await ensureParticipantExists(this.prisma, user.id, user.email);
+    await ensureProgramApplication(this.prisma, {
+      participantId: participant.id,
+      brandId,
+      programId: command.programId,
+      programSlug: command.programSlug,
     });
 
     // Log success

@@ -39,6 +39,7 @@ export class GetMyParticipantProfileHandler implements IQueryHandler<GetMyPartic
             occupation: participant.occupation ?? undefined,
             instagramUsername: participant.instagramUsername ?? undefined,
             linkedinUrl: participant.linkedinUrl ?? undefined,
+            profilePictureUrl: participant.profilePictureUrl ?? undefined,
             tshirtSize: participant.tshirtSize ?? undefined,
             dietaryRestrictions: participant.dietaryRestrictions ?? undefined,
             profileCompletionPercentage: participant.profileCompletionPercentage ?? 0,

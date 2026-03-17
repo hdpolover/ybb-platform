@@ -1,16 +1,17 @@
-import { Inject, Injectable, ConflictException, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, ConflictException, BadRequestException, Logger } from '@nestjs/common';
 import { RegisterCommand } from '../register.command';
 import { AuthResponseDto } from '../../../presentation/dto/auth-response.dto';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
 import { UnitOfWork } from '../../../../../shared/infrastructure/database/unit-of-work.service';
 import { RabbitMQProducerService } from '../../../../../shared/infrastructure/rabbitmq/rabbitmq-producer.service';
-import { Ambassador, ApplicationCategory } from '@prisma/client';
+import { Ambassador } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { AuthLoggingService } from '../../services/auth-logging.service';
 import { MetricsService } from '../../../../../shared/infrastructure/monitoring/metrics.service';
 import { GeoIpService } from '@shared/infrastructure/geoip/geoip.service';
+import { ensureProgramApplication, resolveAuthTargetProgram } from '../../services/auth-program-linking.util';
 
 @Injectable()
 export class RegisterHandler {
@@ -139,48 +140,13 @@ export class RegisterHandler {
     }
 
     // Resolve Target Program ID
-    let targetProgramId = command.programId;
-
-    if (command.programSlug) {
-        const programBySlug = await this.prisma.program.findUnique({
-          where: {
-            brandId_slug: {
-              brandId: brandId,
-              slug: command.programSlug,
-            }
-          }
-        });
-
-        if (!programBySlug) {
-          throw new BadRequestException(`Invalid program slug '${command.programSlug}' for the current brand domain.`);
-        }
-        targetProgramId = programBySlug.id;
-    }
-
-    // Automatic registration to latest active program if no specific program requested
-    if (!targetProgramId) {
-      const latestProgram = await this.prisma.program.findFirst({
-        where: {
-          brandId: brandId,
-          isActive: true,
-        },
-        orderBy: {
-          startDate: 'desc',
-        },
-      });
-
-      if (latestProgram) {
-        targetProgramId = latestProgram.id;
-      }
-    }
-
-    // Compatibility check (if ID was manually provided)
-    if (targetProgramId && command.programId) {
-       const confirmProgram = await this.prisma.program.findUnique({ where: { id: targetProgramId }});
-       if (confirmProgram && confirmProgram.brandId !== brandId) {
-           throw new BadRequestException('Program does not belong to the selected category');
-       }
-    }
+    const targetProgram = await resolveAuthTargetProgram(this.prisma, {
+      brandId,
+      programId: command.programId,
+      programSlug: command.programSlug,
+      fallbackToLatestOpenProgram: true,
+    });
+    const targetProgramId = targetProgram?.id;
 
     // Check Ambassador Referral
     let ambassador: Ambassador | null = null;
@@ -258,72 +224,21 @@ export class RegisterHandler {
         }
       }
 
-      if (!targetProgramId) return;
-
-      // Check if already registered for this program
-      const existingApplication = await this.prisma.participantApplication.findFirst({
-        where: {
-          participantId: participant.id,
-          programId: targetProgramId,
-        },
+      await ensureProgramApplication(this.prisma, {
+        participantId: participant.id,
+        brandId,
+        programId: targetProgramId,
+        applicationCategory: command.applicationCategory,
       });
-
-      // Create application if not exists
-      if (!existingApplication) {
-        // Determine Default Category from Active Participation Infos
-        const participationInfos = await this.prisma.programParticipationInfo.findMany({
-            where: {
-                programId: targetProgramId,
-                isActive: true
-            }
-        });
-
-        // Default: Self Funded if no visible options or logic fails
-        let applicationCategory: ApplicationCategory = ApplicationCategory.self_funded;
-
-        if (command.applicationCategory) {
-            // 1. User requested specific category
-            const isAvailable = participationInfos.some(pi => pi.category === command.applicationCategory);
-            if (!isAvailable) {
-                 // Trying to register for a closed or non-existent category
-                 // However, we shouldn't block REGISTRATION entirely if the user just clicked a bad link? 
-                 // But strictly speaking, if they want "Fully Funded" and it's closed, we should tell them.
-                 throw new BadRequestException(`Registration for '${command.applicationCategory.replace('_', ' ')}' is not available for this program.`);
-            }
-            applicationCategory = command.applicationCategory;
-        } else {
-            // 2. Fallback Priority: Fully Funded -> Self Funded -> Other/First Available
-            const hasFullyFunded = participationInfos.some(pi => pi.category === ApplicationCategory.fully_funded);
-            const hasSelfFunded = participationInfos.some(pi => pi.category === ApplicationCategory.self_funded);
-
-            if (hasFullyFunded) {
-                applicationCategory = ApplicationCategory.fully_funded;
-            } else if (hasSelfFunded) {
-                applicationCategory = ApplicationCategory.self_funded;
-            } else if (participationInfos.length > 0) {
-                applicationCategory = participationInfos[0].category;
-            }
-        }
-
-        await this.prisma.participantApplication.create({
-          data: {
-            participantId: participant.id,
-            programId: targetProgramId,
-            status: 'draft',
-            applicationCategory: applicationCategory
-          },
-        });
-      }
     };
 
     // For OAuth providers, check if identity already exists
     if (authProvider.name !== 'local' && command.providerUserId) {
-      const existingIdentity = await this.prisma.userIdentity.findUnique({
+      const existingIdentity = await this.prisma.userIdentity.findFirst({
         where: {
-          providerId_providerUserId: {
-            providerId: authProvider.id,
-            providerUserId: command.providerUserId,
-          },
+          brandId,
+          providerId: authProvider.id,
+          providerUserId: command.providerUserId,
         },
         include: {
           user: true,
@@ -384,6 +299,7 @@ export class RegisterHandler {
       await this.prisma.userIdentity.create({
         data: {
           userId: user.id,
+          brandId: user.brandId,
           providerId: authProvider.id,
           providerUserId: providerUserIdToUse,
           providerEmail: command.email,
@@ -478,6 +394,7 @@ export class RegisterHandler {
           emailVerificationExpires,
           identities: {
             create: {
+              brandId: brandId,
               providerId: authProvider.id,
               providerUserId: providerUserIdToUse,
               providerEmail: command.email,
@@ -515,68 +432,22 @@ export class RegisterHandler {
         }
       }
 
-      // Create application if target program exists
-      if (targetProgramId) {
-        // Check if already registered (shouldn't happen, but defensive)
-        const existingApp = await tx.participantApplication.findFirst({
-          where: {
-            participantId: participant.id,
-            programId: targetProgramId,
-          },
-        });
-
-        if (!existingApp) {
-          // Determine application category
-          const participationInfos = await tx.programParticipationInfo.findMany({
-            where: {
-              programId: targetProgramId,
-              isActive: true,
-            },
-          });
-
-          let applicationCategory: ApplicationCategory = ApplicationCategory.self_funded;
-
-          if (command.applicationCategory) {
-            const isAvailable = participationInfos.some(
-              (pi) => pi.category === command.applicationCategory,
-            );
-            if (!isAvailable) {
-              throw new BadRequestException(
-                `Registration for '${command.applicationCategory.replace('_', ' ')}' is not available for this program.`,
-              );
-            }
-            applicationCategory = command.applicationCategory;
-          } else {
-            // Fallback priority: Fully Funded -> Self Funded -> First Available
-            const hasFullyFunded = participationInfos.some(
-              (pi) => pi.category === ApplicationCategory.fully_funded,
-            );
-            const hasSelfFunded = participationInfos.some(
-              (pi) => pi.category === ApplicationCategory.self_funded,
-            );
-
-            if (hasFullyFunded) {
-              applicationCategory = ApplicationCategory.fully_funded;
-            } else if (hasSelfFunded) {
-              applicationCategory = ApplicationCategory.self_funded;
-            } else if (participationInfos.length > 0) {
-              applicationCategory = participationInfos[0].category;
-            }
-          }
-
-          await tx.participantApplication.create({
-            data: {
-              participantId: participant.id,
-              programId: targetProgramId,
-              status: 'draft',
-              applicationCategory: applicationCategory,
-            },
-          });
-        }
-      }
-
       return user;
     }, { name: 'user-registration', timeout: 10000 });
+
+    const newParticipant = await this.prisma.participant.findUnique({
+      where: { userId: newUser.id },
+      select: { id: true },
+    });
+
+    if (newParticipant) {
+      await ensureProgramApplication(this.prisma, {
+        participantId: newParticipant.id,
+        brandId,
+        programId: targetProgramId,
+        applicationCategory: command.applicationCategory,
+      });
+    }
 
     // Send notifications
     if (authProvider.name === 'local' && emailVerificationToken) {

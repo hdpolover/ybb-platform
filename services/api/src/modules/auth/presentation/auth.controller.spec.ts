@@ -2,6 +2,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthController } from './auth.controller';
 import { LoginHandler } from '../application/commands/handlers/login.handler';
+import { AdminLoginHandler } from '../application/commands/handlers/admin-login.handler';
+import { AdminRefreshHandler } from '../application/commands/handlers/admin-refresh.handler';
 import { RegisterHandler } from '../application/commands/handlers/register.handler';
 import { RegisterAdminHandler } from '../application/commands/handlers/register-admin.handler';
 import { LogoutHandler } from '../application/commands/handlers/logout.handler';
@@ -9,6 +11,7 @@ import { ForgotPasswordHandler } from '../application/commands/handlers/forgot-p
 import { ResetPasswordHandler } from '../application/commands/handlers/reset-password.handler';
 import { VerifyEmailHandler } from '../application/commands/handlers/verify-email.handler';
 import { ResendVerificationEmailHandler } from '../application/commands/handlers/resend-verification-email.handler';
+import { FirebaseLoginHandler } from '../application/commands/handlers/firebase-login.handler';
 import { GetUserProfileHandler } from '../application/queries/handlers/get-user-profile.handler';
 import { GetAuthProvidersHandler } from '../application/queries/handlers/get-auth-providers.handler';
 import { LoginDto } from './dto/login.dto';
@@ -24,6 +27,8 @@ describe('AuthController', () => {
     let registerHandler: RegisterHandler;
 
     const mockLoginHandler = { execute: jest.fn() };
+    const mockAdminLoginHandler = { execute: jest.fn() };
+    const mockAdminRefreshHandler = { execute: jest.fn() };
     const mockRegisterHandler = { execute: jest.fn() };
     const mockRegisterAdminHandler = { execute: jest.fn() };
     const mockLogoutHandler = { execute: jest.fn() };
@@ -31,6 +36,7 @@ describe('AuthController', () => {
     const mockResetPasswordHandler = { execute: jest.fn() };
     const mockVerifyEmailHandler = { execute: jest.fn() };
     const mockResendVerificationHandler = { execute: jest.fn() };
+    const mockFirebaseLoginHandler = { execute: jest.fn() };
     const mockGetUserProfileHandler = { execute: jest.fn() };
     const mockGetAuthProvidersHandler = { execute: jest.fn() };
 
@@ -39,6 +45,8 @@ describe('AuthController', () => {
             controllers: [AuthController],
             providers: [
                 { provide: LoginHandler, useValue: mockLoginHandler },
+                { provide: AdminLoginHandler, useValue: mockAdminLoginHandler },
+                { provide: AdminRefreshHandler, useValue: mockAdminRefreshHandler },
                 { provide: RegisterHandler, useValue: mockRegisterHandler },
                 { provide: RegisterAdminHandler, useValue: mockRegisterAdminHandler },
                 { provide: LogoutHandler, useValue: mockLogoutHandler },
@@ -46,6 +54,7 @@ describe('AuthController', () => {
                 { provide: ResetPasswordHandler, useValue: mockResetPasswordHandler },
                 { provide: VerifyEmailHandler, useValue: mockVerifyEmailHandler },
                 { provide: ResendVerificationEmailHandler, useValue: mockResendVerificationHandler },
+                { provide: FirebaseLoginHandler, useValue: mockFirebaseLoginHandler },
                 { provide: GetUserProfileHandler, useValue: mockGetUserProfileHandler },
                 { provide: GetAuthProvidersHandler, useValue: mockGetAuthProvidersHandler },
             ],
@@ -70,7 +79,9 @@ describe('AuthController', () => {
             const dto: LoginDto = {
                 email: 'test@example.com',
                 password: 'password',
-                brandId: 'cat-1'
+                brandId: 'cat-1',
+                programId: 'prog-1',
+                programSlug: 'iys-2026',
             };
             const mockReq = { headers: { 'user-agent': 'Jest' } };
             const ip = '127.0.0.1';
@@ -87,6 +98,8 @@ describe('AuthController', () => {
             expect(command.email).toBe(dto.email);
             expect(command.password).toBe(dto.password);
             expect(command.ipAddress).toBe(ip);
+            expect(command.programId).toBe(dto.programId);
+            expect(command.programSlug).toBe(dto.programSlug);
         });
     });
 

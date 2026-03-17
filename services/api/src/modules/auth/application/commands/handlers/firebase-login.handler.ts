@@ -10,6 +10,7 @@ import { FirebaseAuthService } from '../../../infrastructure/services/firebase-a
 import { AuthLoggingService } from '../../services/auth-logging.service';
 import { GeoIpService } from '@shared/infrastructure/geoip/geoip.service';
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
+import { ensureProgramApplication, resolveAuthTargetProgram } from '../../services/auth-program-linking.util';
 
 @Injectable()
 export class FirebaseLoginHandler {
@@ -29,18 +30,44 @@ export class FirebaseLoginHandler {
     if (brandId) {
       return brandId;
     }
-    // Default fallback to first active category if nothing provided
-    // Ideally this logic should be shared or more robust
-    const defaultCategory = await this.prisma.brand.findFirst({
-      where: { isActive: true },
-      orderBy: { createdAt: 'asc' },
-      select: { id: true }
-    });
-    
-    if (!defaultCategory) {
-      throw new BadRequestException('No active program category found.');
+
+        if (!domain) {
+            const defaultCategory = await this.prisma.brand.findFirst({
+                where: { isActive: true },
+                orderBy: { createdAt: 'asc' },
+                select: { id: true },
+            });
+
+            if (!defaultCategory) {
+                throw new BadRequestException('No active program category found.');
+            }
+
+            return defaultCategory.id;
+        }
+
+        let brand = await this.prisma.brand.findFirst({
+            where: {
+                websiteUrl: domain,
+                isActive: true,
+            },
+            select: { id: true },
+        });
+
+        if (!brand) {
+            brand = await this.prisma.brand.findFirst({
+                where: {
+                    websiteUrl: { contains: domain, mode: 'insensitive' },
+                    isActive: true,
+                },
+                select: { id: true },
+            });
+        }
+
+        if (!brand) {
+            throw new BadRequestException(`No brand found for domain: ${domain}. Please provide brandId.`);
     }
-    return defaultCategory.id;
+
+        return brand.id;
   }
 
   private parseUserAgent(ua: string) {
@@ -103,6 +130,7 @@ export class FirebaseLoginHandler {
     // 4. Check for existing User Identity
     let userIdentity = await this.prisma.userIdentity.findFirst({
         where: {
+            brandId,
             providerId: authProvider.id,
             providerUserId: uid
         },
@@ -126,6 +154,7 @@ export class FirebaseLoginHandler {
             userIdentity = await this.prisma.userIdentity.create({
                 data: {
                     userId: user.id,
+                    brandId,
                     providerId: authProvider.id,
                     providerUserId: uid,
                     providerEmail: email,
@@ -148,6 +177,7 @@ export class FirebaseLoginHandler {
                     isActive: true,
                     identities: {
                         create: {
+                            brandId,
                             providerId: authProvider.id,
                             providerUserId: uid,
                             providerEmail: email,
@@ -225,94 +255,33 @@ export class FirebaseLoginHandler {
         // We only auto-register if the participant has NO applications for this Program Category
         // OR if a specific program was requested.
 
-        let targetProgramId = command.programId;
+        const requestedProgram = await resolveAuthTargetProgram(this.prisma, {
+            brandId,
+            programId: command.programId,
+            programSlug: command.programSlug,
+        });
 
-        // A. Explicit Program Requested via Slug
-        if (!targetProgramId && command.programSlug) {
-            const prog = await this.prisma.program.findUnique({
-                where: { 
-                    brandId_slug: { brandId, slug: command.programSlug }
-                }
-            });
-            if (prog) targetProgramId = prog.id;
-        }
+        const existingBrandApplication = await this.prisma.participantApplication.findFirst({
+            where: {
+                participantId: participant.id,
+                program: {
+                    brandId,
+                },
+            },
+            select: { id: true },
+        });
 
-        // B. Check if already registered in THIS category
-        // (If explicit program not requested, we check if we need to auto-link)
-        if (!targetProgramId) {
-             const existingApp = await this.prisma.participantApplication.findFirst({
-                 where: {
-                     participantId: participant.id,
-                     program: {
-                         brandId: brandId
-                     }
-                 }
-             });
+        const applicationResult = await ensureProgramApplication(this.prisma, {
+            participantId: participant.id,
+            brandId,
+            programId: requestedProgram?.id,
+            fallbackToLatestOpenProgram: !requestedProgram && !existingBrandApplication,
+        });
 
-             // Only auto-link if they have NO presence in this category yet
-             if (!existingApp) {
-                const activeProgram = await this.prisma.program.findFirst({
-                    where: {
-                        brandId: brandId,
-                        isActive: true, // Must be active
-                        isPublished: true, // Must be published
-                    },
-                    orderBy: {
-                        createdAt: 'desc', // Latest one
-                    },
-                });
-
-                if (activeProgram) {
-                    targetProgramId = activeProgram.id;
-                    this.logger.log(`Auto-linking user ${user.id} to active program: ${activeProgram.name} (${activeProgram.id})`);
-                }
-             }
-        }
-
-        // Perform Registration if determined
-        if (targetProgramId) {
-             // Check if already applied to THIS specific program (idempotency check)
-             const alreadyApplied = await this.prisma.participantApplication.findUnique({
-                 where: {
-                     participantId_programId: {
-                         participantId: participant.id,
-                         programId: targetProgramId
-                     }
-                 }
-             });
-
-             if (!alreadyApplied) {
-                 // Determine Default Category from Active Participation Infos
-                 const participationInfos = await this.prisma.programParticipationInfo.findMany({
-                     where: {
-                         programId: targetProgramId,
-                         isActive: true
-                     }
-                 });
-
-                 // Default priority: Fully Funded -> Self Funded -> Other/First Available
-                 let applicationCategory: ApplicationCategory = ApplicationCategory.self_funded;
-
-                 const hasFullyFunded = participationInfos.some(pi => pi.category === ApplicationCategory.fully_funded);
-                 const hasSelfFunded = participationInfos.some(pi => pi.category === ApplicationCategory.self_funded);
-
-                 if (hasFullyFunded) {
-                     applicationCategory = ApplicationCategory.fully_funded;
-                 } else if (hasSelfFunded) {
-                      applicationCategory = ApplicationCategory.self_funded;
-                 } else if (participationInfos.length > 0) {
-                      applicationCategory = participationInfos[0].category;
-                 }
-
-                 await this.prisma.participantApplication.create({
-                     data: {
-                         participantId: participant.id,
-                         programId: targetProgramId,
-                         status: 'draft',
-                         applicationCategory: applicationCategory
-                     }
-                 });
-             }
+        if (applicationResult.status === 'created') {
+            this.logger.log(
+                `Auto-linked user ${user.id} to program ${applicationResult.program.name} (${applicationResult.program.id})`,
+            );
         }
 
     } catch (e) {

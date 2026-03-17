@@ -116,6 +116,7 @@ model UserIdentity {
   id             String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   userId         String  @map("user_id") @db.Uuid
   providerId     String  @map("provider_id") @db.Uuid // Reference to AuthProvider
+  brandId        String  @map("brand_id") @db.Uuid
   providerUserId String? @map("provider_user_id") @db.VarChar(255) // Provider's user ID (null for local)
   providerEmail  String? @map("provider_email") @db.VarChar(255) // Email from provider
 
@@ -135,11 +136,13 @@ model UserIdentity {
 
   // Relations
   user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  brand    Brand        @relation(fields: [brandId], references: [id], onDelete: Cascade)
   provider AuthProvider @relation(fields: [providerId], references: [id], onDelete: Restrict)
 
   @@unique([userId, providerId]) // One provider per user
-  @@unique([providerId, providerUserId]) // Unique provider-providerUserId combination
+  @@unique([brandId, providerId, providerUserId]) // Unique provider-providerUserId combination per brand
   @@index([userId])
+  @@index([brandId])
   @@index([providerId])
   @@index([providerUserId])
   @@map("user_identities")

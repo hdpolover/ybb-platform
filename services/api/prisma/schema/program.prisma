@@ -53,6 +53,7 @@ model Brand {
   // Relations
   testimonials             ProgramTestimonial[]
   users                    User[]
+  userIdentities           UserIdentity[]
   programs                 Program[]
   systemAnnouncements      SystemAnnouncement[]
   sponsors                 Sponsor[]

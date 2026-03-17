@@ -109,6 +109,7 @@ export async function migrateUsers() {
                             createdAt: legacyUser.created_at || new Date(),
                             identities: {
                                 create: {
+                                    brandId: programData.brandId,
                                     providerId: (await getLocalProviderId()),
                                     providerUserId: null,
                                     providerEmail: userEmail,
@@ -133,6 +134,7 @@ export async function migrateUsers() {
                                 createdAt: legacyUser.created_at || new Date(),
                                 identities: {
                                     create: {
+                                        brandId: programData.brandId,
                                         providerId: (await getLocalProviderId()),
                                         providerUserId: null,
                                         providerEmail: userEmail,

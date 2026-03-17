@@ -5,5 +5,7 @@ export class LoginCommand {
     public readonly ipAddress: string,
     public readonly userAgent: string,
     public readonly brandId?: string,
+    public readonly programId?: string,
+    public readonly programSlug?: string,
   ) {}
 }
