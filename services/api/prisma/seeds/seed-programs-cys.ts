@@ -266,6 +266,69 @@ export async function seedCYSPrograms() {
   }
 
   // ==========================================
+  // Gallery Images
+  // ==========================================
+  await prisma.programGallery.deleteMany({ where: { programId: cys2026.id, type: 'image' } });
+  await prisma.programGallery.createMany({
+    data: [
+      { programId: cys2026.id, type: 'image', title: 'Opening Ceremony', imageUrl: 'https://placehold.co/800x600/E62C4F/FFF?text=Opening+Ceremony', order: 1, isActive: true },
+      { programId: cys2026.id, type: 'image', title: 'Keynote Session', imageUrl: 'https://placehold.co/800x600/C0392B/FFF?text=Keynote+Session', order: 2, isActive: true },
+      { programId: cys2026.id, type: 'image', title: 'Panel Discussion', imageUrl: 'https://placehold.co/800x600/922B21/FFF?text=Panel+Discussion', order: 3, isActive: true },
+      { programId: cys2026.id, type: 'image', title: 'Cultural Night', imageUrl: 'https://placehold.co/800x600/E62C4F/FFF?text=Cultural+Night', order: 4, isActive: true },
+      { programId: cys2026.id, type: 'image', title: 'Group Workshop', imageUrl: 'https://placehold.co/800x600/C0392B/FFF?text=Group+Workshop', order: 5, isActive: true },
+      { programId: cys2026.id, type: 'image', title: 'Innovation Lab', imageUrl: 'https://placehold.co/800x600/922B21/FFF?text=Innovation+Lab', order: 6, isActive: true },
+      { programId: cys2026.id, type: 'image', title: 'Networking Dinner', imageUrl: 'https://placehold.co/800x600/E62C4F/FFF?text=Networking+Dinner', order: 7, isActive: true },
+      { programId: cys2026.id, type: 'image', title: 'City Tour Beijing', imageUrl: 'https://placehold.co/800x600/C0392B/FFF?text=City+Tour+Beijing', order: 8, isActive: true },
+      { programId: cys2026.id, type: 'image', title: 'Awards Ceremony', imageUrl: 'https://placehold.co/800x600/922B21/FFF?text=Awards+Ceremony', order: 9, isActive: true },
+      { programId: cys2026.id, type: 'image', title: 'Closing Ceremony', imageUrl: 'https://placehold.co/800x600/E62C4F/FFF?text=Closing+Ceremony', order: 10, isActive: true },
+      { programId: cys2026.id, type: 'image', title: 'Delegates Group Photo', imageUrl: 'https://placehold.co/800x600/C0392B/FFF?text=Group+Photo', order: 11, isActive: true },
+      { programId: cys2026.id, type: 'image', title: 'Leadership Training', imageUrl: 'https://placehold.co/800x600/922B21/FFF?text=Leadership+Training', order: 12, isActive: true },
+    ],
+  });
+
+  // ==========================================
+  // Gallery Videos (highlight videos)
+  // ==========================================
+  await prisma.programGallery.deleteMany({ where: { programId: cys2026.id, type: 'video' } });
+  await prisma.programGallery.createMany({
+    data: [
+      { programId: cys2026.id, type: 'video', title: 'CYS 2026 Official Trailer', description: 'The official trailer for China Youth Summit 2026.', imageUrl: 'https://placehold.co/800x450/E62C4F/FFF?text=CYS+2026+Trailer', videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', order: 1, isActive: true },
+      { programId: cys2026.id, type: 'video', title: 'Day 1 Recap', description: 'Highlights from the first day of CYS 2026.', imageUrl: 'https://placehold.co/800x450/C0392B/FFF?text=Day+1+Recap', videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', order: 2, isActive: true },
+      { programId: cys2026.id, type: 'video', title: 'Cultural Immersion', description: 'Exploring Chinese culture through immersive activities.', imageUrl: 'https://placehold.co/800x450/922B21/FFF?text=Cultural+Immersion', videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', order: 3, isActive: true },
+    ],
+  });
+
+  // ==========================================
+  // Speakers
+  // ==========================================
+  await prisma.programSpeaker.deleteMany({ where: { programId: cys2026.id } });
+  await prisma.programSpeaker.createMany({
+    data: [
+      { programId: cys2026.id, name: 'Dr. Li Wei', title: 'Professor of International Relations', organization: 'Peking University', bio: 'Dr. Li Wei is a leading scholar in international youth diplomacy with over 15 years of experience in cross-cultural education programs across Asia. He has authored numerous papers on youth empowerment and global citizenship.', photoUrl: 'https://placehold.co/400x500/E62C4F/FFF?text=Dr+Li+Wei', email: 'liwei@pku.edu.cn', order: 1, isActive: true },
+      { programId: cys2026.id, name: 'Sarah Chen', title: 'CEO & Founder', organization: 'Asia Youth Network', bio: 'Sarah Chen founded Asia Youth Network in 2018, connecting over 50,000 young leaders across 30 countries. Her work focuses on sustainable development and social entrepreneurship.', photoUrl: 'https://placehold.co/400x500/C0392B/FFF?text=Sarah+Chen', linkedinUrl: 'https://linkedin.com/in/sarahchen', order: 2, isActive: true },
+      { programId: cys2026.id, name: 'Kenji Yamamoto', title: 'Director of Innovation', organization: 'Global Youth Foundation', bio: 'Kenji brings 10 years of experience leading innovation programs for youth across Asia-Pacific. He specializes in design thinking and social impact.', photoUrl: 'https://placehold.co/400x500/922B21/FFF?text=Kenji+Yamamoto', order: 3, isActive: true },
+      { programId: cys2026.id, name: 'Fatima Al-Rahman', title: 'UN Youth Delegate', organization: 'United Nations', bio: 'Fatima served as a UN Youth Delegate representing sustainable development goals. She is passionate about climate action and has spoken at over 40 international conferences.', photoUrl: 'https://placehold.co/400x500/E62C4F/FFF?text=Fatima+Al-Rahman', order: 4, isActive: true },
+    ],
+  });
+
+  // ==========================================
+  // Alumni Testimonials (for alumni stories section)
+  // ==========================================
+  const existingAlumniTestimonials = await prisma.programTestimonial.findMany({
+    where: { brandId: brand.id, category: 'alumni' },
+  });
+  if (existingAlumniTestimonials.length === 0) {
+    await prisma.programTestimonial.createMany({
+      data: [
+        { brandId: brand.id, programId: cys2026.id, name: 'Zhang Mei', role: 'Software Engineer', testimonial: 'CYS gave me the confidence to pursue my dreams internationally. The connections I made here led to my career breakthrough.', category: 'alumni', type: 'text', avatarUrl: 'https://placehold.co/100x100/E62C4F/FFF?text=ZM', thumbnailUrl: 'https://placehold.co/400x300/E62C4F/FFF?text=Zhang+Mei+Story', isFeatured: true, order: 1, isActive: true },
+        { brandId: brand.id, programId: cys2026.id, name: 'Raj Patel', role: 'Social Entrepreneur', testimonial: 'The innovation challenge at CYS inspired me to launch my social enterprise. Two years later, we have impacted 10,000 lives.', category: 'alumni', type: 'text', avatarUrl: 'https://placehold.co/100x100/C0392B/FFF?text=RP', thumbnailUrl: 'https://placehold.co/400x300/C0392B/FFF?text=Raj+Patel+Story', isFeatured: true, order: 2, isActive: true },
+        { brandId: brand.id, programId: cys2026.id, name: 'Yuki Tanaka', role: 'Climate Activist', testimonial: 'Meeting leaders from 60+ countries opened my eyes to the global climate movement. CYS was the catalyst for my advocacy work.', category: 'alumni', type: 'video', videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', avatarUrl: 'https://placehold.co/100x100/922B21/FFF?text=YT', thumbnailUrl: 'https://placehold.co/400x300/922B21/FFF?text=Yuki+Tanaka+Story', isFeatured: true, order: 3, isActive: true },
+        { brandId: brand.id, programId: cys2026.id, name: 'Amira Hassan', role: 'Policy Analyst', testimonial: 'CYS taught me that leadership is about service. The mentorship I received shaped my approach to public policy.', category: 'alumni', type: 'text', avatarUrl: 'https://placehold.co/100x100/E62C4F/FFF?text=AH', thumbnailUrl: 'https://placehold.co/400x300/E62C4F/FFF?text=Amira+Hassan+Story', isFeatured: false, order: 4, isActive: true },
+      ],
+    });
+  }
+
+  // ==========================================
   // YouTube Shorts (gallery type='short')
   // ==========================================
   const existingShorts = await prisma.programGallery.findMany({

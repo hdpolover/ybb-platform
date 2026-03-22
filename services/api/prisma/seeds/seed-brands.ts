@@ -179,6 +179,33 @@ export async function seedBrands() {
       ],
       note: 'All payments are processed securely. For queries, contact our support team.',
     },
+    participant_demographics: {
+      eyebrow: 'Participant Geography',
+      title: 'Participant Distribution by Country',
+      country_levels: {
+        'China': 'high', 'Indonesia': 'high', 'Japan': 'high', 'Pakistan': 'high',
+        'India': 'medium', 'Malaysia': 'medium', 'South Korea': 'medium', 'Turkey': 'medium',
+        'United States of America': 'low', 'Brazil': 'low', 'Germany': 'low', 'Australia': 'low',
+        'Nigeria': 'low', 'France': 'low', 'Canada': 'low',
+      },
+      country_participants: {
+        'China': 520, 'Indonesia': 380, 'Japan': 290, 'Pakistan': 210,
+        'India': 160, 'Malaysia': 140, 'South Korea': 130, 'Turkey': 110,
+        'United States of America': 95, 'Brazil': 70, 'Germany': 65, 'Australia': 55,
+        'Nigeria': 50, 'France': 45, 'Canada': 40,
+      },
+      legend: { high: 'High participation', medium: 'Medium participation', low: 'Low participation', none: 'No participants' },
+    },
+    promo_cta: {
+      eyebrow: 'Ready to Lead?',
+      title: 'Ready to Lead? Join China Youth Summit 2026!',
+      subtitle: 'Be part of a transformative experience connecting young leaders from 60+ countries. Apply now and shape the future.',
+      primary_cta_label: 'Apply Now',
+      primary_cta_href: '/apply',
+      video_url: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+      video_title: 'CYS 2026 Registration Guideline',
+      video_description: 'Watch this short walkthrough to understand the registration flow, required documents, and key deadlines.',
+    },
   };
 
   await prisma.brand.upsert({
