@@ -254,4 +254,64 @@ export async function seedBrandContent() {
   });
 
   log('✅ Brand Content (Settings, Socials, Sponsors, Team, Testimonials, Legal) seeded for IYS');
+
+  // ==========================================
+  // CYS Brand Content
+  // ==========================================
+  const cys = await prisma.brand.findUnique({ where: { slug: BRANDS.CYS } });
+  if (!cys) {
+    error('CYS Brand not found — skipping CYS brand content');
+    return;
+  }
+
+  // CYS Settings
+  await prisma.brandSetting.upsert({
+    where: { brandId: cys.id },
+    update: {},
+    create: {
+      brandId: cys.id,
+      isMaintenanceMode: false,
+      usdInIdr: 16000,
+      supportEmail: 'info@chinayouthsummit.com',
+      footerNavigation: [
+        {
+          title: 'Programs',
+          links: [
+            { label: 'China Youth Summit 2026', url: '/programs/china-youth-summit-2026' },
+            { label: 'Past Events', url: '/programs/past' },
+          ],
+        },
+        {
+          title: 'Legal',
+          links: [
+            { label: 'Privacy Policy', url: '/legal/privacy' },
+            { label: 'Terms of Service', url: '/legal/terms' },
+          ],
+        },
+      ],
+    },
+  });
+
+  // CYS Social Feeds
+  await prisma.brandSocialFeed.deleteMany({ where: { brandId: cys.id } });
+  await prisma.brandSocialFeed.createMany({
+    data: [
+      { brandId: cys.id, platform: 'instagram', postId: 'cys_ig_001', imageUrl: 'https://placehold.co/400x400/E62C4F/FFF?text=CYS+Registration+Open', permalink: 'https://instagram.com/p/cys001', caption: 'Registration is NOW OPEN for CYS 2026! 🚀 #CYS2026 #ChinaYouthSummit', postedAt: new Date(), isActive: true },
+      { brandId: cys.id, platform: 'instagram', postId: 'cys_ig_002', imageUrl: 'https://placehold.co/400x400/C0392B/FFF?text=CYS+2025+Highlights', permalink: 'https://instagram.com/p/cys002', caption: 'Throwback to CYS 2025 in Beijing! What an incredible journey. #CYS2025', postedAt: new Date(Date.now() - 86400000), isActive: true },
+      { brandId: cys.id, platform: 'instagram', postId: 'cys_ig_003', imageUrl: 'https://placehold.co/400x400/922B21/FFF?text=Speaker+Announcement', permalink: 'https://instagram.com/p/cys003', caption: 'Excited to announce our keynote speakers for CYS 2026!', postedAt: new Date(Date.now() - 172800000), isActive: true },
+    ],
+  });
+
+  // CYS Sponsors
+  await prisma.sponsor.deleteMany({ where: { brandId: cys.id } });
+  await prisma.sponsor.createMany({
+    data: [
+      { brandId: cys.id, name: 'Asia Innovation Fund', type: 'corporate', tier: 'platinum', logoUrl: 'https://placehold.co/200x100/E62C4F/FFF?text=Asia+Innovation', websiteUrl: 'https://asiainnovation.example.com', description: 'Driving innovation across Asia.', order: 1, isActive: true },
+      { brandId: cys.id, name: 'Global Education Alliance', type: 'ngo', tier: 'gold', logoUrl: 'https://placehold.co/200x100/C0392B/FFF?text=GEA', websiteUrl: 'https://gea.example.org', description: 'Advancing education worldwide.', order: 2, isActive: true },
+      { brandId: cys.id, name: 'Youth Media Network', type: 'media_partner', tier: 'partner', logoUrl: 'https://placehold.co/200x100/922B21/FFF?text=YMN', websiteUrl: 'https://ymn.example.com', description: 'Youth-focused media coverage.', order: 3, isActive: true },
+      { brandId: cys.id, name: 'TechBridge Asia', type: 'corporate', tier: 'gold', logoUrl: 'https://placehold.co/200x100/E62C4F/FFF?text=TechBridge', websiteUrl: 'https://techbridge.example.com', description: 'Connecting tech talent across borders.', order: 4, isActive: true },
+    ],
+  });
+
+  log('✅ Brand Content seeded for CYS');
 }

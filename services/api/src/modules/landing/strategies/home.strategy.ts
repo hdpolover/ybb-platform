@@ -399,6 +399,34 @@ export class HomeStrategy implements ILandingPageStrategy {
             tier: s.tier,
           })),
         },
+        {
+          type: 'participant_demographics',
+          content: brandMeta.participant_demographics || {
+            eyebrow: 'Participant Geography',
+            title: 'Participant Distribution by Country',
+            country_levels: {},
+            country_participants: {},
+            legend: {
+              high: 'High participation',
+              medium: 'Medium participation',
+              low: 'Low participation',
+              none: 'No participants',
+            },
+          },
+        },
+        {
+          type: 'promo_cta',
+          content: brandMeta.promo_cta || {
+            eyebrow: 'Ready to Innovate?',
+            title: `Ready to Innovate? Join ${brand.name} Now!`,
+            subtitle: 'Be part of a global community of young leaders and innovators who are creating real impact through international programs.',
+            primary_cta_label: 'Apply Now',
+            primary_cta_href: '/apply',
+            video_url: program?.videoUrl || null,
+            video_title: program ? `${program.name} Registration Guideline` : null,
+            video_description: null,
+          },
+        },
       ],
     };
 
