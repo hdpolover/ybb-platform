@@ -3,6 +3,7 @@ import { Ctx, EventPattern, Payload, RmqContext } from '@nestjs/microservices';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { Response } from 'express';
 import { ReportingService } from './reporting.service';
+import { PaymentSucceededPayload, UserRegisteredPayload } from '@common/types/events';
 // import { JwtAuthGuard } from '../auth/infrastructure/guards/jwt-auth.guard';
 // import { RolesGuard } from '../auth/infrastructure/guards/roles.guard';
 // import { Roles } from '../common/decorators/roles.decorator';
@@ -51,13 +52,13 @@ export class ReportingController {
   }
 
   @EventPattern('payment.succeeded')
-  async handlePaymentSucceeded(@Payload() data: any, @Ctx() context: RmqContext) {
+  async handlePaymentSucceeded(@Payload() data: PaymentSucceededPayload, @Ctx() context: RmqContext) {
     this.logger.log(`[Reporting] Processing Payment Succeeded: ${data.amount} ${data.currency}`);
     // Future: this.reportingService.recordRevenue(data);
   }
 
   @EventPattern('user.registered')
-  async handleUserRegistered(@Payload() data: any, @Ctx() context: RmqContext) {
+  async handleUserRegistered(@Payload() data: UserRegisteredPayload, @Ctx() context: RmqContext) {
     this.logger.log(`[Reporting] Processing User Registration: ${data.email}`);
     // Future: this.reportingService.recordSignups(data);
   }

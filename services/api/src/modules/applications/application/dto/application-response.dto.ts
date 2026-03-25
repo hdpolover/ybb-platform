@@ -1,4 +1,4 @@
-import { ApplicationStatus, ApplicationCategory, ScoreStatus } from '@core/entities/participant-application.entity';
+import { ApplicationStatus, ApplicationCategory, ScoreStatus, DocumentFile, ApplicationStatusHistoryEntry } from '@core/entities/participant-application.entity';
 
 export class ApplicationStepDto {
   section: string;       // e.g., 'personal_info'
@@ -22,8 +22,8 @@ export class ApplicationResponseDto {
   motivationLetter?: string;
   achievements?: string;
   experiences?: string;
-  documents?: Record<string, any>;
-  requirementFiles?: any[];
+  documents?: Record<string, DocumentFile>;
+  requirementFiles?: DocumentFile[];
   twibbonLink?: string;
   pricingTierId?: string;
   paymentAmount?: number;
@@ -35,8 +35,8 @@ export class ApplicationResponseDto {
   reviewedBy?: string;
   reviewedAt?: Date;
   reviewerNotes?: string;
-  participantSnapshot?: Record<string, any>;
-  statusHistory?: any[];
+  participantSnapshot?: Record<string, unknown>;
+  statusHistory?: ApplicationStatusHistoryEntry[];
   createdAt: Date;
   updatedAt: Date;
   submittedAt?: Date;

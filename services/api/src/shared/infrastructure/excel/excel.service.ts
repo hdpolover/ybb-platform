@@ -2,10 +2,12 @@ import { Injectable } from '@nestjs/common';
 import * as ExcelJS from 'exceljs';
 import { Response } from 'express';
 
+type ExcelRow = Record<string, string | number | boolean | Date | null | undefined>;
+
 @Injectable()
 export class ExcelService {
   async generateExcel(
-    data: any[],
+    data: ExcelRow[],
     columns: Partial<ExcelJS.Column>[],
     sheetName = 'Report',
   ): Promise<Buffer> {
@@ -23,7 +25,7 @@ export class ExcelService {
 
   async streamExcel(
     res: Response,
-    data: any[],
+    data: ExcelRow[],
     columns: Partial<ExcelJS.Column>[],
     fileName: string,
     sheetName = 'Report',

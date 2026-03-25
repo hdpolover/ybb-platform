@@ -4,6 +4,7 @@ import { UpdateBrandDetailsCommand } from '../update-brand-details.command';
 import { IBrandRepository } from '@core/interfaces/repositories/brand.repository.interface';
 import { BrandResponseDto } from '../../../presentation/dto/brand.dto';
 import { StorageService } from '../../../../files/application/storage.service';
+import { Brand } from '@core/entities/brand.entity';
 
 @CommandHandler(UpdateBrandDetailsCommand)
 export class UpdateBrandDetailsHandler implements ICommandHandler<UpdateBrandDetailsCommand> {
@@ -70,7 +71,7 @@ export class UpdateBrandDetailsHandler implements ICommandHandler<UpdateBrandDet
         return this.mapToDto(updatedBrand);
     }
 
-    private mapToDto(brand: any): BrandResponseDto {
+    private mapToDto(brand: Brand): BrandResponseDto {
         const dto = new BrandResponseDto();
         dto.id = brand.id;
         dto.name = brand.name;
@@ -100,7 +101,7 @@ export class UpdateBrandDetailsHandler implements ICommandHandler<UpdateBrandDet
         dto.createdAt = brand.createdAt;
         dto.updatedAt = brand.updatedAt;
         dto.deletedAt = brand.deletedAt;
-        dto.settings = brand.settings;
+        dto.settings = brand.settings as unknown as Record<string, unknown> | null;
         return dto;
     }
 }

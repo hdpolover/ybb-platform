@@ -7,9 +7,9 @@ export class UpdateProgramBrandingCommand implements ICommand {
         public readonly dto: UploadProgramBrandingDto,
         public readonly userId: string,
         public readonly files: {
-            logo?: any;
-            banner?: any;
-            thumbnail?: any;
+            logo?: Express.Multer.File;
+            banner?: Express.Multer.File;
+            thumbnail?: Express.Multer.File;
         }
     ) {}
 }

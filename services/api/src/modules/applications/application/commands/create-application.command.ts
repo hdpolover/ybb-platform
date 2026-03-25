@@ -1,4 +1,4 @@
-import { ApplicationCategory } from '@core/entities/participant-application.entity';
+import { ApplicationCategory, DocumentFile } from '@core/entities/participant-application.entity';
 
 /**
  * Create Application Command
@@ -13,8 +13,8 @@ export class CreateApplicationCommand {
     public readonly motivationLetter?: string,
     public readonly achievements?: string,
     public readonly experiences?: string,
-    public readonly documents?: Record<string, any>,
-    public readonly requirementFiles?: any[],
+    public readonly documents?: Record<string, DocumentFile>,
+    public readonly requirementFiles?: DocumentFile[],
     public readonly twibbonLink?: string,
     public readonly pricingTierId?: string,
   ) {}

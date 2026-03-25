@@ -15,5 +15,5 @@ export class ConfirmPaymentDto {
     @ApiPropertyOptional()
     @IsObject()
     @IsOptional()
-    payment_details?: Record<string, any>;
+    payment_details?: Record<string, unknown>;
 }

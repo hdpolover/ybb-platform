@@ -45,7 +45,7 @@ export class GetSupportTicketHandler implements IQueryHandler<GetSupportTicketQu
                 isFromAdmin: m.isFromAdmin,
                 senderName: m.senderName,
                 createdAt: m.createdAt,
-                attachments: m.attachments,
+                attachments: m.attachments as unknown as string[],
             })),
         };
     }

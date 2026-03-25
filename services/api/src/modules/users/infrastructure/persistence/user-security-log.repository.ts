@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { IUserSecurityLogRepository } from '@core/interfaces/repositories/user-security-log.repository.interface';
 import { UserSecurityLog } from '@core/entities/user-security-log.entity';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
-import { RiskLevel } from '@prisma/client';
+import { RiskLevel, Prisma } from '@prisma/client';
 
 @Injectable()
 export class UserSecurityLogRepository implements IUserSecurityLogRepository {
@@ -44,7 +44,7 @@ export class UserSecurityLogRepository implements IUserSecurityLogRepository {
         return this.toDomain(created);
     }
 
-    private toDomain(orm: any): UserSecurityLog {
+    private toDomain(orm: Prisma.UserSecurityLogGetPayload<Record<string, never>>): UserSecurityLog {
         return new UserSecurityLog(
             orm.id,
             orm.userId,

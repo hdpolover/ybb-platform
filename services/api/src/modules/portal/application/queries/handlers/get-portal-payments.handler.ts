@@ -110,7 +110,7 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
             // Filter tiers based on application category
             const applicableTiers = application.program.pricingTiers.filter(t => 
                 !application.invoices.some(inv => inv.pricingTierId === t.id && inv.status === 'paid') &&
-                (t.allowedCategories.includes(application.applicationCategory as any) || t.allowedCategories.length === 0)
+                (t.allowedCategories.includes(application.applicationCategory as import('@prisma/client').ApplicationCategory) || t.allowedCategories.length === 0)
             );
 
             for (const tier of applicableTiers) {

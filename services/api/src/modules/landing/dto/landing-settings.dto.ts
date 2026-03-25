@@ -52,7 +52,7 @@ export class BrandSettingsDto {
   address?: string;
 
   @ApiProperty({ example: { instagram: '@username' }, required: false, description: 'Social media links object' })
-  social_media?: any;
+  social_media?: Record<string, string>;
 }
 
 export class NavigationItemDto {

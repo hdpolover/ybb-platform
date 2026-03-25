@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { IProgramRepository, FindAllProgramsParams, FindAllProgramsResult } from '@core/interfaces/repositories/program.repository.interface';
 import { Program } from '@core/entities/program.entity';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
@@ -10,7 +11,7 @@ export class ProgramRepository implements IProgramRepository {
     async findAll(params: FindAllProgramsParams): Promise<FindAllProgramsResult> {
         const { brandId, year, isPublished, isActive, isVisibleToUsers, status, page = 1, limit = 10 } = params;
 
-        const where: any = {
+        const where: Prisma.ProgramWhereInput = {
             brandId,
             deletedAt: null,
         };
@@ -71,7 +72,7 @@ export class ProgramRepository implements IProgramRepository {
     }
 
     async findBySlug(slug: string, brandId?: string): Promise<Program | null> {
-        const where: any = { slug };
+        const where: Prisma.ProgramWhereInput = { slug };
         if (brandId) {
             where.brandId = brandId;
         }
@@ -134,7 +135,7 @@ export class ProgramRepository implements IProgramRepository {
                 registrationOpenDate: data.registrationOpenDate,
                 registrationCloseDate: data.registrationCloseDate,
                 requirePayment: data.requirePayment ?? false,
-                registrationFee: data.registrationFee as any, // Decimal handling
+                registrationFee: data.registrationFee as unknown as Prisma.Decimal, // Decimal handling
                 requirementsDescription: data.requirementsDescription,
                 benefitsDescription: data.benefitsDescription,
                 termsAndConditions: data.termsAndConditions,
@@ -182,7 +183,7 @@ export class ProgramRepository implements IProgramRepository {
                 registrationOpenDate: data.registrationOpenDate,
                 registrationCloseDate: data.registrationCloseDate,
                 requirePayment: data.requirePayment,
-                registrationFee: data.registrationFee as any,
+                registrationFee: data.registrationFee as unknown as Prisma.Decimal,
                 requirementsDescription: data.requirementsDescription,
                 benefitsDescription: data.benefitsDescription,
                 termsAndConditions: data.termsAndConditions,
@@ -210,7 +211,7 @@ export class ProgramRepository implements IProgramRepository {
         });
     }
 
-    private mapToEntity(prismaEntity: any): Program {
+    private mapToEntity(prismaEntity: Prisma.ProgramGetPayload<{ include: { brand: { select: { name: true } } } }> | Prisma.ProgramGetPayload<Record<string, never>>): Program {
         return new Program(
             prismaEntity.id,
             prismaEntity.brandId,
@@ -248,7 +249,7 @@ export class ProgramRepository implements IProgramRepository {
             prismaEntity.createdAt,
             prismaEntity.updatedAt,
             prismaEntity.deletedAt,
-            prismaEntity.brand?.name ?? null,
+            (prismaEntity as Record<string, unknown> & { brand?: { name?: string } }).brand?.name ?? null,
         );
     }
 }

@@ -3,6 +3,8 @@ import { NotFoundException, Inject } from '@nestjs/common';
 import { UpdateBrandSettingsCommand } from '../update-brand-settings.command';
 import { IBrandRepository } from '@core/interfaces/repositories/brand.repository.interface';
 import { BrandResponseDto } from '../../../presentation/dto/brand.dto';
+import { Brand } from '@core/entities/brand.entity';
+import { BrandSetting } from '@core/entities/brand-setting.entity';
 
 @CommandHandler(UpdateBrandSettingsCommand)
 export class UpdateBrandSettingsHandler implements ICommandHandler<UpdateBrandSettingsCommand> {
@@ -20,13 +22,13 @@ export class UpdateBrandSettingsHandler implements ICommandHandler<UpdateBrandSe
         }
 
         // Separate Brand fields vs Settings fields
-        const brandUpdate: any = {
+        const brandUpdate: Partial<Brand> & { settings?: Record<string, unknown> } = {
             requireEmailVerification: dto.requireEmailVerification,
             defaultCurrency: dto.defaultCurrency,
             enableMultiCurrency: dto.enableMultiCurrency,
         };
 
-        const settingsUpdate: any = {
+        const settingsUpdate: Record<string, unknown> = {
             isMaintenanceMode: dto.isMaintenanceMode,
             maintenanceMessage: dto.maintenanceMessage,
             footerNavigation: dto.footerNavigation,
@@ -43,7 +45,7 @@ export class UpdateBrandSettingsHandler implements ICommandHandler<UpdateBrandSe
         
         // Ensure settings object is passed only if there are settings to update
         if (Object.values(settingsUpdate).some(v => v !== undefined)) {
-            brandUpdate.settings = settingsUpdate;
+            brandUpdate.settings = settingsUpdate as unknown as BrandSetting & Record<string, unknown>;
         }
 
         const updatedBrand = await this.brandRepository.update(id, brandUpdate);
@@ -51,7 +53,7 @@ export class UpdateBrandSettingsHandler implements ICommandHandler<UpdateBrandSe
         return this.mapToDto(updatedBrand);
     }
 
-    private mapToDto(brand: any): BrandResponseDto {
+    private mapToDto(brand: Brand): BrandResponseDto {
         const dto = new BrandResponseDto();
         dto.id = brand.id;
         dto.name = brand.name;
@@ -81,7 +83,7 @@ export class UpdateBrandSettingsHandler implements ICommandHandler<UpdateBrandSe
         dto.createdAt = brand.createdAt;
         dto.updatedAt = brand.updatedAt;
         dto.deletedAt = brand.deletedAt;
-        dto.settings = brand.settings;
+        dto.settings = brand.settings as unknown as Record<string, unknown> | null;
         return dto;
     }
 }

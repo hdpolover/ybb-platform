@@ -13,7 +13,7 @@ export class UserNotification {
         public actionLabel: string | null,
         public relatedEntityType: string | null,
         public relatedEntityId: string | null,
-        public metadata: any,
+        public metadata: Record<string, unknown>,
         public isRead: boolean,
         public readAt: Date | null,
         public priority: 'low' | 'normal' | 'high' | 'urgent',

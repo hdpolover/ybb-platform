@@ -11,7 +11,7 @@ describe('PortalCertificatesController', () => {
     let getCertsHandler: jest.Mocked<GetPortalCertificatesHandler>;
     let downloadHandler: jest.Mocked<DownloadCertificateHandler>;
 
-    const mockUser = { userId: 'user-123' };
+    const mockUser = { userId: 'user-123', email: 'test@test.com', brandId: 'brand-id' } as import('@shared/decorators/current-user.decorator').CurrentUserData;
 
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
@@ -69,7 +69,7 @@ describe('PortalCertificatesController', () => {
         });
 
         it('should throw UnauthorizedException if no user', async () => {
-            await expect(controller.listCertificates({})).rejects.toThrow(
+            await expect(controller.listCertificates({} as unknown as import('@shared/decorators/current-user.decorator').CurrentUserData)).rejects.toThrow(
                 UnauthorizedException,
             );
         });
@@ -94,7 +94,7 @@ describe('PortalCertificatesController', () => {
         });
 
         it('should throw UnauthorizedException if no user', async () => {
-            await expect(controller.downloadCertificate({}, 'cert-1')).rejects.toThrow(
+            await expect(controller.downloadCertificate({} as unknown as import('@shared/decorators/current-user.decorator').CurrentUserData, 'cert-1')).rejects.toThrow(
                 UnauthorizedException,
             );
         });

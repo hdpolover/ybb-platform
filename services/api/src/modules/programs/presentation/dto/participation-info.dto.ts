@@ -20,17 +20,17 @@ export class CreateParticipationInfoDto {
   @ApiPropertyOptional({ description: 'List of benefits (JSON)', isArray: true, type: 'object' })
   @IsArray()
   @IsOptional()
-  benefits?: any[];
+  benefits?: Record<string, unknown>[];
 
   @ApiPropertyOptional({ description: 'List of requirements (JSON)', isArray: true, type: 'object' })
   @IsArray()
   @IsOptional()
-  requirements?: any[];
+  requirements?: Record<string, unknown>[];
 
   @ApiPropertyOptional({ description: 'Custom sections', isArray: true, type: 'object' })
   @IsArray()
   @IsOptional()
-  sections?: any[];
+  sections?: Record<string, unknown>[];
 
   @ApiPropertyOptional()
   @IsBoolean()
@@ -52,17 +52,17 @@ export class UpdateParticipationInfoDto {
   @ApiPropertyOptional()
   @IsArray()
   @IsOptional()
-  benefits?: any[];
+  benefits?: Record<string, unknown>[];
 
   @ApiPropertyOptional()
   @IsArray()
   @IsOptional()
-  requirements?: any[];
+  requirements?: Record<string, unknown>[];
 
   @ApiPropertyOptional()
   @IsArray()
   @IsOptional()
-  sections?: any[];
+  sections?: Record<string, unknown>[];
 
   @ApiPropertyOptional()
   @IsBoolean()
@@ -87,13 +87,13 @@ export class ParticipationInfoResponseDto {
   heroDescription?: string;
 
   @ApiPropertyOptional()
-  benefits: any;
+  benefits: Record<string, unknown>[] | null;
 
   @ApiPropertyOptional()
-  requirements: any;
+  requirements: Record<string, unknown>[] | null;
 
   @ApiPropertyOptional()
-  sections: any;
+  sections: Record<string, unknown>[] | null;
 
   @ApiProperty()
   isActive: boolean;

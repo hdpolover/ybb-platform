@@ -1,7 +1,12 @@
 import { Controller, Get, Param, Put, Post, Delete, Body, UseGuards, Request } from '@nestjs/common';
+import { Request as ExpressRequest } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
 import { Public } from '../../../shared/decorators/public.decorator';
+
+interface AuthenticatedRequest extends ExpressRequest {
+  user: { id: string; userId: string };
+}
 
 import {
   ProgramTimelineResponseDto,
@@ -60,7 +65,7 @@ export class ProgramScheduleController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add timeline item' })
-  async addTimeline(@Param('id') programId: string, @Body() dto: CreateProgramTimelineDto, @Request() req: any) {
+  async addTimeline(@Param('id') programId: string, @Body() dto: CreateProgramTimelineDto, @Request() req: AuthenticatedRequest) {
     return this.createProgramTimelineHandler.execute(new CreateProgramTimelineCommand(dto, req.user.id));
   }
 
@@ -68,7 +73,7 @@ export class ProgramScheduleController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update timeline item' })
-  async updateTimeline(@Param('itemId') itemId: string, @Body() dto: UpdateProgramTimelineDto, @Request() req: any) {
+  async updateTimeline(@Param('itemId') itemId: string, @Body() dto: UpdateProgramTimelineDto, @Request() req: AuthenticatedRequest) {
     return this.updateProgramTimelineHandler.execute(new UpdateProgramTimelineCommand(itemId, dto, req.user.id));
   }
 
@@ -76,7 +81,7 @@ export class ProgramScheduleController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete timeline item' })
-  async deleteTimeline(@Param('itemId') itemId: string, @Request() req: any) {
+  async deleteTimeline(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
     return this.deleteProgramTimelineHandler.execute(new DeleteProgramTimelineCommand(itemId, req.user.id));
   }
 
@@ -93,7 +98,7 @@ export class ProgramScheduleController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add schedule item' })
-  async addSchedule(@Param('id') programId: string, @Body() dto: CreateProgramScheduleDto, @Request() req: any) {
+  async addSchedule(@Param('id') programId: string, @Body() dto: CreateProgramScheduleDto, @Request() req: AuthenticatedRequest) {
     return this.createProgramScheduleHandler.execute(new CreateProgramScheduleCommand(dto, req.user.id));
   }
 
@@ -101,7 +106,7 @@ export class ProgramScheduleController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update schedule item' })
-  async updateSchedule(@Param('itemId') itemId: string, @Body() dto: UpdateProgramScheduleDto, @Request() req: any) {
+  async updateSchedule(@Param('itemId') itemId: string, @Body() dto: UpdateProgramScheduleDto, @Request() req: AuthenticatedRequest) {
     return this.updateProgramScheduleHandler.execute(new UpdateProgramScheduleCommand(itemId, dto, req.user.id));
   }
 
@@ -109,7 +114,7 @@ export class ProgramScheduleController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete schedule item' })
-  async deleteSchedule(@Param('itemId') itemId: string, @Request() req: any) {
+  async deleteSchedule(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
     return this.deleteProgramScheduleHandler.execute(new DeleteProgramScheduleCommand(itemId, req.user.id));
   }
 }

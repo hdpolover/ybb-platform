@@ -1,4 +1,4 @@
-import { ApplicationCategory } from '@core/entities/participant-application.entity';
+import { ApplicationCategory, DocumentFile } from '@core/entities/participant-application.entity';
 
 /**
  * Update Application DTO
@@ -10,8 +10,8 @@ export class UpdateApplicationDto {
   motivationLetter?: string;
   achievements?: string;
   experiences?: string;
-  documents?: Record<string, any>;
-  requirementFiles?: any[];
+  documents?: Record<string, DocumentFile>;
+  requirementFiles?: DocumentFile[];
   twibbonLink?: string;
   pricingTierId?: string;
 }

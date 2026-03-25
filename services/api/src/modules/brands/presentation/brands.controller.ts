@@ -87,7 +87,7 @@ export class BrandsController {
     @ApiResponse({ status: 201, description: 'Brand created successfully', type: BrandResponseDto })
     async createBrand(
         @Body() dto: CreateBrandDto,
-        @UploadedFiles() files: { logo?: any[], banner?: any[] },
+        @UploadedFiles() files: { logo?: Express.Multer.File[], banner?: Express.Multer.File[] },
         @CurrentUser() user: CurrentUserData,
     ): Promise<BrandResponseDto> {
         const uploadedFiles = {
@@ -112,7 +112,7 @@ export class BrandsController {
     async updateBrand(
         @Param('id') id: string,
         @Body() dto: UpdateBrandDto,
-        @UploadedFiles() files: { logo?: any[], banner?: any[] },
+        @UploadedFiles() files: { logo?: Express.Multer.File[], banner?: Express.Multer.File[] },
         @CurrentUser() user: CurrentUserData,
     ): Promise<BrandResponseDto> {
         const uploadedFiles = {
@@ -137,7 +137,7 @@ export class BrandsController {
     async updateBrandDetails(
         @Param('id') id: string,
         @Body() dto: UpdateBrandDetailsDto,
-        @UploadedFiles() files: { logo?: any[], banner?: any[] },
+        @UploadedFiles() files: { logo?: Express.Multer.File[], banner?: Express.Multer.File[] },
         @CurrentUser() user: CurrentUserData,
     ): Promise<BrandResponseDto> {
         const uploadedFiles = {

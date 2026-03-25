@@ -14,6 +14,7 @@ import {
     ApplicationFormField,
     ProgramEssay,
     ProgramParticipationCategory,
+    Prisma,
 } from '@prisma/client';
 import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service';
 import { IProgramContentRepository, ProgramPricingTierWithPeriods } from '../../../../core/interfaces/repositories/program-content.repository.interface';
@@ -105,11 +106,11 @@ export class ProgramContentRepository implements IProgramContentRepository {
     }
 
     // CRUD for Timeline
-    async createTimeline(data: any): Promise<ProgramTimeline> {
-        return this.prisma.programTimeline.create({ data });
+    async createTimeline(data: Record<string, unknown>): Promise<ProgramTimeline> {
+        return this.prisma.programTimeline.create({ data: data as Prisma.ProgramTimelineUncheckedCreateInput });
     }
-    async updateTimeline(id: string, data: any): Promise<ProgramTimeline> {
-        return this.prisma.programTimeline.update({ where: { id }, data });
+    async updateTimeline(id: string, data: Record<string, unknown>): Promise<ProgramTimeline> {
+        return this.prisma.programTimeline.update({ where: { id }, data: data as Prisma.ProgramTimelineUncheckedUpdateInput });
     }
     async deleteTimeline(id: string): Promise<void> {
         await this.prisma.programTimeline.delete({ where: { id } });
@@ -119,11 +120,11 @@ export class ProgramContentRepository implements IProgramContentRepository {
     }
 
     // CRUD for Schedules
-    async createSchedule(data: any): Promise<ProgramSchedule> {
-        return this.prisma.programSchedule.create({ data });
+    async createSchedule(data: Record<string, unknown>): Promise<ProgramSchedule> {
+        return this.prisma.programSchedule.create({ data: data as Prisma.ProgramScheduleUncheckedCreateInput });
     }
-    async updateSchedule(id: string, data: any): Promise<ProgramSchedule> {
-        return this.prisma.programSchedule.update({ where: { id }, data });
+    async updateSchedule(id: string, data: Record<string, unknown>): Promise<ProgramSchedule> {
+        return this.prisma.programSchedule.update({ where: { id }, data: data as Prisma.ProgramScheduleUncheckedUpdateInput });
     }
     async deleteSchedule(id: string): Promise<void> {
         await this.prisma.programSchedule.delete({ where: { id } });
@@ -133,11 +134,11 @@ export class ProgramContentRepository implements IProgramContentRepository {
     }
 
     // CRUD for Speakers
-    async createSpeaker(data: any): Promise<ProgramSpeaker> {
-        return this.prisma.programSpeaker.create({ data });
+    async createSpeaker(data: Record<string, unknown>): Promise<ProgramSpeaker> {
+        return this.prisma.programSpeaker.create({ data: data as Prisma.ProgramSpeakerUncheckedCreateInput });
     }
-    async updateSpeaker(id: string, data: any): Promise<ProgramSpeaker> {
-        return this.prisma.programSpeaker.update({ where: { id }, data });
+    async updateSpeaker(id: string, data: Record<string, unknown>): Promise<ProgramSpeaker> {
+        return this.prisma.programSpeaker.update({ where: { id }, data: data as Prisma.ProgramSpeakerUncheckedUpdateInput });
     }
     async deleteSpeaker(id: string): Promise<void> {
         await this.prisma.programSpeaker.delete({ where: { id } });
@@ -147,11 +148,11 @@ export class ProgramContentRepository implements IProgramContentRepository {
     }
 
     // CRUD for Gallery
-    async createGallery(data: any): Promise<ProgramGallery> {
-        return this.prisma.programGallery.create({ data });
+    async createGallery(data: Record<string, unknown>): Promise<ProgramGallery> {
+        return this.prisma.programGallery.create({ data: data as Prisma.ProgramGalleryUncheckedCreateInput });
     }
-    async updateGallery(id: string, data: any): Promise<ProgramGallery> {
-        return this.prisma.programGallery.update({ where: { id }, data });
+    async updateGallery(id: string, data: Record<string, unknown>): Promise<ProgramGallery> {
+        return this.prisma.programGallery.update({ where: { id }, data: data as Prisma.ProgramGalleryUncheckedUpdateInput });
     }
     async deleteGallery(id: string): Promise<void> {
         await this.prisma.programGallery.delete({ where: { id } });
@@ -161,11 +162,11 @@ export class ProgramContentRepository implements IProgramContentRepository {
     }
 
     // CRUD for Testimonials
-    async createTestimonial(data: any): Promise<ProgramTestimonial> {
-        return this.prisma.programTestimonial.create({ data });
+    async createTestimonial(data: Record<string, unknown>): Promise<ProgramTestimonial> {
+        return this.prisma.programTestimonial.create({ data: data as Prisma.ProgramTestimonialUncheckedCreateInput });
     }
-    async updateTestimonial(id: string, data: any): Promise<ProgramTestimonial> {
-        return this.prisma.programTestimonial.update({ where: { id }, data });
+    async updateTestimonial(id: string, data: Record<string, unknown>): Promise<ProgramTestimonial> {
+        return this.prisma.programTestimonial.update({ where: { id }, data: data as Prisma.ProgramTestimonialUncheckedUpdateInput });
     }
     async deleteTestimonial(id: string): Promise<void> {
         await this.prisma.programTestimonial.delete({ where: { id } });
@@ -175,11 +176,11 @@ export class ProgramContentRepository implements IProgramContentRepository {
     }
 
     // CRUD for FAQs
-    async createFaq(data: any): Promise<ProgramFaq> {
-        return this.prisma.programFaq.create({ data });
+    async createFaq(data: Record<string, unknown>): Promise<ProgramFaq> {
+        return this.prisma.programFaq.create({ data: data as Prisma.ProgramFaqUncheckedCreateInput });
     }
-    async updateFaq(id: string, data: any): Promise<ProgramFaq> {
-        return this.prisma.programFaq.update({ where: { id }, data });
+    async updateFaq(id: string, data: Record<string, unknown>): Promise<ProgramFaq> {
+        return this.prisma.programFaq.update({ where: { id }, data: data as Prisma.ProgramFaqUncheckedUpdateInput });
     }
     async deleteFaq(id: string): Promise<void> {
         await this.prisma.programFaq.delete({ where: { id } });
@@ -189,11 +190,11 @@ export class ProgramContentRepository implements IProgramContentRepository {
     }
 
     // CRUD for Team
-    async createTeam(data: any): Promise<ProgramTeam> {
-        return this.prisma.programTeam.create({ data });
+    async createTeam(data: Record<string, unknown>): Promise<ProgramTeam> {
+        return this.prisma.programTeam.create({ data: data as Prisma.ProgramTeamUncheckedCreateInput });
     }
-    async updateTeam(id: string, data: any): Promise<ProgramTeam> {
-        return this.prisma.programTeam.update({ where: { id }, data });
+    async updateTeam(id: string, data: Record<string, unknown>): Promise<ProgramTeam> {
+        return this.prisma.programTeam.update({ where: { id }, data: data as Prisma.ProgramTeamUncheckedUpdateInput });
     }
     async deleteTeam(id: string): Promise<void> {
         await this.prisma.programTeam.delete({ where: { id } });
@@ -203,11 +204,11 @@ export class ProgramContentRepository implements IProgramContentRepository {
     }
 
     // CRUD for Partners
-    async createPartner(data: any): Promise<ProgramPartner> {
-        return this.prisma.programPartner.create({ data });
+    async createPartner(data: Record<string, unknown>): Promise<ProgramPartner> {
+        return this.prisma.programPartner.create({ data: data as Prisma.ProgramPartnerUncheckedCreateInput });
     }
-    async updatePartner(id: string, data: any): Promise<ProgramPartner> {
-        return this.prisma.programPartner.update({ where: { id }, data });
+    async updatePartner(id: string, data: Record<string, unknown>): Promise<ProgramPartner> {
+        return this.prisma.programPartner.update({ where: { id }, data: data as Prisma.ProgramPartnerUncheckedUpdateInput });
     }
     async deletePartner(id: string): Promise<void> {
         await this.prisma.programPartner.delete({ where: { id } });
@@ -217,11 +218,11 @@ export class ProgramContentRepository implements IProgramContentRepository {
     }
 
     // CRUD for Resources
-    async createResource(data: any): Promise<ProgramResource> {
-        return this.prisma.programResource.create({ data });
+    async createResource(data: Record<string, unknown>): Promise<ProgramResource> {
+        return this.prisma.programResource.create({ data: data as Prisma.ProgramResourceUncheckedCreateInput });
     }
-    async updateResource(id: string, data: any): Promise<ProgramResource> {
-        return this.prisma.programResource.update({ where: { id }, data });
+    async updateResource(id: string, data: Record<string, unknown>): Promise<ProgramResource> {
+        return this.prisma.programResource.update({ where: { id }, data: data as Prisma.ProgramResourceUncheckedUpdateInput });
     }
     async deleteResource(id: string): Promise<void> {
         await this.prisma.programResource.delete({ where: { id } });
@@ -231,11 +232,11 @@ export class ProgramContentRepository implements IProgramContentRepository {
     }
 
     // CRUD for Pricing Tiers
-    async createPricingTier(data: any): Promise<ProgramPricingTier> {
-        return this.prisma.programPricingTier.create({ data });
+    async createPricingTier(data: Record<string, unknown>): Promise<ProgramPricingTier> {
+        return this.prisma.programPricingTier.create({ data: data as Prisma.ProgramPricingTierUncheckedCreateInput });
     }
-    async updatePricingTier(id: string, data: any): Promise<ProgramPricingTier> {
-        return this.prisma.programPricingTier.update({ where: { id }, data });
+    async updatePricingTier(id: string, data: Record<string, unknown>): Promise<ProgramPricingTier> {
+        return this.prisma.programPricingTier.update({ where: { id }, data: data as Prisma.ProgramPricingTierUncheckedUpdateInput });
     }
     async deletePricingTier(id: string): Promise<void> {
         await this.prisma.programPricingTier.delete({ where: { id } });
@@ -245,11 +246,11 @@ export class ProgramContentRepository implements IProgramContentRepository {
     }
 
     // CRUD for Requirements
-    async createRequirement(data: any): Promise<ProgramRequirement> {
-        return this.prisma.programRequirement.create({ data });
+    async createRequirement(data: Record<string, unknown>): Promise<ProgramRequirement> {
+        return this.prisma.programRequirement.create({ data: data as Prisma.ProgramRequirementUncheckedCreateInput });
     }
-    async updateRequirement(id: string, data: any): Promise<ProgramRequirement> {
-        return this.prisma.programRequirement.update({ where: { id }, data });
+    async updateRequirement(id: string, data: Record<string, unknown>): Promise<ProgramRequirement> {
+        return this.prisma.programRequirement.update({ where: { id }, data: data as Prisma.ProgramRequirementUncheckedUpdateInput });
     }
     async deleteRequirement(id: string): Promise<void> {
         await this.prisma.programRequirement.delete({ where: { id } });
@@ -266,11 +267,11 @@ export class ProgramContentRepository implements IProgramContentRepository {
     }
 
     // CRUD for Application Form Fields
-    async createFormField(data: any): Promise<ApplicationFormField> {
-        return this.prisma.applicationFormField.create({ data });
+    async createFormField(data: Record<string, unknown>): Promise<ApplicationFormField> {
+        return this.prisma.applicationFormField.create({ data: data as Prisma.ApplicationFormFieldUncheckedCreateInput });
     }
-    async updateFormField(id: string, data: any): Promise<ApplicationFormField> {
-        return this.prisma.applicationFormField.update({ where: { id }, data });
+    async updateFormField(id: string, data: Record<string, unknown>): Promise<ApplicationFormField> {
+        return this.prisma.applicationFormField.update({ where: { id }, data: data as Prisma.ApplicationFormFieldUncheckedUpdateInput });
     }
     async deleteFormField(id: string): Promise<void> {
         await this.prisma.applicationFormField.delete({ where: { id } });
@@ -294,11 +295,11 @@ export class ProgramContentRepository implements IProgramContentRepository {
     }
 
     // CRUD for Essays
-    async createEssay(data: any): Promise<ProgramEssay> {
-        return this.prisma.programEssay.create({ data });
+    async createEssay(data: Record<string, unknown>): Promise<ProgramEssay> {
+        return this.prisma.programEssay.create({ data: data as Prisma.ProgramEssayUncheckedCreateInput });
     }
-    async updateEssay(id: string, data: any): Promise<ProgramEssay> {
-        return this.prisma.programEssay.update({ where: { id }, data });
+    async updateEssay(id: string, data: Record<string, unknown>): Promise<ProgramEssay> {
+        return this.prisma.programEssay.update({ where: { id }, data: data as Prisma.ProgramEssayUncheckedUpdateInput });
     }
     async deleteEssay(id: string): Promise<void> {
         await this.prisma.programEssay.delete({ where: { id } });
@@ -308,11 +309,11 @@ export class ProgramContentRepository implements IProgramContentRepository {
     }
 
     // CRUD for Participation Categories
-    async createParticipationCategory(data: any): Promise<ProgramParticipationCategory> {
-        return this.prisma.programParticipationCategory.create({ data });
+    async createParticipationCategory(data: Record<string, unknown>): Promise<ProgramParticipationCategory> {
+        return this.prisma.programParticipationCategory.create({ data: data as Prisma.ProgramParticipationCategoryUncheckedCreateInput });
     }
-    async updateParticipationCategory(id: string, data: any): Promise<ProgramParticipationCategory> {
-        return this.prisma.programParticipationCategory.update({ where: { id }, data });
+    async updateParticipationCategory(id: string, data: Record<string, unknown>): Promise<ProgramParticipationCategory> {
+        return this.prisma.programParticipationCategory.update({ where: { id }, data: data as Prisma.ProgramParticipationCategoryUncheckedUpdateInput });
     }
     async deleteParticipationCategory(id: string): Promise<void> {
         await this.prisma.programParticipationCategory.delete({ where: { id } });

@@ -5,6 +5,25 @@ import { firstValueFrom } from 'rxjs';
 import { IPaymentRepository } from '@core/interfaces/repositories/payment.repository.interface';
 import { Payment } from '@core/entities/payment.entity';
 
+interface PaymentDto {
+  id: string;
+  user_id: string;
+  reference_id?: string;
+  amount: number | string;
+  currency?: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  metadata?: unknown;
+  transactions?: PaymentTransactionDto[];
+}
+
+interface PaymentTransactionDto {
+  payment_method_id?: string;
+  status?: string;
+  proof_file_url?: string;
+}
+
 @Injectable()
 export class PaymentRepository implements IPaymentRepository {
     private readonly paymentServiceUrl: string;
@@ -38,7 +57,7 @@ export class PaymentRepository implements IPaymentRepository {
                 return [];
             }
 
-            return payments.map((paymentDto: any) => this.mapToEntity(paymentDto));
+            return payments.map((paymentDto: PaymentDto) => this.mapToEntity(paymentDto));
         } catch (error) {
             this.logger.error(`Error fetching payments for user ${userId}`, error);
             // Fallback: return empty array so frontend doesn't crash
@@ -60,11 +79,11 @@ export class PaymentRepository implements IPaymentRepository {
         }
     }
 
-    private mapToEntity(dto: any): Payment {
+    private mapToEntity(dto: PaymentDto): Payment {
         const metadata = this.parseMetadata(dto.metadata);
         const transactions = Array.isArray(dto.transactions) ? dto.transactions : [];
         const latestTransaction = transactions.length > 0 ? transactions[transactions.length - 1] : undefined;
-        const applicationId = dto.reference_id || metadata.application_id || metadata.applicationId || '';
+        const applicationId = dto.reference_id || String(metadata.application_id || metadata.applicationId || '');
         const paidAt = dto.status === 'SUCCEEDED' ? new Date(dto.updated_at) : undefined;
         const paymentMethod = latestTransaction?.payment_method_id || 'N/A';
         const paymentType = this.inferPaymentType(latestTransaction);
@@ -84,7 +103,7 @@ export class PaymentRepository implements IPaymentRepository {
         );
     }
 
-    private parseMetadata(metadata: unknown): Record<string, any> {
+    private parseMetadata(metadata: unknown): Record<string, unknown> {
         if (!metadata) {
             return {};
         }
@@ -98,13 +117,13 @@ export class PaymentRepository implements IPaymentRepository {
         }
 
         if (typeof metadata === 'object') {
-            return metadata as Record<string, any>;
+            return metadata as Record<string, unknown>;
         }
 
         return {};
     }
 
-    private inferPaymentType(latestTransaction?: any): string {
+    private inferPaymentType(latestTransaction?: PaymentTransactionDto): string {
         if (!latestTransaction) {
             return 'AUTOMATIC';
         }

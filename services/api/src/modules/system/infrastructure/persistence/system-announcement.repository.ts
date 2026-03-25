@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { ISystemAnnouncementRepository } from '@core/interfaces/repositories/system-announcement.repository.interface';
 import { SystemAnnouncement } from '@core/entities/system-announcement.entity';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
@@ -8,7 +9,7 @@ export class SystemAnnouncementRepository implements ISystemAnnouncementReposito
     constructor(private readonly prisma: PrismaService) { }
 
     async findAll(filters?: { isPublished?: boolean; targetAudience?: string }): Promise<SystemAnnouncement[]> {
-        const where: any = {};
+        const where: Prisma.SystemAnnouncementWhereInput = {};
         if (filters?.isPublished !== undefined) {
             where.isPublished = filters.isPublished;
         }
@@ -27,7 +28,7 @@ export class SystemAnnouncementRepository implements ISystemAnnouncementReposito
         return announcement ? this.mapToEntity(announcement) : null;
     }
 
-    private mapToEntity(prismaEntity: any): SystemAnnouncement {
+    private mapToEntity(prismaEntity: Prisma.SystemAnnouncementGetPayload<Record<string, never>>): SystemAnnouncement {
         return new SystemAnnouncement(
             prismaEntity.id,
             prismaEntity.title,

@@ -137,7 +137,7 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
         // 3. Application Summary & Alerts
         let activeAppSummary: PortalApplicationSummaryDto | null = null;
         let alerts: PortalDashboardAlertDto[] = [];
-        let announcements: any[] = [];
+        let announcements: { id: string; title: string; date: Date | null; preview: string; isRead: boolean }[] = [];
 
         if (latestApplication) {
             alerts = this.generateAlerts(latestApplication);
@@ -183,11 +183,11 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
              });
         }
 
-        const result = {
+        const result: PortalDashboardResponseDto = {
             greeting: `Welcome back, ${participant.fullName.split(' ')[0]}`,
             activeApplication: activeAppSummary,
             alerts,
-            recentAnnouncements: announcements,
+            recentAnnouncements: announcements as unknown as import('../../../presentation/dto/portal-dashboard.dto').PortalAnnouncementDto[],
             stats
         };
 
@@ -214,7 +214,7 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
          };
     }
 
-    private generateAlerts(application: any): PortalDashboardAlertDto[] {
+    private generateAlerts(application: { invoices: { status: string }[] }): PortalDashboardAlertDto[] {
         const alerts: PortalDashboardAlertDto[] = [];
         
         // Payment Alert

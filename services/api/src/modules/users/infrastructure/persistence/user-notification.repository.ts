@@ -2,14 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { IUserNotificationRepository } from '@core/interfaces/repositories/user-notification.repository.interface';
 import { UserNotification } from '@core/entities/user-notification.entity';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
-import { NotificationPriority } from '@prisma/client';
+import { NotificationPriority, Prisma } from '@prisma/client';
 
 @Injectable()
 export class UserNotificationRepository implements IUserNotificationRepository {
     constructor(private readonly prisma: PrismaService) { }
 
     async findByUserId(userId: string, skip?: number, take?: number, type?: string, isRead?: boolean): Promise<UserNotification[]> {
-        const where: any = { userId, deletedAt: null };
+        const where: Prisma.UserNotificationWhereInput = { userId, deletedAt: null };
         if (type) where.type = type;
         if (isRead !== undefined) where.isRead = isRead;
 
@@ -24,7 +24,7 @@ export class UserNotificationRepository implements IUserNotificationRepository {
     }
 
     async countByUserId(userId: string, type?: string, isRead?: boolean): Promise<number> {
-        const where: any = { userId, deletedAt: null };
+        const where: Prisma.UserNotificationWhereInput = { userId, deletedAt: null };
         if (type) where.type = type;
         if (isRead !== undefined) where.isRead = isRead;
 
@@ -57,7 +57,7 @@ export class UserNotificationRepository implements IUserNotificationRepository {
                 actionLabel: n.actionLabel,
                 relatedEntityType: n.relatedEntityType,
                 relatedEntityId: n.relatedEntityId,
-                metadata: n.metadata ?? {},
+                metadata: (n.metadata ?? {}) as Prisma.InputJsonValue,
                 isRead: n.isRead,
                 readAt: n.readAt,
                 priority: n.priority as NotificationPriority,
@@ -71,7 +71,7 @@ export class UserNotificationRepository implements IUserNotificationRepository {
         return this.toDomain(created);
     }
 
-    private toDomain(orm: any): UserNotification {
+    private toDomain(orm: Prisma.UserNotificationGetPayload<Record<string, never>>): UserNotification {
         return new UserNotification(
             orm.id,
             orm.userId,
@@ -82,7 +82,7 @@ export class UserNotificationRepository implements IUserNotificationRepository {
             orm.actionLabel,
             orm.relatedEntityType,
             orm.relatedEntityId,
-            orm.metadata,
+            orm.metadata as unknown as Record<string, unknown>,
             orm.isRead,
             orm.readAt,
             orm.priority,

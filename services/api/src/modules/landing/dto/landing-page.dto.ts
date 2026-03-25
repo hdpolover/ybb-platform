@@ -51,22 +51,22 @@ export class LandingPageSectionContentDto {
   about_us?: string;
 
   @ApiProperty({ example: { vision: '...', mission: '...' }, required: false })
-  vision_mission?: any;
+  vision_mission?: Record<string, unknown>;
 
   @ApiProperty({ description: 'Instagram feed items', required: false, isArray: true, example: [{ id: '...', imageUrl: '...' }] })
-  ig_feed?: any[];
+  ig_feed?: Record<string, unknown>[];
 
   @ApiProperty({ description: 'Registration types/tiers', required: false, isArray: true })
-  registration_types?: any[];
+  registration_types?: Record<string, unknown>[];
 
   @ApiProperty({ description: 'Guidelines or resources', required: false, isArray: true })
-  guidelines?: any[];
+  guidelines?: Record<string, unknown>[];
 
   @ApiProperty({ description: 'Tabs for video content', required: false, isArray: true })
-  tabs?: any[];
+  tabs?: Record<string, unknown>[];
 
   @ApiProperty({ description: 'List of items (e.g., testimonials, awards)', required: false, isArray: true })
-  items?: any[];
+  items?: Record<string, unknown>[];
 }
 
 export class LandingPageSectionDto {
@@ -96,7 +96,7 @@ export class LandingPageSectionDto {
       { id: '2', title: 'Program B', description: '...' }
     ]
   })
-  data?: any[];
+  data?: Record<string, unknown>[];
 }
 
 export class LandingPageResponseDto {

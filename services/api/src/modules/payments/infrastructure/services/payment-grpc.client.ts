@@ -5,6 +5,16 @@ import {
   PaymentService, 
   GetIntentsByReferenceRequest, 
   GetIntentsByReferenceResponse,
+  CreateIntentRequest,
+  CreateIntentResponse,
+  GetPaymentMethodsRequest,
+  GetPaymentMethodsResponse,
+  ProcessPaymentRequest,
+  ProcessPaymentResponse,
+  SubmitManualPaymentRequest,
+  SubmitManualPaymentResponse,
+  VerifyManualPaymentRequest,
+  VerifyManualPaymentResponse,
   AdminCreatePaymentMethodRequest,
   AdminUpdatePaymentMethodRequest,
   AdminDeletePaymentMethodRequest,
@@ -35,7 +45,7 @@ export class PaymentGrpcClient implements OnModuleInit {
     }
   }
 
-  async submitManualPayment(req: any): Promise<any> {
+  async submitManualPayment(req: SubmitManualPaymentRequest): Promise<SubmitManualPaymentResponse> {
     try {
         return await lastValueFrom(this.paymentService.SubmitManualPayment(req));
     } catch (error) {
@@ -44,7 +54,7 @@ export class PaymentGrpcClient implements OnModuleInit {
     }
   }
 
-  async verifyManualPayment(req: any): Promise<any> {
+  async verifyManualPayment(req: VerifyManualPaymentRequest): Promise<VerifyManualPaymentResponse> {
       try {
           return await lastValueFrom(this.paymentService.VerifyManualPayment(req));
       } catch (error) {
@@ -53,7 +63,7 @@ export class PaymentGrpcClient implements OnModuleInit {
       }
   }
 
-  async createIntent(req: any): Promise<any> {
+  async createIntent(req: CreateIntentRequest): Promise<CreateIntentResponse> {
       try {
           return await lastValueFrom(this.paymentService.CreateIntent(req));
       } catch (error) {
@@ -62,7 +72,7 @@ export class PaymentGrpcClient implements OnModuleInit {
       }
   }
 
-  async getPaymentMethods(req: any): Promise<any> {
+  async getPaymentMethods(req: GetPaymentMethodsRequest): Promise<GetPaymentMethodsResponse> {
     try {
         return await lastValueFrom(this.paymentService.GetPaymentMethods(req));
     } catch (error) {
@@ -71,7 +81,7 @@ export class PaymentGrpcClient implements OnModuleInit {
     }
   }
 
-  async processPayment(req: any): Promise<any> {
+  async processPayment(req: ProcessPaymentRequest): Promise<ProcessPaymentResponse> {
       try {
           const resp = await lastValueFrom(this.paymentService.ProcessPayment(req));
           this.logger.log(`ProcessPayment response: ${JSON.stringify(resp)}`);

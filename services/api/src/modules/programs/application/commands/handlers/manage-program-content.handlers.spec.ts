@@ -52,7 +52,7 @@ describe('ManageProgramContentHandlers', () => {
 
         it('should create speaker with uploaded photo', async () => {
             const dto = { programId: 'prog-1', name: 'Speaker 1' };
-            const file = { originalname: 'photo.jpg' };
+            const file = { originalname: 'photo.jpg' } as unknown as Express.Multer.File;
             const command = new CreateProgramSpeakerCommand(dto, 'user-1', file);
 
             // Mock Program existence for Brand ID lookup
@@ -76,7 +76,7 @@ describe('ManageProgramContentHandlers', () => {
 
         it('should throw NotFoundException if program not found during upload', async () => {
             const dto = { programId: 'prog-1', name: 'Speaker' };
-            const command = new CreateProgramSpeakerCommand(dto, 'user-1', {});
+            const command = new CreateProgramSpeakerCommand(dto, 'user-1', {} as unknown as Express.Multer.File);
 
             mockPrismaService.program.findUnique.mockResolvedValue(null);
 
@@ -102,7 +102,7 @@ describe('ManageProgramContentHandlers', () => {
 
         it('should update speaker photo if new file provided', async () => {
             const dto = { name: 'Updated Name' };
-            const file = { originalname: 'new.jpg' };
+            const file = { originalname: 'new.jpg' } as unknown as Express.Multer.File;
             const command = new UpdateProgramSpeakerCommand('spk-1', dto, 'user-1', file);
 
             // Mock Speaker Lookup

@@ -34,7 +34,7 @@ export class UpdateUserPreferencesHandler {
         return this.mapToDto(preferences);
     }
 
-    private applyUpdates(pref: UserPreference, updates: any) {
+    private applyUpdates(pref: UserPreference, updates: UpdateUserPreferencesCommand['updates']) {
         if (updates.theme !== undefined) pref.theme = updates.theme;
         if (updates.language !== undefined) pref.language = updates.language;
         if (updates.timezone !== undefined) pref.timezone = updates.timezone;

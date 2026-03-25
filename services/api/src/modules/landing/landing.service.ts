@@ -9,6 +9,8 @@ import { AnnouncementsStrategy } from './strategies/announcements.strategy';
 import { SettingsStrategy } from './strategies/settings.strategy';
 import { FaqsStrategy } from './strategies/faqs.strategy';
 import { Brand } from '@prisma/client';
+import { LandingPageResponseDto } from './dto/landing-page.dto';
+import { LandingSettingsResponseDto } from './dto/landing-settings.dto';
 
 @Injectable()
 export class LandingService {
@@ -70,43 +72,43 @@ export class LandingService {
     return brand;
   }
 
-  async getHome(url?: string): Promise<any> {
+  async getHome(url?: string): Promise<LandingPageResponseDto> {
     const brand = await this.resolveBrand(url);
-    return this.homeStrategy.getData(brand);
+    return this.homeStrategy.getData(brand) as Promise<LandingPageResponseDto>;
   }
 
-  async getAbout(url?: string): Promise<any> {
+  async getAbout(url?: string): Promise<LandingPageResponseDto> {
     const brand = await this.resolveBrand(url);
-    return this.aboutStrategy.getData(brand);
+    return this.aboutStrategy.getData(brand) as Promise<LandingPageResponseDto>;
   }
 
-  async getPrograms(url?: string): Promise<any> {
+  async getPrograms(url?: string): Promise<LandingPageResponseDto> {
     const brand = await this.resolveBrand(url);
-    return this.programsStrategy.getData(brand);
+    return this.programsStrategy.getData(brand) as Promise<LandingPageResponseDto>;
   }
 
-  async getProgramDetail(slug: string, url?: string): Promise<any> {
+  async getProgramDetail(slug: string, url?: string): Promise<LandingPageResponseDto> {
     const brand = await this.resolveBrand(url);
-    return this.programsStrategy.getProgramData(slug, brand);
+    return this.programsStrategy.getProgramData(slug, brand) as Promise<LandingPageResponseDto>;
   }
 
-  async getPartnersSponsors(url?: string): Promise<any> {
+  async getPartnersSponsors(url?: string): Promise<LandingPageResponseDto> {
     const brand = await this.resolveBrand(url);
-    return this.partnersSponsorsStrategy.getData(brand);
+    return this.partnersSponsorsStrategy.getData(brand) as Promise<LandingPageResponseDto>;
   }
 
-  async getAnnouncements(url?: string): Promise<any> {
+  async getAnnouncements(url?: string): Promise<LandingPageResponseDto> {
     const brand = await this.resolveBrand(url);
-    return this.announcementsStrategy.getData(brand);
+    return this.announcementsStrategy.getData(brand) as Promise<LandingPageResponseDto>;
   }
 
-  async getFaqs(url?: string, page: number = 1, limit: number = 10, search?: string): Promise<any> {
+  async getFaqs(url?: string, page: number = 1, limit: number = 10, search?: string): Promise<LandingPageResponseDto> {
     const brand = await this.resolveBrand(url);
     // FaqsStrategy has a specific getFaqs method with pagination
-    return this.faqsStrategy.getFaqs(brand, page, limit, search);
+    return this.faqsStrategy.getFaqs(brand, page, limit, search) as Promise<LandingPageResponseDto>;
   }
 
-  async getSettings(url?: string): Promise<any> {
+  async getSettings(url?: string): Promise<LandingSettingsResponseDto> {
     const brand = await this.resolveBrand(url);
     return this.settingsStrategy.getData(brand);
   }

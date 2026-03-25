@@ -17,6 +17,7 @@ import { JwtAuthGuard } from '../auth/infrastructure/guards/jwt-auth.guard';
 import { CurrentUser, CurrentUserData } from '../../shared/decorators/current-user.decorator';
 import { QueryAuditLogsDto } from './dto/query-audit-logs.dto';
 import { AuditCleanupService } from './audit-cleanup.service';
+import { Prisma, DataChangeLog, ChangeType, ChangedByType, RiskLevel } from '@prisma/client';
 
 @ApiTags('audit')
 @Controller('admin/audit-logs')
@@ -135,7 +136,7 @@ export class AuditAdminController {
             take: 5000,
         });
 
-        const data = logs.map((log: any) => ({
+        const data = logs.map((log: DataChangeLog) => ({
             id: log.id,
             timestamp: log.createdAt,
             action: log.action,
@@ -181,15 +182,15 @@ export class AuditAdminController {
     /**
      * Build Prisma where clause from query DTO.
      */
-    private buildWhereClause(query: QueryAuditLogsDto): any {
-        const where: any = {};
+    private buildWhereClause(query: QueryAuditLogsDto): Prisma.DataChangeLogWhereInput {
+        const where: Prisma.DataChangeLogWhereInput = {};
 
         if (query.entityType) where.entityType = query.entityType;
         if (query.entityId) where.entityId = query.entityId;
-        if (query.action) where.action = query.action;
+        if (query.action) where.action = query.action as ChangeType;
         if (query.actorId) where.actorId = query.actorId;
-        if (query.actorType) where.actorType = query.actorType;
-        if (query.riskLevel) where.riskLevel = query.riskLevel;
+        if (query.actorType) where.actorType = query.actorType as ChangedByType;
+        if (query.riskLevel) where.riskLevel = query.riskLevel as RiskLevel;
         if (query.source) where.source = query.source;
 
         if (query.dateFrom || query.dateTo) {

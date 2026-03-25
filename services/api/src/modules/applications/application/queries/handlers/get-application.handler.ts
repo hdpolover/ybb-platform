@@ -1,4 +1,6 @@
 import { Injectable, NotFoundException, Inject } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { ParticipantApplication } from '@core/entities/participant-application.entity';
 import { IApplicationRepository } from '@core/interfaces/repositories/application.repository.interface';
 import { GetApplicationQuery } from '../get-application.query';
 import { ApplicationResponseDto, ApplicationStepDto } from '../../dto/application-response.dto';
@@ -107,7 +109,7 @@ export class GetApplicationHandler {
     return dto;
   }
 
-  private calculateSteps(app: any, fields: any[]): ApplicationStepDto[] {
+  private calculateSteps(app: ParticipantApplication, fields: Prisma.ApplicationFormFieldGetPayload<Record<string, never>>[]): ApplicationStepDto[] {
     const fieldSections = [...new Set(fields.map(f => f.section))];
     if(!fieldSections.includes('preview')) fieldSections.push('preview');
 

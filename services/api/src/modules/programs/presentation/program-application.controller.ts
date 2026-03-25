@@ -1,7 +1,12 @@
 import { Controller, Get, Param, Put, Post, Delete, Body, UseGuards, Request, Query } from '@nestjs/common';
+import { Request as ExpressRequest } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
 import { Public } from '../../../shared/decorators/public.decorator';
+
+interface AuthenticatedRequest extends ExpressRequest {
+  user: { id: string; userId: string };
+}
 
 import {
   ProgramPricingTierResponseDto,
@@ -92,14 +97,14 @@ export class ProgramApplicationConfigController {
   @ApiOperation({ summary: 'Get program pricing tiers' })
   @ApiResponse({ status: 200, type: [ProgramPricingTierResponseDto] })
   async getPricingTiers(@Param('id') id: string): Promise<ProgramPricingTierResponseDto[]> {
-    return this.listProgramPricingTiersHandler.execute(new ListProgramPricingTiersQuery(id));
+    return this.listProgramPricingTiersHandler.execute(new ListProgramPricingTiersQuery(id)) as unknown as Promise<ProgramPricingTierResponseDto[]>;
   }
 
   @Post(':id/pricing-tiers')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add pricing tier' })
-  async addPricingTier(@Param('id') programId: string, @Body() dto: CreateProgramPricingTierDto, @Request() req: any) {
+  async addPricingTier(@Param('id') programId: string, @Body() dto: CreateProgramPricingTierDto, @Request() req: AuthenticatedRequest) {
     return this.createProgramPricingTierHandler.execute(new CreateProgramPricingTierCommand(dto, req.user.id));
   }
 
@@ -107,7 +112,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update pricing tier' })
-  async updatePricingTier(@Param('itemId') itemId: string, @Body() dto: UpdateProgramPricingTierDto, @Request() req: any) {
+  async updatePricingTier(@Param('itemId') itemId: string, @Body() dto: UpdateProgramPricingTierDto, @Request() req: AuthenticatedRequest) {
     return this.updateProgramPricingTierHandler.execute(new UpdateProgramPricingTierCommand(itemId, dto, req.user.id));
   }
 
@@ -115,7 +120,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete pricing tier' })
-  async deletePricingTier(@Param('itemId') itemId: string, @Request() req: any) {
+  async deletePricingTier(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
     return this.deleteProgramPricingTierHandler.execute(new DeleteProgramPricingTierCommand(itemId, req.user.id));
   }
 
@@ -132,7 +137,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add requirement' })
-  async addRequirement(@Param('id') programId: string, @Body() dto: CreateProgramRequirementDto, @Request() req: any) {
+  async addRequirement(@Param('id') programId: string, @Body() dto: CreateProgramRequirementDto, @Request() req: AuthenticatedRequest) {
     return this.createProgramRequirementHandler.execute(new CreateProgramRequirementCommand(dto, req.user.id));
   }
 
@@ -140,7 +145,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update requirement' })
-  async updateRequirement(@Param('itemId') itemId: string, @Body() dto: UpdateProgramRequirementDto, @Request() req: any) {
+  async updateRequirement(@Param('itemId') itemId: string, @Body() dto: UpdateProgramRequirementDto, @Request() req: AuthenticatedRequest) {
     return this.updateProgramRequirementHandler.execute(new UpdateProgramRequirementCommand(itemId, dto, req.user.id));
   }
 
@@ -148,7 +153,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete requirement' })
-  async deleteRequirement(@Param('itemId') itemId: string, @Request() req: any) {
+  async deleteRequirement(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
     return this.deleteProgramRequirementHandler.execute(new DeleteProgramRequirementCommand(itemId, req.user.id));
   }
 
@@ -170,7 +175,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add essay' })
-  async addEssay(@Param('id') programId: string, @Body() dto: CreateProgramEssayDto, @Request() req: any) {
+  async addEssay(@Param('id') programId: string, @Body() dto: CreateProgramEssayDto, @Request() req: AuthenticatedRequest) {
     return this.createProgramEssayHandler.execute(new CreateProgramEssayCommand(dto, req.user.id));
   }
 
@@ -178,7 +183,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update essay' })
-  async updateEssay(@Param('itemId') itemId: string, @Body() dto: UpdateProgramEssayDto, @Request() req: any) {
+  async updateEssay(@Param('itemId') itemId: string, @Body() dto: UpdateProgramEssayDto, @Request() req: AuthenticatedRequest) {
     return this.updateProgramEssayHandler.execute(new UpdateProgramEssayCommand(itemId, dto, req.user.id));
   }
 
@@ -186,7 +191,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete essay' })
-  async deleteEssay(@Param('itemId') itemId: string, @Request() req: any) {
+  async deleteEssay(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
     return this.deleteProgramEssayHandler.execute(new DeleteProgramEssayCommand(itemId, req.user.id));
   }
 
@@ -208,7 +213,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add participation category' })
-  async addParticipationCategory(@Param('id') programId: string, @Body() dto: CreateProgramParticipationCategoryDto, @Request() req: any) {
+  async addParticipationCategory(@Param('id') programId: string, @Body() dto: CreateProgramParticipationCategoryDto, @Request() req: AuthenticatedRequest) {
     return this.createProgramParticipationCategoryHandler.execute(new CreateProgramParticipationCategoryCommand(dto, req.user.id));
   }
 
@@ -216,7 +221,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update participation category' })
-  async updateParticipationCategory(@Param('itemId') itemId: string, @Body() dto: UpdateProgramParticipationCategoryDto, @Request() req: any) {
+  async updateParticipationCategory(@Param('itemId') itemId: string, @Body() dto: UpdateProgramParticipationCategoryDto, @Request() req: AuthenticatedRequest) {
     return this.updateProgramParticipationCategoryHandler.execute(new UpdateProgramParticipationCategoryCommand(itemId, dto, req.user.id));
   }
 
@@ -224,7 +229,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete participation category' })
-  async deleteParticipationCategory(@Param('itemId') itemId: string, @Request() req: any) {
+  async deleteParticipationCategory(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
     return this.deleteProgramParticipationCategoryHandler.execute(new DeleteProgramParticipationCategoryCommand(itemId, req.user.id));
   }
 
@@ -242,7 +247,7 @@ export class ProgramApplicationConfigController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add application form field' })
   @ApiResponse({ status: 201, type: ApplicationFormFieldResponseDto })
-  async addFormField(@Param('id') programId: string, @Body() dto: CreateApplicationFormFieldDto, @Request() req: any) {
+  async addFormField(@Param('id') programId: string, @Body() dto: CreateApplicationFormFieldDto, @Request() req: AuthenticatedRequest) {
     return this.createApplicationFormFieldHandler.execute(new CreateApplicationFormFieldCommand(programId, dto, req.user.id));
   }
 
@@ -251,7 +256,7 @@ export class ProgramApplicationConfigController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update application form field' })
   @ApiResponse({ status: 200, type: ApplicationFormFieldResponseDto })
-  async updateFormField(@Param('itemId') itemId: string, @Body() dto: UpdateApplicationFormFieldDto, @Request() req: any) {
+  async updateFormField(@Param('itemId') itemId: string, @Body() dto: UpdateApplicationFormFieldDto, @Request() req: AuthenticatedRequest) {
     return this.updateApplicationFormFieldHandler.execute(new UpdateApplicationFormFieldCommand(itemId, dto, req.user.id));
   }
 
@@ -260,7 +265,7 @@ export class ProgramApplicationConfigController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete application form field' })
   @ApiResponse({ status: 200, description: 'Application form field deleted successfully' })
-  async deleteFormField(@Param('itemId') itemId: string, @Request() req: any) {
+  async deleteFormField(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
     return this.deleteApplicationFormFieldHandler.execute(new DeleteApplicationFormFieldCommand(itemId, req.user.id));
   }
 }

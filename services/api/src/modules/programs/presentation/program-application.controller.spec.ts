@@ -90,7 +90,7 @@ describe('ProgramApplicationConfigController', () => {
                 validFrom: new Date().toISOString(),
                 validUntil: new Date().toISOString()
             };
-            const req = { user: { id: 'admin-1' } };
+            const req = { user: { id: 'admin-1' } } as any;
             
             await controller.addPricingTier('prog-1', dto, req);
 

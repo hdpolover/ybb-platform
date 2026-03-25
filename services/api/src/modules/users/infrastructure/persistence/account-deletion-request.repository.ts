@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma, DeletionStatus } from '@prisma/client';
 import { IAccountDeletionRequestRepository } from '@core/interfaces/repositories/account-deletion-request.repository.interface';
 import { AccountDeletionRequest } from '@core/entities/account-deletion-request.entity';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
-import { DeletionStatus } from '@prisma/client';
 
 @Injectable()
 export class AccountDeletionRequestRepository implements IAccountDeletionRequestRepository {
@@ -40,7 +40,7 @@ export class AccountDeletionRequestRepository implements IAccountDeletionRequest
         return req ? this.toDomain(req) : null;
     }
 
-    private toDomain(orm: any): AccountDeletionRequest {
+    private toDomain(orm: Prisma.AccountDeletionRequestGetPayload<Record<string, never>>): AccountDeletionRequest {
         return new AccountDeletionRequest(
             orm.id,
             orm.userId,
@@ -52,8 +52,8 @@ export class AccountDeletionRequestRepository implements IAccountDeletionRequest
             orm.reviewNotes,
             orm.scheduledDeletionDate,
             orm.actualDeletionDate,
-            orm.dataSnapshot,
-            orm.deletionLog,
+            (orm.dataSnapshot ?? {}) as Record<string, unknown>,
+            orm.deletionLog as Record<string, unknown>,
             orm.ipAddress,
             orm.userAgent,
             orm.createdAt,

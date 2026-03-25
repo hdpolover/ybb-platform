@@ -1,5 +1,5 @@
 import { INestApplication } from '@nestjs/common';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { DocumentBuilder, OpenAPIObject, SwaggerModule } from '@nestjs/swagger';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -90,11 +90,11 @@ export function setupSwagger(app: INestApplication): void {
   const documentAll = SwaggerModule.createDocument(app, config);
 
   // Helper to determine if an endpoint is Admin-only
-  const isAdminEndpoint = (path: string, method: string, operation: any): boolean => {
+  const isAdminEndpoint = (path: string, method: string, operation: Record<string, unknown>): boolean => {
     const lowerPath = path.toLowerCase();
     const lowerMethod = method.toLowerCase();
-    const summary = (operation.summary || '').toLowerCase();
-    const description = (operation.description || '').toLowerCase();
+    const summary = ((operation.summary as string) || '').toLowerCase();
+    const description = ((operation.description as string) || '').toLowerCase();
 
     // 1. Explicit marker in Summary or Description
     if (summary.includes('admin') || summary.includes('reporting') || summary.includes('audit')) {
@@ -186,16 +186,17 @@ export function setupSwagger(app: INestApplication): void {
   const usedAdminTagsLower = new Set<string>();
 
   // Helper to collect all used schema references recursively
-  const collectUsedSchemas = (obj: any, usedSet: Set<string>) => {
+  const collectUsedSchemas = (obj: unknown, usedSet: Set<string>) => {
     if (!obj || typeof obj !== 'object') return;
 
-    if (obj.$ref && typeof obj.$ref === 'string') {
-      const parts = obj.$ref.split('/');
+    const objRecord = obj as Record<string, unknown>;
+    if (objRecord.$ref && typeof objRecord.$ref === 'string') {
+      const parts = (objRecord.$ref as string).split('/');
       const schemaName = parts[parts.length - 1];
       if (!usedSet.has(schemaName)) {
         usedSet.add(schemaName);
         // Recursively check the newly added schema
-        const schema = (documentAll as any).components?.schemas?.[schemaName];
+        const schema = (documentAll as OpenAPIObject & { components?: { schemas?: Record<string, unknown> } }).components?.schemas?.[schemaName];
         if (schema) collectUsedSchemas(schema, usedSet);
       }
     }
@@ -217,8 +218,8 @@ export function setupSwagger(app: INestApplication): void {
       const cleanKey = pathKey.startsWith('/v1') ? (pathKey.replace(/^\/v1/, '') || '/') : pathKey;
 
       // Categorize methods within the path
-      const participantMethods: any = {};
-      const adminMethods: any = {};
+      const participantMethods: Record<string, unknown> = {};
+      const adminMethods: Record<string, unknown> = {};
 
       Object.keys(pathItem).forEach(method => {
         const operation = pathItem[method];
@@ -244,25 +245,26 @@ export function setupSwagger(app: INestApplication): void {
   });
 
   // Filter components (schemas)
-  const allSchemas = (documentAll as any).components?.schemas || {};
+  const docAllWithComponents = documentAll as OpenAPIObject & { components?: { schemas?: Record<string, unknown> }; tags?: Array<{ name: string }> };
+  const allSchemas = docAllWithComponents.components?.schemas || {};
   documentV1Participant.components = {
     ...documentAll.components,
     schemas: Object.fromEntries(
       Object.entries(allSchemas).filter(([name]) => usedParticipantSchemas.has(name))
     )
-  } as any;
+  } as OpenAPIObject['components'] extends infer C ? C : never;
 
   documentV1Admin.components = {
     ...documentAll.components,
     schemas: Object.fromEntries(
       Object.entries(allSchemas).filter(([name]) => usedAdminSchemas.has(name))
     )
-  } as any;
+  } as OpenAPIObject['components'] extends infer C ? C : never;
 
   // Filter tags to only show those that have endpoints
-  if ((documentAll as any).tags) {
-    documentV1Participant.tags = (documentAll as any).tags.filter((t: any) => usedParticipantTagsLower.has(t.name.toLowerCase()));
-    documentV1Admin.tags = (documentAll as any).tags.filter((t: any) => usedAdminTagsLower.has(t.name.toLowerCase()));
+  if (docAllWithComponents.tags) {
+    documentV1Participant.tags = docAllWithComponents.tags.filter((t) => usedParticipantTagsLower.has(t.name.toLowerCase()));
+    documentV1Admin.tags = docAllWithComponents.tags.filter((t) => usedAdminTagsLower.has(t.name.toLowerCase()));
   }
 
   // Setup specific endpoints to ensure -json files are served

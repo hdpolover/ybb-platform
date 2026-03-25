@@ -23,7 +23,7 @@ export class CreateDeletionRequestHandler {
             command.dto.reason ?? null,
             command.dto.reasonCategory ?? null,
             'pending',
-            null, null, null, null, null, null, {},
+            null, null, null, null, null, {}, {},
             command.ipAddress ?? null,
             command.userAgent ?? null,
             new Date(),

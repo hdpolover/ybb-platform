@@ -17,6 +17,7 @@ import { CreateGalleryItemDto } from '../dto/create-gallery-item.dto';
 import { GalleryService } from '../application/gallery.service';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { ChangeType } from '@prisma/client';
+import { Request } from 'express';
 
 @ApiTags('Gallery')
 @Controller('gallery')
@@ -50,13 +51,13 @@ export class GalleryController {
   @UseInterceptors(FileInterceptor('file'))
   @AuditTrail({ entityType: 'ProgramGallery', action: ChangeType.create })
   async uploadGalleryItem(
-    @UploadedFile() file: any,
+    @UploadedFile() file: Express.Multer.File,
     @Body() dto: CreateGalleryItemDto,
-    @Req() req: any,
+    @Req() req: Request,
   ) {
     this.logger.log(`Uploading gallery item for program ${dto.program_id}`);
-    const userId = req.user?.userId; // Assumes JwtAuthGuard populates request.user with { userId }
-    return this.galleryService.create(dto, file, userId);
+    const userId = (req.user as { userId?: string } | undefined)?.userId;
+    return this.galleryService.create(dto, file, userId ?? '');
   }
 
   @Get()

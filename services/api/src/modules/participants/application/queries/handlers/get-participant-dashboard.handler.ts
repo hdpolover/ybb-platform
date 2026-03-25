@@ -5,7 +5,8 @@ import { GetParticipantDashboardQuery } from '../get-participant-dashboard.query
 import { 
     ParticipantDashboardResponseDto, 
     ParticipantDashboardAlertDto,
-    ParticipantDashboardApplicationSummaryDto
+    ParticipantDashboardApplicationSummaryDto,
+    ParticipantDashboardAnnouncementDto
 } from '../../../presentation/dto/participant-dashboard.dto';
 import { ApplicationStatus } from '@core/entities/participant-application.entity';
 
@@ -94,7 +95,7 @@ export class GetParticipantDashboardHandler implements IQueryHandler<GetParticip
         // 4. Construct Alerts & Summary
         let activeAppSummary: ParticipantDashboardApplicationSummaryDto | null = null;
         let alerts: ParticipantDashboardAlertDto[] = [];
-        let announcements: any[] = [];
+        let announcements: ParticipantDashboardAnnouncementDto[] = [];
 
         if (latestApplication) {
             // Generate Alerts based on application state
@@ -200,12 +201,13 @@ export class GetParticipantDashboardHandler implements IQueryHandler<GetParticip
         };
     }
 
-    private generateAlerts(application: any): ParticipantDashboardAlertDto[] {
+    private generateAlerts(application: Record<string, unknown>): ParticipantDashboardAlertDto[] {
         const alerts: ParticipantDashboardAlertDto[] = [];
         const status = application.status;
 
         // Payment Alert
-        const hasUnpaidInvoices = application.invoices.some(inv => inv.status === 'unpaid' || inv.status === 'failed');
+        const invoices = (application.invoices as { status: string }[]) || [];
+        const hasUnpaidInvoices = invoices.some(inv => inv.status === 'unpaid' || inv.status === 'failed');
         if (hasUnpaidInvoices) {
             alerts.push({
                 id: 'payment-due',
@@ -218,8 +220,9 @@ export class GetParticipantDashboardHandler implements IQueryHandler<GetParticip
         }
 
         // Draft Alert
+        const program = application.program as { applicationDeadline: Date | string | null; name: string } | null;
         if (status === 'draft') {
-            const deadline = new Date(application.program.applicationDeadline);
+            const deadline = new Date(program?.applicationDeadline ?? 0);
             const now = new Date();
             const daysLeft = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 3600 * 24));
             
@@ -228,7 +231,7 @@ export class GetParticipantDashboardHandler implements IQueryHandler<GetParticip
                     id: 'deadline-near',
                     type: 'warning',
                     title: 'Application Deadline Approaching',
-                    message: `Only ${daysLeft} days left to submit your application for ${application.program.name}.`,
+                    message: `Only ${daysLeft} days left to submit your application for ${program?.name}.`,
                     actionLabel: 'Continue Application',
                     actionUrl: `/applications/${application.id}`
                 });
@@ -237,14 +240,14 @@ export class GetParticipantDashboardHandler implements IQueryHandler<GetParticip
                     id: 'deadline-missed',
                     type: 'error',
                     title: 'Deadline Missed',
-                    message: `The application period for ${application.program.name} has ended.`,
+                    message: `The application period for ${program?.name} has ended.`,
                 });
             } else {
                  alerts.push({
                     id: 'draft-reminder',
                     type: 'info',
                     title: 'Complete your Application',
-                    message: `Your application for ${application.program.name} is still in draft.`,
+                    message: `Your application for ${program?.name} is still in draft.`,
                     actionLabel: 'Continue',
                     actionUrl: `/applications/${application.id}`
                 });
@@ -266,7 +269,7 @@ export class GetParticipantDashboardHandler implements IQueryHandler<GetParticip
         return alerts;
     }
 
-    private calculateProgress(application: any): number {
+    private calculateProgress(application: Record<string, unknown>): number {
         // Simple heuristic
         if (application.status === 'draft') return 25;
         if (application.status === 'submitted') return 50;
@@ -277,7 +280,7 @@ export class GetParticipantDashboardHandler implements IQueryHandler<GetParticip
         return 0;
     }
 
-    private determineCurrentStep(application: any): string {
+    private determineCurrentStep(application: Record<string, unknown>): string {
         switch (application.status) {
             case 'draft': return 'Application Drafting';
             case 'submitted': return 'Documentation Check';

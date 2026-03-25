@@ -7,7 +7,7 @@ export class CreateAuthProviderCommand {
     public readonly clientSecret?: string,
     public readonly authUrl?: string,
     public readonly tokenUrl?: string,
-    public readonly scopes?: any,
+    public readonly scopes?: string[],
     public readonly isActive?: boolean,
     public readonly isOAuth?: boolean,
     public readonly icon?: string,

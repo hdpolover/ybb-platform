@@ -19,7 +19,7 @@ import {
     ApiQuery,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
-import { CurrentUser } from '@shared/decorators/current-user.decorator';
+import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 import {
     GetPortalSubmissionDetailQuery,
     SaveSubmissionSectionCommand,
@@ -66,10 +66,10 @@ export class PortalSubmissionsController {
     @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid JWT' })
     @ApiResponse({ status: 404, description: 'Participant or active application not found' })
     async getSubmissionDetail(
-        @CurrentUser() user: any,
+        @CurrentUser() user: CurrentUserData,
         @Query('programId') programId?: string,
     ): Promise<PortalSubmissionDetailResponseDto> {
-        const userId = user?.userId || user?.id;
+        const userId = user.userId;
         if (!userId) throw new UnauthorizedException();
         return this.getSubmissionDetailHandler.execute(
             new GetPortalSubmissionDetailQuery(userId, programId),
@@ -93,12 +93,12 @@ export class PortalSubmissionsController {
     @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid JWT' })
     @ApiResponse({ status: 404, description: 'Participant or active application not found' })
     async saveSection(
-        @CurrentUser() user: any,
+        @CurrentUser() user: CurrentUserData,
         @Param('section') section: string,
         @Body() dto: SaveSubmissionSectionDto,
         @Query('programId') programId?: string,
     ): Promise<SaveSectionResponseDto> {
-        const userId = user?.userId || user?.id;
+        const userId = user.userId;
         if (!userId) throw new UnauthorizedException();
         return this.saveSubmissionSectionHandler.execute(
             new SaveSubmissionSectionCommand(userId, section, dto.data, programId),
@@ -115,9 +115,9 @@ export class PortalSubmissionsController {
     @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid JWT' })
     @ApiResponse({ status: 404, description: 'Participant or active application not found' })
     async submitApplication(
-        @CurrentUser() user: any,
+        @CurrentUser() user: CurrentUserData,
     ): Promise<SubmitApplicationResponseDto> {
-        const userId = user?.userId || user?.id;
+        const userId = user.userId;
         if (!userId) throw new UnauthorizedException();
         return this.portalSubmitHandler.execute(
             new PortalSubmitApplicationCommand(userId),

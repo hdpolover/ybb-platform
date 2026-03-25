@@ -6,7 +6,7 @@ import { FileGrpcClient } from '../infrastructure/clients/file-grpc-client.servi
 export interface StorageUploadResult {
   url: string;
   path: string;
-  fileInfo: any;
+  fileInfo: Record<string, unknown>;
 }
 
 @Injectable()
@@ -26,31 +26,34 @@ export class StorageService {
    * Generates a URL for the file. 
    * Integrating ImageKit or similar CDNs here is efficient.
    */
-  private constructPublicUrl(fileData: any, defaultBucket: string): string {
+  private constructPublicUrl(fileData: Record<string, unknown>, defaultBucket: string): string {
     if (!fileData.storage_path) return '';
     
+    const storagePath = fileData.storage_path as string;
+    const contentType = fileData.content_type as string | undefined;
+    const bucket = (fileData.bucket as string) || defaultBucket;
+
     // Whitelist for Public Image CDN
     // ONLY these folders typically contain safe-to-share images
     const PUBLIC_IMAGE_BUCKETS = ['gallery', 'programs', 'banners', 'sponsors', 'speakers', 'avatars', 'assets'];
-    const bucket = fileData.bucket || defaultBucket;
 
     // 1. ImageKit Integration (Safe Mode)
     const imageKitId = this.configService.get<string>('IMAGEKIT_ID');
-    const isImage = fileData.content_type && fileData.content_type.startsWith('image/');
+    const isImage = contentType && contentType.startsWith('image/');
     const isPublic = PUBLIC_IMAGE_BUCKETS.includes(bucket);
 
     if (imageKitId && isImage && isPublic) {
         // Remove leading slash
-        const path = fileData.storage_path.startsWith('/') ? fileData.storage_path.substring(1) : fileData.storage_path;
+        const path = storagePath.startsWith('/') ? storagePath.substring(1) : storagePath;
         return `https://ik.imagekit.io/${imageKitId}/${path}`;
     }
 
     // 2. Custom Domain Logic (Existing)
     const isCustomDomain = this.storagePublicUrl && !this.storagePublicUrl.includes('digitaloceanspaces.com');
     
-    const path = fileData.storage_path.startsWith('/') 
-        ? fileData.storage_path.substring(1) 
-        : fileData.storage_path;
+    const path = storagePath.startsWith('/') 
+        ? storagePath.substring(1) 
+        : storagePath;
 
     if (isCustomDomain) {
         // Assume STORAGE_PUBLIC_URL points to the bucket root
@@ -81,7 +84,7 @@ export class StorageService {
    * @param targetBucket The actual S3/Spaces bucket name (default: ybb)
    */
   async uploadFile(
-    file: any,
+    file: Express.Multer.File,
     userId: string,
     brandId: string,
     folder: string, 
@@ -142,7 +145,7 @@ export class StorageService {
 
     return {
       url: fullUrl,
-      path: fileData.storage_path,
+      path: (fileData.storage_path as string) || '',
       fileInfo: fileData
     };
   }

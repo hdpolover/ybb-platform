@@ -3,6 +3,7 @@ import { IBrandRepository } from '@core/interfaces/repositories/brand.repository
 import { Brand } from '@core/entities/brand.entity';
 import { BrandSetting } from '@core/entities/brand-setting.entity';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class BrandRepository implements IBrandRepository {
@@ -57,30 +58,22 @@ export class BrandRepository implements IBrandRepository {
     }
 
     async update(id: string, data: Partial<Brand>): Promise<Brand> {
-        let settingsUpdate: any = undefined;
+        let settingsUpdate: { upsert: Prisma.BrandSettingUpsertWithoutBrandInput } | undefined = undefined;
         if (data.settings) {
+            const settingsFields = {
+                isMaintenanceMode: data.settings.isMaintenanceMode,
+                maintenanceMessage: data.settings.maintenanceMessage,
+                maintenanceScheduledEnd: data.settings.maintenanceScheduledEnd,
+                footerNavigation: data.settings.footerNavigation ?? [],
+                usdInIdr: data.settings.usdInIdr,
+                googleAnalyticsId: data.settings.googleAnalyticsId,
+                pixelId: data.settings.pixelId,
+                supportEmail: data.settings.supportEmail,
+            };
             settingsUpdate = {
                 upsert: {
-                    create: {
-                        isMaintenanceMode: data.settings.isMaintenanceMode,
-                        maintenanceMessage: data.settings.maintenanceMessage,
-                        maintenanceScheduledEnd: data.settings.maintenanceScheduledEnd,
-                        footerNavigation: data.settings.footerNavigation ?? [],
-                        usdInIdr: data.settings.usdInIdr,
-                        googleAnalyticsId: data.settings.googleAnalyticsId,
-                        pixelId: data.settings.pixelId,
-                        supportEmail: data.settings.supportEmail,
-                    },
-                    update: {
-                        isMaintenanceMode: data.settings.isMaintenanceMode,
-                        maintenanceMessage: data.settings.maintenanceMessage,
-                        maintenanceScheduledEnd: data.settings.maintenanceScheduledEnd,
-                        footerNavigation: data.settings.footerNavigation ?? [],
-                        usdInIdr: data.settings.usdInIdr,
-                        googleAnalyticsId: data.settings.googleAnalyticsId,
-                        pixelId: data.settings.pixelId,
-                        supportEmail: data.settings.supportEmail,
-                    }
+                    create: settingsFields as unknown as Prisma.BrandSettingCreateWithoutBrandInput,
+                    update: settingsFields as unknown as Prisma.BrandSettingUpdateWithoutBrandInput,
                 }
             };
         }
@@ -138,7 +131,7 @@ export class BrandRepository implements IBrandRepository {
         });
     }
 
-    private mapToEntity(prismaEntity: any): Brand {
+    private mapToEntity(prismaEntity: Prisma.BrandGetPayload<{ include: { settings: true } }>): Brand {
         let settings: BrandSetting | null = null;
         if (prismaEntity.settings) {
             settings = new BrandSetting(
@@ -147,7 +140,7 @@ export class BrandRepository implements IBrandRepository {
                 prismaEntity.settings.isMaintenanceMode,
                 prismaEntity.settings.maintenanceMessage,
                 prismaEntity.settings.maintenanceScheduledEnd,
-                prismaEntity.settings.footerNavigation,
+                prismaEntity.settings.footerNavigation as unknown as Record<string, unknown>,
                 prismaEntity.settings.usdInIdr ? Number(prismaEntity.settings.usdInIdr) : 16000,
                 prismaEntity.settings.googleAnalyticsId,
                 prismaEntity.settings.pixelId,
@@ -176,7 +169,7 @@ export class BrandRepository implements IBrandRepository {
             prismaEntity.contactPhone,
             prismaEntity.contactWhatsapp,
             prismaEntity.contactAddress,
-            prismaEntity.socialMediaLinks,
+            prismaEntity.socialMediaLinks as unknown as Record<string, string> | null,
 
             prismaEntity.defaultLocation,
             prismaEntity.defaultCountry,
@@ -195,7 +188,7 @@ export class BrandRepository implements IBrandRepository {
             prismaEntity.deletedAt,
             prismaEntity.isActive,
             settings,
-            prismaEntity.programs?.length ?? 0,
+            (prismaEntity as unknown as { programs?: { id: string }[] }).programs?.length ?? 0,
         );
     }
 }

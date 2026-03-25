@@ -9,7 +9,7 @@ export class UpdateAuthProviderCommand {
       clientSecret?: string;
       authUrl?: string;
       tokenUrl?: string;
-      scopes?: any;
+      scopes?: string[];
       isActive?: boolean;
       isOAuth?: boolean;
       icon?: string;

@@ -1,9 +1,81 @@
 import { Observable } from 'rxjs';
 
+// --- CreateIntent ---
+export interface ItemDetail {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+  brand?: string;
+  category?: string;
+  merchant_name?: string;
+}
+
+export interface CreateIntentRequest {
+  user_id: string;
+  participant_id?: string;
+  amount: number;
+  currency: string;
+  reference_type: string;
+  reference_id: string;
+  metadata?: Record<string, string>;
+  customer_name?: string;
+  customer_email?: string;
+  customer_phone?: string;
+  description?: string;
+  item_details?: ItemDetail[];
+}
+
+export interface CreateIntentResponse {
+  intent_id: string;
+  client_secret?: string;
+  status: string;
+}
+
+// --- GetPaymentMethods ---
+export interface GetPaymentMethodsRequest {
+  amount: number;
+  currency: string;
+}
+
+export interface PaymentMethod {
+  id: string;
+  name: string;
+  category: string;
+  image_url: string;
+  estimated_fee: number;
+  is_surcharge: boolean;
+}
+
+export interface GetPaymentMethodsResponse {
+  methods: PaymentMethod[];
+}
+
+// --- ProcessPayment ---
+export interface ProcessPaymentRequest {
+  intent_id: string;
+  payment_method_id: string;
+  gateway_token?: string;
+  payment_details?: { details_json?: string };
+}
+
+export interface ProcessPaymentAction {
+  type: string;
+  url?: string;
+  qr_string?: string;
+}
+
+export interface ProcessPaymentResponse {
+  status: string;
+  transaction_id: string;
+  action?: ProcessPaymentAction;
+  metadata?: Record<string, string>;
+}
+
 export interface PaymentService {
-  CreateIntent(req: any): Observable<any>;
-  GetPaymentMethods(req: any): Observable<any>;
-  ProcessPayment(req: any): Observable<any>;
+  CreateIntent(req: CreateIntentRequest): Observable<CreateIntentResponse>;
+  GetPaymentMethods(req: GetPaymentMethodsRequest): Observable<GetPaymentMethodsResponse>;
+  ProcessPayment(req: ProcessPaymentRequest): Observable<ProcessPaymentResponse>;
   GetIntentsByReference(req: GetIntentsByReferenceRequest): Observable<GetIntentsByReferenceResponse>;
   SubmitManualPayment(req: SubmitManualPaymentRequest): Observable<SubmitManualPaymentResponse>;
   VerifyManualPayment(req: VerifyManualPaymentRequest): Observable<VerifyManualPaymentResponse>;

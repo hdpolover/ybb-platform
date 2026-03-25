@@ -79,8 +79,8 @@ describe('CreateBrandHandler', () => {
     it('should upload files and update brand if files are provided', async () => {
         const dto: CreateBrandDto = { name: 'Brand With Files' };
         const files = {
-            logo: { originalname: 'logo.png' },
-            banner: { originalname: 'banner.png' }
+            logo: { originalname: 'logo.png' } as unknown as Express.Multer.File,
+            banner: { originalname: 'banner.png' } as unknown as Express.Multer.File
         };
         const command = new CreateBrandCommand(dto, 'user-1', files);
 

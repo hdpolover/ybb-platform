@@ -1,6 +1,7 @@
 import { Controller, Logger } from '@nestjs/common';
 import { Ctx, EventPattern, Payload, RmqContext } from '@nestjs/microservices';
 import { AuditService } from './audit.service';
+import { RmqEventPayload } from '@common/types/events';
 
 @Controller()
 export class AuditController {
@@ -32,25 +33,25 @@ export class AuditController {
   // Adding a few common ones as a starting point.
   
   @EventPattern('user.*')
-  async handleUserEvents(@Payload() data: any, @Ctx() context: RmqContext) {
+  async handleUserEvents(@Payload() data: RmqEventPayload, @Ctx() context: RmqContext) {
     const pattern = context.getPattern(); 
     await this.auditService.logEvent(pattern, data);
   }
 
   @EventPattern('payment.*')
-  async handlePaymentEvents(@Payload() data: any, @Ctx() context: RmqContext) {
+  async handlePaymentEvents(@Payload() data: RmqEventPayload, @Ctx() context: RmqContext) {
     const pattern = context.getPattern();
     await this.auditService.logEvent(pattern, data);
   }
 
   @EventPattern('system.*')
-  async handleSystemEvents(@Payload() data: any, @Ctx() context: RmqContext) {
+  async handleSystemEvents(@Payload() data: RmqEventPayload, @Ctx() context: RmqContext) {
     const pattern = context.getPattern();
     await this.auditService.logEvent(pattern, data);
   }
   
   @EventPattern('program.*')
-  async handleProgramEvents(@Payload() data: any, @Ctx() context: RmqContext) {
+  async handleProgramEvents(@Payload() data: RmqEventPayload, @Ctx() context: RmqContext) {
     const pattern = context.getPattern();
     await this.auditService.logEvent(pattern, data);
   }

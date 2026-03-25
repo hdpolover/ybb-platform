@@ -32,9 +32,9 @@ export class UpdateParticipantProfileHandler implements ICommandHandler<UpdatePa
         }
 
         // Prepare Update Data
-        const updateData: any = { ...updateDto };
-        if (updateData.birthdate) {
-            updateData.birthdate = new Date(updateData.birthdate);
+        const updateData: Record<string, unknown> = { ...updateDto };
+        if (updateData['birthdate']) {
+            updateData['birthdate'] = new Date(updateData['birthdate'] as string);
         }
 
         // Calculate New Completion Score
@@ -80,7 +80,7 @@ export class UpdateParticipantProfileHandler implements ICommandHandler<UpdatePa
         };
     }
 
-    private calculateCompletionPercentage(data: any): number {
+    private calculateCompletionPercentage(data: Record<string, unknown>): number {
         let score = 20; // Base score for Onboarding (Name, Origin, etc.)
 
         // 1. Personal Details (+20%)

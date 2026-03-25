@@ -61,7 +61,7 @@ export class ListBrandsHandler implements IQueryHandler<ListBrandsQuery> {
             createdAt: brand.createdAt,
             updatedAt: brand.updatedAt,
             deletedAt: brand.deletedAt || null,
-            settings: brand.settings || null,
+            settings: (brand.settings as unknown as Record<string, unknown>) || null,
         }));
     }
 }

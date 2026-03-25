@@ -54,9 +54,9 @@ export class SettingsStrategy {
                 contact_phone: category.contactPhone || undefined,
                 contact_whatsapp: category.contactWhatsapp || undefined,
                 address: category.contactAddress || undefined,
-                social_media: category.socialMediaLinks || undefined
+                social_media: (category.socialMediaLinks || undefined) as unknown as Record<string, string> | undefined
             },
-            footer_navigation: (settings?.footerNavigation as any) || [],
+            footer_navigation: ((settings?.footerNavigation as Record<string, unknown>[] | null) || []) as unknown as import('../dto/landing-settings.dto').FooterColumnDto[],
             currency: {
                 code: category.defaultCurrency || 'USD',
                 rate_to_idr: settings?.usdInIdr ? Number(settings.usdInIdr) : 16000

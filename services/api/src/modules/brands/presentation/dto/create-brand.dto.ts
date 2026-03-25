@@ -18,7 +18,7 @@ export class CreateBrandDto {
 
     @ApiProperty({ type: 'string', format: 'binary', required: false, description: 'Logo file' })
     @IsOptional()
-    logo?: any;
+    logo?: Express.Multer.File;
 
     @ApiProperty({ required: false })
     @IsOptional()
@@ -27,7 +27,7 @@ export class CreateBrandDto {
 
     @ApiProperty({ type: 'string', format: 'binary', required: false, description: 'Banner file' })
     @IsOptional()
-    banner?: any;
+    banner?: Express.Multer.File;
 
     @ApiProperty({ required: false })
     @IsOptional()

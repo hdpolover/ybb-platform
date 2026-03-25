@@ -51,8 +51,8 @@ export class AmbassadorRepository implements IAmbassadorRepository {
 
     async update(userId: string, data: Partial<Ambassador>): Promise<Ambassador> {
         // Helper to filter valid fields logic skipped for brevity
-        const updateData: any = { ...data };
-        delete updateData.userId;
+        const updateData: Prisma.AmbassadorUpdateInput = { ...data } as Prisma.AmbassadorUpdateInput;
+        delete (updateData as Record<string, unknown>).userId;
         delete updateData.id;
 
         const updated = await this.prisma.ambassador.update({

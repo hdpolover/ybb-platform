@@ -3,6 +3,7 @@ import { Inject, NotFoundException } from '@nestjs/common';
 import { DeleteProgramCommand } from '../delete-program.command';
 import { IProgramRepository } from '@core/interfaces/repositories/program.repository.interface';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
+import { UserActivityLog } from '@core/entities/user-activity-log.entity';
 
 @CommandHandler(DeleteProgramCommand)
 export class DeleteProgramHandler implements ICommandHandler<DeleteProgramCommand> {
@@ -24,22 +25,22 @@ export class DeleteProgramHandler implements ICommandHandler<DeleteProgramComman
         await this.programRepository.delete(programId);
 
         // Log activity
-        await this.activityLogRepository.create({
-            id: undefined,
-            userId: userId,
-            activityType: 'DELETE_PROGRAM',
-            activityCategory: 'PROGRAM',
-            activityData: {
+        await this.activityLogRepository.create(new UserActivityLog(
+            undefined as unknown as string,
+            userId,
+            'DELETE_PROGRAM',
+            'PROGRAM',
+            {
                 programId: programId,
                 programName: existingProgram.name,
             },
-            pageUrl: null,
-            referrerUrl: null,
-            sessionId: null,
-            ipAddress: null,
-            userAgent: null,
-            deviceType: null,
-            createdAt: new Date(),
-        } as any);
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            new Date(),
+        ));
     }
 }

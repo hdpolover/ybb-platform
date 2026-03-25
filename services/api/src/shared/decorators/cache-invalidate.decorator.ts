@@ -30,7 +30,7 @@ export const CacheInvalidate = (patterns: string[]) =>
  */
 export function resolveCachePatterns(
   patterns: string[],
-  params: Record<string, any>,
+  params: Record<string, unknown>,
 ): string[] {
   return patterns.map((pattern) => {
     let resolved = pattern;

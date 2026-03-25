@@ -7,8 +7,8 @@ export interface CreateDataChangeLogDto {
     entityId?: string;
     action: ChangeType;
     changedFields?: string[];
-    beforeState?: Record<string, any>;
-    afterState?: Record<string, any>;
+    beforeState?: Record<string, unknown>;
+    afterState?: Record<string, unknown>;
     actorType?: ChangedByType;
     actorId?: string;
     source?: string;
@@ -72,8 +72,8 @@ export class DataChangeLogService {
      * Compute the list of fields that changed between two object snapshots.
      */
     computeChangedFields(
-        before: Record<string, any> | null | undefined,
-        after: Record<string, any> | null | undefined,
+        before: Record<string, unknown> | null | undefined,
+        after: Record<string, unknown> | null | undefined,
     ): string[] {
         if (!before || !after) return [];
 

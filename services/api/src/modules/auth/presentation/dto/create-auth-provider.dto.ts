@@ -39,7 +39,7 @@ export class CreateAuthProviderDto {
 
   @ApiProperty({ example: ['read:user', 'user:email'], required: false })
   @IsOptional()
-  scopes?: any;
+  scopes?: string[];
 
   @ApiProperty({ example: true })
   @IsBoolean()

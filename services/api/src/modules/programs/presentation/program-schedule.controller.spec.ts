@@ -70,7 +70,7 @@ describe('ProgramScheduleController', () => {
                 description: 'Day 1',
                 date: new Date().toISOString()
             };
-            const req = { user: { id: 'admin-1' } };
+            const req = { user: { id: 'admin-1' } } as any;
             
             await controller.addTimeline('prog-1', dto, req);
 

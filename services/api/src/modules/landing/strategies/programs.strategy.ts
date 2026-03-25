@@ -170,7 +170,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
             }
         });
 
-        const sections: any[] = [];
+        const sections: Record<string, unknown>[] = [];
 
         if (currentProgram) {
             // Section 1: Hero (Image + Title)
@@ -565,7 +565,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
 
         // 4. Rundown (Program Schedules)
         // Grouping by day for better structure
-        const schedulesByDay = program.schedules.reduce((acc: Record<string, any[]>, curr) => {
+        const schedulesByDay = program.schedules.reduce((acc: Record<string, unknown[]>, curr) => {
             const day = curr.day || 'Unscheduled';
             if (!acc[day]) acc[day] = [];
             acc[day].push({

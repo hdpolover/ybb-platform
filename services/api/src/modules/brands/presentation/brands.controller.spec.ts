@@ -112,7 +112,7 @@ describe('BrandsController', () => {
     describe('createBrand', () => {
         it('should execute CreateBrandCommand', async () => {
             const dto: CreateBrandDto = { name: 'Brand 1', slug: 'brand-1' };
-            const files = { logo: [{}], banner: [{}] };
+            const files = { logo: [{} as unknown as Express.Multer.File], banner: [{} as unknown as Express.Multer.File] };
             const user = { userId: 'user-1' } as any;
             const expectedResult: BrandResponseDto = { 
                 id: 'brand-1', 

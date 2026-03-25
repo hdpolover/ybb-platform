@@ -113,7 +113,7 @@ export class GetProgramDetailHandler {
     }
 
     // Build full includes
-    const includes: any = { ...basic };
+    const includes: Record<string, unknown> = { ...basic };
 
     /*
     if (include === 'all' || include === 'payments') {
@@ -213,10 +213,10 @@ export class GetProgramDetailHandler {
     return includes;
   }
 
-  private transformResponse(program: any, include: string) {
+  private transformResponse(program: Record<string, unknown>, include: string) {
     const now = new Date();
 
-    const response: any = {
+    const response: Record<string, unknown> = {
       id: program.id,
       name: program.name,
       slug: program.slug,
@@ -313,7 +313,7 @@ export class GetProgramDetailHandler {
     }
 
     if (program.testimonials) {
-      response.testimonials = program.testimonials.map((t: any) => ({
+      response.testimonials = (program.testimonials as { rating: unknown }[]).map((t) => ({
         ...t,
         rating: t.rating ? Number(t.rating) : null,
       }));
@@ -336,14 +336,14 @@ export class GetProgramDetailHandler {
     }
 
     if (program.resources) {
-      response.resources = program.resources.map((r: any) => ({
+      response.resources = (program.resources as { fileSize: unknown }[]).map((r) => ({
         ...r,
         fileSize: r.fileSize ? Number(r.fileSize) : null,
       }));
     }
 
     if (program.tags) {
-      response.tags = program.tags.map((t: any) => t.tag);
+      response.tags = (program.tags as { tag: unknown }[]).map((t) => t.tag);
     }
 
     if (program.programAnnouncements) {

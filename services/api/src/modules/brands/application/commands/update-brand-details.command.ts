@@ -6,6 +6,6 @@ export class UpdateBrandDetailsCommand implements ICommand {
         public readonly id: string,
         public readonly dto: UpdateBrandDetailsDto,
         public readonly userId: string,
-        public readonly files?: { logo?: any; banner?: any },
+        public readonly files?: { logo?: Express.Multer.File; banner?: Express.Multer.File },
     ) {}
 }

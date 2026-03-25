@@ -2,7 +2,7 @@ import { Controller, Get, Param, Post, UseGuards, Query, Body } from '@nestjs/co
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
-import { CurrentUser } from '@shared/decorators/current-user.decorator';
+import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { ListSystemAnnouncementsQuery } from '../application/queries/list-system-announcements.query';
 import { GetSystemAnnouncementQuery } from '../application/queries/get-system-announcement.query';
 import { MarkAnnouncementReadCommand } from '../application/commands/mark-announcement-read.command';
@@ -39,11 +39,11 @@ export class SystemAnnouncementsController {
     @ApiResponse({ status: 201, description: 'Marked as read' })
     async markAsRead(
         @Param('id') id: string,
-        @CurrentUser() user: any,
+        @CurrentUser() user: CurrentUserData,
         @Query('dismiss') dismiss?: boolean,
     ): Promise<void> {
         return this.commandBus.execute(
-            new MarkAnnouncementReadCommand(user.id, id, dismiss === true)
+            new MarkAnnouncementReadCommand(user.userId, id, dismiss === true)
         );
     }
 }

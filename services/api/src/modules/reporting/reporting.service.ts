@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { ExcelService } from '@shared/infrastructure/excel/excel.service';
 import { Response } from 'express';
+import { DataChangeLog } from '@prisma/client';
 
 @Injectable()
 export class ReportingService {
@@ -18,7 +19,7 @@ export class ReportingService {
       take: 5000,
     });
 
-    const data = logs.map((log: any) => ({
+    const data = logs.map((log: DataChangeLog) => ({
       id: log.id,
       timestamp: log.createdAt,
       action: log.action,
@@ -76,7 +77,7 @@ export class ReportingService {
       createdAt: user.createdAt,
       lastLogin: user.lastLoginAt,
       brandId: user.brandId,
-      providers: user.identities.map((i: any) => i.providerId).join(', ')
+      providers: user.identities.map((i: { providerId?: string }) => i.providerId).join(', ')
     }));
 
     const columns = [
@@ -147,7 +148,7 @@ export class ReportingService {
       }
     });
 
-    const data = invoices.map((inv: any) => ({
+    const data = invoices.map((inv) => ({
       id: inv.id,
       status: inv.status,
       // @ts-ignore
@@ -155,7 +156,9 @@ export class ReportingService {
       currency: inv.currency,
       // @ts-ignore
       program: inv.application?.program?.title ?? 'Unknown',
+      // @ts-ignore
       payerEmail: inv.application?.participant?.user?.email ?? 'N/A',
+      // @ts-ignore
       tier: inv.pricingTier?.name ?? 'N/A',
       method: inv.paymentMethod || '-',
       paidAt: inv.paidAt || '-',

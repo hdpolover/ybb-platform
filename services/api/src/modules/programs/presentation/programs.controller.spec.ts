@@ -72,7 +72,7 @@ describe('ProgramsController', () => {
                 endDate: new Date().toISOString(),
                 applicationDeadline: new Date().toISOString()
              };
-            const req = { user: { id: 'admin-1' } };
+            const req = { user: { id: 'admin-1' } } as any;
             
             mockExecute.execute.mockResolvedValue({ id: 'prog-1', ...dto });
 

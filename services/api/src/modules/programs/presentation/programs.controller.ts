@@ -1,5 +1,6 @@
 import { Controller, Get, Query, Param, Put, Post, Delete, Body, UseGuards, Request, UseInterceptors, UploadedFiles } from '@nestjs/common';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import { Request as ExpressRequest } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery, ApiConsumes } from '@nestjs/swagger';
 import { ListProgramsDto } from './dto/list-programs.dto';
 import { ProgramListResponseDto, ProgramResponseDto } from './dto/program-response.dto';
@@ -26,6 +27,33 @@ import { Public } from '../../../shared/decorators/public.decorator';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
 import { AuditTrail } from '../../../shared/decorators/audit-trail.decorator';
 import { ChangeType } from '@prisma/client';
+
+interface AuthenticatedRequest extends ExpressRequest {
+  user: { id: string; userId: string; email: string; brandId: string };
+}
+
+interface ProgramLike {
+  id: string;
+  brandId: string;
+  brandName?: string | null;
+  name: string;
+  slug: string;
+  description?: string | null;
+  year: number;
+  startDate: Date;
+  endDate: Date;
+  applicationDeadline: Date;
+  location?: string | null;
+  capacity?: number | null;
+  registrationOpenDate?: Date | null;
+  registrationCloseDate?: Date | null;
+  registrationFee?: number | null;
+  isPublished: boolean;
+  isActive: boolean;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 @ApiTags('Programs')
 @Controller('programs')
@@ -81,7 +109,7 @@ export class ProgramsController {
       announcementsLimit,
       resourcesLimit,
     );
-    return this.getProgramDetailHandler.execute(query);
+    return this.getProgramDetailHandler.execute(query) as Promise<ProgramDetailResponseDto>;
   }
 
   @Post()
@@ -93,7 +121,7 @@ export class ProgramsController {
   @AuditTrail({ entityType: 'Program', action: ChangeType.create })
   async create(
     @Body() dto: CreateProgramDto,
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
   ) {
     const command = new CreateProgramCommand(dto, req.user.id);
     const program = await this.createProgramHandler.execute(command);
@@ -115,7 +143,7 @@ export class ProgramsController {
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateProgramDto,
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
   ) {
     const command = new UpdateProgramCommand(id, dto, req.user.id);
     const program = await this.updateProgramHandler.execute(command);
@@ -126,20 +154,20 @@ export class ProgramsController {
     };
   }
 
-  private mapToResponse(program: any): ProgramResponseDto {
+  private mapToResponse(program: ProgramLike): ProgramResponseDto {
     return {
       id: program.id,
       brandId: program.brandId,
       brandName: program.brandName ?? null,
       name: program.name,
       slug: program.slug,
-      description: program.description,
+      description: program.description ?? null,
       year: program.year,
       startDate: program.startDate,
       endDate: program.endDate,
       applicationDeadline: program.applicationDeadline,
-      location: program.location,
-      capacity: program.capacity,
+      location: program.location ?? null,
+      capacity: program.capacity ?? null,
       registrationOpenDate: program.registrationOpenDate,
       registrationCloseDate: program.registrationCloseDate,
       registrationFee: program.registrationFee,
@@ -164,8 +192,8 @@ export class ProgramsController {
   async updateBranding(
     @Param('id') id: string,
     @Body() dto: UploadProgramBrandingDto,
-    @UploadedFiles() files: { logo?: any[], banner?: any[], thumbnail?: any[] },
-    @Request() req: any,
+    @UploadedFiles() files: { logo?: Express.Multer.File[], banner?: Express.Multer.File[], thumbnail?: Express.Multer.File[] },
+    @Request() req: AuthenticatedRequest,
   ) {
     const uploadedFiles = {
       logo: files?.logo?.[0],
@@ -177,7 +205,7 @@ export class ProgramsController {
       new UpdateProgramBrandingCommand(id, dto, req.user.id, uploadedFiles)
     );
 
-    return this.mapToResponse(program);
+    return this.mapToResponse(program as unknown as ProgramLike);
   }
 
   @Delete(':id')
@@ -190,7 +218,7 @@ export class ProgramsController {
   @AuditTrail({ entityType: 'Program', action: ChangeType.delete })
   async delete(
     @Param('id') id: string,
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
   ) {
     const command = new DeleteProgramCommand(id, req.user.id);
     await this.deleteProgramHandler.execute(command);
@@ -205,7 +233,7 @@ export class ProgramsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get participant progress tracking from timeline' })
   @ApiResponse({ status: 200, type: [ProgressStepDto] })
-  async getParticipantProgress(@Param('id') id: string, @Request() req: any): Promise<ProgressStepDto[]> {
+  async getParticipantProgress(@Param('id') id: string, @Request() req: AuthenticatedRequest): Promise<ProgressStepDto[]> {
     return this.getParticipantProgressHandler.execute(new GetParticipantProgressQuery(id, req.user.id));
   }
 }

@@ -3,6 +3,7 @@ import { IUserRepository } from '@core/interfaces/repositories/user.repository.i
 import { User, UserRole } from '@core/entities/user.entity';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { UserMapper } from '../mappers/user.mapper';
+import { Prisma } from '@prisma/client';
 
 /**
  * User Repository Implementation
@@ -46,7 +47,7 @@ export class UserRepository implements IUserRepository {
   }
 
   async findAll(brandId: string, skip?: number, take?: number, role?: string): Promise<User[]> {
-    const where: any = {
+    const where: Prisma.UserWhereInput = {
       brandId: brandId,
       deletedAt: null,
     };

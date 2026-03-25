@@ -73,5 +73,5 @@ export class CreateIntentDto {
     @ApiPropertyOptional()
     @IsObject()
     @IsOptional()
-    metadata?: Record<string, any>;
+    metadata?: Record<string, unknown>;
 }

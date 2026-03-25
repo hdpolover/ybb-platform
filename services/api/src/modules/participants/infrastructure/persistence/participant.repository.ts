@@ -27,10 +27,9 @@ export class ParticipantRepository implements IParticipantRepository {
 
         // Remove undefined fields to avoid Prisma errors if any
         const createData: Prisma.ParticipantCreateInput = {
+            ...(this.mapToPrismaInput(rest) as Prisma.ParticipantCreateInput),
             user: { connect: { id: userId } },
             fullName: rest.fullName || 'Unknown', // Required field
-            // Map other fields... spreading 'rest' might fail if it contains undefined for mapped fields
-            ...this.mapToPrismaInput(rest),
         };
 
         const created = await this.prisma.participant.create({
@@ -51,12 +50,12 @@ export class ParticipantRepository implements IParticipantRepository {
         return updated as unknown as Participant;
     }
 
-    private mapToPrismaInput(data: Partial<Participant>): any {
+    private mapToPrismaInput(data: Partial<Participant>): Prisma.ParticipantUpdateInput {
         // Helper to cleanup undefined or handle incompatible types
-        const input: any = { ...data };
+        const input: Prisma.ParticipantUpdateInput = { ...data } as Prisma.ParticipantUpdateInput;
 
-        delete input.userId; // handled separately or immutable id
-        delete input.id;
+        delete (input as Record<string, unknown>).userId; // handled separately or immutable id
+        delete (input as Record<string, unknown>).id;
 
         // Ensure enumerables or special types are correct if needed
         // For now assuming direct mapping works for most fields

@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { IUserPreferenceRepository } from '@core/interfaces/repositories/user-preference.repository.interface';
 import { UserPreference } from '@core/entities/user-preference.entity';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
-import { Theme } from '@prisma/client';
+import { Theme, Prisma } from '@prisma/client';
 
 @Injectable()
 export class UserPreferenceRepository implements IUserPreferenceRepository {
@@ -33,7 +33,7 @@ export class UserPreferenceRepository implements IUserPreferenceRepository {
                 programUpdates: preference.programUpdates,
                 applicationUpdates: preference.applicationUpdates,
                 reminderEmails: preference.reminderEmails,
-                customSettings: preference.customSettings ?? {},
+                customSettings: (preference.customSettings ?? {}) as Prisma.InputJsonValue,
             },
         });
 
@@ -55,7 +55,7 @@ export class UserPreferenceRepository implements IUserPreferenceRepository {
                 programUpdates: preference.programUpdates,
                 applicationUpdates: preference.applicationUpdates,
                 reminderEmails: preference.reminderEmails,
-                customSettings: preference.customSettings ?? {},
+                customSettings: (preference.customSettings ?? {}) as Prisma.InputJsonValue,
                 updatedAt: new Date(),
             },
         });
@@ -63,7 +63,7 @@ export class UserPreferenceRepository implements IUserPreferenceRepository {
         return this.toDomain(updated);
     }
 
-    private toDomain(ormEntity: any): UserPreference {
+    private toDomain(ormEntity: Prisma.UserPreferenceGetPayload<Record<string, never>>): UserPreference {
         return new UserPreference(
             ormEntity.id,
             ormEntity.userId,
@@ -78,7 +78,7 @@ export class UserPreferenceRepository implements IUserPreferenceRepository {
             ormEntity.programUpdates,
             ormEntity.applicationUpdates,
             ormEntity.reminderEmails,
-            ormEntity.customSettings,
+            ormEntity.customSettings as unknown as Record<string, unknown>,
             ormEntity.createdAt,
             ormEntity.updatedAt,
         );

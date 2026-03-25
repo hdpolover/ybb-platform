@@ -14,7 +14,7 @@ describe('PortalController', () => {
   let controller: PortalController;
   let queryBus: QueryBus;
 
-  const mockUser = { userId: 'user-123' };
+  const mockUser = { userId: 'user-123', email: 'test@test.com', brandId: 'brand-id' } as import('@shared/decorators/current-user.decorator').CurrentUserData;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -47,7 +47,7 @@ describe('PortalController', () => {
     });
 
     it('should throw UnauthorizedException if no user', async () => {
-      await expect(controller.getDashboard({})).rejects.toThrow(UnauthorizedException);
+      await expect(controller.getDashboard({} as unknown as import('@shared/decorators/current-user.decorator').CurrentUserData)).rejects.toThrow(UnauthorizedException);
     });
   });
 

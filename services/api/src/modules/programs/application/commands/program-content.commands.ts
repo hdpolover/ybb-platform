@@ -41,7 +41,7 @@ export class CreateProgramSpeakerCommand {
     constructor(
         public readonly dto: CreateProgramSpeakerDto, 
         public readonly userId: string,
-        public readonly image?: any
+        public readonly image?: Express.Multer.File
     ) { }
 }
 export class UpdateProgramSpeakerCommand {
@@ -49,7 +49,7 @@ export class UpdateProgramSpeakerCommand {
         public readonly id: string, 
         public readonly dto: UpdateProgramSpeakerDto, 
         public readonly userId: string,
-        public readonly image?: any
+        public readonly image?: Express.Multer.File
     ) { }
 }
 export class DeleteProgramSpeakerCommand {
@@ -61,7 +61,7 @@ export class CreateProgramGalleryCommand {
     constructor(
         public readonly dto: CreateProgramGalleryDto, 
         public readonly userId: string,
-        public readonly image?: any
+        public readonly image?: Express.Multer.File
     ) { }
 }
 export class UpdateProgramGalleryCommand {
@@ -69,7 +69,7 @@ export class UpdateProgramGalleryCommand {
         public readonly id: string, 
         public readonly dto: UpdateProgramGalleryDto, 
         public readonly userId: string,
-        public readonly image?: any
+        public readonly image?: Express.Multer.File
     ) { }
 }
 export class DeleteProgramGalleryCommand {
@@ -103,7 +103,7 @@ export class CreateProgramTeamCommand {
     constructor(
         public readonly dto: CreateProgramTeamDto, 
         public readonly userId: string,
-        public readonly image?: any
+        public readonly image?: Express.Multer.File
     ) { }
 }
 export class UpdateProgramTeamCommand {
@@ -111,7 +111,7 @@ export class UpdateProgramTeamCommand {
         public readonly id: string, 
         public readonly dto: UpdateProgramTeamDto, 
         public readonly userId: string,
-        public readonly image?: any
+        public readonly image?: Express.Multer.File
     ) { }
 }
 export class DeleteProgramTeamCommand {
@@ -123,7 +123,7 @@ export class CreateProgramPartnerCommand {
     constructor(
         public readonly dto: CreateProgramPartnerDto, 
         public readonly userId: string,
-        public readonly logo?: any
+        public readonly logo?: Express.Multer.File
     ) { }
 }
 export class UpdateProgramPartnerCommand {
@@ -131,7 +131,7 @@ export class UpdateProgramPartnerCommand {
         public readonly id: string, 
         public readonly dto: UpdateProgramPartnerDto, 
         public readonly userId: string,
-        public readonly logo?: any
+        public readonly logo?: Express.Multer.File
     ) { }
 }
 export class DeleteProgramPartnerCommand {
@@ -143,7 +143,7 @@ export class CreateProgramResourceCommand {
     constructor(
         public readonly dto: CreateProgramResourceDto, 
         public readonly userId: string,
-        public readonly file?: any
+        public readonly file?: Express.Multer.File
     ) { }
 }
 export class UpdateProgramResourceCommand {
@@ -151,7 +151,7 @@ export class UpdateProgramResourceCommand {
         public readonly id: string, 
         public readonly dto: UpdateProgramResourceDto, 
         public readonly userId: string,
-        public readonly file?: any
+        public readonly file?: Express.Multer.File
     ) { }
 }
 export class DeleteProgramResourceCommand {

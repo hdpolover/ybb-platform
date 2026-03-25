@@ -16,9 +16,9 @@ export class GetProgramLandingDto {
 }
 
 export class ProgramLandingResponseDto {
-  news: any[];   // Update with concrete types later if strictness is needed
-  awards: any[];
-  scholarship: any;
-  conference: any; // Timeline or Schedule
-  program: any;    // Basic program info (videoUrl etc)
+  news: Record<string, unknown>[];
+  awards: Record<string, unknown>[];
+  scholarship: Record<string, unknown> | null;
+  conference: Record<string, unknown> | null;
+  program: Record<string, unknown> | null;
 }

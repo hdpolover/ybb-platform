@@ -39,7 +39,7 @@ export class SaveSubmissionSectionCommand {
   constructor(
     public readonly userId: string,
     public readonly section: string,
-    public readonly data: Record<string, any>,
+    public readonly data: Record<string, unknown>,
     public readonly programId?: string,
   ) { }
 }

@@ -76,14 +76,14 @@ export class SaveSubmissionSectionHandler {
 
     private buildUpdatePayload(
         section: string,
-        application: any,
-        data: Record<string, any>,
-    ): Record<string, any> {
+        application: { personalData: unknown; essayAnswers: unknown; uploadedFiles: unknown },
+        data: Record<string, unknown>,
+    ): Record<string, unknown> {
         const normalizedData = this.normalizePersonalDataPayload(data);
 
         switch (section) {
             case SubmissionSection.PERSONAL_INFO: {
-                const existing = (application.personalData as Record<string, any>) || {};
+                const existing = (application.personalData as Record<string, unknown>) || {};
                 return { personalData: { ...existing, ...normalizedData } };
             }
             case SubmissionSection.PERSONAL_DETAILS:
@@ -92,8 +92,8 @@ export class SaveSubmissionSectionHandler {
             case SubmissionSection.ENTRY_INFORMATION:
             case SubmissionSection.MISCELLANEOUS:
             case SubmissionSection.ADDITIONAL_INFO: {
-                const existing = (application.personalData as Record<string, any>) || {};
-                const updateData: Record<string, any> = {
+                const existing = (application.personalData as Record<string, unknown>) || {};
+                const updateData: Record<string, unknown> = {
                     personalData: { ...existing, ...normalizedData },
                 };
 
@@ -104,11 +104,11 @@ export class SaveSubmissionSectionHandler {
                 return updateData;
             }
             case SubmissionSection.ESSAYS: {
-                const existing = (application.essayAnswers as Record<string, any>) || {};
+                const existing = (application.essayAnswers as Record<string, unknown>) || {};
                 return { essayAnswers: { ...existing, ...data } };
             }
             case SubmissionSection.DOCUMENTS: {
-                const existing = (application.uploadedFiles as Record<string, any>) || {};
+                const existing = (application.uploadedFiles as Record<string, unknown>) || {};
                 return { uploadedFiles: { ...existing, ...data } };
             }
             default:
@@ -116,7 +116,7 @@ export class SaveSubmissionSectionHandler {
         }
     }
 
-    private normalizePersonalDataPayload(data: Record<string, any>): Record<string, any> {
+    private normalizePersonalDataPayload(data: Record<string, unknown>): Record<string, unknown> {
         const normalized = { ...data };
 
         if (normalized.program_id !== undefined) {

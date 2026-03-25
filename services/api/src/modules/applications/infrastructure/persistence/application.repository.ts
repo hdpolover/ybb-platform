@@ -3,6 +3,7 @@ import { IApplicationRepository } from '@core/interfaces/repositories/applicatio
 import { ParticipantApplication, ApplicationStatus } from '@core/entities/participant-application.entity';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { ApplicationMapper } from '../mappers/application.mapper';
+import { Prisma } from '@prisma/client';
 
 /**
  * Application Repository
@@ -60,14 +61,14 @@ export class ApplicationRepository implements IApplicationRepository {
       offset?: number;
     },
   ): Promise<{ applications: ParticipantApplication[]; total: number }> {
-    const where: any = { programId };
+    const where: Prisma.ParticipantApplicationWhereInput = { programId };
 
     if (filters?.status) {
       where.status = filters.status;
     }
 
     if (filters?.category) {
-      where.applicationCategory = filters.category;
+      where.applicationCategory = filters.category as import('@prisma/client').ApplicationCategory;
     }
 
     if (filters?.search) {
@@ -103,7 +104,7 @@ export class ApplicationRepository implements IApplicationRepository {
       offset?: number;
     },
   ): Promise<{ applications: ParticipantApplication[]; total: number }> {
-    const where: any = {
+    const where: Prisma.ParticipantApplicationWhereInput = {
       program: {
         brand: {
           id: brandId,
@@ -139,7 +140,7 @@ export class ApplicationRepository implements IApplicationRepository {
     const data = this.mapper.toPrismaCreate(application);
 
     const created = await this.prisma.participantApplication.create({
-      data,
+      data: data as import('@prisma/client').Prisma.ParticipantApplicationCreateInput,
     });
 
     return this.mapper.toDomain(created);

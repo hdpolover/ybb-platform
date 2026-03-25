@@ -6,8 +6,8 @@ export class UpdateBrandCommand {
         public readonly dto: UpdateBrandDto,
         public readonly userId: string,
         public readonly files?: {
-            logo?: any;
-            banner?: any;
+            logo?: Express.Multer.File;
+            banner?: Express.Multer.File;
         }
     ) {}
 }

@@ -53,7 +53,7 @@ export class PaymentAdminController {
     @ApiOperation({ summary: 'List payment methods (Admin)' })
     @ApiQuery({ name: 'is_active', required: false, type: Boolean })
     @ApiResponse({ status: 200, description: 'List of payment methods' })
-    async listMethods(@Query() query: any) {
+    async listMethods(@Query() query: Record<string, string>) {
         try {
             const queryParams = JSON.stringify(query);
             const cacheKey = CACHE_KEYS.PAYMENT_METHODS(queryParams);
@@ -183,7 +183,7 @@ export class PaymentAdminController {
 
             // Handle various possible response structures from File Service
             // It might return { data: { url: ... } } or just { url: ... }
-            const data = fileInfo.data || fileInfo;
+            const data = (fileInfo.data || fileInfo) as Record<string, string | undefined>;
             const resolvedUrl = data.url || data.display_url;
 
             if (resolvedUrl) {
@@ -213,13 +213,14 @@ export class PaymentAdminController {
         return uuidRegex.test(uuid);
     }
 
-    private handleError(error: any) {
-        if (error.response) {
-            this.logger.error(`Payment Service Error: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
-            throw new HttpException(error.response.data, error.response.status);
+    private handleError(error: unknown) {
+        const err = error as { response?: { status: number; data: unknown }; message?: string };
+        if (err.response) {
+            this.logger.error(`Payment Service Error: ${err.response.status} - ${JSON.stringify(err.response.data)}`);
+            throw new HttpException(err.response.data as string | Record<string, unknown>, err.response.status);
         }
-        this.logger.error(`Internal Error: ${error.message}`);
-        throw new HttpException(error.message, 500);
+        this.logger.error(`Internal Error: ${err.message}`);
+        throw new HttpException(err.message ?? 'Internal server error', 500);
     }
 
     private buildInternalHeaders(): Record<string, string> {

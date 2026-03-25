@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MetricsService } from '../monitoring/metrics.service';
+import { PrismaTransactionClient } from '@shared/types/prisma-transaction.type';
 
 /**
  * Transaction Service
@@ -45,7 +46,7 @@ export class TransactionService {
    * ```
    */
   async execute<T>(
-    callback: (tx: any) => Promise<T>,
+    callback: (tx: PrismaTransactionClient) => Promise<T>,
     options?: {
       name?: string;
       timeout?: number;
@@ -125,7 +126,7 @@ export class TransactionService {
    * ```
    */
   async executeWithRetry<T>(
-    callback: (tx: any) => Promise<T>,
+    callback: (tx: PrismaTransactionClient) => Promise<T>,
     options?: {
       name?: string;
       timeout?: number;
@@ -136,7 +137,7 @@ export class TransactionService {
   ): Promise<T> {
     const maxRetries = options?.maxRetries || 3;
     const retryDelay = options?.retryDelay || 100;
-    let lastError: any;
+    let lastError: unknown;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
@@ -175,9 +176,9 @@ export class TransactionService {
    * - Lock wait timeout
    * - Connection issues
    */
-  private isRetryableError(error: any): boolean {
-    const errorCode = error?.code;
-    const errorMessage = error?.message?.toLowerCase() || '';
+  private isRetryableError(error: unknown): boolean {
+    const errorCode = (error as { code?: string })?.code;
+    const errorMessage = ((error as { message?: string })?.message || '').toLowerCase();
 
     // PostgreSQL error codes
     const retryableCodes = [
@@ -187,7 +188,7 @@ export class TransactionService {
     ];
 
     return (
-      retryableCodes.includes(errorCode) ||
+      retryableCodes.includes(errorCode ?? '') ||
       errorMessage.includes('deadlock') ||
       errorMessage.includes('timeout') ||
       errorMessage.includes('connection')

@@ -61,11 +61,11 @@ export class CreateApplicationFormFieldDto {
 
   @ApiPropertyOptional({ description: 'Options for select/radio/checkbox (JSON)', type: 'array', items: { type: 'string' } })
   @IsOptional()
-  options?: any;
+  options?: string[] | Record<string, unknown>[];
 
   @ApiPropertyOptional({ description: 'Validation rules (JSON)' })
   @IsOptional()
-  validationRules?: any;
+  validationRules?: Record<string, unknown>;
 
   @ApiPropertyOptional({ description: 'Default value' })
   @IsOptional()

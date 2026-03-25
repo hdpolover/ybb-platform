@@ -21,7 +21,7 @@ export class Brand {
         public readonly contactPhone: string | null,
         public readonly contactWhatsapp: string | null,
         public readonly contactAddress: string | null,
-        public readonly socialMediaLinks: any | null,
+        public readonly socialMediaLinks: Record<string, string> | null,
 
         // Location
         public readonly defaultLocation: string | null,

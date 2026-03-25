@@ -11,7 +11,7 @@ export class UserActivityLogResponseDto {
     activityCategory?: string;
 
     @ApiProperty()
-    activityData: any;
+    activityData: Record<string, unknown>;
 
     @ApiPropertyOptional()
     pageUrl?: string;

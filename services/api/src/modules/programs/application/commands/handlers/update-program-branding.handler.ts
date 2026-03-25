@@ -24,7 +24,7 @@ export class UpdateProgramBrandingHandler implements ICommandHandler<UpdateProgr
         }
 
         const brandId = program.brandId;
-        const updates: any = {};
+        const updates: Record<string, string> = {};
 
         if (files.logo) {
             const result = await this.storageService.uploadFile(

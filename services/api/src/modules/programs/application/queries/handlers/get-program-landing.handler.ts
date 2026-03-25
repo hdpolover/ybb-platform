@@ -102,8 +102,8 @@ export class GetProgramLandingHandler implements IQueryHandler<GetProgramLanding
     return {
       news,
       awards: mappedAwards,
-      scholarship,
-      conference,
+      scholarship: scholarship as unknown as Record<string, unknown>,
+      conference: conference as unknown as Record<string, unknown>,
       program: {
         id: program.id,
         title: program.name,

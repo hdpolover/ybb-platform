@@ -13,7 +13,7 @@ import {
     ApiParam,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
-import { CurrentUser } from '@shared/decorators/current-user.decorator';
+import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 import {
     GetPortalCertificatesQuery,
     DownloadCertificateCommand,
@@ -48,9 +48,9 @@ export class PortalCertificatesController {
     @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid JWT' })
     @ApiResponse({ status: 404, description: 'Participant not found' })
     async listCertificates(
-        @CurrentUser() user: any,
+        @CurrentUser() user: CurrentUserData,
     ): Promise<PortalCertificatesResponseDto> {
-        const userId = user?.userId || user?.id;
+        const userId = user.userId;
         if (!userId) throw new UnauthorizedException();
         return this.getCertificatesHandler.execute(
             new GetPortalCertificatesQuery(userId),
@@ -72,10 +72,10 @@ export class PortalCertificatesController {
     @ApiResponse({ status: 403, description: 'Certificate does not belong to this user' })
     @ApiResponse({ status: 404, description: 'Certificate not found' })
     async downloadCertificate(
-        @CurrentUser() user: any,
+        @CurrentUser() user: CurrentUserData,
         @Param('id') id: string,
     ): Promise<DownloadCertificateResponseDto> {
-        const userId = user?.userId || user?.id;
+        const userId = user.userId;
         if (!userId) throw new UnauthorizedException();
         return this.downloadCertificateHandler.execute(
             new DownloadCertificateCommand(userId, id),

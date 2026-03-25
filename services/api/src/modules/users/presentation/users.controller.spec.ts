@@ -68,7 +68,7 @@ describe('UsersController', () => {
 
   describe('getMyPreferences', () => {
     it('should execute GetUserPreferencesQuery', async () => {
-      const user = { userId: 'u-1' };
+      const user = { userId: 'u-1' } as unknown as import('@shared/decorators/current-user.decorator').CurrentUserData;
       await controller.getMyPreferences(user);
       expect(mockGetUserPreferencesHandler.execute).toHaveBeenCalledWith(
         expect.any(GetUserPreferencesQuery)
@@ -80,7 +80,7 @@ describe('UsersController', () => {
 
   describe('updateMyPreferences', () => {
     it('should execute UpdateUserPreferencesCommand', async () => {
-      const user = { userId: 'u-1' };
+      const user = { userId: 'u-1' } as unknown as import('@shared/decorators/current-user.decorator').CurrentUserData;
       const dto = { language: 'id' };
       await controller.updateMyPreferences(user, dto);
       expect(mockUpdateUserPreferencesHandler.execute).toHaveBeenCalledWith(
@@ -94,7 +94,7 @@ describe('UsersController', () => {
 
   describe('getMyNotifications', () => {
       it('should execute ListUserNotificationsQuery with defaults', async () => {
-          const user = { userId: 'u-1' };
+          const user = { userId: 'u-1' } as unknown as import('@shared/decorators/current-user.decorator').CurrentUserData;
           await controller.getMyNotifications(user);
           expect(mockListUserNotificationsHandler.execute).toHaveBeenCalledWith(
               expect.any(ListUserNotificationsQuery)
@@ -106,7 +106,7 @@ describe('UsersController', () => {
       });
 
       it('should pass pagination params', async () => {
-        const user = { userId: 'u-1' };
+        const user = { userId: 'u-1' } as unknown as import('@shared/decorators/current-user.decorator').CurrentUserData;
         await controller.getMyNotifications(user, 2, 5, 'info', false);
         const query = mockListUserNotificationsHandler.execute.mock.calls[0][0];
         expect(query.page).toBe(2);
@@ -118,7 +118,7 @@ describe('UsersController', () => {
 
   describe('markNotificationRead', () => {
       it('should execute MarkNotificationReadCommand', async () => {
-          const user = { userId: 'u-1' };
+          const user = { userId: 'u-1' } as unknown as import('@shared/decorators/current-user.decorator').CurrentUserData;
           await controller.markNotificationRead(user, 'notif-1');
           expect(mockMarkNotificationReadHandler.execute).toHaveBeenCalledWith(
               expect.any(MarkNotificationReadCommand)

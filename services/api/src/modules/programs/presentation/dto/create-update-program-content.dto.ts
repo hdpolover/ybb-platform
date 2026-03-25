@@ -195,7 +195,7 @@ export class CreateProgramSpeakerDto {
 
     @ApiProperty({ type: 'string', format: 'binary', required: false, description: 'Speaker Photo to upload' })
     @IsOptional()
-    photo?: any;
+    photo?: Express.Multer.File;
 
     @ApiProperty({ required: false })
     @IsString()
@@ -285,7 +285,7 @@ export class CreateProgramGalleryDto {
 
     @ApiProperty({ type: 'string', format: 'binary', required: false, description: 'Gallery Image to upload' })
     @IsOptional()
-    image?: any;
+    image?: Express.Multer.File;
 
     @ApiProperty({ required: false })
     @IsString()
@@ -316,7 +316,7 @@ export class UpdateProgramGalleryDto {
 
     @ApiProperty({ type: 'string', format: 'binary', required: false, description: 'Gallery Image to upload' })
     @IsOptional()
-    image?: any;
+    image?: Express.Multer.File;
 
     @ApiProperty({ required: false })
     @IsString()
@@ -553,7 +553,7 @@ export class CreateProgramTeamDto {
 
     @ApiProperty({ type: 'string', format: 'binary', required: false, description: 'Member Photo to upload' })
     @IsOptional()
-    photo?: any;
+    photo?: Express.Multer.File;
 
     @ApiProperty({ required: false })
     @IsString()
@@ -652,7 +652,7 @@ export class CreateProgramPartnerDto {
 
     @ApiProperty({ type: 'string', format: 'binary', required: false, description: 'Partner Logo to upload' })
     @IsOptional()
-    logo?: any;
+    logo?: Express.Multer.File;
 
     @ApiProperty({ required: false })
     @IsString()
@@ -736,7 +736,7 @@ export class CreateProgramResourceDto {
     
     @ApiProperty({ type: 'string', format: 'binary', required: false, description: 'File to upload' })
     @IsOptional()
-    file?: any;
+    file?: Express.Multer.File;
 
     @ApiProperty({ required: false })
     @IsNumber()
@@ -856,12 +856,12 @@ export class CreateProgramPricingTierDto {
     @ApiProperty({ required: false })
     @IsArray()
     @IsOptional()
-    benefits?: any[];
+    benefits?: Record<string, unknown>[];
 
     @ApiProperty({ required: false })
     @IsArray()
     @IsOptional()
-    requirements?: any[];
+    requirements?: Record<string, unknown>[];
 
     @ApiProperty({ required: false })
     @IsString()
@@ -923,12 +923,12 @@ export class UpdateProgramPricingTierDto {
     @ApiProperty({ required: false })
     @IsArray()
     @IsOptional()
-    benefits?: any[];
+    benefits?: Record<string, unknown>[];
 
     @ApiProperty({ required: false })
     @IsArray()
     @IsOptional()
-    requirements?: any[];
+    requirements?: Record<string, unknown>[];
 
     @ApiProperty({ required: false })
     @IsString()
@@ -996,11 +996,11 @@ export class CreateProgramRequirementDto {
     @ApiProperty({ required: false })
     @IsArray()
     @IsOptional()
-    options?: any[];
+    options?: string[] | Record<string, unknown>[];
 
     @ApiProperty({ required: false })
     @IsOptional()
-    validationRules?: any;
+    validationRules?: Record<string, unknown>;
 
     @ApiProperty({ required: false })
     @IsNumber()
@@ -1042,11 +1042,11 @@ export class UpdateProgramRequirementDto {
     @ApiProperty({ required: false })
     @IsArray()
     @IsOptional()
-    options?: any[];
+    options?: string[] | Record<string, unknown>[];
 
     @ApiProperty({ required: false })
     @IsOptional()
-    validationRules?: any;
+    validationRules?: Record<string, unknown>;
 
     @ApiProperty({ required: false })
     @IsNumber()

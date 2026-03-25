@@ -4,7 +4,7 @@ export class UserActivityLog {
         public readonly userId: string | null,
         public activityType: string,
         public activityCategory: string | null,
-        public activityData: any,
+        public activityData: Record<string, unknown>,
         public pageUrl: string | null,
         public referrerUrl: string | null,
         public sessionId: string | null,

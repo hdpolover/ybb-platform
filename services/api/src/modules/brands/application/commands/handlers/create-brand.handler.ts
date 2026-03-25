@@ -5,6 +5,7 @@ import { IBrandRepository } from '@core/interfaces/repositories/brand.repository
 import { Brand } from '@core/entities/brand.entity';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
 import { StorageService } from '../../../../files/application/storage.service';
+import { UserActivityLog } from '@core/entities/user-activity-log.entity';
 
 @CommandHandler(CreateBrandCommand)
 export class CreateBrandHandler implements ICommandHandler<CreateBrandCommand> {
@@ -36,7 +37,7 @@ export class CreateBrandHandler implements ICommandHandler<CreateBrandCommand> {
         
         // Let's create the brand first to get ID.
         let brand = await this.brandRepository.create(dto);
-        const updates: any = {};
+        const updates: Record<string, unknown> = {};
         let needsUpdate = false;
 
         if (files) {
@@ -66,37 +67,27 @@ export class CreateBrandHandler implements ICommandHandler<CreateBrandCommand> {
         }
 
         if (needsUpdate) {
-            // We need an update method in IBrandRepository. 
-            // Assuming it exists or using update functionality.
-            // Since IBrandRepository interface is not visible, I'll assume usage of update or similar.
-            // But wait, create returned a Brand entity.
-            
-            // Checking standard repository pattern...
-            // Usually update(id, data).
-            
-            // Let's assume we can update. If IBrandRepository doesn't expose update, we might have an issue.
-            // But 'UpdateBrandHandler' exists, so repository MUST have update.
-            brand = await this.brandRepository.update(brand.id, updates);
+            brand = await this.brandRepository.update(brand.id, updates as Partial<Brand>);
         }
 
         // Log activity
-        await this.activityLogRepository.create({
-            id: undefined, // Let DB generate ID
-            userId: userId,
-            activityType: 'CREATE_BRAND',
-            activityCategory: 'BRAND',
-            activityData: {
+        await this.activityLogRepository.create(new UserActivityLog(
+            undefined as unknown as string,
+            userId,
+            'CREATE_BRAND',
+            'BRAND',
+            {
                 brandId: brand.id,
                 brandName: brand.name,
             },
-            pageUrl: null,
-            referrerUrl: null,
-            sessionId: null,
-            ipAddress: null,
-            userAgent: null,
-            deviceType: null,
-            createdAt: new Date(),
-        } as any);
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            new Date(),
+        ));
 
         return brand;
     }

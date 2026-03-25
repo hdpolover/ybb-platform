@@ -25,5 +25,5 @@ export class SaveSubmissionSectionDto {
         example: { full_name: 'John Doe', email: 'john@example.com' },
     })
     @IsObject()
-    data: Record<string, any>;
+    data: Record<string, unknown>;
 }

@@ -78,7 +78,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
             async findUnique({ model, operation, args, query }) {
               if (modelHasDeletedAt(model)) {
                 const where = args.where || {};
-                const newWhere: any = { deletedAt: null };
+                const newWhere: Record<string, unknown> = { deletedAt: null };
 
                 // Flatten compound unique keys for findFirst compatibility
                 // findUnique({ where: { compound_key: { a: 1, b: 2 } } }) -> findFirst({ where: { a: 1, b: 2, deletedAt: null } })
@@ -91,7 +91,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
                   }
                 }
 
-                return (extendedClient as any)[toCamelCase(model)].findFirst({
+                return (extendedClient as unknown as Record<string, Record<string, (...args: unknown[]) => unknown>>)[toCamelCase(model)].findFirst({
                   ...args,
                   where: newWhere,
                 });
@@ -106,16 +106,16 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
             },
             async findMany({ model, operation, args, query }) {
               if (modelHasDeletedAt(model)) {
-                const safeWhere = args.where as any;
+                const safeWhere = args.where as Record<string, unknown>;
                 if (safeWhere?.deletedAt === undefined) {
-                  args.where = { deletedAt: null, ...(args.where as any) };
+                  args.where = { deletedAt: null, ...(args.where as Record<string, unknown>) };
                 }
               }
               return query(args);
             },
             async delete({ model, operation, args, query }) {
               if (modelHasDeletedAt(model)) {
-                return (extendedClient as any)[toCamelCase(model)].update({
+                return (extendedClient as unknown as Record<string, Record<string, (...args: unknown[]) => unknown>>)[toCamelCase(model)].update({
                   ...args,
                   data: { deletedAt: new Date() },
                 });
@@ -124,7 +124,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
             },
             async deleteMany({ model, operation, args, query }) {
               if (modelHasDeletedAt(model)) {
-                return (extendedClient as any)[toCamelCase(model)].updateMany({
+                return (extendedClient as unknown as Record<string, Record<string, (...args: unknown[]) => unknown>>)[toCamelCase(model)].updateMany({
                   ...args,
                   data: { deletedAt: new Date() },
                 });
@@ -144,7 +144,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
       // Always patch the model to use the extended client (which includes monitoring)
       const camelCaseName = toCamelCase(model.name);
       Object.defineProperty(this, camelCaseName, {
-        get: () => (extendedClient as any)[camelCaseName],
+        get: () => (extendedClient as Record<string, unknown>)[camelCaseName],
         configurable: true,
       });
     }
@@ -170,8 +170,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
    * Updates deletedAt instead of actually deleting the record
    */
   async softDelete<T>(
-    model: any,
-    where: any,
+    model: { update: (args: { where: object; data: object }) => Promise<T> },
+    where: object,
     deletedBy?: string,
   ): Promise<T> {
     return model.update({
@@ -186,7 +186,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
   /**
    * Restore soft deleted record
    */
-  async restore<T>(model: any, where: any): Promise<T> {
+  async restore<T>(model: { update: (args: { where: object; data: object }) => Promise<T> }, where: object): Promise<T> {
     return model.update({
       where,
       data: {
@@ -199,7 +199,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
   /**
    * Check if record is soft deleted
    */
-  isSoftDeleted(record: any): boolean {
+  isSoftDeleted(record: Record<string, unknown>): boolean {
     return record?.deletedAt !== null;
   }
 

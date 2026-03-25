@@ -32,7 +32,7 @@ export class ReplySupportTicketDto {
 
     @ApiProperty({ required: false })
     @IsOptional()
-    attachments?: any[];
+    attachments?: string[];
 }
 
 export class SupportTicketMessageResponseDto {
@@ -52,7 +52,7 @@ export class SupportTicketMessageResponseDto {
     createdAt: Date;
 
     @ApiProperty()
-    attachments: any[];
+    attachments: string[];
 }
 
 export class SupportTicketResponseDto {

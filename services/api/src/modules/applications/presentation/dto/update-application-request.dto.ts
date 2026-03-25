@@ -1,6 +1,7 @@
 import { IsString, IsOptional, IsEnum, IsObject, IsArray, IsUUID } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ApplicationCategory } from '@core/entities/participant-application.entity';
+import { DocumentFile } from '@core/entities/participant-application.entity';
 
 /**
  * Update Application Request DTO
@@ -31,12 +32,12 @@ export class UpdateApplicationRequestDto {
   @ApiPropertyOptional({ description: 'Documents metadata' })
   @IsOptional()
   @IsObject()
-  documents?: Record<string, any>;
+  documents?: Record<string, DocumentFile>;
 
   @ApiPropertyOptional({ description: 'Requirement files' })
   @IsOptional()
   @IsArray()
-  requirementFiles?: any[];
+  requirementFiles?: DocumentFile[];
 
   @ApiPropertyOptional({ description: 'Twibbon link' })
   @IsOptional()
