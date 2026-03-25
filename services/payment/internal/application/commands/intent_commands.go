@@ -10,6 +10,7 @@ type CreateIntentCommand struct {
 	Amount        float64
 	Currency      string
 	Metadata      map[string]interface{}
+	ExchangeRate  *float64
 }
 
 type ConfirmIntentCommand struct {

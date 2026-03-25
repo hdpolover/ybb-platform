@@ -10,6 +10,7 @@ import { ProgramContentController } from './presentation/program-content.control
 import { ProgramApplicationConfigController } from './presentation/program-application.controller';
 import { ProgramParticipationController } from './presentation/program-participation.controller';
 import { ProgramLandingController } from './presentation/program-landing.controller';
+import { ProgramExchangeRateController } from './presentation/program-exchange-rate.controller';
 import {
   UpsertParticipationInfoHandler,
   DeleteParticipationInfoHandler,
@@ -60,6 +61,7 @@ import {
 } from './application/commands/handlers/application-form-field.handler';
 import { GetApplicationFormFieldsHandler } from './application/queries/handlers/get-application-form-fields.handler';
 import { GetParticipantProgressHandler } from './application/queries/handlers/get-participant-progress.handler';
+import { UpdateExchangeRateHandler } from './application/commands/handlers/update-exchange-rate.handler';
 import { ProgramContentRepository } from './infrastructure/persistence/program-content.repository';
 import { ProgramRepository } from './infrastructure/persistence/program.repository';
 import { PrismaService } from '../../shared/infrastructure/prisma/prisma.service';
@@ -75,6 +77,7 @@ import { CacheService } from '../../shared/infrastructure/cache/cache.service';
     ProgramApplicationConfigController,
     ProgramParticipationController,
     ProgramLandingController,
+    ProgramExchangeRateController,
   ],
   providers: [
     ListProgramsHandler,
@@ -85,6 +88,7 @@ import { CacheService } from '../../shared/infrastructure/cache/cache.service';
     UpdateProgramBrandingHandler,
     DeleteProgramHandler,
     GetParticipantProgressHandler,
+    UpdateExchangeRateHandler,
     // Content Handlers
     ListProgramTimelineHandler,
     ListProgramSchedulesHandler,

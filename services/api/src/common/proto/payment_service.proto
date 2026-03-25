@@ -84,6 +84,9 @@ message CreateIntentRequest {
   // Item Details
   string description = 11;
   repeated ItemDetail item_details = 12;
+
+  // Exchange rate snapshot (USD to IDR at the time of intent creation)
+  double exchange_rate = 13;
 }
 
 message CreateIntentResponse {

@@ -154,6 +154,7 @@ model Program {
   requireEmailVerification Boolean @default(true) @map("require_email_verification")
   currency                 String  @default("USD") @map("currency") @db.VarChar(3)
   enableCurrencyConversion Boolean @default(false) @map("enable_currency_conversion")
+  usdInIdr                 Decimal? @map("usd_in_idr") @db.Decimal(10, 2) // Program-level exchange rate; falls back to brand_settings.usd_in_idr if null
   logoUrl                  String? @map("logo_url") @db.VarChar(500)
   logoWhiteUrl             String? @map("logo_white_url") @db.VarChar(500)
   logoColorUrl             String? @map("logo_color_url") @db.VarChar(500)
@@ -214,6 +215,7 @@ model Program {
   essays                   ProgramEssay[]
   scoringSchemas           ScoringSchema[]
   participationCategories  ProgramParticipationCategory[]
+  exchangeRateHistory      ProgramExchangeRateHistory[]
 
   @@unique([brandId, slug])
   @@index([brandId])
@@ -315,4 +317,23 @@ model ProgramParticipationCategory {
 
   @@index([programId])
   @@map("program_participation_categories")
+}
+
+model ProgramExchangeRateHistory {
+  id        String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId String  @map("program_id") @db.Uuid
+  oldRate   Decimal @map("old_rate") @db.Decimal(10, 2)
+  newRate   Decimal @map("new_rate") @db.Decimal(10, 2)
+  changedBy String  @map("changed_by") @db.Uuid
+  reason    String? @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+  admin   User    @relation("ExchangeRateChangedBy", fields: [changedBy], references: [id])
+
+  @@index([programId])
+  @@index([createdAt])
+  @@map("program_exchange_rate_history")
 }

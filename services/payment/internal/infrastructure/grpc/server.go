@@ -75,6 +75,12 @@ func (s *PaymentGrpcServer) CreateIntent(ctx context.Context, req *pb.CreateInte
 		metadata["item_details"] = req.ItemDetails
 	}
 
+	var exchangeRate *float64
+	if req.ExchangeRate > 0 {
+		rate := req.ExchangeRate
+		exchangeRate = &rate
+	}
+
 	intent := entities.NewPaymentIntent(
 		req.UserId,
 		float64(req.Amount),
@@ -82,6 +88,7 @@ func (s *PaymentGrpcServer) CreateIntent(ctx context.Context, req *pb.CreateInte
 		req.ReferenceType,
 		req.ReferenceId,
 		metadata,
+		exchangeRate,
 	)
 
 	if req.ParticipantId != "" {

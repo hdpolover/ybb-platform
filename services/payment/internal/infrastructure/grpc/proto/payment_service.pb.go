@@ -532,8 +532,10 @@ type CreateIntentRequest struct {
 	CustomerEmail string `protobuf:"bytes,9,opt,name=customer_email,json=customerEmail,proto3" json:"customer_email,omitempty"`
 	CustomerPhone string `protobuf:"bytes,10,opt,name=customer_phone,json=customerPhone,proto3" json:"customer_phone,omitempty"`
 	// Item Details
-	Description   string        `protobuf:"bytes,11,opt,name=description,proto3" json:"description,omitempty"`
-	ItemDetails   []*ItemDetail `protobuf:"bytes,12,rep,name=item_details,json=itemDetails,proto3" json:"item_details,omitempty"`
+	Description  string        `protobuf:"bytes,11,opt,name=description,proto3" json:"description,omitempty"`
+	ItemDetails  []*ItemDetail `protobuf:"bytes,12,rep,name=item_details,json=itemDetails,proto3" json:"item_details,omitempty"`
+	// Exchange rate snapshot (USD to IDR at the time of intent creation)
+	ExchangeRate  float64 `protobuf:"fixed64,13,opt,name=exchange_rate,json=exchangeRate,proto3" json:"exchange_rate,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -650,6 +652,13 @@ func (x *CreateIntentRequest) GetItemDetails() []*ItemDetail {
 		return x.ItemDetails
 	}
 	return nil
+}
+
+func (x *CreateIntentRequest) GetExchangeRate() float64 {
+	if x != nil {
+		return x.ExchangeRate
+	}
+	return 0
 }
 
 type CreateIntentResponse struct {

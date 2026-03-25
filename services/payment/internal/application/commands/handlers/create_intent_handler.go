@@ -30,6 +30,7 @@ func (h *CreateIntentHandler) Handle(ctx context.Context, cmd *commands.CreateIn
 		cmd.ReferenceType,
 		cmd.ReferenceID,
 		cmd.Metadata,
+		cmd.ExchangeRate,
 	)
 
 	if cmd.ParticipantID != "" {
