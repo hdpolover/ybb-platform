@@ -4,8 +4,6 @@ import { CreateRegistrationPaymentIntentCommand } from '../create-registration-p
 import { APPLICATION_REPOSITORY } from '@modules/applications/infrastructure/tokens';
 import { PaymentGrpcClient } from '@modules/payments/infrastructure/services/payment-grpc.client';
 import { ApplicationCategory } from '@core/entities/participant-application.entity';
-// We might need to fetch Program to get the exact price from Pricing Tier
-// Assuming `programRepository` exists or we fetch via helper
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 
 @Injectable()
@@ -14,7 +12,7 @@ export class CreateRegistrationPaymentIntentHandler {
     @Inject(APPLICATION_REPOSITORY)
     private readonly applicationRepository: IApplicationRepository,
     private readonly paymentClient: PaymentGrpcClient,
-    private readonly prisma: PrismaService, // Direct access for simpler PricingTier check
+    private readonly prisma: PrismaService,
   ) {}
 
   async execute(command: CreateRegistrationPaymentIntentCommand): Promise<any> {
@@ -40,7 +38,6 @@ export class CreateRegistrationPaymentIntentHandler {
     let currency = 'IDR';
 
     if (application.pricingTierId) {
-        // Fetch pricing tier
         const tier = await this.prisma.programPricingTier.findUnique({
             where: { id: application.pricingTierId }
         });
@@ -50,14 +47,30 @@ export class CreateRegistrationPaymentIntentHandler {
         }
     }
 
-    // Fallback or default logic if no tier selected?
     if (amount <= 0) {
-        // Fallback for logic where maybe pricing tier is not set yet but default fee exists?
-        // For now, fail safe
         throw new BadRequestException('Pricing tier not selected or invalid amount.');
     }
-    
-    // 4. Create Intent via Payment Service
+
+    // 4. Get exchange rate snapshot (program-level, with brand fallback)
+    const program = await this.prisma.program.findUnique({
+        where: { id: application.programId },
+        include: {
+            brand: {
+                include: { settings: true },
+            },
+        },
+    });
+
+    let exchangeRate: number | undefined;
+    if (program) {
+        exchangeRate = program.usdInIdr
+            ? Number(program.usdInIdr)
+            : program.brand?.settings?.usdInIdr
+              ? Number(program.brand.settings.usdInIdr)
+              : 16000;
+    }
+
+    // 5. Create Intent via Payment Service (with exchange rate snapshot)
     const metadata = {
         payment_category: 'registration',
         program_id: application.programId,
@@ -70,7 +83,8 @@ export class CreateRegistrationPaymentIntentHandler {
         currency: currency,
         reference_type: 'application',
         reference_id: application.id,
-        metadata: metadata
+        metadata: metadata,
+        exchange_rate: exchangeRate,
     });
 
     return intent;

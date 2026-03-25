@@ -22,6 +22,7 @@ export class Program {
         public readonly requireEmailVerification: boolean,
         public readonly currency: string,
         public readonly enableCurrencyConversion: boolean,
+        public readonly usdInIdr: number | null,
         public readonly logoUrl: string | null,
         public readonly allowRegistration: boolean,
         public readonly registrationOpenDate: Date | null,

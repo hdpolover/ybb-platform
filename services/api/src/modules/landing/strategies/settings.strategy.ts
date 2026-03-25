@@ -34,6 +34,11 @@ export class SettingsStrategy {
             where: { brandId: category.id }
         });
 
+        // Exchange rate: program-level takes priority, then brand setting, then default
+        const brandRate = settings?.usdInIdr ? Number(settings.usdInIdr) : 16000;
+        const programRate = program?.usdInIdr ? Number(program.usdInIdr) : null;
+        const effectiveRate = programRate ?? brandRate;
+
         const result = {
             maintenance: {
                 is_maintenance_mode: settings?.isMaintenanceMode || false,
@@ -59,7 +64,7 @@ export class SettingsStrategy {
             footer_navigation: ((settings?.footerNavigation as Record<string, unknown>[] | null) || []) as unknown as import('../dto/landing-settings.dto').FooterColumnDto[],
             currency: {
                 code: category.defaultCurrency || 'USD',
-                rate_to_idr: settings?.usdInIdr ? Number(settings.usdInIdr) : 16000
+                rate_to_idr: effectiveRate
             },
             active_program: program ? { 
                 id: program.id, 
