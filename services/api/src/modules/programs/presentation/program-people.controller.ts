@@ -1,8 +1,13 @@
 import { Controller, Get, Param, Put, Post, Delete, Body, UseGuards, Request, UseInterceptors, UploadedFile } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Request as ExpressRequest } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
 import { Public } from '../../../shared/decorators/public.decorator';
+
+interface AuthenticatedRequest extends ExpressRequest {
+  user: { id: string; userId: string };
+}
 
 import {
   ProgramSpeakerResponseDto,
@@ -76,8 +81,8 @@ export class ProgramPeopleController {
   async addSpeaker(
     @Param('id') programId: string, 
     @Body() dto: CreateProgramSpeakerDto, 
-    @UploadedFile() photo: any,
-    @Request() req: any
+    @UploadedFile() photo: Express.Multer.File,
+    @Request() req: AuthenticatedRequest
   ) {
     return this.createProgramSpeakerHandler.execute(new CreateProgramSpeakerCommand(dto, req.user.id, photo));
   }
@@ -91,8 +96,8 @@ export class ProgramPeopleController {
   async updateSpeaker(
     @Param('itemId') itemId: string, 
     @Body() dto: UpdateProgramSpeakerDto, 
-    @UploadedFile() photo: any,
-    @Request() req: any
+    @UploadedFile() photo: Express.Multer.File,
+    @Request() req: AuthenticatedRequest
   ) {
     return this.updateProgramSpeakerHandler.execute(new UpdateProgramSpeakerCommand(itemId, dto, req.user.id, photo));
   }
@@ -101,7 +106,7 @@ export class ProgramPeopleController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete speaker' })
-  async deleteSpeaker(@Param('itemId') itemId: string, @Request() req: any) {
+  async deleteSpeaker(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
     return this.deleteProgramSpeakerHandler.execute(new DeleteProgramSpeakerCommand(itemId, req.user.id));
   }
 
@@ -123,8 +128,8 @@ export class ProgramPeopleController {
   async addTeam(
     @Param('id') programId: string, 
     @Body() dto: CreateProgramTeamDto, 
-    @UploadedFile() photo: any,
-    @Request() req: any
+    @UploadedFile() photo: Express.Multer.File,
+    @Request() req: AuthenticatedRequest
   ) {
     return this.createProgramTeamHandler.execute(new CreateProgramTeamCommand(dto, req.user.id, photo));
   }
@@ -138,8 +143,8 @@ export class ProgramPeopleController {
   async updateTeam(
     @Param('itemId') itemId: string, 
     @Body() dto: UpdateProgramTeamDto, 
-    @UploadedFile() photo: any,
-    @Request() req: any
+    @UploadedFile() photo: Express.Multer.File,
+    @Request() req: AuthenticatedRequest
   ) {
     return this.updateProgramTeamHandler.execute(new UpdateProgramTeamCommand(itemId, dto, req.user.id, photo));
   }
@@ -148,7 +153,7 @@ export class ProgramPeopleController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete team member' })
-  async deleteTeam(@Param('itemId') itemId: string, @Request() req: any) {
+  async deleteTeam(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
     return this.deleteProgramTeamHandler.execute(new DeleteProgramTeamCommand(itemId, req.user.id));
   }
 
@@ -170,8 +175,8 @@ export class ProgramPeopleController {
   async addPartner(
     @Param('id') programId: string, 
     @Body() dto: CreateProgramPartnerDto, 
-    @UploadedFile() logo: any,
-    @Request() req: any
+    @UploadedFile() logo: Express.Multer.File,
+    @Request() req: AuthenticatedRequest
   ) {
     return this.createProgramPartnerHandler.execute(new CreateProgramPartnerCommand(dto, req.user.id, logo));
   }
@@ -185,8 +190,8 @@ export class ProgramPeopleController {
   async updatePartner(
     @Param('itemId') itemId: string, 
     @Body() dto: UpdateProgramPartnerDto, 
-    @UploadedFile() logo: any,
-    @Request() req: any
+    @UploadedFile() logo: Express.Multer.File,
+    @Request() req: AuthenticatedRequest
   ) {
     return this.updateProgramPartnerHandler.execute(new UpdateProgramPartnerCommand(itemId, dto, req.user.id, logo));
   }
@@ -195,7 +200,7 @@ export class ProgramPeopleController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete partner' })
-  async deletePartner(@Param('itemId') itemId: string, @Request() req: any) {
+  async deletePartner(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
     return this.deleteProgramPartnerHandler.execute(new DeleteProgramPartnerCommand(itemId, req.user.id));
   }
 }

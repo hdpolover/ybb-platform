@@ -38,7 +38,7 @@ export class UpdateBrandSettingsDto {
         }
     })
     @IsOptional()
-    footerNavigation?: any;
+    footerNavigation?: Record<string, unknown>;
 
     @ApiProperty({ required: false, description: 'Exchange rate (1 USD = ? IDR).', example: 16000 })
     @IsOptional()

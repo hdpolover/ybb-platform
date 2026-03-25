@@ -2,7 +2,7 @@ import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { Inject, NotFoundException, BadRequestException } from '@nestjs/common';
 import { IProgramContentRepository } from '@core/interfaces/repositories/program-content.repository.interface';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
-import { Prisma, PricingFeeType, ApplicationCategory } from '@prisma/client';
+import { Prisma, PricingFeeType, ApplicationCategory, ProgramPricingTier, ProgramRequirement } from '@prisma/client';
 import { StorageService } from '../../../../files/application/storage.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import {
@@ -612,7 +612,7 @@ export class CreateProgramPricingTierHandler implements ICommandHandler<CreatePr
                 ? command.dto.allowedCategories.map(c => c as ApplicationCategory) 
                 : undefined
         };
-        return this.repository.createPricingTier(dto);
+        return this.repository.createPricingTier(dto as Partial<ProgramPricingTier>);
     }
 }
 @CommandHandler(UpdateProgramPricingTierCommand)
@@ -659,7 +659,7 @@ export class UpdateProgramPricingTierHandler implements ICommandHandler<UpdatePr
                 ? command.dto.allowedCategories.map(c => c as ApplicationCategory) 
                 : undefined
         };
-        return this.repository.updatePricingTier(command.id, dto);
+        return this.repository.updatePricingTier(command.id, dto as Partial<ProgramPricingTier>);
     }
 }
 @CommandHandler(DeleteProgramPricingTierCommand)
@@ -675,14 +675,14 @@ export class DeleteProgramPricingTierHandler implements ICommandHandler<DeletePr
 export class CreateProgramRequirementHandler implements ICommandHandler<CreateProgramRequirementCommand> {
     constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
     async execute(command: CreateProgramRequirementCommand) {
-        return this.repository.createRequirement(command.dto);
+        return this.repository.createRequirement(command.dto as Partial<ProgramRequirement>);
     }
 }
 @CommandHandler(UpdateProgramRequirementCommand)
 export class UpdateProgramRequirementHandler implements ICommandHandler<UpdateProgramRequirementCommand> {
     constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
     async execute(command: UpdateProgramRequirementCommand) {
-        return this.repository.updateRequirement(command.id, command.dto);
+        return this.repository.updateRequirement(command.id, command.dto as Partial<ProgramRequirement>);
     }
 }
 @CommandHandler(DeleteProgramRequirementCommand)

@@ -6,7 +6,7 @@ import { ListDeletionRequestsQuery } from '../application/queries/list-deletion-
 import { ReviewDeletionRequestCommand } from '../application/commands/review-deletion-request.command';
 import { DeletionRequestResponseDto, ReviewDeletionRequestDto } from './dto/deletion-request.dto';
 import { JwtAuthGuard } from '../../auth/infrastructure/guards/jwt-auth.guard';
-import { CurrentUser } from '../../../shared/decorators/current-user.decorator';
+import { CurrentUser, CurrentUserData } from '../../../shared/decorators/current-user.decorator';
 // import { AdminGuard } from ... // Should restrict to admin
 
 @ApiTags('Users')
@@ -40,7 +40,7 @@ export class DeletionRequestsController {
   async review(
     @Param('id') id: string,
     @Body() dto: ReviewDeletionRequestDto,
-    @CurrentUser() admin: any
+    @CurrentUser() admin: CurrentUserData
   ) {
     // We assume the user is an admin. In production, add @Roles('admin') check.
     const command = new ReviewDeletionRequestCommand(id, admin.userId, dto.action, dto.notes);

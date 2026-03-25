@@ -1,4 +1,5 @@
 import { Controller, Get, Param, Put, Post, Delete, Body, UseGuards, Request, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Request as ExpressRequest } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
@@ -86,8 +87,8 @@ export class ProgramContentController {
   async addGallery(
     @Param('id') programId: string, 
     @Body() dto: CreateProgramGalleryDto, 
-    @UploadedFile() image: any,
-    @Request() req: any
+    @UploadedFile() image: Express.Multer.File,
+    @Request() req: ExpressRequest & { user: { id: string } }
   ) {
     return this.createProgramGalleryHandler.execute(new CreateProgramGalleryCommand(dto, req.user.id, image));
   }
@@ -101,8 +102,8 @@ export class ProgramContentController {
   async updateGallery(
     @Param('itemId') itemId: string, 
     @Body() dto: UpdateProgramGalleryDto, 
-    @UploadedFile() image: any,
-    @Request() req: any
+    @UploadedFile() image: Express.Multer.File,
+    @Request() req: ExpressRequest & { user: { id: string } }
   ) {
     return this.updateProgramGalleryHandler.execute(new UpdateProgramGalleryCommand(itemId, dto, req.user.id, image));
   }
@@ -111,7 +112,7 @@ export class ProgramContentController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete gallery item' })
-  async deleteGallery(@Param('itemId') itemId: string, @Request() req: any) {
+  async deleteGallery(@Param('itemId') itemId: string, @Request() req: ExpressRequest & { user: { id: string } }) {
     return this.deleteProgramGalleryHandler.execute(new DeleteProgramGalleryCommand(itemId, req.user.id));
   }
 
@@ -128,7 +129,7 @@ export class ProgramContentController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add testimonial' })
-  async addTestimonial(@Param('id') programId: string, @Body() dto: CreateProgramTestimonialDto, @Request() req: any) {
+  async addTestimonial(@Param('id') programId: string, @Body() dto: CreateProgramTestimonialDto, @Request() req: ExpressRequest & { user: { id: string } }) {
     return this.createProgramTestimonialHandler.execute(new CreateProgramTestimonialCommand(dto, req.user.id));
   }
 
@@ -136,7 +137,7 @@ export class ProgramContentController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update testimonial' })
-  async updateTestimonial(@Param('itemId') itemId: string, @Body() dto: UpdateProgramTestimonialDto, @Request() req: any) {
+  async updateTestimonial(@Param('itemId') itemId: string, @Body() dto: UpdateProgramTestimonialDto, @Request() req: ExpressRequest & { user: { id: string } }) {
     return this.updateProgramTestimonialHandler.execute(new UpdateProgramTestimonialCommand(itemId, dto, req.user.id));
   }
 
@@ -144,7 +145,7 @@ export class ProgramContentController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete testimonial' })
-  async deleteTestimonial(@Param('itemId') itemId: string, @Request() req: any) {
+  async deleteTestimonial(@Param('itemId') itemId: string, @Request() req: ExpressRequest & { user: { id: string } }) {
     return this.deleteProgramTestimonialHandler.execute(new DeleteProgramTestimonialCommand(itemId, req.user.id));
   }
 
@@ -161,7 +162,7 @@ export class ProgramContentController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add FAQ' })
-  async addFaq(@Param('id') programId: string, @Body() dto: CreateProgramFaqDto, @Request() req: any) {
+  async addFaq(@Param('id') programId: string, @Body() dto: CreateProgramFaqDto, @Request() req: ExpressRequest & { user: { id: string } }) {
     return this.createProgramFaqHandler.execute(new CreateProgramFaqCommand(dto, req.user.id));
   }
 
@@ -169,7 +170,7 @@ export class ProgramContentController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update FAQ' })
-  async updateFaq(@Param('itemId') itemId: string, @Body() dto: UpdateProgramFaqDto, @Request() req: any) {
+  async updateFaq(@Param('itemId') itemId: string, @Body() dto: UpdateProgramFaqDto, @Request() req: ExpressRequest & { user: { id: string } }) {
     return this.updateProgramFaqHandler.execute(new UpdateProgramFaqCommand(itemId, dto, req.user.id));
   }
 
@@ -177,7 +178,7 @@ export class ProgramContentController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete FAQ' })
-  async deleteFaq(@Param('itemId') itemId: string, @Request() req: any) {
+  async deleteFaq(@Param('itemId') itemId: string, @Request() req: ExpressRequest & { user: { id: string } }) {
     return this.deleteProgramFaqHandler.execute(new DeleteProgramFaqCommand(itemId, req.user.id));
   }
 
@@ -199,8 +200,8 @@ export class ProgramContentController {
   async addResource(
     @Param('id') programId: string, 
     @Body() dto: CreateProgramResourceDto, 
-    @UploadedFile() file: any,
-    @Request() req: any
+    @UploadedFile() file: Express.Multer.File,
+    @Request() req: ExpressRequest & { user: { id: string } }
   ) {
     return this.createProgramResourceHandler.execute(new CreateProgramResourceCommand(dto, req.user.id, file));
   }
@@ -214,8 +215,8 @@ export class ProgramContentController {
   async updateResource(
     @Param('itemId') itemId: string, 
     @Body() dto: UpdateProgramResourceDto, 
-    @UploadedFile() file: any,
-    @Request() req: any
+    @UploadedFile() file: Express.Multer.File,
+    @Request() req: ExpressRequest & { user: { id: string } }
   ) {
     return this.updateProgramResourceHandler.execute(new UpdateProgramResourceCommand(itemId, dto, req.user.id, file));
   }
@@ -224,7 +225,7 @@ export class ProgramContentController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete resource' })
-  async deleteResource(@Param('itemId') itemId: string, @Request() req: any) {
+  async deleteResource(@Param('itemId') itemId: string, @Request() req: ExpressRequest & { user: { id: string } }) {
     return this.deleteProgramResourceHandler.execute(new DeleteProgramResourceCommand(itemId, req.user.id));
   }
 }

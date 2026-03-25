@@ -63,7 +63,7 @@ export class UpdateUserPreferenceDto {
     @ApiPropertyOptional({ description: 'JSON object for any other custom settings.' })
     @IsOptional()
     @IsObject()
-    customSettings?: any;
+    customSettings?: Record<string, unknown>;
 }
 
 export class UserPreferenceResponseDto {
@@ -107,7 +107,7 @@ export class UserPreferenceResponseDto {
     reminderEmails: boolean;
 
     @ApiProperty()
-    customSettings: any;
+    customSettings: Record<string, unknown>;
 
     @ApiProperty()
     updatedAt: Date;

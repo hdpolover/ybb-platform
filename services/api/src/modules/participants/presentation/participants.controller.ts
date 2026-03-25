@@ -15,7 +15,7 @@ import {
     ApiBearerAuth,
 } from '@nestjs/swagger';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
-import { CurrentUser } from '@shared/decorators/current-user.decorator';
+import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { GetMyParticipantProfileQuery } from '../application/queries/get-my-participant-profile.query';
 import { GetParticipantDashboardQuery } from '../application/queries/get-participant-dashboard.query';
 import { UpdateParticipantProfileCommand } from '../application/commands/update-participant-profile.command';
@@ -46,9 +46,9 @@ export class ParticipantsController {
         type: ParticipantResponseDto,
     })
     async getMyProfile(
-        @CurrentUser() user: any,
+        @CurrentUser() user: CurrentUserData,
     ): Promise<ParticipantResponseDto> {
-        const userId = user?.userId || user?.id;
+        const userId = user.userId;
         if (!userId) {
             throw new UnauthorizedException();
         }
@@ -63,10 +63,10 @@ export class ParticipantsController {
         type: ParticipantResponseDto,
     })
     async completeOnboarding(
-        @CurrentUser() user: any,
+        @CurrentUser() user: CurrentUserData,
         @Body() dto: OnboardingDto,
     ): Promise<ParticipantResponseDto> {
-        const userId = user?.userId || user?.id;
+        const userId = user.userId;
         if (!userId) {
             throw new UnauthorizedException();
         }
@@ -83,10 +83,10 @@ export class ParticipantsController {
         type: ParticipantResponseDto,
     })
     async updateMyProfile(
-        @CurrentUser() user: any,
+        @CurrentUser() user: CurrentUserData,
         @Body() updateDto: UpdateParticipantProfileDto,
     ): Promise<ParticipantResponseDto> {
-        const userId = user?.userId || user?.id;
+        const userId = user.userId;
         if (!userId) {
             throw new UnauthorizedException();
         }
@@ -99,10 +99,10 @@ export class ParticipantsController {
     @ApiOperation({ summary: 'Apply to become an ambassador' })
     @ApiResponse({ status: 201, description: 'Application submitted' })
     async applyAmbassador(
-        @CurrentUser() user: any,
+        @CurrentUser() user: CurrentUserData,
         @Body() dto: ApplyAmbassadorDto,
-    ): Promise<any> {
-        const userId = user?.userId || user?.id;
+    ): Promise<unknown> {
+        const userId = user.userId;
         if (!userId) throw new UnauthorizedException();
         return this.commandBus.execute(new ApplyAmbassadorCommand(userId, dto));
     }
@@ -111,10 +111,10 @@ export class ParticipantsController {
     @ApiOperation({ summary: 'Get participant dashboard summary' })
     @ApiResponse({ status: 200, type: ParticipantDashboardResponseDto })
     async getDashboard(
-        @CurrentUser() user: any,
+        @CurrentUser() user: CurrentUserData,
         @Query('participantId') participantId?: string,
     ): Promise<ParticipantDashboardResponseDto> {
-        const userId = user?.userId || user?.id;
+        const userId = user.userId;
         if (!userId) throw new UnauthorizedException();
         return this.queryBus.execute(new GetParticipantDashboardQuery(userId, participantId));
     }
@@ -123,9 +123,9 @@ export class ParticipantsController {
     @ApiOperation({ summary: 'Get ambassador dashboard stats' })
     @ApiResponse({ status: 200, description: 'Return stats', type: AmbassadorDashboardDto })
     async getAmbassadorDashboard(
-        @CurrentUser() user: any,
+        @CurrentUser() user: CurrentUserData,
     ): Promise<AmbassadorDashboardDto> {
-        const userId = user?.userId || user?.id;
+        const userId = user.userId;
         if (!userId) throw new UnauthorizedException();
         return this.queryBus.execute(new GetAmbassadorDashboardQuery(userId));
     }

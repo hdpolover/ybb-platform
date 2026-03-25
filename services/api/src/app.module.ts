@@ -58,7 +58,7 @@ import { AdminsModule } from '@modules/admins/admins.module';
               winston.format.timestamp(),
               winston.format.ms(),
               winston.format.colorize(),
-              winston.format.printf(({ timestamp, level, message, context, ...meta }: any) => {
+              winston.format.printf(({ timestamp, level, message, context, ...meta }: winston.Logform.TransformableInfo & { timestamp?: unknown; context?: unknown }) => {
                 return `${timestamp} [${context || 'Application'}] ${level}: ${message} ${Object.keys(meta).length ? JSON.stringify(meta) : ''}`;
               }),
             ),
@@ -66,7 +66,7 @@ import { AdminsModule } from '@modules/admins/admins.module';
         ];
 
         const lokiUrl = configService.get<string>('LOKI_URL') || 'http://host.docker.internal:3110';
-        const LokiTransportConstructor = (LokiTransport as any).default || LokiTransport;
+        const LokiTransportConstructor = ((LokiTransport as Record<string, unknown>).default || LokiTransport) as new (opts: Record<string, unknown>) => winston.transport;
         transports.push(
           new LokiTransportConstructor({
             host: lokiUrl,
@@ -74,7 +74,7 @@ import { AdminsModule } from '@modules/admins/admins.module';
             json: true,
             format: winston.format.combine(
               winston.format.timestamp(),
-              winston.format((info: any) => {
+              winston.format((info: winston.Logform.TransformableInfo) => {
                 const span = trace.getSpan(context.active());
                 if (span) {
                   const spanContext = span.spanContext();

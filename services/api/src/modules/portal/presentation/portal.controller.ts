@@ -2,7 +2,7 @@ import { Controller, Get, Query, UseGuards, UnauthorizedException } from '@nestj
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { QueryBus } from '@nestjs/cqrs';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
-import { CurrentUser } from '@shared/decorators/current-user.decorator';
+import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { 
     GetPortalDashboardQuery, 
     GetPortalSubmissionsQuery,
@@ -24,8 +24,8 @@ export class PortalController {
     @Get('dashboard')
     @ApiOperation({ summary: 'Get participant dashboard summary' })
     @ApiResponse({ status: 200, type: PortalDashboardResponseDto })
-    async getDashboard(@CurrentUser() user: any): Promise<PortalDashboardResponseDto> {
-        const userId = user?.userId || user?.id;
+    async getDashboard(@CurrentUser() user: CurrentUserData): Promise<PortalDashboardResponseDto> {
+        const userId = user.userId;
         if (!userId) throw new UnauthorizedException();
         return this.queryBus.execute(new GetPortalDashboardQuery(userId));
     }
@@ -34,10 +34,10 @@ export class PortalController {
     @ApiOperation({ summary: 'Get application submission progress' })
     @ApiResponse({ status: 200, type: PortalSubmissionResponseDto })
     async getSubmissions(
-        @CurrentUser() user: any,
+        @CurrentUser() user: CurrentUserData,
         @Query('programId') programId?: string,
     ): Promise<PortalSubmissionResponseDto> {
-        const userId = user?.userId || user?.id;
+        const userId = user.userId;
         if (!userId) throw new UnauthorizedException();
         return this.queryBus.execute(new GetPortalSubmissionsQuery(userId, programId));
     }
@@ -45,8 +45,8 @@ export class PortalController {
     @Get('payments')
     @ApiOperation({ summary: 'Get pyment history and outstanding items' })
     @ApiResponse({ status: 200, type: PortalPaymentResponseDto })
-    async getPayments(@CurrentUser() user: any): Promise<PortalPaymentResponseDto> {
-        const userId = user?.userId || user?.id;
+    async getPayments(@CurrentUser() user: CurrentUserData): Promise<PortalPaymentResponseDto> {
+        const userId = user.userId;
         if (!userId) throw new UnauthorizedException();
         return this.queryBus.execute(new GetPortalPaymentsQuery(userId));
     }
@@ -54,8 +54,8 @@ export class PortalController {
     @Get('documents')
     @ApiOperation({ summary: 'Get program resources and my documents' })
     @ApiResponse({ status: 200, type: PortalDocumentResponseDto })
-    async getDocuments(@CurrentUser() user: any): Promise<PortalDocumentResponseDto> {
-        const userId = user?.userId || user?.id;
+    async getDocuments(@CurrentUser() user: CurrentUserData): Promise<PortalDocumentResponseDto> {
+        const userId = user.userId;
         if (!userId) throw new UnauthorizedException();
         return this.queryBus.execute(new GetPortalDocumentsQuery(userId));
     }

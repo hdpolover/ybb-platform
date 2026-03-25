@@ -1,4 +1,4 @@
-import { ApplicationCategory } from '@core/entities/participant-application.entity';
+import { ApplicationCategory, DocumentFile } from '@core/entities/participant-application.entity';
 
 /**
  * Create Application DTO
@@ -12,8 +12,8 @@ export class CreateApplicationDto {
   motivationLetter?: string;
   achievements?: string;
   experiences?: string;
-  documents?: Record<string, any>;
-  requirementFiles?: any[];
+  documents?: Record<string, DocumentFile>;
+  requirementFiles?: DocumentFile[];
   twibbonLink?: string;
   pricingTierId?: string;
 }

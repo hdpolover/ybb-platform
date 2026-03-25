@@ -31,7 +31,7 @@ export class HomeStrategy implements ILandingPageStrategy {
 
     // Cache miss - fetch from database
 
-    const brandMeta = (brand as any).metadata as Record<string, any> || {};
+    const brandMeta = (brand as Brand & { metadata?: Record<string, unknown> }).metadata || {};
 
     const [program, brandSponsors, socialFeeds, videoPrograms, alumniTestimonials, delegateTestimonials, latestProgramWithAwards] = await Promise.all([
       this.prisma.program.findFirst({
@@ -211,7 +211,7 @@ export class HomeStrategy implements ILandingPageStrategy {
           type: 'program_objectives',
           content: {
             title: 'Program Objectives',
-            items: (program as any)?.objectives?.map((obj) => ({
+            items: program?.objectives?.map((obj) => ({
               id: obj.id,
               description: obj.description,
               order: obj.order
@@ -285,9 +285,9 @@ export class HomeStrategy implements ILandingPageStrategy {
         {
           type: 'program_shorts',
           content: {
-            eyebrow: brandMeta.moments_shorts?.eyebrow || 'Short Highlights',
-            title: brandMeta.moments_shorts?.title || 'Discover Our Moments in 60 Seconds',
-            description: brandMeta.moments_shorts?.description || `Watch bite-sized highlights from ${brand.name}'s workshops and cultural sessions.`,
+            eyebrow: (brandMeta.moments_shorts as { eyebrow?: string; title?: string; description?: string } | undefined)?.eyebrow || 'Short Highlights',
+            title: (brandMeta.moments_shorts as { eyebrow?: string; title?: string; description?: string } | undefined)?.title || 'Discover Our Moments in 60 Seconds',
+            description: (brandMeta.moments_shorts as { eyebrow?: string; title?: string; description?: string } | undefined)?.description || `Watch bite-sized highlights from ${brand.name}'s workshops and cultural sessions.`,
             items: shortsGallery.map(s => ({
               id: s.id,
               title: s.title,
@@ -302,9 +302,9 @@ export class HomeStrategy implements ILandingPageStrategy {
             title: 'Global Program Impact',
             stats: brandMeta.impact_stats
               ? [
-                  { id: 'participants', label: 'Total Participants', value: brandMeta.impact_stats.total_participants, icon: 'participants' },
-                  { id: 'countries', label: 'Total Countries', value: brandMeta.impact_stats.total_countries, icon: 'countries' },
-                  { id: 'alumni', label: 'Total Alumni', value: brandMeta.impact_stats.total_alumni, icon: 'alumni' },
+                  { id: 'participants', label: 'Total Participants', value: (brandMeta.impact_stats as { total_participants?: unknown; total_countries?: unknown; total_alumni?: unknown } | undefined)?.total_participants, icon: 'participants' },
+                  { id: 'countries', label: 'Total Countries', value: (brandMeta.impact_stats as { total_participants?: unknown; total_countries?: unknown; total_alumni?: unknown } | undefined)?.total_countries, icon: 'countries' },
+                  { id: 'alumni', label: 'Total Alumni', value: (brandMeta.impact_stats as { total_participants?: unknown; total_countries?: unknown; total_alumni?: unknown } | undefined)?.total_alumni, icon: 'alumni' },
                 ]
               : [],
           },
@@ -315,7 +315,7 @@ export class HomeStrategy implements ILandingPageStrategy {
             eyebrow: 'What Sets Us Apart',
             title: `What Makes ${brand.name} Special`,
             subtitle: `Discover the pillars that make ${brand.name} a truly transformative leadership experience.`,
-            items: (brandMeta.features || []).map((f: any) => ({
+            items: ((brandMeta['features'] || []) as Array<{ id?: unknown; icon?: unknown; title?: unknown; description?: unknown }>).map((f) => ({
               id: f.id,
               icon: f.icon,
               title: f.title,

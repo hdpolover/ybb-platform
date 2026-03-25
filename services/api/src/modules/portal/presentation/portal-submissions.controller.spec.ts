@@ -12,7 +12,7 @@ describe('PortalSubmissionsController', () => {
     let saveSectionHandler: jest.Mocked<SaveSubmissionSectionHandler>;
     let submitHandler: jest.Mocked<PortalSubmitApplicationHandler>;
 
-    const mockUser = { userId: 'user-123' };
+    const mockUser = { userId: 'user-123', email: 'test@test.com', brandId: 'brand-id' } as import('@shared/decorators/current-user.decorator').CurrentUserData;
 
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
@@ -69,7 +69,7 @@ describe('PortalSubmissionsController', () => {
         });
 
         it('should throw UnauthorizedException if no user', async () => {
-            await expect(controller.getSubmissionDetail({})).rejects.toThrow(
+            await expect(controller.getSubmissionDetail({} as unknown as import('@shared/decorators/current-user.decorator').CurrentUserData)).rejects.toThrow(
                 UnauthorizedException,
             );
         });
@@ -100,7 +100,7 @@ describe('PortalSubmissionsController', () => {
 
         it('should throw UnauthorizedException if no user', async () => {
             await expect(
-                controller.saveSection({}, 'personal_info', { data: {} }),
+                controller.saveSection({} as unknown as import('@shared/decorators/current-user.decorator').CurrentUserData, 'personal_info', { data: {} }),
             ).rejects.toThrow(UnauthorizedException);
         });
     });
@@ -122,7 +122,7 @@ describe('PortalSubmissionsController', () => {
         });
 
         it('should throw UnauthorizedException if no user', async () => {
-            await expect(controller.submitApplication({})).rejects.toThrow(
+            await expect(controller.submitApplication({} as unknown as import('@shared/decorators/current-user.decorator').CurrentUserData)).rejects.toThrow(
                 UnauthorizedException,
             );
         });

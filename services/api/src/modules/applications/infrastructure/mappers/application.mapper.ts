@@ -4,8 +4,11 @@ import {
   ApplicationStatus,
   ApplicationCategory,
   ScoreStatus,
+  DocumentFile,
+  ApplicationStatusHistoryEntry,
 } from '@core/entities/participant-application.entity';
 import { ApplicationResponseDto } from '@modules/applications/application/dto/application-response.dto';
+import { Prisma } from '@prisma/client';
 
 /**
  * Application Mapper
@@ -18,42 +21,42 @@ export class ApplicationMapper {
   /**
    * Convert Prisma model to Domain Entity
    */
-  toDomain(prismaModel: any): ParticipantApplication {
+  toDomain(prismaModel: Prisma.ParticipantApplicationGetPayload<Record<string, never>>): ParticipantApplication {
     return new ParticipantApplication(
       prismaModel.id,
       prismaModel.participantId,
       prismaModel.programId,
       prismaModel.status as ApplicationStatus,
       prismaModel.applicationCategory as ApplicationCategory,
-      // Map New JSON Fields
-      prismaModel.personalData || {},
-      prismaModel.essayAnswers || {},
-      prismaModel.uploadedFiles || {},
-      
-      prismaModel.motivationLetter,
-      prismaModel.achievements,
-      prismaModel.experiences,
-      prismaModel.documents as Record<string, any>,
-      prismaModel.requirementFiles as any[],
-      prismaModel.twibbonLink,
-      prismaModel.pricingTierId,
+      // Map New JSON Fields — cast from Prisma's JsonValue to domain types
+      (prismaModel.personalData ?? {}) as Record<string, unknown>,
+      (prismaModel.essayAnswers ?? {}) as Record<string, unknown>,
+      (prismaModel.uploadedFiles ?? {}) as unknown as Record<string, DocumentFile>,
+
+      prismaModel.motivationLetter ?? undefined,
+      prismaModel.achievements ?? undefined,
+      prismaModel.experiences ?? undefined,
+      (prismaModel.documentFiles ?? {}) as unknown as Record<string, DocumentFile>,
+      (prismaModel.requirementFiles ?? []) as unknown as DocumentFile[],
+      prismaModel.twibbonLink ?? undefined,
+      prismaModel.pricingTierId ?? undefined,
       prismaModel.paymentAmount ? Number(prismaModel.paymentAmount) : undefined,
-      prismaModel.paymentId,
-      prismaModel.paymentStatus,
+      prismaModel.paymentId ?? undefined,
+      prismaModel.paymentStatus ?? undefined,
       prismaModel.scoreTotal ? Number(prismaModel.scoreTotal) : undefined,
-      prismaModel.scoreBreakdown as Record<string, number>,
-      prismaModel.scoreStatus as ScoreStatus,
-      prismaModel.reviewedBy,
-      prismaModel.reviewedAt,
-      prismaModel.reviewerNotes,
-      prismaModel.participantSnapshot as Record<string, any>,
-      prismaModel.statusHistory as any[],
+      (prismaModel.scoreBreakdown ?? {}) as Record<string, number>,
+      prismaModel.scoreStatus as ScoreStatus ?? undefined,
+      prismaModel.reviewedBy ?? undefined,
+      prismaModel.reviewedAt ?? undefined,
+      prismaModel.reviewerNotes ?? undefined,
+      (prismaModel.participantSnapshot ?? {}) as Record<string, unknown>,
+      (prismaModel.statusHistory ?? []) as unknown as ApplicationStatusHistoryEntry[],
       prismaModel.createdAt,
       prismaModel.updatedAt,
-      prismaModel.submittedAt,
-      prismaModel.lastEditedAt,
-      prismaModel.withdrawnAt,
-      prismaModel.withdrawnBy,
+      prismaModel.submittedAt ?? undefined,
+      prismaModel.lastEditedAt ?? undefined,
+      prismaModel.withdrawnAt ?? undefined,
+      prismaModel.withdrawnBy ?? undefined,
     );
   }
 
@@ -105,7 +108,7 @@ export class ApplicationMapper {
   /**
    * Convert Domain Entity to Prisma create input
    */
-  toPrismaCreate(entity: ParticipantApplication): any {
+  toPrismaCreate(entity: ParticipantApplication): Record<string, unknown> {
     return {
       participantId: entity.participantId,
       programId: entity.programId,
@@ -139,7 +142,7 @@ export class ApplicationMapper {
   /**
    * Convert Domain Entity to Prisma update input
    */
-  toPrismaUpdate(entity: ParticipantApplication): any {
+  toPrismaUpdate(entity: ParticipantApplication): Record<string, unknown> {
     return {
       status: entity.status,
       applicationCategory: entity.applicationCategory,

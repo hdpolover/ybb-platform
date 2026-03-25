@@ -1,4 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
+import { ParticipantApplication } from '@core/entities/participant-application.entity';
 import { IApplicationRepository } from '@core/interfaces/repositories/application.repository.interface';
 import { ListApplicationsQuery } from '../list-applications.query';
 import { ApplicationListResponseDto } from '../../dto/application-response.dto';
@@ -20,7 +21,7 @@ export class ListApplicationsHandler {
   ) {}
 
   async execute(query: ListApplicationsQuery): Promise<ApplicationListResponseDto> {
-    let result: { applications: any[]; total: number };
+    let result: { applications: ParticipantApplication[]; total: number };
 
     // Route to appropriate repository method based on filters
     if (query.filters.brandId) {

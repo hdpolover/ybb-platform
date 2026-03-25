@@ -66,7 +66,7 @@ export class AuditTrailInterceptor implements NestInterceptor {
         const userAgent = request.headers?.['user-agent'] || null;
 
         // --- Fetch "before" state (only for updates/deletes/status_changes) ---
-        let beforeState: Record<string, any> | null = null;
+        let beforeState: Record<string, unknown> | null = null;
         const actionsNeedingBeforeState: ChangeType[] = [ChangeType.update, ChangeType.delete, ChangeType.status_change];
         if (entityId && actionsNeedingBeforeState.includes(action)) {
             beforeState = await this.fetchEntityState(entityType, entityId, selectFields);
@@ -78,7 +78,7 @@ export class AuditTrailInterceptor implements NestInterceptor {
                 try {
                     // Extract the "after" state from the response
                     // The TransformInterceptor wraps responses in { statusCode, message, data }
-                    let afterState: Record<string, any> | null = null;
+                    let afterState: Record<string, unknown> | null = null;
 
                     if (action === ChangeType.delete) {
                         // For deletes, the after state is null (entity was deleted)
@@ -127,11 +127,11 @@ export class AuditTrailInterceptor implements NestInterceptor {
         entityType: string,
         entityId: string,
         selectFields?: Record<string, boolean>,
-    ): Promise<Record<string, any> | null> {
+    ): Promise<Record<string, unknown> | null> {
         try {
             // Convert PascalCase entity type to camelCase for Prisma model access
             const modelName = entityType.charAt(0).toLowerCase() + entityType.slice(1);
-            const model = (this.prisma as any)[modelName];
+            const model = (this.prisma as unknown as Record<string, unknown>)[modelName] as { findUnique: (args: { where: { id: string }; select?: Record<string, boolean> }) => Promise<Record<string, unknown> | null> } | undefined;
 
             if (!model) {
                 this.logger.warn(`Prisma model not found for entity type: ${entityType}`);

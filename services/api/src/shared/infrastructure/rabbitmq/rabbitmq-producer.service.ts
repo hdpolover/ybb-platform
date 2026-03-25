@@ -27,7 +27,7 @@ export class RabbitMQProducerService implements OnModuleInit, OnModuleDestroy {
 
     this.channelWrapper = this.connection.createChannel({
       json: true,
-      setup: (channel: any) => {
+      setup: (channel: { assertExchange: (name: string, type: string, options: object) => Promise<void> }) => {
         // Assert exchange to be safe, though init script usually does it
         return channel.assertExchange(this.exchange, 'topic', { durable: true });
       },
@@ -38,7 +38,7 @@ export class RabbitMQProducerService implements OnModuleInit, OnModuleDestroy {
     await this.connection.close();
   }
 
-  async emit(pattern: string, data: any) {
+  async emit(pattern: string, data: unknown) {
     try {
       this.logger.log(`Publishing event to exchange '${this.exchange}' with routing key '${pattern}'`);
       await this.channelWrapper.publish(

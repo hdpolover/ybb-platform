@@ -24,7 +24,7 @@ export class UpdateBrandDetailsDto {
 
     @ApiProperty({ type: 'string', format: 'binary', required: false, description: 'Logo image file (PNG/JPG).' })
     @IsOptional()
-    logo?: any;
+    logo?: Express.Multer.File;
 
     @ApiProperty({ required: false, description: 'Direct URL to logo if not uploading a file.' })
     @IsOptional()
@@ -33,7 +33,7 @@ export class UpdateBrandDetailsDto {
 
     @ApiProperty({ type: 'string', format: 'binary', required: false, description: 'Banner/Hero image file (PNG/JPG).' })
     @IsOptional()
-    banner?: any;
+    banner?: Express.Multer.File;
 
     @ApiProperty({ required: false, description: 'Direct URL to banner if not uploading a file.' })
     @IsOptional()
@@ -76,7 +76,7 @@ export class UpdateBrandDetailsDto {
         example: { instagram: 'https://instagram.com/ybb', linkedin: 'https://linkedin.com/company/ybb' }
     })
     @IsOptional()
-    socialMediaLinks?: any;
+    socialMediaLinks?: Record<string, string>;
 
     @ApiProperty({ required: false, example: 'Jakarta, Indonesia' })
     @IsOptional()

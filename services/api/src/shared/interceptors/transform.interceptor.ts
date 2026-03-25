@@ -6,21 +6,21 @@ export interface Response<T> {
   statusCode: number;
   message: string;
   data: T;
-  meta?: any;
+  meta?: Record<string, unknown>;
 }
 
 @Injectable()
 export class TransformInterceptor<T> implements NestInterceptor<T, Response<T>> {
   intercept(context: ExecutionContext, next: CallHandler): Observable<Response<T>> {
     return next.handle().pipe(
-      map(data => {
+      map((data): Response<T> => {
         const ctx = context.switchToHttp();
         const response = ctx.getResponse();
-        const val = data as any;
+        const val = data as T & Record<string, unknown>;
 
         // Skip if it's already a formatted response
         if (val && val.statusCode && val.data) {
-            return val;
+            return val as unknown as Response<T>;
         }
         
         // 1. Handle { data: [], ...rest } pattern (e.g. Programs pagination)
@@ -29,7 +29,7 @@ export class TransformInterceptor<T> implements NestInterceptor<T, Response<T>> 
             return {
                 statusCode: response.statusCode,
                 message: 'Success',
-                data: items,
+                data: items as unknown as T,
                 meta: metaData,
             };
         }
@@ -41,8 +41,8 @@ export class TransformInterceptor<T> implements NestInterceptor<T, Response<T>> 
              return {
                 statusCode: response.statusCode,
                 message: 'Success',
-                data: items,
-                meta: finalMeta,
+                data: items as unknown as T,
+                meta: finalMeta as Record<string, unknown> | undefined,
              };
         }
 
@@ -50,7 +50,7 @@ export class TransformInterceptor<T> implements NestInterceptor<T, Response<T>> 
         return {
           statusCode: response.statusCode,
           message: 'Success',
-          data: val,
+          data: val as unknown as T,
         };
       }),
     );

@@ -13,6 +13,54 @@ import {
     SubmissionRequirementDto,
 } from '../../../presentation/dto/portal-submission-detail.dto';
 
+type ApplicationDetail = {
+    id: string;
+    status: string;
+    applicationCategory: string | null;
+    personalData: unknown;
+    essayAnswers: unknown;
+    uploadedFiles: unknown;
+    program: {
+        id: string;
+        name: string;
+        formFields: {
+            id: string;
+            section: string | null;
+            label: string;
+            name: string;
+            type: string;
+            placeholder: string | null;
+            helpText: string | null;
+            mediaUrl: string | null;
+            mediaAlt: string | null;
+            options: unknown;
+            validationRules: unknown;
+            isRequired: boolean;
+            order: number;
+        }[];
+        essays: {
+            id: string;
+            question: string;
+            isRequired: boolean;
+            wordLimit: number | null;
+            order: number;
+        }[];
+        requirements: {
+            id: string;
+            name: string;
+            description: string | null;
+            type: string;
+            isRequired: boolean;
+            order: number;
+        }[];
+        subthemes: {
+            id: string;
+            name: string;
+            description: string | null;
+        }[];
+    };
+};
+
 /**
  * Get Portal Submission Detail Handler
  *
@@ -142,9 +190,9 @@ export class GetPortalSubmissionDetailHandler
     }
 
     private buildSections(
-        application: any,
+        application: ApplicationDetail,
     ): SubmissionSectionDetailDto[] {
-        const personalData = (application.personalData as Record<string, any>) || {};
+        const personalData = (application.personalData as Record<string, unknown>) || {};
         const formFields = application.program.formFields || [];
 
         // Group form fields by section
@@ -163,11 +211,11 @@ export class GetPortalSubmissionDetailHandler
                 helpText: field.helpText || undefined,
                 mediaUrl: field.mediaUrl || undefined,
                 mediaAlt: field.mediaAlt || undefined,
-                options: this.resolveFieldOptions(field, application),
-                validationRules: field.validationRules || undefined,
+                options: this.resolveFieldOptions(field as unknown as SubmissionFormFieldDto, application),
+                validationRules: (field.validationRules || undefined) as import('../../../presentation/dto/portal-submission-detail.dto').FieldValidationRules | undefined,
                 isRequired: field.isRequired,
                 order: field.order,
-            });
+            } as import('../../../presentation/dto/portal-submission-detail.dto').SubmissionFormFieldDto);
         }
 
         const sectionTitles: Record<string, string> = {
@@ -240,10 +288,10 @@ export class GetPortalSubmissionDetailHandler
     private buildSectionValues(
         sectionId: string,
         fields: SubmissionFormFieldDto[],
-        application: any,
-        personalData: Record<string, any>,
-    ): Record<string, any> {
-        const values: Record<string, any> = {};
+        application: ApplicationDetail,
+        personalData: Record<string, unknown>,
+    ): Record<string, unknown> {
+        const values: Record<string, unknown> = {};
 
         for (const field of fields) {
             if (field.name === 'category') {
@@ -266,12 +314,11 @@ export class GetPortalSubmissionDetailHandler
         return values;
     }
 
-    private resolveFieldOptions(field: any, application: any): any {
+    private resolveFieldOptions(field: SubmissionFormFieldDto, application: ApplicationDetail): SubmissionFormFieldDto['options'] {
         if (field.name === 'program_subtheme_id') {
-            return (application.program.subthemes || []).map((subtheme: any) => ({
+            return (application.program.subthemes || []).map((subtheme) => ({
                 label: subtheme.name,
                 value: subtheme.id,
-                description: subtheme.description || undefined,
             }));
         }
 
@@ -286,32 +333,32 @@ export class GetPortalSubmissionDetailHandler
         return true;
     }
 
-    private buildEssays(application: any): SubmissionEssayDto[] {
-        const essayAnswers = (application.essayAnswers as Record<string, any>) || {};
+    private buildEssays(application: ApplicationDetail): SubmissionEssayDto[] {
+        const essayAnswers = (application.essayAnswers as Record<string, unknown>) || {};
         const programEssays = application.program.essays || [];
 
-        return programEssays.map((essay: any) => ({
+        return programEssays.map((essay) => ({
             id: essay.id,
             question: essay.question,
             isRequired: essay.isRequired,
             wordLimit: essay.wordLimit || undefined,
             order: essay.order,
-            answer: essayAnswers[essay.id] || undefined,
+            answer: (essayAnswers[essay.id] || undefined) as string | undefined,
         }));
     }
 
-    private buildRequirements(application: any): SubmissionRequirementDto[] {
-        const uploadedFiles = (application.uploadedFiles as Record<string, any>) || {};
+    private buildRequirements(application: ApplicationDetail): SubmissionRequirementDto[] {
+        const uploadedFiles = (application.uploadedFiles as Record<string, unknown>) || {};
         const programReqs = application.program.requirements || [];
 
-        return programReqs.map((req: any) => ({
+        return programReqs.map((req) => ({
             id: req.id,
             name: req.name,
             description: req.description || undefined,
             type: req.type,
             isRequired: req.isRequired,
             order: req.order,
-            uploadedFile: uploadedFiles[req.id] || undefined,
+            uploadedFile: (uploadedFiles[req.id] || undefined) as import('@core/entities/participant-application.entity').DocumentFile | undefined,
         }));
     }
 

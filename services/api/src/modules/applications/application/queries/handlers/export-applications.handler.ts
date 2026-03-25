@@ -1,4 +1,19 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+
+type ApplicationExportPayload = Prisma.ParticipantApplicationGetPayload<{
+    include: {
+        participant: {
+            select: {
+                fullName: true;
+                phoneNumber: true;
+                originCountry: true;
+                user: { select: { email: true } };
+            };
+        };
+        program: { select: { name: true } };
+    };
+}>;
 import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { StreamableFile } from '@nestjs/common';
 import { ExportApplicationsQuery } from '../export-applications.query';
@@ -26,7 +41,7 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
             let offset = 0;
             let hasMore = true;
 
-            const where: any = {
+            const where: Prisma.ParticipantApplicationWhereInput = {
                 program: {
                     brand: {
                         id: query.brandId,
@@ -44,8 +59,7 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
             }
 
             while (hasMore) {
-                // Use any cast to avoid complex Prisma include typing issues
-                const applications: any[] = await prisma.participantApplication.findMany({
+                const applications: ApplicationExportPayload[] = await prisma.participantApplication.findMany({
                     where,
                     take: BATCH_SIZE,
                     skip: offset,

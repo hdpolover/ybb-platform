@@ -75,8 +75,8 @@ describe('ProgramContentController', () => {
                 type: 'IMAGE',
                 imageUrl: 'http://example.com/image.jpg'
             };
-            const req = { user: { id: 'admin-1' } };
-            const file = { originalname: 'image.jpg' };
+            const req = { user: { id: 'admin-1' } } as any;
+            const file = { originalname: 'image.jpg' } as unknown as Express.Multer.File;
             
             await controller.addGallery('prog-1', dto, file, req);
 

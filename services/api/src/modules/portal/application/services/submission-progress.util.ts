@@ -1,5 +1,20 @@
 type ProgressStatus = 'pending' | 'in_progress' | 'completed';
 
+interface ApplicationForProgress {
+    status?: string | null;
+    applicationCategory?: string | null;
+    personalData?: unknown;
+    essayAnswers?: unknown;
+    uploadedFiles?: unknown;
+    program?: {
+        id?: string;
+        formFields?: { section?: string | null; name: string; isRequired: boolean }[];
+        essays?: { id: string; isRequired: boolean }[];
+        requirements?: { id: string; isRequired: boolean }[];
+        subthemes?: unknown[];
+    };
+}
+
 type ProgressField = {
     name: string;
     isRequired: boolean;
@@ -80,7 +95,7 @@ function normalizeStatus(fields: ProgressField[], values: Record<string, unknown
 function getFieldValue(
     fieldName: string,
     personalData: Record<string, unknown>,
-    application: any,
+    application: ApplicationForProgress,
 ): unknown {
     if (fieldName === 'category') {
         return personalData[fieldName] ?? application.applicationCategory ?? undefined;
@@ -108,7 +123,7 @@ function calculateAggregateStatus(items: { isRequired: boolean; completed: boole
     return 'pending';
 }
 
-export function buildSubmissionProgressSections(application: any): ProgressSection[] {
+export function buildSubmissionProgressSections(application: ApplicationForProgress): ProgressSection[] {
     const personalData = (application.personalData as Record<string, unknown>) || {};
     const formFields = application.program?.formFields || [];
     const groupedFields = new Map<string, ProgressField[]>();
@@ -158,13 +173,13 @@ export function buildSubmissionProgressSections(application: any): ProgressSecti
             title: SECTION_TITLES.essays,
             description: SECTION_DESCRIPTIONS.essays,
             status: calculateAggregateStatus(
-                essays.map((essay: any) => ({
+                essays.map((essay: { id: string; isRequired: boolean }) => ({
                     isRequired: essay.isRequired,
                     completed: hasValue(essayAnswers[essay.id]),
                     started: hasValue(essayAnswers[essay.id]),
                 })),
             ),
-            isRequired: essays.some((essay: any) => essay.isRequired),
+            isRequired: essays.some((essay: { isRequired: boolean }) => essay.isRequired),
         });
     }
 
@@ -176,13 +191,13 @@ export function buildSubmissionProgressSections(application: any): ProgressSecti
             title: SECTION_TITLES.documents,
             description: SECTION_DESCRIPTIONS.documents,
             status: calculateAggregateStatus(
-                requirements.map((requirement: any) => ({
+                requirements.map((requirement: { id: string; isRequired: boolean }) => ({
                     isRequired: requirement.isRequired,
                     completed: hasValue(uploadedFiles[requirement.id]),
                     started: hasValue(uploadedFiles[requirement.id]),
                 })),
             ),
-            isRequired: requirements.some((requirement: any) => requirement.isRequired),
+            isRequired: requirements.some((requirement: { isRequired: boolean }) => requirement.isRequired),
         });
     }
 
@@ -191,7 +206,7 @@ export function buildSubmissionProgressSections(application: any): ProgressSecti
     );
 }
 
-export function calculateSubmissionProgress(application: any): number {
+export function calculateSubmissionProgress(application: ApplicationForProgress): number {
     if (application.status && application.status !== 'draft') {
         return 100;
     }
@@ -203,7 +218,7 @@ export function calculateSubmissionProgress(application: any): number {
     return Math.round((completedCount / sections.length) * 100);
 }
 
-export function determineSubmissionCurrentStep(application: any): string {
+export function determineSubmissionCurrentStep(application: ApplicationForProgress): string {
     const progress = calculateSubmissionProgress(application);
 
     switch (application.status) {

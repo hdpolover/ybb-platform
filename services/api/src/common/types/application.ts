@@ -9,6 +9,23 @@ export enum ApplicationStatus {
   WITHDRAWN = 'withdrawn',
 }
 
+/** A file uploaded as part of an application requirement or document. */
+export interface DocumentFile {
+  fileId: string;
+  fileName: string;
+  fileUrl: string;
+  mimeType?: string;
+  uploadedAt?: string;
+}
+
+/** One entry in an application's status-change history. */
+export interface ApplicationStatusHistoryEntry {
+  status: string;
+  changedAt: string;
+  changedBy?: string;
+  reason?: string;
+}
+
 export interface Application {
   id: string;
   userId: string;

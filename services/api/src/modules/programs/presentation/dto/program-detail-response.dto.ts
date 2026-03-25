@@ -184,10 +184,10 @@ class ProgramRequirementDto {
   fileAllowedTypes?: string;
 
   @ApiProperty()
-  options?: any[];
+  options?: string[] | Record<string, unknown>[];
 
   @ApiProperty()
-  validationRules?: any;
+  validationRules?: Record<string, unknown>;
 }
 
 class ApplicationFormFieldDto {
@@ -222,10 +222,10 @@ class ApplicationFormFieldDto {
   isRequired: boolean;
 
   @ApiProperty()
-  options?: any[];
+  options?: string[] | Record<string, unknown>[];
 
   @ApiProperty()
-  validationRules?: any;
+  validationRules?: Record<string, unknown>;
 
   @ApiProperty()
   defaultValue?: string;

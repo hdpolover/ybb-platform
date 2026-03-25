@@ -8,6 +8,8 @@ import { UserRole } from '@core/entities/user.entity';
 import { CreateIntentDto, SubmitManualPaymentDto, VerifyManualPaymentDto, AdminListPaymentsDto } from './dto/payment.dto';
 import { Request } from 'express';
 
+interface JwtPayload { sub: string; email?: string; }
+
 @ApiTags('Payments')
 @Controller('infra/payments') // Renamed to avoid conflict with CQRS controller
 @ApiBearerAuth()
@@ -18,7 +20,7 @@ export class PaymentController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Create Payment Intent (Direct)' })
   async createIntent(@Body() dto: CreateIntentDto, @Req() req: Request) {
-    const user = req.user as any;
+    const user = req.user as JwtPayload;
     const userId = user.sub;
     const userEmail = user.email; 
     
@@ -27,7 +29,7 @@ export class PaymentController {
       user_id: userId,
       metadata: {
           ...(dto.metadata || {}),
-          email: userEmail
+          ...(userEmail ? { email: userEmail } : {}),
       }
     });
   }
@@ -49,7 +51,7 @@ export class PaymentController {
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Verify Manual Payment (Admin)' })
   async verifyManualPayment(@Param('id') transactionId: string, @Body() dto: VerifyManualPaymentDto, @Req() req: Request) {
-      const adminId = (req.user as any).sub;
+      const adminId = (req.user as JwtPayload).sub;
 
       return this.paymentClient.verifyManualPayment({
           transaction_id: transactionId,

@@ -54,30 +54,31 @@ export class WebhooksController {
             const { data, status, headers } = await firstValueFrom(
                 this.httpService.post(targetUrl, req.body, {
                     headers: {
-                        ...req.headers,
+                        ...(req.headers as Record<string, string | undefined>),
                         ...this.buildInternalHeaders(),
                         // Override host to avoid confusion if necessary, 
                         // but usually axios handles Host header.
                         // Important: Forward auth or signature headers
                         host: undefined, 
                         'content-length': undefined,
-                    } as any,
+                    },
                 })
             );
 
             this.logger.log(`Forwarded webhook to ${targetUrl}, Status: ${status}`);
             return res.status(status).json(data);
 
-        } catch (error: any) {
-            this.logger.error(`Failed to forward webhook to ${targetUrl}`, error.message);
+        } catch (error: unknown) {
+            const err = error as { message?: string; response?: { status: number; data: unknown } };
+            this.logger.error(`Failed to forward webhook to ${targetUrl}`, err.message);
             
-            if (error.response) {
-                return res.status(error.response.status).json(error.response.data);
+            if (err.response) {
+                return res.status(err.response.status).json(err.response.data);
             }
             
             return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
                 error: 'Failed to forward webhook',
-                details: error.message,
+                details: err.message,
             });
         }
     }

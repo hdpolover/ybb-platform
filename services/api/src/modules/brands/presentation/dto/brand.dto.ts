@@ -47,7 +47,7 @@ export class BrandResponseDto {
     contactAddress?: string | null;
 
     @ApiProperty({ required: false, nullable: true, example: { instagram: '...' } })
-    socialMediaLinks?: any | null;
+    socialMediaLinks?: Record<string, string> | null;
 
     @ApiProperty({ required: false, nullable: true })
     defaultLocation?: string | null;
@@ -92,7 +92,7 @@ export class BrandResponseDto {
     deletedAt?: Date | null;
 
     @ApiProperty({ required: false, nullable: true, description: 'Brand-specific settings like footer config.' })
-    settings?: any | null; // Detailed settings object
+    settings?: Record<string, unknown> | null; // Detailed settings object
 }
 
 export class SponsorResponseDto {

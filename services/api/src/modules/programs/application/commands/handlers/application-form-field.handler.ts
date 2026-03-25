@@ -7,6 +7,7 @@ import {
     DeleteApplicationFormFieldCommand,
 } from '../application-form-field.commands';
 import { CreateApplicationFormFieldDto } from '../../dto/application-form-field/create-application-form-field.dto';
+import { ApplicationFormField } from '@prisma/client';
 
 function buildValidationRules(dto: Partial<CreateApplicationFormFieldDto>) {
     if (dto.defaultValue === undefined) {
@@ -47,7 +48,7 @@ export class CreateApplicationFormFieldHandler implements ICommandHandler<Create
         return this.repository.createFormField({
             ...mapFormFieldDto(dto),
             programId,
-        });
+        } as Partial<ApplicationFormField>);
     }
 }
 
@@ -57,7 +58,7 @@ export class UpdateApplicationFormFieldHandler implements ICommandHandler<Update
 
     async execute(command: UpdateApplicationFormFieldCommand) {
         const { fieldId, dto } = command;
-        return this.repository.updateFormField(fieldId, mapFormFieldDto(dto));
+        return this.repository.updateFormField(fieldId, mapFormFieldDto(dto) as Partial<ApplicationFormField>);
     }
 }
 

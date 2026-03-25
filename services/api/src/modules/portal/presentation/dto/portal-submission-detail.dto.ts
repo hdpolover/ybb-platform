@@ -1,4 +1,21 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { DocumentFile } from '@core/entities/participant-application.entity';
+
+/** Typed option for select/radio/checkbox fields */
+export interface FieldOption {
+    label: string;
+    value: string;
+}
+
+/** Validation constraints for a form field */
+export interface FieldValidationRules {
+    required?: boolean;
+    minLength?: number;
+    maxLength?: number;
+    min?: number;
+    max?: number;
+    pattern?: string;
+}
 
 /**
  * Represents a single form field in a submission section
@@ -29,10 +46,10 @@ export class SubmissionFormFieldDto {
     mediaAlt?: string;
 
     @ApiPropertyOptional({ example: ['Option 1', 'Option 2'] })
-    options?: any;
+    options?: string[] | FieldOption[];
 
     @ApiPropertyOptional({ example: { required: true, minLength: 2 } })
-    validationRules?: any;
+    validationRules?: FieldValidationRules;
 
     @ApiProperty({ example: true })
     isRequired: boolean;
@@ -58,7 +75,7 @@ export class SubmissionSectionDetailDto {
     fields: SubmissionFormFieldDto[];
 
     @ApiProperty({ description: 'Saved values for this section', example: { full_name: 'John Doe' } })
-    values: Record<string, any>;
+    values: Record<string, unknown>;
 
     @ApiProperty({ enum: ['pending', 'in_progress', 'completed'] })
     status: string;
@@ -110,7 +127,7 @@ export class SubmissionRequirementDto {
     order: number;
 
     @ApiPropertyOptional({ description: 'Uploaded file info if available' })
-    uploadedFile?: Record<string, any>;
+    uploadedFile?: DocumentFile;
 }
 
 /**

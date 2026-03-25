@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ISponsorRepository } from '@core/interfaces/repositories/sponsor.repository.interface';
 import { Sponsor } from '@core/entities/sponsor.entity';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class SponsorRepository implements ISponsorRepository {
@@ -15,7 +16,7 @@ export class SponsorRepository implements ISponsorRepository {
         return sponsors.map(this.mapToEntity);
     }
 
-    private mapToEntity(prismaEntity: any): Sponsor {
+    private mapToEntity(prismaEntity: Prisma.SponsorGetPayload<Record<string, never>>): Sponsor {
         return new Sponsor(
             prismaEntity.id,
             prismaEntity.name,

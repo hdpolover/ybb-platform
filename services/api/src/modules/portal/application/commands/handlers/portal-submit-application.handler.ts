@@ -67,7 +67,7 @@ export class PortalSubmitApplicationHandler {
         };
     }
 
-    private async validatePaymentStatus(application: any): Promise<void> {
+    private async validatePaymentStatus(application: { id: string; applicationCategory: string | null }): Promise<void> {
         const isFullyFunded = application.applicationCategory === 'fully_funded';
         if (isFullyFunded) return;
 
@@ -78,7 +78,7 @@ export class PortalSubmitApplicationHandler {
             });
 
             const hasPaidRegistration = payments.intents.some(
-                (intent: any) =>
+                (intent: { status: string; metadata?: Record<string, unknown> }) =>
                     intent.status === 'SUCCEEDED' &&
                     intent.metadata?.['payment_category'] === 'registration',
             );

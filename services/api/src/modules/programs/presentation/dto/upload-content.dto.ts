@@ -4,19 +4,19 @@ import { IsNotEmpty, IsObject, IsOptional, IsString } from 'class-validator';
 
 export class UploadEntityImageDto {
     @ApiProperty({ type: 'string', format: 'binary' })
-    file: any;
+    file: Express.Multer.File;
 }
 
 export class UploadProgramBrandingDto {
     @ApiProperty({ type: 'string', format: 'binary', description: 'Program Logo' })
     @IsOptional()
-    logo?: any;
+    logo?: Express.Multer.File;
 
     @ApiProperty({ type: 'string', format: 'binary', description: 'Program Banner' })
     @IsOptional()
-    banner?: any;
+    banner?: Express.Multer.File;
     
     @ApiProperty({ type: 'string', format: 'binary', description: 'Program Thumbnail' })
     @IsOptional()
-    thumbnail?: any;
+    thumbnail?: Express.Multer.File;
 }

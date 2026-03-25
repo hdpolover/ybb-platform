@@ -1,12 +1,13 @@
 import { Controller, Logger, Optional } from '@nestjs/common';
 import { EventPattern, Payload } from '@nestjs/microservices';
+import { RmqEventPayload } from '@common/types/events';
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { UnitOfWork } from '@shared/infrastructure/database/unit-of-work.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { RedisPubSubService } from '@shared/infrastructure/redis/redis-pubsub.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
-import { PaymentStatus } from '@prisma/client';
+import { PaymentStatus, Prisma } from '@prisma/client';
 
 @Controller()
 export class PaymentEventsController {
@@ -21,16 +22,16 @@ export class PaymentEventsController {
     ) {}
 
     @EventPattern('payment.succeeded')
-    async handlePaymentSucceeded(@Payload() data: any) {
+    async handlePaymentSucceeded(@Payload() data: RmqEventPayload) {
         const start = Date.now();
         try {
             // Log basic info for debugging
             this.logger.debug(`Metrics: payment.succeeded event received`);
             
-            const currency = data.currency || 'IDR';
-            const method = data.payment_method || data.method || 'unknown'; 
+            const currency = (data.currency as string) || 'IDR';
+            const method = (data.payment_method as string) || (data.method as string) || 'unknown'; 
             const amount = Number(data.amount) || 0;
-            const gatewayOrderId = data.gateway_order_id || data.id;
+            const gatewayOrderId = (data.gateway_order_id as string) || (data.id as string);
 
             // Counter
             this.metricsService.paymentTotal.inc({
@@ -47,9 +48,9 @@ export class PaymentEventsController {
             }, amount);
 
             // Business Logic: Update Application & Create Invoice
-            const metadata = data.metadata || {};
-            const applicationId = metadata.application_id || data.application_id;
-            const paymentCategory = metadata.payment_category || 'registration';
+            const metadata = (data.metadata as Record<string, unknown>) || {};
+            const applicationId = (metadata.application_id as string) || (data.application_id as string);
+            const paymentCategory = (metadata.payment_category as string) || 'registration';
 
             if (applicationId) {
                 const userId = await this.processApplicationPayment(
@@ -57,7 +58,7 @@ export class PaymentEventsController {
                     paymentCategory, 
                     amount, 
                     currency, 
-                    gatewayOrderId, 
+                    gatewayOrderId ?? '', 
                     method
                 );
 
@@ -102,7 +103,7 @@ export class PaymentEventsController {
             return null;
         }
 
-        const updateData: any = {};
+        const updateData: Prisma.ParticipantApplicationUpdateInput = {};
         if (category === 'registration') {
             updateData.registrationPaymentStatus = PaymentStatus.paid;
         } else if (category === 'program') {
@@ -149,13 +150,13 @@ export class PaymentEventsController {
     }
 
     @EventPattern('payment.failed')
-    async handlePaymentFailed(@Payload() data: any) {
+    async handlePaymentFailed(@Payload() data: RmqEventPayload) {
         const start = Date.now();
         try {
             this.logger.debug(`Metrics: payment.failed event received`);
             
-            const currency = data.currency || 'IDR';
-            const method = data.payment_method || data.method || 'unknown';
+            const currency = (data.currency as string) || 'IDR';
+            const method = (data.payment_method as string) || (data.method as string) || 'unknown';
 
             this.metricsService.paymentTotal.inc({
                 currency,
@@ -164,8 +165,8 @@ export class PaymentEventsController {
             });
 
             // Also invalidate cache on failure so user sees the failed status
-            const metadata = data.metadata || {};
-            const applicationId = metadata.application_id || data.application_id;
+            const metadata = (data.metadata as Record<string, unknown>) || {};
+            const applicationId = (metadata.application_id as string) || (data.application_id as string);
             
             if (applicationId) {
                 const application = await this.prisma.participantApplication.findUnique({

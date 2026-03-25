@@ -4,6 +4,7 @@ import { CreateProgramCommand } from '../create-program.command';
 import { IProgramRepository } from '@core/interfaces/repositories/program.repository.interface';
 import { Program } from '@core/entities/program.entity';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
+import { UserActivityLog } from '@core/entities/user-activity-log.entity';
 
 @CommandHandler(CreateProgramCommand)
 export class CreateProgramHandler implements ICommandHandler<CreateProgramCommand> {
@@ -21,35 +22,36 @@ export class CreateProgramHandler implements ICommandHandler<CreateProgramComman
             createProgramDto.slug = this.generateSlug(createProgramDto.name);
         }
 
-        const programData: any = { ...createProgramDto };
-        if (programData.startDate) programData.startDate = new Date(programData.startDate);
-        if (programData.endDate) programData.endDate = new Date(programData.endDate);
-        if (programData.applicationDeadline) programData.applicationDeadline = new Date(programData.applicationDeadline);
-        if (programData.registrationOpenDate) programData.registrationOpenDate = new Date(programData.registrationOpenDate);
-        if (programData.registrationCloseDate) programData.registrationCloseDate = new Date(programData.registrationCloseDate);
+        const programData: Partial<Program> = { ...createProgramDto } as unknown as Partial<Program>;
+        const mutableData = programData as Record<string, unknown>;
+        if (mutableData.startDate) mutableData.startDate = new Date(mutableData.startDate as string);
+        if (mutableData.endDate) mutableData.endDate = new Date(mutableData.endDate as string);
+        if (mutableData.applicationDeadline) mutableData.applicationDeadline = new Date(mutableData.applicationDeadline as string);
+        if (mutableData.registrationOpenDate) mutableData.registrationOpenDate = new Date(mutableData.registrationOpenDate as string);
+        if (mutableData.registrationCloseDate) mutableData.registrationCloseDate = new Date(mutableData.registrationCloseDate as string);
 
-        const program = await this.programRepository.create(programData);
+        const program = await this.programRepository.create(mutableData as Partial<Program>);
 
         // Log activity
-        await this.activityLogRepository.create({
-            id: undefined, // Let DB generate ID
-            userId: userId,
-            activityType: 'CREATE_PROGRAM',
-            activityCategory: 'PROGRAM',
-            activityData: {
+        await this.activityLogRepository.create(new UserActivityLog(
+            undefined as unknown as string, // Let DB generate ID
+            userId,
+            'CREATE_PROGRAM',
+            'PROGRAM',
+            {
                 programId: program.id,
                 programName: program.name,
             },
-            pageUrl: null,
-            referrerUrl: null,
-            sessionId: null,
-            ipAddress: null,
-            userAgent: null,
-            deviceType: null,
-            createdAt: new Date(),
-        } as any);
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            new Date(),
+        ));
 
-        const { brandId, ...rest } = program as any;
+        const { brandId, ...rest } = program as unknown as Record<string, unknown>;
         return {
             ...rest,
             brandId: brandId,

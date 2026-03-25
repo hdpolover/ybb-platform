@@ -46,6 +46,21 @@ export interface ScoreBreakdown {
   [criterion: string]: number;
 }
 
+export interface DocumentFile {
+  fileId: string;
+  fileName: string;
+  fileUrl: string;
+  mimeType?: string;
+  uploadedAt?: string;
+}
+
+export interface ApplicationStatusHistoryEntry {
+  status: string;
+  changedAt: string;
+  changedBy?: string;
+  reason?: string;
+}
+
 export class ParticipantApplication {
   constructor(
     public readonly id: string,
@@ -54,15 +69,15 @@ export class ParticipantApplication {
     public status: ApplicationStatus,
     public applicationCategory?: ApplicationCategory,
     // New JSON Fields
-    public personalData: Record<string, any> = {},
-    public essayAnswers: Record<string, any> = {},
-    public uploadedFiles: Record<string, any> = {},
+    public personalData: Record<string, unknown> = {},
+    public essayAnswers: Record<string, unknown> = {},
+    public uploadedFiles: Record<string, DocumentFile> = {},
 
     public motivationLetter?: string,
     public achievements?: string,
     public experiences?: string,
-    public documents?: Record<string, any>,
-    public requirementFiles?: any[],
+    public documents?: Record<string, DocumentFile>,
+    public requirementFiles?: DocumentFile[],
     public twibbonLink?: string,
     public pricingTierId?: string,
     public paymentAmount?: number,
@@ -74,8 +89,8 @@ export class ParticipantApplication {
     public reviewedBy?: string,
     public reviewedAt?: Date,
     public reviewerNotes?: string,
-    public participantSnapshot?: Record<string, any>,
-    public statusHistory?: any[],
+    public participantSnapshot?: Record<string, unknown>,
+    public statusHistory?: ApplicationStatusHistoryEntry[],
     public readonly createdAt?: Date,
     public readonly updatedAt?: Date,
     public readonly submittedAt?: Date,
@@ -206,9 +221,9 @@ export class ParticipantApplication {
     
     this.statusHistory.push({
       status: newStatus,
-      changedAt: new Date(),
+      changedAt: new Date().toISOString(),
       changedBy,
-      notes,
+      reason: notes,
     });
   }
 }

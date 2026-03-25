@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ISupportTicketRepository } from '@core/interfaces/repositories/support-ticket.repository.interface';
 import { SupportTicket, SupportTicketMessage } from '@core/entities/support-ticket.entity';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
-import { SupportTicketStatus, SupportTicketPriority } from '@prisma/client';
+import { SupportTicket as PrismaSupportTicket, SupportTicketMessage as PrismaSupportTicketMessage, SupportTicketStatus, SupportTicketPriority } from '@prisma/client';
 
 @Injectable()
 export class SupportTicketRepository implements ISupportTicketRepository {
@@ -60,7 +60,7 @@ export class SupportTicketRepository implements ISupportTicketRepository {
                 isFromAdmin: message.isFromAdmin,
                 senderId: message.senderId,
                 senderName: message.senderName,
-                attachments: message.attachments,
+                attachments: message.attachments as unknown as import('@prisma/client').Prisma.InputJsonValue,
                 isRead: message.isRead,
             },
         });
@@ -68,7 +68,7 @@ export class SupportTicketRepository implements ISupportTicketRepository {
     }
 
     async updateStatus(id: string, status: string, resolvedAt?: Date, closedAt?: Date): Promise<void> {
-        const data: any = { status: status as SupportTicketStatus };
+        const data: Partial<PrismaSupportTicket> = { status: status as SupportTicketStatus };
         if (resolvedAt) data.resolvedAt = resolvedAt;
         if (closedAt) data.closedAt = closedAt;
 
@@ -85,7 +85,7 @@ export class SupportTicketRepository implements ISupportTicketRepository {
         return `TKT-${date}-${num}`;
     }
 
-    private mapToEntity(prisma: any): SupportTicket {
+    private mapToEntity(prisma: PrismaSupportTicket & { messages?: (PrismaSupportTicketMessage & Record<string, unknown>)[] }): SupportTicket {
         const messages = prisma.messages?.map(this.mapMessageToEntity) || [];
         return new SupportTicket(
             prisma.id,
@@ -110,7 +110,7 @@ export class SupportTicketRepository implements ISupportTicketRepository {
         );
     }
 
-    private mapMessageToEntity(prisma: any): SupportTicketMessage {
+    private mapMessageToEntity(prisma: PrismaSupportTicketMessage): SupportTicketMessage {
         return new SupportTicketMessage(
             prisma.id,
             prisma.ticketId,
@@ -119,7 +119,7 @@ export class SupportTicketRepository implements ISupportTicketRepository {
             prisma.senderId,
             prisma.senderName,
             prisma.createdAt,
-            prisma.attachments as any[],
+            prisma.attachments as unknown as import('@core/entities/participant-application.entity').DocumentFile[],
             prisma.isRead,
         );
     }

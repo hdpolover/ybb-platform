@@ -73,8 +73,8 @@ describe('ProgramPeopleController', () => {
                 title: 'CEO',
                 bio: 'Bio here'
             };
-            const req = { user: { id: 'admin-1' } };
-            const file = { originalname: 'photo.jpg' };
+            const req = { user: { id: 'admin-1' } } as any;
+            const file = { originalname: 'photo.jpg' } as unknown as Express.Multer.File;
             
             await controller.addSpeaker('prog-1', dto, file, req);
 

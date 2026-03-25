@@ -1,4 +1,5 @@
 import { PrismaTransactionClient } from '@shared/types/prisma-transaction.type';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { UserRepository } from '@modules/users/infrastructure/persistence/user.repository';
 import { ParticipantRepository } from '@modules/participants/infrastructure/persistence/participant.repository';
 import { AmbassadorRepository } from '@modules/participants/infrastructure/persistence/ambassador.repository';
@@ -64,13 +65,14 @@ export class TransactionalRepositories {
     const applicationMapper = new ApplicationMapper();
 
     // Create repository instances with transaction client
-    // We cast to 'any' temporarily to inject the transaction client
-    // This is safe because we're only using the repositories within the transaction scope
-    this.users = new UserRepository(tx as any);
-    this.participants = new ParticipantRepository(tx as any);
-    this.ambassadors = new AmbassadorRepository(tx as any);
-    this.applications = new ApplicationRepository(tx as any, applicationMapper);
-    this.supportTickets = new SupportTicketRepository(tx as any);
+    // We cast through unknown to PrismaService because PrismaTransactionClient
+    // is structurally compatible for all repository operations within a transaction scope
+    const txAsService = tx as unknown as PrismaService;
+    this.users = new UserRepository(txAsService);
+    this.participants = new ParticipantRepository(txAsService);
+    this.ambassadors = new AmbassadorRepository(txAsService);
+    this.applications = new ApplicationRepository(txAsService, applicationMapper);
+    this.supportTickets = new SupportTicketRepository(txAsService);
   }
 
   /**
@@ -132,11 +134,11 @@ export class TransactionalRepositories {
    */
   async updateApplicationStatus(
     applicationId: string,
-    status: any,
+    status: string,
   ) {
     return this.tx.participantApplication.update({
       where: { id: applicationId },
-      data: { status },
+      data: { status: status as import('@prisma/client').ApplicationStatus },
     });
   }
 }

@@ -43,7 +43,7 @@ export class ReplySupportTicketHandler implements ICommandHandler<ReplySupportTi
             participant.id, // senderId
             participant.fullName, // senderName
             new Date(),
-            dto.attachments || [],
+            (dto.attachments || []) as unknown as import('@core/entities/participant-application.entity').DocumentFile[],
         );
 
         // ========================================
@@ -61,7 +61,7 @@ export class ReplySupportTicketHandler implements ICommandHandler<ReplySupportTi
                         isFromAdmin: message.isFromAdmin,
                         senderId: message.senderId,
                         senderName: message.senderName,
-                        attachments: message.attachments,
+                        attachments: message.attachments as unknown as import('@prisma/client').Prisma.InputJsonValue,
                         isRead: message.isRead,
                     },
                 });

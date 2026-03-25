@@ -13,7 +13,7 @@ export class UpdateUserPreferencesCommand {
             programUpdates?: boolean;
             applicationUpdates?: boolean;
             reminderEmails?: boolean;
-            customSettings?: any;
+            customSettings?: Record<string, unknown>;
         }
     ) { }
 }

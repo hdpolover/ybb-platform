@@ -19,7 +19,7 @@ export class UserPreference {
         public programUpdates: boolean,
         public applicationUpdates: boolean,
         public reminderEmails: boolean,
-        public customSettings: any,
+        public customSettings: Record<string, unknown>,
         public readonly createdAt: Date,
         public updatedAt: Date,
     ) { }

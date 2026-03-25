@@ -3,7 +3,7 @@ import { ILandingPageStrategy } from './landing-page.strategy';
 import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
-import { Brand } from '@prisma/client';
+import { Brand, Prisma } from '@prisma/client';
 
 @Injectable()
 export class FaqsStrategy implements ILandingPageStrategy {
@@ -73,7 +73,7 @@ export class FaqsStrategy implements ILandingPageStrategy {
         }
 
         // 2. Fetch FAQs with pagination
-        const whereCondition: any = {
+        const whereCondition: Prisma.ProgramFaqWhereInput = {
             isActive: true, // Only show active FAQs
         };
 

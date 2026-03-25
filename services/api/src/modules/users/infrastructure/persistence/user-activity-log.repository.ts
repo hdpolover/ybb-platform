@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
 import { UserActivityLog } from '@core/entities/user-activity-log.entity';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class UserActivityLogRepository implements IUserActivityLogRepository {
@@ -30,7 +31,7 @@ export class UserActivityLogRepository implements IUserActivityLogRepository {
                 userId: log.userId,
                 activityType: log.activityType,
                 activityCategory: log.activityCategory,
-                activityData: log.activityData ?? {},
+                activityData: (log.activityData ?? {}) as Prisma.InputJsonValue,
                 pageUrl: log.pageUrl,
                 referrerUrl: log.referrerUrl,
                 sessionId: log.sessionId,
@@ -43,13 +44,13 @@ export class UserActivityLogRepository implements IUserActivityLogRepository {
         return this.toDomain(created);
     }
 
-    private toDomain(orm: any): UserActivityLog {
+    private toDomain(orm: Prisma.UserActivityLogGetPayload<Record<string, never>>): UserActivityLog {
         return new UserActivityLog(
             orm.id,
             orm.userId,
             orm.activityType,
             orm.activityCategory,
-            orm.activityData,
+            orm.activityData as unknown as Record<string, unknown>,
             orm.pageUrl,
             orm.referrerUrl,
             orm.sessionId,

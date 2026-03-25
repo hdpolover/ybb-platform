@@ -72,7 +72,7 @@ export class FilesController {
   @ApiResponse({ status: 201, description: 'File uploaded successfully' })
   @UseInterceptors(FileInterceptor('file'))
   async uploadFile(
-    @UploadedFile() file: any,
+    @UploadedFile() file: Express.Multer.File,
     @Body('user_id') userId: string,
     @Body('brand_id') brandId: string,
     @Body('bucket') bucket: string = 'documents',

@@ -39,7 +39,7 @@ export class Participant {
     resumeUrl?: string | null;
     knowledgeSource?: string | null;
     referralCode?: string | null;
-    preferences?: any | null;
+    preferences?: Record<string, unknown> | null;
     createdAt?: Date;
     updatedAt?: Date;
     profileCompletedAt?: Date | null;

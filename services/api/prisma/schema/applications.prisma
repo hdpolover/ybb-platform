@@ -133,13 +133,41 @@ model ParticipantApplication {
 
   submittedAt DateTime? @map("submission_date") @db.Timestamptz(6)
 
-  // Application Data (Flexible Store)
+  // Application Content (separate columns enable full-text search & filtering)
+  motivationLetter String? @map("motivation_letter") @db.Text
+  achievements     String? @db.Text
+  experiences      String? @db.Text
+  twibbonLink      String? @map("twibbon_link") @db.VarChar(500)
+
+  // Application Data (Flexible JSON stores for dynamic form responses)
   personalData  Json @default("{}") @map("personal_data") @db.Json
   essayAnswers  Json @default("{}") @map("essay_answers") @db.Json
   uploadedFiles Json @default("{}") @map("uploaded_files") @db.Json
 
-  // Deprecated Hardcoded Fields (Migrating to ApplicationAssessment)
-  // reviewScore, adminNotes, interviewScore etc. are replaced by assessments relation
+  // File Attachments (JSON maps — named documentFiles to avoid conflict with ParticipantDocument relation)
+  documentFiles    Json? @default("{}") @map("document_files") @db.Json
+  requirementFiles Json? @default("[]") @map("requirement_files") @db.Json
+
+  // Audit & History
+  participantSnapshot Json? @map("participant_snapshot") @db.Json
+  statusHistory       Json? @default("[]") @map("status_history") @db.Json
+
+  // Denormalized scoring (convenience fields; source of truth is ApplicationAssessment)
+  scoreTotal     Decimal?     @map("score_total") @db.Decimal(5, 2)
+  scoreBreakdown Json?        @map("score_breakdown") @db.Json
+  scoreStatus    ScoreStatus? @map("score_status")
+  reviewedBy     String?      @map("reviewed_by") @db.Uuid
+  reviewedAt     DateTime?    @map("reviewed_at") @db.Timestamptz(6)
+  reviewerNotes  String?      @map("reviewer_notes") @db.Text
+
+  // Denormalized payment summary (source of truth is ApplicationInvoice)
+  paymentAmount Decimal? @map("payment_amount") @db.Decimal(10, 2)
+  paymentId     String?  @map("payment_id") @db.VarChar(100)
+  paymentStatus String?  @map("payment_status") @db.VarChar(50)
+
+  // Timestamps
+  lastEditedAt DateTime? @map("last_edited_at") @db.Timestamptz(6)
+  withdrawnAt  DateTime? @map("withdrawn_at") @db.Timestamptz(6)
 
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   deletedBy   String?   @map("deleted_by") @db.Uuid

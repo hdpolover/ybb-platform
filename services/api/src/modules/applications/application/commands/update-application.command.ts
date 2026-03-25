@@ -1,3 +1,5 @@
+import { DocumentFile } from '@core/entities/participant-application.entity';
+
 /**
  * Update Application Command
  * 
@@ -11,8 +13,8 @@ export class UpdateApplicationCommand {
       motivationLetter?: string;
       achievements?: string;
       experiences?: string;
-      documents?: Record<string, any>;
-      requirementFiles?: any[];
+      documents?: Record<string, DocumentFile>;
+      requirementFiles?: DocumentFile[];
       twibbonLink?: string;
       pricingTierId?: string;
     },

@@ -62,8 +62,7 @@ export class MetadataService {
 
   getTimezones(search?: string) {
     // Use built-in Internationalization API to get all valid IANA timezones
-    // @ts-ignore - supportedValuesOf comes in ES2022, but our target is ES2021. Node runtime supports it.
-    const timezones = (Intl as any).supportedValuesOf('timeZone');
+    const timezones = (Intl as typeof Intl & { supportedValuesOf(key: string): string[] }).supportedValuesOf('timeZone');
 
     if (search) {
       const lowerSearch = search.toLowerCase();

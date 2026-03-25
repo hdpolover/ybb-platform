@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
+import { ApplicationCategory } from '@core/entities/participant-application.entity';
 import { IApplicationRepository } from '@core/interfaces/repositories/application.repository.interface';
 import { UpdateApplicationCommand } from '../update-application.command';
 import { ApplicationResponseDto } from '../../dto/application-response.dto';
@@ -36,7 +37,7 @@ export class UpdateApplicationHandler {
 
     // Apply updates
     if (command.updates.applicationCategory) {
-      application.applicationCategory = command.updates.applicationCategory as any;
+      application.applicationCategory = command.updates.applicationCategory as ApplicationCategory;
     }
     if (command.updates.motivationLetter !== undefined) {
       application.motivationLetter = command.updates.motivationLetter;

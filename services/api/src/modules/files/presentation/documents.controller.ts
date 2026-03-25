@@ -123,7 +123,7 @@ export class DocumentsController {
     @Body() dto: {
       title: string;
       headers: string[];
-      data: any[];
+      data: Record<string, unknown>[];
       sheet_name?: string;
     },
     @Res() res: Response,
@@ -254,12 +254,12 @@ export class DocumentsController {
       participant_data: {
         name: string;
         email: string;
-        metadata?: Record<string, any>;
+        metadata?: Record<string, unknown>;
       };
       program_data: {
         name: string;
         completion_date?: string;
-        metadata?: Record<string, any>;
+        metadata?: Record<string, unknown>;
       };
       certificate_type?: string; // Changed from enum to string to support 'award', 'speaker' etc.
       template_path?: string;

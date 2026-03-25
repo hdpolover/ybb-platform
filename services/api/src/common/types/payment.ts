@@ -26,7 +26,7 @@ export interface Payment {
   status: PaymentStatus;
   paymentMethod: PaymentMethod;
   stripePaymentIntentId?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   paidAt?: Date;
   refundedAt?: Date;
   refundAmount?: number;
@@ -41,7 +41,7 @@ export interface CreatePaymentDto {
   amount: number;
   currency: string;
   paymentMethod: PaymentMethod;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ProcessPaymentDto {

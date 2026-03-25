@@ -22,16 +22,16 @@ export class UpsertParticipationInfoHandler implements ICommandHandler<UpsertPar
       where: {
         programId_category: {
           programId,
-          category: dto.category,
+          category: dto.category as import('@prisma/client').ApplicationCategory,
         },
       },
       update: {
         ...dto,
-      },
+      } as import('@prisma/client').Prisma.ProgramParticipationInfoUpdateInput,
       create: {
         programId,
         ...dto,
-      },
+      } as unknown as import('@prisma/client').Prisma.ProgramParticipationInfoCreateInput,
     });
   }
 }

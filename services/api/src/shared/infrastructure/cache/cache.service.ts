@@ -17,7 +17,7 @@ export class CacheService {
     const startTime = Date.now();
     try {
       // Get the underlying Redis client from the store
-      const store = (this.cacheManager as any).store;
+      const store = (this.cacheManager as unknown as { store?: { client?: { keys: (p: string) => Promise<string[]>; del: (...k: string[]) => Promise<void> } } }).store;
       if (store?.client) {
         const keys = await store.client.keys(pattern);
         if (keys.length > 0) {
@@ -89,14 +89,14 @@ export class CacheService {
   async clearAll(): Promise<void> {
     const startTime = Date.now();
     // Try to use Redis FLUSHDB via store
-    const store = (this.cacheManager as any).store;
+    const store = (this.cacheManager as unknown as { store?: { client?: { flushdb?: () => Promise<void> } } }).store;
     if (store?.client) {
       await store.client.flushdb?.();
     } else {
       // Fallback for cache-manager v7
-      const stores: any = (this.cacheManager as any).stores;
+      const stores = (this.cacheManager as unknown as { stores?: Array<{ clear?: () => Promise<void> }> }).stores;
       if (stores && stores.length > 0) {
-        await Promise.all(stores.map((s: any) => s.clear?.()));
+        await Promise.all(stores.map((s) => s.clear?.()));
       }
     }
     this.metricsService?.recordLatency('clear', Date.now() - startTime);

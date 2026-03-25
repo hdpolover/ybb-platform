@@ -26,7 +26,7 @@ export class UserNotificationResponseDto {
     relatedEntityId?: string;
 
     @ApiProperty()
-    metadata: any;
+    metadata: Record<string, unknown>;
 
     @ApiProperty()
     isRead: boolean;

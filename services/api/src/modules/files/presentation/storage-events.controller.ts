@@ -29,7 +29,7 @@ export class StorageEventsController {
   @ApiResponse({ status: 200, description: 'Event processed' })
   // @ApiExcludeEndpoint() // Ideally hide from public swagger or protect it
   async handleMinioEvent(
-    @Body() payload: any,
+    @Body() payload: Record<string, unknown>,
     @Headers('authorization') authHeader?: string
   ) {
     // 1. (Optional) Validate Secret
@@ -49,15 +49,16 @@ export class StorageEventsController {
       return { status: 'ignored', reason: 'no_records' };
     }
 
-    const records = payload.Records || [];
+    const records = (payload.Records as Record<string, unknown>[] | undefined) || [];
 
     for (const record of records) {
-      const eventName = record.eventName;
+      const eventName = (record.eventName as string) || '';
         
       if (eventName.startsWith('s3:ObjectCreated:')) {
-        const key = decodeURIComponent(record.s3.object.key.replace(/\+/g, ' '));
-        const bucket = record.s3.bucket.name;
-        const size = record.s3.object.size;
+        const s3 = record.s3 as Record<string, Record<string, unknown>>;
+        const key = decodeURIComponent((s3.object.key as string).replace(/\+/g, ' '));
+        const bucket = s3.bucket.name as string;
+        const size = s3.object.size as number;
 
         this.logger.log(`Processing Upload Event: ${key} in ${bucket}`);
 

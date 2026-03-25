@@ -4,6 +4,7 @@ import { UpdateProgramCommand } from '../update-program.command';
 import { IProgramRepository } from '@core/interfaces/repositories/program.repository.interface';
 import { Program } from '@core/entities/program.entity';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
+import { UserActivityLog } from '@core/entities/user-activity-log.entity';
 import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
 
 @CommandHandler(UpdateProgramCommand)
@@ -28,39 +29,39 @@ export class UpdateProgramHandler implements ICommandHandler<UpdateProgramComman
             updateProgramDto.slug = this.generateSlug(updateProgramDto.name);
         }
 
-        const programData: any = { ...updateProgramDto };
-        if (programData.startDate) programData.startDate = new Date(programData.startDate);
-        if (programData.endDate) programData.endDate = new Date(programData.endDate);
-        if (programData.applicationDeadline) programData.applicationDeadline = new Date(programData.applicationDeadline);
-        if (programData.registrationOpenDate) programData.registrationOpenDate = new Date(programData.registrationOpenDate);
-        if (programData.registrationCloseDate) programData.registrationCloseDate = new Date(programData.registrationCloseDate);
+        const programData: Record<string, unknown> = { ...updateProgramDto };
+        if (programData.startDate) programData.startDate = new Date(programData.startDate as string);
+        if (programData.endDate) programData.endDate = new Date(programData.endDate as string);
+        if (programData.applicationDeadline) programData.applicationDeadline = new Date(programData.applicationDeadline as string);
+        if (programData.registrationOpenDate) programData.registrationOpenDate = new Date(programData.registrationOpenDate as string);
+        if (programData.registrationCloseDate) programData.registrationCloseDate = new Date(programData.registrationCloseDate as string);
 
         const updatedProgram = await this.programRepository.update(programId, programData);
 
         // Log activity
-        await this.activityLogRepository.create({
-            id: undefined,
-            userId: userId,
-            activityType: 'UPDATE_PROGRAM',
-            activityCategory: 'PROGRAM',
-            activityData: {
+        await this.activityLogRepository.create(new UserActivityLog(
+            undefined as unknown as string,
+            userId,
+            'UPDATE_PROGRAM',
+            'PROGRAM',
+            {
                 programId: updatedProgram.id,
                 programName: updatedProgram.name,
                 changes: updateProgramDto,
             },
-            pageUrl: null,
-            referrerUrl: null,
-            sessionId: null,
-            ipAddress: null,
-            userAgent: null,
-            deviceType: null,
-            createdAt: new Date(),
-        } as any);
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            new Date(),
+        ));
 
         // Invalidate all landing page caches for this brand
         await this.invalidateLandingCaches(updatedProgram.brandId);
 
-        const { brandId, ...rest } = updatedProgram as any;
+        const { brandId, ...rest } = updatedProgram as unknown as Record<string, unknown>;
         return {
             ...rest,
             brandId: brandId,

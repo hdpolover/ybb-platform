@@ -6,13 +6,11 @@ import { AxiosResponse } from 'axios';
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
 
 export interface FileUploadResponse {
-  file: any;
+  file: Record<string, unknown>;
   message: string;
 }
 
-export interface FileResponse {
-  [key: string]: any;
-}
+export type FileResponse = Record<string, unknown>;
 
 /**
  * File Service HTTP Client
@@ -51,7 +49,7 @@ export class FileServiceClient {
    * Upload file to file service
    */
   async uploadFile(
-    file: any,
+    file: Express.Multer.File,
     userId: string,
     brandId: string,
     bucket: string = 'documents',
@@ -85,8 +83,8 @@ export class FileServiceClient {
           ),
         );
         return response.data;
-      } catch (error: any) {
-        this.logger.error(`Failed to upload file: ${error.message}`);
+      } catch (error: unknown) {
+        this.logger.error(`Failed to upload file: ${error instanceof Error ? error.message : String(error)}`);
         throw error;
       }
     });
@@ -111,8 +109,8 @@ export class FileServiceClient {
           ),
         );
         return response.data;
-      } catch (error: any) {
-        this.logger.error(`Failed to get file: ${error.message}`);
+      } catch (error: unknown) {
+        this.logger.error(`Failed to get file: ${error instanceof Error ? error.message : String(error)}`);
         throw error;
       }
     });
@@ -123,7 +121,7 @@ export class FileServiceClient {
    */
   async generateParticipantReport(data: {
     program_name: string;
-    participants: any[];
+    participants: Record<string, unknown>[];
   }): Promise<Buffer> {
     try {
       const response: AxiosResponse<ArrayBuffer> = await firstValueFrom(
@@ -136,8 +134,8 @@ export class FileServiceClient {
         ),
       );
       return Buffer.from(response.data);
-    } catch (error: any) {
-      this.logger.error(`Failed to generate participant report: ${error.message}`);
+    } catch (error: unknown) {
+      this.logger.error(`Failed to generate participant report: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
   }
@@ -149,7 +147,7 @@ export class FileServiceClient {
     program_name: string;
     start_date: string;
     end_date: string;
-    payments: any[];
+    payments: Record<string, unknown>[];
   }): Promise<Buffer> {
     try {
       const response: AxiosResponse<ArrayBuffer> = await firstValueFrom(
@@ -162,8 +160,8 @@ export class FileServiceClient {
         ),
       );
       return Buffer.from(response.data);
-    } catch (error: any) {
-      this.logger.error(`Failed to generate payment report: ${error.message}`);
+    } catch (error: unknown) {
+      this.logger.error(`Failed to generate payment report: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
   }
@@ -174,7 +172,7 @@ export class FileServiceClient {
   async generateCustomReport(data: {
     title: string;
     headers: string[];
-    data: any[];
+    data: Record<string, unknown>[];
     sheet_name?: string;
   }): Promise<Buffer> {
     try {
@@ -188,8 +186,8 @@ export class FileServiceClient {
         ),
       );
       return Buffer.from(response.data);
-    } catch (error: any) {
-      this.logger.error(`Failed to generate custom report: ${error.message}`);
+    } catch (error: unknown) {
+      this.logger.error(`Failed to generate custom report: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
   }
@@ -197,7 +195,7 @@ export class FileServiceClient {
   /**
    * Generate payment receipt PDF
    */
-  async generateReceipt(transactionData: any): Promise<Buffer> {
+  async generateReceipt(transactionData: Record<string, unknown>): Promise<Buffer> {
     try {
       const response: AxiosResponse<ArrayBuffer> = await firstValueFrom(
         this.httpService.post(
@@ -209,8 +207,8 @@ export class FileServiceClient {
         ),
       );
       return Buffer.from(response.data);
-    } catch (error: any) {
-      this.logger.error(`Failed to generate receipt: ${error.message}`);
+    } catch (error: unknown) {
+      this.logger.error(`Failed to generate receipt: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
   }
@@ -219,8 +217,8 @@ export class FileServiceClient {
    * Generate offer letter PDF
    */
   async generateOfferLetter(
-    participantData: any,
-    programData: any,
+    participantData: Record<string, unknown>,
+    programData: Record<string, unknown>,
   ): Promise<Buffer> {
     try {
       const response: AxiosResponse<ArrayBuffer> = await firstValueFrom(
@@ -236,8 +234,8 @@ export class FileServiceClient {
         ),
       );
       return Buffer.from(response.data);
-    } catch (error: any) {
-      this.logger.error(`Failed to generate offer letter: ${error.message}`);
+    } catch (error: unknown) {
+      this.logger.error(`Failed to generate offer letter: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
   }
@@ -246,8 +244,8 @@ export class FileServiceClient {
    * Generate certificate (completion or participation)
    */
   async generateCertificate(
-    participantData: any,
-    programData: any,
+    participantData: Record<string, unknown>,
+    programData: Record<string, unknown>,
     certificateType: 'completion' | 'participation' = 'completion',
   ): Promise<Buffer> {
     try {
@@ -265,8 +263,8 @@ export class FileServiceClient {
         ),
       );
       return Buffer.from(response.data);
-    } catch (error: any) {
-      this.logger.error(`Failed to generate certificate: ${error.message}`);
+    } catch (error: unknown) {
+      this.logger.error(`Failed to generate certificate: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
   }
@@ -282,8 +280,8 @@ export class FileServiceClient {
         ),
       );
       return response.data;
-    } catch (error: any) {
-      this.logger.error(`Failed to verify certificate: ${error.message}`);
+    } catch (error: unknown) {
+      this.logger.error(`Failed to verify certificate: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
   }

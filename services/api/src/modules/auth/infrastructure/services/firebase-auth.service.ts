@@ -48,8 +48,8 @@ export class FirebaseAuthService implements OnModuleInit {
   async verifyIdToken(token: string): Promise<admin.auth.DecodedIdToken> {
     try {
       return await admin.auth().verifyIdToken(token);
-    } catch (error: any) {
-      this.logger.error(`Firebase token verification failed: ${error.message}`);
+    } catch (error: unknown) {
+      this.logger.error(`Firebase token verification failed: ${error instanceof Error ? error.message : String(error)}`);
       throw new Error('Invalid Firebase token');
     }
   }

@@ -1,6 +1,7 @@
 import { QueryHandler, IQueryHandler } from '@nestjs/cqrs';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
 import { GetAmbassadorsListQuery } from '../../commands/ambassador-admin.commands'; // Corrected path
+import { Prisma } from '@prisma/client';
 
 @QueryHandler(GetAmbassadorsListQuery)
 export class GetAmbassadorsListHandler implements IQueryHandler<GetAmbassadorsListQuery> {
@@ -10,7 +11,7 @@ export class GetAmbassadorsListHandler implements IQueryHandler<GetAmbassadorsLi
         const { programId, search, page, limit } = query;
         const skip = (page - 1) * limit;
 
-        const where: any = {};
+        const where: Prisma.AmbassadorWhereInput = {};
         
         if (programId) {
             where.programId = programId;

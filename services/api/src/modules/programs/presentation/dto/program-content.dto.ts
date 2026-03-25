@@ -227,13 +227,13 @@ export class ProgramPricingTierResponseDto {
     validityPeriods?: ProgramPricingTierValidityPeriodDto[];
 
     @ApiProperty({ required: false })
-    benefits?: any;
+    benefits?: Record<string, unknown>;
     
     @ApiProperty({ required: false })
     icon?: string;
     
     @ApiProperty({ required: false })
-    requirements?: any;
+    requirements?: Record<string, unknown>;
 }
 
 
@@ -286,10 +286,10 @@ export class ApplicationFormFieldResponseDto {
     isRequired: boolean;
 
     @ApiProperty({ required: false })
-    options?: any;
+    options?: string[] | Record<string, unknown>[];
 
     @ApiProperty({ required: false })
-    validationRules?: any;
+    validationRules?: Record<string, unknown>;
 
     @ApiProperty({ required: false })
     defaultValue?: string;

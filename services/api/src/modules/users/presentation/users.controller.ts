@@ -25,7 +25,7 @@ import { UserActivityLogResponseDto, UserSecurityLogResponseDto } from './dto/us
 import { CreateDeletionRequestDto, DeletionRequestResponseDto } from './dto/deletion-request.dto';
 import { CreateDeletionRequestCommand } from '../application/commands/create-deletion-request.command';
 import { CreateDeletionRequestHandler } from '../application/commands/handlers/create-deletion-request.handler';
-import { CurrentUser } from '../../../shared/decorators/current-user.decorator';
+import { CurrentUser, CurrentUserData } from '../../../shared/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/infrastructure/guards/roles.guard';
 import { Roles } from '../../auth/application/decorators/roles.decorator';
@@ -59,7 +59,7 @@ export class UsersController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get Current User Preferences' })
   @ApiResponse({ status: 200, description: 'Successfully retrieved user preferences', type: UserPreferenceResponseDto })
-  async getMyPreferences(@CurrentUser() user: any): Promise<UserPreferenceResponseDto> {
+  async getMyPreferences(@CurrentUser() user: CurrentUserData): Promise<UserPreferenceResponseDto> {
     const query = new GetUserPreferencesQuery(user.userId);
     return this.getUserPreferencesHandler.execute(query);
   }
@@ -70,7 +70,7 @@ export class UsersController {
   @ApiOperation({ summary: 'Update Current User Preferences' })
   @ApiResponse({ status: 200, description: 'User preferences successfully updated', type: UserPreferenceResponseDto })
   async updateMyPreferences(
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Body() dto: UpdateUserPreferenceDto,
   ): Promise<UserPreferenceResponseDto> {
     const command = new UpdateUserPreferencesCommand(user.userId, dto);
@@ -87,7 +87,7 @@ export class UsersController {
   @ApiQuery({ name: 'type', required: false, type: String })
   @ApiQuery({ name: 'isRead', required: false, type: Boolean })
   async getMyNotifications(
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
     @Query('type') type?: string,
@@ -103,7 +103,7 @@ export class UsersController {
   @ApiOperation({ summary: 'Mark Notification as Read' })
   @ApiResponse({ status: 200, description: 'Notification successfully marked as read', type: UserNotificationResponseDto })
   async markNotificationRead(
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Param('id') id: string,
   ): Promise<UserNotificationResponseDto> {
     const command = new MarkNotificationReadCommand(user.userId, id);
@@ -118,7 +118,7 @@ export class UsersController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async getMyActivityLogs(
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ): Promise<{ data: UserActivityLogResponseDto[], total: number }> {
@@ -136,7 +136,7 @@ export class UsersController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async getMySecurityLogs(
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ): Promise<{ data: UserSecurityLogResponseDto[], total: number }> {
@@ -153,7 +153,7 @@ export class UsersController {
   @ApiResponse({ status: 201, description: 'Deletion request successfully created', type: DeletionRequestResponseDto })
   @AuditTrail({ entityType: 'User', action: ChangeType.delete })
   async requestDeletion(
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Body() dto: CreateDeletionRequestDto,
     @Ip() ipAddress?: string,
     @Headers('user-agent') userAgent?: string,

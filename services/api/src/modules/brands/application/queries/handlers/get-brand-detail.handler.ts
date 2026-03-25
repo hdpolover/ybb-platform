@@ -65,7 +65,7 @@ export class GetBrandDetailHandler implements IQueryHandler<GetBrandDetailQuery>
             createdAt: brand.createdAt,
             updatedAt: brand.updatedAt,
             deletedAt: brand.deletedAt || null,
-            settings: brand.settings || null,
+            settings: (brand.settings as unknown as Record<string, unknown>) || null,
         };
     }
 }

@@ -5,7 +5,7 @@ export class BrandSetting {
         public readonly isMaintenanceMode: boolean,
         public readonly maintenanceMessage: string | null,
         public readonly maintenanceScheduledEnd: Date | null,
-        public readonly footerNavigation: any,
+        public readonly footerNavigation: Record<string, unknown>,
         public readonly usdInIdr: number,
         public readonly googleAnalyticsId: string | null,
         public readonly pixelId: string | null,

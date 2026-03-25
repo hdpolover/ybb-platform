@@ -39,7 +39,7 @@ export class GetPublicPartnershipsHandler implements IQueryHandler<GetPublicPart
         subtitle: opt.subtitle || undefined,
         description: opt.description || undefined,
         type: opt.type,
-        features: (opt.features as any) || [],
+        features: (opt.features as string[] | null) || [],
         ctaLabel: opt.ctaLabel || undefined
       })),
       sponsorshipTiers: sponsorshipTiers.map(tier => ({
@@ -47,7 +47,7 @@ export class GetPublicPartnershipsHandler implements IQueryHandler<GetPublicPart
         name: tier.name,
         priceDescription: tier.priceDescription || undefined,
         description: tier.description || undefined,
-        features: (tier.features as any) || []
+        features: (tier.features as string[] | null) || []
       }))
     };
   }

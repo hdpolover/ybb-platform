@@ -32,7 +32,7 @@ export class SupportTicketMessage {
         public readonly senderId: string,
         public readonly senderName: string,
         public readonly createdAt: Date,
-        public readonly attachments: any[] = [],
+        public readonly attachments: import('@core/entities/participant-application.entity').DocumentFile[] = [],
         public readonly isRead: boolean = false,
     ) { }
 }

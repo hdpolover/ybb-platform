@@ -51,7 +51,7 @@ export class AiBotService {
   async update(id: string, dto: UpdateAiBotConfigDto) {
     await this.findOne(id); // Ensure exists
     const { brandId, ...rest } = dto;
-    const data: any = { ...rest };
+    const data: Record<string, unknown> = { ...rest };
     if (brandId !== undefined) {
       data.brandId = brandId;
     }
