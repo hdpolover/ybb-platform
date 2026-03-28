@@ -35,7 +35,6 @@ $Services = @(
     "file",
     "notification",
     "admin-dashboard",
-    "minimal-admin",
     "monitoring",
     "pgadmin"
 )
@@ -261,7 +260,6 @@ function Open-Shell {
         "file" = "ybb-file"
         "notification" = "ybb-notification"
         "admin-dashboard" = "ybb-admin-dashboard"
-        "minimal-admin" = "ybb-minimal-admin"
         "pgadmin" = "ybb-pgadmin"
     }
     
