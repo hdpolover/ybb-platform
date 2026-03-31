@@ -51,14 +51,7 @@ services:
         condition: service_healthy
     networks:
       - dokploy-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=dokploy-network"
-      - "traefik.http.routers.ybb-api.rule=${APP_DOMAINS_RULE:-Host(`staging-api.ybbhub.com`)}"
-      - "traefik.http.routers.ybb-api.entrypoints=websecure"
-      - "traefik.http.routers.ybb-api.tls.certresolver=letsencrypt"
-      - "traefik.http.services.ybb-api.loadbalancer.server.port=4000"
-      # CORS middleware? API handles it, but maybe needed for preflight
+    # Dokploy handles Traefik labels and SSL termination automatically via the UI
 
   postgres-api:
     image: postgres:15-alpine
