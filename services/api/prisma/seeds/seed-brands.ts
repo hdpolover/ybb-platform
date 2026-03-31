@@ -211,6 +211,7 @@ export async function seedBrands() {
   await prisma.brand.upsert({
     where: { slug: BRANDS.CYS },
     update: {
+      websiteUrl: 'https://chinayouthsummit.com',
       about: 'China Youth Summit (CYS) is a premier international youth leadership program bridging young people across China, Asia, and the world. Through summit sessions, innovation challenges, and cultural exchanges, CYS empowers the next generation to lead with purpose.',
       vision: 'To be the leading platform that connects and empowers the brightest young minds across Asia and the world.',
       mission: 'To cultivate globally-minded, culturally aware, and purpose-driven leaders through impactful youth summit experiences.',
@@ -240,7 +241,7 @@ export async function seedBrands() {
       about: 'China Youth Summit (CYS) is a premier international youth leadership program bridging young people across China, Asia, and the world. Through summit sessions, innovation challenges, and cultural exchanges, CYS empowers the next generation to lead with purpose.',
       vision: 'To be the leading platform that connects and empowers the brightest young minds across Asia and the world.',
       mission: 'To cultivate globally-minded, culturally aware, and purpose-driven leaders through impactful youth summit experiences.',
-      websiteUrl: 'chinayouthsummit.com',
+      websiteUrl: 'https://chinayouthsummit.com',
       contactEmail: 'info@chinayouthsummit.com',
       contactPhone: '+8615000000000',
       contactWhatsapp: '+8615000000000',
