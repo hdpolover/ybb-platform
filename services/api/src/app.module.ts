@@ -65,30 +65,34 @@ import { AdminsModule } from '@modules/admins/admins.module';
           }),
         ];
 
-        const lokiUrl = configService.get<string>('LOKI_URL') || 'http://host.docker.internal:3110';
-        const LokiTransportConstructor = ((LokiTransport as Record<string, unknown>).default || LokiTransport) as new (opts: Record<string, unknown>) => winston.transport;
-        transports.push(
-          new LokiTransportConstructor({
-            host: lokiUrl,
-            labels: { job: 'ybb-api' },
-            json: true,
-            format: winston.format.combine(
-              winston.format.timestamp(),
-              winston.format((info: winston.Logform.TransformableInfo) => {
-                const span = trace.getSpan(context.active());
-                if (span) {
-                  const spanContext = span.spanContext();
-                  info.traceId = spanContext.traceId;
-                  info.spanId = spanContext.spanId;
-                }
-                return info;
-              })(),
-              winston.format.json(),
-            ),
-            replaceTimestamp: true,
-            onConnectionError: (err) => console.error('Loki connection error:', err),
-          }),
-        );
+        const enableLoki = configService.get<string>('ENABLE_LOKI') === 'true';
+        
+        if (enableLoki) {
+          const lokiUrl = configService.get<string>('LOKI_URL') || 'http://host.docker.internal:3110';
+          const LokiTransportConstructor = ((LokiTransport as Record<string, unknown>).default || LokiTransport) as new (opts: Record<string, unknown>) => winston.transport;
+          transports.push(
+            new LokiTransportConstructor({
+              host: lokiUrl,
+              labels: { job: 'ybb-api' },
+              json: true,
+              format: winston.format.combine(
+                winston.format.timestamp(),
+                winston.format((info: winston.Logform.TransformableInfo) => {
+                  const span = trace.getSpan(context.active());
+                  if (span) {
+                    const spanContext = span.spanContext();
+                    info.traceId = spanContext.traceId;
+                    info.spanId = spanContext.spanId;
+                  }
+                  return info;
+                })(),
+                winston.format.json(),
+              ),
+              replaceTimestamp: true,
+              onConnectionError: (err) => console.error('Loki connection error:', err),
+            }),
+          );
+        }
 
         return {
           transports,

@@ -34,7 +34,12 @@ export const sdk = new NodeSDK({
 
 // initialize the SDK and register with the OpenTelemetry API
 // this enables the API to record telemetry
-sdk.start();
+if (process.env.ENABLE_TRACING === 'true') {
+    sdk.start();
+    console.log('OpenTelemetry tracing initialized.');
+} else {
+    console.log('OpenTelemetry tracing disabled. Set ENABLE_TRACING=true to enable.');
+}
 
 // gracefully shut down the SDK on process exit
 process.on('SIGTERM', () => {
