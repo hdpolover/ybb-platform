@@ -13,3 +13,11 @@ export class UpdateAmbassadorStatusCommand {
         public readonly isActive: boolean,
     ) {}
 }
+
+export class GetAmbassadorReferralsQuery {
+    constructor(
+        public readonly ambassadorId: string,
+        public readonly page: number = 1,
+        public readonly limit: number = 20,
+    ) {}
+}

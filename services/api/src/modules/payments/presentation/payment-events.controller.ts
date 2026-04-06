@@ -8,6 +8,7 @@ import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { RedisPubSubService } from '@shared/infrastructure/redis/redis-pubsub.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
 import { PaymentStatus, Prisma } from '@prisma/client';
+import { ReferralFunnelService } from '@modules/participants/application/services/referral-funnel.service';
 
 @Controller()
 export class PaymentEventsController {
@@ -19,6 +20,7 @@ export class PaymentEventsController {
         private readonly unitOfWork: UnitOfWork,
         private readonly cacheService: CacheService,
         @Optional() private readonly pubSubService?: RedisPubSubService,
+        @Optional() private readonly referralFunnel?: ReferralFunnelService,
     ) {}
 
     @EventPattern('payment.succeeded')
@@ -53,7 +55,7 @@ export class PaymentEventsController {
             const paymentCategory = (metadata.payment_category as string) || 'registration';
 
             if (applicationId) {
-                const userId = await this.processApplicationPayment(
+                const result = await this.processApplicationPayment(
                     applicationId, 
                     paymentCategory, 
                     amount, 
@@ -63,8 +65,16 @@ export class PaymentEventsController {
                 );
 
                 // Invalidate portal cache for this user to reflect payment immediately
-                if (userId) {
-                    await this.invalidateUserPortalCache(userId, 'payment succeeded');
+                if (result) {
+                    await this.invalidateUserPortalCache(result.userId, 'payment succeeded');
+
+                    // Advance referral funnel: → completed (only when all payments are done)
+                    if (this.referralFunnel) {
+                        await this.referralFunnel.advanceToCompleted(
+                            result.participantId,
+                            result.programId,
+                        );
+                    }
                 }
             } else {
                 this.logger.warn(`Payment succeeded but no application_id found in metadata. ID: ${gatewayOrderId}`);
@@ -88,12 +98,12 @@ export class PaymentEventsController {
         currency: string,
         transactionId: string,
         method: string
-    ): Promise<string | null> {
+    ): Promise<{ userId: string; participantId: string; programId: string } | null> {
         const application = await this.prisma.participantApplication.findUnique({
             where: { id: applicationId },
             include: {
                 participant: {
-                    select: { userId: true }
+                    select: { id: true, userId: true }
                 }
             }
         });
@@ -145,8 +155,12 @@ export class PaymentEventsController {
         );
         this.logger.log(`Application ${applicationId} updated to PAID (Category: ${category})`);
 
-        // Return userId for cache invalidation
-        return application.participant.userId;
+        // Return context for cache invalidation and referral funnel
+        return {
+            userId: application.participant.userId,
+            participantId: application.participant.id,
+            programId: application.programId,
+        };
     }
 
     @EventPattern('payment.failed')

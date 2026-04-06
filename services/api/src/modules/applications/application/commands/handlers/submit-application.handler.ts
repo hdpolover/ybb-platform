@@ -9,6 +9,7 @@ import { PaymentGrpcClient } from '@modules/payments/infrastructure/services/pay
 import { ApplicationCategory } from '@core/entities/participant-application.entity';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
+import { ReferralFunnelService } from '@modules/participants/application/services/referral-funnel.service';
 
 /**
  * Submit Application Handler
@@ -25,6 +26,7 @@ export class SubmitApplicationHandler {
     private readonly metricsService: MetricsService,
     private readonly paymentClient: PaymentGrpcClient,
     private readonly cacheService: CacheService,
+    private readonly referralFunnel: ReferralFunnelService,
   ) {}
 
   async execute(command: SubmitApplicationCommand): Promise<ApplicationResponseDto> {
@@ -86,6 +88,9 @@ export class SubmitApplicationHandler {
 
     // Invalidate participant latest app cache
     await this.invalidateParticipantCache(application.participantId);
+
+    // Advance referral funnel: → applied
+    await this.referralFunnel.advanceToApplied(application.participantId, application.programId);
 
     // Return DTO
     return this.applicationMapper.toDto(updated);
