@@ -173,9 +173,16 @@ func (h *PaymentHandler) HandleWebhook(c *gin.Context) {
 		return
 	}
 
-	// 4. Suruh Gateway Memproses Data (Returns Legacy Entity 'Payment')
+	// 4. Inject gateway-specific headers into context for verification.
+	// Xendit uses x-callback-token; other gateways verify via payload signatures.
+	webhookCtx := c.Request.Context()
+	if callbackToken := c.GetHeader("x-callback-token"); callbackToken != "" {
+		webhookCtx = context.WithValue(webhookCtx, infraGateways.XenditCallbackTokenKey, callbackToken)
+	}
+
+	// 5. Suruh Gateway Memproses Data (Returns Legacy Entity 'Payment')
 	// updatedData.ID here corresponds to Order ID sent to gateway
-	updatedData, err := gateway.HandleWebhook(c.Request.Context(), payload)
+	updatedData, err := gateway.HandleWebhook(webhookCtx, payload)
 	if err != nil {
 		log.Printf("payment_webhook failed request_id=%s gateway=%s error=%v", requestID, gatewayName, err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Webhook processing failed", "details": err.Error()})

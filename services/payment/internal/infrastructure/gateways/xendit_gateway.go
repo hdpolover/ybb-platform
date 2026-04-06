@@ -2,8 +2,10 @@ package gateways
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/xendit/xendit-go/v3"
 	"github.com/xendit/xendit-go/v3/invoice"
@@ -11,14 +13,22 @@ import (
 	domainGateways "github.com/ybb-platform/payment/internal/domain/gateways"
 )
 
+// XenditCallbackTokenKey is the context key used to pass the x-callback-token header
+// into the HandleWebhook method for signature verification.
+type xenditContextKey string
+
+const XenditCallbackTokenKey xenditContextKey = "xendit_callback_token"
+
 type XenditGateway struct {
-	client *xendit.APIClient
+	client        *xendit.APIClient
+	callbackToken string
 }
 
-func NewXenditGateway(apiKey string) *XenditGateway {
+func NewXenditGateway(apiKey, callbackToken string) *XenditGateway {
 	client := xendit.NewClient(apiKey)
 	return &XenditGateway{
-		client: client,
+		client:        client,
+		callbackToken: callbackToken,
 	}
 }
 
@@ -26,6 +36,39 @@ func (g *XenditGateway) GetName() string {
 	return "xendit"
 }
 
+// CreatePayment creates a Xendit Invoice (redirect/link flow).
+func (g *XenditGateway) CreatePayment(ctx context.Context, req *domainGateways.CreatePaymentRequest) (*domainGateways.CreatePaymentResponse, error) {
+	createInvoiceRequest := *invoice.NewCreateInvoiceRequest(
+		req.Payment.ID,
+		float32(req.Payment.Amount),
+	)
+
+	if req.CustomerEmail != "" {
+		createInvoiceRequest.SetPayerEmail(req.CustomerEmail)
+	}
+	if req.Payment.Description != "" {
+		createInvoiceRequest.SetDescription(req.Payment.Description)
+	}
+	if req.CallbackURL != "" {
+		createInvoiceRequest.SetSuccessRedirectUrl(req.CallbackURL)
+		createInvoiceRequest.SetFailureRedirectUrl(req.CallbackURL)
+	}
+
+	resp, _, err := g.client.InvoiceApi.CreateInvoice(ctx).CreateInvoiceRequest(createInvoiceRequest).Execute()
+	if err != nil {
+		log.Printf("Xendit CreateInvoice Error: %v\n", err)
+		return nil, fmt.Errorf("xendit create invoice failed: %w", err)
+	}
+
+	return &domainGateways.CreatePaymentResponse{
+		RedirectURL:    resp.InvoiceUrl,
+		Token:          *resp.Id,
+		GatewayOrderID: req.Payment.ID,
+		Raw:            resp,
+	}, nil
+}
+
+// ChargePayment initiates an invoice-based payment (redirect flow) for Xendit.
 func (g *XenditGateway) ChargePayment(ctx context.Context, req *domainGateways.ChargePaymentRequest) (*domainGateways.ChargePaymentResponse, error) {
 	payment := &entities.Payment{
 		ID:            req.TransactionID,
@@ -59,61 +102,102 @@ func (g *XenditGateway) ChargePayment(ctx context.Context, req *domainGateways.C
 	}, nil
 }
 
-// CreatePayment membuat Invoice Xendit
-func (g *XenditGateway) CreatePayment(ctx context.Context, req *domainGateways.CreatePaymentRequest) (*domainGateways.CreatePaymentResponse, error) {
-	// 1. Buat Request Invoice (Hanya Data Wajib)
-	createInvoiceRequest := *invoice.NewCreateInvoiceRequest(
-		req.Payment.ID,
-		float32(req.Payment.Amount),
-	)
-
-	// 2. Set Data Optional (HANYA JIKA TIDAK KOSONG)
-	// Xendit akan error jika kita maksa kirim string kosong "" sebagai email
-	if req.CustomerEmail != "" {
-		createInvoiceRequest.SetPayerEmail(req.CustomerEmail)
-	}
-
-	if req.Payment.Description != "" {
-		createInvoiceRequest.SetDescription(req.Payment.Description)
-	}
-
-	// Cek Callback URL juga
-	if req.CallbackURL != "" {
-		createInvoiceRequest.SetSuccessRedirectUrl(req.CallbackURL)
-		createInvoiceRequest.SetFailureRedirectUrl(req.CallbackURL)
-	}
-
-	// 3. Kirim ke Xendit
-	resp, _, err := g.client.InvoiceApi.CreateInvoice(ctx).CreateInvoiceRequest(createInvoiceRequest).Execute()
+// VerifyPayment fetches the current invoice status from Xendit by invoice ID.
+func (g *XenditGateway) VerifyPayment(ctx context.Context, gatewayOrderID string) (*entities.Payment, error) {
+	resp, _, err := g.client.InvoiceApi.GetInvoiceById(ctx, gatewayOrderID).Execute()
 	if err != nil {
-		log.Printf("Xendit CreateInvoice Error: %v\n", err)
-		return nil, fmt.Errorf("xendit error: %w", err)
+		errStr := err.Error()
+		if strings.Contains(errStr, "404") || strings.Contains(strings.ToUpper(errStr), "NOT_FOUND") {
+			return &entities.Payment{
+				ID:              gatewayOrderID,
+				Status:          entities.PaymentStatusPending,
+				GatewayOrderID:  gatewayOrderID,
+				GatewayResponse: map[string]interface{}{"status_message": "Invoice not found in Xendit"},
+			}, nil
+		}
+		return nil, fmt.Errorf("xendit get invoice failed: %w", err)
 	}
 
-	// 4. Kembalikan URL Pembayaran
-	return &domainGateways.CreatePaymentResponse{
-		RedirectURL:    resp.InvoiceUrl,
-		Token:          *resp.Id,
-		GatewayOrderID: req.Payment.ID,
-		Raw:            resp,
+	var rawResponse map[string]interface{}
+	if data, marshalErr := json.Marshal(resp); marshalErr == nil {
+		_ = json.Unmarshal(data, &rawResponse)
+	}
+
+	statusStr, _ := rawResponse["status"].(string)
+	externalID, _ := rawResponse["external_id"].(string)
+	if externalID == "" {
+		externalID = gatewayOrderID
+	}
+
+	return &entities.Payment{
+		ID:              externalID,
+		Status:          mapXenditInvoiceStatus(statusStr),
+		GatewayOrderID:  gatewayOrderID,
+		GatewayResponse: rawResponse,
 	}, nil
 }
 
-// ... (Fungsi Verify, Webhook, Cancel, Refund biarkan seperti yang kita bahas sebelumnya) ...
-func (g *XenditGateway) VerifyPayment(ctx context.Context, gatewayOrderID string) (*entities.Payment, error) {
-	return nil, fmt.Errorf("not implemented yet")
-}
-
+// HandleWebhook processes Xendit invoice callback notifications.
+// The caller (HTTP handler) must inject the x-callback-token header value into
+// the context using XenditCallbackTokenKey before invoking this method.
 func (g *XenditGateway) HandleWebhook(ctx context.Context, payload []byte) (*entities.Payment, error) {
-	return nil, fmt.Errorf("not implemented yet")
+	// 1. Verify callback token
+	if g.callbackToken != "" {
+		ctxToken, _ := ctx.Value(XenditCallbackTokenKey).(string)
+		if ctxToken != g.callbackToken {
+			return nil, fmt.Errorf("invalid xendit callback token")
+		}
+	}
+
+	// 2. Parse payload
+	var notification map[string]interface{}
+	if err := json.Unmarshal(payload, &notification); err != nil {
+		return nil, fmt.Errorf("failed to parse xendit webhook payload: %w", err)
+	}
+
+	invoiceID, _ := notification["id"].(string)
+	externalID, _ := notification["external_id"].(string)
+	statusStr, _ := notification["status"].(string)
+
+	// external_id is the order ID we sent when creating the invoice
+	if externalID == "" {
+		externalID = invoiceID
+	}
+
+	return &entities.Payment{
+		ID:              externalID,
+		Status:          mapXenditInvoiceStatus(statusStr),
+		GatewayOrderID:  invoiceID,
+		GatewayResponse: notification,
+	}, nil
 }
 
+// CancelPayment expires a pending Xendit invoice so it can no longer be paid.
 func (g *XenditGateway) CancelPayment(ctx context.Context, gatewayOrderID string) error {
+	_, _, err := g.client.InvoiceApi.ExpireInvoice(ctx, gatewayOrderID).Execute()
+	if err != nil {
+		return fmt.Errorf("xendit expire invoice failed: %w", err)
+	}
 	return nil
 }
 
+// RefundPayment is not supported via the Xendit Invoice API.
+// Refunds for Xendit must be processed manually through the Xendit dashboard.
 func (g *XenditGateway) RefundPayment(ctx context.Context, gatewayOrderID string, amount float64) error {
-	return fmt.Errorf("xendit invoice does not support direct refund via API")
+	return fmt.Errorf("xendit invoice refunds must be processed via the Xendit dashboard; direct API refunds are not supported for invoices")
+}
+
+// mapXenditInvoiceStatus maps Xendit invoice statuses to internal PaymentStatus values.
+// Xendit statuses: PENDING, PAID, SETTLED, EXPIRED
+func mapXenditInvoiceStatus(status string) entities.PaymentStatus {
+	switch strings.ToUpper(status) {
+	case "PAID", "SETTLED":
+		return entities.PaymentStatusSuccess
+	case "EXPIRED":
+		return entities.PaymentStatusFailed
+	default:
+		return entities.PaymentStatusPending
+	}
 }
 
 func stringValue(values map[string]interface{}, key string) string {

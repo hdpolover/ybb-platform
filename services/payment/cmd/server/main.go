@@ -142,10 +142,14 @@ func main() {
 
 	// Initialize gateway factory
 	gatewayFactory := infraGateways.NewGatewayFactory()
-	registerGateways(cfg, gatewayFactory, logger)
 
 	// Initialize repositories
+	gatewayConfigRepo := persistence.NewGatewayConfigRepository(db)
 	paymentMethodRepo := persistence.NewPaymentMethodRepository(db)
+
+	// Load gateways: DB-stored configs take priority over env vars.
+	// Providers found in DB will override their env-var counterparts.
+	registerGateways(context.Background(), cfg, gatewayFactory, gatewayConfigRepo, logger)
 	intentRepo := persistence.NewGormPaymentIntentRepository(db)
 	txRepo := persistence.NewGormPaymentTransactionRepository(db)
 	idempotencyRepo := persistence.NewGormPaymentIdempotencyRepository(db)
@@ -182,6 +186,7 @@ func main() {
 	)
 
 	paymentMethodHandler := handlers.NewPaymentMethodHandler(paymentMethodRepo)
+	gatewayConfigHandler := handlers.NewGatewayConfigHandler(gatewayConfigRepo)
 
 	// Initialize Intent Handlers
 	createIntentHandler := commandHandlers.NewCreateIntentHandler(intentRepo)
@@ -189,7 +194,7 @@ func main() {
 	intentHandler := handlers.NewIntentHandler(createIntentHandler, confirmIntentHandler)
 
 	// Setup router
-	r := setupRouter(paymentHandler, paymentMethodHandler, intentHandler, cfg.InternalServiceKey)
+	r := setupRouter(paymentHandler, paymentMethodHandler, gatewayConfigHandler, intentHandler, cfg.InternalServiceKey)
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -221,43 +226,94 @@ func main() {
 	logger.Info("Server exited")
 }
 
-func registerGateways(cfg *config.Config, gatewayFactory *infraGateways.GatewayFactory, logger *zap.SugaredLogger) {
+// registerGateways loads payment gateways with DB-stored configs taking priority over env vars.
+// Strategy:
+//  1. Start with env-var fallbacks (existing behaviour, unchanged).
+//  2. For each active DB config, build and register the matching gateway, overwriting the
+//     env-var version if the same provider was already registered.
+//
+// This means: adding a Xendit row in payment_gateway_configs with is_active=true will
+// override XENDIT_SECRET_KEY without any restart config change.
+func registerGateways(
+	ctx context.Context,
+	cfg *config.Config,
+	gatewayFactory *infraGateways.GatewayFactory,
+	gatewayConfigRepo *persistence.GatewayConfigRepository,
+	logger *zap.SugaredLogger,
+) {
 	registered := []string{}
 
+	// Manual gateway is always registered — it has no API keys.
 	gatewayFactory.Register(infraGateways.NewManualGateway())
 	registered = append(registered, "manual")
 
+	// --- Step 1: env-var fallbacks ---
 	if cfg.MidtransServerKey != "" {
 		gatewayFactory.Register(infraGateways.NewMidtransGateway(
 			cfg.MidtransServerKey,
 			cfg.MidtransClientKey,
 			cfg.Environment,
 		))
-		registered = append(registered, "midtrans")
+		registered = append(registered, "midtrans(env)")
 	}
-
 	if cfg.XenditSecretKey != "" {
-		gatewayFactory.Register(infraGateways.NewXenditGateway(cfg.XenditSecretKey))
-		registered = append(registered, "xendit")
+		gatewayFactory.Register(infraGateways.NewXenditGateway(cfg.XenditSecretKey, cfg.XenditCallbackToken))
+		registered = append(registered, "xendit(env)")
 	}
-
 	if cfg.StripeSecretKey != "" {
 		gatewayFactory.Register(infraGateways.NewStripeGateway(cfg.StripeSecretKey))
-		registered = append(registered, "stripe")
+		registered = append(registered, "stripe(env)")
 	}
-
 	if cfg.PayPalClientID != "" && cfg.PayPalSecret != "" {
 		gatewayFactory.Register(infraGateways.NewPayPalGateway(cfg.PayPalClientID, cfg.PayPalSecret, cfg.PayPalMode))
-		registered = append(registered, "paypal")
+		registered = append(registered, "paypal(env)")
+	}
+
+	// --- Step 2: DB configs override env-var registrations ---
+	dbConfigs, err := gatewayConfigRepo.FindActive(ctx)
+	if err != nil {
+		logger.Warnf("Could not load gateway configs from DB, using env vars only: %v", err)
+	} else {
+		for _, dbCfg := range dbConfigs {
+			env := dbCfg.Mode // "sandbox" or "production"
+			switch dbCfg.Provider {
+			case "midtrans":
+				gatewayFactory.Register(infraGateways.NewMidtransGateway(
+					dbCfg.ServerKey,
+					dbCfg.ClientKey,
+					env,
+				))
+				registered = append(registered, "midtrans(db)")
+			case "xendit":
+				gatewayFactory.Register(infraGateways.NewXenditGateway(
+					dbCfg.ServerKey,
+					dbCfg.WebhookSecret, // callback token stored in webhook_secret
+				))
+				registered = append(registered, "xendit(db)")
+			case "stripe":
+				gatewayFactory.Register(infraGateways.NewStripeGateway(dbCfg.ServerKey))
+				registered = append(registered, "stripe(db)")
+			case "paypal":
+				gatewayFactory.Register(infraGateways.NewPayPalGateway(
+					dbCfg.ServerKey, // client_id stored in server_key
+					dbCfg.ClientKey, // secret stored in client_key
+					env,
+				))
+				registered = append(registered, "paypal(db)")
+			default:
+				logger.Warnf("Unknown provider %q in gateway_configs, skipping", dbCfg.Provider)
+			}
+		}
 	}
 
 	logger.Infof("Registered payment gateways: %v", registered)
 }
 
-// setupRouter sekarang menerima handler dan mendaftarkan route Swagger
+// setupRouter registers all HTTP routes.
 func setupRouter(
 	paymentHandler *handlers.PaymentHandler,
 	paymentMethodHandler *handlers.PaymentMethodHandler,
+	gatewayConfigHandler *handlers.GatewayConfigHandler,
 	intentHandler *handlers.IntentHandler,
 	internalServiceKey string,
 ) *gin.Engine {
@@ -314,6 +370,17 @@ func setupRouter(
 			methods.POST("", paymentMethodHandler.Create)
 			methods.PUT("/:id", paymentMethodHandler.Update)
 			methods.DELETE("/:id", paymentMethodHandler.Delete)
+		}
+
+		// Gateway Configs (admin — manage provider API keys and active status)
+		gwConfigs := protected.Group("/gateway-configs")
+		{
+			gwConfigs.GET("", gatewayConfigHandler.GetAll)
+			gwConfigs.GET("/:id", gatewayConfigHandler.GetByID)
+			gwConfigs.POST("", gatewayConfigHandler.Create)
+			gwConfigs.PUT("/:id", gatewayConfigHandler.Update)
+			gwConfigs.PATCH("/:id/active", gatewayConfigHandler.SetActive)
+			gwConfigs.DELETE("/:id", gatewayConfigHandler.Delete)
 		}
 	}
 

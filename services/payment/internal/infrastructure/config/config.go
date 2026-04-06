@@ -20,7 +20,8 @@ type Config struct {
 	MidtransClientKey    string
 	MidtransIsProduction bool
 
-	XenditSecretKey string
+	XenditSecretKey     string
+	XenditCallbackToken string
 
 	StripeSecretKey     string
 	StripeWebhookSecret string
@@ -49,7 +50,8 @@ func LoadConfig() (*Config, error) {
 		MidtransClientKey:    getEnv("MIDTRANS_CLIENT_KEY", ""),
 		MidtransIsProduction: getEnv("MIDTRANS_IS_PRODUCTION", "false") == "true",
 
-		XenditSecretKey: getEnv("XENDIT_SECRET_KEY", ""),
+		XenditSecretKey:     getEnv("XENDIT_SECRET_KEY", ""),
+		XenditCallbackToken: getEnv("XENDIT_CALLBACK_TOKEN", ""),
 
 		StripeSecretKey:     getEnv("STRIPE_SECRET_KEY", ""),
 		StripeWebhookSecret: getEnv("STRIPE_WEBHOOK_SECRET", ""),
