@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@modules/auth/auth.module';
+import { ParticipantsModule } from '@modules/participants/participants.module';
 import { ApplicationsController } from './presentation/applications.controller';
 import { PaymentModule } from '@modules/payments/payment.module';
 
@@ -28,7 +29,7 @@ import { APPLICATION_REPOSITORY } from './infrastructure/tokens';
 import { CacheModule } from '@shared/infrastructure/cache/cache.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, MonitoringModule, PaymentModule, CacheModule],
+  imports: [PrismaModule, AuthModule, ParticipantsModule, MonitoringModule, PaymentModule, CacheModule],
   controllers: [ApplicationsController],
   providers: [
     // Command Handlers

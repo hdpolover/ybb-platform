@@ -16,6 +16,9 @@ import { AmbassadorAdminController } from './presentation/ambassador-admin.contr
 import { CompleteOnboardingHandler } from './application/commands/handlers/complete-onboarding.handler';
 import { GetAmbassadorsListHandler } from './application/queries/handlers/get-ambassadors-list.handler';
 import { UpdateAmbassadorStatusHandler } from './application/commands/handlers/update-ambassador-status.handler';
+import { GetAmbassadorReferralsHandler } from './application/queries/handlers/get-ambassador-referrals.handler';
+import { DeleteAmbassadorHandler } from './application/commands/handlers/delete-ambassador.handler';
+import { ReferralFunnelService } from './application/services/referral-funnel.service';
 
 @Module({
     imports: [CqrsModule, AuthModule],
@@ -39,7 +42,10 @@ import { UpdateAmbassadorStatusHandler } from './application/commands/handlers/u
         GetAmbassadorDashboardHandler,
         GetAmbassadorsListHandler,
         UpdateAmbassadorStatusHandler,
+        GetAmbassadorReferralsHandler,
+        DeleteAmbassadorHandler,
+        ReferralFunnelService,
     ],
-    exports: ['IParticipantRepository', 'IAmbassadorRepository'],
+    exports: ['IParticipantRepository', 'IAmbassadorRepository', ReferralFunnelService],
 })
 export class ParticipantsModule { }

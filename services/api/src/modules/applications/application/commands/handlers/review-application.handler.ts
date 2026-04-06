@@ -7,6 +7,7 @@ import { ApplicationMapper } from '@modules/applications/infrastructure/mappers/
 import { APPLICATION_REPOSITORY } from '@modules/applications/infrastructure/tokens';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
+import { ReferralFunnelService } from '@modules/participants/application/services/referral-funnel.service';
 
 /**
  * Review Application Handler
@@ -21,6 +22,7 @@ export class ReviewApplicationHandler {
     private readonly applicationRepository: IApplicationRepository,
     private readonly applicationMapper: ApplicationMapper,
     private readonly cacheService: CacheService,
+    private readonly referralFunnel: ReferralFunnelService,
   ) {}
 
   async execute(command: ReviewApplicationCommand): Promise<ApplicationResponseDto> {
@@ -93,6 +95,11 @@ export class ReviewApplicationHandler {
     // Invalidate portal cache for the participant
     // When admin reviews, the participant should see status change immediately
     await this.invalidateParticipantCache(application.participantId);
+
+    // Advance referral funnel on acceptance
+    if (command.status === ApplicationStatus.ACCEPTED) {
+      await this.referralFunnel.advanceToAccepted(application.participantId, application.programId);
+    }
 
     // Return DTO
     return this.applicationMapper.toDto(updated);

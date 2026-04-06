@@ -5,6 +5,7 @@ import { CompleteOnboardingCommand } from '../complete-onboarding.command';
 import { Gender } from '@prisma/client';
 import { Country } from 'country-state-city';
 import { Logger, BadRequestException } from '@nestjs/common';
+import { ReferralFunnelService } from '../../services/referral-funnel.service';
 
 @CommandHandler(CompleteOnboardingCommand)
 export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboardingCommand> {
@@ -13,6 +14,7 @@ export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboar
     constructor(
         private readonly prisma: PrismaService,
         private readonly unitOfWork: UnitOfWork,
+        private readonly referralFunnel: ReferralFunnelService,
     ) {}
 
     async execute(command: CompleteOnboardingCommand) {
@@ -119,6 +121,9 @@ export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboar
 
             return participant;
         }, { name: 'complete-onboarding', timeout: 5000 });
+
+        // Advance referral funnel: referred → registered
+        await this.referralFunnel.advanceToRegistered(result.id);
 
         return result;
     }
