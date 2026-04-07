@@ -274,3 +274,87 @@ export function deletePlatformProgram(programId: string): Promise<void> {
     method: "DELETE",
   });
 }
+
+// ─── Ambassador Types ─────────────────────────────────────────────────────────
+
+export type AmbassadorRow = {
+  id: string;
+  fullName: string;
+  referralCode: string;
+  totalReferrals: number;
+  successfulReferrals: number;
+  isActive: boolean;
+  createdAt: string;
+  activatedAt?: string | null;
+  deactivatedAt?: string | null;
+  programId?: string;
+  programName?: string;
+  // nested from include
+  user?: { email: string } | null;
+  program?: { name: string; slug: string } | null;
+};
+
+export type AmbassadorReferral = {
+  id: string;
+  status: string;
+  createdAt: string;
+  registeredAt?: string | null;
+  appliedAt?: string | null;
+  acceptedAt?: string | null;
+  completedAt?: string | null;
+  daysToRegister?: number | null;
+  daysToApply?: number | null;
+  daysToAccept?: number | null;
+  totalConversionDays?: number | null;
+  participant?: {
+    fullName?: string | null;
+    user?: { email: string } | null;
+  } | null;
+};
+
+export type AmbassadorListMeta = {
+  total: number;
+  page: number;
+  limit: number;
+  lastPage: number;
+};
+
+export type AmbassadorListResponse = {
+  data: AmbassadorRow[];
+  meta: AmbassadorListMeta;
+};
+
+export type AmbassadorReferralsResponse = {
+  data: AmbassadorReferral[];
+  meta: AmbassadorListMeta;
+};
+
+// ─── Ambassador API Functions ─────────────────────────────────────────────────
+
+export function listAmbassadors(params?: {
+  programId?: string;
+  search?: string;
+  page?: number;
+}): Promise<AmbassadorListResponse> {
+  const qs = new URLSearchParams();
+  if (params?.programId) qs.set("programId", params.programId);
+  if (params?.search) qs.set("search", params.search);
+  if (params?.page) qs.set("page", String(params.page));
+  return request<AmbassadorListResponse>(`/admin/ambassadors?${qs.toString()}`, undefined, { unwrapData: false });
+}
+
+export function activateAmbassador(id: string): Promise<void> {
+  return request<void>(`/admin/ambassadors/${id}/activate`, { method: "PATCH" });
+}
+
+export function deactivateAmbassador(id: string): Promise<void> {
+  return request<void>(`/admin/ambassadors/${id}/deactivate`, { method: "PATCH" });
+}
+
+export function deleteAmbassador(id: string): Promise<void> {
+  return request<void>(`/admin/ambassadors/${id}`, { method: "DELETE" });
+}
+
+export function getAmbassadorReferrals(id: string, page = 1): Promise<AmbassadorReferralsResponse> {
+  return request<AmbassadorReferralsResponse>(`/admin/ambassadors/${id}/referrals?page=${page}`, undefined, { unwrapData: false });
+}
