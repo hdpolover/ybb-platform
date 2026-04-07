@@ -56,6 +56,12 @@ const menuItems: MenuItem[] = [
     icon: UserGroupIcon,
   },
   {
+    id: "ambassadors",
+    label: "Ambassadors",
+    href: "/platform/ambassadors",
+    icon: UserGroupIcon,
+  },
+  {
     id: "admins",
     label: "Admins",
     href: "/platform/admins",
