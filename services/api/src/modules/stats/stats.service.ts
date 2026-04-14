@@ -175,4 +175,89 @@ export class StatsService {
       }
     }
   }
+
+  async getAdminAnalytics(brandId?: string) {
+    const brandFilter = brandId ? { brandId } : {};
+    const userBrandFilter = brandId ? { brandId } : {};
+
+    const [
+      totalPrograms,
+      publishedPrograms,
+      activePrograms,
+      draftPrograms,
+      totalUsers,
+      activeUsers,
+      totalApplications,
+      applicationsByStatus,
+      totalParticipants,
+      topPrograms,
+    ] = await Promise.all([
+      this.prisma.program.count({ where: { ...brandFilter, deletedAt: null } }),
+      this.prisma.program.count({ where: { ...brandFilter, isPublished: true, deletedAt: null } }),
+      this.prisma.program.count({ where: { ...brandFilter, isActive: true, deletedAt: null } }),
+      this.prisma.program.count({ where: { ...brandFilter, isPublished: false, deletedAt: null } }),
+      this.prisma.user.count({ where: { ...userBrandFilter, deletedAt: null } }),
+      this.prisma.user.count({ where: { ...userBrandFilter, isActive: true, deletedAt: null } }),
+      this.prisma.participantApplication.count({
+        where: { program: { ...brandFilter, deletedAt: null } },
+      }),
+      this.prisma.participantApplication.groupBy({
+        by: ['status'],
+        where: { program: { ...brandFilter, deletedAt: null } },
+        _count: { id: true },
+      }),
+      this.prisma.participant.count({
+        where: { user: { ...userBrandFilter, deletedAt: null } },
+      }),
+      this.prisma.program.findMany({
+        where: { ...brandFilter, deletedAt: null },
+        select: {
+          id: true,
+          name: true,
+          _count: { select: { participantApplications: true } },
+        },
+        orderBy: { participantApplications: { _count: 'desc' } },
+        take: 5,
+      }),
+    ]);
+
+    // New users this month
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+    const newUsersThisMonth = await this.prisma.user.count({
+      where: { ...userBrandFilter, createdAt: { gte: startOfMonth }, deletedAt: null },
+    });
+
+    const statusMap = applicationsByStatus.reduce<Record<string, number>>((acc, item) => {
+      acc[item.status] = item._count.id;
+      return acc;
+    }, {});
+
+    return {
+      programs: {
+        total: totalPrograms,
+        published: publishedPrograms,
+        active: activePrograms,
+        draft: draftPrograms,
+      },
+      users: {
+        total: totalUsers,
+        active: activeUsers,
+        new_this_month: newUsersThisMonth,
+      },
+      applications: {
+        total: totalApplications,
+        by_status: statusMap,
+      },
+      participants: {
+        total: totalParticipants,
+      },
+      top_programs: topPrograms.map((p) => ({
+        id: p.id,
+        name: p.name,
+        applicants: p._count.participantApplications,
+      })),
+    };
+  }
 }

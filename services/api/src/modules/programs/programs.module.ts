@@ -11,6 +11,13 @@ import { ProgramApplicationConfigController } from './presentation/program-appli
 import { ProgramParticipationController } from './presentation/program-participation.controller';
 import { ProgramLandingController } from './presentation/program-landing.controller';
 import { ProgramExchangeRateController } from './presentation/program-exchange-rate.controller';
+import { ProgramAnnouncementsController } from './presentation/program-announcements.controller';
+import {
+  ListProgramAnnouncementsHandler,
+  CreateProgramAnnouncementHandler,
+  UpdateProgramAnnouncementHandler,
+  DeleteProgramAnnouncementHandler,
+} from './application/commands/handlers/manage-program-announcements.handler';
 import {
   UpsertParticipationInfoHandler,
   DeleteParticipationInfoHandler,
@@ -78,6 +85,7 @@ import { CacheService } from '../../shared/infrastructure/cache/cache.service';
     ProgramParticipationController,
     ProgramLandingController,
     ProgramExchangeRateController,
+    ProgramAnnouncementsController,
   ],
   providers: [
     ListProgramsHandler,
@@ -128,6 +136,12 @@ import { CacheService } from '../../shared/infrastructure/cache/cache.service';
     DeleteParticipationInfoHandler,
     GetParticipationInfoHandler,
     ListParticipationInfoHandler,
+
+    // Announcement Handlers
+    ListProgramAnnouncementsHandler,
+    CreateProgramAnnouncementHandler,
+    UpdateProgramAnnouncementHandler,
+    DeleteProgramAnnouncementHandler,
 
     CacheService,
     {

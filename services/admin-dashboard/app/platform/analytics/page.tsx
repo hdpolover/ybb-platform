@@ -1,11 +1,43 @@
 "use client";
 
-import { ChartBarIcon, ArrowTrendingUpIcon, UsersIcon, RectangleStackIcon, ArrowDownTrayIcon, FunnelIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
+import { useEffect, useState, useCallback } from "react";
+import {
+  ChartBarIcon,
+  ArrowTrendingUpIcon,
+  UsersIcon,
+  RectangleStackIcon,
+  ArrowPathIcon,
+} from "@heroicons/react/24/outline";
+import { getAdminAnalytics, type AdminAnalytics } from "../../../src/shared/api-client";
+import { useAuth } from "../../contexts/AuthContext";
 
 export default function AnalyticsPage() {
+  const { adminProfile } = useAuth();
+  const [analytics, setAnalytics] = useState<AdminAnalytics | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const brandId = adminProfile?.assignedBrands?.[0]?.brandId ?? undefined;
+
+  const fetchAnalytics = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getAdminAnalytics(brandId);
+      setAnalytics(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load analytics");
+    } finally {
+      setLoading(false);
+    }
+  }, [brandId]);
+
+  useEffect(() => {
+    fetchAnalytics();
+  }, [fetchAnalytics]);
+
   return (
     <div className="space-y-4">
-      {/* Bagian header halaman analytics */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">Platform Analytics</h1>
@@ -13,163 +45,145 @@ export default function AnalyticsPage() {
             Comprehensive analytics and insights across all programs
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <select className="rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
-            <option value="7d">Last 7 days</option>
-            <option value="30d">Last 30 days</option>
-            <option value="90d">Last 90 days</option>
-            <option value="1y">Last year</option>
-          </select>
-          <button
-            type="button"
-            className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-          >
-            Export Report
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={fetchAnalytics}
+          className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-zinc-600 shadow-sm hover:bg-zinc-50"
+        >
+          <ArrowPathIcon className="h-3.5 w-3.5" />
+          Refresh
+        </button>
       </div>
 
-      {/* Grid statistik utama platform */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-zinc-600">Total Programs</p>
-              <p className="mt-1 text-2xl font-bold text-zinc-900">24</p>
-              <p className="mt-1 text-[10px] text-emerald-600">↑ 12% from last month</p>
-            </div>
-            <div className="rounded-full bg-blue-100 p-2.5">
-              <RectangleStackIcon className="h-5 w-5 text-blue-600" />
-            </div>
-          </div>
-        </div>
+      {error && (
+        <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>
+      )}
 
-        <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-zinc-600">Total Users</p>
-              <p className="mt-1 text-2xl font-bold text-zinc-900">2,847</p>
-              <p className="mt-1 text-[10px] text-emerald-600">↑ 8% from last month</p>
-            </div>
-            <div className="rounded-full bg-emerald-100 p-2.5">
-              <UsersIcon className="h-5 w-5 text-emerald-600" />
-            </div>
-          </div>
-        </div>
+      {loading && (
+        <p className="text-xs text-zinc-400">Loading analytics…</p>
+      )}
 
-        <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-zinc-600">Revenue</p>
-              <p className="mt-1 text-2xl font-bold text-zinc-900">$48.2K</p>
-              <p className="mt-1 text-[10px] text-emerald-600">↑ 23% from last month</p>
-            </div>
-            <div className="rounded-full bg-purple-100 p-2.5">
-              <ArrowTrendingUpIcon className="h-5 w-5 text-purple-600" />
-            </div>
+      {!loading && analytics && (
+        <>
+          <div className="grid gap-4 md:grid-cols-4">
+            <StatCard
+              icon={<RectangleStackIcon className="h-5 w-5 text-blue-600" />}
+              bg="bg-blue-100"
+              label="Total Programs"
+              value={analytics.programs.total}
+              sub={`${analytics.programs.active} active`}
+            />
+            <StatCard
+              icon={<UsersIcon className="h-5 w-5 text-emerald-600" />}
+              bg="bg-emerald-100"
+              label="Total Users"
+              value={analytics.users.total}
+              sub={`${analytics.users.new_this_month} new this month`}
+            />
+            <StatCard
+              icon={<ArrowTrendingUpIcon className="h-5 w-5 text-purple-600" />}
+              bg="bg-purple-100"
+              label="Applications"
+              value={analytics.applications.total}
+              sub="All time"
+            />
+            <StatCard
+              icon={<ChartBarIcon className="h-5 w-5 text-amber-600" />}
+              bg="bg-amber-100"
+              label="Participants"
+              value={analytics.participants.total}
+              sub="Accepted"
+            />
           </div>
-        </div>
 
-        <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-zinc-600">Active Programs</p>
-              <p className="mt-1 text-2xl font-bold text-zinc-900">18</p>
-              <p className="mt-1 text-[10px] text-zinc-600">6 ending soon</p>
+          <section className="rounded-md border border-zinc-200 bg-white px-5 py-4 shadow-sm">
+            <h2 className="mb-3 text-sm font-semibold text-zinc-900">Applications by Status</h2>
+            <div className="grid gap-3 sm:grid-cols-3 md:grid-cols-5">
+              {Object.entries(analytics.applications.by_status).map(([status, count]) => (
+                <div key={status} className="rounded-md border border-zinc-100 bg-zinc-50 px-3 py-2">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">{status}</p>
+                  <p className="mt-0.5 text-lg font-bold text-zinc-900">{count as number}</p>
+                </div>
+              ))}
             </div>
-            <div className="rounded-full bg-amber-100 p-2.5">
-              <ChartBarIcon className="h-5 w-5 text-amber-600" />
+          </section>
+
+          <section className="rounded-md border border-zinc-200 bg-white px-5 py-4 shadow-sm">
+            <h2 className="mb-3 text-sm font-semibold text-zinc-900">Top Programs by Applicants</h2>
+            <div className="overflow-hidden rounded-md border border-zinc-200">
+              <table className="min-w-full text-left text-[11px]">
+                <thead className="bg-zinc-50 text-zinc-600">
+                  <tr>
+                    <th className="px-3 py-2 font-semibold">#</th>
+                    <th className="px-3 py-2 font-semibold">Program</th>
+                    <th className="px-3 py-2 text-right font-semibold">Applicants</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {analytics.top_programs.map((p, idx) => (
+                    <tr key={p.id} className={idx % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}>
+                      <td className="px-3 py-2 text-zinc-500">{idx + 1}</td>
+                      <td className="px-3 py-2 font-medium text-zinc-900">{p.name}</td>
+                      <td className="px-3 py-2 text-right font-semibold text-zinc-700">{p.applicants}</td>
+                    </tr>
+                  ))}
+                  {analytics.top_programs.length === 0 && (
+                    <tr>
+                      <td colSpan={3} className="px-3 py-4 text-center text-zinc-400">No data.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
-          </div>
+          </section>
+
+          <section className="rounded-md border border-zinc-200 bg-white px-5 py-4 shadow-sm">
+            <h2 className="mb-3 text-sm font-semibold text-zinc-900">Program Status Breakdown</h2>
+            <div className="grid gap-3 sm:grid-cols-4">
+              <MiniStat label="Total" value={analytics.programs.total} />
+              <MiniStat label="Published" value={analytics.programs.published} />
+              <MiniStat label="Active" value={analytics.programs.active} />
+              <MiniStat label="Draft" value={analytics.programs.draft} />
+            </div>
+          </section>
+        </>
+      )}
+    </div>
+  );
+}
+
+function StatCard({
+  icon,
+  bg,
+  label,
+  value,
+  sub,
+}: {
+  icon: React.ReactNode;
+  bg: string;
+  label: string;
+  value: number;
+  sub: string;
+}) {
+  return (
+    <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-xs text-zinc-600">{label}</p>
+          <p className="mt-1 text-2xl font-bold text-zinc-900">{value}</p>
+          <p className="mt-1 text-[10px] text-zinc-500">{sub}</p>
         </div>
+        <div className={`rounded-full ${bg} p-2.5`}>{icon}</div>
       </div>
+    </div>
+  );
+}
 
-      {/* Section detail analytics / chart */}
-      <section className="rounded-md border border-zinc-200 bg-white px-5 py-4 text-sm shadow-sm">
-        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-sm font-semibold text-zinc-900">Performance Analytics</h2>
-            <p className="mt-1 text-[11px] text-zinc-500">
-              Detailed insights and trends across all programs
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 text-[11px]">
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-1.5 font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
-            >
-              <ArrowDownTrayIcon className="h-3.5 w-3.5 text-emerald-500" />
-              Export Report
-            </button>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 bg-blue-50 px-3 py-1.5 font-semibold text-blue-700 shadow-sm transition hover:bg-blue-100"
-            >
-              <FunnelIcon className="h-3.5 w-3.5" />
-              Apply Filters
-            </button>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-1.5 font-semibold text-zinc-600 shadow-sm transition hover:bg-zinc-50"
-            >
-              <ArrowPathIcon className="h-3.5 w-3.5" />
-              Reset
-            </button>
-          </div>
-        </div>
-
-        <div className="mb-3 grid gap-3 md:grid-cols-3">
-          <div>
-            <label className="mb-1 block text-[11px] font-medium text-zinc-700">
-              Time Period
-            </label>
-            <select className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
-              <option>Last 7 days</option>
-              <option>Last 30 days</option>
-              <option>Last 90 days</option>
-              <option>Last year</option>
-              <option>All time</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-[11px] font-medium text-zinc-700">
-              Program
-            </label>
-            <select className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
-              <option>All Programs</option>
-              <option>IYS 2024</option>
-              <option>JYS 2025</option>
-              <option>KYS 2025</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-[11px] font-medium text-zinc-700">
-              Metric
-            </label>
-            <select className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
-              <option>All Metrics</option>
-              <option>User Growth</option>
-              <option>Revenue</option>
-              <option>Conversion Rate</option>
-              <option>Engagement</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-12 text-center">
-          <ChartBarIcon className="mx-auto h-16 w-16 text-zinc-300" />
-          <h3 className="mt-4 text-sm font-semibold text-zinc-900">Analytics Visualization</h3>
-          <p className="mt-2 text-xs text-zinc-600">
-            Detailed charts and graphs will be displayed here
-          </p>
-          <p className="mt-1 text-[10px] text-zinc-500">
-            Revenue trends, user growth, program performance, conversion rates
-          </p>
-        </div>
-      </section>
+function MiniStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-md border border-zinc-100 bg-zinc-50 px-3 py-2">
+      <p className="text-[10px] font-medium text-zinc-500">{label}</p>
+      <p className="mt-0.5 text-xl font-bold text-zinc-900">{value}</p>
     </div>
   );
 }
