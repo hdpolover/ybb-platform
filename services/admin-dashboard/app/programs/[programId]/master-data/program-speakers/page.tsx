@@ -1,99 +1,192 @@
-import { ProgramSpeakersHeader } from "@/app/components/programSpeakersMasterData/ProgramSpeakersHeader";
-import { ProgramSpeakersTable, type ProgramSpeaker } from "@/app/components/programSpeakersMasterData/ProgramSpeakersTable";
+"use client";
 
-// --- MOCK DATA (Simulasi Fetch dari DB/API) ---
-const MOCK_SPEAKERS: ProgramSpeaker[] = [
-  {
-    id: 1,
-    name: "Dr. Hana Nakamura",
-    title: "Professor of International Relations",
-    organization: "Tokyo Global University",
-    email: "hana.nakamura@example.com",
-    type: "Keynote",
-    status: "Active",
-    biography: "Dr. Hana has over 15 years of experience working on youth diplomacy, peacebuilding, and cross-cultural leadership programs across Asia and Europe.",
-    expertiseAreas: "Youth Diplomacy, Peacebuilding, Global Governance",
-    photoUrl: "/img/mock/speaker-hana.jpg",
-    linkedInUrl: "https://www.linkedin.com/in/hananakamura",
-    instagramUrl: "https://www.instagram.com/hanaspeaks",
-    sessionTitle: "Youth as Catalysts for Global Change",
-    sessionTime: "Day 1, 09:00 - 10:30",
-    sessionDescription: "A keynote session exploring how young leaders can shape global narratives and drive impact through collaboration.",
-  },
-  {
-    id: 2,
-    name: "Michael Tan",
-    title: "Social Innovation Strategist",
-    organization: "ImpactBridge Asia",
-    email: "michael.tan@example.com",
-    type: "Regular",
-    status: "Active",
-    biography: "Michael works with youth-led organizations to design social innovation projects and sustainable community programs.",
-    expertiseAreas: "Social Innovation, Design Thinking, Community Development",
-    photoUrl: "/img/mock/speaker-michael.jpg",
-    linkedInUrl: "https://www.linkedin.com/in/michaeltan",
-    sessionTitle: "Design Thinking for Youth-Led Projects",
-    sessionTime: "Day 1, 13:30 - 15:00",
-    sessionDescription: "A hands-on workshop guiding participants to design impactful and feasible community initiatives.",
-  },
-  {
-    id: 3,
-    name: "Aisha Rahman",
-    title: "Program Manager",
-    organization: "Global Youth Network",
-    email: "aisha.rahman@example.com",
-    type: "Regular",
-    status: "Inactive",
-    biography: "Aisha manages international youth exchange programs and facilitates leadership camps across multiple countries.",
-    expertiseAreas: "Exchange Programs, Youth Leadership, Facilitation",
-    photoUrl: "/img/mock/speaker-aisha.jpg",
-    linkedInUrl: "https://www.linkedin.com/in/aisharahman",
-    sessionTitle: "Building Sustainable Youth Networks",
-    sessionTime: "Day 2, 10:00 - 11:30",
-    sessionDescription: "An interactive session on how to maintain and grow international youth communities.",
-  },
-];
+import { useEffect, useState, useCallback } from "react";
+import { useParams } from "next/navigation";
+import { PlusIcon, PencilSquareIcon, TrashIcon, XMarkIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
+import { useAuth } from "@/app/contexts/AuthContext";
+import {
+  listProgramSpeakers,
+  createProgramSpeaker,
+  updateProgramSpeaker,
+  deleteProgramSpeaker,
+  type ProgramSpeaker,
+} from "@/src/shared/api-client";
 
-export default async function ProgramSpeakersPage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ programId: string }>;
-  searchParams: Promise<{ search?: string }>;
-}) {
-  const resolvedParams = await params;
-  const resolvedSearchParams = await searchParams;
-  const searchQuery = resolvedSearchParams.search?.toLowerCase() || "";
+export default function ProgramSpeakersPage() {
+  const params = useParams<{ programId: string }>();
+  const { accessiblePrograms } = useAuth();
+  const [speakers, setSpeakers] = useState<ProgramSpeaker[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [editTarget, setEditTarget] = useState<ProgramSpeaker | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ProgramSpeaker | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
-  const filteredData = MOCK_SPEAKERS.filter((speaker) => {
-    if (!searchQuery) return true;
-    return (
-      speaker.name.toLowerCase().includes(searchQuery) ||
-      (speaker.title ?? "").toLowerCase().includes(searchQuery) ||
-      (speaker.organization ?? "").toLowerCase().includes(searchQuery) ||
-      speaker.type.toLowerCase().includes(searchQuery) ||
-      (speaker.sessionTitle ?? "").toLowerCase().includes(searchQuery) ||
-      speaker.status.toLowerCase().includes(searchQuery)
-    );
-  });
+  const programName =
+    accessiblePrograms.find((p) => p.programId === params.programId)?.programName ?? "Selected Program";
 
-  const totalSpeakers = MOCK_SPEAKERS.length;
-  const totalKeynote = MOCK_SPEAKERS.filter((s) => s.type === "Keynote").length;
-  const totalRegular = MOCK_SPEAKERS.filter((s) => s.type === "Regular").length;
-  const totalWithSession = MOCK_SPEAKERS.filter((s) => s.sessionTitle && s.sessionTitle.trim() !== "").length;
+  const fetchSpeakers = useCallback(async () => {
+    if (!params.programId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await listProgramSpeakers(params.programId);
+      setSpeakers(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load speakers");
+    } finally {
+      setLoading(false);
+    }
+  }, [params.programId]);
+
+  useEffect(() => { fetchSpeakers(); }, [fetchSpeakers]);
+
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    try {
+      await deleteProgramSpeaker(deleteTarget.id);
+      setDeleteTarget(null);
+      fetchSpeakers();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Delete failed");
+    } finally {
+      setDeleteLoading(false);
+    }
+  }
 
   return (
-    <div className="space-y-4">
-      <ProgramSpeakersHeader 
-        totalSpeakers={totalSpeakers}
-        totalKeynote={totalKeynote}
-        totalRegular={totalRegular}
-        totalWithSession={totalWithSession}
-      />
-      
+    <main className="space-y-4">
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-        <ProgramSpeakersTable data={filteredData} currentSearch={searchQuery} />
+        <div className="inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-blue-700">Master Data</div>
+        <h1 className="mt-1 text-lg font-bold text-zinc-900">{programName} Speakers</h1>
+        <p className="text-sm text-zinc-500">Manage speakers for this program.</p>
       </section>
+
+      <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-[11px] text-zinc-500">{speakers.length} speaker(s)</p>
+          <div className="flex gap-2">
+            <button type="button" onClick={fetchSpeakers} className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50"><ArrowPathIcon className="h-3.5 w-3.5" />Refresh</button>
+            <button type="button" onClick={() => setShowCreate(true)} className="inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600"><PlusIcon className="h-3.5 w-3.5" />Add Speaker</button>
+          </div>
+        </div>
+
+        {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+
+        <div className="overflow-hidden rounded-md border border-zinc-200">
+          <table className="min-w-full text-left text-[11px]">
+            <thead className="bg-zinc-50 text-zinc-600">
+              <tr>
+                <th className="px-3 py-2 font-semibold">Name</th>
+                <th className="px-3 py-2 font-semibold">Title / Org</th>
+                <th className="px-3 py-2 font-semibold">Keynote</th>
+                <th className="px-3 py-2 text-right font-semibold">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading && <tr><td colSpan={4} className="px-3 py-6 text-center text-zinc-400">Loading…</td></tr>}
+              {!loading && speakers.length === 0 && <tr><td colSpan={4} className="px-3 py-6 text-center text-zinc-400">No speakers yet.</td></tr>}
+              {!loading && speakers.map((s, idx) => (
+                <tr key={s.id} className={idx % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}>
+                  <td className="px-3 py-2 font-medium text-zinc-900">{s.name}</td>
+                  <td className="px-3 py-2 text-zinc-600">{[s.title, s.organization].filter(Boolean).join(" · ") || "—"}</td>
+                  <td className="px-3 py-2">{s.isKeynote ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">Keynote</span> : <span className="text-zinc-400">—</span>}</td>
+                  <td className="px-3 py-2 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <button type="button" onClick={() => setEditTarget(s)} className="rounded-md border border-zinc-200 p-1 text-zinc-500 hover:bg-zinc-50"><PencilSquareIcon className="h-3.5 w-3.5" /></button>
+                      <button type="button" onClick={() => setDeleteTarget(s)} className="rounded-md border border-red-100 p-1 text-red-400 hover:bg-red-50"><TrashIcon className="h-3.5 w-3.5" /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {showCreate && <SpeakerModal programId={params.programId} onClose={() => setShowCreate(false)} onSaved={fetchSpeakers} />}
+      {editTarget && <SpeakerModal programId={params.programId} speaker={editTarget} onClose={() => setEditTarget(null)} onSaved={fetchSpeakers} />}
+      {deleteTarget && (
+        <ConfirmDelete name={deleteTarget.name} loading={deleteLoading} onCancel={() => setDeleteTarget(null)} onConfirm={handleDelete} />
+      )}
+    </main>
+  );
+}
+
+function SpeakerModal({ programId, speaker, onClose, onSaved }: { programId: string; speaker?: ProgramSpeaker; onClose: () => void; onSaved: () => void }) {
+  const [name, setName] = useState(speaker?.name ?? "");
+  const [title, setTitle] = useState(speaker?.title ?? "");
+  const [organization, setOrganization] = useState(speaker?.organization ?? "");
+  const [isKeynote, setIsKeynote] = useState(speaker?.isKeynote ?? false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    try {
+      if (speaker) {
+        await updateProgramSpeaker(speaker.id, { name, title, organization, isKeynote });
+      } else {
+        await createProgramSpeaker(programId, { name, title, organization, isKeynote });
+      }
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+      <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 shadow-xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-zinc-900">{speaker ? "Edit Speaker" : "Add Speaker"}</h2>
+          <button onClick={onClose}><XMarkIcon className="h-5 w-5 text-zinc-400" /></button>
+        </div>
+        {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <Field label="Name" required><input required type="text" value={name} onChange={(e) => setName(e.target.value)} className={inputCls} /></Field>
+          <Field label="Title"><input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className={inputCls} /></Field>
+          <Field label="Organization"><input type="text" value={organization} onChange={(e) => setOrganization(e.target.value)} className={inputCls} /></Field>
+          <div className="flex items-center gap-2"><input id="keynote" type="checkbox" checked={isKeynote} onChange={(e) => setIsKeynote(e.target.checked)} className="h-3.5 w-3.5" /><label htmlFor="keynote" className="text-[11px] font-medium text-zinc-700">Keynote speaker</label></div>
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose} className="rounded-md border border-zinc-200 px-3 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50">Cancel</button>
+            <button type="submit" disabled={loading} className="rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600 disabled:opacity-60">{loading ? "Saving…" : "Save"}</button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
+
+function ConfirmDelete({ name, loading, onCancel, onConfirm }: { name: string; loading: boolean; onCancel: () => void; onConfirm: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+      <div className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-6 shadow-xl">
+        <h2 className="mb-2 text-sm font-semibold text-zinc-900">Delete?</h2>
+        <p className="text-[11px] text-zinc-600">Remove <span className="font-semibold">{name}</span>? This cannot be undone.</p>
+        <div className="mt-4 flex justify-end gap-2">
+          <button onClick={onCancel} className="rounded-md border border-zinc-200 px-3 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50">Cancel</button>
+          <button onClick={onConfirm} disabled={loading} className="rounded-md bg-red-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-red-600 disabled:opacity-60">{loading ? "Deleting…" : "Delete"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="mb-1 block text-[11px] font-medium text-zinc-700">{label}{required && <span className="ml-0.5 text-red-500">*</span>}</label>
+      {children}
+    </div>
+  );
+}
+
+const inputCls = "block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
