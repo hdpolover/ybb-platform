@@ -26,8 +26,8 @@ const nextConfig: NextConfig = {
 
   // Experimental features for better performance
   experimental: {
-    // Optimize CSS
-    optimizeCss: true,
+    // optimizeCss: true, // disabled — requires 'critters' package
+
     // Optimize package imports
     optimizePackageImports: ["@heroicons/react", "recharts"],
   },

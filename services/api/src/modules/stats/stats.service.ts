@@ -214,9 +214,9 @@ export class StatsService {
         select: {
           id: true,
           name: true,
-          _count: { select: { participantApplications: true } },
+          _count: { select: { applications: true } },
         },
-        orderBy: { participantApplications: { _count: 'desc' } },
+        orderBy: { applications: { _count: 'desc' } },
         take: 5,
       }),
     ]);
@@ -256,7 +256,7 @@ export class StatsService {
       top_programs: topPrograms.map((p) => ({
         id: p.id,
         name: p.name,
-        applicants: p._count.participantApplications,
+        applicants: p._count.applications,
       })),
     };
   }

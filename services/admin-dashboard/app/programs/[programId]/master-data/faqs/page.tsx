@@ -93,3 +93,4 @@ const MOCK_FAQS: ProgramFaq[] = [
     category: "Payments",
     status: "Inactive",
   },
+];

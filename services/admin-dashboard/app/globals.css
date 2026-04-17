@@ -1,21 +1,61 @@
 @import "tailwindcss";
 
+/* ─── Semantic design tokens ──────────────────────────────────────────────── */
 :root {
+  /* Base */
   --background: #ffffff;
   --foreground: #171717;
+
+  /* Sidebar */
+  --sidebar-width: 256px;
+  --sidebar-collapsed-width: 64px;
+  --sidebar-bg: #1e40af;        /* blue-800 */
+  --sidebar-border: #3b82f6;   /* blue-500 */
+  --sidebar-text: #bfdbfe;     /* blue-200 */
+  --sidebar-active-bg: #3b82f6; /* blue-500 */
+  --sidebar-hover-bg: rgba(59,130,246,0.4);
+
+  /* Navbar */
+  --navbar-height: 64px;
+  --navbar-bg: #ffffff;
+  --navbar-border: #e4e4e7;    /* zinc-200 */
+
+  /* Content area */
+  --content-bg: #f4f4f5;       /* zinc-100 */
+  --content-max-width: 1280px;
+  --content-padding: 1.5rem;
+
+  /* Text */
+  --text-default: #18181b;     /* zinc-900 */
+  --text-muted: #71717a;       /* zinc-500 */
+  --text-subtle: #a1a1aa;      /* zinc-400 */
+
+  /* Borders */
+  --border-default: #e4e4e7;   /* zinc-200 */
+  --border-subtle: #f4f4f5;    /* zinc-100 */
+
+  /* Status */
+  --status-success-bg: #ecfdf5;
+  --status-success-text: #065f46;
+  --status-warning-bg: #fffbeb;
+  --status-warning-text: #92400e;
+  --status-error-bg: #fef2f2;
+  --status-error-text: #991b1b;
+  --status-info-bg: #eff6ff;
+  --status-info-text: #1e40af;
+  --status-pending-bg: #f0f9ff;
+  --status-pending-text: #0c4a6e;
+
+  /* Cards */
+  --card-bg: #ffffff;
+  --card-border: #e4e4e7;
+  --card-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-jakarta-sans);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {

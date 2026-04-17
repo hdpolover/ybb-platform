@@ -63,6 +63,26 @@ export async function seedAdmins() {
 
   const admins: AdminSeed[] = [
     {
+      email: 'super@ybbhub.com',
+      name: 'YBB Super Admin',
+      role: 'Super Admin',
+      primaryBrandSlug: BRANDS.IYS,
+      level: 999,
+      canManageAdmins: true,
+      canAssignRoles: true,
+      customPermissions: ['*'],
+      brandAssignments: brandSlugs.map((brandSlug) => ({
+        brandSlug,
+        roleInBrand: 'owner',
+        permissions: ['*', 'platform.manage', 'admin.manage'],
+      })),
+      programAssignments: brandSlugs.map((brandSlug) => ({
+        brandSlug,
+        roleInProgram: 'owner',
+        permissions: ['*'],
+      })),
+    },
+    {
       email: 'admin@ybbhub.com',
       name: 'YBB Platform Super Admin',
       role: 'Super Admin',

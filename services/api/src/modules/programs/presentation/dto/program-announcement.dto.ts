@@ -1,7 +1,6 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsEnum, IsOptional, IsBoolean, IsDateString, IsNumber, Min, Max } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsArray, IsNumber, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
-import { AnnouncementType, AnnouncementPriority, AnnouncementTarget } from '@prisma/client';
 
 export class CreateProgramAnnouncementDto {
   @ApiProperty({ description: 'Announcement title' })
@@ -14,30 +13,36 @@ export class CreateProgramAnnouncementDto {
   @IsNotEmpty()
   content: string;
 
-  @ApiPropertyOptional({ enum: AnnouncementType, default: AnnouncementType.general })
+  @ApiPropertyOptional({ description: 'Category (e.g. News, Award, Scholarship, General)' })
   @IsOptional()
-  @IsEnum(AnnouncementType)
-  type?: AnnouncementType;
+  @IsString()
+  category?: string;
 
-  @ApiPropertyOptional({ enum: AnnouncementPriority, default: AnnouncementPriority.normal })
+  @ApiPropertyOptional({ description: 'Target audience: all, applicants, accepted, rejected, participants' })
   @IsOptional()
-  @IsEnum(AnnouncementPriority)
-  priority?: AnnouncementPriority;
+  @IsString()
+  targetAudience?: string;
 
-  @ApiPropertyOptional({ enum: AnnouncementTarget, default: AnnouncementTarget.all })
+  @ApiPropertyOptional({ description: 'Tags' })
   @IsOptional()
-  @IsEnum(AnnouncementTarget)
-  target?: AnnouncementTarget;
+  @IsArray()
+  @IsString({ each: true })
+  tags?: string[];
 
-  @ApiPropertyOptional({ description: 'Announcement expiry date (ISO 8601)' })
-  @IsOptional()
-  @IsDateString()
-  expiresAt?: string;
-
-  @ApiPropertyOptional({ description: 'Whether to display as a banner' })
+  @ApiPropertyOptional({ description: 'Whether to send email notification' })
   @IsOptional()
   @IsBoolean()
-  showBanner?: boolean;
+  sendEmail?: boolean;
+
+  @ApiPropertyOptional({ description: 'Whether to pin this announcement' })
+  @IsOptional()
+  @IsBoolean()
+  isPinned?: boolean;
+
+  @ApiPropertyOptional({ description: 'Optional image URL' })
+  @IsOptional()
+  @IsString()
+  imageUrl?: string;
 }
 
 export class UpdateProgramAnnouncementDto extends PartialType(CreateProgramAnnouncementDto) {
@@ -48,15 +53,15 @@ export class UpdateProgramAnnouncementDto extends PartialType(CreateProgramAnnou
 }
 
 export class ListProgramAnnouncementsQueryDto {
-  @ApiPropertyOptional({ enum: AnnouncementType })
+  @ApiPropertyOptional({ description: 'Filter by category' })
   @IsOptional()
-  @IsEnum(AnnouncementType)
-  type?: AnnouncementType;
+  @IsString()
+  category?: string;
 
-  @ApiPropertyOptional({ enum: AnnouncementPriority })
+  @ApiPropertyOptional({ description: 'Filter by target audience' })
   @IsOptional()
-  @IsEnum(AnnouncementPriority)
-  priority?: AnnouncementPriority;
+  @IsString()
+  targetAudience?: string;
 
   @ApiPropertyOptional({ default: 1, minimum: 1 })
   @IsOptional()
@@ -87,26 +92,26 @@ export class ProgramAnnouncementResponseDto {
   @ApiProperty()
   content: string;
 
-  @ApiProperty({ enum: AnnouncementType })
-  type: AnnouncementType;
+  @ApiPropertyOptional()
+  category?: string;
 
-  @ApiProperty({ enum: AnnouncementPriority })
-  priority: AnnouncementPriority;
+  @ApiProperty()
+  targetAudience: string;
 
-  @ApiProperty({ enum: AnnouncementTarget })
-  target: AnnouncementTarget;
+  @ApiProperty()
+  sendEmail: boolean;
+
+  @ApiProperty()
+  isPinned: boolean;
 
   @ApiPropertyOptional()
-  expiresAt?: Date;
+  imageUrl?: string;
+
+  @ApiProperty()
+  tags: string[];
 
   @ApiProperty()
   isActive: boolean;
-
-  @ApiProperty()
-  showBanner: boolean;
-
-  @ApiProperty()
-  createdBy: string;
 
   @ApiProperty()
   createdAt: Date;

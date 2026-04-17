@@ -1,6 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
-import { AnnouncementType, AnnouncementPriority } from '@prisma/client';
 import {
   CreateProgramAnnouncementCommand,
   UpdateProgramAnnouncementCommand,
@@ -13,17 +12,17 @@ export class ListProgramAnnouncementsHandler {
   constructor(private readonly prisma: PrismaService) {}
 
   async execute(command: ListProgramAnnouncementsCommand) {
-    const { programId, type, priority, page, limit } = command;
+    const { programId, category, targetAudience, page, limit } = command;
     const skip = (page - 1) * limit;
 
     const where: Record<string, unknown> = { programId };
-    if (type) where.type = type as AnnouncementType;
-    if (priority) where.priority = priority as AnnouncementPriority;
+    if (category) where.category = category;
+    if (targetAudience) where.targetAudience = targetAudience;
 
     const [data, total] = await Promise.all([
       this.prisma.programAnnouncement.findMany({
         where,
-        orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
+        orderBy: [{ isPinned: 'desc' }, { createdAt: 'desc' }],
         skip,
         take: limit,
       }),
@@ -52,12 +51,12 @@ export class CreateProgramAnnouncementHandler {
         programId,
         title: dto.title,
         content: dto.content,
-        type: dto.type ?? 'general',
-        priority: dto.priority ?? 'normal',
-        target: dto.target ?? 'all',
-        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
-        showBanner: dto.showBanner ?? false,
-        createdBy,
+        category: dto.category ?? null,
+        targetAudience: dto.targetAudience ?? 'all',
+        tags: dto.tags ?? [],
+        sendEmail: dto.sendEmail ?? false,
+        isPinned: dto.isPinned ?? false,
+        imageUrl: dto.imageUrl ?? null,
         isActive: true,
       },
     });
@@ -79,11 +78,12 @@ export class UpdateProgramAnnouncementHandler {
       data: {
         ...(dto.title !== undefined && { title: dto.title }),
         ...(dto.content !== undefined && { content: dto.content }),
-        ...(dto.type !== undefined && { type: dto.type }),
-        ...(dto.priority !== undefined && { priority: dto.priority }),
-        ...(dto.target !== undefined && { target: dto.target }),
-        ...(dto.expiresAt !== undefined && { expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null }),
-        ...(dto.showBanner !== undefined && { showBanner: dto.showBanner }),
+        ...(dto.category !== undefined && { category: dto.category }),
+        ...(dto.targetAudience !== undefined && { targetAudience: dto.targetAudience }),
+        ...(dto.tags !== undefined && { tags: dto.tags }),
+        ...(dto.sendEmail !== undefined && { sendEmail: dto.sendEmail }),
+        ...(dto.isPinned !== undefined && { isPinned: dto.isPinned }),
+        ...(dto.imageUrl !== undefined && { imageUrl: dto.imageUrl }),
         ...(dto.isActive !== undefined && { isActive: dto.isActive }),
       },
     });
