@@ -3,8 +3,8 @@ import { CreateProgramAnnouncementDto, UpdateProgramAnnouncementDto } from '../.
 export class ListProgramAnnouncementsCommand {
   constructor(
     public readonly programId: string,
-    public readonly type?: string,
-    public readonly priority?: string,
+    public readonly category?: string,
+    public readonly targetAudience?: string,
     public readonly page: number = 1,
     public readonly limit: number = 20,
   ) {}

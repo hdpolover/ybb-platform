@@ -59,8 +59,8 @@ export class ProgramAnnouncementsController {
     return this.listHandler.execute(
       new ListProgramAnnouncementsCommand(
         programId,
-        query.type,
-        query.priority,
+        query.category,
+        query.targetAudience,
         query.page ?? 1,
         query.limit ?? 20,
       ),
