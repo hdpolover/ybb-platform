@@ -426,9 +426,9 @@ export default function MediaLibraryPage() {
         page,
         limit,
       });
-      setFiles(res.files);
-      setTotal(res.total);
-      setTotalPages(res.total_pages);
+      setFiles(res.files ?? []);
+      setTotal(res.total ?? 0);
+      setTotalPages(res.total_pages ?? 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load media.");
     } finally {
@@ -454,9 +454,9 @@ export default function MediaLibraryPage() {
   }
 
   // Client-side search filter
-  const displayed = search.trim()
-    ? files.filter((f) => f.original_filename.toLowerCase().includes(search.toLowerCase()))
-    : files;
+  const displayed = (files ?? []).filter((f) =>
+    !search.trim() || f.original_filename.toLowerCase().includes(search.toLowerCase()),
+  );
 
   return (
     <main className="flex h-full flex-col space-y-4">
