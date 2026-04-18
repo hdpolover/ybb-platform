@@ -45,3 +45,5 @@ temp/
 
 # Security
 service-account.json
+*-service-acc.json
+ybb-service-acc.json

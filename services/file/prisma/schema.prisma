@@ -35,7 +35,13 @@ model File {
   template_id       String?   @map("template_id") @db.VarChar(36)
   version           Int       @default(1)
 
+  // Media library fields
+  program_id        String?   @map("program_id") @db.VarChar(50)
+  asset_type        String?   @map("asset_type") @db.VarChar(50)
+
   @@index([user_id])
   @@index([brand_id])
+  @@index([program_id])
+  @@index([brand_id, program_id])
   @@map("files")
 }

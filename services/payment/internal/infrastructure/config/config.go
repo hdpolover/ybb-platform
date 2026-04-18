@@ -15,6 +15,7 @@ type Config struct {
 	RabbitMQExchange   string
 	DefaultGateway     string
 	InternalServiceKey string
+	PaymentSecretsKey  string
 
 	MidtransServerKey    string
 	MidtransClientKey    string
@@ -45,6 +46,7 @@ func LoadConfig() (*Config, error) {
 		RabbitMQExchange:   getEnv("RABBITMQ_EXCHANGE", "payment-events"),
 		DefaultGateway:     getEnv("DEFAULT_PAYMENT_GATEWAY", ""),
 		InternalServiceKey: getEnv("INTERNAL_SERVICE_KEY", ""),
+		PaymentSecretsKey:  getEnv("PAYMENT_SECRETS_KEY", ""),
 
 		MidtransServerKey:    getEnv("MIDTRANS_SERVER_KEY", ""),
 		MidtransClientKey:    getEnv("MIDTRANS_CLIENT_KEY", ""),

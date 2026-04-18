@@ -144,7 +144,7 @@ func main() {
 	gatewayFactory := infraGateways.NewGatewayFactory()
 
 	// Initialize repositories
-	gatewayConfigRepo := persistence.NewGatewayConfigRepository(db)
+	gatewayConfigRepo := persistence.NewGatewayConfigRepository(db, cfg.PaymentSecretsKey)
 	paymentMethodRepo := persistence.NewPaymentMethodRepository(db)
 
 	// Load gateways: DB-stored configs take priority over env vars.

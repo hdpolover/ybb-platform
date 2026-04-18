@@ -19,3 +19,4 @@ class UploadFileCommand:
     program_id: Optional[str] = None
     participant_id: Optional[str] = None
     metadata: Optional[dict] = None
+    asset_type: Optional[str] = None  # e.g., 'logo', 'banner', 'gallery', 'document', 'certificate'

@@ -739,3 +739,81 @@ export function updateProgramAnnouncement(
 export function deleteProgramAnnouncement(id: string): Promise<void> {
   return request<void>(`/programs/announcements/${id}`, { method: "DELETE" });
 }
+
+// ─── Media Library ────────────────────────────────────────────────────────────
+
+export type MediaFile = {
+  id: string;
+  original_filename: string;
+  filename: string;
+  content_type: string;
+  size: number;
+  bucket: string;
+  storage_path: string;
+  program_id: string | null;
+  asset_type: string | null;
+  url: string | null;
+  download_url: string | null;
+  uploaded_at: string;
+  updated_at: string | null;
+};
+
+export type PaginatedMedia = {
+  files: MediaFile[];
+  total: number;
+  page: number;
+  limit: number;
+  total_pages: number;
+};
+
+export function listProgramMedia(params: {
+  programId: string;
+  brandId: string;
+  assetType?: string;
+  bucket?: string;
+  page?: number;
+  limit?: number;
+}): Promise<PaginatedMedia> {
+  const qs = new URLSearchParams({
+    brand_id: params.brandId,
+    ...(params.assetType && { asset_type: params.assetType }),
+    ...(params.bucket && { bucket: params.bucket }),
+    page: String(params.page ?? 1),
+    limit: String(params.limit ?? 50),
+  });
+  return request<PaginatedMedia>(
+    `/admin/programs/${params.programId}/media?${qs.toString()}`,
+  );
+}
+
+export function deleteProgramMediaFile(params: {
+  programId: string;
+  fileId: string;
+  brandId: string;
+}): Promise<void> {
+  return request<void>(
+    `/admin/programs/${params.programId}/media/${params.fileId}?brand_id=${params.brandId}`,
+    { method: "DELETE" },
+  );
+}
+
+export function uploadProgramMediaFile(params: {
+  programId: string;
+  brandId: string;
+  userId: string;
+  file: File;
+  assetType?: string;
+  bucket?: string;
+}): Promise<{ file: MediaFile; url: string | null; path: string }> {
+  const formData = new FormData();
+  formData.append("file", params.file);
+  formData.append("brand_id", params.brandId);
+  formData.append("user_id", params.userId);
+  if (params.assetType) formData.append("asset_type", params.assetType);
+  if (params.bucket) formData.append("bucket", params.bucket ?? "gallery");
+
+  return request<{ file: MediaFile; url: string | null; path: string }>(
+    `/admin/programs/${params.programId}/media`,
+    { method: "POST", body: formData },
+  );
+}

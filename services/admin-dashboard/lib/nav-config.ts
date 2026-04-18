@@ -30,6 +30,7 @@ import {
   Shield,
   Menu,
   ChevronRight,
+  Images,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -128,6 +129,18 @@ export const programNavSections: NavSection[] = [
         label: "Ambassadors",
         href: "ambassadors",
         icon: UserPlus,
+      },
+    ],
+  },
+  {
+    id: "media",
+    title: "Media",
+    items: [
+      {
+        id: "media-library",
+        label: "Media Library",
+        href: "media",
+        icon: Images,
       },
     ],
   },

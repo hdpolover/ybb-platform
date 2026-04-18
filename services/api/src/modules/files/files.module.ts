@@ -8,6 +8,7 @@ import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.m
 import { FilesController } from './presentation/files.controller';
 import { DocumentsController } from './presentation/documents.controller';
 import { StorageEventsController } from './presentation/storage-events.controller';
+import { AdminMediaController } from './presentation/admin-media.controller';
 import { FileServiceClient } from './infrastructure/clients/file-service.client';
 import { FileGrpcClient } from './infrastructure/clients/file-grpc-client.service';
 import { StorageService } from './application/storage.service';
@@ -40,7 +41,7 @@ import { StorageService } from './application/storage.service';
     AuthModule,
     MonitoringModule,
   ],
-  controllers: [FilesController, DocumentsController, StorageEventsController],
+  controllers: [FilesController, DocumentsController, StorageEventsController, AdminMediaController],
   providers: [FileServiceClient, FileGrpcClient, StorageService],
   exports: [FileServiceClient, FileGrpcClient, StorageService],
 })

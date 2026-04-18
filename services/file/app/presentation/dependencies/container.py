@@ -10,7 +10,9 @@ from app.infrastructure.messaging.rabbitmq_service import RabbitMQService
 
 # --- IMPORT HANDLERS ---
 from app.application.commands.handlers.upload_file_handler import UploadFileHandler
+from app.application.commands.handlers.delete_file_handler import DeleteFileHandler
 from app.application.queries.handlers.get_file_handler import GetFileHandler
+from app.application.queries.handlers.list_files_by_program_handler import ListFilesByProgramHandler
 
 # --- IMPORT PROCESSORS ---
 from app.infrastructure.processors.excel_export import ExcelExportService
@@ -33,7 +35,6 @@ def get_storage_service() -> MinIOStorage:
     )
 
 
-# Ganti InMemory jadi Postgres
 def get_file_repository() -> PostgresFileRepository:
     """Get PostgreSQL file repository instance."""
     return PostgresFileRepository()
@@ -86,6 +87,26 @@ def get_get_file_handler(
 ) -> GetFileHandler:
     """Get file handler."""
     return GetFileHandler(
+        file_repository=file_repository,
+        storage_service=get_storage_service()
+    )
+
+
+def get_delete_file_handler(
+    file_repository: PostgresFileRepository = Depends(get_file_repository)
+) -> DeleteFileHandler:
+    """Get delete file handler."""
+    return DeleteFileHandler(
+        file_repository=file_repository,
+        storage_service=get_storage_service()
+    )
+
+
+def get_list_files_by_program_handler(
+    file_repository: PostgresFileRepository = Depends(get_file_repository)
+) -> ListFilesByProgramHandler:
+    """Get list-files-by-program handler."""
+    return ListFilesByProgramHandler(
         file_repository=file_repository,
         storage_service=get_storage_service()
     )

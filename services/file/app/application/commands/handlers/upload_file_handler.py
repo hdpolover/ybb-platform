@@ -141,7 +141,9 @@ class UploadFileHandler:
             user_id=command.user_id,
             brand_id=command.brand_id,
             uploaded_at=datetime.utcnow(),
-            metadata=file_metadata
+            metadata=file_metadata,
+            program_id=command.program_id,
+            asset_type=command.asset_type,
         )
         
         # Save metadata to repository
