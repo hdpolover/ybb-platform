@@ -16,7 +16,25 @@ class IFileRepository(ABC):
     async def find_by_user(self, user_id: str, brand_id: str) -> List[File]:
         """Find all files for a user in a specific brand."""
         pass
-    
+
+    @abstractmethod
+    async def find_by_program(
+        self,
+        program_id: str,
+        brand_id: str,
+        asset_type: Optional[str] = None,
+        bucket: Optional[str] = None,
+        page: int = 1,
+        limit: int = 50,
+    ) -> tuple[List[File], int]:
+        """
+        Find all non-deleted files for a program with optional filters.
+        
+        Returns:
+            (files, total_count) tuple.
+        """
+        pass
+
     @abstractmethod
     async def save(self, file: File) -> File:
         """Save file metadata."""

@@ -1,6 +1,6 @@
 """File DTOs."""
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel
 from app.domain.entities.file import File
 
@@ -22,6 +22,8 @@ class FileDto(BaseModel):
     download_url: Optional[str] = None
     url: Optional[str] = None
     metadata: Optional[dict] = None
+    program_id: Optional[str] = None
+    asset_type: Optional[str] = None
     
     @staticmethod
     def from_entity(file: File, download_url: Optional[str] = None, url: Optional[str] = None) -> 'FileDto':
@@ -40,7 +42,9 @@ class FileDto(BaseModel):
             updated_at=file.updated_at,
             download_url=download_url,
             url=url,
-            metadata=file.metadata
+            metadata=file.metadata,
+            program_id=file.program_id,
+            asset_type=file.asset_type,
         )
 
 
@@ -49,3 +53,13 @@ class UploadFileResponseDto(BaseModel):
     
     file: FileDto
     message: str = "File uploaded successfully"
+
+
+class PaginatedFilesDto(BaseModel):
+    """Paginated list of files."""
+
+    files: List[FileDto]
+    total: int
+    page: int
+    limit: int
+    total_pages: int

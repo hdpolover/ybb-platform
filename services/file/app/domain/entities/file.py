@@ -21,6 +21,8 @@ class File:
     uploaded_at: datetime
     updated_at: Optional[datetime] = None
     metadata: Optional[dict] = None
+    program_id: Optional[str] = None
+    asset_type: Optional[str] = None  # e.g., 'logo', 'banner', 'gallery', 'document', 'certificate'
     
     # Backward compatibility aliases
     @property

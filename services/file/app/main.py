@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
-from app.presentation.api.routes import files, documents, images
+from app.presentation.api.routes import files, documents, images, media
 from app.infrastructure.persistence.postgres.database import connect_db, disconnect_db
 from app.middleware.cache_headers import CacheControlMiddleware
 from app.infrastructure.telemetry.otel import init_telemetry
@@ -35,6 +35,7 @@ app.add_middleware(
 app.include_router(files.router, prefix="/api/v1")
 app.include_router(documents.router, prefix="/api/v1")
 app.include_router(images.router, prefix="/api/v1")
+app.include_router(media.router, prefix="/api/v1")
 
 # Instrument Prometheus
 Instrumentator().instrument(app).expose(app)

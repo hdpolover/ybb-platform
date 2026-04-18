@@ -285,4 +285,60 @@ export class FileServiceClient {
       throw error;
     }
   }
+
+  // ─── Media Library ────────────────────────────────────────────────────────
+
+  /**
+   * List media files for a program (media library query).
+   */
+  async listProgramMedia(params: {
+    programId: string;
+    brandId: string;
+    assetType?: string;
+    bucket?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<Record<string, unknown>> {
+    return this.executeRequest(async () => {
+      try {
+        const response: AxiosResponse<Record<string, unknown>> = await firstValueFrom(
+          this.httpService.get(
+            `${this.fileServiceUrl}/api/v1/media/program/${params.programId}`,
+            {
+              params: {
+                brand_id: params.brandId,
+                asset_type: params.assetType,
+                bucket: params.bucket,
+                page: params.page ?? 1,
+                limit: params.limit ?? 50,
+              },
+            },
+          ),
+        );
+        return response.data;
+      } catch (error: unknown) {
+        this.logger.error(`Failed to list program media: ${error instanceof Error ? error.message : String(error)}`);
+        throw error;
+      }
+    });
+  }
+
+  /**
+   * Soft-delete a media file.
+   */
+  async deleteMediaFile(fileId: string, brandId: string): Promise<void> {
+    return this.executeRequest(async () => {
+      try {
+        await firstValueFrom(
+          this.httpService.delete(
+            `${this.fileServiceUrl}/api/v1/media/${fileId}`,
+            { params: { brand_id: brandId } },
+          ),
+        );
+      } catch (error: unknown) {
+        this.logger.error(`Failed to delete media file ${fileId}: ${error instanceof Error ? error.message : String(error)}`);
+        throw error;
+      }
+    });
+  }
 }

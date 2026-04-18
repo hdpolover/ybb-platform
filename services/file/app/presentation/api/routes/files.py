@@ -28,6 +28,7 @@ async def upload_file(
     bucket: Annotated[str, Form(description="Category (e.g., documents, essays, payments)")] = "documents",
     program_id: Annotated[str, Form(description="Program ID (Optional - for Program Context)")] = None,
     participant_id: Annotated[str, Form(description="Participant ID (Optional - for Program Context)")] = None,
+    asset_type: Annotated[str, Form(description="Asset type for media library (Optional)")] = None,
     upload_handler: UploadFileHandler = Depends(get_upload_handler)
 ):
     """
@@ -62,7 +63,8 @@ async def upload_file(
             brand_id=brand_id,
             bucket=bucket,
             program_id=program_id,
-            participant_id=participant_id
+            participant_id=participant_id,
+            asset_type=asset_type,
         )
         
         # Execute upload
