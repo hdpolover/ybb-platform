@@ -43,4 +43,4 @@ EXPOSE 50052
 
 # Run application (Start both REST and gRPC)
 COPY ./app/grpc_main.py ./app/grpc_main.py
-CMD ["sh", "-c", "prisma generate && prisma db push --skip-generate && (uvicorn app.main:app --host 0.0.0.0 --port 8001 & python -m app.grpc_main)"]
+CMD ["sh", "-c", "prisma generate && prisma db push --skip-generate --accept-data-loss && (uvicorn app.main:app --host 0.0.0.0 --port 8001 & python -m app.grpc_main)"]
