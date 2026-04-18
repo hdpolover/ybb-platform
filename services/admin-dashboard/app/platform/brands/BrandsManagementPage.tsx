@@ -1,16 +1,13 @@
 "use client";
 
-import {
-  PlusIcon,
-  FolderIcon,
-  RectangleStackIcon,
-  TagIcon,
-  CalendarIcon,
-} from "@heroicons/react/24/outline";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useEffect, useState } from "react";
+import { Layers, FolderOpen, BarChart2, Clock } from "lucide-react";
 import { CategoriesTable, type Category } from "../components/categories/CategoriesTable";
 import { CategoryFormModal, type CategoryFormData } from "../components/categories/CategoryFormModal";
-import { DeleteConfirmModal } from "../components/shared/DeleteConfirmModal";
+import { PageHeader } from "@/src/admin/page-header";
+import { StatCard } from "@/src/admin/stat-card";
+import { ConfirmDialog } from "@/src/admin/confirm-dialog";
+import { Button } from "@/src/ui/button";
 import {
   createPlatformBrand,
   deletePlatformBrand,
@@ -201,97 +198,41 @@ export default function BrandsManagementPage() {
   };
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold text-zinc-900">Brands</h1>
-        <p className="mt-1 text-sm text-zinc-600">
-          Manage brands that group and anchor your programs
-        </p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Brands"
+        description="Manage brands that group and anchor your programs"
+        actions={
+          <Button onClick={() => setIsFormModalOpen(true)}>
+            Create Brand
+          </Button>
+        }
+      />
 
       <div className="grid gap-4 md:grid-cols-4">
-        <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-zinc-600">Total Brands</p>
-              <p className="mt-1 text-2xl font-bold text-zinc-900">{brands.length}</p>
-              <p className="mt-1 text-[10px] text-zinc-600">Available brands</p>
-            </div>
-            <div className="rounded-full bg-blue-100 p-2.5">
-              <FolderIcon className="h-5 w-5 text-blue-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-zinc-600">Total Programs</p>
-              <p className="mt-1 text-2xl font-bold text-zinc-900">{totalPrograms}</p>
-              <p className="mt-1 text-[10px] text-zinc-600">Across all brands</p>
-            </div>
-            <div className="rounded-full bg-emerald-100 p-2.5">
-              <RectangleStackIcon className="h-5 w-5 text-emerald-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-zinc-600">Avg Programs</p>
-              <p className="mt-1 text-2xl font-bold text-zinc-900">
-                {brands.length > 0 ? Math.round(totalPrograms / brands.length) : 0}
-              </p>
-              <p className="mt-1 text-[10px] text-zinc-600">Per brand</p>
-            </div>
-            <div className="rounded-full bg-purple-100 p-2.5">
-              <TagIcon className="h-5 w-5 text-purple-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-zinc-600">Last Updated</p>
-              <p className="mt-1 text-2xl font-bold text-zinc-900">{lastUpdatedLabel}</p>
-              <p className="mt-1 text-[10px] text-emerald-600">Recent changes</p>
-            </div>
-            <div className="rounded-full bg-amber-100 p-2.5">
-              <CalendarIcon className="h-5 w-5 text-amber-600" />
-            </div>
-          </div>
-        </div>
+        <StatCard title="Total Brands" value={brands.length} description="Available brands" icon={FolderOpen} />
+        <StatCard title="Total Programs" value={totalPrograms} description="Across all brands" icon={Layers} />
+        <StatCard
+          title="Avg Programs"
+          value={brands.length > 0 ? Math.round(totalPrograms / brands.length) : 0}
+          description="Per brand"
+          icon={BarChart2}
+        />
+        <StatCard title="Last Updated" value={lastUpdatedLabel} description="Recent changes" icon={Clock} />
       </div>
 
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={() => setIsFormModalOpen(true)}
-          className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-blue-600"
-        >
-          <PlusIcon className="h-3.5 w-3.5" />
-          Create Brand
-        </button>
-      </div>
-
-      {pageError ? (
+      {pageError && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {pageError}
         </div>
-      ) : null}
+      )}
 
       {isLoading ? (
-        <div className="rounded-lg border border-zinc-200 bg-white p-12 text-center text-sm text-zinc-600">
-          Loading brands...
+        <div className="rounded-lg border border-zinc-200 bg-white p-12 text-center text-sm text-zinc-500">
+          Loading brands…
         </div>
       ) : (
-        <CategoriesTable
-          categories={brands}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-        />
+        <CategoriesTable categories={brands} onEdit={handleEdit} onDelete={handleDelete} />
       )}
 
       <CategoryFormModal
@@ -304,20 +245,19 @@ export default function BrandsManagementPage() {
         errorMessage={formError}
       />
 
-      <DeleteConfirmModal
-        isOpen={isDeleteModalOpen}
-        onClose={handleCloseDeleteModal}
-        onConfirm={handleDeleteBrand}
+      <ConfirmDialog
+        open={isDeleteModalOpen}
+        onOpenChange={(open) => !open && handleCloseDeleteModal()}
         title="Delete Brand"
-        message="Are you sure you want to delete this brand?"
-        itemName={selectedBrand?.name}
-        isSubmitting={isDeleting}
-        errorMessage={deleteError}
-        warningMessage={
-          selectedBrand && selectedBrand.programCount > 0
-            ? `This brand has ${selectedBrand.programCount} program(s) associated with it. They will need to be reassigned.`
-            : undefined
+        description={
+          selectedBrand?.programCount
+            ? `"${selectedBrand.name}" has ${selectedBrand.programCount} program(s). Are you sure you want to delete it?`
+            : `Are you sure you want to delete "${selectedBrand?.name ?? "this brand"}"? This action cannot be undone.`
         }
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={handleDeleteBrand}
+        loading={isDeleting}
       />
     </div>
   );

@@ -1,17 +1,14 @@
 "use client";
 
-import {
-  PlusIcon,
-  RectangleStackIcon,
-  UserGroupIcon,
-  CheckCircleIcon,
-  ArchiveBoxIcon,
-} from "@heroicons/react/24/outline";
 import { useEffect, useMemo, useState } from "react";
+import { Layers, CheckCircle, Users, Archive } from "lucide-react";
 import { ProgramsTable, type Program } from "../components/programs/ProgramsTable";
 import { ProgramFormModal, type ProgramFormData } from "../components/programs/ProgramFormModal";
-import { ProgramFilters } from "../components/programs/ProgramFilters";
-import { DeleteConfirmModal } from "../components/shared/DeleteConfirmModal";
+import { PageHeader } from "@/src/admin/page-header";
+import { StatCard } from "@/src/admin/stat-card";
+import { FilterBar } from "@/src/admin/filter-bar";
+import { ConfirmDialog } from "@/src/admin/confirm-dialog";
+import { Button } from "@/src/ui/button";
 import {
   createPlatformProgram,
   deletePlatformProgram,
@@ -233,111 +230,84 @@ export default function ProgramsPage() {
   };
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold text-zinc-900">Programs</h1>
-        <p className="mt-1 text-sm text-zinc-600">
-          Manage top-level program shells across brands. Fees, capacity, location, and registration windows are handled inside each program admin workspace.
-        </p>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-4">
-        <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-zinc-600">Total Programs</p>
-              <p className="mt-1 text-2xl font-bold text-zinc-900">{programs.length}</p>
-              <p className="mt-1 text-[10px] text-zinc-600">All brands</p>
-            </div>
-            <div className="rounded-full bg-blue-100 p-2.5">
-              <RectangleStackIcon className="h-5 w-5 text-blue-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-zinc-600">Published</p>
-              <p className="mt-1 text-2xl font-bold text-zinc-900">
-                {programs.filter((program) => program.status === "published").length}
-              </p>
-              <p className="mt-1 text-[10px] text-emerald-600">Launch-ready programs</p>
-            </div>
-            <div className="rounded-full bg-emerald-100 p-2.5">
-              <CheckCircleIcon className="h-5 w-5 text-emerald-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-zinc-600">Active</p>
-              <p className="mt-1 text-2xl font-bold text-zinc-900">
-                {programs.filter((program) => program.isActive).length}
-              </p>
-              <p className="mt-1 text-[10px] text-zinc-600">Currently enabled programs</p>
-            </div>
-            <div className="rounded-full bg-purple-100 p-2.5">
-              <UserGroupIcon className="h-5 w-5 text-purple-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-zinc-600">Closed</p>
-              <p className="mt-1 text-2xl font-bold text-zinc-900">
-                {programs.filter((program) => program.status === "completed" || program.status === "cancelled").length}
-              </p>
-              <p className="mt-1 text-[10px] text-zinc-600">Completed or cancelled</p>
-            </div>
-            <div className="rounded-full bg-zinc-100 p-2.5">
-              <ArchiveBoxIcon className="h-5 w-5 text-zinc-600" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={() => setIsFormModalOpen(true)}
-          className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-blue-600"
-        >
-          <PlusIcon className="h-3.5 w-3.5" />
-          Create Program
-        </button>
-      </div>
-
-      <ProgramFilters
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        selectedBrand={selectedBrand}
-        onBrandChange={setSelectedBrand}
-        selectedStatus={selectedStatus}
-        onStatusChange={setSelectedStatus}
-        categories={categories}
+    <div className="space-y-6">
+      <PageHeader
+        title="Programs"
+        description="Manage program shells across brands. Fees, capacity, and registration windows are handled inside each program workspace."
+        actions={
+          <Button onClick={() => setIsFormModalOpen(true)}>
+            Create Program
+          </Button>
+        }
       />
 
-      {pageError ? (
+      <div className="grid gap-4 md:grid-cols-4">
+        <StatCard title="Total Programs" value={programs.length} description="All brands" icon={Layers} />
+        <StatCard
+          title="Published"
+          value={programs.filter((p) => p.status === "published").length}
+          description="Launch-ready programs"
+          icon={CheckCircle}
+        />
+        <StatCard
+          title="Active"
+          value={programs.filter((p) => p.isActive).length}
+          description="Currently enabled"
+          icon={Users}
+        />
+        <StatCard
+          title="Closed"
+          value={programs.filter((p) => p.status === "completed" || p.status === "cancelled").length}
+          description="Completed or cancelled"
+          icon={Archive}
+        />
+      </div>
+
+      <FilterBar
+        search={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="Search programs…"
+        resultCount={filteredPrograms.length}
+        filters={
+          <>
+            <select
+              value={selectedBrand}
+              onChange={(e) => setSelectedBrand(e.target.value)}
+              className="flex h-9 rounded-md border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+            >
+              <option value="">All Brands</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="flex h-9 rounded-md border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+            >
+              <option value="">All Statuses</option>
+              <option value="draft">Draft</option>
+              <option value="published">Published</option>
+              <option value="ongoing">Ongoing</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </>
+        }
+      />
+
+      {pageError && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {pageError}
         </div>
-      ) : null}
+      )}
 
       {isLoading ? (
-        <div className="rounded-lg border border-zinc-200 bg-white p-12 text-center text-sm text-zinc-600">
-          Loading programs...
+        <div className="rounded-lg border border-zinc-200 bg-white p-12 text-center text-sm text-zinc-500">
+          Loading programs…
         </div>
       ) : (
-        <ProgramsTable
-          programs={filteredPrograms}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-        />
+        <ProgramsTable programs={filteredPrograms} onEdit={handleEdit} onDelete={handleDelete} />
       )}
 
       <ProgramFormModal
@@ -351,16 +321,15 @@ export default function ProgramsPage() {
         errorMessage={formError}
       />
 
-      <DeleteConfirmModal
-        isOpen={isDeleteModalOpen}
-        onClose={handleCloseDeleteModal}
-        onConfirm={handleDeleteProgram}
+      <ConfirmDialog
+        open={isDeleteModalOpen}
+        onOpenChange={(open) => !open && handleCloseDeleteModal()}
         title="Delete Program"
-        message="Are you sure you want to delete this program? This action cannot be undone."
-        itemName={selectedProgram?.name}
-        isSubmitting={isDeleting}
-        errorMessage={deleteError}
-        warningMessage="Deleting a program removes it from active platform management. Make sure no downstream content still depends on it."
+        description={`Are you sure you want to delete "${selectedProgram?.name ?? "this program"}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={handleDeleteProgram}
+        loading={isDeleting}
       />
     </div>
   );

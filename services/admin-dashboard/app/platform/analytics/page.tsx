@@ -1,15 +1,20 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import {
-  ChartBarIcon,
-  ArrowTrendingUpIcon,
-  UsersIcon,
-  RectangleStackIcon,
-  ArrowPathIcon,
-} from "@heroicons/react/24/outline";
+import { BarChart2, TrendingUp, Users, Layers } from "lucide-react";
 import { getAdminAnalytics, type AdminAnalytics } from "../../../src/shared/api-client";
 import { useAuth } from "../../contexts/AuthContext";
+import { PageHeader } from "@/src/admin/page-header";
+import { StatCard } from "@/src/admin/stat-card";
+import { Button } from "@/src/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/src/ui/table";
 
 export default function AnalyticsPage() {
   const { adminProfile } = useAuth();
@@ -37,66 +42,55 @@ export default function AnalyticsPage() {
   }, [fetchAnalytics]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-zinc-900">Platform Analytics</h1>
-          <p className="mt-1 text-sm text-zinc-600">
-            Comprehensive analytics and insights across all programs
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={fetchAnalytics}
-          className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-zinc-600 shadow-sm hover:bg-zinc-50"
-        >
-          <ArrowPathIcon className="h-3.5 w-3.5" />
-          Refresh
-        </button>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Platform Analytics"
+        description="Comprehensive analytics and insights across all programs"
+        actions={
+          <Button variant="outline" size="sm" onClick={fetchAnalytics} loading={loading}>
+            Refresh
+          </Button>
+        }
+      />
 
       {error && (
-        <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       )}
 
-      {loading && (
-        <p className="text-xs text-zinc-400">Loading analytics…</p>
+      {loading && !analytics && (
+        <p className="text-sm text-zinc-400">Loading analytics…</p>
       )}
 
-      {!loading && analytics && (
+      {analytics && (
         <>
           <div className="grid gap-4 md:grid-cols-4">
             <StatCard
-              icon={<RectangleStackIcon className="h-5 w-5 text-blue-600" />}
-              bg="bg-blue-100"
-              label="Total Programs"
+              title="Total Programs"
               value={analytics.programs.total}
-              sub={`${analytics.programs.active} active`}
+              description={`${analytics.programs.active} active`}
+              icon={Layers}
             />
             <StatCard
-              icon={<UsersIcon className="h-5 w-5 text-emerald-600" />}
-              bg="bg-emerald-100"
-              label="Total Users"
+              title="Total Users"
               value={analytics.users.total}
-              sub={`${analytics.users.new_this_month} new this month`}
+              description={`${analytics.users.new_this_month} new this month`}
+              icon={Users}
             />
             <StatCard
-              icon={<ArrowTrendingUpIcon className="h-5 w-5 text-purple-600" />}
-              bg="bg-purple-100"
-              label="Applications"
+              title="Applications"
               value={analytics.applications.total}
-              sub="All time"
+              description="All time"
+              icon={TrendingUp}
             />
             <StatCard
-              icon={<ChartBarIcon className="h-5 w-5 text-amber-600" />}
-              bg="bg-amber-100"
-              label="Participants"
+              title="Participants"
               value={analytics.participants.total}
-              sub="Accepted"
+              description="Accepted"
+              icon={BarChart2}
             />
           </div>
 
-          <section className="rounded-md border border-zinc-200 bg-white px-5 py-4 shadow-sm">
+          <div className="rounded-lg border border-zinc-200 bg-white p-5">
             <h2 className="mb-3 text-sm font-semibold text-zinc-900">Applications by Status</h2>
             <div className="grid gap-3 sm:grid-cols-3 md:grid-cols-5">
               {Object.entries(analytics.applications.by_status).map(([status, count]) => (
@@ -106,84 +100,53 @@ export default function AnalyticsPage() {
                 </div>
               ))}
             </div>
-          </section>
+          </div>
 
-          <section className="rounded-md border border-zinc-200 bg-white px-5 py-4 shadow-sm">
+          <div className="rounded-lg border border-zinc-200 bg-white p-5">
             <h2 className="mb-3 text-sm font-semibold text-zinc-900">Top Programs by Applicants</h2>
-            <div className="overflow-hidden rounded-md border border-zinc-200">
-              <table className="min-w-full text-left text-[11px]">
-                <thead className="bg-zinc-50 text-zinc-600">
-                  <tr>
-                    <th className="px-3 py-2 font-semibold">#</th>
-                    <th className="px-3 py-2 font-semibold">Program</th>
-                    <th className="px-3 py-2 text-right font-semibold">Applicants</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {analytics.top_programs.map((p, idx) => (
-                    <tr key={p.id} className={idx % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}>
-                      <td className="px-3 py-2 text-zinc-500">{idx + 1}</td>
-                      <td className="px-3 py-2 font-medium text-zinc-900">{p.name}</td>
-                      <td className="px-3 py-2 text-right font-semibold text-zinc-700">{p.applicants}</td>
-                    </tr>
-                  ))}
-                  {analytics.top_programs.length === 0 && (
-                    <tr>
-                      <td colSpan={3} className="px-3 py-4 text-center text-zinc-400">No data.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-10">#</TableHead>
+                  <TableHead>Program</TableHead>
+                  <TableHead className="text-right">Applicants</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {analytics.top_programs.map((p, idx) => (
+                  <TableRow key={p.id}>
+                    <TableCell className="text-zinc-500">{idx + 1}</TableCell>
+                    <TableCell className="font-medium">{p.name}</TableCell>
+                    <TableCell className="text-right font-semibold">{p.applicants}</TableCell>
+                  </TableRow>
+                ))}
+                {analytics.top_programs.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={3} className="py-6 text-center text-zinc-400">No data.</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
 
-          <section className="rounded-md border border-zinc-200 bg-white px-5 py-4 shadow-sm">
+          <div className="rounded-lg border border-zinc-200 bg-white p-5">
             <h2 className="mb-3 text-sm font-semibold text-zinc-900">Program Status Breakdown</h2>
             <div className="grid gap-3 sm:grid-cols-4">
-              <MiniStat label="Total" value={analytics.programs.total} />
-              <MiniStat label="Published" value={analytics.programs.published} />
-              <MiniStat label="Active" value={analytics.programs.active} />
-              <MiniStat label="Draft" value={analytics.programs.draft} />
+              {[
+                { label: "Total", value: analytics.programs.total },
+                { label: "Published", value: analytics.programs.published },
+                { label: "Active", value: analytics.programs.active },
+                { label: "Draft", value: analytics.programs.draft },
+              ].map(({ label, value }) => (
+                <div key={label} className="rounded-md border border-zinc-100 bg-zinc-50 px-3 py-2">
+                  <p className="text-[10px] font-medium text-zinc-500">{label}</p>
+                  <p className="mt-0.5 text-xl font-bold text-zinc-900">{value}</p>
+                </div>
+              ))}
             </div>
-          </section>
+          </div>
         </>
       )}
-    </div>
-  );
-}
-
-function StatCard({
-  icon,
-  bg,
-  label,
-  value,
-  sub,
-}: {
-  icon: React.ReactNode;
-  bg: string;
-  label: string;
-  value: number;
-  sub: string;
-}) {
-  return (
-    <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs text-zinc-600">{label}</p>
-          <p className="mt-1 text-2xl font-bold text-zinc-900">{value}</p>
-          <p className="mt-1 text-[10px] text-zinc-500">{sub}</p>
-        </div>
-        <div className={`rounded-full ${bg} p-2.5`}>{icon}</div>
-      </div>
-    </div>
-  );
-}
-
-function MiniStat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-md border border-zinc-100 bg-zinc-50 px-3 py-2">
-      <p className="text-[10px] font-medium text-zinc-500">{label}</p>
-      <p className="mt-0.5 text-xl font-bold text-zinc-900">{value}</p>
     </div>
   );
 }

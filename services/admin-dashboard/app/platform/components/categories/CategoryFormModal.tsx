@@ -1,8 +1,17 @@
 "use client";
 
-import { XMarkIcon } from "@heroicons/react/24/outline";
 import { useState } from "react";
 import type { Category } from "./CategoriesTable";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/src/ui/sheet";
+import { Button } from "@/src/ui/button";
+import { Input } from "@/src/ui/input";
+import { Label } from "@/src/ui/label";
 
 type CategoryFormModalProps = {
   isOpen: boolean;
@@ -54,138 +63,93 @@ export function CategoryFormModal({
     onSubmit(formData);
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-zinc-200 px-6 py-4">
-          <h2 className="text-lg font-semibold text-zinc-900">
-            {category ? "Edit Brand" : "Create Brand"}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600"
-          >
-            <XMarkIcon className="h-5 w-5" />
-          </button>
-        </div>
+    <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <SheetContent side="right" className="flex flex-col sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>{category ? "Edit Brand" : "Create Brand"}</SheetTitle>
+          <SheetDescription>
+            {category
+              ? "Update the brand details and slug."
+              : "Create a new brand to group your programs under a common identity."}
+          </SheetDescription>
+        </SheetHeader>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6">
-          <div className="space-y-4">
-            {errorMessage ? (
-              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                {errorMessage}
-              </div>
-            ) : null}
+        <form onSubmit={handleSubmit} className="mt-6 flex flex-1 flex-col gap-4">
+          {errorMessage && (
+            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {errorMessage}
+            </div>
+          )}
 
-            {/* Name */}
-            <div>
-              <label
-                htmlFor="name"
-                className="mb-1 block text-sm font-medium text-zinc-700"
-              >
-                Brand Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                id="name"
-                value={formData.name}
-                onChange={(e) => handleNameChange(e.target.value)}
-                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                placeholder="e.g., Istanbul Youth Summit"
+          <div className="space-y-1">
+            <Label htmlFor="brand-name">
+              Brand Name <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="brand-name"
+              value={formData.name}
+              onChange={(e) => handleNameChange(e.target.value)}
+              placeholder="e.g., Istanbul Youth Summit"
+              required
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="brand-slug">
+              Slug <span className="text-red-500">*</span>
+            </Label>
+            <div className="space-y-1.5">
+              <Input
+                id="brand-slug"
+                value={formData.slug}
+                onChange={(e) => {
+                  setFormData({ ...formData, slug: e.target.value });
+                  setAutoGenerateSlug(false);
+                }}
+                placeholder="youth-leadership"
+                pattern="^[a-z0-9]+(?:-[a-z0-9]+)*$"
                 required
               />
-            </div>
-
-            {/* Slug */}
-            <div>
-              <label
-                htmlFor="slug"
-                className="mb-1 block text-sm font-medium text-zinc-700"
-              >
-                Slug <span className="text-red-500">*</span>
-              </label>
-              <div className="space-y-2">
+              <label className="flex items-center gap-2 text-xs text-zinc-500">
                 <input
-                  type="text"
-                  id="slug"
-                  value={formData.slug}
+                  type="checkbox"
+                  checked={autoGenerateSlug}
                   onChange={(e) => {
-                    setFormData({ ...formData, slug: e.target.value });
-                    setAutoGenerateSlug(false);
+                    setAutoGenerateSlug(e.target.checked);
+                    if (e.target.checked) {
+                      setFormData((prev) => ({ ...prev, slug: generateSlug(prev.name) }));
+                    }
                   }}
-                  className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  placeholder="youth-leadership"
-                  pattern="^[a-z0-9]+(?:-[a-z0-9]+)*$"
-                  required
+                  className="rounded border-zinc-300"
                 />
-                <label className="flex items-center gap-2 text-xs text-zinc-600">
-                  <input
-                    type="checkbox"
-                    checked={autoGenerateSlug}
-                    onChange={(e) => {
-                      setAutoGenerateSlug(e.target.checked);
-                      if (e.target.checked) {
-                        setFormData((prev) => ({
-                          ...prev,
-                          slug: generateSlug(prev.name),
-                        }));
-                      }
-                    }}
-                    className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  Auto-generate from name
-                </label>
-              </div>
-            </div>
-
-            {/* Description */}
-            <div>
-              <label
-                htmlFor="description"
-                className="mb-1 block text-sm font-medium text-zinc-700"
-              >
-                Description
+                Auto-generate from name
               </label>
-              <textarea
-                id="description"
-                value={formData.description}
-                onChange={(e) =>
-                  setFormData({ ...formData, description: e.target.value })
-                }
-                rows={3}
-                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                placeholder="Brief description of this brand..."
-              />
             </div>
           </div>
 
-          {/* Actions */}
-          <div className="mt-6 flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isSubmitting}
-              className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-            >
+          <div className="space-y-1">
+            <Label htmlFor="brand-description">Description</Label>
+            <textarea
+              id="brand-description"
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              rows={3}
+              className="flex w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+              placeholder="Brief description of this brand…"
+            />
+          </div>
+
+          <div className="mt-auto flex justify-end gap-3 border-t border-zinc-200 pt-4">
+            <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
               Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-            >
-              {isSubmitting
-                ? (category ? "Updating..." : "Creating...")
-                : (category ? "Update Brand" : "Create Brand")}
-            </button>
+            </Button>
+            <Button type="submit" loading={isSubmitting}>
+              {category ? "Update Brand" : "Create Brand"}
+            </Button>
           </div>
         </form>
-      </div>
-    </div>
+      </SheetContent>
+    </Sheet>
   );
 }
