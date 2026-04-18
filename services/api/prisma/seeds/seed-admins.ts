@@ -7,34 +7,21 @@ export async function seedAdmins() {
 
   const passwordHash = await bcrypt.hash('admin123', 10);
 
-  const brandSlugs = [BRANDS.IYS, BRANDS.JYS, BRANDS.CYS] as const;
-  const brands = await prisma.brand.findMany({
-    where: { slug: { in: [...brandSlugs] } },
-  });
-
-  const brandBySlug = new Map(brands.map((brand) => [brand.slug, brand]));
-
-  for (const slug of brandSlugs) {
-    if (!brandBySlug.has(slug)) {
-      return error(`${slug} Brand not found. Cannot seed admins.`);
-    }
+  const cysBrand = await prisma.brand.findUnique({ where: { slug: BRANDS.CYS } });
+  if (!cysBrand) {
+    return error(`${BRANDS.CYS} Brand not found. Cannot seed admins.`);
   }
 
-  const activePrograms = await prisma.program.findMany({
-    where: {
-      brandId: { in: brands.map((brand) => brand.id) },
-      isActive: true,
-    },
+  const brandBySlug = new Map([[BRANDS.CYS, cysBrand]]);
+
+  const activeCysProgram = await prisma.program.findFirst({
+    where: { brandId: cysBrand.id, isActive: true },
     orderBy: [{ year: 'desc' }, { createdAt: 'desc' }],
   });
 
-  const programByBrandSlug = new Map<string, (typeof activePrograms)[number]>();
-  for (const program of activePrograms) {
-    const brand = brands.find((entry) => entry.id === program.brandId);
-    if (brand && !programByBrandSlug.has(brand.slug)) {
-      programByBrandSlug.set(brand.slug, program);
-    }
-  }
+  const programByBrandSlug = new Map(
+    activeCysProgram ? [[BRANDS.CYS, activeCysProgram]] : [],
+  );
 
   type BrandAssignmentSeed = {
     brandSlug: string;
@@ -62,106 +49,88 @@ export async function seedAdmins() {
   };
 
   const admins: AdminSeed[] = [
+    // Platform-level super admin — full access across all brands and platform config
     {
       email: 'super@ybbhub.com',
       name: 'YBB Super Admin',
       role: 'Super Admin',
-      primaryBrandSlug: BRANDS.IYS,
-      level: 999,
-      canManageAdmins: true,
-      canAssignRoles: true,
-      customPermissions: ['*'],
-      brandAssignments: brandSlugs.map((brandSlug) => ({
-        brandSlug,
-        roleInBrand: 'owner',
-        permissions: ['*', 'platform.manage', 'admin.manage'],
-      })),
-      programAssignments: brandSlugs.map((brandSlug) => ({
-        brandSlug,
-        roleInProgram: 'owner',
-        permissions: ['*'],
-      })),
-    },
-    {
-      email: 'admin@ybbhub.com',
-      name: 'YBB Platform Super Admin',
-      role: 'Super Admin',
-      primaryBrandSlug: BRANDS.IYS,
-      level: 999,
-      canManageAdmins: true,
-      canAssignRoles: true,
-      customPermissions: ['*'],
-      brandAssignments: brandSlugs.map((brandSlug) => ({
-        brandSlug,
-        roleInBrand: 'owner',
-        permissions: ['*', 'platform.manage', 'admin.manage'],
-      })),
-      programAssignments: brandSlugs.map((brandSlug) => ({
-        brandSlug,
-        roleInProgram: 'owner',
-        permissions: ['*'],
-      })),
-    },
-    {
-      email: 'platform@ybbhub.com',
-      name: 'YBB Platform Admin',
-      role: 'Platform Admin',
-      primaryBrandSlug: BRANDS.IYS,
-      level: 7,
-      canManageAdmins: false,
-      canAssignRoles: false,
-      customPermissions: ['platform.manage', 'platform_access'],
-      brandAssignments: brandSlugs.map((brandSlug) => ({
-        brandSlug,
-        roleInBrand: 'platform_admin',
-        permissions: ['platform.manage', 'platform_access', 'brand.manage', 'program:read', 'program:write'],
-      })),
-    },
-    {
-      email: 'manager@ybbhub.com',
-      name: 'IYS Program Manager',
-      role: 'Program Admin',
-      primaryBrandSlug: BRANDS.IYS,
-      level: 3,
-      canManageAdmins: false,
-      canAssignRoles: false,
-      programAssignments: [
-        {
-          brandSlug: BRANDS.IYS,
-          roleInProgram: 'program_admin',
-          permissions: ['program:read', 'program:write', 'applications:read', 'applications:write', 'participants:read', 'payments:read'],
-        },
-      ],
-    },
-    {
-      email: 'jys.manager@ybbhub.com',
-      name: 'JYS Program Manager',
-      role: 'Program Admin',
-      primaryBrandSlug: BRANDS.JYS,
-      level: 3,
-      canManageAdmins: false,
-      canAssignRoles: false,
-      programAssignments: [
-        {
-          brandSlug: BRANDS.JYS,
-          roleInProgram: 'program_admin',
-          permissions: ['program:read', 'program:write', 'applications:read', 'applications:write', 'participants:read', 'payments:read'],
-        },
-      ],
-    },
-    {
-      email: 'editor@ybbhub.com',
-      name: 'CYS Content Editor',
-      role: 'Editor',
       primaryBrandSlug: BRANDS.CYS,
-      level: 2,
+      level: 999,
+      canManageAdmins: true,
+      canAssignRoles: true,
+      customPermissions: ['*'],
+      brandAssignments: [
+        {
+          brandSlug: BRANDS.CYS,
+          roleInBrand: 'owner',
+          permissions: ['*', 'platform.manage', 'admin.manage'],
+        },
+      ],
+      programAssignments: [
+        {
+          brandSlug: BRANDS.CYS,
+          roleInProgram: 'owner',
+          permissions: ['*'],
+        },
+      ],
+    },
+    // CYS brand super admin — full CYS management, no platform-level access
+    {
+      email: 'super@chinayouthsummit.com',
+      name: 'CYS Super Admin',
+      role: 'Admin',
+      primaryBrandSlug: BRANDS.CYS,
+      level: 800,
+      canManageAdmins: true,
+      canAssignRoles: true,
+      customPermissions: [
+        'brand.manage', 'admin.manage',
+        'program:read', 'program:write',
+        'applications:read', 'applications:write',
+        'participants:read', 'participants:write',
+        'payments:read', 'payments:write',
+        'content:write',
+      ],
+      brandAssignments: [
+        {
+          brandSlug: BRANDS.CYS,
+          roleInBrand: 'owner',
+          permissions: ['brand.manage', 'admin.manage', 'program:read', 'program:write', 'content:write'],
+        },
+      ],
+      programAssignments: [
+        {
+          brandSlug: BRANDS.CYS,
+          roleInProgram: 'owner',
+          permissions: [
+            'program:read', 'program:write',
+            'applications:read', 'applications:write',
+            'participants:read', 'participants:write',
+            'payments:read', 'payments:write',
+            'content:write',
+          ],
+        },
+      ],
+    },
+    // CYS program admin — scoped to program operations, limited dashboard access
+    {
+      email: 'admin@chinayouthsummit.com',
+      name: 'CYS Program Admin',
+      role: 'Program Admin',
+      primaryBrandSlug: BRANDS.CYS,
+      level: 3,
       canManageAdmins: false,
       canAssignRoles: false,
       programAssignments: [
         {
           brandSlug: BRANDS.CYS,
-          roleInProgram: 'content_editor',
-          permissions: ['program:read', 'content:write'],
+          roleInProgram: 'program_admin',
+          permissions: [
+            'program:read',
+            'applications:read', 'applications:write',
+            'participants:read',
+            'payments:read',
+          ],
         },
       ],
     },

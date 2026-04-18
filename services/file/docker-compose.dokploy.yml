@@ -9,7 +9,7 @@ services:
       PYTHON_ENV: production
       SERVICE_PORT: 8001
       # Database
-      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@ybb-postgres-file:5432/${DATABASE_NAME}
+      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@ybb-prod-postgres-file:5432/${DATABASE_NAME}
       # MinIO (External or Staging)
       MINIO_ENDPOINT: ${MINIO_ENDPOINT}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
@@ -30,16 +30,16 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=dokploy-network"
-      - "traefik.http.routers.ybb-file.rule=${APP_DOMAINS_RULE:-Host(`staging-files.ybbhub.com`)}"
-      - "traefik.http.routers.ybb-file.entrypoints=websecure"
-      - "traefik.http.routers.ybb-file.tls.certresolver=letsencrypt"
-      - "traefik.http.services.ybb-file.loadbalancer.server.port=8001"
-      - "traefik.http.routers.ybb-file.service=ybb-file"
+      - "traefik.http.routers.ybb-prod-file.rule=${APP_DOMAINS_RULE:-Host(`files.ybbhub.com`)}"
+      - "traefik.http.routers.ybb-prod-file.entrypoints=websecure"
+      - "traefik.http.routers.ybb-prod-file.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ybb-prod-file.loadbalancer.server.port=8001"
+      - "traefik.http.routers.ybb-prod-file.service=ybb-prod-file"
 
   # Filestash (S3 Browser for DigitalOcean Spaces)
   filestash:
     image: machines/filestash:latest
-    container_name: ybb-filestash
+    container_name: ybb-prod-filestash
     restart: always
     environment:
       - APPLICATION_URL=https://staging-console.ybbhub.com
@@ -50,14 +50,14 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=dokploy-network"
-      - "traefik.http.routers.ybb-filestash.rule=Host(`staging-console.ybbhub.com`)"
-      - "traefik.http.routers.ybb-filestash.entrypoints=websecure"
-      - "traefik.http.routers.ybb-filestash.tls.certresolver=letsencrypt"
-      - "traefik.http.services.ybb-filestash.loadbalancer.server.port=8334"
+      - "traefik.http.routers.ybb-prod-filestash.rule=Host(`console.ybbhub.com`)"
+      - "traefik.http.routers.ybb-prod-filestash.entrypoints=websecure"
+      - "traefik.http.routers.ybb-prod-filestash.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ybb-prod-filestash.loadbalancer.server.port=8334"
 
   postgres-file:
     image: postgres:15-alpine
-    container_name: ybb-postgres-file
+    container_name: ybb-prod-postgres-file
     restart: always
     environment:
       POSTGRES_USER: ${DATABASE_USER}
