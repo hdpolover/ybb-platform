@@ -5,6 +5,7 @@ import { AuthResponseDto } from '../../../presentation/dto/auth-response.dto';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { ConfigService } from '@nestjs/config';
 import { AuthLoggingService } from '../../services/auth-logging.service';
 import { GeoIpService } from '@shared/infrastructure/geoip/geoip.service';
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
@@ -15,6 +16,7 @@ export class LoginHandler {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
     private readonly authLoggingService: AuthLoggingService,
     private readonly geoIpService: GeoIpService,
     private readonly metricsService: MetricsService,
@@ -259,11 +261,11 @@ export class LoginHandler {
     };
 
     const accessToken = this.jwtService.sign(accessTokenPayload, {
-      expiresIn: '1h',
+      expiresIn: this.configService.get<string>('JWT_EXPIRES_IN', '1h'),
     });
 
     const refreshToken = this.jwtService.sign(refreshTokenPayload, {
-      expiresIn: '7d',
+      expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d'),
     });
 
     // Create User Session

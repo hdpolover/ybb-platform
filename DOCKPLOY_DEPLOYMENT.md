@@ -1,124 +1,128 @@
-# Deploying to Dockploy
+# Deploying to Dokploy
 
-To deploy YBB Platform services on Dockploy, you will treat each microservice as a separate **"Docker Compose" Service** in the Dockploy dashboard.
+Each service is a separate **Docker Compose** project in Dokploy. All use `docker-compose.dokploy.yml` — do **not** use `docker-compose.prod.yml` (that's for manual VPS deployments).
 
 ## Prerequisites
-1.  **Dockploy Server** is running.
-2.  **Repo Connected**: Connect your GitHub repository `ybb-platform`.
-
-## Common Setup
-Each service requires accessing `dokploy-network` to communicate internally and use Traefik for public domains.
+1.  Dokploy server running with Traefik enabled.
+2.  GitHub repo `ybb-platform` connected to your Dokploy account.
+3.  `dokploy-network` exists (Dokploy creates this automatically).
 
 ---
 
-## 1. Shared RabbitMQ Service
-*   **Name**: `shared-rabbitmq`
-*   **Repository**: `ybb-platform`
-*   **Branch**: `main`
-*   **Build Path**: `services/shared-rabbitmq`
-*   **Compose Path**: `docker-compose.dokploy.yml`
-*   **Environment Variables**:
-    *   `RABBITMQ_DEFAULT_USER` (e.g., guest)
-    *   `RABBITMQ_DEFAULT_PASS` (e.g., guest)
-    *   `APP_DOMAINS_RULE`: `Host(\`queue.ybbhub.com\`)` (if exposing UI)
+## Deployment Order
 
-## 2. API Service
-*   **Name**: `api`
-*   **Repository**: `ybb-platform`
-*   **Branch**: `main`
-*   **Build Path**: `services/api`
-*   **Compose Path**: `docker-compose.dokploy.yml`
-*   **Environment Variables**:
-    *   `DATABASE_USER`
-    *   `DATABASE_PASSWORD`
-    *   `DATABASE_NAME` (e.g., ybb_platform_db)
-    *   `JWT_SECRET`
-    *   `APP_DOMAINS_RULE`: `Host(\`api.ybbhub.com\`)`
-    *   (Plus RabbitMQ creds to connect to shared-rabbitmq)
-    *   **Optional Advanced Features**:
-        *   `READ_REPLICA_URL` - Read replica database URL for improved performance
-        *   `CIRCUIT_BREAKER_FAILURE_THRESHOLD` - Failures before circuit opens (default: 5)
-        *   `CIRCUIT_BREAKER_SUCCESS_THRESHOLD` - Successes to close circuit (default: 3)
-        *   `CIRCUIT_BREAKER_TIMEOUT` - Reset timeout in ms (default: 60000)
+Deploy in this order due to dependencies:
 
-## 3. Payment Service
-*   **Name**: `payment`
-*   **Repository**: `ybb-platform`
-*   **Branch**: `main`
-*   **Build Path**: `services/payment`
-*   **Compose Path**: `docker-compose.dokploy.yml`
-*   **Environment Variables**:
-    *   `DATABASE_USER`
-    *   `DATABASE_PASSWORD`
-    *   `DATABASE_NAME` (e.g., ybb_payments_db)
-    *   `MIDTRANS_SERVER_KEY`
-    *   `APP_DOMAINS_RULE`: `Host(\`payments.ybbhub.com\`)`
+| Wave | Service | Depends On |
+|------|---------|------------|
+| 1 | `shared-rabbitmq` | nothing |
+| 2 | `payment`, `file`, `notification` | RabbitMQ |
+| 3 | `api` | RabbitMQ + payment + file |
+| 4 | `admin-dashboard` | API URL (baked at build time) |
+| anytime | `monitoring`, `pgadmin` | nothing critical |
 
-## 4. File Service
-*   **Name**: `file`
-*   **Repository**: `ybb-platform`
-*   **Branch**: `main`
-*   **Build Path**: `services/file`
-*   **Compose Path**: `docker-compose.dokploy.yml`
-*   **Environment Variables**:
-    *   `DATABASE_USER`
-    *   `DATABASE_PASSWORD`
-    *   `DATABASE_NAME` (e.g., ybb_files_db)
-    *   `MINIO_ENDPOINT`, etc.
-    *   `APP_DOMAINS_RULE`: `Host(\`files.ybbhub.com\`)`
+---
 
-## 5. Notification Service
-*   **Name**: `notification`
-*   **Repository**: `ybb-platform`
-*   **Branch**: `main`
-*   **Build Path**: `services/notification`
-*   **Compose Path**: `docker-compose.dokploy.yml`
-*   **Environment Variables**:
-    *   `RABBITMQ_DEFAULT_USER`, `RABBITMQ_DEFAULT_PASS`
-    *   `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`
-    *   `APP_DOMAINS_RULE`: `Host(\`notify.ybbhub.com\`)` (Optional)
+## Dokploy Field Reference
+
+For every service:
+- **Repository**: `ybb-platform`
+- **Branch**: `main`
+- **Compose Path**: `services/<service-name>/docker-compose.dokploy.yml`
+- **Watch Path**: `services/<service-name>/**`
+
+---
+
+## 1. Shared RabbitMQ
+- **Compose Path**: `services/shared-rabbitmq/docker-compose.dokploy.yml`
+- **Watch Path**: `services/shared-rabbitmq/**`
+- **Environment Variables**:
+    - `RABBITMQ_DEFAULT_USER`
+    - `RABBITMQ_DEFAULT_PASS`
+    - `APP_DOMAINS_RULE`: `Host(\`queue.ybbhub.com\`)` (optional, for management UI)
+
+## 2. Payment Service
+- **Compose Path**: `services/payment/docker-compose.dokploy.yml`
+- **Watch Path**: `services/payment/**`
+- **Environment Variables**:
+    - `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_NAME` (e.g., `ybb_payments_db`)
+    - `RABBITMQ_DEFAULT_USER`, `RABBITMQ_DEFAULT_PASS`
+    - `MIDTRANS_SERVER_KEY`, `MIDTRANS_CLIENT_KEY`
+    - `MIDTRANS_IS_PRODUCTION`: `true`
+    - `INTERNAL_SERVICE_KEY`
+    - `APP_DOMAINS_RULE`: `Host(\`payments.ybbhub.com\`)`
+    - `LOKI_URL`, `OTEL_EXPORTER_OTLP_ENDPOINT` (optional)
+
+## 3. File Service
+- **Compose Path**: `services/file/docker-compose.dokploy.yml`
+- **Watch Path**: `services/file/**`
+- **Environment Variables**:
+    - `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_NAME` (e.g., `ybb_files_db`)
+    - `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET`
+    - `MINIO_PUBLIC_ENDPOINT`
+    - `APP_DOMAINS_RULE`: `Host(\`files.ybbhub.com\`)`
+    - `LOKI_URL`, `OTEL_EXPORTER_OTLP_ENDPOINT` (optional)
+
+## 4. Notification Service
+- **Compose Path**: `services/notification/docker-compose.dokploy.yml`
+- **Watch Path**: `services/notification/**`
+- **Environment Variables**:
+    - `RABBITMQ_DEFAULT_USER`, `RABBITMQ_DEFAULT_PASS`
+    - `RESEND_API_KEY`, `RESEND_FROM`
+    - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` (if using SMTP instead of Resend)
+    - `APP_DOMAINS_RULE`: `Host(\`notifications.ybbhub.com\`)` (optional)
+    - `LOKI_URL`, `OTEL_EXPORTER_OTLP_ENDPOINT` (optional)
+
+## 5. API Service
+- **Compose Path**: `services/api/docker-compose.dokploy.yml`
+- **Watch Path**: `services/api/**`
+- **Environment Variables**:
+    - `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_NAME` (e.g., `ybb_platform_db`)
+    - `REDIS_PASSWORD`
+    - `RABBITMQ_DEFAULT_USER`, `RABBITMQ_DEFAULT_PASS`
+    - `PAYMENT_SERVICE_URL`: `http://ybb-prod-payment:8002`
+    - `PAYMENT_SERVICE_INTERNAL_KEY`
+    - `FILE_SERVICE_URL`: `http://ybb-prod-file:8001`
+    - `STORAGE_PUBLIC_URL`
+    - `CORS_ORIGINS` (e.g., `https://chinayouthsummit.com,https://admin.ybbhub.com`)
+    - `JWT_SECRET`, `JWT_EXPIRES_IN`
+    - `ADMIN_REGISTRATION_SECRET`
+    - `FIREBASE_SERVICE_ACCOUNT_JSON` (full JSON string)
+    - `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`, `FIREBASE_STORAGE_BUCKET`
+    - `FIREBASE_MESSAGING_SENDER_ID`, `FIREBASE_APP_ID`, `FIREBASE_MEASUREMENT_ID`
+    - `APP_DOMAINS_RULE`: `Host(\`api.ybbhub.com\`)`
+    - `LOKI_URL`, `OTEL_EXPORTER_OTLP_ENDPOINT` (optional)
+    - **Optional tuning**:
+        - `READ_REPLICA_URL`
+        - `CIRCUIT_BREAKER_FAILURE_THRESHOLD` (default: 5)
+        - `CIRCUIT_BREAKER_SUCCESS_THRESHOLD` (default: 3)
+        - `CIRCUIT_BREAKER_TIMEOUT` (default: 60000)
 
 ## 6. Admin Dashboard
-*   **Name**: `admin-dashboard`
-*   **Repository**: `ybb-platform`
-*   **Branch**: `main`
-*   **Build Path**: `services/admin-dashboard`
-*   **Compose Path**: `docker-compose.dokploy.yml`
-*   **Environment Variables**:
-    *   `APP_DOMAINS_RULE`: `Host(\`staging-admin.ybbhub.com\`)`
-    *   `NEXT_PUBLIC_API_URL`: `https://staging-api.ybbhub.com` (Required at Build Time)
+- **Compose Path**: `services/admin-dashboard/docker-compose.dokploy.yml`
+- **Watch Path**: `services/admin-dashboard/**`
+- **Environment Variables**:
+    - `NEXT_PUBLIC_API_URL`: `https://api.ybbhub.com` (**required at build time**)
+    - `APP_DOMAINS_RULE`: `Host(\`admin.ybbhub.com\`)`
 
-## 7. Minimal Admin
-*   **Name**: `minimal-admin`
-*   **Repository**: `ybb-platform`
-*   **Branch**: `main`
-*   **Build Path**: `services/minimal-admin`
-*   **Compose Path**: `docker-compose.dokploy.yml`
-*   **Environment Variables**:
-    *   `APP_DOMAINS_RULE`: `Host(\`ops.ybbhub.com\`)`
+## 7. Monitoring Stack (Prometheus + Grafana + Loki + Tempo)
+- **Compose Path**: `services/monitoring/docker-compose.dokploy.yml`
+- **Watch Path**: `services/monitoring/**`
+- **Environment Variables**:
+    - `GRAFANA_USER`, `GRAFANA_PASSWORD`
+    - `APP_DOMAINS_RULE`: `Host(\`monitor.ybbhub.com\`)`
 
-## 8. Monitoring Stack (Prometheus + Grafana)
-*   **Name**: `monitoring`
-*   **Repository**: `ybb-platform`
-*   **Branch**: `main`
-*   **Build Path**: `services/monitoring`
-*   **Compose Path**: `docker-compose.dokploy.yml`
-*   **Environment Variables**:
-    *   `GRAFANA_USER`
-    *   `GRAFANA_PASSWORD`
-    *   `APP_DOMAINS_RULE`: `Host(\`monitor.ybbhub.com\`)`
+## 8. PgAdmin
+- **Compose Path**: `services/pgadmin/docker-compose.dokploy.yml`
+- **Watch Path**: `services/pgadmin/**`
+- **Environment Variables**:
+    - `PGADMIN_DEFAULT_EMAIL`, `PGADMIN_DEFAULT_PASSWORD`
+    - `APP_DOMAINS_RULE`: `Host(\`db.ybbhub.com\`)`
 
-## 9. PgAdmin
-*   **Name**: `pgadmin`
-*   **Repository**: `ybb-platform`
-*   **Branch**: `main`
-*   **Build Path**: `services/pgadmin`
-*   **Compose Path**: `docker-compose.dokploy.yml`
-*   **Environment Variables**:
-    *   `PGADMIN_EMAIL`
-    *   `PGADMIN_PASSWORD`
-    *   `APP_DOMAINS_RULE`: `Host(\`db.ybbhub.com\`)`
+---
 
 ## Notes
-*   **Internal Communication**: Services communicate via `dokploy-network` using container names (e.g., `ybb-shared-rabbitmq`, `ybb-payment`). The provided compose files are pre-configured for this.
-*   **Databases**: Each service (API, Payment, File) spins up its own dedicated PostgreSQL container within its deployment. This is defined in their respective `docker-compose.dokploy.yml` files.
+- **Container names**: All prod containers are prefixed `ybb-prod-` (e.g., `ybb-prod-api`, `ybb-prod-postgres-api`) to avoid conflicts with staging containers on the same host.
+- **Internal URLs**: Services on `dokploy-network` communicate by container name (e.g., `http://ybb-prod-payment:8002`).
+- **Databases**: Each stateful service (API, Payment, File) runs its own dedicated PostgreSQL container defined in its own compose file.
+- **Seeding**: On first boot, the API runs `seed:prod` which only seeds auth providers, brands, and admin accounts — no dummy data.
