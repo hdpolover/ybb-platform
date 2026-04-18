@@ -3,13 +3,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.prod
-    container_name: ybb-notification
+    container_name: ybb-prod-notification
     restart: always
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${PORT:-4002}
       # RabbitMQ
-      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@ybb-shared-rabbitmq:5672/
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@ybb-prod-shared-rabbitmq:5672/
       # Email / SMTP Config (Add as needed in Dockploy dashboard)
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT}
@@ -29,10 +29,10 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=dokploy-network"
-      - "traefik.http.routers.ybb-notification.rule=${APP_DOMAINS_RULE:-Host(`staging-notifications.ybbhub.com`)}"
-      - "traefik.http.routers.ybb-notification.entrypoints=websecure"
-      - "traefik.http.routers.ybb-notification.tls.certresolver=letsencrypt"
-      - "traefik.http.services.ybb-notification.loadbalancer.server.port=4002"
+      - "traefik.http.routers.ybb-prod-notification.rule=${APP_DOMAINS_RULE:-Host(`notifications.ybbhub.com`)}"
+      - "traefik.http.routers.ybb-prod-notification.entrypoints=websecure"
+      - "traefik.http.routers.ybb-prod-notification.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ybb-prod-notification.loadbalancer.server.port=4002"
 
 networks:
   dokploy-network:

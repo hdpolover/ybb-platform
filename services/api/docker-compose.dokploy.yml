@@ -3,15 +3,15 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.prod
-    container_name: ybb-api
+    container_name: ybb-prod-api
     restart: always
     # No ports exposed to host, only via Traefik
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${PORT:-4000}
-      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@ybb-postgres-api:5432/${DATABASE_NAME}
-      REDIS_URL: redis://:${REDIS_PASSWORD}@ybb-redis-api:6379
-      REDIS_HOST: ybb-redis-api
+      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@ybb-prod-postgres-api:5432/${DATABASE_NAME}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@ybb-prod-redis-api:6379
+      REDIS_HOST: ybb-prod-redis-api
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       # Links to other services (on same dokploy-network)
@@ -20,7 +20,7 @@ services:
       FILE_SERVICE_URL: ${FILE_SERVICE_URL}
       STORAGE_PUBLIC_URL: ${STORAGE_PUBLIC_URL}
       CORS_ORIGINS: ${CORS_ORIGINS}
-      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@ybb-shared-rabbitmq:5672/
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@ybb-prod-shared-rabbitmq:5672/
       # Auth
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
@@ -55,7 +55,7 @@ services:
 
   postgres-api:
     image: postgres:15-alpine
-    container_name: ybb-postgres-api
+    container_name: ybb-prod-postgres-api
     restart: always
     environment:
       POSTGRES_USER: ${DATABASE_USER}
@@ -76,7 +76,7 @@ services:
 
   redis-api:
     image: redis:7-alpine
-    container_name: ybb-redis-api
+    container_name: ybb-prod-redis-api
     restart: always
     command: redis-server --requirepass ${REDIS_PASSWORD}
     volumes:

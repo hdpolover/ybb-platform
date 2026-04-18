@@ -9,8 +9,6 @@ export async function seedAuth() {
   const providers = [
     { name: 'local', displayName: 'Email & Password', icon: 'email', buttonColor: '#4A5568', order: 1, isOAuth: false },
     { name: 'google', displayName: 'Google', icon: 'google', buttonColor: '#4285F4', order: 2, isOAuth: true },
-    { name: 'facebook', displayName: 'Facebook', icon: 'facebook', buttonColor: '#1877F2', order: 3, isOAuth: true },
-    { name: 'apple', displayName: 'Apple', icon: 'apple', buttonColor: '#000000', order: 4, isOAuth: true },
   ];
 
   for (const p of providers) {

@@ -3,7 +3,6 @@ import * as bcrypt from 'bcrypt';
 
 export const BRANDS = {
   IYS: 'istanbul-youth-summit',
-  YAF: 'youth-academic-forum',
   WYF: 'world-youth-fest',
   JYS: 'japan-youth-summit',
   MEYS: 'middle-east-youth-summit',
@@ -29,23 +28,6 @@ export async function seedBrands() {
       isActive: true,
       logoUrl: "https://placehold.co/400x100/023e8a/FFF?text=IYS+Logo",
       bannerUrl: "https://placehold.co/1200x400/023e8a/FFF?text=IYS+Banner",
-    },
-  });
-
-  // 2. YAF
-  const yaf = await prisma.brand.upsert({
-    where: { slug: BRANDS.YAF },
-    update: {},
-    create: {
-      name: 'Youth Academic Forum',
-      slug: BRANDS.YAF,
-      description: 'Platform for young scholars.',
-      websiteUrl: 'https://youthacademicforum.com',
-      contactEmail: 'admin@youthacademicforum.com',
-      primaryColor: '#0056B3',
-      isActive: true,
-      logoUrl: "https://placehold.co/400x100/0056B3/FFF?text=YAF+Logo",
-      bannerUrl: "https://placehold.co/1200x400/0056B3/FFF?text=YAF+Banner",
     },
   });
 

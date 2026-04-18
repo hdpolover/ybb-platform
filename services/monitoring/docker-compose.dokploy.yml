@@ -1,7 +1,7 @@
 services:
   prometheus:
     image: prom/prometheus:latest
-    container_name: ybb-prometheus
+    container_name: ybb-prod-prometheus
     restart: always
     volumes:
       - ./prometheus/prometheus.prod.yml:/etc/prometheus/prometheus.yml
@@ -11,7 +11,7 @@ services:
 
   grafana:
     image: grafana/grafana:latest
-    container_name: ybb-grafana
+    container_name: ybb-prod-grafana
     restart: always
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning
@@ -24,14 +24,14 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=dokploy-network"
-      - "traefik.http.routers.ybb-grafana.rule=${APP_DOMAINS_RULE:-Host(`staging-monitor.ybbhub.com`)}"
-      - "traefik.http.routers.ybb-grafana.entrypoints=websecure"
-      - "traefik.http.routers.ybb-grafana.tls.certresolver=letsencrypt"
-      - "traefik.http.services.ybb-grafana.loadbalancer.server.port=3000"
+      - "traefik.http.routers.ybb-prod-grafana.rule=${APP_DOMAINS_RULE:-Host(`monitor.ybbhub.com`)}"
+      - "traefik.http.routers.ybb-prod-grafana.entrypoints=websecure"
+      - "traefik.http.routers.ybb-prod-grafana.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ybb-prod-grafana.loadbalancer.server.port=3000"
 
   loki:
     image: grafana/loki:3.0.0
-    container_name: ybb-loki
+    container_name: ybb-prod-loki
     restart: always
     volumes:
       - ./loki/loki-config.yml:/etc/loki/local-config.yaml
@@ -41,7 +41,7 @@ services:
 
   tempo:
     image: grafana/tempo:2.4.1
-    container_name: ybb-tempo
+    container_name: ybb-prod-tempo
     command: [ "-config.file=/etc/tempo.yaml" ]
     volumes:
       - ./tempo/tempo-config.yml:/etc/tempo.yaml
@@ -51,7 +51,7 @@ services:
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.96.0
-    container_name: ybb-otel-collector
+    container_name: ybb-prod-otel-collector
     command: [ "--config=/etc/otel-collector-config.yaml" ]
     volumes:
       - ./otel/otel-collector-config.yml:/etc/otel-collector-config.yaml

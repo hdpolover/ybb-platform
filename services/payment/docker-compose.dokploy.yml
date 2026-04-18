@@ -3,15 +3,15 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.prod
-    container_name: ybb-payment
+    container_name: ybb-prod-payment
     restart: always
     environment:
       ENVIRONMENT: ${ENVIRONMENT:-production}
       PORT: 8002
       # Database
-      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@ybb-postgres-payment:5432/${DATABASE_NAME}?sslmode=disable
+      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@ybb-prod-postgres-payment:5432/${DATABASE_NAME}?sslmode=disable
       # RabbitMQ
-      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@ybb-shared-rabbitmq:5672/
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@ybb-prod-shared-rabbitmq:5672/
       # Gateways
       MIDTRANS_SERVER_KEY: ${MIDTRANS_SERVER_KEY}
       MIDTRANS_CLIENT_KEY: ${MIDTRANS_CLIENT_KEY}
@@ -29,14 +29,14 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=dokploy-network"
-      - "traefik.http.routers.ybb-payment.rule=${APP_DOMAINS_RULE:-Host(`staging-payments.ybbhub.com`)}"
-      - "traefik.http.routers.ybb-payment.entrypoints=websecure"
-      - "traefik.http.routers.ybb-payment.tls.certresolver=letsencrypt"
-      - "traefik.http.services.ybb-payment.loadbalancer.server.port=8002"
+      - "traefik.http.routers.ybb-prod-payment.rule=${APP_DOMAINS_RULE:-Host(`payments.ybbhub.com`)}"
+      - "traefik.http.routers.ybb-prod-payment.entrypoints=websecure"
+      - "traefik.http.routers.ybb-prod-payment.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ybb-prod-payment.loadbalancer.server.port=8002"
 
   postgres-payment:
     image: postgres:15-alpine
-    container_name: ybb-postgres-payment
+    container_name: ybb-prod-postgres-payment
     restart: always
     environment:
       POSTGRES_USER: ${DATABASE_USER}
