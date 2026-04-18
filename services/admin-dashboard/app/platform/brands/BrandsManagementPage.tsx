@@ -2,26 +2,27 @@
 
 import { useMemo, useEffect, useState } from "react";
 import { Layers, FolderOpen, BarChart2, Clock } from "lucide-react";
-import { CategoriesTable, type Category } from "../components/categories/CategoriesTable";
+import { BrandsTable, type Brand } from "../components/brands/BrandsTable";
 import { CategoryFormModal, type CategoryFormData } from "../components/categories/CategoryFormModal";
 import { PageHeader } from "@/src/admin/page-header";
 import { StatCard } from "@/src/admin/stat-card";
-import { ConfirmDialog } from "@/src/admin/confirm-dialog";
+import { FilterBar } from "@/src/admin/filter-bar";
 import { Button } from "@/src/ui/button";
+import { Select } from "@/src/ui/select";
 import {
   createPlatformBrand,
-  deletePlatformBrand,
   listPlatformBrands,
   type PlatformBrand,
   updatePlatformBrand,
 } from "../api";
 
-function mapBrandToCategory(brand: PlatformBrand): Category {
+function mapBrand(brand: PlatformBrand): Brand {
   return {
     id: brand.id,
     name: brand.name,
     description: brand.description ?? null,
     slug: brand.slug,
+    isActive: brand.isActive,
     programCount: brand.programCount,
     createdAt: brand.createdAt,
     updatedAt: brand.updatedAt,
@@ -29,16 +30,29 @@ function mapBrandToCategory(brand: PlatformBrand): Category {
 }
 
 export default function BrandsManagementPage() {
-  const [brands, setBrands] = useState<Category[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [pageError, setPageError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [selectedBrand, setSelectedBrand] = useState<Category | null>(null);
+  const [selectedBrand, setSelectedBrand] = useState<Brand | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+
+  const filteredBrands = useMemo(() => {
+    let result = brands;
+    if (statusFilter !== "all") {
+      result = result.filter((b) => (statusFilter === "active" ? b.isActive : !b.isActive));
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (b) => b.name.toLowerCase().includes(q) || b.slug.toLowerCase().includes(q),
+      );
+    }
+    return result;
+  }, [brands, search, statusFilter]);
 
   const totalPrograms = useMemo(
     () => brands.reduce((sum, brand) => sum + brand.programCount, 0),
@@ -71,7 +85,7 @@ export default function BrandsManagementPage() {
           return;
         }
 
-        setBrands(data.map(mapBrandToCategory));
+        setBrands(data.map(mapBrand));
       } catch (error) {
         if (!isMounted) {
           return;
@@ -104,7 +118,7 @@ export default function BrandsManagementPage() {
       });
 
       setBrands((current) =>
-        [...current, mapBrandToCategory(createdBrand)].sort((left, right) => left.name.localeCompare(right.name)),
+        [...current, mapBrand(createdBrand)].sort((left, right) => left.name.localeCompare(right.name)),
       );
       setIsFormModalOpen(false);
       setSelectedBrand(null);
@@ -130,7 +144,7 @@ export default function BrandsManagementPage() {
         description: data.description,
       });
 
-      const mappedBrand = mapBrandToCategory(updatedBrand);
+      const mappedBrand = mapBrand(updatedBrand);
       setBrands((current) =>
         current
           .map((brand) => (brand.id === mappedBrand.id ? mappedBrand : brand))
@@ -145,36 +159,10 @@ export default function BrandsManagementPage() {
     }
   };
 
-  const handleDeleteBrand = async () => {
-    if (!selectedBrand) {
-      return;
-    }
-
-    setIsDeleting(true);
-    setDeleteError(null);
-
-    try {
-      await deletePlatformBrand(selectedBrand.id);
-      setBrands((current) => current.filter((brand) => brand.id !== selectedBrand.id));
-      setSelectedBrand(null);
-      setIsDeleteModalOpen(false);
-    } catch (error) {
-      setDeleteError(error instanceof Error ? error.message : "Failed to delete brand.");
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
-  const handleEdit = (brand: Category) => {
+  const handleEdit = (brand: Brand) => {
     setFormError(null);
     setSelectedBrand(brand);
     setIsFormModalOpen(true);
-  };
-
-  const handleDelete = (brand: Category) => {
-    setDeleteError(null);
-    setSelectedBrand(brand);
-    setIsDeleteModalOpen(true);
   };
 
   const handleCloseFormModal = () => {
@@ -185,16 +173,6 @@ export default function BrandsManagementPage() {
     setIsFormModalOpen(false);
     setSelectedBrand(null);
     setFormError(null);
-  };
-
-  const handleCloseDeleteModal = () => {
-    if (isDeleting) {
-      return;
-    }
-
-    setIsDeleteModalOpen(false);
-    setSelectedBrand(null);
-    setDeleteError(null);
   };
 
   return (
@@ -227,12 +205,30 @@ export default function BrandsManagementPage() {
         </div>
       )}
 
+      <FilterBar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search brands…"
+        resultCount={filteredBrands.length}
+        filters={
+          <Select
+            className="h-8 w-[130px] text-xs"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as "all" | "active" | "inactive")}
+          >
+            <option value="all">All Status</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </Select>
+        }
+      />
+
       {isLoading ? (
         <div className="rounded-lg border border-zinc-200 bg-white p-12 text-center text-sm text-zinc-500">
           Loading brands…
         </div>
       ) : (
-        <CategoriesTable categories={brands} onEdit={handleEdit} onDelete={handleDelete} />
+        <BrandsTable brands={filteredBrands} onEdit={handleEdit} />
       )}
 
       <CategoryFormModal
@@ -243,21 +239,6 @@ export default function BrandsManagementPage() {
         category={selectedBrand}
         isSubmitting={isSubmitting}
         errorMessage={formError}
-      />
-
-      <ConfirmDialog
-        open={isDeleteModalOpen}
-        onOpenChange={(open) => !open && handleCloseDeleteModal()}
-        title="Delete Brand"
-        description={
-          selectedBrand?.programCount
-            ? `"${selectedBrand.name}" has ${selectedBrand.programCount} program(s). Are you sure you want to delete it?`
-            : `Are you sure you want to delete "${selectedBrand?.name ?? "this brand"}"? This action cannot be undone.`
-        }
-        confirmLabel="Delete"
-        variant="destructive"
-        onConfirm={handleDeleteBrand}
-        loading={isDeleting}
       />
     </div>
   );

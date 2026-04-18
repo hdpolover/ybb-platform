@@ -39,6 +39,17 @@ export class LegalDocumentRepository {
         });
     }
 
+    async findAllByBrandForAdmin(brandSlug: string, includeInactive = true): Promise<LegalDocument[]> {
+        return this.prisma.legalDocument.findMany({
+            where: {
+                brand: { slug: brandSlug },
+                deletedAt: null,
+                ...(includeInactive ? {} : { isActive: true }),
+            },
+            orderBy: [{ slug: 'asc' }, { version: 'desc' }],
+        });
+    }
+
     async create(brandId: string, data: CreateLegalDocumentDto): Promise<LegalDocument> {
         return this.prisma.legalDocument.create({
             data: {

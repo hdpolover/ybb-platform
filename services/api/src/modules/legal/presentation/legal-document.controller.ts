@@ -30,6 +30,32 @@ export class LegalDocumentController {
         return docs.map(doc => this.toDto(doc));
     }
 
+    @Get('admin')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'List all legal documents for a brand including inactive (Admin Only)' })
+    @ApiParam({ name: 'brandSlug', description: 'The slug of the brand' })
+    @ApiResponse({ status: 200, description: 'All legal documents (including inactive)', type: [LegalDocumentResponseDto] })
+    @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+    async listAdmin(@Param('brandSlug') brandSlug: string) {
+        const docs = await this.service.findAllByBrandForAdmin(brandSlug);
+        return docs.map(doc => this.toDto(doc));
+    }
+
+    @Get('admin/:id')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Get a legal document by ID (Admin Only)' })
+    @ApiParam({ name: 'brandSlug', description: 'The slug of the brand' })
+    @ApiParam({ name: 'id', description: 'The UUID of the document' })
+    @ApiResponse({ status: 200, description: 'The legal document', type: LegalDocumentResponseDto })
+    @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+    @ApiNotFoundResponse({ description: 'Document not found' })
+    async getById(@Param('brandSlug') brandSlug: string, @Param('id') id: string) {
+        const doc = await this.service.findById(id);
+        return this.toDto(doc);
+    }
+
     @Get(':typeSlug')
     @ApiOperation({ summary: 'Get a specific legal document by type/slug (Public)' })
     @ApiParam({ name: 'brandSlug', description: 'The slug of the brand' })

@@ -13,17 +13,17 @@ import { RedisThrottlerStorage } from './redis-throttler.storage';
           {
             name: 'short',
             ttl: seconds(1),
-            limit: 3, // 3 requests per second
+            limit: 20, // 20 requests per second
           },
           {
             name: 'medium',
             ttl: seconds(10),
-            limit: 20, // 20 requests per 10 seconds
+            limit: 100, // 100 requests per 10 seconds
           },
           {
             name: 'long',
             ttl: seconds(60),
-            limit: 100, // 100 requests per minute
+            limit: 300, // 300 requests per minute
           },
         ],
         storage: new RedisThrottlerStorage(
