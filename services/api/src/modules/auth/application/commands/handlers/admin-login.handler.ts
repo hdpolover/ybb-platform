@@ -3,6 +3,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
 import { AuthLoggingService } from '../../services/auth-logging.service';
 import { AdminLoginCommand } from '../admin-login.command';
@@ -21,6 +22,7 @@ export class AdminLoginHandler {
     constructor(
         private readonly prisma: PrismaService,
         private readonly jwtService: JwtService,
+        private readonly configService: ConfigService,
         private readonly authLoggingService: AuthLoggingService,
         private readonly metricsService: MetricsService,
     ) { }
@@ -192,11 +194,11 @@ export class AdminLoginHandler {
         };
 
         const accessToken = this.jwtService.sign(accessTokenPayload, {
-            expiresIn: '8h', // Admins get longer sessions? Or shorter? 8h is standard work day.
+            expiresIn: this.configService.get<string>('JWT_ADMIN_EXPIRES_IN', '8h'),
         });
 
         const refreshToken = this.jwtService.sign(refreshTokenPayload, {
-            expiresIn: '7d',
+            expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d'),
         });
 
         const expiresAt = new Date();

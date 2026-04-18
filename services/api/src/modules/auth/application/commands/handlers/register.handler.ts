@@ -255,8 +255,8 @@ export class RegisterHandler {
           brandId: existingIdentity.user.brandId,
         };
 
-        const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
-        const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+        const accessToken = this.jwtService.sign(payload, { expiresIn: this.configService.get<string>('JWT_EXPIRES_IN', '1h') });
+        const refreshToken = this.jwtService.sign(payload, { expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d') });
 
         // Update last used
         await this.prisma.userIdentity.update({
@@ -324,8 +324,8 @@ export class RegisterHandler {
         brandId: user.brandId,
       };
 
-      const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
-      const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+      const accessToken = this.jwtService.sign(payload, { expiresIn: this.configService.get<string>('JWT_EXPIRES_IN', '1h') });
+      const refreshToken = this.jwtService.sign(payload, { expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d') });
 
       const registeredPrograms = await this.getRegisteredPrograms(user.id, user.brandId);
 
@@ -482,11 +482,11 @@ export class RegisterHandler {
     };
 
     const accessToken = this.jwtService.sign(payload, {
-      expiresIn: '1h',
+      expiresIn: this.configService.get<string>('JWT_EXPIRES_IN', '1h'),
     });
 
     const refreshToken = this.jwtService.sign(refreshTokenPayload, {
-      expiresIn: '7d',
+      expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d'),
     });
 
     // Create initial user session

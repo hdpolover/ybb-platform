@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { AdminAuthResponseDto } from '../../../presentation/dto/admin-auth-response.dto';
 import {
@@ -25,6 +26,7 @@ export class AdminRefreshHandler {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
   ) {}
 
   async execute(refreshToken: string): Promise<AdminAuthResponseDto> {
@@ -142,7 +144,7 @@ export class AdminRefreshHandler {
         adminId: user.admin.id,
         sid: session.sessionToken,
       },
-      { expiresIn: '8h' },
+      { expiresIn: this.configService.get<string>('JWT_ADMIN_EXPIRES_IN', '8h') },
     );
 
     const nextRefreshToken = this.jwtService.sign(
@@ -155,7 +157,7 @@ export class AdminRefreshHandler {
         isAdmin: true,
         sid: session.sessionToken,
       },
-      { expiresIn: '7d' },
+      { expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d') },
     );
 
     const expiresAt = new Date();

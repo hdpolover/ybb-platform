@@ -137,11 +137,11 @@ export class RegisterAdminHandler {
     };
 
     const accessToken = this.jwtService.sign(payload, {
-      expiresIn: '1h',
+      expiresIn: this.configService.get<string>('JWT_ADMIN_EXPIRES_IN', '8h'),
     });
 
     const refreshToken = this.jwtService.sign(payload, {
-      expiresIn: '7d',
+      expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d'),
     });
 
     return {

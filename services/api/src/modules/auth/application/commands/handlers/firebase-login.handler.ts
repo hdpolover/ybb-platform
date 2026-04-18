@@ -6,6 +6,7 @@ import { AuthResponseDto } from '../../../presentation/dto/auth-response.dto';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
 import { UnitOfWork } from '../../../../../shared/infrastructure/database/unit-of-work.service';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { FirebaseAuthService } from '../../../infrastructure/services/firebase-auth.service';
 import { AuthLoggingService } from '../../services/auth-logging.service';
 import { GeoIpService } from '@shared/infrastructure/geoip/geoip.service';
@@ -20,6 +21,7 @@ export class FirebaseLoginHandler {
     private readonly prisma: PrismaService,
     private readonly unitOfWork: UnitOfWork,
     private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
     private readonly firebaseAuthService: FirebaseAuthService,
     private readonly authLoggingService: AuthLoggingService,
     private readonly geoIpService: GeoIpService,
@@ -322,8 +324,8 @@ export class FirebaseLoginHandler {
       jti: randomUUID(),
     };
 
-    const accessToken = this.jwtService.sign(accessTokenPayload, { expiresIn: '1h' });
-    const refreshToken = this.jwtService.sign(refreshTokenPayload, { expiresIn: '7d' });
+    const accessToken = this.jwtService.sign(accessTokenPayload, { expiresIn: this.configService.get<string>('JWT_EXPIRES_IN', '1h') });
+    const refreshToken = this.jwtService.sign(refreshTokenPayload, { expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d') });
 
     // Create Session
     const agentInfo = this.parseUserAgent(command.userAgent);
