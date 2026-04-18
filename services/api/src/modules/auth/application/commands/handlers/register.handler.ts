@@ -6,6 +6,7 @@ import { UnitOfWork } from '../../../../../shared/infrastructure/database/unit-o
 import { RabbitMQProducerService } from '../../../../../shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { Ambassador } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { AuthLoggingService } from '../../services/auth-logging.service';
@@ -25,6 +26,7 @@ export class RegisterHandler {
     private readonly authLoggingService: AuthLoggingService,
     private readonly metricsService: MetricsService,
     private readonly geoIpService: GeoIpService,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
