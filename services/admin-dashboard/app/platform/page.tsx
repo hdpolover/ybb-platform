@@ -2,24 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import {
-  FolderIcon,
-  RectangleStackIcon,
-  UserGroupIcon,
-  ChartBarIcon,
-} from "@heroicons/react/24/outline";
-
-type StatCard = {
-  id: string;
-  title: string;
-  value: string | number;
-  description: string;
-  icon: React.ComponentType<{ className?: string }>;
-  href: string;
-  iconClassName: string;
-  backgroundClassName: string;
-};
-
+import { FolderOpen, Layers, BarChart2, Users } from "lucide-react";
+import { PageHeader } from "@/src/admin/page-header";
 import { listPlatformBrands, listPlatformPrograms } from "./api";
 
 const quickActions = [
@@ -92,14 +76,14 @@ export default function PlatformDashboard() {
     };
   }, []);
 
-  const stats: StatCard[] = useMemo(
+  const stats: DashboardStat[] = useMemo(
     () => [
       {
         id: "categories",
         title: "Brands",
         value: categoryCount,
         description: `${activeCategoryCount} active brands`,
-        icon: FolderIcon,
+        icon: FolderOpen,
         href: "/platform/brands",
         iconClassName: "text-blue-600",
         backgroundClassName: "bg-blue-50",
@@ -109,7 +93,7 @@ export default function PlatformDashboard() {
         title: "Programs",
         value: programCount,
         description: "Total programs across all brands",
-        icon: RectangleStackIcon,
+        icon: Layers,
         href: "/platform/programs",
         iconClassName: "text-emerald-600",
         backgroundClassName: "bg-emerald-50",
@@ -119,7 +103,7 @@ export default function PlatformDashboard() {
         title: "Published Programs",
         value: publishedCount,
         description: "Visible or launch-ready programs",
-        icon: ChartBarIcon,
+        icon: BarChart2,
         href: "/platform/programs",
         iconClassName: "text-amber-600",
         backgroundClassName: "bg-amber-50",
@@ -129,7 +113,7 @@ export default function PlatformDashboard() {
         title: "Administrators",
         value: "Manage",
         description: "Platform and program admin access",
-        icon: UserGroupIcon,
+        icon: Users,
         href: "/platform/admins",
         iconClassName: "text-zinc-700",
         backgroundClassName: "bg-zinc-100",
@@ -140,15 +124,11 @@ export default function PlatformDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Bagian header halaman dashboard platform */}
-      <div>
-        <h1 className="text-2xl font-bold text-zinc-900">Platform Dashboard</h1>
-        <p className="mt-1 text-sm text-zinc-600">
-          Overview of all brands, programs, and platform-wide metrics
-        </p>
-      </div>
+      <PageHeader
+        title="Platform Dashboard"
+        description="Overview of all brands, programs, and platform-wide metrics"
+      />
 
-      {/* Grid statistik utama */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => {
           const Icon = stat.icon;
@@ -181,7 +161,7 @@ export default function PlatformDashboard() {
         </div>
       ) : null}
 
-      {/* Aksi cepat yang sering dipake admin */}
+      {/* Quick actions */}
       <div>
         <h2 className="text-lg font-semibold text-zinc-900">Quick Actions</h2>
         <div className="mt-3 grid gap-3 md:grid-cols-3">
@@ -198,11 +178,11 @@ export default function PlatformDashboard() {
         </div>
       </div>
 
-      {/* Placeholder buat activity log terbaru */}
+      {/* Recent Activity placeholder */}
       <div className="rounded-lg border border-zinc-200 bg-white p-6">
         <h2 className="text-lg font-semibold text-zinc-900">Recent Activity</h2>
         <div className="mt-4 text-center text-zinc-500">
-          <ChartBarIcon className="mx-auto h-12 w-12 text-zinc-300" />
+          <BarChart2 className="mx-auto h-12 w-12 text-zinc-300" />
           <p className="mt-2 text-sm">Activity tracking coming soon</p>
         </div>
       </div>

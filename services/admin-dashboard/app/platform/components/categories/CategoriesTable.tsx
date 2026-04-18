@@ -1,6 +1,16 @@
 "use client";
 
-import { PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { Pencil, Trash2, FolderOpen } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/src/ui/table";
+import { Button } from "@/src/ui/button";
+import { EmptyState } from "@/src/admin/empty-state";
 
 export type Category = {
   id: string;
@@ -18,119 +28,73 @@ type CategoriesTableProps = {
   onDelete: (category: Category) => void;
 };
 
-export function CategoriesTable({
-  categories,
-  onEdit,
-  onDelete,
-}: CategoriesTableProps) {
+export function CategoriesTable({ categories, onEdit, onDelete }: CategoriesTableProps) {
   if (categories.length === 0) {
     return (
-      <div className="rounded-lg border border-zinc-200 bg-white p-12 text-center">
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-zinc-100">
-          <svg
-            className="h-8 w-8 text-zinc-400"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-            />
-          </svg>
-        </div>
-        <h3 className="mb-2 text-lg font-semibold text-zinc-900">
-          No brands yet
-        </h3>
-        <p className="text-sm text-zinc-600">
-          Get started by creating your first brand
-        </p>
-      </div>
+      <EmptyState
+        icon={FolderOpen}
+        title="No brands yet"
+        description="Get started by creating your first brand."
+      />
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="border-b border-zinc-200 bg-zinc-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-600">
-                Brand
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-600">
-                Slug
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-600">
-                Description
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-600">
-                Programs
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-600">
-                Updated
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-zinc-600">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-200">
-            {categories.map((category) => (
-              <tr
-                key={category.id}
-                className="transition-colors hover:bg-zinc-50"
-              >
-                <td className="px-6 py-4">
-                  <div className="font-medium text-zinc-900">
-                    {category.name}
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <span className="inline-flex rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-700">
-                    {category.slug}
-                  </span>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="max-w-xs truncate text-sm text-zinc-600">
-                    {category.description || "—"}
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <span className="text-sm font-medium text-zinc-900">
-                    {category.programCount}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-sm text-zinc-600">
-                  {new Date(category.updatedAt).toLocaleDateString()}
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex items-center justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onEdit(category)}
-                      className="rounded-md p-2 text-zinc-600 hover:bg-zinc-100 hover:text-blue-600"
-                      title="Edit brand"
-                    >
-                      <PencilIcon className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onDelete(category)}
-                      className="rounded-md p-2 text-zinc-600 hover:bg-red-50 hover:text-red-600"
-                      title="Delete brand"
-                    >
-                      <TrashIcon className="h-4 w-4" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Brand</TableHead>
+          <TableHead>Slug</TableHead>
+          <TableHead>Description</TableHead>
+          <TableHead>Programs</TableHead>
+          <TableHead>Updated</TableHead>
+          <TableHead className="text-right">Actions</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {categories.map((category) => (
+          <TableRow key={category.id}>
+            <TableCell className="font-semibold text-zinc-900">{category.name}</TableCell>
+            <TableCell>
+              <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-xs text-zinc-600">
+                {category.slug}
+              </span>
+            </TableCell>
+            <TableCell className="max-w-xs truncate text-zinc-600">
+              {category.description ?? "—"}
+            </TableCell>
+            <TableCell>
+              <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">
+                {category.programCount}
+              </span>
+            </TableCell>
+            <TableCell className="text-zinc-500">
+              {new Date(category.updatedAt).toLocaleDateString()}
+            </TableCell>
+            <TableCell className="text-right">
+              <div className="flex items-center justify-end gap-1">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => onEdit(category)}
+                  title="Edit brand"
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => onDelete(category)}
+                  title="Delete brand"
+                  className="text-red-500 hover:bg-red-50 hover:text-red-700"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }

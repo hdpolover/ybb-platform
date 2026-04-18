@@ -65,7 +65,6 @@ export const platformNavSections: NavSection[] = [
       { id: "brands", label: "Brands", href: "/platform/brands", icon: FolderOpen },
       { id: "programs", label: "Programs", href: "/platform/programs", icon: Layers },
       { id: "users", label: "Users", href: "/platform/users", icon: Users },
-      { id: "ambassadors", label: "Ambassadors", href: "/platform/ambassadors", icon: UserPlus },
       { id: "admins", label: "Admins", href: "/platform/admins", icon: UserCheck },
     ],
   },
@@ -74,13 +73,6 @@ export const platformNavSections: NavSection[] = [
     title: "Insights",
     items: [
       { id: "analytics", label: "Analytics", href: "/platform/analytics", icon: BarChart3 },
-    ],
-  },
-  {
-    id: "system",
-    title: "System",
-    items: [
-      { id: "settings", label: "Settings", href: "/platform/settings", icon: Settings },
     ],
   },
 ];

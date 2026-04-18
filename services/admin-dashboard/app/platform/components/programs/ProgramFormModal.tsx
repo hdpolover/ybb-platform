@@ -1,8 +1,17 @@
 "use client";
 
-import { XMarkIcon } from "@heroicons/react/24/outline";
 import { useState } from "react";
 import type { Program } from "./ProgramsTable";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/src/ui/sheet";
+import { Button } from "@/src/ui/button";
+import { Input } from "@/src/ui/input";
+import { Label } from "@/src/ui/label";
 
 type ProgramFormModalProps = {
   isOpen: boolean;
@@ -52,14 +61,8 @@ export function ProgramFormModal({
   }));
   const [autoGenerateSlug, setAutoGenerateSlug] = useState(() => !program);
 
-  if (!isOpen) return null;
-
-  const generateSlug = (name: string): string => {
-    return name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
-  };
+  const generateSlug = (name: string): string =>
+    name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
   const handleNameChange = (name: string) => {
     setFormData((prev) => ({
@@ -75,322 +78,214 @@ export function ProgramFormModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-white shadow-xl">
-        {/* Bagian header modal */}
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-200 bg-white px-6 py-4">
-          <h2 className="text-lg font-semibold text-zinc-900">
-            {program ? "Edit Program" : "Create Program"}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600"
-          >
-            <XMarkIcon className="h-5 w-5" />
-          </button>
-        </div>
+    <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <SheetContent side="right" className="flex w-full flex-col overflow-y-auto sm:max-w-2xl">
+        <SheetHeader className="shrink-0">
+          <SheetTitle>{program ? "Edit Program" : "Create Program"}</SheetTitle>
+          <SheetDescription>
+            {program
+              ? "Update this program shell. Fees, capacity, and registration windows are managed inside the program workspace."
+              : "Create a new program shell. Additional settings are configured inside the program workspace."}
+          </SheetDescription>
+        </SheetHeader>
 
-        {/* Isi form utama */}
-        <form onSubmit={handleSubmit} className="p-6">
-          <div className="space-y-6">
-            {errorMessage ? (
-              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                {errorMessage}
-              </div>
-            ) : null}
-
-            {/* Bagian informasi dasar program */}
-            <div>
-              <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-zinc-500">
-                Basic Information
-              </h3>
-              <div className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {/* Input nama program */}
-                  <div className="sm:col-span-2">
-                    <label
-                      htmlFor="name"
-                      className="mb-1 block text-sm font-medium text-zinc-700"
-                    >
-                      Program Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      id="name"
-                      value={formData.name}
-                      onChange={(e) => handleNameChange(e.target.value)}
-                      className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      placeholder="e.g., Summer Leadership Camp 2025"
-                      required
-                    />
-                  </div>
-
-                  {/* Dropdown kategori program */}
-                  <div>
-                    <label
-                      htmlFor="brandId"
-                      className="mb-1 block text-sm font-medium text-zinc-700"
-                    >
-                      Brand <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      id="brandId"
-                      value={formData.brandId}
-                      onChange={(e) =>
-                        setFormData({ ...formData, brandId: e.target.value })
-                      }
-                      className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      required
-                    >
-                      <option value="">Select a brand</option>
-                      {categories.map((category) => (
-                        <option key={category.id} value={category.id}>
-                          {category.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="year"
-                      className="mb-1 block text-sm font-medium text-zinc-700"
-                    >
-                      Year <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      id="year"
-                      value={formData.year}
-                      onChange={(e) =>
-                        setFormData({ ...formData, year: Number(e.target.value) })
-                      }
-                      min="2000"
-                      max="2100"
-                      className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="status"
-                      className="mb-1 block text-sm font-medium text-zinc-700"
-                    >
-                      Status <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      id="status"
-                      value={formData.status}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          status: e.target.value as ProgramFormData["status"],
-                        })
-                      }
-                      className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      required
-                    >
-                      <option value="draft">Draft</option>
-                      <option value="published">Published</option>
-                      <option value="ongoing">Ongoing</option>
-                      <option value="completed">Completed</option>
-                      <option value="cancelled">Cancelled</option>
-                    </select>
-                  </div>
-
-                  {/* Input slug buat URL program */}
-                  <div className="sm:col-span-2">
-                    <label
-                      htmlFor="slug"
-                      className="mb-1 block text-sm font-medium text-zinc-700"
-                    >
-                      Slug <span className="text-red-500">*</span>
-                    </label>
-                    <div className="space-y-2">
-                      <input
-                        type="text"
-                        id="slug"
-                        value={formData.slug}
-                        onChange={(e) => {
-                          setFormData({ ...formData, slug: e.target.value });
-                          setAutoGenerateSlug(false);
-                        }}
-                        className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        placeholder="summer-leadership-camp-2025"
-                        pattern="^[a-z0-9]+(?:-[a-z0-9]+)*$"
-                        required
-                      />
-                      <label className="flex items-center gap-2 text-xs text-zinc-600">
-                        <input
-                          type="checkbox"
-                          checked={autoGenerateSlug}
-                          onChange={(e) => {
-                            setAutoGenerateSlug(e.target.checked);
-                            if (e.target.checked) {
-                              setFormData((prev) => ({
-                                ...prev,
-                                slug: generateSlug(prev.name),
-                              }));
-                            }
-                          }}
-                          className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        Auto-generate from name
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* Description */}
-                  <div className="sm:col-span-2">
-                    <label
-                      htmlFor="description"
-                      className="mb-1 block text-sm font-medium text-zinc-700"
-                    >
-                      Description
-                    </label>
-                    <textarea
-                      id="description"
-                      value={formData.description}
-                      onChange={(e) =>
-                        setFormData({ ...formData, description: e.target.value })
-                      }
-                      rows={4}
-                      className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      placeholder="Provide a detailed description of the program..."
-                    />
-                  </div>
-
-                  <div className="sm:col-span-2 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
-                    Program-specific settings like fees, capacity, registration windows, and venue details are managed inside the program admin area.
-                  </div>
-
-                  <div className="flex items-end">
-                    <label className="flex items-center gap-2 text-sm text-zinc-700">
-                      <input
-                        type="checkbox"
-                        checked={formData.isPublished}
-                        onChange={(e) =>
-                          setFormData({ ...formData, isPublished: e.target.checked })
-                        }
-                        className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      Publish after save
-                    </label>
-                  </div>
-
-                  <div className="flex items-end">
-                    <label className="flex items-center gap-2 text-sm text-zinc-700">
-                      <input
-                        type="checkbox"
-                        checked={formData.isActive}
-                        onChange={(e) =>
-                          setFormData({ ...formData, isActive: e.target.checked })
-                        }
-                        className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      Mark program as active
-                    </label>
-                  </div>
-                </div>
-              </div>
+        <form onSubmit={handleSubmit} className="mt-6 flex flex-1 flex-col gap-6">
+          {errorMessage && (
+            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {errorMessage}
             </div>
+          )}
 
-            <div>
-              <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-zinc-500">
-                Schedule
-              </h3>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label
-                    htmlFor="applicationDeadline"
-                    className="mb-1 block text-sm font-medium text-zinc-700"
-                  >
-                    Application Deadline <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    id="applicationDeadline"
-                    value={formData.applicationDeadline}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        applicationDeadline: e.target.value,
-                      })
-                    }
-                    className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          {/* Basic Information */}
+          <div>
+            <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+              Basic Information
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="sm:col-span-2 space-y-1">
+                <Label htmlFor="prog-name">
+                  Program Name <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="prog-name"
+                  value={formData.name}
+                  onChange={(e) => handleNameChange(e.target.value)}
+                  placeholder="e.g., Summer Leadership Camp 2025"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="prog-brand">
+                  Brand <span className="text-red-500">*</span>
+                </Label>
+                <select
+                  id="prog-brand"
+                  value={formData.brandId}
+                  onChange={(e) => setFormData({ ...formData, brandId: e.target.value })}
+                  className="flex h-9 w-full rounded-md border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                  required
+                >
+                  <option value="">Select a brand</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="prog-year">
+                  Year <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  type="number"
+                  id="prog-year"
+                  value={formData.year}
+                  onChange={(e) => setFormData({ ...formData, year: Number(e.target.value) })}
+                  min="2000"
+                  max="2100"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="prog-status">
+                  Status <span className="text-red-500">*</span>
+                </Label>
+                <select
+                  id="prog-status"
+                  value={formData.status}
+                  onChange={(e) =>
+                    setFormData({ ...formData, status: e.target.value as ProgramFormData["status"] })
+                  }
+                  className="flex h-9 w-full rounded-md border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                  required
+                >
+                  <option value="draft">Draft</option>
+                  <option value="published">Published</option>
+                  <option value="ongoing">Ongoing</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+
+              <div className="sm:col-span-2 space-y-1">
+                <Label htmlFor="prog-slug">
+                  Slug <span className="text-red-500">*</span>
+                </Label>
+                <div className="space-y-1.5">
+                  <Input
+                    id="prog-slug"
+                    value={formData.slug}
+                    onChange={(e) => {
+                      setFormData({ ...formData, slug: e.target.value });
+                      setAutoGenerateSlug(false);
+                    }}
+                    placeholder="summer-leadership-camp-2025"
+                    pattern="^[a-z0-9]+(?:-[a-z0-9]+)*$"
                     required
                   />
-                </div>
-                <div>
-                  <label
-                    htmlFor="startDate"
-                    className="mb-1 block text-sm font-medium text-zinc-700"
-                  >
-                    Program Start Date
+                  <label className="flex items-center gap-2 text-xs text-zinc-500">
+                    <input
+                      type="checkbox"
+                      checked={autoGenerateSlug}
+                      onChange={(e) => {
+                        setAutoGenerateSlug(e.target.checked);
+                        if (e.target.checked) {
+                          setFormData((prev) => ({ ...prev, slug: generateSlug(prev.name) }));
+                        }
+                      }}
+                      className="rounded border-zinc-300"
+                    />
+                    Auto-generate from name
                   </label>
-                  <input
-                    type="date"
-                    id="startDate"
-                    value={formData.startDate}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        startDate: e.target.value,
-                      })
-                    }
-                    className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    required
-                  />
                 </div>
-                <div>
-                  <label
-                    htmlFor="endDate"
-                    className="mb-1 block text-sm font-medium text-zinc-700"
-                  >
-                    Program End Date
-                  </label>
-                  <input
-                    type="date"
-                    id="endDate"
-                    value={formData.endDate}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        endDate: e.target.value,
-                      })
-                    }
-                    className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    required
-                  />
-                </div>
+              </div>
+
+              <div className="sm:col-span-2 space-y-1">
+                <Label htmlFor="prog-description">Description</Label>
+                <textarea
+                  id="prog-description"
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  rows={3}
+                  className="flex w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                  placeholder="Provide a detailed description of the program…"
+                />
+              </div>
+
+              <div className="sm:col-span-2 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                Program-specific settings like fees, capacity, registration windows, and venue details are managed inside the program admin workspace.
+              </div>
+
+              <label className="flex items-center gap-2 text-sm text-zinc-700">
+                <input
+                  type="checkbox"
+                  checked={formData.isPublished}
+                  onChange={(e) => setFormData({ ...formData, isPublished: e.target.checked })}
+                  className="rounded border-zinc-300"
+                />
+                Publish after save
+              </label>
+              <label className="flex items-center gap-2 text-sm text-zinc-700">
+                <input
+                  type="checkbox"
+                  checked={formData.isActive}
+                  onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                  className="rounded border-zinc-300"
+                />
+                Mark program as active
+              </label>
+            </div>
+          </div>
+
+          {/* Schedule */}
+          <div>
+            <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-zinc-500">Schedule</p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label htmlFor="prog-deadline">
+                  Application Deadline <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  type="date"
+                  id="prog-deadline"
+                  value={formData.applicationDeadline}
+                  onChange={(e) => setFormData({ ...formData, applicationDeadline: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="prog-start">Start Date</Label>
+                <Input
+                  type="date"
+                  id="prog-start"
+                  value={formData.startDate}
+                  onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="prog-end">End Date</Label>
+                <Input
+                  type="date"
+                  id="prog-end"
+                  value={formData.endDate}
+                  onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                />
               </div>
             </div>
           </div>
 
-            {/* Tombol aksi di bagian bawah form */}
-          <div className="mt-6 flex justify-end gap-3 border-t border-zinc-200 pt-6">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isSubmitting}
-              className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-            >
+          <div className="mt-auto flex justify-end gap-3 border-t border-zinc-200 pt-4">
+            <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
               Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-            >
-              {isSubmitting
-                ? (program ? "Updating..." : "Creating...")
-                : (program ? "Update Program" : "Create Program")}
-            </button>
+            </Button>
+            <Button type="submit" loading={isSubmitting}>
+              {program ? "Update Program" : "Create Program"}
+            </Button>
           </div>
         </form>
-      </div>
-    </div>
+      </SheetContent>
+    </Sheet>
   );
 }

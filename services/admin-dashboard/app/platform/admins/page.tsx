@@ -243,7 +243,7 @@ export default function AdminsPage() {
     setError(null);
     try {
       const res = await listAdmins({ page, limit: 20, search: search || undefined, brandId });
-      setAdmins(res.data);
+      setAdmins(res.data ?? []);
       setTotal(res.meta.total);
       setTotalPages(res.meta.totalPages);
     } catch (err) {
