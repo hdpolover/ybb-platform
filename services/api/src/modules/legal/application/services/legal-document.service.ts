@@ -16,10 +16,22 @@ export class LegalDocumentService {
         return this.repository.findByBrandSlug(brandSlug);
     }
 
+    async findAllByBrandForAdmin(brandSlug: string): Promise<LegalDocument[]> {
+        return this.repository.findAllByBrandForAdmin(brandSlug);
+    }
+
     async findOneByBrandAndType(brandSlug: string, typeSlug: string): Promise<LegalDocument> {
         const doc = await this.repository.findByBrandSlugAndType(brandSlug, typeSlug);
         if (!doc) {
             throw new NotFoundException(`Legal document '${typeSlug}' not found for brand '${brandSlug}'`);
+        }
+        return doc;
+    }
+
+    async findById(id: string): Promise<LegalDocument> {
+        const doc = await this.repository.findById(id);
+        if (!doc) {
+            throw new NotFoundException(`Legal document with ID '${id}' not found`);
         }
         return doc;
     }

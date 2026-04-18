@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, UseInterceptors, UploadedFile, UploadedFiles, Query, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, UseInterceptors, UploadedFile, UploadedFiles, Query, ParseUUIDPipe, HttpCode, HttpStatus } from '@nestjs/common';
 import { FileInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiQuery } from '@nestjs/swagger';
@@ -10,16 +10,20 @@ import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.de
 import { ListBrandsQuery } from '../application/queries/list-brands.query';
 import { GetBrandDetailQuery } from '../application/queries/get-brand-detail.query';
 import { ListBrandSponsorsQuery } from '../application/queries/list-brand-sponsors.query';
+import { ListBrandAdminsQuery } from '../application/queries/list-brand-admins.query';
 import { CreateBrandCommand } from '../application/commands/create-brand.command';
 import { UpdateBrandCommand } from '../application/commands/update-brand.command';
 import { DeleteBrandCommand } from '../application/commands/delete-brand.command';
 import { UpdateBrandDetailsCommand } from '../application/commands/update-brand-details.command';
 import { UpdateBrandSettingsCommand } from '../application/commands/update-brand-settings.command';
+import { AssignBrandAdminCommand } from '../application/commands/assign-brand-admin.command';
+import { RemoveBrandAdminCommand } from '../application/commands/remove-brand-admin.command';
 import { BrandResponseDto, SponsorResponseDto } from './dto/brand.dto';
 import { CreateBrandDto } from './dto/create-brand.dto';
 import { UpdateBrandDto } from './dto/update-brand.dto';
 import { UpdateBrandDetailsDto } from './dto/update-brand-details.dto';
 import { UpdateBrandSettingsDto } from './dto/update-brand-settings.dto';
+import { AssignBrandAdminDto, BrandAdminResponseDto } from './dto/brand-admin.dto';
 import { ListProgramsQuery } from '../../programs/application/queries/list-programs.query';
 import { ProgramListResponseDto } from '../../programs/presentation/dto/program-response.dto';
 import { ListProgramsDto } from '../../programs/presentation/dto/list-programs.dto';
@@ -171,5 +175,54 @@ export class BrandsController {
     @ApiResponse({ status: 404, description: 'Brand not found' })
     async deleteBrand(@Param('id') id: string): Promise<void> {
         return this.commandBus.execute(new DeleteBrandCommand(id));
+    }
+
+    // -------------------------------------------------------------------------
+    // Brand Admin Management
+    // -------------------------------------------------------------------------
+
+    @Get(':id/admins')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'List admins with access to a brand' })
+    @ApiResponse({ status: 200, description: 'List of brand admins', type: [BrandAdminResponseDto] })
+    @ApiResponse({ status: 404, description: 'Brand not found' })
+    async listBrandAdmins(
+        @Param('id', ParseUUIDPipe) id: string,
+    ): Promise<BrandAdminResponseDto[]> {
+        return this.queryBus.execute(new ListBrandAdminsQuery(id));
+    }
+
+    @Post(':id/admins')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @AuditTrail({ entityType: 'AdminBrand', action: ChangeType.create })
+    @ApiOperation({ summary: 'Assign an admin to a brand' })
+    @ApiResponse({ status: 201, description: 'Admin assigned to brand', type: BrandAdminResponseDto })
+    @ApiResponse({ status: 404, description: 'Brand or admin not found' })
+    @ApiResponse({ status: 409, description: 'Admin already assigned to this brand' })
+    async assignBrandAdmin(
+        @Param('id', ParseUUIDPipe) id: string,
+        @Body() dto: AssignBrandAdminDto,
+        @CurrentUser() user: CurrentUserData,
+    ): Promise<BrandAdminResponseDto> {
+        return this.commandBus.execute(
+            new AssignBrandAdminCommand(id, dto.adminId, dto.roleInBrand, dto.permissions, user.userId),
+        );
+    }
+
+    @Delete(':id/admins/:adminId')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @HttpCode(HttpStatus.OK)
+    @AuditTrail({ entityType: 'AdminBrand', action: ChangeType.delete })
+    @ApiOperation({ summary: 'Remove an admin from a brand' })
+    @ApiResponse({ status: 200, description: 'Admin removed from brand' })
+    @ApiResponse({ status: 404, description: 'Assignment not found' })
+    async removeBrandAdmin(
+        @Param('id', ParseUUIDPipe) id: string,
+        @Param('adminId', ParseUUIDPipe) adminId: string,
+    ): Promise<{ message: string }> {
+        return this.commandBus.execute(new RemoveBrandAdminCommand(id, adminId));
     }
 }

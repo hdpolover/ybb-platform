@@ -13,6 +13,9 @@ import { DeleteAdminHandler } from '../application/commands/handlers/delete-admi
 import { GetAdminsHandler } from '../application/queries/handlers/get-admins.handler';
 import { GetAdminHandler } from '../application/queries/handlers/get-admin.handler';
 import { JwtAuthGuard } from '../../auth/infrastructure/guards/jwt-auth.guard';
+import { RolesGuard } from '../../auth/infrastructure/guards/roles.guard';
+import { Roles } from '../../auth/application/decorators/roles.decorator';
+import { UserRole } from '../../../core/entities/user.entity';
 import { CurrentUser, CurrentUserData } from '../../../shared/decorators/current-user.decorator';
 import { UpdateAdminDto } from './dto/update-admin.dto';
 import { AuditTrail } from '../../../shared/decorators/audit-trail.decorator';
@@ -20,7 +23,8 @@ import { ChangeType } from '@prisma/client';
 
 @ApiTags('admins')
 @Controller('admins')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 @ApiBearerAuth()
 export class AdminsController {
     constructor(

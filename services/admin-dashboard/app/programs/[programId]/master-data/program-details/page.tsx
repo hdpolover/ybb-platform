@@ -246,12 +246,12 @@ export default function ProgramDetailsPage({
           throw new Error(await readErrorMessage(response));
         }
 
-        const payload = (await response.json()) as ProgramDetail;
+        const envelope = (await response.json()) as ApiEnvelope<ProgramDetail>;
         if (!isMounted) {
           return;
         }
 
-        setProgramDetail(payload);
+        setProgramDetail(envelope.data);
       } catch (error) {
         if (!isMounted) {
           return;
@@ -337,8 +337,8 @@ export default function ProgramDetailsPage({
         throw new Error(await readErrorMessage(refreshedResponse));
       }
 
-      const refreshedDetail = (await refreshedResponse.json()) as ProgramDetail;
-      setProgramDetail(refreshedDetail);
+      const refreshedEnvelope = (await refreshedResponse.json()) as ApiEnvelope<ProgramDetail>;
+      setProgramDetail(refreshedEnvelope.data);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to update program settings.";
       setSaveError(message);

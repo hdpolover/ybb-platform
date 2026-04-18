@@ -14,6 +14,9 @@ import { Response } from 'express';
 import { PrismaService } from '../../shared/infrastructure/prisma/prisma.service';
 import { ExcelService } from '../../shared/infrastructure/excel/excel.service';
 import { JwtAuthGuard } from '../auth/infrastructure/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/infrastructure/guards/roles.guard';
+import { Roles } from '../auth/application/decorators/roles.decorator';
+import { UserRole } from '../../core/entities/user.entity';
 import { CurrentUser, CurrentUserData } from '../../shared/decorators/current-user.decorator';
 import { QueryAuditLogsDto } from './dto/query-audit-logs.dto';
 import { AuditCleanupService } from './audit-cleanup.service';
@@ -21,7 +24,8 @@ import { Prisma, DataChangeLog, ChangeType, ChangedByType, RiskLevel } from '@pr
 
 @ApiTags('audit')
 @Controller('admin/audit-logs')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 @ApiBearerAuth()
 export class AuditAdminController {
     private readonly logger = new Logger(AuditAdminController.name);

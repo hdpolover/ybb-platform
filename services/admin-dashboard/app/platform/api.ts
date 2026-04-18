@@ -140,8 +140,121 @@ async function request<T>(
   return payload as T;
 }
 
+export type PlatformBrandDetail = PlatformBrand & {
+  about?: string | null;
+  vision?: string | null;
+  mission?: string | null;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  contactWhatsapp?: string | null;
+  contactAddress?: string | null;
+  socialMediaLinks?: Record<string, string> | null;
+  defaultLocation?: string | null;
+  defaultCountry?: string | null;
+  defaultTimezone?: string | null;
+  requireEmailVerification?: boolean;
+  defaultCurrency?: string;
+  enableMultiCurrency?: boolean;
+  metaTitle?: string | null;
+  metaDescription?: string | null;
+  metaKeywords?: string | null;
+  settings?: {
+    isMaintenanceMode: boolean;
+    maintenanceMessage?: string | null;
+    usdInIdr: number;
+    googleAnalyticsId?: string | null;
+    pixelId?: string | null;
+    supportEmail?: string | null;
+  } | null;
+};
+
 export function listPlatformBrands(): Promise<PlatformBrand[]> {
   return request<PlatformBrand[]>("/brands");
+}
+
+export function getPlatformBrand(brandId: string): Promise<PlatformBrandDetail> {
+  return request<PlatformBrandDetail>(`/brands/${brandId}`);
+}
+
+export function updatePlatformBrandIdentity(
+  brandId: string,
+  input: {
+    name: string;
+    slug: string;
+    description?: string;
+    websiteUrl?: string;
+    primaryColor?: string;
+    contactEmail?: string;
+    isActive?: boolean;
+  },
+): Promise<PlatformBrandDetail> {
+  const formData = new FormData();
+  formData.set("name", input.name);
+  formData.set("slug", input.slug);
+  if (input.description != null) formData.set("description", input.description);
+  if (input.websiteUrl != null) formData.set("websiteUrl", input.websiteUrl);
+  if (input.primaryColor != null) formData.set("primaryColor", input.primaryColor);
+  if (input.contactEmail != null) formData.set("contactEmail", input.contactEmail);
+  if (input.isActive != null) formData.set("isActive", String(input.isActive));
+  return request<PlatformBrandDetail>(`/brands/${brandId}`, { method: "PUT", body: formData });
+}
+
+export function updatePlatformBrandDetails(
+  brandId: string,
+  input: {
+    about?: string;
+    vision?: string;
+    mission?: string;
+    contactPhone?: string;
+    contactWhatsapp?: string;
+    contactAddress?: string;
+    socialMediaLinks?: Record<string, string>;
+    defaultLocation?: string;
+    defaultCountry?: string;
+    defaultTimezone?: string;
+    requireEmailVerification?: boolean;
+    metaTitle?: string;
+    metaDescription?: string;
+    metaKeywords?: string;
+  },
+): Promise<PlatformBrandDetail> {
+  const formData = new FormData();
+  if (input.about != null) formData.set("about", input.about);
+  if (input.vision != null) formData.set("vision", input.vision);
+  if (input.mission != null) formData.set("mission", input.mission);
+  if (input.contactPhone != null) formData.set("contactPhone", input.contactPhone);
+  if (input.contactWhatsapp != null) formData.set("contactWhatsapp", input.contactWhatsapp);
+  if (input.contactAddress != null) formData.set("contactAddress", input.contactAddress);
+  if (input.socialMediaLinks != null)
+    formData.set("socialMediaLinks", JSON.stringify(input.socialMediaLinks));
+  if (input.defaultLocation != null) formData.set("defaultLocation", input.defaultLocation);
+  if (input.defaultCountry != null) formData.set("defaultCountry", input.defaultCountry);
+  if (input.defaultTimezone != null) formData.set("defaultTimezone", input.defaultTimezone);
+  if (input.requireEmailVerification != null) formData.set("requireEmailVerification", String(input.requireEmailVerification));
+  if (input.metaTitle != null) formData.set("metaTitle", input.metaTitle);
+  if (input.metaDescription != null) formData.set("metaDescription", input.metaDescription);
+  if (input.metaKeywords != null) formData.set("metaKeywords", input.metaKeywords);
+  return request<PlatformBrandDetail>(`/brands/${brandId}/details`, { method: "PUT", body: formData });
+}
+
+export function updatePlatformBrandSettings(
+  brandId: string,
+  input: {
+    requireEmailVerification?: boolean;
+    defaultCurrency?: string;
+    enableMultiCurrency?: boolean;
+    isMaintenanceMode?: boolean;
+    maintenanceMessage?: string;
+    usdInIdr?: number;
+    googleAnalyticsId?: string;
+    pixelId?: string;
+    supportEmail?: string;
+  },
+): Promise<PlatformBrandDetail> {
+  return request<PlatformBrandDetail>(`/brands/${brandId}/settings`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
 }
 
 export function createPlatformBrand(input: {
@@ -185,6 +298,180 @@ export function updatePlatformBrand(
 
 export function deletePlatformBrand(brandId: string): Promise<void> {
   return request<void>(`/brands/${brandId}`, {
+    method: "DELETE",
+  });
+}
+
+export type BrandSponsor = {
+  id: string;
+  name: string;
+  type: string;
+  logoUrl: string | null;
+  websiteUrl: string | null;
+  tier: string | null;
+  order: number;
+};
+
+export function listBrandSponsors(brandId: string): Promise<BrandSponsor[]> {
+  return request<BrandSponsor[]>(`/brands/${brandId}/sponsors`);
+}
+
+// ─── Brand Admins ─────────────────────────────────────────────────────────────
+
+export type BrandAdmin = {
+  id: string;
+  adminId: string;
+  brandId: string;
+  roleInBrand: string | null;
+  permissions: unknown;
+  assignedAt: string;
+  admin?: {
+    id: string;
+    fullName: string;
+    user?: { email: string } | null;
+  };
+};
+
+export function listBrandAdmins(brandId: string): Promise<BrandAdmin[]> {
+  return request<BrandAdmin[]>(`/brands/${brandId}/admins`);
+}
+
+export type AdminOption = { id: string; fullName: string; email: string };
+
+export function listAllAdmins(search?: string): Promise<{ data: AdminOption[] }> {
+  const qs = new URLSearchParams({ limit: "100", page: "1" });
+  if (search) qs.set("search", search);
+  return request<{ data: AdminOption[] }>(`/admins?${qs.toString()}`);
+}
+
+export function assignBrandAdmin(
+  brandId: string,
+  input: { adminId: string; roleInBrand?: string; permissions?: string[] }
+): Promise<BrandAdmin> {
+  return request<BrandAdmin>(`/brands/${brandId}/admins`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function removeBrandAdmin(brandId: string, adminId: string): Promise<{ message: string }> {
+  return request<{ message: string }>(`/brands/${brandId}/admins/${adminId}`, {
+    method: "DELETE",
+  });
+}
+
+// ─── Email Templates ──────────────────────────────────────────────────────────
+
+export type EmailTemplate = {
+  id: string;
+  brandId: string | null;
+  programId: string | null;
+  name: string;
+  type: string;
+  subject: string;
+  body: string;
+  variables: unknown;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export function listEmailTemplates(params?: {
+  brandId?: string;
+  programId?: string;
+  type?: string;
+  isActive?: boolean;
+}): Promise<EmailTemplate[]> {
+  const qs = new URLSearchParams();
+  if (params?.brandId) qs.set("brandId", params.brandId);
+  if (params?.programId) qs.set("programId", params.programId);
+  if (params?.type) qs.set("type", params.type);
+  if (params?.isActive !== undefined) qs.set("isActive", String(params.isActive));
+  const q = qs.toString();
+  return request<EmailTemplate[]>(`/admin/email-templates${q ? `?${q}` : ""}`);
+}
+
+export function createEmailTemplate(input: {
+  name: string;
+  type: string;
+  subject: string;
+  body: string;
+  variables?: string[];
+  brandId?: string;
+  programId?: string;
+  isActive?: boolean;
+}): Promise<EmailTemplate> {
+  return request<EmailTemplate>("/admin/email-templates", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateEmailTemplate(
+  id: string,
+  input: Partial<{
+    name: string;
+    type: string;
+    subject: string;
+    body: string;
+    variables: string[];
+    isActive: boolean;
+  }>
+): Promise<EmailTemplate> {
+  return request<EmailTemplate>(`/admin/email-templates/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteEmailTemplate(id: string): Promise<{ message: string }> {
+  return request<{ message: string }>(`/admin/email-templates/${id}`, { method: "DELETE" });
+}
+
+// ─── Legal Documents ──────────────────────────────────────────────────────────
+
+export type LegalDocument = {
+  id: string;
+  brandId: string;
+  title: string;
+  slug: string;
+  content: string;
+  version: string;
+  description: string | null;
+  isRequired: boolean;
+  isActive: boolean;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export function listLegalDocuments(brandSlug: string): Promise<LegalDocument[]> {
+  return request<LegalDocument[]>(`/brands/${brandSlug}/legal-documents/admin`);
+}
+
+export function createLegalDocument(
+  brandSlug: string,
+  input: { title: string; slug: string; content: string; version?: string; description?: string; isRequired?: boolean; isActive?: boolean }
+): Promise<LegalDocument> {
+  return request<LegalDocument>(`/brands/${brandSlug}/legal-documents`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateLegalDocument(
+  brandSlug: string,
+  id: string,
+  input: Partial<{ title: string; slug: string; content: string; version: string; description: string; isRequired: boolean; isActive: boolean }>
+): Promise<LegalDocument> {
+  return request<LegalDocument>(`/brands/${brandSlug}/legal-documents/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteLegalDocument(brandSlug: string, id: string): Promise<{ message: string }> {
+  return request<{ message: string }>(`/brands/${brandSlug}/legal-documents/${id}`, {
     method: "DELETE",
   });
 }

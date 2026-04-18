@@ -38,6 +38,7 @@ import { PortalModule } from '@modules/portal/portal.module';
 import { AuditModule } from '@modules/audit/audit.module';
 import { ReportingModule } from '@modules/reporting/reporting.module';
 import { AdminsModule } from '@modules/admins/admins.module';
+import { EmailTemplatesModule } from '@modules/email-templates/email-templates.module';
 
 @Module({
   imports: [
@@ -117,6 +118,7 @@ import { AdminsModule } from '@modules/admins/admins.module';
     ApplicationsModule,
     AuthModule,
     BrandsModule,
+    EmailTemplatesModule,
     FilesModule,
     HealthModule,
     LandingModule,

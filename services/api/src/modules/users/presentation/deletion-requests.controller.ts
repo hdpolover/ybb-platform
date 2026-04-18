@@ -6,12 +6,15 @@ import { ListDeletionRequestsQuery } from '../application/queries/list-deletion-
 import { ReviewDeletionRequestCommand } from '../application/commands/review-deletion-request.command';
 import { DeletionRequestResponseDto, ReviewDeletionRequestDto } from './dto/deletion-request.dto';
 import { JwtAuthGuard } from '../../auth/infrastructure/guards/jwt-auth.guard';
+import { RolesGuard } from '../../auth/infrastructure/guards/roles.guard';
+import { Roles } from '../../auth/application/decorators/roles.decorator';
+import { UserRole } from '../../../core/entities/user.entity';
 import { CurrentUser, CurrentUserData } from '../../../shared/decorators/current-user.decorator';
-// import { AdminGuard } from ... // Should restrict to admin
 
 @ApiTags('Users')
 @Controller('admin/deletion-requests')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 @ApiBearerAuth()
 export class DeletionRequestsController {
   constructor(

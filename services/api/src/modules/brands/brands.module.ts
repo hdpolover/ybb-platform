@@ -11,11 +11,14 @@ import { SponsorRepository } from './infrastructure/persistence/sponsor.reposito
 import { ListBrandsHandler } from './application/queries/handlers/list-brands.handler';
 import { GetBrandDetailHandler } from './application/queries/handlers/get-brand-detail.handler';
 import { ListBrandSponsorsHandler } from './application/queries/handlers/list-brand-sponsors.handler';
+import { ListBrandAdminsHandler } from './application/queries/handlers/list-brand-admins.handler';
 import { CreateBrandHandler } from './application/commands/handlers/create-brand.handler';
 import { UpdateBrandHandler } from './application/commands/handlers/update-brand.handler';
 import { DeleteBrandHandler } from './application/commands/handlers/delete-brand.handler';
 import { UpdateBrandDetailsHandler } from './application/commands/handlers/update-brand-details.handler';
 import { UpdateBrandSettingsHandler } from './application/commands/handlers/update-brand-settings.handler';
+import { AssignBrandAdminHandler } from './application/commands/handlers/assign-brand-admin.handler';
+import { RemoveBrandAdminHandler } from './application/commands/handlers/remove-brand-admin.handler';
 
 @Module({
     imports: [CqrsModule, AuthModule, FilesModule, UsersModule, ProgramsModule],
@@ -33,12 +36,15 @@ import { UpdateBrandSettingsHandler } from './application/commands/handlers/upda
         ListBrandsHandler,
         GetBrandDetailHandler,
         ListBrandSponsorsHandler,
+        ListBrandAdminsHandler,
         // Command Handlers
         CreateBrandHandler,
         UpdateBrandHandler,
         DeleteBrandHandler,
         UpdateBrandDetailsHandler,
         UpdateBrandSettingsHandler,
+        AssignBrandAdminHandler,
+        RemoveBrandAdminHandler,
     ],
 })
 export class BrandsModule { }
