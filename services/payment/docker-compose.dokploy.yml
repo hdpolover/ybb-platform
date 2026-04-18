@@ -21,6 +21,9 @@ services:
       LOKI_URL: ${LOKI_URL}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
       OTEL_LOG_LEVEL: ${OTEL_LOG_LEVEL:-info}
+      # Payment Service
+      PAYMENT_SECRETS_KEY: ${PAYMENT_SECRETS_KEY}
+      # PAYMENT_AUTO_MIGRATE intentionally unset — SQL migrations are authoritative
     depends_on:
       postgres-payment:
         condition: service_healthy

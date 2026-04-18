@@ -80,9 +80,6 @@ export class ParticipantApplication {
     public requirementFiles?: DocumentFile[],
     public twibbonLink?: string,
     public pricingTierId?: string,
-    public paymentAmount?: number,
-    public paymentId?: string,
-    public paymentStatus?: string,
     public scoreTotal?: number,
     public scoreBreakdown?: ScoreBreakdown,
     public scoreStatus?: ScoreStatus,
@@ -139,14 +136,6 @@ export class ParticipantApplication {
       ApplicationStatus.REJECTED,
       ApplicationStatus.WITHDRAWN,
     ].includes(this.status);
-  }
-
-  requiresPayment(): boolean {
-    return !!this.paymentAmount && this.paymentAmount > 0;
-  }
-
-  isPaymentCompleted(): boolean {
-    return this.paymentStatus === 'completed';
   }
 
   /**

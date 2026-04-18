@@ -39,8 +39,10 @@ const (
 	PaymentTypeManual    PaymentType = "manual"
 )
 
-// Payment represents a payment transaction in the system
-// @Description Data detail sebuah transaksi pembayaran
+// Payment is a gateway-response DTO used by VerifyPayment and HandleWebhook.
+// It is NOT persisted — the legacy `payments` table was dropped in migration
+// 014. The v2 schema uses PaymentIntent + PaymentTransaction for persistence.
+// The GORM tags below are inert (kept only to avoid touching field call-sites).
 type Payment struct {
 	// --- Primary Key ---
 	ID string `gorm:"type:uuid;primaryKey" json:"id" example:"550e8400-e29b-41d4-a716-446655440000"`

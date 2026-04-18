@@ -110,18 +110,22 @@ func main() {
 		logger.Fatalf("Failed to run SQL migrations: %v", err)
 	}
 
-	// Auto-migrate database schema (GORM Structs)
-	// Keeps Go structs in sync for basic CRUD
-	if err := db.AutoMigrate(
-		&entities.Payment{},
-		&entities.PaymentMethodEntity{},
-		&entities.Refund{},
-		&entities.GatewayConfig{},
-		&entities.PaymentIntent{},
-		&entities.PaymentTransaction{},
-		&entities.PaymentIdempotencyKey{},
-	); err != nil {
-		logger.Fatalf("Failed to migrate database: %v", err)
+	// Auto-migrate database schema (GORM Structs) — dev only.
+	// Raw SQL migrations above are the source of truth in prod.
+	if os.Getenv("PAYMENT_AUTO_MIGRATE") == "true" {
+		if err := db.AutoMigrate(
+			&entities.PaymentMethodEntity{},
+			&entities.Refund{},
+			&entities.GatewayConfig{},
+			&entities.PaymentIntent{},
+			&entities.PaymentTransaction{},
+			&entities.PaymentIdempotencyKey{},
+		); err != nil {
+			logger.Fatalf("Failed to migrate database: %v", err)
+		}
+		logger.Info("GORM AutoMigrate completed")
+	} else {
+		logger.Info("PAYMENT_AUTO_MIGRATE not set; skipping GORM AutoMigrate (SQL migrations are authoritative)")
 	}
 
 	logger.Info("Connected to database successfully")

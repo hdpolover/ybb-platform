@@ -4,6 +4,7 @@ from fastapi.responses import StreamingResponse
 from typing import Annotated, Optional
 from io import BytesIO
 from PIL import Image
+import os
 import uuid
 
 from app.domain.exceptions.file_exceptions import (
@@ -16,6 +17,10 @@ from app.utils.concurrency import run_in_threadpool
 
 
 router = APIRouter(prefix="/images", tags=["Images"])
+
+# Environment prefix for storage paths (matches FilePathService convention)
+_ENV_PREFIX_MAP = {"development": "dev", "staging": "staging", "production": "prod"}
+_ENV_PREFIX = _ENV_PREFIX_MAP.get(os.getenv("PYTHON_ENV", "development"), "dev")
 
 # Image configuration
 ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
@@ -145,7 +150,7 @@ async def upload_avatar(
         # Generate unique filename
         file_id = str(uuid.uuid4())
         filename = f"{file_id}.jpg"
-        storage_path = f"avatars/{brand_id}/{user_id}/{filename}"
+        storage_path = f"{_ENV_PREFIX}/{brand_id}/avatars/{user_id}/{filename}"
         
         # Upload to storage
         await storage_service.upload(
@@ -204,7 +209,7 @@ async def upload_program_logo(
         
         file_id = str(uuid.uuid4())
         filename = f"{file_id}.png"
-        storage_path = f"programs/{brand_id}/{program_id}/logo/{filename}"
+        storage_path = f"{_ENV_PREFIX}/{brand_id}/programs/{program_id}/logo/{filename}"
         
         await storage_service.upload(
             bucket="programs",
@@ -261,7 +266,7 @@ async def upload_program_banner(
         
         file_id = str(uuid.uuid4())
         filename = f"{file_id}.jpg"
-        storage_path = f"programs/{brand_id}/{program_id}/banner/{filename}"
+        storage_path = f"{_ENV_PREFIX}/{brand_id}/programs/{program_id}/banner/{filename}"
         
         await storage_service.upload(
             bucket="programs",
@@ -319,7 +324,7 @@ async def upload_program_thumbnail(
         
         file_id = str(uuid.uuid4())
         filename = f"{file_id}.jpg"
-        storage_path = f"programs/{brand_id}/{program_id}/thumbnail/{filename}"
+        storage_path = f"{_ENV_PREFIX}/{brand_id}/programs/{program_id}/thumbnail/{filename}"
         
         await storage_service.upload(
             bucket="programs",
@@ -379,7 +384,7 @@ async def upload_program_gallery_image(
         
         file_id = str(uuid.uuid4())
         main_filename = f"{file_id}.jpg"
-        main_path = f"programs/{brand_id}/{program_id}/gallery/{main_filename}"
+        main_path = f"{_ENV_PREFIX}/{brand_id}/programs/{program_id}/gallery/{main_filename}"
         
         # Process thumbnail
         thumbnail = await run_in_threadpool(
@@ -391,7 +396,7 @@ async def upload_program_gallery_image(
             crop_to_fit=True
         )
         thumb_filename = f"{file_id}_thumb.jpg"
-        thumb_path = f"programs/{brand_id}/{program_id}/gallery/thumbnails/{thumb_filename}"
+        thumb_path = f"{_ENV_PREFIX}/{brand_id}/programs/{program_id}/gallery/thumbnails/{thumb_filename}"
         
         # Upload main image
         await storage_service.upload(
@@ -467,7 +472,7 @@ async def upload_sponsor_logo(
         
         file_id = str(uuid.uuid4())
         filename = f"{file_id}.png"
-        storage_path = f"sponsors/{brand_id}/{sponsor_id}/{filename}"
+        storage_path = f"{_ENV_PREFIX}/{brand_id}/sponsors/{sponsor_id}/{filename}"
         
         await storage_service.upload(
             bucket="sponsors",
@@ -524,7 +529,7 @@ async def upload_testimonial_avatar(
         
         file_id = str(uuid.uuid4())
         filename = f"{file_id}.jpg"
-        storage_path = f"testimonials/{brand_id}/{testimonial_id}/avatar/{filename}"
+        storage_path = f"{_ENV_PREFIX}/{brand_id}/testimonials/{testimonial_id}/avatar/{filename}"
         
         await storage_service.upload(
             bucket="testimonials",
@@ -581,7 +586,7 @@ async def upload_brand_logo(
         
         file_id = str(uuid.uuid4())
         filename = f"{file_id}.png"
-        storage_path = f"brands/{brand_id}/logo/{filename}"
+        storage_path = f"{_ENV_PREFIX}/{brand_id}/brands/logo/{filename}"
         
         await storage_service.upload(
             bucket="brands",
@@ -637,7 +642,7 @@ async def upload_brand_banner(
         
         file_id = str(uuid.uuid4())
         filename = f"{file_id}.jpg"
-        storage_path = f"brands/{brand_id}/banner/{filename}"
+        storage_path = f"{_ENV_PREFIX}/{brand_id}/brands/banner/{filename}"
         
         await storage_service.upload(
             bucket="brands",

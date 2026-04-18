@@ -10,6 +10,9 @@ services:
     restart: always
     env_file:
       - .env.prod
+    environment:
+      PAYMENT_SECRETS_KEY: ${PAYMENT_SECRETS_KEY}
+      # PAYMENT_AUTO_MIGRATE intentionally unset — SQL migrations are authoritative
     ports:
       - "8002:8002"
     depends_on:
