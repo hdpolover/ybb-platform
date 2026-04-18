@@ -23,6 +23,9 @@ services:
       # Observability
       LOKI_URL: ${LOKI_URL}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      # Payment Service
+      PAYMENT_AUTO_MIGRATE: "true"
+      PAYMENT_SECRETS_KEY: ${PAYMENT_SECRETS_KEY}
     ports:
       - "8002:8002"
       - "50053:50053"

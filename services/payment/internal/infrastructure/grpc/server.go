@@ -406,6 +406,8 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 		event := events.NewPaymentEvent(
 			events.PaymentSucceededEvent,
 			tx.ID,
+			intent.ID,
+			tx.ID,
 			intent.ReferenceID,
 			intent.UserID,
 			email,
@@ -448,6 +450,8 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 
 		event := events.NewPaymentEvent(
 			events.PaymentFailedEvent,
+			tx.ID,
+			intent.ID,
 			tx.ID,
 			intent.ReferenceID,
 			intent.UserID,
@@ -573,6 +577,8 @@ func (s *PaymentGrpcServer) SubmitManualPayment(ctx context.Context, req *pb.Sub
 	event := events.NewPaymentEvent(
 		events.PaymentCreatedEvent,
 		tx.ID,
+		intent.ID,
+		tx.ID,
 		intent.ReferenceID,
 		intent.UserID,
 		email,
@@ -634,6 +640,8 @@ func (s *PaymentGrpcServer) VerifyManualPayment(ctx context.Context, req *pb.Ver
 		event := events.NewPaymentEvent(
 			events.PaymentSucceededEvent,
 			tx.ID,
+			intent.ID,
+			tx.ID,
 			intent.ReferenceID,
 			intent.UserID,
 			email,
@@ -659,6 +667,8 @@ func (s *PaymentGrpcServer) VerifyManualPayment(ctx context.Context, req *pb.Ver
 		// Publish Failed Event
 		event := events.NewPaymentEvent(
 			events.PaymentFailedEvent,
+			tx.ID,
+			intent.ID,
 			tx.ID,
 			intent.ReferenceID,
 			intent.UserID,

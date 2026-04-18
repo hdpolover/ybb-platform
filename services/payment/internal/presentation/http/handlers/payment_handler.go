@@ -280,6 +280,8 @@ func (h *PaymentHandler) publishIntentEvent(intent *entities.PaymentIntent, tx *
 	event := events.NewPaymentEvent(
 		eventType,
 		tx.ID,
+		intent.ID,
+		tx.ID,
 		intent.ReferenceID,
 		intent.UserID,
 		email,
@@ -297,8 +299,6 @@ func (h *PaymentHandler) publishIntentEvent(intent *entities.PaymentIntent, tx *
 		}
 	}
 	event.Metadata["source"] = "webhook"
-	event.Metadata["intent_id"] = intent.ID
-	event.Metadata["transaction_id"] = tx.ID
 
 	if err := h.eventPublisher.Publish(context.Background(), event); err != nil {
 		log.Printf("publish_intent_event failed intent_id=%s transaction_id=%s event=%s error=%v", intent.ID, tx.ID, eventType, err)

@@ -17,8 +17,8 @@ model File {
   original_filename String    @map("original_filename") @db.VarChar(255)
   file_type         String    @map("file_type") @db.VarChar(50)
   mime_type         String    @map("mime_type") @db.VarChar(100)
-  file_size         Int       @map("file_size")
-  storage_path      String    @map("storage_path") @db.VarChar(500)
+  file_size         BigInt    @map("file_size")
+  storage_path      String    @unique @map("storage_path") @db.VarChar(500)
   bucket            String    @db.VarChar(100)
   user_id           String    @map("user_id") @db.VarChar(36)
   brand_id          String    @map("brand_id") @db.VarChar(50)
@@ -38,10 +38,15 @@ model File {
   // Media library fields
   program_id        String?   @map("program_id") @db.VarChar(50)
   asset_type        String?   @map("asset_type") @db.VarChar(50)
+  alt_text          String?   @map("alt_text") @db.VarChar(500)
+  title             String?   @map("title") @db.VarChar(255)
+  width             Int?      @map("width")
+  height            Int?      @map("height")
 
   @@index([user_id])
   @@index([brand_id])
   @@index([program_id])
   @@index([brand_id, program_id])
+  @@index([is_deleted])
   @@map("files")
 }

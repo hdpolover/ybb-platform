@@ -53,15 +53,18 @@ export class PaymentEventsController {
             const metadata = (data.metadata as Record<string, unknown>) || {};
             const applicationId = (metadata.application_id as string) || (data.application_id as string);
             const paymentCategory = (metadata.payment_category as string) || 'registration';
+            const intentId = (data.intent_id as string) || '';
+            const transactionId = (data.transaction_id as string) || gatewayOrderId || '';
 
             if (applicationId) {
                 const result = await this.processApplicationPayment(
-                    applicationId, 
-                    paymentCategory, 
-                    amount, 
-                    currency, 
-                    gatewayOrderId ?? '', 
-                    method
+                    applicationId,
+                    paymentCategory,
+                    amount,
+                    currency,
+                    transactionId,
+                    intentId,
+                    method,
                 );
 
                 // Invalidate portal cache for this user to reflect payment immediately
@@ -92,12 +95,13 @@ export class PaymentEventsController {
     }
 
     private async processApplicationPayment(
-        applicationId: string, 
-        category: string, 
-        amount: number, 
+        applicationId: string,
+        category: string,
+        amount: number,
         currency: string,
         transactionId: string,
-        method: string
+        intentId: string,
+        method: string,
     ): Promise<{ userId: string; participantId: string; programId: string } | null> {
         const application = await this.prisma.participantApplication.findUnique({
             where: { id: applicationId },
@@ -144,8 +148,9 @@ export class PaymentEventsController {
                             status: PaymentStatus.paid,
                             paidAt: new Date(),
                             externalTransactionId: transactionId,
-                            paymentMethod: method
-                        }
+                            externalIntentId: intentId || null,
+                            paymentMethod: method,
+                        },
                     });
                 } else {
                     this.logger.warn(`Skipping invoice creation for app ${applicationId} - no pricingTierId`);

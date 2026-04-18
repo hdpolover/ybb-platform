@@ -160,11 +160,6 @@ model ParticipantApplication {
   reviewedAt     DateTime?    @map("reviewed_at") @db.Timestamptz(6)
   reviewerNotes  String?      @map("reviewer_notes") @db.Text
 
-  // Denormalized payment summary (source of truth is ApplicationInvoice)
-  paymentAmount Decimal? @map("payment_amount") @db.Decimal(10, 2)
-  paymentId     String?  @map("payment_id") @db.VarChar(100)
-  paymentStatus String?  @map("payment_status") @db.VarChar(50)
-
   // Timestamps
   lastEditedAt DateTime? @map("last_edited_at") @db.Timestamptz(6)
   withdrawnAt  DateTime? @map("withdrawn_at") @db.Timestamptz(6)
@@ -211,6 +206,8 @@ model ApplicationInvoice {
 
   // Link to external transaction ID from Payment Service for reference
   externalTransactionId String? @map("external_transaction_id") @db.VarChar(100)
+  // Link to payment-service PaymentIntent (the user's obligation)
+  externalIntentId      String? @map("external_intent_id") @db.VarChar(100)
   paymentMethod         String? @map("payment_method") @db.VarChar(50)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -221,6 +218,7 @@ model ApplicationInvoice {
 
   @@index([applicationId])
   @@index([status])
+  @@index([externalIntentId])
   @@map("application_invoices")
 }
 

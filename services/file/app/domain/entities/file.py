@@ -23,6 +23,10 @@ class File:
     metadata: Optional[dict] = None
     program_id: Optional[str] = None
     asset_type: Optional[str] = None  # e.g., 'logo', 'banner', 'gallery', 'document', 'certificate'
+    alt_text: Optional[str] = None
+    title: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
     
     # Backward compatibility aliases
     @property

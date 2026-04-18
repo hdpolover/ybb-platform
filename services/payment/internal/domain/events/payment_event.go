@@ -21,6 +21,8 @@ type PaymentEvent struct {
 	ID            string                 `json:"id"`
 	Type          EventType              `json:"type"`
 	PaymentID     string                 `json:"payment_id"`
+	IntentID      string                 `json:"intent_id,omitempty"`
+	TransactionID string                 `json:"transaction_id,omitempty"`
 	ApplicationID string                 `json:"application_id"`
 	UserID        string                 `json:"user_id"`
 	Email         string                 `json:"email"` // Added for Notification Service
@@ -32,12 +34,19 @@ type PaymentEvent struct {
 	Metadata      map[string]interface{} `json:"metadata,omitempty"`
 }
 
-// NewPaymentEvent creates a new payment event
-func NewPaymentEvent(eventType EventType, paymentID, applicationID, userID, email string, amount float64, currency, status, gatewayName string) *PaymentEvent {
+// NewPaymentEvent creates a new payment event. intentID and transactionID are
+// optional; callers without an intent/transaction context should pass "".
+func NewPaymentEvent(
+	eventType EventType,
+	paymentID, intentID, transactionID, applicationID, userID, email string,
+	amount float64,
+	currency, status, gatewayName string,
+) *PaymentEvent {
 	return &PaymentEvent{
-		ID:            "", // Will be set by event publisher
 		Type:          eventType,
 		PaymentID:     paymentID,
+		IntentID:      intentID,
+		TransactionID: transactionID,
 		ApplicationID: applicationID,
 		UserID:        userID,
 		Email:         email,
