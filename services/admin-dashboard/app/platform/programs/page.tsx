@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Layers, CheckCircle, Users, Archive } from "lucide-react";
+import { toast } from "sonner";
 import { ProgramsTable, type Program } from "../components/programs/ProgramsTable";
 import { ProgramFormModal, type ProgramFormData } from "../components/programs/ProgramFormModal";
 import { PageHeader } from "@/src/admin/page-header";
@@ -9,6 +10,10 @@ import { StatCard } from "@/src/admin/stat-card";
 import { FilterBar } from "@/src/admin/filter-bar";
 import { ConfirmDialog } from "@/src/admin/confirm-dialog";
 import { Button } from "@/src/ui/button";
+import {
+  applyTemplateToProgram,
+  fetchFormTemplates,
+} from "@/app/components/submissionsMasterData/form-fields/catalog-api";
 import {
   createPlatformProgram,
   deletePlatformProgram,
@@ -112,6 +117,31 @@ export default function ProgramsPage() {
     });
   }, [programs, searchQuery, selectedBrand, selectedStatus]);
 
+  async function offerDefaultTemplate(programId: string) {
+    try {
+      const templates = await fetchFormTemplates();
+      // Prefer a default template; any will do for MVP
+      const defaultTemplate = templates.find((t) => t.isDefault);
+      if (!defaultTemplate) return;
+
+      const ok = window.confirm(
+        `Apply the "${defaultTemplate.name}" template?\n\n` +
+          `It will pre-populate ${defaultTemplate.fieldCount} form fields. ` +
+          `You can edit or remove any of them later.`,
+      );
+      if (!ok) return;
+
+      const result = await applyTemplateToProgram(programId, defaultTemplate.id, "append");
+      toast.success(
+        `Added ${result.added.length} fields from "${defaultTemplate.name}".`,
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to apply default template",
+      );
+    }
+  }
+
   const handleCreateProgram = async (data: ProgramFormData) => {
     setIsSubmitting(true);
     setFormError(null);
@@ -132,6 +162,7 @@ export default function ProgramsPage() {
       });
 
       setPrograms((current) => [mapProgram(createdProgram), ...current]);
+      await offerDefaultTemplate(createdProgram.id);
       setIsFormModalOpen(false);
       setSelectedProgram(null);
     } catch (error) {
