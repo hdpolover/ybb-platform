@@ -15,6 +15,7 @@ import {
   readJsonData,
 } from "@/app/components/submissionsMasterData/api";
 import { FormFieldEditor } from "./FormFieldEditor";
+import { AddFieldDialog } from "./AddFieldDialog";
 
 export interface ApplicationFormFieldRow {
   id: string;
@@ -63,7 +64,7 @@ export function FormFieldsTable({ programId }: { programId: string }) {
   const [fields, setFields] = useState<ApplicationFormFieldRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [editorOpen, setEditorOpen] = useState(false);
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editingField, setEditingField] = useState<ApplicationFormFieldRow | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -93,13 +94,11 @@ export function FormFieldsTable({ programId }: { programId: string }) {
   }, [programId]);
 
   const openCreate = () => {
-    setEditingField(null);
-    setEditorOpen(true);
+    setAddDialogOpen(true);
   };
 
   const openEdit = (field: ApplicationFormFieldRow) => {
     setEditingField(field);
-    setEditorOpen(true);
   };
 
   const handleDelete = async (field: ApplicationFormFieldRow) => {
@@ -261,12 +260,25 @@ export function FormFieldsTable({ programId }: { programId: string }) {
         </div>
       </div>
 
-      <FormFieldEditor
-        open={editorOpen}
-        initialField={editingField}
+      <AddFieldDialog
+        open={addDialogOpen}
         programId={programId}
-        onClose={() => setEditorOpen(false)}
-        onSaved={() => void loadFields()}
+        onClose={() => setAddDialogOpen(false)}
+        onSaved={() => {
+          setAddDialogOpen(false);
+          void loadFields();
+        }}
+      />
+
+      <FormFieldEditor
+        open={editingField !== null}
+        programId={programId}
+        initialField={editingField}
+        onClose={() => setEditingField(null)}
+        onSaved={() => {
+          setEditingField(null);
+          void loadFields();
+        }}
       />
     </section>
   );
