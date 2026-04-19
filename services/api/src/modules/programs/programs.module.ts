@@ -14,6 +14,16 @@ import { ProgramLandingController } from './presentation/program-landing.control
 import { ProgramExchangeRateController } from './presentation/program-exchange-rate.controller';
 import { ProgramAnnouncementsController } from './presentation/program-announcements.controller';
 import { SystemFormFieldsController } from './presentation/system-form-fields.controller';
+import { FormTemplatesController } from './presentation/form-templates.controller';
+import {
+  CreateFormTemplateHandler,
+  UpdateFormTemplateHandler,
+  DeleteFormTemplateHandler,
+} from './application/commands/handlers/form-template.handler';
+import {
+  GetFormTemplatesHandler,
+  GetFormTemplateByIdHandler,
+} from './application/queries/handlers/get-form-templates.handler';
 import {
   ListProgramAnnouncementsHandler,
   CreateProgramAnnouncementHandler,
@@ -101,6 +111,7 @@ import { FormFieldKeyValidator } from './application/validators/form-field-key.v
     ProgramExchangeRateController,
     ProgramAnnouncementsController,
     SystemFormFieldsController,
+    FormTemplatesController,
   ],
   providers: [
     ListProgramsHandler,
@@ -153,6 +164,13 @@ import { FormFieldKeyValidator } from './application/validators/form-field-key.v
     CreateSystemFormFieldHandler,
     UpdateSystemFormFieldHandler,
     DeleteSystemFormFieldHandler,
+
+    // Form Template Handlers
+    CreateFormTemplateHandler,
+    UpdateFormTemplateHandler,
+    DeleteFormTemplateHandler,
+    GetFormTemplatesHandler,
+    GetFormTemplateByIdHandler,
 
     // Participation Info Handlers
     UpsertParticipationInfoHandler,
