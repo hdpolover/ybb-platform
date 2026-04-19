@@ -7,7 +7,11 @@ import {
   getAccessToken,
   readErrorMessage,
 } from "@/app/components/submissionsMasterData/api";
+import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
 import type { SubThemeRow } from "./SubThemesTable";
+
+const INPUT_CLS =
+  "block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
 
 type FormState = {
   name: string;
@@ -40,8 +44,6 @@ function SubThemeModal({
   const [form, setForm] = useState<FormState>(toFormState(initialData));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  if (!isOpen) return null;
 
   async function handleSave() {
     setError(null);
@@ -95,66 +97,16 @@ function SubThemeModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 sm:p-6">
-      <div className="w-full max-w-lg overflow-hidden rounded-xl border border-zinc-200 bg-white text-left shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-6 py-5">
-          <div>
-            <h3 className="text-lg font-bold text-zinc-900">
-              {isEditing ? "Edit Sub Theme" : "Add Sub Theme"}
-            </h3>
-            <p className="mt-1 text-sm text-zinc-500">
-              Update sub theme information used in the submission form.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700"
-          >
-            <span className="text-xl leading-none">×</span>
-          </button>
-        </div>
-
-        <div className="space-y-5 px-6 py-6 text-left">
-          {error && (
-            <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-              {error}
-            </div>
-          )}
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Sub Theme Name</label>
-            <input
-              type="text"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-            />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Description</label>
-            <textarea
-              rows={4}
-              value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm leading-relaxed text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-            />
-          </div>
-          {isEditing && (
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-zinc-500">Status</label>
-              <select
-                value={form.isActive ? "Active" : "Inactive"}
-                onChange={(e) => setForm((f) => ({ ...f, isActive: e.target.value === "Active" }))}
-                className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              >
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-              </select>
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center justify-end gap-3 border-t border-zinc-200 bg-zinc-50 px-6 py-4">
+    <DrawerShell
+      open={isOpen}
+      onClose={onClose}
+      title={isEditing ? "Edit Sub Theme" : "Add Sub Theme"}
+      description="Update sub theme information used in the submission form."
+      error={error}
+      locked={saving}
+      width="sm:max-w-lg"
+      footer={
+        <>
           <button
             type="button"
             onClick={onClose}
@@ -171,9 +123,41 @@ function SubThemeModal({
           >
             {saving ? "Saving…" : isEditing ? "Save Changes" : "Add Sub Theme"}
           </button>
-        </div>
+        </>
+      }
+    >
+      <div>
+        <label className="mb-1.5 block text-xs font-medium text-zinc-500">Sub Theme Name</label>
+        <input
+          type="text"
+          value={form.name}
+          onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+          className={INPUT_CLS}
+        />
       </div>
-    </div>
+      <div>
+        <label className="mb-1.5 block text-xs font-medium text-zinc-500">Description</label>
+        <textarea
+          rows={4}
+          value={form.description}
+          onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+          className={INPUT_CLS}
+        />
+      </div>
+      {isEditing && (
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-zinc-500">Status</label>
+          <select
+            value={form.isActive ? "Active" : "Inactive"}
+            onChange={(e) => setForm((f) => ({ ...f, isActive: e.target.value === "Active" }))}
+            className={INPUT_CLS}
+          >
+            <option value="Active">Active</option>
+            <option value="Inactive">Inactive</option>
+          </select>
+        </div>
+      )}
+    </DrawerShell>
   );
 }
 
