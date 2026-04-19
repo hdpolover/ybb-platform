@@ -21,6 +21,22 @@ import { ValidationRulesEditor, type ValidationRules } from "./ValidationRulesEd
 import { MediaLibraryPicker } from "./MediaLibraryPicker";
 import type { ApplicationFormFieldRow } from "./FormFieldsTable";
 
+const SLUG_MAX_LEN = 64;
+
+function autoSlug(input: string): string {
+  if (!input) return "";
+  const normalized = input
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]+/g, "")
+    .replace(/\s+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  if (!normalized) return "";
+  const prefixed = /^[0-9]/.test(normalized) ? `f_${normalized}` : normalized;
+  return prefixed.slice(0, SLUG_MAX_LEN);
+}
+
 export const SECTION_OPTIONS = [
   { value: "personal_details", label: "Personal Details" },
   { value: "contact_information", label: "Contact Information" },
@@ -69,6 +85,8 @@ type EditorState = {
   validationRules: ValidationRules;
   defaultValue: string;
   order: number;
+  fieldNameTouched: boolean;
+  advancedOpen: boolean;
 };
 
 /** Coerces whatever shape the server stored in `options` into {label,value} rows. */
@@ -129,6 +147,8 @@ function toEditorState(field: ApplicationFormFieldRow | null): EditorState {
       validationRules: {},
       defaultValue: "",
       order: 0,
+      fieldNameTouched: false,
+      advancedOpen: false,
     };
   }
   return {
@@ -145,6 +165,8 @@ function toEditorState(field: ApplicationFormFieldRow | null): EditorState {
     validationRules: validationRulesFromRaw(field.validationRules),
     defaultValue: field.defaultValue ?? "",
     order: field.order ?? 0,
+    fieldNameTouched: true,
+    advancedOpen: false,
   };
 }
 
@@ -208,6 +230,7 @@ export function FormFieldEditor({
     }
 
     const body: Record<string, unknown> = {
+      source: "custom",
       section: state.section || undefined,
       fieldName,
       label,
@@ -298,27 +321,73 @@ export function FormFieldEditor({
                 ))}
               </select>
             </Field>
-            <Field
-              label="Field Key"
-              hint="Internal identifier. Lowercase with underscores (e.g. tshirt_size)."
-            >
-              <input
-                type="text"
-                value={state.fieldName}
-                onChange={(e) => patch("fieldName", e.target.value)}
-                placeholder="tshirt_size"
-                className={INPUT_CLS}
-              />
-            </Field>
-            <Field label="Label" hint="What applicants will see next to the input.">
+            <div className="sm:col-span-2">
+              <label className="mb-1.5 block text-xs font-medium text-zinc-600">
+                Label <span className="text-rose-500">*</span>
+              </label>
               <input
                 type="text"
                 value={state.label}
-                onChange={(e) => patch("label", e.target.value)}
+                onChange={(e) => {
+                  const newLabel = e.target.value;
+                  setState((prev) => ({
+                    ...prev,
+                    label: newLabel,
+                    ...(prev.fieldNameTouched
+                      ? {}
+                      : { fieldName: autoSlug(newLabel) }),
+                  }));
+                }}
                 placeholder="T-Shirt Size"
                 className={INPUT_CLS}
               />
-            </Field>
+              <p className="mt-1 text-[11px] text-zinc-400">
+                {state.fieldName ? (
+                  <>
+                    Will be stored as{" "}
+                    <code className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-700">
+                      {state.fieldName}
+                    </code>
+                  </>
+                ) : (
+                  "Will be stored as an auto-generated key from the label."
+                )}{" "}
+                <button
+                  type="button"
+                  onClick={() => patch("advancedOpen", !state.advancedOpen)}
+                  className="text-blue-600 hover:underline"
+                >
+                  {state.advancedOpen ? "hide advanced" : "advanced"}
+                </button>
+              </p>
+            </div>
+
+            {state.advancedOpen && (
+              <div className="sm:col-span-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-3">
+                <label className="mb-1.5 block text-xs font-medium text-zinc-600">
+                  Storage key (advanced)
+                </label>
+                <input
+                  type="text"
+                  value={state.fieldName}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setState((prev) => ({
+                      ...prev,
+                      fieldName: value,
+                      fieldNameTouched: true,
+                    }));
+                  }}
+                  placeholder="tshirt_size"
+                  className={INPUT_CLS}
+                />
+                <p className="mt-1 text-[11px] text-zinc-500">
+                  Auto-generated from the label. Only change this if you need to align
+                  with an existing integration. Must start with a letter and use only
+                  lowercase letters, digits, and underscores.
+                </p>
+              </div>
+            )}
             <Field label="Placeholder" hint="Light-gray hint text inside an empty input.">
               <input
                 type="text"
