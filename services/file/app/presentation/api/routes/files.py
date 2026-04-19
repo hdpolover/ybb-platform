@@ -1,20 +1,36 @@
 """File upload/download API routes."""
-from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, status
+from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from typing import Annotated
 from io import BytesIO
 from app.application.commands.upload_file_command import UploadFileCommand
+from app.application.commands.create_upload_url_command import CreateUploadUrlCommand
+from app.application.commands.mark_file_ready_command import MarkFileReadyCommand
 from app.application.commands.handlers.upload_file_handler import UploadFileHandler
+from app.application.commands.handlers.create_upload_url_handler import CreateUploadUrlHandler
+from app.application.commands.handlers.mark_file_ready_handler import MarkFileReadyHandler
 from app.application.queries.get_file_query import GetFileQuery
 from app.application.queries.handlers.get_file_handler import GetFileHandler
-from app.application.dto.file_dto import UploadFileResponseDto, FileDto
+from app.application.dto.file_dto import (
+    CreateUploadUrlRequestDto,
+    CreateUploadUrlResponseDto,
+    FileDto,
+    UploadFileResponseDto,
+)
 from app.domain.exceptions.file_exceptions import (
     FileDomainException,
     FileNotFoundException,
+    FileNotUploadedException,
     InvalidFileTypeException,
-    FileSizeLimitException
+    FileSizeLimitException,
 )
-from app.presentation.dependencies.container import get_upload_handler, get_get_file_handler, get_storage_service
+from app.presentation.dependencies.container import (
+    get_create_upload_url_handler,
+    get_get_file_handler,
+    get_mark_file_ready_handler,
+    get_storage_service,
+    get_upload_handler,
+)
 
 
 router = APIRouter(prefix="/files", tags=["files"])
@@ -87,6 +103,76 @@ async def upload_file(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+
+
+@router.post(
+    "/upload-url",
+    response_model=CreateUploadUrlResponseDto,
+    status_code=status.HTTP_201_CREATED,
+    summary="Request a presigned PUT URL for direct-to-storage upload",
+)
+async def request_upload_url(
+    body: CreateUploadUrlRequestDto,
+    handler: CreateUploadUrlHandler = Depends(get_create_upload_url_handler),
+) -> CreateUploadUrlResponseDto:
+    """
+    Step 1 of the presigned-URL flow. Validates MIME/size, reserves a File row with
+    status=PROCESSING, and returns a presigned PUT URL. Client then PUTs the file bytes
+    directly to `upload_url` (the API never sees them) and calls PATCH /files/{id}/ready.
+
+    Allowed MIME types: PDF, Word, Excel, JPEG/PNG/WebP/GIF.
+    Max size: 10 MB for documents, 5 MB for images.
+    """
+    try:
+        command = CreateUploadUrlCommand(
+            filename=body.filename,
+            content_type=body.content_type,
+            size=body.size,
+            user_id=body.user_id,
+            brand_id=body.brand_id,
+            bucket=body.bucket,
+            program_id=body.program_id,
+            participant_id=body.participant_id,
+            asset_type=body.asset_type,
+        )
+        return await handler.execute(command)
+    except InvalidFileTypeException as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except FileSizeLimitException as e:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(e))
+    except FileDomainException as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.patch(
+    "/{file_id}/ready",
+    response_model=FileDto,
+    summary="Mark a file as READY after the client PUT to the presigned URL succeeded",
+)
+async def mark_file_ready(
+    file_id: str,
+    brand_id: str = Query(..., description="Brand ID — must match the row's brand_id"),
+    actual_size: int | None = Query(None, description="Optional: correct size learned after upload"),
+    handler: MarkFileReadyHandler = Depends(get_mark_file_ready_handler),
+) -> FileDto:
+    """
+    Step 2 of the presigned-URL flow. Verifies the object exists on storage and
+    transitions the File row from PROCESSING to READY. Idempotent — calling on a
+    READY file returns the current state without error.
+    """
+    try:
+        command = MarkFileReadyCommand(
+            file_id=file_id,
+            brand_id=brand_id,
+            actual_size=actual_size,
+        )
+        return await handler.execute(command)
+    except FileNotFoundException as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except FileNotUploadedException as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+    except FileDomainException as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.get("/{file_id}", response_model=FileDto)

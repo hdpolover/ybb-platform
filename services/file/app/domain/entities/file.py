@@ -4,10 +4,18 @@ from datetime import datetime
 from typing import Optional
 
 
+class FileStatus:
+    """Upload lifecycle states. See DO_SPACES_MIGRATION.md for the flow."""
+
+    PROCESSING = "PROCESSING"  # row reserved via presigned URL, bytes not yet confirmed on storage
+    READY = "READY"            # object confirmed on storage; safe to serve
+    FAILED = "FAILED"          # presign issued but client never completed / verification failed
+
+
 @dataclass
 class File:
     """File domain entity representing an uploaded file."""
-    
+
     id: str
     filename: str
     original_filename: str
@@ -27,6 +35,7 @@ class File:
     title: Optional[str] = None
     width: Optional[int] = None
     height: Optional[int] = None
+    status: str = FileStatus.PROCESSING
     
     # Backward compatibility aliases
     @property

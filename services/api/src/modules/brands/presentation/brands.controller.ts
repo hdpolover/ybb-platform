@@ -16,13 +16,16 @@ import { UpdateBrandCommand } from '../application/commands/update-brand.command
 import { DeleteBrandCommand } from '../application/commands/delete-brand.command';
 import { UpdateBrandDetailsCommand } from '../application/commands/update-brand-details.command';
 import { UpdateBrandSettingsCommand } from '../application/commands/update-brand-settings.command';
+import { UpdateBrandMetadataCommand } from '../application/commands/update-brand-metadata.command';
 import { AssignBrandAdminCommand } from '../application/commands/assign-brand-admin.command';
 import { RemoveBrandAdminCommand } from '../application/commands/remove-brand-admin.command';
+import { GetBrandMetadataQuery } from '../application/queries/get-brand-metadata.query';
 import { BrandResponseDto, SponsorResponseDto } from './dto/brand.dto';
 import { CreateBrandDto } from './dto/create-brand.dto';
 import { UpdateBrandDto } from './dto/update-brand.dto';
 import { UpdateBrandDetailsDto } from './dto/update-brand-details.dto';
 import { UpdateBrandSettingsDto } from './dto/update-brand-settings.dto';
+import { UpdateBrandMetadataDto } from './dto/update-brand-metadata.dto';
 import { AssignBrandAdminDto, BrandAdminResponseDto } from './dto/brand-admin.dto';
 import { ListProgramsQuery } from '../../programs/application/queries/list-programs.query';
 import { ProgramListResponseDto } from '../../programs/presentation/dto/program-response.dto';
@@ -164,6 +167,31 @@ export class BrandsController {
         @CurrentUser() user: CurrentUserData,
     ): Promise<BrandResponseDto> {
         return this.commandBus.execute(new UpdateBrandSettingsCommand(id, dto, user.userId));
+    }
+
+    @Get(':id/metadata')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Get brand landing page metadata' })
+    @ApiResponse({ status: 200, description: 'Brand metadata object' })
+    async getBrandMetadata(
+        @Param('id', ParseUUIDPipe) id: string,
+    ): Promise<Record<string, unknown>> {
+        return this.queryBus.execute(new GetBrandMetadataQuery(id));
+    }
+
+    @Put(':id/metadata')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @AuditTrail({ entityType: 'Brand', action: ChangeType.update })
+    @ApiOperation({ summary: 'Update brand landing page metadata (partial merge)' })
+    @ApiResponse({ status: 200, description: 'Updated metadata object' })
+    async updateBrandMetadata(
+        @Param('id', ParseUUIDPipe) id: string,
+        @Body() dto: UpdateBrandMetadataDto,
+        @CurrentUser() user: CurrentUserData,
+    ): Promise<Record<string, unknown>> {
+        return this.commandBus.execute(new UpdateBrandMetadataCommand(id, dto.patch, user.userId));
     }
 
     @Delete(':id')

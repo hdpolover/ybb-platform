@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ImageIcon, Save, Upload } from "lucide-react";
+import { useAuth } from "@/app/contexts/AuthContext";
 import { PageHeader } from "@/src/admin/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/src/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/src/ui/tabs";
@@ -162,6 +163,7 @@ function IdentityTab({
   brand: PlatformBrandDetail;
   onSaved: (updated: PlatformBrandDetail) => void;
 }) {
+  const { adminProfile } = useAuth();
   const [name, setName] = useState(brand.name);
   const [slug, setSlug] = useState(brand.slug);
   const [description, setDescription] = useState(brand.description ?? "");
@@ -197,6 +199,9 @@ function IdentityTab({
     setError(null);
     setSuccess(null);
     try {
+      if (!adminProfile?.userId) {
+        throw new Error("You must be signed in to update brand identity.");
+      }
       const updated = await updatePlatformBrandIdentity(brand.id, {
         name,
         slug,
@@ -207,6 +212,7 @@ function IdentityTab({
         isActive,
         logo: logoFile ?? undefined,
         banner: bannerFile ?? undefined,
+        userId: adminProfile.userId,
       });
       setSuccess("Identity saved.");
       setLogoFile(null);

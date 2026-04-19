@@ -43,10 +43,14 @@ model File {
   width             Int?      @map("width")
   height            Int?      @map("height")
 
+  // Upload lifecycle: PROCESSING (reserved via presigned URL) → READY (confirmed on storage) | FAILED
+  status            String    @default("PROCESSING") @db.VarChar(20)
+
   @@index([user_id])
   @@index([brand_id])
   @@index([program_id])
   @@index([brand_id, program_id])
   @@index([is_deleted])
+  @@index([status])
   @@map("files")
 }

@@ -83,7 +83,7 @@ export async function seedBrands() {
     ],
     benefits: {
       eyebrow: 'Program Benefits',
-      title: 'Built for Students, University Students & Professionals',
+      title: 'Built for High School & University Students',
       groups: [
         {
           id: 'high_school',
@@ -105,17 +105,6 @@ export async function seedBrands() {
             'Network with professors and global academics',
             'Case competitions and innovation challenges',
             'Career acceleration through mentorship and industry exposure',
-          ],
-        },
-        {
-          id: 'professional',
-          title: 'Benefits for Young Professionals',
-          imageUrl: 'https://placehold.co/640x360/922B21/FFF?text=CYS+Professional',
-          items: [
-            'Cross-sector leadership development workshops',
-            'Business networking across 60+ countries',
-            'Featured in media coverage and alumni spotlights',
-            'Partnership and collaboration opportunities post-program',
           ],
         },
       ],

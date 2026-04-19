@@ -12,6 +12,27 @@ export interface FileUploadResponse {
 
 export type FileResponse = Record<string, unknown>;
 
+export interface CreateUploadUrlRequest {
+  filename: string;
+  content_type: string;
+  size: number;
+  user_id: string;
+  brand_id: string;
+  bucket?: string;
+  program_id?: string;
+  participant_id?: string;
+  asset_type?: string;
+}
+
+export interface CreateUploadUrlResponse {
+  file_id: string;
+  upload_url: string;
+  storage_path: string;
+  bucket: string;
+  public_url: string | null;
+  expires_in_seconds: number;
+}
+
 /**
  * File Service HTTP Client
  * 
@@ -318,6 +339,63 @@ export class FileServiceClient {
         return response.data;
       } catch (error: unknown) {
         this.logger.error(`Failed to list program media: ${error instanceof Error ? error.message : String(error)}`);
+        throw error;
+      }
+    });
+  }
+
+  /**
+   * Request a presigned PUT URL so the client can upload bytes directly to Spaces.
+   * Pairs with markFileReady() — this call reserves a File row in PROCESSING state;
+   * markFileReady() flips it to READY once the browser's PUT completes.
+   */
+  async createUploadUrl(request: CreateUploadUrlRequest): Promise<CreateUploadUrlResponse> {
+    return this.executeRequest(async () => {
+      try {
+        const response: AxiosResponse<CreateUploadUrlResponse> = await firstValueFrom(
+          this.httpService.post(
+            `${this.fileServiceUrl}/api/v1/files/upload-url`,
+            request,
+          ),
+        );
+        return response.data;
+      } catch (error: unknown) {
+        this.logger.error(
+          `Failed to request upload URL: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        throw error;
+      }
+    });
+  }
+
+  /**
+   * Mark a PROCESSING file as READY after the client-side PUT to the presigned URL succeeded.
+   * Idempotent — safe to retry if the client isn't sure the first call landed.
+   */
+  async markFileReady(
+    fileId: string,
+    brandId: string,
+    actualSize?: number,
+  ): Promise<FileResponse> {
+    return this.executeRequest(async () => {
+      try {
+        const response: AxiosResponse<FileResponse> = await firstValueFrom(
+          this.httpService.patch(
+            `${this.fileServiceUrl}/api/v1/files/${fileId}/ready`,
+            null,
+            {
+              params: {
+                brand_id: brandId,
+                ...(actualSize !== undefined ? { actual_size: actualSize } : {}),
+              },
+            },
+          ),
+        );
+        return response.data;
+      } catch (error: unknown) {
+        this.logger.error(
+          `Failed to mark file ready (${fileId}): ${error instanceof Error ? error.message : String(error)}`,
+        );
         throw error;
       }
     });

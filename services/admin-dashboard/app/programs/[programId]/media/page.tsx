@@ -21,7 +21,7 @@ import { useAuth } from "@/app/contexts/AuthContext";
 import {
   listProgramMedia,
   deleteProgramMediaFile,
-  uploadProgramMediaFile,
+  uploadFileViaPresignedUrl,
   type MediaFile,
 } from "@/src/shared/api-client";
 
@@ -252,7 +252,13 @@ function UploadZone({
     onClose();
     const settled = await Promise.allSettled(
       files.map((file) =>
-        uploadProgramMediaFile({ programId, brandId, userId, file, assetType, bucket: assetType }),
+        uploadFileViaPresignedUrl(file, {
+          userId,
+          brandId,
+          bucket: assetType,
+          programId,
+          assetType,
+        }),
       ),
     );
     const succeeded = settled.filter((r) => r.status === "fulfilled").length;

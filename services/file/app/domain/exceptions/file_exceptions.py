@@ -34,6 +34,17 @@ class FileSizeLimitException(FileDomainException):
 
 class StorageException(FileDomainException):
     """Raised when storage operation fails."""
-    
+
     def __init__(self, message: str):
         super().__init__(f"Storage error: {message}")
+
+
+class FileNotUploadedException(FileDomainException):
+    """Raised when a client asks to mark a file ready but the object isn't on storage yet."""
+
+    def __init__(self, file_id: str, storage_path: str):
+        self.file_id = file_id
+        self.storage_path = storage_path
+        super().__init__(
+            f"File {file_id} has no object at {storage_path} — client must PUT to the upload URL before marking ready"
+        )

@@ -27,7 +27,7 @@ from app.infrastructure.persistence.postgres.database import connect_db, disconn
 from app.infrastructure.processors.certificate_generator import CertificateGeneratorService
 from app.infrastructure.processors.pdf_generator import PDFGeneratorService
 from app.application.services.file_path_service import FilePathService
-from app.domain.entities.file import File
+from app.domain.entities.file import File, FileStatus
 import uuid
 from datetime import datetime
 
@@ -213,11 +213,13 @@ class FileService(file_service_pb2_grpc.FileServiceServicer):
                  )
 
             file.metadata["status"] = "ACTIVE"
-            
+            # Sync the new dedicated status column (was previously only tracked via metadata).
+            file.status = FileStatus.READY
+
             # Update size if provided by event (S3 event contains size)
             if request.HasField("size") and request.size > 0:
                 file.file_size = request.size
-            
+
             await self.repo.save(file)
             logging.info(f"ConfirmUpload: File {file.id} marked ACTIVE.")
             
