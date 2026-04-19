@@ -9,6 +9,7 @@ import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.m
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { PaymentsController } from './presentation/payments.controller';
 import { PaymentAdminController } from './presentation/payment-admin.controller';
+import { GatewayAdminController } from './presentation/gateway-admin.controller';
 import { PaymentEventsController } from './presentation/payment-events.controller';
 import { WebhooksController } from './presentation/webhooks.controller';
 import { PaymentRepository } from './infrastructure/persistence/payment.repository';
@@ -31,7 +32,7 @@ import { CacheModule } from '@shared/infrastructure/cache/cache.module';
         ConfigModule,
         CacheModule,
     ],
-    controllers: [PaymentsController, PaymentAdminController, PaymentEventsController, WebhooksController],
+    controllers: [PaymentsController, PaymentAdminController, GatewayAdminController, PaymentEventsController, WebhooksController],
     providers: [
         {
             provide: 'IPaymentRepository',

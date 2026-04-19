@@ -14,7 +14,8 @@ export class ListBrandsHandler implements IQueryHandler<ListBrandsQuery> {
         private readonly repository: IBrandRepository,
         private readonly configService: ConfigService,
     ) { 
-        this.storageUrl = this.configService.get('STORAGE_PUBLIC_URL', 'http://localhost:9000');
+        const rawUrl = this.configService.get('STORAGE_PUBLIC_URL', 'http://localhost:9000');
+        this.storageUrl = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
     }
 
     async execute(query: ListBrandsQuery): Promise<BrandResponseDto[]> {

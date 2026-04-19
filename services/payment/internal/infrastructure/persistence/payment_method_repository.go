@@ -89,6 +89,23 @@ func (r *PaymentMethodRepository) FindByCodeOrID(ctx context.Context, value stri
 	return &method, nil
 }
 
+// CountByGatewayName counts active (non-soft-deleted) payment methods that
+// reference a gateway provider by name. Empty gateway names are excluded so
+// manual methods never contribute to the count.
+func (r *PaymentMethodRepository) CountByGatewayName(ctx context.Context, gatewayName string) (int64, error) {
+	if gatewayName == "" {
+		return 0, nil
+	}
+	var count int64
+	if err := r.db.WithContext(ctx).
+		Model(&entities.PaymentMethodEntity{}).
+		Where("gateway_name = ?", gatewayName).
+		Count(&count).Error; err != nil {
+		return 0, fmt.Errorf("failed to count payment methods for gateway %q: %w", gatewayName, err)
+	}
+	return count, nil
+}
+
 // Delete: Menghapus data (Soft Delete karena ada gorm.DeletedAt di entity)
 func (r *PaymentMethodRepository) Delete(ctx context.Context, id string) error {
 	if err := r.db.WithContext(ctx).Delete(&entities.PaymentMethodEntity{}, "id = ?", id).Error; err != nil {

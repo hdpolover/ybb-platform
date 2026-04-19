@@ -153,17 +153,21 @@ export class HomeStrategy implements ILandingPageStrategy {
 
     // Separate gallery by type
     const allGallery = program?.gallery || [];
-    const imageGallery = allGallery.filter(g => g.type === 'image');
     const shortsGallery = allGallery.filter(g => g.type === 'short');
 
-    // Get images for objectives (random 4 from image gallery)
-    const objectiveImages = imageGallery
-      .sort(() => 0.5 - Math.random())
-      .slice(0, 4)
-      .map(img => ({
-        url: img.imageUrl,
-        caption: img.title
-      }));
+    // Shuffle image gallery once — all sections below draw from this randomised pool.
+    // Fisher-Yates shuffle ensures an unbiased random order per cache-miss (i.e. per deploy / TTL expiry).
+    const imageGallery = allGallery
+      .filter(g => g.type === 'image')
+      .map(img => ({ img, sort: Math.random() }))
+      .sort((a, b) => a.sort - b.sort)
+      .map(({ img }) => img);
+
+    // 4 images for the objectives collage
+    const objectiveImages = imageGallery.slice(0, 4).map(img => ({
+      url: img.imageUrl,
+      caption: img.title,
+    }));
 
     const result = {
       slug: 'home',

@@ -43,7 +43,10 @@ class UploadFileHandler:
         'announcements',
         'faq',
         'payment_icons',
-        'payment_methods'
+        'payment_methods',
+        'brands',
+        'brands/logos',
+        'brands/banners',
     ]
     
     def __init__(
@@ -150,6 +153,16 @@ class UploadFileHandler:
         
         # Save metadata to repository
         saved_file = await self.file_repository.save(file_entity)
-        
-        # Return DTO
-        return FileDto.from_entity(saved_file)
+
+        # Compute a public URL so callers (NestJS uploadFile) get a loadable
+        # link back. Without this, `grpcResult.url` is empty and everything
+        # downstream stores an empty string for the asset URL.
+        try:
+            public_url = self.storage_service.get_public_url(
+                bucket=saved_file.bucket,
+                object_name=saved_file.storage_path,
+            )
+        except Exception:
+            public_url = None
+
+        return FileDto.from_entity(saved_file, download_url=public_url or None, url=public_url or None)

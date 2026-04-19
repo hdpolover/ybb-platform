@@ -35,7 +35,7 @@ export class StorageService {
 
     // Whitelist for Public Image CDN
     // ONLY these folders typically contain safe-to-share images
-    const PUBLIC_IMAGE_BUCKETS = ['gallery', 'programs', 'banners', 'sponsors', 'speakers', 'avatars', 'assets'];
+    const PUBLIC_IMAGE_BUCKETS = ['gallery', 'programs', 'banners', 'sponsors', 'speakers', 'avatars', 'assets', 'brands', 'brands/logos', 'brands/banners', 'payment-methods'];
 
     // 1. ImageKit Integration (Safe Mode)
     const imageKitId = this.configService.get<string>('IMAGEKIT_ID');

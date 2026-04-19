@@ -27,7 +27,12 @@ export class BrandRepository implements IBrandRepository {
     async findById(id: string): Promise<Brand | null> {
         const category = await this.prisma.brand.findUnique({
             where: { id },
-            include: { settings: true },
+            include: {
+                settings: true,
+                // programs id-only select is used by mapToEntity to compute programCount.
+                // Without it, detail views always report 0.
+                programs: { where: { deletedAt: null }, select: { id: true } },
+            },
         });
         return category ? this.mapToEntity(category) : null;
     }
@@ -35,7 +40,10 @@ export class BrandRepository implements IBrandRepository {
     async findBySlug(slug: string): Promise<Brand | null> {
         const category = await this.prisma.brand.findUnique({
             where: { slug },
-            include: { settings: true },
+            include: {
+                settings: true,
+                programs: { where: { deletedAt: null }, select: { id: true } },
+            },
         });
         return category ? this.mapToEntity(category) : null;
     }

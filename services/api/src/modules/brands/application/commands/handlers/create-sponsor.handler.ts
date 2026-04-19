@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { StorageService } from '../../../../files/application/storage.service';
 import { CreateSponsorCommand } from '../create-sponsor.command';
-import { SponsorResponseDto } from '../../presentation/dto/brand.dto';
+import { SponsorResponseDto } from '../../../presentation/dto/brand.dto';
 
 @CommandHandler(CreateSponsorCommand)
 export class CreateSponsorHandler implements ICommandHandler<CreateSponsorCommand> {
@@ -15,7 +15,8 @@ export class CreateSponsorHandler implements ICommandHandler<CreateSponsorComman
         private readonly storageService: StorageService,
         private readonly configService: ConfigService,
     ) {
-        this.storageUrl = this.configService.get('STORAGE_PUBLIC_URL', 'http://localhost:9000');
+        const rawUrl = this.configService.get('STORAGE_PUBLIC_URL', 'http://localhost:9000');
+        this.storageUrl = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
     }
 
     async execute(command: CreateSponsorCommand): Promise<SponsorResponseDto> {

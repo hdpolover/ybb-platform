@@ -8,11 +8,19 @@ import { UserAnnouncementReadRepository } from './infrastructure/persistence/use
 import { ListSystemAnnouncementsHandler } from './application/queries/handlers/list-system-announcements.handler';
 import { GetSystemAnnouncementHandler } from './application/queries/handlers/get-system-announcement.handler';
 import { MarkAnnouncementReadHandler } from './application/commands/handlers/mark-announcement-read.handler';
+import {
+    ListAllSystemAnnouncementsHandler,
+    CreateSystemAnnouncementHandler,
+    UpdateSystemAnnouncementHandler,
+    DeleteSystemAnnouncementHandler,
+    TogglePublishSystemAnnouncementHandler,
+} from './application/commands/handlers/manage-system-announcements.handler';
 
 @Module({
     imports: [CqrsModule, AuthModule],
     controllers: [SystemAnnouncementsController],
     providers: [
+        PrismaService,
         {
             provide: 'ISystemAnnouncementRepository',
             useClass: SystemAnnouncementRepository,
@@ -24,6 +32,11 @@ import { MarkAnnouncementReadHandler } from './application/commands/handlers/mar
         ListSystemAnnouncementsHandler,
         GetSystemAnnouncementHandler,
         MarkAnnouncementReadHandler,
+        ListAllSystemAnnouncementsHandler,
+        CreateSystemAnnouncementHandler,
+        UpdateSystemAnnouncementHandler,
+        DeleteSystemAnnouncementHandler,
+        TogglePublishSystemAnnouncementHandler,
     ],
 })
 export class SystemModule { }

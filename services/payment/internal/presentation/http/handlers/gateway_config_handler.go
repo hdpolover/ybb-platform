@@ -10,12 +10,18 @@ import (
 
 // GatewayConfigHandler handles admin CRUD for payment gateway configurations.
 type GatewayConfigHandler struct {
-	repo repositories.GatewayConfigRepository
+	repo              repositories.GatewayConfigRepository
+	paymentMethodRepo repositories.PaymentMethodRepository
 }
 
-// NewGatewayConfigHandler creates a new GatewayConfigHandler.
-func NewGatewayConfigHandler(repo repositories.GatewayConfigRepository) *GatewayConfigHandler {
-	return &GatewayConfigHandler{repo: repo}
+// NewGatewayConfigHandler creates a new GatewayConfigHandler. The payment
+// method repo is required so Delete can block removal of a config still
+// referenced by one or more payment methods.
+func NewGatewayConfigHandler(
+	repo repositories.GatewayConfigRepository,
+	paymentMethodRepo repositories.PaymentMethodRepository,
+) *GatewayConfigHandler {
+	return &GatewayConfigHandler{repo: repo, paymentMethodRepo: paymentMethodRepo}
 }
 
 // GetAll godoc
@@ -167,7 +173,31 @@ func (h *GatewayConfigHandler) SetActive(c *gin.Context) {
 // @Failure      500  {object}  map[string]interface{}
 // @Router       /gateway-configs/{id} [delete]
 func (h *GatewayConfigHandler) Delete(c *gin.Context) {
-	if err := h.repo.Delete(c.Request.Context(), c.Param("id")); err != nil {
+	ctx := c.Request.Context()
+	existing, err := h.repo.FindByID(ctx, c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Gateway config not found"})
+		return
+	}
+
+	// Referential guard: refuse to delete while any payment method still uses
+	// this provider, otherwise payments using those methods would fail at
+	// charge time with a confusing "no active config" error.
+	count, err := h.paymentMethodRepo.CountByGatewayName(ctx, existing.Provider)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check references"})
+		return
+	}
+	if count > 0 {
+		c.JSON(http.StatusConflict, gin.H{
+			"error":           "Cannot delete: gateway is still referenced by payment methods",
+			"provider":        existing.Provider,
+			"referenced_by":   count,
+		})
+		return
+	}
+
+	if err := h.repo.Delete(ctx, c.Param("id")); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete gateway config"})
 		return
 	}
