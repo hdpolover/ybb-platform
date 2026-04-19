@@ -4,7 +4,6 @@ import { IsDateString, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-va
 export enum Gender {
   male = 'male',
   female = 'female',
-  other = 'other',
 }
 
 export class OnboardingDto {

@@ -94,59 +94,28 @@ export class StorageService {
   ): Promise<StorageUploadResult> {
     this.logger.log(`Uploading file to folder ${folder} for program ${programId}`);
 
-    // Try gRPC first
-    try {
-      this.logger.log('Attempting upload via gRPC...');
-      const grpcResult = await this.fileGrpcClient.uploadFile(file.buffer, {
-        filename: file.originalname,
-        content_type: file.mimetype,
-        user_id: userId,
-        brand_id: brandId,
-        bucket: folder,
-        program_id: programId,
-        participant_id: participantId,
-      });
+    this.logger.log('Uploading via gRPC...');
+    const grpcResult = await this.fileGrpcClient.uploadFile(file.buffer, {
+      filename: file.originalname,
+      content_type: file.mimetype,
+      user_id: userId,
+      brand_id: brandId,
+      bucket: folder,
+      program_id: programId,
+      participant_id: participantId,
+      size: file.size,
+    });
 
-      this.logger.log('gRPC upload successful');
-      
-      // Map result to StorageUploadResult
-      return {
-        url: grpcResult.url,
-        path: grpcResult.storage_path,
-        fileInfo: {
-            ...grpcResult,
-            storage_path: grpcResult.storage_path,
-            bucket: grpcResult.bucket || targetBucket
-        }
-      };
-    } catch (grpcError) {
-      this.logger.warn(`gRPC upload failed, falling back to REST: ${grpcError.message}`);
-    }
-
-    // Fallback to File Service REST
-    // Note: The File Service Python currently accepts 'bucket' as the 4th argument.
-    // Based on existing usage in GalleryService, we pass the folder name (e.g., 'gallery') here.
-    const uploadResult = await this.fileService.uploadFile(
-      file,
-      userId,
-      brandId,
-      folder, 
-      programId,
-      participantId
-    );
-
-    if (!uploadResult || !uploadResult.file) {
-      this.logger.error('File Service returned no file data');
-      throw new InternalServerErrorException('Failed to upload file');
-    }
-
-    const fileData = uploadResult.file;
-    const fullUrl = this.constructPublicUrl(fileData, targetBucket);
+    this.logger.log('gRPC upload successful');
 
     return {
-      url: fullUrl,
-      path: (fileData.storage_path as string) || '',
-      fileInfo: fileData
+      url: grpcResult.url,
+      path: grpcResult.storage_path,
+      fileInfo: {
+        ...grpcResult,
+        storage_path: grpcResult.storage_path,
+        bucket: grpcResult.bucket || targetBucket,
+      },
     };
   }
 }

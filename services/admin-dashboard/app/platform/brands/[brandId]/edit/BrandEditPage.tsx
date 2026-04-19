@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Save } from "lucide-react";
+import { ArrowLeft, ImageIcon, Save, Upload } from "lucide-react";
 import { PageHeader } from "@/src/admin/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/src/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/src/ui/tabs";
@@ -171,9 +171,25 @@ function IdentityTab({
     (brand as PlatformBrandDetail & { contactEmail?: string }).contactEmail ?? "",
   );
   const [isActive, setIsActive] = useState(brand.isActive);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(brand.logoUrl ?? null);
+  const [bannerPreview, setBannerPreview] = useState<string | null>(brand.bannerUrl ?? null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const bannerInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  function onFileChange(
+    e: React.ChangeEvent<HTMLInputElement>,
+    setFile: (f: File | null) => void,
+    setPreview: (url: string | null) => void,
+  ) {
+    const file = e.target.files?.[0] ?? null;
+    setFile(file);
+    if (file) setPreview(URL.createObjectURL(file));
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -189,8 +205,12 @@ function IdentityTab({
         primaryColor: primaryColor || undefined,
         contactEmail: contactEmail || undefined,
         isActive,
+        logo: logoFile ?? undefined,
+        banner: bannerFile ?? undefined,
       });
       setSuccess("Identity saved.");
+      setLogoFile(null);
+      setBannerFile(null);
       onSaved(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save.");
@@ -221,6 +241,80 @@ function IdentityTab({
               onChange={setDescription}
               placeholder="Short description of this brand…"
               rows={3}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Media</CardTitle></CardHeader>
+        <CardContent className="space-y-5">
+          {/* Banner */}
+          <div className="space-y-2">
+            <Label>Banner</Label>
+            <div
+              className="relative h-32 w-full cursor-pointer overflow-hidden rounded-lg border border-dashed border-zinc-300 bg-zinc-50 hover:border-zinc-400"
+              onClick={() => bannerInputRef.current?.click()}
+            >
+              {bannerPreview ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={bannerPreview} alt="Banner preview" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full flex-col items-center justify-center gap-1">
+                  <Upload className="h-6 w-6 text-zinc-400" />
+                  <p className="text-xs text-zinc-400">Click to upload banner</p>
+                </div>
+              )}
+              {bannerPreview && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity hover:opacity-100">
+                  <Upload className="h-6 w-6 text-white" />
+                </div>
+              )}
+            </div>
+            {bannerFile && <p className="text-xs text-zinc-500">{bannerFile.name}</p>}
+            <p className="text-xs text-zinc-400">Recommended: 1200×400 or wider. PNG, JPG.</p>
+            <input
+              ref={bannerInputRef}
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              onChange={(e) => onFileChange(e, setBannerFile, setBannerPreview)}
+            />
+          </div>
+
+          {/* Logo */}
+          <div className="space-y-2">
+            <Label>Logo</Label>
+            <div className="flex items-center gap-4">
+              <div
+                className="flex h-20 w-20 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-dashed border-zinc-300 bg-zinc-50 hover:border-zinc-400"
+                onClick={() => logoInputRef.current?.click()}
+              >
+                {logoPreview ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={logoPreview} alt="Logo preview" className="h-full w-full object-contain p-1" />
+                ) : (
+                  <ImageIcon className="h-8 w-8 text-zinc-300" />
+                )}
+              </div>
+              <div className="flex-1 space-y-1">
+                <button
+                  type="button"
+                  onClick={() => logoInputRef.current?.click()}
+                  className="inline-flex items-center gap-2 text-sm text-blue-600 hover:underline"
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  {logoFile ? logoFile.name : "Upload logo…"}
+                </button>
+                <p className="text-xs text-zinc-400">PNG, JPG, SVG, WEBP. Square recommended.</p>
+              </div>
+            </div>
+            <input
+              ref={logoInputRef}
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              onChange={(e) => onFileChange(e, setLogoFile, setLogoPreview)}
             />
           </div>
         </CardContent>
