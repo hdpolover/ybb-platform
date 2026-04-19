@@ -14,6 +14,7 @@ import {
   applyTemplateToProgram,
   fetchFormTemplates,
 } from "@/app/components/submissionsMasterData/form-fields/catalog-api";
+import { FLAGS } from "@/app/flags";
 import {
   createPlatformProgram,
   deletePlatformProgram,
@@ -162,7 +163,9 @@ export default function ProgramsPage() {
       });
 
       setPrograms((current) => [mapProgram(createdProgram), ...current]);
-      await offerDefaultTemplate(createdProgram.id);
+      if (FLAGS.FORM_FIELD_CATALOG_V2) {
+        await offerDefaultTemplate(createdProgram.id);
+      }
       setIsFormModalOpen(false);
       setSelectedProgram(null);
     } catch (error) {
