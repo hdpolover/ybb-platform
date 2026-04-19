@@ -102,6 +102,8 @@ model ApplicationFormField {
 
   // NEW: catalog linkage
   source         String  @default("custom") @db.VarChar(16)
+  // Intentionally no FK to system_form_field_definitions.key — loose coupling
+  // so catalog soft-deletes don't cascade-break existing program fields.
   systemFieldKey String? @map("system_field_key") @db.VarChar(64)
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -110,7 +112,12 @@ model ApplicationFormField {
 
   program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
 
-  @@unique([programId, name, deletedAt], map: "application_form_fields_program_name_uq")
+  // Enforced as a partial UNIQUE index in the migration SQL:
+  //   CREATE UNIQUE INDEX application_form_fields_program_name_uq
+  //     ON application_form_fields (program_id, name) WHERE deleted_at IS NULL;
+  // Prisma 7 DSL cannot express partial indexes, so the Prisma-level line
+  // below is a plain @@index for query performance; uniqueness is DB-enforced.
+  @@index([programId, name], map: "application_form_fields_program_name_uq")
   @@index([programId])
   @@index([section])
   @@index([order])
@@ -366,6 +373,8 @@ model ApplicationFormTemplateField {
   id             String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   templateId     String  @map("template_id") @db.Uuid
   source         String  @db.VarChar(16)
+  // Intentionally no FK to system_form_field_definitions.key — loose coupling
+  // so catalog soft-deletes don't cascade-break existing program fields.
   systemFieldKey String? @map("system_field_key") @db.VarChar(64)
 
   name            String? @db.VarChar(100)

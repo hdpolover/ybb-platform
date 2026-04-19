@@ -79,7 +79,7 @@ CREATE INDEX "application_form_template_fields_template_id_idx" ON "application_
 CREATE INDEX "application_form_fields_source_idx" ON "application_form_fields"("source");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "application_form_fields_program_name_uq" ON "application_form_fields"("program_id", "name", "deleted_at");
+CREATE UNIQUE INDEX "application_form_fields_program_name_uq" ON "application_form_fields" ("program_id", "name") WHERE "deleted_at" IS NULL;
 
 -- AddForeignKey
 ALTER TABLE "application_form_template_fields" ADD CONSTRAINT "application_form_template_fields_template_id_fkey" FOREIGN KEY ("template_id") REFERENCES "application_form_templates"("id") ON DELETE CASCADE ON UPDATE CASCADE;
