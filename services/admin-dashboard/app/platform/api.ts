@@ -6,6 +6,7 @@ export type PlatformBrand = {
   logoUrl?: string | null;
   bannerUrl?: string | null;
   websiteUrl?: string | null;
+  landingUrl?: string | null;
   primaryColor?: string | null;
   isActive: boolean;
   programCount: number;
@@ -191,6 +192,7 @@ export async function updatePlatformBrandIdentity(
     slug: string;
     description?: string;
     websiteUrl?: string;
+    landingUrl?: string;
     primaryColor?: string;
     contactEmail?: string;
     isActive?: boolean;
@@ -243,6 +245,7 @@ export async function updatePlatformBrandIdentity(
   formData.set("slug", input.slug);
   if (input.description != null) formData.set("description", input.description);
   if (input.websiteUrl != null) formData.set("websiteUrl", input.websiteUrl);
+  if (input.landingUrl != null) formData.set("landingUrl", input.landingUrl);
   if (input.primaryColor != null) formData.set("primaryColor", input.primaryColor);
   if (input.contactEmail != null) formData.set("contactEmail", input.contactEmail);
   if (input.isActive != null) formData.set("isActive", String(input.isActive));

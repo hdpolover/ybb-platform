@@ -16,7 +16,7 @@ export class UpdateBrandMetadataHandler implements ICommandHandler<UpdateBrandMe
         const { id, patch } = command;
         try {
             const result = await this.brandRepository.updateMetadata(id, patch);
-            await this.landingRevalidation.revalidateSettings();
+            await this.landingRevalidation.revalidateForBrand(id);
             return result;
         } catch (error: unknown) {
             if (error instanceof Error && error.message.includes('not found')) {

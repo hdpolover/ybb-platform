@@ -52,7 +52,7 @@ export class CreateSponsorHandler implements ICommandHandler<CreateSponsorComman
             },
         });
 
-        await this.landingRevalidation.revalidateSettings();
+        await this.landingRevalidation.revalidateForBrand(brandId);
 
         return {
             id: sponsor.id,

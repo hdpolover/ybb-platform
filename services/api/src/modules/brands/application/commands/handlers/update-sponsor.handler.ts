@@ -54,7 +54,7 @@ export class UpdateSponsorHandler implements ICommandHandler<UpdateSponsorComman
             },
         });
 
-        await this.landingRevalidation.revalidateSettings();
+        await this.landingRevalidation.revalidateForBrand(brandId);
 
         return {
             id: updated.id,

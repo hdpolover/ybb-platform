@@ -22,6 +22,9 @@ export class BrandResponseDto {
     @ApiProperty({ required: false, nullable: true })
     websiteUrl?: string | null;
 
+    @ApiProperty({ required: false, nullable: true, description: 'Canonical public landing deployment URL.' })
+    landingUrl?: string | null;
+
     @ApiProperty({ required: false, nullable: true })
     primaryColor?: string | null;
 

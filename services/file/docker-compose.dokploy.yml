@@ -12,12 +12,18 @@ services:
       DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@ybb-prod-postgres-file:5432/${DATABASE_NAME}
       # MinIO (External or Staging)
       MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_REGION: ${MINIO_REGION:-sgp1}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MINIO_BUCKET: ${MINIO_BUCKET}
       MINIO_SECURE: "true"
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
       MINIO_PUBLIC_SECURE: "true"
+      # RabbitMQ
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@ybb-prod-shared-rabbitmq:5672/
+      # Service Configuration
+      CERTIFICATE_SIGNING_KEY: ${CERTIFICATE_SIGNING_KEY}
+      CERTIFICATE_VERIFICATION_URL: ${CERTIFICATE_VERIFICATION_URL}
       # Observability
       LOKI_URL: ${LOKI_URL}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
@@ -42,7 +48,7 @@ services:
     container_name: ybb-prod-filestash
     restart: always
     environment:
-      - APPLICATION_URL=https://staging-console.ybbhub.com
+      - APPLICATION_URL=https://console.ybbhub.com
     volumes:
       - filestash_data:/app/data/state/
     networks:
