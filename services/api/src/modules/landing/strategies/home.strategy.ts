@@ -172,7 +172,7 @@ export class HomeStrategy implements ILandingPageStrategy {
         {
           type: 'main_banner',
           content: {
-            imageUrl: brand.bannerUrl || program?.bannerUrl || '',
+            imageUrl: program?.bannerUrl || brand.bannerUrl || '',
             link: brand.websiteUrl || '',
             title: brand.name || '',
             subtitle: brand.description || '',

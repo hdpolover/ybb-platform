@@ -41,6 +41,9 @@ import {
   getPlatformBrand,
   listPlatformPrograms,
   listBrandSponsors,
+  createBrandSponsor,
+  updateBrandSponsor,
+  deleteBrandSponsor,
   listBrandAdmins,
   listAllAdmins,
   assignBrandAdmin,
@@ -54,6 +57,7 @@ import {
   updateLegalDocument,
   deleteLegalDocument,
   updatePlatformBrandIdentity,
+  updatePlatformBrandMedia,
   updatePlatformBrandDetails,
   updatePlatformBrandSettings,
   getBrandMetadata,
@@ -200,15 +204,12 @@ function MediaSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved: (
     setError(null);
     setSuccess(null);
     try {
-      await updatePlatformBrandIdentity(brand.id, {
-        name: brand.name,
-        slug: brand.slug,
-        logo: logoFile ?? undefined,
-        banner: bannerFile ?? undefined,
-      });
-      setSuccess("Media saved.");
-      setLogoFile(null);
-      setBannerFile(null);
+      await updatePlatformBrandMedia(
+        brand.id,
+        { name: brand.name, slug: brand.slug },
+        { logo: logoFile ?? undefined, banner: bannerFile ?? undefined },
+      );
+      setOpen(false);
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save.");
@@ -351,7 +352,7 @@ function IdentitySheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved
         contactEmail: form.contactEmail || undefined,
         isActive: form.isActive,
       });
-      setSuccess("Identity saved.");
+      setOpen(false);
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save.");
@@ -430,7 +431,7 @@ function DetailsSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved:
         metaDescription: form.metaDescription || undefined,
         metaKeywords: form.metaKeywords || undefined,
       });
-      setSuccess("Details saved.");
+      setOpen(false);
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save.");
@@ -513,7 +514,7 @@ function ContactSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved:
         contactAddress: form.contactAddress || undefined,
         socialMediaLinks: Object.keys(socialMediaLinks).length > 0 ? socialMediaLinks : undefined,
       });
-      setSuccess("Contact saved.");
+      setOpen(false);
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save.");
@@ -592,7 +593,7 @@ function SettingsSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved
         googleAnalyticsId: form.googleAnalyticsId || undefined,
         pixelId: form.pixelId || undefined,
       });
-      setSuccess("Settings saved.");
+      setOpen(false);
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save.");
@@ -1557,20 +1558,198 @@ function LandingPageTab({ brandId }: { brandId: string }) {
 
 // ─── Tab: Sponsors ────────────────────────────────────────────────────────────
 
+const SPONSOR_TYPES = ["corporate", "ngo", "media_partner", "government", "academic", "individual", "other"];
+const SPONSOR_TIERS = ["platinum", "gold", "silver", "bronze", "partner"];
+
+type SponsorForm = {
+  name: string;
+  type: string;
+  tier: string;
+  websiteUrl: string;
+  description: string;
+  order: string;
+  logo: File | null;
+  logoPreview: string | null;
+};
+
+function SponsorSheet({
+  brandId,
+  sponsor,
+  onSaved,
+  trigger,
+}: {
+  brandId: string;
+  sponsor?: BrandSponsor;
+  onSaved: () => void;
+  trigger: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState<SponsorForm>({
+    name: sponsor?.name ?? "",
+    type: sponsor?.type ?? "corporate",
+    tier: sponsor?.tier ?? "",
+    websiteUrl: sponsor?.websiteUrl ?? "",
+    description: sponsor?.description ?? "",
+    order: String(sponsor?.order ?? 0),
+    logo: null,
+    logoPreview: sponsor?.logoUrl ?? null,
+  });
+
+  function setField<K extends keyof SponsorForm>(k: K, v: SponsorForm[K]) {
+    setForm((f) => ({ ...f, [k]: v }));
+    setError(null);
+  }
+
+  function onLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null;
+    setField("logo", file);
+    if (file) setField("logoPreview", URL.createObjectURL(file));
+  }
+
+  async function handleSave() {
+    if (!form.name.trim()) { setError("Name is required."); return; }
+    if (!form.type.trim()) { setError("Type is required."); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      const payload = {
+        name: form.name.trim(),
+        type: form.type,
+        tier: form.tier || undefined,
+        websiteUrl: form.websiteUrl || undefined,
+        description: form.description || undefined,
+        order: parseInt(form.order, 10) || 0,
+        logo: form.logo,
+      };
+      if (sponsor) {
+        await updateBrandSponsor(brandId, sponsor.id, payload);
+      } else {
+        await createBrandSponsor(brandId, payload);
+      }
+      setOpen(false);
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <span onClick={() => setOpen(true)}>{trigger}</span>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent className="w-full overflow-y-auto sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>{sponsor ? "Edit Sponsor" : "Add Sponsor"}</SheetTitle>
+          </SheetHeader>
+          <div className="mt-6 space-y-4">
+            {error && <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+            <div className="space-y-1.5">
+              <Label htmlFor="sp-name">Name *</Label>
+              <Input id="sp-name" value={form.name} onChange={(e) => setField("name", e.target.value)} placeholder="Asia Innovation Fund" />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="sp-type">Type *</Label>
+              <select
+                id="sp-type"
+                value={form.type}
+                onChange={(e) => setField("type", e.target.value)}
+                className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+              >
+                {SPONSOR_TYPES.map((t) => (
+                  <option key={t} value={t}>{t.replace("_", " ")}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="sp-tier">Tier</Label>
+              <select
+                id="sp-tier"
+                value={form.tier}
+                onChange={(e) => setField("tier", e.target.value)}
+                className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+              >
+                <option value="">— None —</option>
+                {SPONSOR_TIERS.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="sp-url">Website URL</Label>
+              <Input id="sp-url" value={form.websiteUrl} onChange={(e) => setField("websiteUrl", e.target.value)} placeholder="https://example.com" />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="sp-desc">Description</Label>
+              <Input id="sp-desc" value={form.description} onChange={(e) => setField("description", e.target.value)} placeholder="Short description (optional)" />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="sp-order">Display Order</Label>
+              <Input id="sp-order" type="number" min={0} value={form.order} onChange={(e) => setField("order", e.target.value)} />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Logo</Label>
+              {form.logoPreview && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={form.logoPreview} alt="Logo preview" className="mb-2 h-16 rounded border border-zinc-200 object-contain p-1" />
+              )}
+              <Input type="file" accept="image/*" onChange={onLogoChange} />
+            </div>
+          </div>
+          <SheetFooter className="mt-6">
+            <Button variant="outline" onClick={() => setOpen(false)} disabled={saving}>Cancel</Button>
+            <Button onClick={handleSave} disabled={saving}>
+              <Save className="mr-1.5 h-4 w-4" />{saving ? "Saving…" : "Save"}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+    </>
+  );
+}
+
 function SponsorsTab({ brandId }: { brandId: string }) {
   const [sponsors, setSponsors] = useState<BrandSponsor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  function reload() {
+    setLoading(true);
+    setError(null);
+    listBrandSponsors(brandId)
+      .then(setSponsors)
+      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load sponsors."))
+      .finally(() => setLoading(false));
+  }
 
   useEffect(() => {
-    let mounted = true;
-    setLoading(true);
-    listBrandSponsors(brandId)
-      .then((data) => { if (mounted) setSponsors(data); })
-      .catch((err) => { if (mounted) setError(err instanceof Error ? err.message : "Failed to load sponsors."); })
-      .finally(() => { if (mounted) setLoading(false); });
-    return () => { mounted = false; };
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [brandId]);
+
+  async function handleDelete(id: string) {
+    if (!confirm("Delete this sponsor? This cannot be undone.")) return;
+    setDeletingId(id);
+    try {
+      await deleteBrandSponsor(brandId, id);
+      reload();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   if (loading) {
     return <div className="rounded-lg border border-zinc-200 bg-white p-10 text-center text-sm text-zinc-500">Loading sponsors…</div>;
@@ -1578,58 +1757,82 @@ function SponsorsTab({ brandId }: { brandId: string }) {
   if (error) {
     return <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>;
   }
-  if (sponsors.length === 0) {
-    return (
-      <EmptyState
-        title="No sponsors yet"
-        description="Sponsors added to this brand will appear here."
-      />
-    );
-  }
 
   return (
-    <div className="rounded-lg border border-zinc-200 bg-white">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-zinc-100">
-            <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Sponsor</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Type</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Tier</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Website</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sponsors.map((s) => (
-            <tr key={s.id} className="border-b border-zinc-50 last:border-0 hover:bg-zinc-50">
-              <td className="px-4 py-3">
-                <div className="flex items-center gap-2">
-                  {s.logoUrl && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={s.logoUrl} alt={s.name} className="h-7 w-7 rounded border border-zinc-200 object-contain" />
-                  )}
-                  <p className="font-medium text-zinc-900">{s.name}</p>
-                </div>
-              </td>
-              <td className="px-4 py-3 text-zinc-600 capitalize">{s.type}</td>
-              <td className="px-4 py-3">
-                {s.tier ? <Badge variant="secondary">{s.tier}</Badge> : <span className="text-zinc-400">—</span>}
-              </td>
-              <td className="px-4 py-3">
-                {s.websiteUrl ? (
-                  <a href={s.websiteUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
-                    Visit <ExternalLink className="h-3 w-3" />
-                  </a>
-                ) : (
-                  <span className="text-zinc-400">—</span>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="border-t border-zinc-200 px-4 py-2.5">
-        <p className="text-xs text-zinc-400">{sponsors.length} sponsor{sponsors.length !== 1 ? "s" : ""}</p>
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <SponsorSheet brandId={brandId} onSaved={reload} trigger={
+          <Button size="sm"><Plus className="mr-1.5 h-4 w-4" />Add Sponsor</Button>
+        } />
       </div>
+      {sponsors.length === 0 ? (
+        <EmptyState title="No sponsors yet" description="Sponsors added to this brand will appear here." />
+      ) : (
+        <div className="rounded-lg border border-zinc-200 bg-white">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-zinc-100">
+                <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Sponsor</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Type</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Tier</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Website</th>
+                <th className="px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody>
+              {sponsors.map((s) => (
+                <tr key={s.id} className="border-b border-zinc-50 last:border-0 hover:bg-zinc-50">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      {s.logoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={s.logoUrl} alt={s.name} className="h-7 w-7 rounded border border-zinc-200 object-contain" />
+                      ) : (
+                        <div className="flex h-7 w-7 items-center justify-center rounded border border-zinc-200 bg-zinc-50 text-xs text-zinc-400">
+                          <ImageIcon className="h-3.5 w-3.5" />
+                        </div>
+                      )}
+                      <p className="font-medium text-zinc-900">{s.name}</p>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 capitalize text-zinc-600">{s.type.replace("_", " ")}</td>
+                  <td className="px-4 py-3">
+                    {s.tier ? <Badge variant="secondary">{s.tier}</Badge> : <span className="text-zinc-400">—</span>}
+                  </td>
+                  <td className="px-4 py-3">
+                    {s.websiteUrl ? (
+                      <a href={s.websiteUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
+                        Visit <ExternalLink className="h-3 w-3" />
+                      </a>
+                    ) : (
+                      <span className="text-zinc-400">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-1">
+                      <SponsorSheet brandId={brandId} sponsor={s} onSaved={reload} trigger={
+                        <Button size="icon" variant="ghost" className="h-7 w-7"><Pencil className="h-3.5 w-3.5" /></Button>
+                      } />
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-red-500 hover:text-red-700"
+                        onClick={() => handleDelete(s.id)}
+                        disabled={deletingId === s.id}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="border-t border-zinc-200 px-4 py-2.5">
+            <p className="text-xs text-zinc-400">{sponsors.length} sponsor{sponsors.length !== 1 ? "s" : ""}</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2229,13 +2432,13 @@ export default function BrandDetailPage({ brandId }: { brandId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(() => {
-    setLoading(true);
+  const load = useCallback((silent = false) => {
+    if (!silent) setLoading(true);
     setError(null);
     getPlatformBrand(brandId)
       .then(setBrand)
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load brand."))
-      .finally(() => setLoading(false));
+      .finally(() => { if (!silent) setLoading(false); });
   }, [brandId]);
 
   useEffect(() => { load(); }, [load]);
@@ -2277,7 +2480,7 @@ export default function BrandDetailPage({ brandId }: { brandId: string }) {
             <ArrowLeft className="h-3.5 w-3.5" /> Back to Brands
           </Link>
         }
-        actions={<IdentitySheet brand={brand} onSaved={load} />}
+        actions={<IdentitySheet brand={brand} onSaved={() => load(true)} />}
       />
 
       <InfoStrip brand={brand} />
@@ -2305,10 +2508,10 @@ export default function BrandDetailPage({ brandId }: { brandId: string }) {
         </TabsList>
 
         <TabsContent value="overview" className="mt-4">
-          <OverviewTab brand={brand} onSaved={load} />
+          <OverviewTab brand={brand} onSaved={() => load(true)} />
         </TabsContent>
         <TabsContent value="contact" className="mt-4">
-          <ContactTab brand={brand} onSaved={load} />
+          <ContactTab brand={brand} onSaved={() => load(true)} />
         </TabsContent>
         <TabsContent value="landing" className="mt-4">
           <LandingPageTab brandId={brandId} />
@@ -2329,7 +2532,7 @@ export default function BrandDetailPage({ brandId }: { brandId: string }) {
           <LegalDocsTab brandSlug={brand.slug} />
         </TabsContent>
         <TabsContent value="settings" className="mt-4">
-          <SettingsTab brand={brand} onSaved={load} />
+          <SettingsTab brand={brand} onSaved={() => load(true)} />
         </TabsContent>
       </Tabs>
     </div>
