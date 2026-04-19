@@ -14,6 +14,7 @@ import {
     UpdateSystemAnnouncementHandler,
     DeleteSystemAnnouncementHandler,
     TogglePublishSystemAnnouncementHandler,
+    GetAdminSystemAnnouncementHandler,
 } from './application/commands/handlers/manage-system-announcements.handler';
 
 @Module({
@@ -37,6 +38,7 @@ import {
         UpdateSystemAnnouncementHandler,
         DeleteSystemAnnouncementHandler,
         TogglePublishSystemAnnouncementHandler,
+        GetAdminSystemAnnouncementHandler,
     ],
 })
 export class SystemModule { }

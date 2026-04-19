@@ -1,19 +1,17 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import {
   PlusIcon,
   PencilSquareIcon,
   TrashIcon,
-  XMarkIcon,
   ArrowPathIcon,
   GlobeAltIcon,
   EyeSlashIcon,
 } from "@heroicons/react/24/outline";
 import {
   listSystemAnnouncements,
-  createSystemAnnouncement,
-  updateSystemAnnouncement,
   deleteSystemAnnouncement,
   publishSystemAnnouncement,
   type SystemAnnouncement,
@@ -40,8 +38,6 @@ export default function SystemAnnouncementsPage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
-  const [editTarget, setEditTarget] = useState<SystemAnnouncement | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SystemAnnouncement | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [publishLoading, setPublishLoading] = useState<string | null>(null);
@@ -52,8 +48,8 @@ export default function SystemAnnouncementsPage() {
     setError(null);
     try {
       const res = await listSystemAnnouncements({ page, limit });
-      setItems(res.data);
-      setTotal(res.meta.total);
+      setItems(res.data ?? []);
+      setTotal(res.meta?.total ?? 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
     } finally {
@@ -117,14 +113,13 @@ export default function SystemAnnouncementsPage() {
               <ArrowPathIcon className="h-3.5 w-3.5" />
               Refresh
             </button>
-            <button
-              type="button"
-              onClick={() => setShowCreate(true)}
+            <Link
+              href="/platform/announcements/new"
               className="inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600"
             >
               <PlusIcon className="h-3.5 w-3.5" />
               New Announcement
-            </button>
+            </Link>
           </div>
         </div>
 
@@ -236,13 +231,12 @@ export default function SystemAnnouncementsPage() {
                             <GlobeAltIcon className="h-3.5 w-3.5" />
                           )}
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditTarget(a)}
+                        <Link
+                          href={`/platform/announcements/${a.id}/edit`}
                           className="rounded-md border border-zinc-200 p-1 text-zinc-500 hover:bg-zinc-50"
                         >
                           <PencilSquareIcon className="h-3.5 w-3.5" />
-                        </button>
+                        </Link>
                         <button
                           type="button"
                           onClick={() => setDeleteTarget(a)}
@@ -283,16 +277,6 @@ export default function SystemAnnouncementsPage() {
         )}
       </section>
 
-      {showCreate && (
-        <AnnouncementModal onClose={() => setShowCreate(false)} onSaved={load} />
-      )}
-      {editTarget && (
-        <AnnouncementModal
-          item={editTarget}
-          onClose={() => setEditTarget(null)}
-          onSaved={load}
-        />
-      )}
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
           <div className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-6 shadow-xl">
@@ -324,317 +308,3 @@ export default function SystemAnnouncementsPage() {
   );
 }
 
-function AnnouncementModal({
-  item,
-  onClose,
-  onSaved,
-}: {
-  item?: SystemAnnouncement;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const [title, setTitle] = useState(item?.title ?? "");
-  const [content, setContent] = useState(item?.content ?? "");
-  const [summary, setSummary] = useState(item?.summary ?? "");
-  const [type, setType] = useState(item?.type ?? "general");
-  const [priority, setPriority] = useState(item?.priority ?? "normal");
-  const [targetAudience, setTargetAudience] = useState(item?.targetAudience ?? "all");
-  const [isPublished, setIsPublished] = useState(item?.isPublished ?? false);
-  const [showBanner, setShowBanner] = useState(item?.showBanner ?? false);
-  const [isDismissible, setIsDismissible] = useState(item?.isDismissible ?? true);
-  const [actionUrl, setActionUrl] = useState(item?.actionUrl ?? "");
-  const [actionLabel, setActionLabel] = useState(item?.actionLabel ?? "");
-  const [startDate, setStartDate] = useState(
-    item?.startDate ? item.startDate.slice(0, 10) : "",
-  );
-  const [endDate, setEndDate] = useState(
-    item?.endDate ? item.endDate.slice(0, 10) : "",
-  );
-  const [imageUrl, setImageUrl] = useState(
-    (item?.metadata?.imageUrl as string) ?? "",
-  );
-  const [author, setAuthor] = useState(
-    (item?.metadata?.author as string) ?? "",
-  );
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    const payload = {
-      title,
-      content,
-      summary: summary || undefined,
-      type,
-      priority,
-      targetAudience,
-      isPublished,
-      showBanner,
-      isDismissible,
-      actionUrl: actionUrl || undefined,
-      actionLabel: actionLabel || undefined,
-      startDate: startDate || undefined,
-      endDate: endDate || undefined,
-      metadata: {
-        ...(item?.metadata ?? {}),
-        imageUrl: imageUrl || undefined,
-        author: author || undefined,
-      },
-    };
-
-    try {
-      if (item) {
-        await updateSystemAnnouncement(item.id, payload);
-      } else {
-        await createSystemAnnouncement(payload);
-      }
-      onSaved();
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const inputCls =
-    "block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/30 py-8">
-      <div className="w-full max-w-2xl rounded-xl border border-zinc-200 bg-white p-6 shadow-xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-zinc-900">
-            {item ? "Edit Announcement" : "New Announcement"}
-          </h2>
-          <button onClick={onClose}>
-            <XMarkIcon className="h-5 w-5 text-zinc-400" />
-          </button>
-        </div>
-
-        {error && (
-          <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div>
-            <label className="mb-1 block text-[11px] font-medium text-zinc-700">
-              Title<span className="ml-0.5 text-red-500">*</span>
-            </label>
-            <input
-              required
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className={inputCls}
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-[11px] font-medium text-zinc-700">
-              Content<span className="ml-0.5 text-red-500">*</span>
-            </label>
-            <textarea
-              required
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              rows={4}
-              className={inputCls}
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-[11px] font-medium text-zinc-700">
-              Summary / Excerpt
-              <span className="ml-1 text-zinc-400">(shown on listing page)</span>
-            </label>
-            <textarea
-              value={summary}
-              onChange={(e) => setSummary(e.target.value)}
-              rows={2}
-              className={inputCls}
-            />
-          </div>
-
-          <div className="grid grid-cols-3 gap-2">
-            <div>
-              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Type</label>
-              <select
-                value={type}
-                onChange={(e) => setType(e.target.value)}
-                className={inputCls}
-              >
-                <option value="general">General</option>
-                <option value="maintenance">Maintenance</option>
-                <option value="deadline">Deadline</option>
-                <option value="feature">Feature</option>
-                <option value="alert">Alert</option>
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Priority</label>
-              <select
-                value={priority}
-                onChange={(e) => setPriority(e.target.value)}
-                className={inputCls}
-              >
-                <option value="low">Low</option>
-                <option value="normal">Normal</option>
-                <option value="high">High</option>
-                <option value="urgent">Urgent</option>
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-[11px] font-medium text-zinc-700">
-                Target Audience
-              </label>
-              <select
-                value={targetAudience}
-                onChange={(e) => setTargetAudience(e.target.value)}
-                className={inputCls}
-              >
-                <option value="all">All</option>
-                <option value="participants">Participants</option>
-                <option value="ambassadors">Ambassadors</option>
-                <option value="specific_program">Specific Program</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="mb-1 block text-[11px] font-medium text-zinc-700">
-                Image URL
-                <span className="ml-1 text-zinc-400">(shown on listing)</span>
-              </label>
-              <input
-                type="url"
-                value={imageUrl}
-                onChange={(e) => setImageUrl(e.target.value)}
-                placeholder="https://..."
-                className={inputCls}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Author</label>
-              <input
-                type="text"
-                value={author}
-                onChange={(e) => setAuthor(e.target.value)}
-                placeholder="YBB Team"
-                className={inputCls}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="mb-1 block text-[11px] font-medium text-zinc-700">
-                CTA Label
-              </label>
-              <input
-                type="text"
-                value={actionLabel}
-                onChange={(e) => setActionLabel(e.target.value)}
-                placeholder="Read More"
-                className={inputCls}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[11px] font-medium text-zinc-700">CTA URL</label>
-              <input
-                type="url"
-                value={actionUrl}
-                onChange={(e) => setActionUrl(e.target.value)}
-                placeholder="https://..."
-                className={inputCls}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="mb-1 block text-[11px] font-medium text-zinc-700">
-                Start Date
-              </label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className={inputCls}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[11px] font-medium text-zinc-700">End Date</label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className={inputCls}
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-4 pt-1">
-            <div className="flex items-center gap-2">
-              <input
-                id="published"
-                type="checkbox"
-                checked={isPublished}
-                onChange={(e) => setIsPublished(e.target.checked)}
-                className="h-3.5 w-3.5"
-              />
-              <label htmlFor="published" className="text-[11px] font-medium text-zinc-700">
-                Published
-              </label>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                id="banner"
-                type="checkbox"
-                checked={showBanner}
-                onChange={(e) => setShowBanner(e.target.checked)}
-                className="h-3.5 w-3.5"
-              />
-              <label htmlFor="banner" className="text-[11px] font-medium text-zinc-700">
-                Show Banner
-              </label>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                id="dismissible"
-                type="checkbox"
-                checked={isDismissible}
-                onChange={(e) => setIsDismissible(e.target.checked)}
-                className="h-3.5 w-3.5"
-              />
-              <label htmlFor="dismissible" className="text-[11px] font-medium text-zinc-700">
-                Dismissible
-              </label>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md border border-zinc-200 px-3 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-60"
-            >
-              {loading ? "Saving…" : item ? "Save Changes" : "Create"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
