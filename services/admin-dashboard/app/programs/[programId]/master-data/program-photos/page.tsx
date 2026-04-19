@@ -14,7 +14,10 @@ import {
 
 export default function ProgramPhotosPage() {
   const params = useParams<{ programId: string }>();
-  const { accessiblePrograms } = useAuth();
+  const { accessiblePrograms, adminProfile } = useAuth();
+  const program = accessiblePrograms.find((p) => p.programId === params.programId);
+  const brandId = program?.brandId ?? "";
+  const userId = adminProfile?.userId ?? "";
   const [items, setItems] = useState<ProgramGalleryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -116,10 +119,23 @@ export default function ProgramPhotosPage() {
       </section>
 
       {showCreate && (
-        <PhotoModal programId={params.programId} onClose={() => setShowCreate(false)} onSaved={fetchItems} />
+        <PhotoModal
+          programId={params.programId}
+          userId={userId}
+          brandId={brandId}
+          onClose={() => setShowCreate(false)}
+          onSaved={fetchItems}
+        />
       )}
       {editTarget && (
-        <PhotoModal programId={params.programId} item={editTarget} onClose={() => setEditTarget(null)} onSaved={fetchItems} />
+        <PhotoModal
+          programId={params.programId}
+          userId={userId}
+          brandId={brandId}
+          item={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSaved={fetchItems}
+        />
       )}
       {deleteTarget && (
         <ConfirmDelete name={deleteTarget.title ?? "this photo"} loading={deleteLoading} onCancel={() => setDeleteTarget(null)} onConfirm={handleDelete} />
@@ -132,11 +148,15 @@ export default function ProgramPhotosPage() {
 
 function PhotoModal({
   programId,
+  userId,
+  brandId,
   item,
   onClose,
   onSaved,
 }: {
   programId: string;
+  userId: string;
+  brandId: string;
   item?: ProgramGalleryItem;
   onClose: () => void;
   onSaved: () => void;
@@ -165,6 +185,7 @@ function PhotoModal({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!isEdit && !imageFile) { setError("Please select an image to upload."); return; }
+    if (!userId || !brandId) { setError("You must be signed in to an accessible program."); return; }
     setLoading(true); setError(null);
     try {
       if (isEdit && item) {
@@ -173,7 +194,7 @@ function PhotoModal({
           description: description || undefined,
           year: year ? Number(year) : undefined,
           order: order !== "" ? Number(order) : undefined,
-          ...(imageFile ? { image: imageFile } : {}),
+          ...(imageFile ? { image: imageFile, userId, brandId } : {}),
         });
       } else {
         await createProgramGalleryItem(programId, {
@@ -182,6 +203,8 @@ function PhotoModal({
           year: year ? Number(year) : undefined,
           order: order !== "" ? Number(order) : undefined,
           image: imageFile!,
+          userId,
+          brandId,
         });
       }
       onSaved();

@@ -24,7 +24,8 @@ class FileDto(BaseModel):
     metadata: Optional[dict] = None
     program_id: Optional[str] = None
     asset_type: Optional[str] = None
-    
+    status: str = "PROCESSING"
+
     @staticmethod
     def from_entity(file: File, download_url: Optional[str] = None, url: Optional[str] = None) -> 'FileDto':
         """Convert domain entity to DTO."""
@@ -45,14 +46,45 @@ class FileDto(BaseModel):
             metadata=file.metadata,
             program_id=file.program_id,
             asset_type=file.asset_type,
+            status=file.status,
         )
 
 
 class UploadFileResponseDto(BaseModel):
     """Response DTO for file upload."""
-    
+
     file: FileDto
     message: str = "File uploaded successfully"
+
+
+class CreateUploadUrlRequestDto(BaseModel):
+    """Request body for POST /files/upload-url."""
+
+    filename: str
+    content_type: str
+    size: int
+    user_id: str
+    brand_id: str
+    bucket: str = "documents"
+    program_id: Optional[str] = None
+    participant_id: Optional[str] = None
+    asset_type: Optional[str] = None
+
+
+class CreateUploadUrlResponseDto(BaseModel):
+    """Response DTO for the presigned-URL upload flow.
+
+    `upload_url` is the S3/Spaces presigned PUT URL — the client uploads bytes here directly.
+    `public_url` is the final CDN URL the object will be reachable at once ready.
+    After the PUT succeeds, the client calls PATCH /files/{file_id}/ready.
+    """
+
+    file_id: str
+    upload_url: str
+    storage_path: str
+    bucket: str
+    public_url: Optional[str] = None
+    expires_in_seconds: int
 
 
 class PaginatedFilesDto(BaseModel):

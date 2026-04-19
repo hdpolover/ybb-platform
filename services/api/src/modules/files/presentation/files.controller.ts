@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Patch,
   Param,
   UseGuards,
   UseInterceptors,
@@ -14,7 +15,12 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { StorageService } from '../application/storage.service';
-import { FileServiceClient, FileResponse } from '../infrastructure/clients/file-service.client';
+import {
+  CreateUploadUrlRequest,
+  CreateUploadUrlResponse,
+  FileResponse,
+  FileServiceClient,
+} from '../infrastructure/clients/file-service.client';
 import { FileGrpcClient } from '../infrastructure/clients/file-grpc-client.service';
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
 
@@ -150,6 +156,38 @@ export class FilesController {
       status: 'ok',
       timestamp: new Date().toISOString(),
     };
+  }
+
+  @Post('upload-url')
+  @ApiOperation({
+    summary:
+      'Presigned PUT URL (REST flow) — validates + reserves a PROCESSING file row, returns URL the client PUTs to directly',
+  })
+  @ApiResponse({ status: 201, description: 'Upload URL issued' })
+  async requestUploadUrl(
+    @Body() dto: CreateUploadUrlRequest,
+  ): Promise<{ success: boolean; data: CreateUploadUrlResponse }> {
+    this.logger.log(`Requesting upload URL for ${dto.filename} (brand ${dto.brand_id})`);
+    const data = await this.fileServiceClient.createUploadUrl(dto);
+    this.metricsService.fileUploadsTotal.inc({ file_type: dto.bucket ?? 'documents' });
+    return { success: true, data };
+  }
+
+  @Patch(':fileId/ready')
+  @ApiOperation({
+    summary:
+      'Mark a file as READY after the client PUT to the presigned URL succeeded (idempotent)',
+  })
+  @ApiResponse({ status: 200, description: 'File transitioned to READY (or already was)' })
+  async markFileReady(
+    @Param('fileId') fileId: string,
+    @Query('brand_id') brandId: string,
+    @Query('actual_size') actualSize?: string,
+  ): Promise<{ success: boolean; data: FileResponse }> {
+    this.logger.log(`Marking file ready: ${fileId} (brand ${brandId})`);
+    const size = actualSize ? Number(actualSize) : undefined;
+    const data = await this.fileServiceClient.markFileReady(fileId, brandId, size);
+    return { success: true, data };
   }
 
   @Post('presigned-upload-url')

@@ -56,6 +56,8 @@ import {
   updatePlatformBrandIdentity,
   updatePlatformBrandDetails,
   updatePlatformBrandSettings,
+  getBrandMetadata,
+  updatePlatformBrandMetadata,
   type AdminOption,
   type BrandAdmin,
   type BrandSponsor,
@@ -63,6 +65,12 @@ import {
   type LegalDocument,
   type PlatformBrandDetail,
   type PlatformProgram,
+  type BrandMetadata,
+  type BenefitGroup,
+  type BrandFeature,
+  type BrandImpactStats,
+  type BrandPromoCta,
+  type BrandMomentsShorts,
 } from "../../api";
 
 // ─── Field primitives ─────────────────────────────────────────────────────────
@@ -966,6 +974,587 @@ function SettingsTab({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved: 
   );
 }
 
+// ─── Tab: Landing Page ────────────────────────────────────────────────────────
+
+// ─── Benefits Sheet ──────────────────────────────────────────────────────────
+
+function BenefitsSheet({
+  brandId,
+  initial,
+  onSaved,
+}: {
+  brandId: string;
+  initial: BrandMetadata["benefits"];
+  onSaved: (updated: BrandMetadata) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [eyebrow, setEyebrow] = useState(initial?.eyebrow ?? "");
+  const [title, setTitle] = useState(initial?.title ?? "");
+  const [groups, setGroups] = useState<BenefitGroup[]>(initial?.groups ?? []);
+
+  function resetState() {
+    setEyebrow(initial?.eyebrow ?? "");
+    setTitle(initial?.title ?? "");
+    setGroups(initial?.groups ?? []);
+    setError(null);
+  }
+
+  function addGroup() {
+    setGroups((gs) => [
+      ...gs,
+      { id: `group_${Date.now()}`, title: "", imageUrl: "", items: [""] },
+    ]);
+  }
+
+  function removeGroup(idx: number) {
+    setGroups((gs) => gs.filter((_, i) => i !== idx));
+  }
+
+  function setGroupField(idx: number, field: keyof BenefitGroup, value: string) {
+    setGroups((gs) =>
+      gs.map((g, i) => (i === idx ? { ...g, [field]: value } : g)),
+    );
+  }
+
+  function setGroupItems(idx: number, items: string[]) {
+    setGroups((gs) => gs.map((g, i) => (i === idx ? { ...g, items } : g)));
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await updatePlatformBrandMetadata(brandId, {
+        benefits: { eyebrow, title, groups },
+      });
+      onSaved(updated);
+      setOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <Button size="sm" variant="outline" onClick={() => { resetState(); setOpen(true); }}>
+        <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
+      </Button>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent side="right" className="sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Edit Program Benefits</SheetTitle>
+          </SheetHeader>
+          <div className="mt-6 space-y-5">
+            <SheetMsg message={error} variant="error" />
+            <FieldInput label="Eyebrow text" id="ben-eyebrow" value={eyebrow} onChange={setEyebrow} placeholder="Program Benefits" />
+            <FieldInput label="Section title" id="ben-title" value={title} onChange={setTitle} placeholder="Built for Students & Professionals" />
+
+            <div className="border-t border-zinc-100 pt-4">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Audience Groups</p>
+                <Button size="sm" variant="outline" onClick={addGroup}>
+                  <Plus className="mr-1 h-3.5 w-3.5" /> Add Group
+                </Button>
+              </div>
+              <div className="space-y-4">
+                {groups.map((group, gi) => (
+                  <div key={gi} className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-medium text-zinc-500">Group {gi + 1}</p>
+                      <Button size="sm" variant="ghost" onClick={() => removeGroup(gi)}>
+                        <X className="h-3.5 w-3.5 text-red-500" />
+                      </Button>
+                    </div>
+                    <FieldInput label="Title" id={`g-title-${gi}`} value={group.title} onChange={(v) => setGroupField(gi, "title", v)} placeholder="Benefits for High School Students" />
+                    <FieldInput label="Image URL" id={`g-img-${gi}`} value={group.imageUrl ?? ""} onChange={(v) => setGroupField(gi, "imageUrl", v)} placeholder="https://..." />
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <Label>Benefit Items</Label>
+                        <button
+                          type="button"
+                          className="text-xs text-blue-500 hover:underline"
+                          onClick={() => setGroupItems(gi, [...group.items, ""])}
+                        >
+                          + Add item
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        {group.items.map((item, ii) => (
+                          <div key={ii} className="flex gap-2">
+                            <input
+                              className="flex-1 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                              value={item}
+                              placeholder={`Item ${ii + 1}`}
+                              onChange={(e) => {
+                                const newItems = [...group.items];
+                                newItems[ii] = e.target.value;
+                                setGroupItems(gi, newItems);
+                              }}
+                            />
+                            <button
+                              type="button"
+                              className="shrink-0 text-zinc-400 hover:text-red-500"
+                              onClick={() => setGroupItems(gi, group.items.filter((_, i) => i !== ii))}
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {groups.length === 0 && (
+                  <p className="text-sm text-zinc-400 text-center py-4">No groups yet. Click "Add Group" to create one.</p>
+                )}
+              </div>
+            </div>
+          </div>
+          <SheetFooter className="mt-6">
+            <Button onClick={handleSave} loading={saving} disabled={saving}>
+              <Save className="mr-1.5 h-4 w-4" /> Save
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+    </>
+  );
+}
+
+// ─── Features Sheet ───────────────────────────────────────────────────────────
+
+function FeaturesSheet({
+  brandId,
+  initial,
+  onSaved,
+}: {
+  brandId: string;
+  initial: BrandFeature[] | undefined;
+  onSaved: (updated: BrandMetadata) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [features, setFeatures] = useState<BrandFeature[]>(initial ?? []);
+
+  function resetState() {
+    setFeatures(initial ?? []);
+    setError(null);
+  }
+
+  function addFeature() {
+    setFeatures((fs) => [
+      ...fs,
+      { id: `f${Date.now()}`, icon: "star", title: "", description: "" },
+    ]);
+  }
+
+  function setFeatureField(idx: number, field: keyof BrandFeature, value: string) {
+    setFeatures((fs) =>
+      fs.map((f, i) => (i === idx ? { ...f, [field]: value } : f)),
+    );
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await updatePlatformBrandMetadata(brandId, { features });
+      onSaved(updated);
+      setOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <Button size="sm" variant="outline" onClick={() => { resetState(); setOpen(true); }}>
+        <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
+      </Button>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent side="right" className="sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Edit Key Features</SheetTitle>
+          </SheetHeader>
+          <div className="mt-6 space-y-5">
+            <SheetMsg message={error} variant="error" />
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Features</p>
+              <Button size="sm" variant="outline" onClick={addFeature}>
+                <Plus className="mr-1 h-3.5 w-3.5" /> Add Feature
+              </Button>
+            </div>
+            <div className="space-y-4">
+              {features.map((f, fi) => (
+                <div key={fi} className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-medium text-zinc-500">Feature {fi + 1}</p>
+                    <Button size="sm" variant="ghost" onClick={() => setFeatures((fs) => fs.filter((_, i) => i !== fi))}>
+                      <X className="h-3.5 w-3.5 text-red-500" />
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <FieldInput label="Icon key" id={`f-icon-${fi}`} value={f.icon} onChange={(v) => setFeatureField(fi, "icon", v)} placeholder="globe" />
+                    <FieldInput label="Title" id={`f-title-${fi}`} value={f.title} onChange={(v) => setFeatureField(fi, "title", v)} placeholder="Feature title" />
+                  </div>
+                  <FieldTextarea label="Description" id={`f-desc-${fi}`} value={f.description} onChange={(v) => setFeatureField(fi, "description", v)} rows={2} />
+                </div>
+              ))}
+              {features.length === 0 && (
+                <p className="text-sm text-zinc-400 text-center py-4">No features yet.</p>
+              )}
+            </div>
+          </div>
+          <SheetFooter className="mt-6">
+            <Button onClick={handleSave} loading={saving} disabled={saving}>
+              <Save className="mr-1.5 h-4 w-4" /> Save
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+    </>
+  );
+}
+
+// ─── Impact Stats Sheet ───────────────────────────────────────────────────────
+
+function ImpactStatsSheet({
+  brandId,
+  initial,
+  onSaved,
+}: {
+  brandId: string;
+  initial: BrandImpactStats | undefined;
+  onSaved: (updated: BrandMetadata) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState<BrandImpactStats>(initial ?? {});
+
+  function set(k: keyof BrandImpactStats, v: string) {
+    setForm((f) => ({ ...f, [k]: v }));
+    setError(null);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await updatePlatformBrandMetadata(brandId, { impact_stats: form });
+      onSaved(updated);
+      setOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <Button size="sm" variant="outline" onClick={() => { setForm(initial ?? {}); setError(null); setOpen(true); }}>
+        <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
+      </Button>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent side="right" className="sm:max-w-md overflow-y-auto">
+          <SheetHeader><SheetTitle>Edit Impact Stats</SheetTitle></SheetHeader>
+          <div className="mt-6 space-y-4">
+            <SheetMsg message={error} variant="error" />
+            <FieldInput label="Total Participants" id="stat-participants" value={form.total_participants ?? ""} onChange={(v) => set("total_participants", v)} placeholder="8,500+" />
+            <FieldInput label="Total Countries" id="stat-countries" value={form.total_countries ?? ""} onChange={(v) => set("total_countries", v)} placeholder="62" />
+            <FieldInput label="Total Alumni" id="stat-alumni" value={form.total_alumni ?? ""} onChange={(v) => set("total_alumni", v)} placeholder="7,200+" />
+            <FieldInput label="Editions Held" id="stat-editions" value={form.editions_held ?? ""} onChange={(v) => set("editions_held", v)} placeholder="5" />
+          </div>
+          <SheetFooter className="mt-6">
+            <Button onClick={handleSave} loading={saving} disabled={saving}>
+              <Save className="mr-1.5 h-4 w-4" /> Save
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+    </>
+  );
+}
+
+// ─── Promo CTA Sheet ──────────────────────────────────────────────────────────
+
+function PromoCtaSheet({
+  brandId,
+  initial,
+  onSaved,
+}: {
+  brandId: string;
+  initial: BrandPromoCta | undefined;
+  onSaved: (updated: BrandMetadata) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState<BrandPromoCta>(initial ?? {});
+
+  function set(k: keyof BrandPromoCta, v: string) {
+    setForm((f) => ({ ...f, [k]: v }));
+    setError(null);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await updatePlatformBrandMetadata(brandId, { promo_cta: form });
+      onSaved(updated);
+      setOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <Button size="sm" variant="outline" onClick={() => { setForm(initial ?? {}); setError(null); setOpen(true); }}>
+        <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
+      </Button>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent side="right" className="sm:max-w-md overflow-y-auto">
+          <SheetHeader><SheetTitle>Edit Promo CTA</SheetTitle></SheetHeader>
+          <div className="mt-6 space-y-4">
+            <SheetMsg message={error} variant="error" />
+            <FieldInput label="Eyebrow" id="cta-eyebrow" value={form.eyebrow ?? ""} onChange={(v) => set("eyebrow", v)} placeholder="Ready to Lead?" />
+            <FieldInput label="Title" id="cta-title" value={form.title ?? ""} onChange={(v) => set("title", v)} placeholder="Join the Summit!" />
+            <FieldTextarea label="Subtitle" id="cta-subtitle" value={form.subtitle ?? ""} onChange={(v) => set("subtitle", v)} rows={2} />
+            <div className="grid grid-cols-2 gap-3">
+              <FieldInput label="Button Label" id="cta-label" value={form.primary_cta_label ?? ""} onChange={(v) => set("primary_cta_label", v)} placeholder="Apply Now" />
+              <FieldInput label="Button URL" id="cta-href" value={form.primary_cta_href ?? ""} onChange={(v) => set("primary_cta_href", v)} placeholder="/apply" />
+            </div>
+            <div className="border-t border-zinc-100 pt-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">Video</p>
+              <div className="space-y-3">
+                <FieldInput label="Embed URL" id="cta-video" value={form.video_url ?? ""} onChange={(v) => set("video_url", v)} placeholder="https://youtube.com/embed/..." />
+                <FieldInput label="Video Title" id="cta-vtitle" value={form.video_title ?? ""} onChange={(v) => set("video_title", v)} placeholder="Registration Guideline" />
+                <FieldTextarea label="Video Description" id="cta-vdesc" value={form.video_description ?? ""} onChange={(v) => set("video_description", v)} rows={2} />
+              </div>
+            </div>
+          </div>
+          <SheetFooter className="mt-6">
+            <Button onClick={handleSave} loading={saving} disabled={saving}>
+              <Save className="mr-1.5 h-4 w-4" /> Save
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+    </>
+  );
+}
+
+// ─── Moments Shorts Sheet ─────────────────────────────────────────────────────
+
+function MomentsShortsSheet({
+  brandId,
+  initial,
+  onSaved,
+}: {
+  brandId: string;
+  initial: BrandMomentsShorts | undefined;
+  onSaved: (updated: BrandMetadata) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState<BrandMomentsShorts>(initial ?? {});
+
+  function set(k: keyof BrandMomentsShorts, v: string) {
+    setForm((f) => ({ ...f, [k]: v }));
+    setError(null);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await updatePlatformBrandMetadata(brandId, { moments_shorts: form });
+      onSaved(updated);
+      setOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <Button size="sm" variant="outline" onClick={() => { setForm(initial ?? {}); setError(null); setOpen(true); }}>
+        <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
+      </Button>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent side="right" className="sm:max-w-md overflow-y-auto">
+          <SheetHeader><SheetTitle>Edit Moments Shorts</SheetTitle></SheetHeader>
+          <div className="mt-6 space-y-4">
+            <SheetMsg message={error} variant="error" />
+            <FieldInput label="Eyebrow" id="ms-eyebrow" value={form.eyebrow ?? ""} onChange={(v) => set("eyebrow", v)} placeholder="Short Highlights" />
+            <FieldInput label="Title" id="ms-title" value={form.title ?? ""} onChange={(v) => set("title", v)} placeholder="Discover Our Moments in 60 Seconds" />
+            <FieldTextarea label="Description" id="ms-desc" value={form.description ?? ""} onChange={(v) => set("description", v)} rows={3} />
+          </div>
+          <SheetFooter className="mt-6">
+            <Button onClick={handleSave} loading={saving} disabled={saving}>
+              <Save className="mr-1.5 h-4 w-4" /> Save
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+    </>
+  );
+}
+
+// ─── Landing Page Tab ─────────────────────────────────────────────────────────
+
+function LandingPageTab({ brandId }: { brandId: string }) {
+  const [meta, setMeta] = useState<BrandMetadata | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setFetchError(null);
+    try {
+      const data = await getBrandMetadata(brandId);
+      setMeta(data);
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : "Failed to load metadata.");
+    } finally {
+      setLoading(false);
+    }
+  }, [brandId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) return <p className="text-sm text-zinc-400 py-8 text-center">Loading…</p>;
+  if (fetchError) return <p className="text-sm text-red-500 py-8 text-center">{fetchError}</p>;
+  if (!meta) return null;
+
+  return (
+    <div className="space-y-4">
+      {/* Benefits */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Program Benefits</CardTitle>
+            <BenefitsSheet brandId={brandId} initial={meta.benefits} onSaved={setMeta} />
+          </div>
+        </CardHeader>
+        <CardContent>
+          {meta.benefits ? (
+            <div className="space-y-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <FieldView label="Eyebrow" value={meta.benefits.eyebrow} />
+                <FieldView label="Title" value={meta.benefits.title} />
+              </div>
+              <div className="space-y-2">
+                {meta.benefits.groups.map((g, i) => (
+                  <div key={i} className="rounded-lg border border-zinc-100 bg-zinc-50 px-4 py-3">
+                    <p className="text-sm font-medium text-zinc-800">{g.title || <span className="text-zinc-400">Untitled group</span>}</p>
+                    <p className="mt-0.5 text-xs text-zinc-400">{g.items.length} items{g.imageUrl ? " · has image" : ""}</p>
+                  </div>
+                ))}
+                {meta.benefits.groups.length === 0 && <p className="text-sm text-zinc-400">No groups defined.</p>}
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-zinc-400">No benefits data yet.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Key Features */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Key Features</CardTitle>
+            <FeaturesSheet brandId={brandId} initial={meta.features} onSaved={setMeta} />
+          </div>
+        </CardHeader>
+        <CardContent>
+          {meta.features && meta.features.length > 0 ? (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {meta.features.map((f, i) => (
+                <div key={i} className="rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2">
+                  <p className="text-sm font-medium text-zinc-800">{f.title}</p>
+                  <p className="text-xs text-zinc-400">icon: {f.icon}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-zinc-400">No features defined.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Impact Stats */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Impact Stats</CardTitle>
+            <ImpactStatsSheet brandId={brandId} initial={meta.impact_stats} onSaved={setMeta} />
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <FieldView label="Total Participants" value={meta.impact_stats?.total_participants} />
+            <FieldView label="Total Countries" value={meta.impact_stats?.total_countries} />
+            <FieldView label="Total Alumni" value={meta.impact_stats?.total_alumni} />
+            <FieldView label="Editions Held" value={meta.impact_stats?.editions_held} />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Promo CTA */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Promo / CTA Section</CardTitle>
+            <PromoCtaSheet brandId={brandId} initial={meta.promo_cta} onSaved={setMeta} />
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <FieldView label="Eyebrow" value={meta.promo_cta?.eyebrow} />
+            <FieldView label="Button Label" value={meta.promo_cta?.primary_cta_label} />
+            <FieldView label="Title" value={meta.promo_cta?.title} />
+            <FieldView label="Button URL" value={meta.promo_cta?.primary_cta_href} />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Moments Shorts */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Moments Shorts (Video Section)</CardTitle>
+            <MomentsShortsSheet brandId={brandId} initial={meta.moments_shorts} onSaved={setMeta} />
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <FieldView label="Eyebrow" value={meta.moments_shorts?.eyebrow} />
+            <FieldView label="Title" value={meta.moments_shorts?.title} />
+            <FieldView label="Description" value={meta.moments_shorts?.description} />
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // ─── Tab: Sponsors ────────────────────────────────────────────────────────────
 
 function SponsorsTab({ brandId }: { brandId: string }) {
@@ -1700,6 +2289,7 @@ export default function BrandDetailPage({ brandId }: { brandId: string }) {
             <Users className="mr-1.5 h-3.5 w-3.5" />
             Contact
           </TabsTrigger>
+          <TabsTrigger value="landing">Landing Page</TabsTrigger>
           <TabsTrigger value="programs">
             <Layers className="mr-1.5 h-3.5 w-3.5" />
             Programs
@@ -1719,6 +2309,9 @@ export default function BrandDetailPage({ brandId }: { brandId: string }) {
         </TabsContent>
         <TabsContent value="contact" className="mt-4">
           <ContactTab brand={brand} onSaved={load} />
+        </TabsContent>
+        <TabsContent value="landing" className="mt-4">
+          <LandingPageTab brandId={brandId} />
         </TabsContent>
         <TabsContent value="programs" className="mt-4">
           <ProgramsTab brandId={brandId} />

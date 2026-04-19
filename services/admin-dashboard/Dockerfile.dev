@@ -6,7 +6,10 @@ WORKDIR /app
 
 # Install dependencies
 COPY package*.json ./
-RUN npm install
+RUN npm install \
+    --fetch-retry-mintimeout 20000 \
+    --fetch-retry-maxtimeout 120000 \
+    --fetch-retries 5
 
 # Copy project files
 COPY . .

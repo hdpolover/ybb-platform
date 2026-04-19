@@ -120,6 +120,28 @@ export class BrandRepository implements IBrandRepository {
         return this.mapToEntity(category);
     }
 
+    async getMetadata(id: string): Promise<Record<string, unknown> | null> {
+        const brand = await this.prisma.brand.findUnique({
+            where: { id },
+            select: { metadata: true },
+        });
+        if (!brand) return null;
+        return (brand.metadata as Record<string, unknown>) ?? {};
+    }
+
+    async updateMetadata(id: string, patch: Record<string, unknown>): Promise<Record<string, unknown>> {
+        const existing = await this.getMetadata(id);
+        if (existing === null) {
+            throw new Error(`Brand with ID ${id} not found`);
+        }
+        const merged = { ...existing, ...patch };
+        await this.prisma.brand.update({
+            where: { id },
+            data: { metadata: merged as Prisma.InputJsonValue },
+        });
+        return merged;
+    }
+
     async delete(id: string): Promise<void> {
         // Soft delete
         await this.prisma.brand.update({

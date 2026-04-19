@@ -176,7 +176,7 @@ export function getPlatformBrand(brandId: string): Promise<PlatformBrandDetail> 
   return request<PlatformBrandDetail>(`/brands/${brandId}`);
 }
 
-export function updatePlatformBrandIdentity(
+export async function updatePlatformBrandIdentity(
   brandId: string,
   input: {
     name: string;
@@ -188,8 +188,44 @@ export function updatePlatformBrandIdentity(
     isActive?: boolean;
     logo?: File | null;
     banner?: File | null;
+    userId: string;
   },
 ): Promise<PlatformBrandDetail> {
+  // Upload logo + banner via the presigned flow before the save call so the
+  // bytes never pass through our API. The backend DTO accepts logoUrl/bannerUrl
+  // string fields — when those are present and no file blob is attached, the
+  // brand handler skips its own upload and just persists the URL we pass.
+  const { uploadFileViaPresignedUrl } = await import("@/src/shared/api-client");
+
+  let logoUrl: string | undefined;
+  let bannerUrl: string | undefined;
+
+  if (input.logo) {
+    const result = await uploadFileViaPresignedUrl(input.logo, {
+      userId: input.userId,
+      brandId,
+      bucket: "brand-logos",
+      assetType: "logo",
+    });
+    if (!result.publicUrl) {
+      throw new Error("Logo uploaded but no public URL was returned.");
+    }
+    logoUrl = result.publicUrl;
+  }
+
+  if (input.banner) {
+    const result = await uploadFileViaPresignedUrl(input.banner, {
+      userId: input.userId,
+      brandId,
+      bucket: "brand-banners",
+      assetType: "banner",
+    });
+    if (!result.publicUrl) {
+      throw new Error("Banner uploaded but no public URL was returned.");
+    }
+    bannerUrl = result.publicUrl;
+  }
+
   const formData = new FormData();
   formData.set("name", input.name);
   formData.set("slug", input.slug);
@@ -198,8 +234,8 @@ export function updatePlatformBrandIdentity(
   if (input.primaryColor != null) formData.set("primaryColor", input.primaryColor);
   if (input.contactEmail != null) formData.set("contactEmail", input.contactEmail);
   if (input.isActive != null) formData.set("isActive", String(input.isActive));
-  if (input.logo) formData.set("logo", input.logo);
-  if (input.banner) formData.set("banner", input.banner);
+  if (logoUrl) formData.set("logoUrl", logoUrl);
+  if (bannerUrl) formData.set("bannerUrl", bannerUrl);
   return request<PlatformBrandDetail>(`/brands/${brandId}`, { method: "PUT", body: formData });
 }
 
@@ -303,6 +339,74 @@ export function updatePlatformBrand(
 export function deletePlatformBrand(brandId: string): Promise<void> {
   return request<void>(`/brands/${brandId}`, {
     method: "DELETE",
+  });
+}
+
+// ─── Brand Landing Page Metadata ──────────────────────────────────────────────
+
+export type BenefitItem = string;
+
+export type BenefitGroup = {
+  id: string;
+  title: string;
+  imageUrl?: string;
+  items: BenefitItem[];
+};
+
+export type BrandFeature = {
+  id: string;
+  icon: string;
+  title: string;
+  description: string;
+};
+
+export type BrandImpactStats = {
+  total_participants?: string;
+  total_countries?: string;
+  total_alumni?: string;
+  editions_held?: string;
+};
+
+export type BrandPromoCta = {
+  eyebrow?: string;
+  title?: string;
+  subtitle?: string;
+  primary_cta_label?: string;
+  primary_cta_href?: string;
+  video_url?: string;
+  video_title?: string;
+  video_description?: string;
+};
+
+export type BrandMomentsShorts = {
+  eyebrow?: string;
+  title?: string;
+  description?: string;
+};
+
+export type BrandMetadata = {
+  benefits?: { eyebrow: string; title: string; groups: BenefitGroup[] };
+  features?: BrandFeature[];
+  impact_stats?: BrandImpactStats;
+  promo_cta?: BrandPromoCta;
+  moments_shorts?: BrandMomentsShorts;
+  recognition?: Record<string, unknown>;
+  payment_info?: Record<string, unknown>;
+  participant_demographics?: Record<string, unknown>;
+  [key: string]: unknown;
+};
+
+export function getBrandMetadata(brandId: string): Promise<BrandMetadata> {
+  return request<BrandMetadata>(`/brands/${brandId}/metadata`);
+}
+
+export function updatePlatformBrandMetadata(
+  brandId: string,
+  patch: Partial<BrandMetadata>,
+): Promise<BrandMetadata> {
+  return request<BrandMetadata>(`/brands/${brandId}/metadata`, {
+    method: "PUT",
+    body: JSON.stringify({ patch }),
   });
 }
 

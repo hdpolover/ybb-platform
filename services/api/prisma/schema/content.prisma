@@ -113,6 +113,7 @@ model ProgramGallery {
   videoUrl    String?   @map("video_url") @db.VarChar(500) // For YouTube/Vimeo links
   title       String?   @db.VarChar(255)
   description String?   @db.Text
+  year        Int? // Optional: year the photo was taken — shown on the admin gallery card
   type        String    @default("image") @db.VarChar(50) // image, video
   order       Int       @default(0)
   isActive    Boolean   @default(true) @map("is_active")

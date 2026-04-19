@@ -596,35 +596,78 @@ export function listProgramGallery(programId: string): Promise<ProgramGalleryIte
   return request<ProgramGalleryItem[]>(`/programs/${programId}/gallery`);
 }
 
-export function createProgramGalleryItem(
+// Gallery creates/updates upload the image via the presigned flow first, then
+// submit the resulting public URL as JSON. Callers pass `userId` and `brandId`
+// so the upload can be scoped correctly — typically sourced from useAuth().
+export async function createProgramGalleryItem(
   programId: string,
-  input: { title?: string; description?: string; year?: number; order?: number; image: File },
+  input: {
+    title?: string;
+    description?: string;
+    year?: number;
+    order?: number;
+    image: File;
+    userId: string;
+    brandId: string;
+  },
 ): Promise<ProgramGalleryItem> {
-  const fd = new FormData();
-  fd.set("programId", programId);
-  if (input.title) fd.set("title", input.title);
-  if (input.description) fd.set("description", input.description);
-  if (input.year !== undefined) fd.set("year", String(input.year));
-  if (input.order !== undefined) fd.set("order", String(input.order));
-  fd.set("image", input.image);
+  const upload = await uploadFileViaPresignedUrl(input.image, {
+    userId: input.userId,
+    brandId: input.brandId,
+    bucket: "gallery",
+    programId,
+    assetType: "gallery",
+  });
+  if (!upload.publicUrl) {
+    throw new Error("Upload succeeded but no public URL was returned.");
+  }
   return request<ProgramGalleryItem>(`/programs/${programId}/gallery`, {
     method: "POST",
-    body: fd,
+    body: JSON.stringify({
+      programId,
+      imageUrl: upload.publicUrl,
+      title: input.title,
+      description: input.description,
+      year: input.year,
+      order: input.order,
+    }),
   });
 }
 
-export function updateProgramGalleryItem(
+export async function updateProgramGalleryItem(
   id: string,
-  input: Partial<Omit<ProgramGalleryItem, "id" | "programId" | "imageUrl">> & { image?: File },
+  input: Partial<Omit<ProgramGalleryItem, "id" | "programId" | "imageUrl">> & {
+    image?: File;
+    userId?: string;
+    brandId?: string;
+  },
 ): Promise<ProgramGalleryItem> {
-  const fd = new FormData();
-  for (const [k, v] of Object.entries(input)) {
-    if (v !== undefined && k !== "image") fd.set(k, String(v));
+  let imageUrl: string | undefined;
+  if (input.image) {
+    if (!input.userId || !input.brandId) {
+      throw new Error("userId and brandId are required when uploading a new image.");
+    }
+    const upload = await uploadFileViaPresignedUrl(input.image, {
+      userId: input.userId,
+      brandId: input.brandId,
+      bucket: "gallery",
+      assetType: "gallery",
+    });
+    if (!upload.publicUrl) {
+      throw new Error("Upload succeeded but no public URL was returned.");
+    }
+    imageUrl = upload.publicUrl;
   }
-  if (input.image) fd.set("image", input.image);
+  const { image: _image, userId: _userId, brandId: _brandId, ...rest } = input;
+  void _image;
+  void _userId;
+  void _brandId;
   return request<ProgramGalleryItem>(`/programs/gallery/${id}`, {
     method: "PUT",
-    body: fd,
+    body: JSON.stringify({
+      ...rest,
+      ...(imageUrl ? { imageUrl } : {}),
+    }),
   });
 }
 
@@ -816,4 +859,190 @@ export function uploadProgramMediaFile(params: {
     `/admin/programs/${params.programId}/media`,
     { method: "POST", body: formData },
   );
+}
+
+// ─── Presigned-URL upload flow ────────────────────────────────────────────────
+// Replaces the multipart path above with direct-to-Spaces uploads. The API
+// never sees file bytes — the client PUTs to a signed URL and then flips the
+// reserved File row from PROCESSING to READY.
+//
+// Use `uploadFileViaPresignedUrl` as the one-shot entry point for most callers.
+// The split helpers are exposed for tests and advanced UIs that need to own
+// the steps (e.g. parallel batch uploads that share one "ready" round-trip).
+
+export type UploadContext = {
+  userId: string;
+  brandId: string;
+  bucket?: string;
+  programId?: string;
+  participantId?: string;
+  assetType?: string;
+};
+
+export type CreateUploadUrlResponse = {
+  file_id: string;
+  upload_url: string;
+  storage_path: string;
+  bucket: string;
+  public_url: string | null;
+  expires_in_seconds: number;
+};
+
+export type UploadProgress = {
+  loaded: number;
+  total: number;
+  percent: number;
+  speedBps: number;
+  etaSecs: number;
+};
+
+export type UploadResult = {
+  fileId: string;
+  publicUrl: string | null;
+  storagePath: string;
+  bucket: string;
+};
+
+const SUPPORTED_DOCUMENT_MIMES = new Set([
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+]);
+const SUPPORTED_IMAGE_MIMES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+
+export function isSupportedUploadMime(mime: string): boolean {
+  return SUPPORTED_DOCUMENT_MIMES.has(mime) || SUPPORTED_IMAGE_MIMES.has(mime);
+}
+
+/**
+ * Ask the gateway for a presigned PUT URL and reserve a File row in PROCESSING.
+ * The server validates MIME + size before issuing the URL, so a 400/413 here
+ * means the file is rejected up-front (no bytes wasted).
+ */
+export function requestUploadUrl(
+  file: File,
+  ctx: UploadContext,
+): Promise<CreateUploadUrlResponse> {
+  return request<CreateUploadUrlResponse>("/files/upload-url", {
+    method: "POST",
+    body: JSON.stringify({
+      filename: file.name,
+      content_type: file.type || "application/octet-stream",
+      size: file.size,
+      user_id: ctx.userId,
+      brand_id: ctx.brandId,
+      bucket: ctx.bucket ?? "documents",
+      program_id: ctx.programId,
+      participant_id: ctx.participantId,
+      asset_type: ctx.assetType,
+    }),
+  });
+}
+
+/**
+ * PUT the file bytes straight to object storage. Does NOT use the shared
+ * `request()` helper because (a) we must not send the JWT Authorization header
+ * to Spaces — the presigned URL is the auth, and (b) fetch can't observe
+ * upload progress, so we need XHR.
+ */
+export function putFileToStorage(
+  file: File,
+  uploadUrl: string,
+  onProgress?: (progress: UploadProgress) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", uploadUrl);
+    xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+
+    // Smooth out the raw progress ticks so ETA doesn't jitter on every packet.
+    let lastTs = Date.now();
+    let lastLoaded = 0;
+    let speedBps = 0;
+
+    xhr.upload.onprogress = (e) => {
+      if (!onProgress || !e.lengthComputable) return;
+      const now = Date.now();
+      const dt = Math.max(1, now - lastTs) / 1000;
+      const dLoaded = e.loaded - lastLoaded;
+      speedBps = speedBps === 0 ? dLoaded / dt : speedBps * 0.7 + (dLoaded / dt) * 0.3;
+      lastTs = now;
+      lastLoaded = e.loaded;
+      const remaining = e.total - e.loaded;
+      onProgress({
+        loaded: e.loaded,
+        total: e.total,
+        percent: e.total === 0 ? 0 : (e.loaded / e.total) * 100,
+        speedBps,
+        etaSecs: speedBps > 0 ? remaining / speedBps : 0,
+      });
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new Error(`Storage upload failed: ${xhr.status} ${xhr.responseText}`));
+    };
+    xhr.onerror = () => reject(new Error("Storage upload network error"));
+    xhr.onabort = () => reject(new DOMException("Upload aborted", "AbortError"));
+
+    if (signal) {
+      if (signal.aborted) {
+        xhr.abort();
+        return;
+      }
+      signal.addEventListener("abort", () => xhr.abort(), { once: true });
+    }
+
+    xhr.send(file);
+  });
+}
+
+/**
+ * Transition a File row from PROCESSING to READY. Idempotent — safe to retry.
+ */
+export function markFileReady(
+  fileId: string,
+  brandId: string,
+  actualSize?: number,
+): Promise<MediaFile> {
+  const qs = new URLSearchParams({ brand_id: brandId });
+  if (actualSize !== undefined) qs.set("actual_size", String(actualSize));
+  return request<MediaFile>(`/files/${fileId}/ready?${qs.toString()}`, {
+    method: "PATCH",
+  });
+}
+
+/**
+ * One-shot upload that handles all three steps. Throws on any failure;
+ * orphaned PROCESSING rows can be cleaned up by a background job or left to
+ * the DB's TTL policy (neither exists yet — flagged as a follow-up).
+ */
+export async function uploadFileViaPresignedUrl(
+  file: File,
+  ctx: UploadContext,
+  onProgress?: (progress: UploadProgress) => void,
+  signal?: AbortSignal,
+): Promise<UploadResult> {
+  if (!isSupportedUploadMime(file.type)) {
+    throw new Error(
+      `Unsupported file type: ${file.type || "unknown"}. Allowed: PDF, Word, Excel, JPEG/PNG/WebP/GIF.`,
+    );
+  }
+  const url = await requestUploadUrl(file, ctx);
+  await putFileToStorage(file, url.upload_url, onProgress, signal);
+  await markFileReady(url.file_id, ctx.brandId, file.size);
+  return {
+    fileId: url.file_id,
+    publicUrl: url.public_url,
+    storagePath: url.storage_path,
+    bucket: url.bucket,
+  };
 }

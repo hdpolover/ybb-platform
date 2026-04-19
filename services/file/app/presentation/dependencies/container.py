@@ -11,6 +11,8 @@ from app.infrastructure.messaging.rabbitmq_service import RabbitMQService
 # --- IMPORT HANDLERS ---
 from app.application.commands.handlers.upload_file_handler import UploadFileHandler
 from app.application.commands.handlers.delete_file_handler import DeleteFileHandler
+from app.application.commands.handlers.create_upload_url_handler import CreateUploadUrlHandler
+from app.application.commands.handlers.mark_file_ready_handler import MarkFileReadyHandler
 from app.application.queries.handlers.get_file_handler import GetFileHandler
 from app.application.queries.handlers.list_files_by_program_handler import ListFilesByProgramHandler
 
@@ -109,4 +111,24 @@ def get_list_files_by_program_handler(
     return ListFilesByProgramHandler(
         file_repository=file_repository,
         storage_service=get_storage_service()
+    )
+
+
+def get_create_upload_url_handler(
+    file_repository: PostgresFileRepository = Depends(get_file_repository),
+) -> CreateUploadUrlHandler:
+    """Get create-upload-url handler (presigned PUT flow)."""
+    return CreateUploadUrlHandler(
+        storage_service=get_storage_service(),
+        file_repository=file_repository,
+    )
+
+
+def get_mark_file_ready_handler(
+    file_repository: PostgresFileRepository = Depends(get_file_repository),
+) -> MarkFileReadyHandler:
+    """Get mark-file-ready handler (transitions PROCESSING → READY after client PUT)."""
+    return MarkFileReadyHandler(
+        storage_service=get_storage_service(),
+        file_repository=file_repository,
     )

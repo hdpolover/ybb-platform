@@ -117,6 +117,7 @@ class PostgresFileRepository(IFileRepository):
                     "title": file.title,
                     "width": file.width,
                     "height": file.height,
+                    "status": file.status,
                 },
                 "update": {
                     "filename": file.filename,
@@ -134,6 +135,7 @@ class PostgresFileRepository(IFileRepository):
                     "title": file.title,
                     "width": file.width,
                     "height": file.height,
+                    "status": file.status,
                 }
             }
         )
@@ -192,4 +194,5 @@ class PostgresFileRepository(IFileRepository):
             title=getattr(model, "title", None),
             width=getattr(model, "width", None),
             height=getattr(model, "height", None),
+            status=getattr(model, "status", "READY"),
         )

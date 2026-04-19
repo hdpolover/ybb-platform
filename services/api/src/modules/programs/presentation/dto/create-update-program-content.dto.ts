@@ -1,4 +1,5 @@
 import { IsString, IsNotEmpty, IsOptional, IsDateString, IsNumber, IsBoolean, IsUUID, IsArray } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
 // Timeline DTOs
@@ -302,9 +303,16 @@ export class CreateProgramGalleryDto {
     @IsOptional()
     type?: string;
 
+    @ApiProperty({ required: false, description: 'Year the photo was taken' })
+    @IsNumber()
+    @IsOptional()
+    @Transform(({ value }) => (value === undefined || value === null || value === '' ? undefined : Number(value)))
+    year?: number;
+
     @ApiProperty({ required: false })
     @IsNumber()
     @IsOptional()
+    @Transform(({ value }) => (value === undefined || value === null || value === '' ? undefined : Number(value)))
     order?: number;
 }
 
@@ -333,9 +341,16 @@ export class UpdateProgramGalleryDto {
     @IsOptional()
     type?: string;
 
+    @ApiProperty({ required: false, description: 'Year the photo was taken' })
+    @IsNumber()
+    @IsOptional()
+    @Transform(({ value }) => (value === undefined || value === null || value === '' ? undefined : Number(value)))
+    year?: number;
+
     @ApiProperty({ required: false })
     @IsNumber()
     @IsOptional()
+    @Transform(({ value }) => (value === undefined || value === null || value === '' ? undefined : Number(value)))
     order?: number;
 
     @ApiProperty({ required: false })

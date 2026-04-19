@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 from app.application.commands.upload_file_command import UploadFileCommand
 from app.application.dto.file_dto import FileDto
-from app.domain.entities.file import File
+from app.domain.entities.file import File, FileStatus
 from app.domain.repositories.file_repository import IFileRepository
 from app.domain.services.storage_service import IStorageService
 from app.domain.exceptions.file_exceptions import (
@@ -128,7 +128,8 @@ class UploadFileHandler:
         else:
             file_type = 'other'
         
-        # Create domain entity
+        # Create domain entity.
+        # Multipart path uploads bytes server-side before saving the row, so status is READY on save.
         file_entity = File(
             id=file_id,
             filename=storage_filename,
@@ -144,6 +145,7 @@ class UploadFileHandler:
             metadata=file_metadata,
             program_id=command.program_id,
             asset_type=command.asset_type,
+            status=FileStatus.READY,
         )
         
         # Save metadata to repository
