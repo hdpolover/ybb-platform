@@ -84,31 +84,37 @@ model ProgramRequirement {
 }
 
 model ApplicationFormField {
-  id              String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId       String    @map("program_id") @db.Uuid
-  section         String    @default("personal_info") @db.VarChar(50) // personal_info, essay, documents, additional_info
-  label           String    @db.VarChar(255)
-  name            String    @db.VarChar(100) // form field name: full_name, essay_1, cv_upload
-  type            String    @db.VarChar(50) // text, email, number, date, textarea, file, select, checkbox, radio
-  placeholder     String?   @db.VarChar(255)
-  helpText        String?   @map("help_text") @db.Text
-  mediaUrl        String?   @map("media_url") @db.Text
-  mediaAlt        String?   @map("media_alt") @db.VarChar(255)
-  options         Json?     @default("[]") @db.Json // For select, radio, checkbox: ["Option 1", "Option 2"]
-  validationRules Json?     @default("{}") @map("validation_rules") @db.Json // { required: true, minLength: 10, maxFileSize: 5MB }
-  isRequired      Boolean   @default(true) @map("is_required")
-  order           Int       @default(0)
-  isActive        Boolean   @default(true) @map("is_active")
-  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(6)
+  id              String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId       String  @map("program_id") @db.Uuid
+  section         String  @default("personal_info") @db.VarChar(50)
+  label           String  @db.VarChar(255)
+  name            String  @db.VarChar(100)
+  type            String  @db.VarChar(50)
+  placeholder     String? @db.VarChar(255)
+  helpText        String? @map("help_text") @db.Text
+  mediaUrl        String? @map("media_url") @db.Text
+  mediaAlt        String? @map("media_alt") @db.VarChar(255)
+  options         Json?   @default("[]") @db.Json
+  validationRules Json?   @default("{}") @map("validation_rules") @db.Json
+  isRequired      Boolean @default(true) @map("is_required")
+  order           Int     @default(0)
+  isActive        Boolean @default(true) @map("is_active")
 
-  // Relations
+  // NEW: catalog linkage
+  source         String  @default("custom") @db.VarChar(16)
+  systemFieldKey String? @map("system_field_key") @db.VarChar(64)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
   program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
 
+  @@unique([programId, name, deletedAt], map: "application_form_fields_program_name_uq")
   @@index([programId])
   @@index([section])
   @@index([order])
+  @@index([source])
   @@map("application_form_fields")
 }
 
@@ -315,4 +321,69 @@ model ParticipantDocument {
   @@index([applicationId])
   @@index([type])
   @@map("participant_documents")
+}
+
+model SystemFormFieldDefinition {
+  id              String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  key             String    @unique @db.VarChar(64)
+  label           String    @db.VarChar(255)
+  category        String    @db.VarChar(32)
+  type            String    @db.VarChar(32)
+  defaultOptions  Json?     @default("[]") @map("default_options") @db.Json
+  validationRules Json?     @default("{}") @map("validation_rules") @db.Json
+  helpText        String?   @map("help_text") @db.Text
+  placeholder     String?   @db.VarChar(255)
+  isMagic         Boolean   @default(false) @map("is_magic")
+  isActive        Boolean   @default(true) @map("is_active")
+  order           Int       @default(0)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@index([category])
+  @@index([isActive])
+  @@map("system_form_field_definitions")
+}
+
+model ApplicationFormTemplate {
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name        String    @db.VarChar(255)
+  description String?   @db.Text
+  category    String?   @db.VarChar(64)
+  isDefault   Boolean   @default(false) @map("is_default")
+  createdBy   String?   @map("created_by") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  fields ApplicationFormTemplateField[]
+
+  @@index([category])
+  @@map("application_form_templates")
+}
+
+model ApplicationFormTemplateField {
+  id             String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  templateId     String  @map("template_id") @db.Uuid
+  source         String  @db.VarChar(16)
+  systemFieldKey String? @map("system_field_key") @db.VarChar(64)
+
+  name            String? @db.VarChar(100)
+  label           String? @db.VarChar(255)
+  type            String? @db.VarChar(50)
+  placeholder     String? @db.VarChar(255)
+  helpText        String? @map("help_text") @db.Text
+  options         Json?   @default("[]") @db.Json
+  validationRules Json?   @default("{}") @map("validation_rules") @db.Json
+
+  section          String  @default("personal_details") @db.VarChar(50)
+  isRequired       Boolean @default(false) @map("is_required")
+  order            Int     @default(0)
+  labelOverride    String? @map("label_override") @db.VarChar(255)
+  helpTextOverride String? @map("help_text_override") @db.Text
+
+  template ApplicationFormTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+  @@map("application_form_template_fields")
 }
