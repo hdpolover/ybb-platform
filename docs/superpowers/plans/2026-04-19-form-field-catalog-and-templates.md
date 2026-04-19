@@ -84,6 +84,8 @@ model ApplicationFormField {
 
   // NEW: catalog linkage
   source          String    @default("custom") @db.VarChar(16)
+  // Intentionally no FK to system_form_field_definitions.key — loose coupling
+  // so catalog soft-deletes don't cascade-break existing program fields.
   systemFieldKey  String?   @map("system_field_key") @db.VarChar(64)
 
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -92,7 +94,12 @@ model ApplicationFormField {
 
   program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
 
-  @@unique([programId, name, deletedAt], map: "application_form_fields_program_name_uq")
+  // Enforced as a partial UNIQUE index in the migration SQL:
+  //   CREATE UNIQUE INDEX application_form_fields_program_name_uq
+  //     ON application_form_fields (program_id, name) WHERE deleted_at IS NULL;
+  // Prisma 7 DSL cannot express partial indexes, so this @@index is non-unique;
+  // uniqueness is DB-enforced only.
+  @@index([programId, name], map: "application_form_fields_program_name_uq")
   @@index([programId])
   @@index([section])
   @@index([order])
@@ -100,6 +107,8 @@ model ApplicationFormField {
   @@map("application_form_fields")
 }
 ```
+
+**Note on the partial unique index:** Postgres treats each `NULL` in a composite UNIQUE index as distinct, so a plain `UNIQUE(program_id, name, deleted_at)` would silently allow duplicate active rows (both having `deleted_at = NULL`). The partial index `WHERE deleted_at IS NULL` is the correct way to express "per-program name uniqueness for active rows." This must be hand-edited into the generated migration SQL (see Step 6).
 
 - [ ] **Step 2: Add `SystemFormFieldDefinition` model**
 
@@ -194,7 +203,21 @@ Open the generated `migration.sql`. Verify:
 - `ALTER TABLE "application_form_fields" ADD COLUMN "source" ...` and `"system_field_key"`.
 - `CREATE UNIQUE INDEX "application_form_fields_program_name_uq" ON ...`.
 
-If anything is off (Prisma sometimes splits into separate migrations), regenerate.
+**Hand-edit the generated unique-index line** to make it a partial unique index. Change:
+
+```sql
+CREATE UNIQUE INDEX "application_form_fields_program_name_uq" ON "application_form_fields"("program_id", "name", "deleted_at");
+```
+
+to:
+
+```sql
+CREATE UNIQUE INDEX "application_form_fields_program_name_uq" ON "application_form_fields" ("program_id", "name") WHERE "deleted_at" IS NULL;
+```
+
+Without this edit, Postgres will allow duplicate active rows (NULL-distinctness rule on composite unique indexes).
+
+If anything else is off (Prisma sometimes splits into separate migrations), regenerate.
 
 - [ ] **Step 6: Apply the migration**
 
