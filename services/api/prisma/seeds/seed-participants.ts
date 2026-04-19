@@ -6,8 +6,7 @@ import { Prisma } from '@prisma/client';
 // Hardcode enums to avoid importing issues if any, or match exactly what's in client
 enum Gender {
   male = 'male',
-  female = 'female',
-  other = 'other'
+  female = 'female'
 }
 
 export async function seedParticipants() {

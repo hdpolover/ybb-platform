@@ -302,7 +302,7 @@ function mapGender(g: string) {
     const lower = g.toLowerCase();
     if (lower.includes('female') || lower === 'f') return 'female';
     if (lower.includes('male') || lower === 'm') return 'male';
-    return 'other';
+    return null;
 }
 
 function mapStatus(paymentStatus: string, isSubmitted: number): any {
