@@ -16,8 +16,8 @@ export interface GeneralInformationData {
   tagline: string;
   websiteUrl: string;
   media: {
-    logo: string;
-    mainBanner: string;
+    logo: string | null;
+    mainBanner: string | null;
     mainVideoUrl: string;
   };
   description: string;
@@ -110,14 +110,22 @@ export function GeneralInformationTab({ data }: { data: GeneralInformationData }
         <dl className="grid gap-5 md:grid-cols-3">
           <div>
             <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Logo Image</dt>
-            <dd className="flex h-24 items-center justify-center rounded-md border border-dashed border-zinc-300 bg-white px-2 text-center text-xs font-medium text-zinc-500">
-              {data.media.logo}
+            <dd className="flex h-24 items-center justify-center overflow-hidden rounded-md border border-dashed border-zinc-300 bg-white">
+              {data.media.logo ? (
+                <img src={data.media.logo} alt="Logo" className="h-full w-full object-contain" />
+              ) : (
+                <span className="text-xs text-zinc-400">Not configured</span>
+              )}
             </dd>
           </div>
           <div>
             <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Main Banner Image</dt>
-            <dd className="flex h-24 items-center justify-center rounded-md border border-dashed border-zinc-300 bg-white px-2 text-center text-xs font-medium text-zinc-500">
-              {data.media.mainBanner}
+            <dd className="flex h-24 items-center justify-center overflow-hidden rounded-md border border-dashed border-zinc-300 bg-white">
+              {data.media.mainBanner ? (
+                <img src={data.media.mainBanner} alt="Main Banner" className="h-full w-full object-cover" />
+              ) : (
+                <span className="text-xs text-zinc-400">Not configured</span>
+              )}
             </dd>
           </div>
           <div>

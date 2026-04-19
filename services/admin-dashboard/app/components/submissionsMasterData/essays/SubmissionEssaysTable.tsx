@@ -8,7 +8,7 @@ import {
   PlusIcon,
   TrashIcon,
 } from "@heroicons/react/24/solid";
-import { buildApiUrl, getAccessToken, readErrorMessage } from "@/app/components/submissionsMasterData/api";
+import { buildApiUrl, getAccessToken, readErrorMessage, readJsonData } from "@/app/components/submissionsMasterData/api";
 
 export interface SubmissionEssayRow {
   id: string;
@@ -196,7 +196,7 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
         throw new Error(await readErrorMessage(response));
       }
 
-      const payload = (await response.json()) as Array<{
+      const payload = await readJsonData<Array<{
         id: string;
         question: string;
         description?: string;
@@ -204,7 +204,7 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
         isRequired: boolean;
         order: number;
         isActive: boolean;
-      }>;
+      }>>(response);
 
       setData(
         payload.map((item) => ({

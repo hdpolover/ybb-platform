@@ -50,6 +50,11 @@ export class HomeStrategy implements ILandingPageStrategy {
           pricingTiers: {
             where: { isActive: true },
             orderBy: { order: 'asc' },
+            include: {
+              validityPeriods: {
+                orderBy: { startDate: 'asc' },
+              },
+            },
           },
           resources: {
             where: { isActive: true, isPublic: true },
@@ -188,6 +193,10 @@ export class HomeStrategy implements ILandingPageStrategy {
               price: tier.price,
               currency: tier.currency,
               benefits: tier.benefits,
+              validity_periods: tier.validityPeriods?.map((vp) => ({
+                start_date: vp.startDate,
+                end_date: vp.endDate,
+              })) ?? [],
             })) || [],
             guidelines: program?.resources.map((res) => ({
               id: res.id,

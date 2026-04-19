@@ -901,10 +901,10 @@ export class CreateProgramPricingTierDto {
 
 // Validity Period DTOs
 export class CreateValidityPeriodDto {
-    @ApiProperty()
+    @ApiProperty({ required: false })
     @IsUUID()
-    @IsNotEmpty()
-    pricingTierId: string;
+    @IsOptional()
+    pricingTierId?: string;
 
     @ApiProperty()
     @IsDateString()
@@ -1236,6 +1236,53 @@ export class UpdateProgramParticipationCategoryDto {
     @ApiProperty({ required: false })
     @IsNumber()
     @IsOptional()
+    order?: number;
+
+    @ApiProperty({ required: false })
+    @IsBoolean()
+    @IsOptional()
+    isActive?: boolean;
+}
+
+// Subtheme DTOs
+export class CreateProgramSubthemeDto {
+    @ApiProperty()
+    @IsUUID()
+    @IsNotEmpty()
+    programId: string;
+
+    @ApiProperty()
+    @IsString()
+    @IsNotEmpty()
+    name: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    description?: string;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    @Transform(({ value }) => (value === undefined || value === null || value === '' ? undefined : Number(value)))
+    order?: number;
+}
+
+export class UpdateProgramSubthemeDto {
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    name?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    description?: string;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    @Transform(({ value }) => (value === undefined || value === null || value === '' ? undefined : Number(value)))
     order?: number;
 
     @ApiProperty({ required: false })

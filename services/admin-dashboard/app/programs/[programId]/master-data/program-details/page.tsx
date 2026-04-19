@@ -5,6 +5,7 @@ import { useAuth } from "@/app/contexts/AuthContext";
 import { HeaderSection } from "@/app/components/programDetailsMasterData/HeaderSection";
 import { TabNavigation } from "@/app/components/programDetailsMasterData/TabNavigation";
 import { EditSpecificsAction } from "@/app/components/programDetailsMasterData/program-specifics/EditSpecificsAction";
+import { EditGeneralAction } from "@/app/components/programDetailsMasterData/general-information/EditGeneralAction";
 import {
   GeneralInformationTab,
   GeneralInformationData,
@@ -16,6 +17,9 @@ import {
 import {
   type ProgramSpecificsFormValues,
 } from "@/app/components/programDetailsMasterData/program-specifics/EditProgramSpecificsModal";
+import {
+  type GeneralInformationFormValues,
+} from "@/app/components/programDetailsMasterData/general-information/EditGeneralInformationModal";
 import { buildApiUrl, getAccessToken, readErrorMessage } from "@/app/components/submissionsMasterData/api";
 
 type ProgramDetail = {
@@ -31,6 +35,7 @@ type ProgramDetail = {
   registrationCloseDate?: string | null;
   location?: string | null;
   capacity?: number | null;
+  logoUrl?: string | null;
   thumbnailUrl?: string | null;
   bannerUrl?: string | null;
   videoUrl?: string | null;
@@ -134,8 +139,8 @@ function toGeneralInformationData(detail: ProgramDetail): GeneralInformationData
     tagline: formatDisplayValue(detail.shortDescription),
     websiteUrl: detail.slug ? `/programs/${detail.slug}` : "Not configured",
     media: {
-      logo: formatDisplayValue(detail.thumbnailUrl),
-      mainBanner: formatDisplayValue(detail.bannerUrl),
+      logo: detail.logoUrl ?? null,
+      mainBanner: detail.bannerUrl ?? null,
       mainVideoUrl: formatDisplayValue(detail.videoUrl),
     },
     description: formatDisplayValue(detail.description),
@@ -191,6 +196,19 @@ function toProgramSpecificsData(detail: ProgramDetail): ProgramSpecificsData {
   };
 }
 
+function toGeneralFormValues(detail: ProgramDetail): GeneralInformationFormValues {
+  return {
+    name: detail.name ?? "",
+    slug: detail.slug ?? "",
+    shortDescription: detail.shortDescription ?? "",
+    description: detail.description ?? "",
+    videoUrl: detail.videoUrl ?? "",
+    metaTitle: detail.metaTitle ?? "",
+    metaDescription: detail.metaDescription ?? "",
+    isVisibleToUsers: detail.isVisibleToUsers,
+  };
+}
+
 function toSpecificsFormValues(detail: ProgramDetail): ProgramSpecificsFormValues {
   return {
     location: detail.location ?? "",
@@ -229,6 +247,8 @@ export default function ProgramDetailsPage({
   const [pageError, setPageError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [generalSaveError, setGeneralSaveError] = useState<string | null>(null);
+  const [isGeneralSaving, setIsGeneralSaving] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -282,6 +302,10 @@ export default function ProgramDetailsPage({
 
   const specificsFormValues = useMemo(() => {
     return programDetail ? toSpecificsFormValues(programDetail) : null;
+  }, [programDetail]);
+
+  const generalFormValues = useMemo(() => {
+    return programDetail ? toGeneralFormValues(programDetail) : null;
   }, [programDetail]);
 
   const programName = programDetail?.name ?? fallbackProgramName;
@@ -348,6 +372,65 @@ export default function ProgramDetailsPage({
     }
   };
 
+  const handleSaveGeneral = async (values: GeneralInformationFormValues) => {
+    if (!programDetail) {
+      return;
+    }
+
+    const accessToken = getAccessToken();
+    if (!accessToken) {
+      throw new Error("You must be signed in to update program settings.");
+    }
+
+    setIsGeneralSaving(true);
+    setGeneralSaveError(null);
+
+    try {
+      const payload = {
+        name: values.name.trim() || undefined,
+        slug: values.slug.trim() || undefined,
+        shortDescription: values.shortDescription.trim() || undefined,
+        description: values.description.trim() || undefined,
+        videoUrl: values.videoUrl.trim() || undefined,
+        metaTitle: values.metaTitle.trim() || undefined,
+        metaDescription: values.metaDescription.trim() || undefined,
+        isVisibleToUsers: values.isVisibleToUsers,
+      };
+
+      const response = await fetch(buildApiUrl(`/programs/${encodeURIComponent(programDetail.id)}`), {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response));
+      }
+
+      await response.json() as ApiEnvelope<unknown>;
+
+      const refreshedResponse = await fetch(buildApiUrl(`/programs/${encodeURIComponent(programDetail.id)}`), {
+        cache: "no-store",
+      });
+
+      if (!refreshedResponse.ok) {
+        throw new Error(await readErrorMessage(refreshedResponse));
+      }
+
+      const refreshedEnvelope = (await refreshedResponse.json()) as ApiEnvelope<ProgramDetail>;
+      setProgramDetail(refreshedEnvelope.data);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to update general information.";
+      setGeneralSaveError(message);
+      throw error;
+    } finally {
+      setIsGeneralSaving(false);
+    }
+  };
+
   return (
     <main className="space-y-4">
       <HeaderSection programName={programName} />
@@ -356,7 +439,26 @@ export default function ProgramDetailsPage({
         <div className="mb-4 flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <TabNavigation activeTab={activeTab} />
 
-          {activeTab === "specifics" && specificsFormValues ? (
+          {activeTab === "general" && generalFormValues ? (
+            <EditGeneralAction
+              programId={programId}
+              brandId={programDetail?.brand.id ?? ""}
+              programName={programName}
+              initialValues={generalFormValues}
+              currentLogoUrl={programDetail?.logoUrl}
+              currentBannerUrl={programDetail?.bannerUrl}
+              currentThumbnailUrl={programDetail?.thumbnailUrl}
+              onSave={handleSaveGeneral}
+              onBrandingUploaded={() => {
+                void fetch(buildApiUrl(`/programs/${encodeURIComponent(programId)}`), { cache: "no-store" })
+                  .then((r) => r.json() as Promise<ApiEnvelope<ProgramDetail>>)
+                  .then((envelope) => setProgramDetail(envelope.data))
+                  .catch(() => null);
+              }}
+              isSaving={isGeneralSaving}
+              errorMessage={generalSaveError}
+            />
+          ) : activeTab === "specifics" && specificsFormValues ? (
             <EditSpecificsAction
               programName={programName}
               initialValues={specificsFormValues}

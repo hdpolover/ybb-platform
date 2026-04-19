@@ -51,6 +51,9 @@ interface ProgramLike {
   isPublished: boolean;
   isActive: boolean;
   status: string;
+  logoUrl?: string | null;
+  bannerUrl?: string | null;
+  thumbnailUrl?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -174,6 +177,9 @@ export class ProgramsController {
       isPublished: program.isPublished,
       isActive: program.isActive,
       status: program.status,
+      logoUrl: program.logoUrl ?? null,
+      bannerUrl: program.bannerUrl ?? null,
+      thumbnailUrl: program.thumbnailUrl ?? null,
       createdAt: program.createdAt,
       updatedAt: program.updatedAt,
     };

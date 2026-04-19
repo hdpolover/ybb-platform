@@ -12,7 +12,8 @@ import {
     CreateValidityPeriodDto, UpdateValidityPeriodDto,
     CreateProgramRequirementDto, UpdateProgramRequirementDto,
     CreateProgramEssayDto, UpdateProgramEssayDto,
-    CreateProgramParticipationCategoryDto, UpdateProgramParticipationCategoryDto
+    CreateProgramParticipationCategoryDto, UpdateProgramParticipationCategoryDto,
+    CreateProgramSubthemeDto, UpdateProgramSubthemeDto,
 } from '../../presentation/dto/create-update-program-content.dto';
 
 // Timeline
@@ -224,4 +225,15 @@ export class DeleteProgramParticipationCategoryCommand {
         public readonly categoryId: string,
         public readonly userId: string,
     ) { }
+}
+
+// Subtheme
+export class CreateProgramSubthemeCommand {
+    constructor(public readonly dto: CreateProgramSubthemeDto, public readonly userId: string) { }
+}
+export class UpdateProgramSubthemeCommand {
+    constructor(public readonly id: string, public readonly dto: UpdateProgramSubthemeDto, public readonly userId: string) { }
+}
+export class DeleteProgramSubthemeCommand {
+    constructor(public readonly id: string, public readonly userId: string) { }
 }

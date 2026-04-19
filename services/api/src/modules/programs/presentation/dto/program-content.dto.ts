@@ -321,6 +321,26 @@ export class ProgramEssayResponseDto {
     isActive: boolean;
 }
 
+export class ProgramSubthemeResponseDto {
+    @ApiProperty()
+    id: string;
+
+    @ApiProperty()
+    programId: string;
+
+    @ApiProperty()
+    name: string;
+
+    @ApiProperty({ required: false })
+    description?: string;
+
+    @ApiProperty()
+    order: number;
+
+    @ApiProperty()
+    isActive: boolean;
+}
+
 export class ProgramParticipationCategoryResponseDto {
     @ApiProperty()
     id: string;

@@ -1,4 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsString, IsNotEmpty, IsOptional, IsIn } from 'class-validator';
 
 export class PaymentItemDto {
     @ApiProperty()
@@ -24,7 +25,7 @@ export class PaymentItemDto {
 
     @ApiProperty()
     paymentMethod?: string;
-    
+
     @ApiProperty({ description: 'URL for payment or invoice' })
     actionUrl?: string;
 }
@@ -46,7 +47,7 @@ export class AvailablePaymentDto {
     currency: string;
 
     @ApiProperty()
-    type: string; // registration_fee, program_fee, merch
+    type: string;
 }
 
 export class PortalPaymentResponseDto {
@@ -64,5 +65,136 @@ export class PortalPaymentResponseDto {
         totalPaid: number;
         totalDue: number;
         currency: string;
-    }
+    };
+}
+
+// --- Payment Detail ---
+
+export class PaymentHistoryEntryDto {
+    @ApiProperty()
+    id: string;
+
+    @ApiProperty()
+    method: string;
+
+    @ApiProperty()
+    amount: number;
+
+    @ApiProperty()
+    date: string;
+
+    @ApiProperty()
+    time: string;
+
+    @ApiProperty({ enum: ['cancelled', 'failed', 'processing', 'paid'] })
+    status: 'cancelled' | 'failed' | 'processing' | 'paid';
+
+    @ApiProperty()
+    note: string;
+
+    @ApiPropertyOptional()
+    code?: string;
+
+    @ApiPropertyOptional()
+    paymentMethod?: string;
+
+    @ApiPropertyOptional()
+    dateTime?: string;
+
+    @ApiPropertyOptional()
+    accountName?: string;
+
+    @ApiPropertyOptional()
+    amountLabel?: string;
+}
+
+export class PaymentInvoiceDetailDto {
+    @ApiProperty()
+    id: string;
+
+    @ApiProperty()
+    label: string;
+
+    @ApiProperty()
+    category: string;
+
+    @ApiProperty()
+    amount: number;
+
+    @ApiPropertyOptional()
+    dueDate?: string;
+
+    @ApiProperty({ enum: ['paid', 'unpaid', 'processing', 'failed'] })
+    status: string;
+
+    @ApiProperty()
+    currency: string;
+}
+
+export class PortalPaymentDetailResponseDto {
+    @ApiProperty()
+    invoice: PaymentInvoiceDetailDto;
+
+    @ApiProperty({ type: [PaymentHistoryEntryDto] })
+    history: PaymentHistoryEntryDto[];
+}
+
+// --- Confirm Payment ---
+
+export class ConfirmPortalPaymentDto {
+    @ApiProperty({ enum: ['gateway', 'manual'] })
+    @IsString()
+    @IsNotEmpty()
+    @IsIn(['gateway', 'manual'])
+    payment_type: 'gateway' | 'manual';
+
+    @ApiProperty({ description: 'Payment method ID, e.g. bca, bni, credit_card, virtual_account' })
+    @IsString()
+    @IsNotEmpty()
+    payment_method_id: string;
+
+    @ApiPropertyOptional({ description: 'Payer account/holder name (manual only)' })
+    @IsString()
+    @IsOptional()
+    account_name?: string;
+
+    @ApiPropertyOptional({ description: 'Source bank or account (manual only)' })
+    @IsString()
+    @IsOptional()
+    source_name?: string;
+
+    @ApiPropertyOptional({ description: 'Date payment was made, ISO string (manual only)' })
+    @IsString()
+    @IsOptional()
+    payment_date?: string;
+
+    @ApiPropertyOptional({ description: 'Additional notes (manual only)' })
+    @IsString()
+    @IsOptional()
+    notes?: string;
+
+    @ApiPropertyOptional({ description: 'Token from gateway JS SDK (gateway only)' })
+    @IsString()
+    @IsOptional()
+    gateway_token?: string;
+}
+
+export class ConfirmPortalPaymentResponseDto {
+    @ApiProperty({ enum: ['PROCESSING', 'REQUIRES_ACTION', 'SUCCEEDED', 'FAILED'] })
+    status: string;
+
+    @ApiProperty()
+    invoice_id: string;
+
+    @ApiPropertyOptional()
+    intent_id?: string;
+
+    @ApiPropertyOptional({ description: 'Next action for gateway payments' })
+    action?: {
+        type: 'redirect' | 'checkout';
+        url: string;
+    };
+
+    @ApiProperty()
+    message: string;
 }

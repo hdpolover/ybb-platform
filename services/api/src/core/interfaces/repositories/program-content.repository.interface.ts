@@ -14,6 +14,7 @@ import {
     ApplicationFormField,
     ProgramEssay,
     ProgramParticipationCategory,
+    ProgramSubtheme,
 } from '@prisma/client';
 
 export type ProgramPricingTierWithPeriods = ProgramPricingTier & { validityPeriods: PricingTierValidityPeriod[] };
@@ -33,6 +34,7 @@ export interface IProgramContentRepository {
     findFormFieldsByProgramId(programId: string): Promise<ApplicationFormField[]>;
     findEssaysByProgramId(programId: string, includeInactive?: boolean): Promise<ProgramEssay[]>;
     findParticipationCategoriesByProgramId(programId: string, includeInactive?: boolean): Promise<ProgramParticipationCategory[]>;
+    findSubthemesByProgramId(programId: string, includeInactive?: boolean): Promise<ProgramSubtheme[]>;
 
     // CRUD for Timeline
     createTimeline(data: Partial<ProgramTimeline>): Promise<ProgramTimeline>;
@@ -123,4 +125,10 @@ export interface IProgramContentRepository {
     updateParticipationCategory(id: string, data: Partial<ProgramParticipationCategory>): Promise<ProgramParticipationCategory>;
     deleteParticipationCategory(id: string): Promise<void>;
     findParticipationCategoryById(id: string): Promise<ProgramParticipationCategory | null>;
+
+    // CRUD for Subthemes
+    createSubtheme(data: Partial<ProgramSubtheme>): Promise<ProgramSubtheme>;
+    updateSubtheme(id: string, data: Partial<ProgramSubtheme>): Promise<ProgramSubtheme>;
+    deleteSubtheme(id: string): Promise<void>;
+    findSubthemeById(id: string): Promise<ProgramSubtheme | null>;
 } // Re-closing the interface

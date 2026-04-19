@@ -14,6 +14,7 @@ import {
   ProgramEssayResponseDto,
   ProgramParticipationCategoryResponseDto,
   ApplicationFormFieldResponseDto,
+  ProgramSubthemeResponseDto,
 } from './dto/program-content.dto';
 
 import {
@@ -22,6 +23,7 @@ import {
   ListProgramRequirementsQuery,
   ListProgramEssaysQuery,
   ListProgramParticipationCategoriesQuery,
+  ListProgramSubthemesQuery,
 } from '../application/queries/list-program-content.queries';
 import { GetApplicationFormFieldsQuery } from '../application/queries/get-application-form-fields.query';
 
@@ -31,6 +33,7 @@ import {
   ListProgramRequirementsHandler,
   ListProgramEssaysHandler,
   ListProgramParticipationCategoriesHandler,
+  ListProgramSubthemesHandler,
 } from '../application/queries/handlers/list-program-content.handlers';
 import { GetApplicationFormFieldsHandler } from '../application/queries/handlers/get-application-form-fields.handler';
 
@@ -40,6 +43,7 @@ import {
   CreateProgramRequirementDto, UpdateProgramRequirementDto,
   CreateProgramEssayDto, UpdateProgramEssayDto,
   CreateProgramParticipationCategoryDto, UpdateProgramParticipationCategoryDto,
+  CreateProgramSubthemeDto, UpdateProgramSubthemeDto,
 } from './dto/create-update-program-content.dto';
 import { CreateApplicationFormFieldDto } from '../application/dto/application-form-field/create-application-form-field.dto';
 import { UpdateApplicationFormFieldDto } from '../application/dto/application-form-field/update-application-form-field.dto';
@@ -50,6 +54,7 @@ import {
   CreateProgramRequirementCommand, UpdateProgramRequirementCommand, DeleteProgramRequirementCommand,
   CreateProgramEssayCommand, UpdateProgramEssayCommand, DeleteProgramEssayCommand,
   CreateProgramParticipationCategoryCommand, UpdateProgramParticipationCategoryCommand, DeleteProgramParticipationCategoryCommand,
+  CreateProgramSubthemeCommand, UpdateProgramSubthemeCommand, DeleteProgramSubthemeCommand,
 } from '../application/commands/program-content.commands';
 import {
   CreateApplicationFormFieldCommand,
@@ -63,6 +68,7 @@ import {
   CreateProgramRequirementHandler, UpdateProgramRequirementHandler, DeleteProgramRequirementHandler,
   CreateProgramEssayHandler, UpdateProgramEssayHandler, DeleteProgramEssayHandler,
   CreateProgramParticipationCategoryHandler, UpdateProgramParticipationCategoryHandler, DeleteProgramParticipationCategoryHandler,
+  CreateProgramSubthemeHandler, UpdateProgramSubthemeHandler, DeleteProgramSubthemeHandler,
 } from '../application/commands/handlers/manage-program-content.handlers';
 import {
   CreateApplicationFormFieldHandler,
@@ -79,6 +85,7 @@ export class ProgramApplicationConfigController {
     private readonly listProgramRequirementsHandler: ListProgramRequirementsHandler,
     private readonly listProgramEssaysHandler: ListProgramEssaysHandler,
     private readonly listProgramParticipationCategoriesHandler: ListProgramParticipationCategoriesHandler,
+    private readonly listProgramSubthemesHandler: ListProgramSubthemesHandler,
     private readonly getApplicationFormFieldsHandler: GetApplicationFormFieldsHandler,
     private readonly createProgramPricingTierHandler: CreateProgramPricingTierHandler,
     private readonly updateProgramPricingTierHandler: UpdateProgramPricingTierHandler,
@@ -95,6 +102,9 @@ export class ProgramApplicationConfigController {
     private readonly createProgramParticipationCategoryHandler: CreateProgramParticipationCategoryHandler,
     private readonly updateProgramParticipationCategoryHandler: UpdateProgramParticipationCategoryHandler,
     private readonly deleteProgramParticipationCategoryHandler: DeleteProgramParticipationCategoryHandler,
+    private readonly createProgramSubthemeHandler: CreateProgramSubthemeHandler,
+    private readonly updateProgramSubthemeHandler: UpdateProgramSubthemeHandler,
+    private readonly deleteProgramSubthemeHandler: DeleteProgramSubthemeHandler,
     private readonly createApplicationFormFieldHandler: CreateApplicationFormFieldHandler,
     private readonly updateApplicationFormFieldHandler: UpdateApplicationFormFieldHandler,
     private readonly deleteApplicationFormFieldHandler: DeleteApplicationFormFieldHandler,
@@ -272,6 +282,44 @@ export class ProgramApplicationConfigController {
   @ApiOperation({ summary: 'Delete participation category' })
   async deleteParticipationCategory(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
     return this.deleteProgramParticipationCategoryHandler.execute(new DeleteProgramParticipationCategoryCommand(itemId, req.user.id));
+  }
+
+  // --- Subtheme Endpoints ---
+  @Get(':id/subthemes')
+  @Public()
+  @ApiOperation({ summary: 'Get program subthemes' })
+  @ApiResponse({ status: 200, type: [ProgramSubthemeResponseDto] })
+  async getSubthemes(
+    @Param('id') id: string,
+    @Query('includeInactive') includeInactive?: string,
+  ) {
+    return this.listProgramSubthemesHandler.execute(
+      new ListProgramSubthemesQuery(id, includeInactive === 'true'),
+    );
+  }
+
+  @Post(':id/subthemes')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Add subtheme' })
+  async addSubtheme(@Param('id') programId: string, @Body() dto: CreateProgramSubthemeDto, @Request() req: AuthenticatedRequest) {
+    return this.createProgramSubthemeHandler.execute(new CreateProgramSubthemeCommand(dto, req.user.id));
+  }
+
+  @Put('subthemes/:itemId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update subtheme' })
+  async updateSubtheme(@Param('itemId') itemId: string, @Body() dto: UpdateProgramSubthemeDto, @Request() req: AuthenticatedRequest) {
+    return this.updateProgramSubthemeHandler.execute(new UpdateProgramSubthemeCommand(itemId, dto, req.user.id));
+  }
+
+  @Delete('subthemes/:itemId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete subtheme (soft)' })
+  async deleteSubtheme(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
+    return this.deleteProgramSubthemeHandler.execute(new DeleteProgramSubthemeCommand(itemId, req.user.id));
   }
 
   // --- Form Field Endpoints ---

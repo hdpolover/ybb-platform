@@ -46,6 +46,7 @@ import {
   ListProgramRequirementsHandler,
   ListProgramEssaysHandler,
   ListProgramParticipationCategoriesHandler,
+  ListProgramSubthemesHandler,
 } from './application/queries/handlers/list-program-content.handlers';
 import {
   CreateProgramTimelineHandler, UpdateProgramTimelineHandler, DeleteProgramTimelineHandler,
@@ -62,6 +63,7 @@ import {
   CreateProgramRequirementHandler, UpdateProgramRequirementHandler, DeleteProgramRequirementHandler,
   CreateProgramEssayHandler, UpdateProgramEssayHandler, DeleteProgramEssayHandler,
   CreateProgramParticipationCategoryHandler, UpdateProgramParticipationCategoryHandler, DeleteProgramParticipationCategoryHandler,
+  CreateProgramSubthemeHandler, UpdateProgramSubthemeHandler, DeleteProgramSubthemeHandler,
 } from './application/commands/handlers/manage-program-content.handlers';
 import {
   CreateApplicationFormFieldHandler,
@@ -114,6 +116,7 @@ import { CacheService } from '../../shared/infrastructure/cache/cache.service';
     ListProgramRequirementsHandler,
     ListProgramEssaysHandler,
     ListProgramParticipationCategoriesHandler,
+    ListProgramSubthemesHandler,
     // Content Management Handlers
     CreateProgramTimelineHandler, UpdateProgramTimelineHandler, DeleteProgramTimelineHandler,
     CreateProgramScheduleHandler, UpdateProgramScheduleHandler, DeleteProgramScheduleHandler,
@@ -129,6 +132,7 @@ import { CacheService } from '../../shared/infrastructure/cache/cache.service';
     CreateProgramRequirementHandler, UpdateProgramRequirementHandler, DeleteProgramRequirementHandler,
     CreateProgramEssayHandler, UpdateProgramEssayHandler, DeleteProgramEssayHandler,
     CreateProgramParticipationCategoryHandler, UpdateProgramParticipationCategoryHandler, DeleteProgramParticipationCategoryHandler,
+    CreateProgramSubthemeHandler, UpdateProgramSubthemeHandler, DeleteProgramSubthemeHandler,
     // Form Field Handlers
     CreateApplicationFormFieldHandler,
     UpdateApplicationFormFieldHandler,

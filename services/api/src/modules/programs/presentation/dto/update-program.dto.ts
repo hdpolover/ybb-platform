@@ -126,4 +126,39 @@ export class UpdateProgramDto {
     @IsNumber()
     @IsOptional()
     usdInIdr?: number;
+
+    @ApiProperty({ description: 'Main promo video URL', required: false })
+    @IsString()
+    @IsOptional()
+    videoUrl?: string;
+
+    @ApiProperty({ description: 'Meta title for SEO', required: false })
+    @IsString()
+    @IsOptional()
+    metaTitle?: string;
+
+    @ApiProperty({ description: 'Meta description for SEO', required: false })
+    @IsString()
+    @IsOptional()
+    metaDescription?: string;
+
+    @ApiProperty({ description: 'Whether the program is visible to users on the public site', required: false })
+    @IsBoolean()
+    @IsOptional()
+    isVisibleToUsers?: boolean;
+
+    @ApiProperty({ description: 'Logo image URL (assign from media library)', required: false })
+    @IsString()
+    @IsOptional()
+    logoUrl?: string;
+
+    @ApiProperty({ description: 'Banner image URL (assign from media library)', required: false })
+    @IsString()
+    @IsOptional()
+    bannerUrl?: string;
+
+    @ApiProperty({ description: 'Thumbnail image URL (assign from media library)', required: false })
+    @IsString()
+    @IsOptional()
+    thumbnailUrl?: string;
 }

@@ -21,7 +21,33 @@ export class GetPortalSubmissionDetailQuery {
 
 // Payments
 export class GetPortalPaymentsQuery {
-  constructor(public readonly userId: string) { }
+  constructor(
+    public readonly userId: string,
+    public readonly programId?: string,
+  ) { }
+}
+
+export class GetPortalPaymentDetailQuery {
+  constructor(
+    public readonly userId: string,
+    public readonly invoiceId: string,
+  ) { }
+}
+
+export class ConfirmPortalPaymentCommand {
+  constructor(
+    public readonly userId: string,
+    public readonly invoiceId: string,
+    public readonly paymentType: 'gateway' | 'manual',
+    public readonly paymentMethodId: string,
+    public readonly details?: {
+      accountName?: string;
+      sourceName?: string;
+      paymentDate?: string;
+      notes?: string;
+      gatewayToken?: string;
+    },
+  ) { }
 }
 
 // Documents
