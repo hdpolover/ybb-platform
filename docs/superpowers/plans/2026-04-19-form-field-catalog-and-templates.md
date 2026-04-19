@@ -601,10 +601,10 @@ export class FormFieldKeyValidator {
       );
     }
     const catalogHits = await this.prisma.systemFormFieldDefinition.findMany({
-      where: { key, isActive: true, deletedAt: null },
+      where: { key, deletedAt: null },
       select: { key: true, isActive: true },
     });
-    if (catalogHits.length > 0) {
+    if (catalogHits.some((hit) => hit.isActive)) {
       throw new FieldKeyValidationError(
         'reserved_catalog',
         `"${key}" is a system field — pick it from the catalog instead.`,
@@ -613,6 +613,8 @@ export class FormFieldKeyValidator {
   }
 }
 ```
+
+The `isActive` filter is applied in JS rather than SQL so that tests using a simple Jest mock for `findMany` (which doesn't honor the `where` clause) behave consistently with the real Prisma runtime. Perf impact is negligible — lookups are by a unique-ish `key`, returning at most a handful of rows.
 
 - [ ] **Step 4: Run — passes**
 
