@@ -15,6 +15,11 @@ import {
 } from "@heroicons/react/24/solid";
 import { buildApiUrl, getAccessToken, readErrorMessage } from "@/app/components/submissionsMasterData/api";
 import { listProgramMedia, type MediaFile } from "@/src/shared/api-client";
+import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
+import { FormSection } from "@/src/ui/drawer/form-section";
+
+const INPUT_CLS =
+  "block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
 
 export interface GeneralInformationFormValues {
   name: string;
@@ -28,6 +33,8 @@ export interface GeneralInformationFormValues {
 }
 
 interface EditGeneralInformationModalProps {
+  /** The drawer is always mounted; parent controls visibility with `open`. */
+  open?: boolean;
   programId: string;
   brandId: string;
   programName: string;
@@ -355,6 +362,7 @@ function ImageUploadField({
 // ─── Main Modal ───────────────────────────────────────────────────────────────
 
 export function EditGeneralInformationModal({
+  open = true,
   programId,
   brandId,
   programName,
@@ -486,7 +494,7 @@ export function EditGeneralInformationModal({
 
   return (
     <>
-      {/* Media Picker overlay — rendered above modal (z-[60]) */}
+      {/* Nested media picker — renders above the drawer (z-[60] in its own overlay). */}
       {pickerTarget && (
         <MediaPickerModal
           programId={programId}
@@ -496,46 +504,46 @@ export function EditGeneralInformationModal({
         />
       )}
 
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 sm:p-6">
-        <div className="flex max-h-[95vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-2xl">
-          {/* Modal Header */}
-          <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-6 py-5">
-            <div>
-              <h2 className="text-lg font-bold text-zinc-900">Edit General Information</h2>
-              <p className="mt-1 text-sm text-zinc-500">
-                Update identity, media, content, and SEO settings for{" "}
-                <span className="font-semibold text-zinc-900">{programName}</span>.
-              </p>
-            </div>
+      <DrawerShell
+        open={open}
+        onClose={onClose}
+        title="Edit General Information"
+        description={
+          <>
+            Update identity, media, content, and SEO settings for{" "}
+            <span className="font-semibold text-zinc-900">{programName}</span>.
+          </>
+        }
+        error={errorMessage}
+        locked={isSaving || brandingStatus === "uploading"}
+        width="sm:max-w-4xl"
+        footer={
+          <>
             <button
               type="button"
-              className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
               onClick={onClose}
+              disabled={isSaving}
+              className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 disabled:opacity-50"
             >
-              <span className="text-xl leading-none">×</span>
+              Cancel
             </button>
-          </div>
-
-          {/* Modal Body */}
-          <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
-            {errorMessage ? (
-              <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                {errorMessage}
-              </div>
-            ) : null}
-
-            {/* Program Identity */}
-            <section className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-5 shadow-sm">
-              <div className="mb-4 flex items-center gap-3 border-b border-zinc-200 pb-3">
-                <IdentificationIcon className="h-5 w-5 text-blue-500" />
-                <div>
-                  <h3 className="text-base font-bold text-zinc-900">Program Identity</h3>
-                  <p className="text-xs text-zinc-500">
-                    Core identifiers that appear across landing pages and marketing materials.
-                  </p>
-                </div>
-              </div>
-              <div className="grid gap-5 md:grid-cols-2">
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={isSaving}
+              className="rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:opacity-60"
+            >
+              {isSaving ? "Saving…" : "Save Changes"}
+            </button>
+          </>
+        }
+      >
+        <FormSection
+          icon={IdentificationIcon}
+          title="Program Identity"
+          description="Core identifiers that appear across landing pages and marketing materials."
+        >
+          <div className="grid gap-5 md:grid-cols-2">
                 <div>
                   <label className="mb-1.5 block text-xs font-medium text-zinc-500">Program Name</label>
                   <input
@@ -577,183 +585,142 @@ export function EditGeneralInformationModal({
                   </label>
                 </div>
               </div>
-            </section>
+        </FormSection>
 
-            {/* Media Assets */}
-            <section className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-5 shadow-sm">
-              <div className="mb-4 flex items-center justify-between gap-3 border-b border-zinc-200 pb-3">
-                <div className="flex items-center gap-3">
-                  <PhotoIcon className="h-5 w-5 text-blue-500" />
-                  <div>
-                    <h3 className="text-base font-bold text-zinc-900">Media Assets</h3>
-                    <p className="text-xs text-zinc-500">
-                      Logo, banner, and thumbnail images displayed on landing pages.
-                    </p>
-                  </div>
-                </div>
-                {hasBrandingChanges && brandingStatus !== "done" && (
-                  <button
-                    type="button"
-                    disabled={brandingStatus === "uploading"}
-                    onClick={handleUploadBranding}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500 bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-600 disabled:opacity-60"
-                  >
-                    {brandingStatus === "uploading" ? (
-                      <>
-                        <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
-                        Saving…
-                      </>
-                    ) : (
-                      "Save Images"
-                    )}
-                  </button>
-                )}
-                {brandingStatus === "done" && (
-                  <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
-                    <CheckCircleIcon className="h-4 w-4" /> Images saved
-                  </span>
-                )}
-              </div>
-
-              {brandingError && (
-                <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                  {brandingError}
-                </div>
+        <FormSection
+          icon={PhotoIcon}
+          title="Media Assets"
+          description="Logo, banner, and thumbnail images displayed on landing pages."
+          actions={
+            <>
+              {hasBrandingChanges && brandingStatus !== "done" && (
+                <button
+                  type="button"
+                  disabled={brandingStatus === "uploading"}
+                  onClick={handleUploadBranding}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500 bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-600 disabled:opacity-60"
+                >
+                  {brandingStatus === "uploading" ? (
+                    <>
+                      <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
+                      Saving…
+                    </>
+                  ) : (
+                    "Save Images"
+                  )}
+                </button>
               )}
+              {brandingStatus === "done" && (
+                <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
+                  <CheckCircleIcon className="h-4 w-4" /> Images saved
+                </span>
+              )}
+            </>
+          }
+        >
+          {brandingError && (
+            <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {brandingError}
+            </div>
+          )}
 
-              <div className="grid gap-5 md:grid-cols-3">
-                <ImageUploadField
-                  label="Logo Image"
-                  currentUrl={currentLogoUrl}
-                  file={logoFile}
-                  pickedUrl={logoPickedUrl}
-                  onFileChange={(f) => { setLogoFile(f); setBrandingStatus("idle"); }}
-                  onPickFromLibrary={() => setPickerTarget("logo")}
-                  onClear={() => { setLogoFile(null); setLogoPickedUrl(null); setBrandingStatus("idle"); }}
-                  uploadStatus={brandingStatus}
-                  hint="Square or 4:3 ratio recommended. PNG/JPG up to 2 MB."
-                />
-                <ImageUploadField
-                  label="Main Banner Image"
-                  currentUrl={currentBannerUrl}
-                  file={bannerFile}
-                  pickedUrl={bannerPickedUrl}
-                  onFileChange={(f) => { setBannerFile(f); setBrandingStatus("idle"); }}
-                  onPickFromLibrary={() => setPickerTarget("banner")}
-                  onClear={() => { setBannerFile(null); setBannerPickedUrl(null); setBrandingStatus("idle"); }}
-                  uploadStatus={brandingStatus}
-                  hint="16:9 ratio recommended (e.g. 1200×675). PNG/JPG up to 2 MB."
-                />
-                <ImageUploadField
-                  label="Thumbnail Image"
-                  currentUrl={currentThumbnailUrl}
-                  file={thumbnailFile}
-                  pickedUrl={thumbnailPickedUrl}
-                  onFileChange={(f) => { setThumbnailFile(f); setBrandingStatus("idle"); }}
-                  onPickFromLibrary={() => setPickerTarget("thumbnail")}
-                  onClear={() => { setThumbnailFile(null); setThumbnailPickedUrl(null); setBrandingStatus("idle"); }}
-                  uploadStatus={brandingStatus}
-                  hint="Used on program cards and listings. PNG/JPG up to 2 MB."
-                />
-              </div>
-            </section>
-
-            {/* Program Description */}
-            <section className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-5 shadow-sm">
-              <div className="mb-4 flex items-center gap-3 border-b border-zinc-200 pb-3">
-                <GlobeAltIcon className="h-5 w-5 text-blue-500" />
-                <div>
-                  <h3 className="text-base font-bold text-zinc-900">Program Description</h3>
-                  <p className="text-xs text-zinc-500">Full description displayed on the program landing page.</p>
-                </div>
-              </div>
-              <div>
-                <textarea
-                  rows={5}
-                  value={formValues.description}
-                  onChange={(e) => updateField("description", e.target.value)}
-                  className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm leading-relaxed text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                  placeholder="Describe the program in detail…"
-                />
-              </div>
-            </section>
-
-            {/* Promo Video */}
-            <section className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-5 shadow-sm">
-              <div className="mb-4 flex items-center gap-3 border-b border-zinc-200 pb-3">
-                <PlayCircleIcon className="h-5 w-5 text-blue-500" />
-                <div>
-                  <h3 className="text-base font-bold text-zinc-900">Promo Video</h3>
-                  <p className="text-xs text-zinc-500">YouTube or Vimeo URL shown as the main promotional video.</p>
-                </div>
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-zinc-500">Video URL</label>
-                <input
-                  type="url"
-                  value={formValues.videoUrl}
-                  onChange={(e) => updateField("videoUrl", e.target.value)}
-                  className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                  placeholder="https://youtu.be/…"
-                />
-              </div>
-            </section>
-
-            {/* SEO / Meta */}
-            <section className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-5 shadow-sm">
-              <div className="mb-4 flex items-center gap-3 border-b border-zinc-200 pb-3">
-                <TagIcon className="h-5 w-5 text-blue-500" />
-                <div>
-                  <h3 className="text-base font-bold text-zinc-900">SEO &amp; Meta</h3>
-                  <p className="text-xs text-zinc-500">Controls how this program appears in search engines.</p>
-                </div>
-              </div>
-              <div className="space-y-5">
-                <div>
-                  <label className="mb-1.5 block text-xs font-medium text-zinc-500">Meta Title</label>
-                  <input
-                    type="text"
-                    value={formValues.metaTitle}
-                    onChange={(e) => updateField("metaTitle", e.target.value)}
-                    className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                    placeholder="Recommended: 50–60 characters"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-xs font-medium text-zinc-500">Meta Description</label>
-                  <textarea
-                    rows={3}
-                    value={formValues.metaDescription}
-                    onChange={(e) => updateField("metaDescription", e.target.value)}
-                    className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm leading-relaxed text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                    placeholder="Recommended: 150–160 characters"
-                  />
-                </div>
-              </div>
-            </section>
+          <div className="grid gap-5 md:grid-cols-3">
+            <ImageUploadField
+              label="Logo Image"
+              currentUrl={currentLogoUrl}
+              file={logoFile}
+              pickedUrl={logoPickedUrl}
+              onFileChange={(f) => { setLogoFile(f); setBrandingStatus("idle"); }}
+              onPickFromLibrary={() => setPickerTarget("logo")}
+              onClear={() => { setLogoFile(null); setLogoPickedUrl(null); setBrandingStatus("idle"); }}
+              uploadStatus={brandingStatus}
+              hint="Square or 4:3 ratio recommended. PNG/JPG up to 2 MB."
+            />
+            <ImageUploadField
+              label="Main Banner Image"
+              currentUrl={currentBannerUrl}
+              file={bannerFile}
+              pickedUrl={bannerPickedUrl}
+              onFileChange={(f) => { setBannerFile(f); setBrandingStatus("idle"); }}
+              onPickFromLibrary={() => setPickerTarget("banner")}
+              onClear={() => { setBannerFile(null); setBannerPickedUrl(null); setBrandingStatus("idle"); }}
+              uploadStatus={brandingStatus}
+              hint="16:9 ratio recommended (e.g. 1200×675). PNG/JPG up to 2 MB."
+            />
+            <ImageUploadField
+              label="Thumbnail Image"
+              currentUrl={currentThumbnailUrl}
+              file={thumbnailFile}
+              pickedUrl={thumbnailPickedUrl}
+              onFileChange={(f) => { setThumbnailFile(f); setBrandingStatus("idle"); }}
+              onPickFromLibrary={() => setPickerTarget("thumbnail")}
+              onClear={() => { setThumbnailFile(null); setThumbnailPickedUrl(null); setBrandingStatus("idle"); }}
+              uploadStatus={brandingStatus}
+              hint="Used on program cards and listings. PNG/JPG up to 2 MB."
+            />
           </div>
+        </FormSection>
 
-          {/* Modal Footer */}
-          <div className="flex items-center justify-end gap-3 border-t border-zinc-200 bg-zinc-50 px-6 py-4">
-            <button
-              type="button"
-              className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 focus:outline-none focus:ring-2 focus:ring-zinc-200"
-              onClick={onClose}
-              disabled={isSaving}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 disabled:opacity-60"
-              onClick={handleSubmit}
-              disabled={isSaving}
-            >
-              {isSaving ? "Saving…" : "Save Changes"}
-            </button>
+        <FormSection
+          icon={GlobeAltIcon}
+          title="Program Description"
+          description="Full description displayed on the program landing page."
+        >
+          <textarea
+            rows={5}
+            value={formValues.description}
+            onChange={(e) => updateField("description", e.target.value)}
+            className={INPUT_CLS}
+            placeholder="Describe the program in detail…"
+          />
+        </FormSection>
+
+        <FormSection
+          icon={PlayCircleIcon}
+          title="Promo Video"
+          description="YouTube or Vimeo URL shown as the main promotional video."
+        >
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Video URL</label>
+            <input
+              type="url"
+              value={formValues.videoUrl}
+              onChange={(e) => updateField("videoUrl", e.target.value)}
+              className={INPUT_CLS}
+              placeholder="https://youtu.be/…"
+            />
           </div>
-        </div>
-      </div>
+        </FormSection>
+
+        <FormSection
+          icon={TagIcon}
+          title="SEO & Meta"
+          description="Controls how this program appears in search engines."
+        >
+          <div className="space-y-5">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-zinc-500">Meta Title</label>
+              <input
+                type="text"
+                value={formValues.metaTitle}
+                onChange={(e) => updateField("metaTitle", e.target.value)}
+                className={INPUT_CLS}
+                placeholder="Recommended: 50–60 characters"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-zinc-500">Meta Description</label>
+              <textarea
+                rows={3}
+                value={formValues.metaDescription}
+                onChange={(e) => updateField("metaDescription", e.target.value)}
+                className={INPUT_CLS}
+                placeholder="Recommended: 150–160 characters"
+              />
+            </div>
+          </div>
+        </FormSection>
+      </DrawerShell>
     </>
   );
 }

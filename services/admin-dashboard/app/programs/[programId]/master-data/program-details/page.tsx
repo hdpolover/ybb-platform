@@ -258,8 +258,10 @@ export default function ProgramDetailsPage({
       setPageError(null);
 
       try {
-        const response = await fetch(buildApiUrl(`/programs/${encodeURIComponent(programId)}`), {
+        const token = getAccessToken();
+        const response = await fetch(buildApiUrl(`/admin/programs/${encodeURIComponent(programId)}`), {
           cache: "no-store",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
 
         if (!response.ok) {
