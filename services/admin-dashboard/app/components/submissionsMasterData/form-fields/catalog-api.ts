@@ -137,3 +137,64 @@ export async function applyTemplateToProgram(
   );
   return jsonOrThrow<ApplyTemplateResult>(response);
 }
+
+// -------- Catalog mutations (super-admin only) --------
+
+export type CreateSystemFormFieldInput = {
+  key: string;
+  label: string;
+  category: string;
+  type: string;
+  defaultOptions?: Array<{ label: string; value: string }>;
+  helpText?: string;
+  order?: number;
+};
+
+export type UpdateSystemFormFieldInput = Partial<Omit<CreateSystemFormFieldInput, "key">> & {
+  isActive?: boolean;
+};
+
+export async function createSystemFormField(
+  input: CreateSystemFormFieldInput,
+): Promise<SystemFormField> {
+  const response = await fetch(buildApiUrl("/system-form-fields"), {
+    method: "POST",
+    headers: {
+      ...authHeaders(),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+  return jsonOrThrow<SystemFormField>(response);
+}
+
+export async function updateSystemFormField(
+  id: string,
+  input: UpdateSystemFormFieldInput,
+): Promise<SystemFormField> {
+  const response = await fetch(
+    buildApiUrl(`/system-form-fields/${encodeURIComponent(id)}`),
+    {
+      method: "PATCH",
+      headers: {
+        ...authHeaders(),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(input),
+    },
+  );
+  return jsonOrThrow<SystemFormField>(response);
+}
+
+export async function deleteSystemFormField(id: string): Promise<void> {
+  const response = await fetch(
+    buildApiUrl(`/system-form-fields/${encodeURIComponent(id)}`),
+    {
+      method: "DELETE",
+      headers: authHeaders(),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response));
+  }
+}
