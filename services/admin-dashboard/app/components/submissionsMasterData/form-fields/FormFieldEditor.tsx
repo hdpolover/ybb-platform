@@ -21,7 +21,7 @@ import { ValidationRulesEditor, type ValidationRules } from "./ValidationRulesEd
 import { MediaLibraryPicker } from "./MediaLibraryPicker";
 import type { ApplicationFormFieldRow } from "./FormFieldsTable";
 
-const SECTION_OPTIONS = [
+export const SECTION_OPTIONS = [
   { value: "personal_details", label: "Personal Details" },
   { value: "contact_information", label: "Contact Information" },
   { value: "professional_profile", label: "Professional Profile" },
