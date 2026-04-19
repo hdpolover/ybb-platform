@@ -31,7 +31,7 @@ const GENERIC_CATALOG: SeedEntry[] = [
     ],
     order: 6,
   },
-  { key: 'nationality', label: 'Nationality', category: 'identity', type: 'text', order: 7 },
+  { key: 'nationality', label: 'Nationality', category: 'identity', type: 'country', order: 7 },
   { key: 'origin_address', label: 'Origin Address', category: 'identity', type: 'textarea', order: 8, helpText: 'Hometown / permanent address.' },
   { key: 'current_address', label: 'Current Address', category: 'identity', type: 'textarea', order: 9 },
   { key: 'profile_picture', label: 'Profile Picture', category: 'identity', type: 'file', order: 10 },

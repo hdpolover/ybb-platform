@@ -167,7 +167,7 @@ Catalog composition is grounded in the legacy `participants` table (260k+ rows) 
 | `phone` | phone | Phone Number | |
 | `date_of_birth` | date | Date of Birth | Legacy `birthdate`. |
 | `gender` | radio | Gender | Options: `male`, `female`, `prefer-not`, `other` (legacy enum). |
-| `nationality` | text | Nationality | |
+| `nationality` | country | Nationality | |
 | `origin_address` | textarea | Origin Address | Hometown / permanent address. |
 | `current_address` | textarea | Current Address | |
 | `profile_picture` | file | Profile Picture | Legacy `picture_url`. |
@@ -206,6 +206,19 @@ Catalog composition is grounded in the legacy `participants` table (260k+ rows) 
 | `twibbon_link` | url | Twibbon / Social Media Post Link | |
 
 All multi-option fields (`tshirt_size`, `gender`, `education_level`, `referral_source`) have their option sets baked into the seed migration and are editable later through the super-admin catalog page.
+
+### 6.3 Field types requiring library-backed rendering
+
+Two field types in the catalog rely on external libraries for correct rendering and data-consistency on the applicant-facing portal. The admin catalog UI simply tags the type; the rendering lives in the applicant portal (`ybb-program-next`).
+
+| Type | Library | Stored value | Rationale |
+|---|---|---|---|
+| `country` | `country-state-city` (already a dependency of `services/api`) | ISO 3166-1 alpha-2 code (e.g. `"ID"`, `"US"`) | Free-text nationality produces inconsistent data ("Indonesia" / "indonesia" / "Indonesian" / emoji). A library-backed searchable dropdown with flag + name keeps reporting usable. |
+| `phone` | `libphonenumber-js` (to be added to the portal package) | E.164 (`"+6281234567890"`) | Phone numbers with implicit country code are ambiguous and hard to validate. Render as country-code picker + number input; validate + canonicalize to E.164 on submit. |
+
+**Admin side** (this plan): the catalog entry carries `type: 'country'` or `type: 'phone'`. No library dependency added to the admin dashboard — admins configure fields, they don't fill them out.
+
+**Portal side** (follow-up, separate repo): render `country` as a searchable `cmdk` dropdown populated from `country-state-city`, render `phone` with a country-code picker. Both should validate + canonicalize on submit.
 
 ## 7. Validation & conflict rules
 

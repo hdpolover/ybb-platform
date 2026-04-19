@@ -59,6 +59,7 @@ const FIELD_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "radio", label: "Radio buttons (one choice)" },
   { value: "checkbox", label: "Checkboxes (multiple choices)" },
   { value: "file", label: "File upload" },
+  { value: "country", label: "Country (searchable)" },
 ];
 
 const TYPES_WITH_OPTIONS = new Set(["select", "radio", "checkbox"]);

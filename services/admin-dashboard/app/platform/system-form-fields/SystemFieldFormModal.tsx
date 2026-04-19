@@ -21,7 +21,7 @@ const CATEGORY_OPTIONS = [
 
 const TYPE_OPTIONS = [
   "text", "textarea", "email", "phone", "url", "number", "date",
-  "select", "radio", "checkbox", "file",
+  "select", "radio", "checkbox", "file", "country",
 ];
 
 type Option = { label: string; value: string };
