@@ -169,19 +169,21 @@ class MinIOStorage(IStorageService):
             raise StorageException(f"Presigned URL error: {e}")
 
     async def get_presigned_upload_url(
-        self, 
-        bucket: str, 
-        object_name: str, 
+        self,
+        bucket: str,
+        object_name: str,
         expiry_seconds: int = 3600
     ) -> str:
-        """Get presigned URL for direct upload."""
+        """Get presigned URL for direct upload.
+
+        Note: we do NOT call `bucket_exists` + `make_bucket` here. On DO Spaces
+        (and other managed S3s) the API key typically lacks `HeadBucket` /
+        `CreateBucket` permissions on the whole Space — only object-level
+        access under the bucket — so that check would fail with AccessDenied
+        even though the bucket is valid. Buckets are provisioned out of band.
+        """
         try:
             from datetime import timedelta
-            
-            # Ensure bucket exists
-            bucket_exists = await self._run_in_thread(self.client.bucket_exists, bucket_name=bucket)
-            if not bucket_exists:
-                await self._run_in_thread(self.client.make_bucket, bucket_name=bucket)
 
             # Generate URL
             url = self.client.presigned_put_object(
