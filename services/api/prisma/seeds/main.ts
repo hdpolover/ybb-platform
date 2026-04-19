@@ -12,6 +12,7 @@ import { seedJYSPrograms } from './seed-programs-jys';
 import { seedCYSPrograms } from './seed-programs-cys';
 import { seedParticipants } from './seed-participants';
 import { seedScoring } from './seed-scoring';
+import { seedSystemFormFields } from './seed-system-form-fields';
 
 async function main() {
   log('🚀 Starting Full Database Seed...');
@@ -55,6 +56,9 @@ async function main() {
     await seedJYSPrograms();
     await seedCYSPrograms();
     await seedAdmins();
+
+    // Seed System Form Field catalog (for the form field picker)
+    await seedSystemFormFields();
 
     // Seed Participants & Apps
     await seedParticipants();
