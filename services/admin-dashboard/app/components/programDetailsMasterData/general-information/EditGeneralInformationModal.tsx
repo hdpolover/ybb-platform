@@ -49,30 +49,29 @@ interface EditGeneralInformationModalProps {
   onClose: () => void;
 }
 
-// ─── Media Picker Modal ───────────────────────────────────────────────────────
+// ─── Inline Media Picker (used inside ImageUploadField) ───────────────────────
 
 const PICKER_FILTERS = [
-  { key: "all", label: "All Images" },
+  { key: "all", label: "All" },
   { key: "logo", label: "Logos" },
   { key: "banner", label: "Banners" },
   { key: "gallery", label: "Gallery" },
 ];
 
-function MediaPickerModal({
+function InlineMediaPicker({
   programId,
   brandId,
-  onSelect,
+  onPick,
   onClose,
 }: {
   programId: string;
   brandId: string;
-  onSelect: (url: string) => void;
+  onPick: (url: string) => void;
   onClose: () => void;
 }) {
   const [files, setFiles] = useState<MediaFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<MediaFile | null>(null);
   const [search, setSearch] = useState("");
   const [assetFilter, setAssetFilter] = useState<string>("all");
 
@@ -101,143 +100,92 @@ function MediaPickerModal({
       )
     : files;
 
-  function handleConfirm() {
-    if (!selected) return;
-    const url = selected.url ?? selected.download_url;
-    if (!url) return;
-    onSelect(url);
-  }
-
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
-      <div className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4">
-          <h3 className="text-base font-bold text-zinc-900">Pick from Media Library</h3>
+    <div className="rounded-lg border border-zinc-200 bg-white shadow-sm">
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-zinc-100 px-3 py-2">
+        {PICKER_FILTERS.map((f) => (
           <button
+            key={f.key}
             type="button"
-            className="flex h-7 w-7 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
-            onClick={onClose}
+            onClick={() => setAssetFilter(f.key)}
+            className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition ${
+              assetFilter === f.key
+                ? "bg-blue-100 text-blue-700"
+                : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
+            }`}
           >
-            <XMarkIcon className="h-4 w-4" />
+            {f.label}
           </button>
+        ))}
+        <div className="ml-auto flex items-center gap-1 rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1">
+          <MagnifyingGlassIcon className="h-3 w-3 text-zinc-400" />
+          <input
+            type="text"
+            placeholder="Search…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-28 bg-transparent text-[11px] text-zinc-900 placeholder:text-zinc-400 focus:outline-none"
+          />
         </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="ml-1 flex h-6 w-6 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+          title="Close picker"
+        >
+          <XMarkIcon className="h-3.5 w-3.5" />
+        </button>
+      </div>
 
-        {/* Filters + Search */}
-        <div className="flex flex-wrap items-center gap-2 border-b border-zinc-100 px-5 py-3">
-          {PICKER_FILTERS.map((f) => (
-            <button
-              key={f.key}
-              type="button"
-              onClick={() => { setAssetFilter(f.key); setSelected(null); }}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-                assetFilter === f.key
-                  ? "bg-blue-100 text-blue-700"
-                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-          <div className="ml-auto flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2 py-1.5">
-            <MagnifyingGlassIcon className="h-3.5 w-3.5 text-zinc-400" />
-            <input
-              type="text"
-              placeholder="Search files\u2026"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-40 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none"
-            />
+      {/* Grid */}
+      <div className="max-h-80 overflow-y-auto p-3">
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <ArrowPathIcon className="h-5 w-5 animate-spin text-zinc-400" />
           </div>
-        </div>
-
-        {/* Grid */}
-        <div className="flex-1 overflow-y-auto p-5">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <ArrowPathIcon className="h-6 w-6 animate-spin text-zinc-400" />
-            </div>
-          ) : fetchError ? (
-            <div className="rounded-lg bg-rose-50 p-4 text-sm text-rose-700">{fetchError}</div>
-          ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-2 py-12 text-zinc-400">
-              <PhotoIcon className="h-10 w-10" />
-              <p className="text-sm">No images found in this program\u2019s media library.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
-              {filtered.map((file) => {
-                const url = file.url ?? file.download_url;
-                const isSelected = selected?.id === file.id;
-                return (
-                  <button
-                    key={file.id}
-                    type="button"
-                    onClick={() => setSelected(isSelected ? null : file)}
-                    className={`relative overflow-hidden rounded-lg border-2 text-left transition focus:outline-none ${
-                      isSelected
-                        ? "border-blue-500 ring-2 ring-blue-100"
-                        : "border-zinc-200 hover:border-blue-300 hover:shadow-sm"
-                    }`}
-                  >
-                    <div className="flex h-24 items-center justify-center overflow-hidden bg-zinc-100">
-                      {url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={url}
-                          alt={file.original_filename}
-                          className="h-full w-full object-cover"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <PhotoIcon className="h-8 w-8 text-zinc-300" />
-                      )}
-                    </div>
-                    <p
-                      className="truncate px-2 py-1.5 text-[10px] text-zinc-600"
-                      title={file.original_filename}
-                    >
-                      {file.original_filename}
-                    </p>
-                    {isSelected && (
-                      <div className="absolute right-1.5 top-1.5">
-                        <CheckCircleIcon className="h-5 w-5 text-blue-600 drop-shadow" />
-                      </div>
+        ) : fetchError ? (
+          <div className="rounded-md bg-rose-50 p-2 text-xs text-rose-700">{fetchError}</div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-1.5 py-8 text-zinc-400">
+            <PhotoIcon className="h-8 w-8" />
+            <p className="text-xs">No images found.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-4 gap-2">
+            {filtered.map((file) => {
+              const url = file.url ?? file.download_url;
+              return (
+                <button
+                  key={file.id}
+                  type="button"
+                  onClick={() => {
+                    if (url) onPick(url);
+                  }}
+                  className="group relative overflow-hidden rounded-md border border-zinc-200 text-left transition hover:border-blue-400 hover:shadow-sm focus:outline-none"
+                  title={file.original_filename}
+                >
+                  <div className="flex h-24 items-center justify-center overflow-hidden bg-zinc-100">
+                    {url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={url}
+                        alt={file.original_filename}
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <PhotoIcon className="h-6 w-6 text-zinc-300" />
                     )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between border-t border-zinc-200 px-5 py-4">
-          <p className="text-xs text-zinc-400">
-            {selected ? (
-              <span className="text-blue-600">1 image selected</span>
-            ) : (
-              "Click an image to select it"
-            )}
-          </p>
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={!selected}
-              onClick={handleConfirm}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Use this image
-            </button>
+                  </div>
+                  <p className="truncate px-1.5 py-1 text-[9px] text-zinc-500" title={file.original_filename}>
+                    {file.original_filename}
+                  </p>
+                </button>
+              );
+            })}
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -251,22 +199,27 @@ function ImageUploadField({
   file,
   pickedUrl,
   onFileChange,
-  onPickFromLibrary,
+  onPick,
   onClear,
   uploadStatus,
   hint,
+  programId,
+  brandId,
 }: {
   label: string;
   currentUrl?: string | null;
   file: File | null;
   pickedUrl: string | null;
   onFileChange: (f: File | null) => void;
-  onPickFromLibrary: () => void;
+  onPick: (url: string) => void;
   onClear: () => void;
   uploadStatus: "idle" | "uploading" | "done" | "error";
   hint?: string;
+  programId: string;
+  brandId: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const previewUrl = file ? URL.createObjectURL(file) : pickedUrl ?? currentUrl ?? null;
   const isDirty = file !== null || pickedUrl !== null;
 
@@ -274,51 +227,53 @@ function ImageUploadField({
     <div className="flex flex-col gap-2">
       <label className="text-xs font-medium text-zinc-500">{label}</label>
 
-      {/* Preview / drop zone */}
-      <div
-        className="relative flex h-36 cursor-pointer items-center justify-center overflow-hidden rounded-lg border-2 border-dashed border-zinc-200 bg-zinc-50 transition hover:border-blue-300 hover:bg-blue-50/30"
-        onClick={() => inputRef.current?.click()}
-      >
-        {previewUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={previewUrl}
-            alt={label}
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <div className="flex flex-col items-center gap-1 text-zinc-300">
-            <PhotoIcon className="h-8 w-8" />
-            <span className="text-[10px]">Click to upload</span>
-          </div>
-        )}
+      {/* Preview / drop zone — hidden while picker is open */}
+      {!pickerOpen && (
+        <div
+          className="relative flex h-36 cursor-pointer items-center justify-center overflow-hidden rounded-lg border-2 border-dashed border-zinc-200 bg-zinc-50 transition hover:border-blue-300 hover:bg-blue-50/30"
+          onClick={() => inputRef.current?.click()}
+        >
+          {previewUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={previewUrl}
+              alt={label}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div className="flex flex-col items-center gap-1 text-zinc-300">
+              <PhotoIcon className="h-8 w-8" />
+              <span className="text-[10px]">Click to upload</span>
+            </div>
+          )}
 
-        {/* Status overlays */}
-        {uploadStatus === "uploading" && (
-          <div className="absolute inset-0 flex items-center justify-center bg-white/70">
-            <ArrowPathIcon className="h-6 w-6 animate-spin text-blue-500" />
-          </div>
-        )}
-        {uploadStatus === "done" && (
-          <div className="absolute inset-0 flex items-center justify-center bg-white/70">
-            <CheckCircleIcon className="h-7 w-7 text-emerald-500" />
-          </div>
-        )}
+          {/* Status overlays */}
+          {uploadStatus === "uploading" && (
+            <div className="absolute inset-0 flex items-center justify-center bg-white/70">
+              <ArrowPathIcon className="h-6 w-6 animate-spin text-blue-500" />
+            </div>
+          )}
+          {uploadStatus === "done" && (
+            <div className="absolute inset-0 flex items-center justify-center bg-white/70">
+              <CheckCircleIcon className="h-7 w-7 text-emerald-500" />
+            </div>
+          )}
 
-        {/* "From library" badge */}
-        {!file && pickedUrl && (
-          <div className="absolute bottom-0 left-0 right-0 bg-emerald-600/90 py-0.5 text-center text-[10px] font-semibold text-white">
-            From library
-          </div>
-        )}
+          {/* "From library" badge */}
+          {!file && pickedUrl && (
+            <div className="absolute bottom-0 left-0 right-0 bg-emerald-600/90 py-0.5 text-center text-[10px] font-semibold text-white">
+              From library
+            </div>
+          )}
 
-        {/* File name badge */}
-        {file && (
-          <div className="absolute bottom-0 left-0 right-0 truncate bg-blue-600/90 px-2 py-0.5 text-center text-[10px] font-semibold text-white">
-            {file.name}
-          </div>
-        )}
-      </div>
+          {/* File name badge */}
+          {file && (
+            <div className="absolute bottom-0 left-0 right-0 truncate bg-blue-600/90 px-2 py-0.5 text-center text-[10px] font-semibold text-white">
+              {file.name}
+            </div>
+          )}
+        </div>
+      )}
 
       <input
         ref={inputRef}
@@ -332,17 +287,34 @@ function ImageUploadField({
         }}
       />
 
+      {/* Inline library picker */}
+      {pickerOpen && (
+        <InlineMediaPicker
+          programId={programId}
+          brandId={brandId}
+          onPick={(url) => {
+            onPick(url);
+            setPickerOpen(false);
+          }}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
+
       {/* Action buttons */}
       <div className="flex items-center gap-2">
         <button
           type="button"
-          onClick={onPickFromLibrary}
-          className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+          onClick={() => setPickerOpen((v) => !v)}
+          className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium shadow-sm transition ${
+            pickerOpen
+              ? "border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
+              : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+          }`}
         >
-          <FolderOpenIcon className="h-3.5 w-3.5 text-zinc-500" />
-          Pick from library
+          <FolderOpenIcon className="h-3.5 w-3.5" />
+          {pickerOpen ? "Close library" : "Pick from library"}
         </button>
-        {isDirty && (
+        {isDirty && !pickerOpen && (
           <button
             type="button"
             onClick={onClear}
@@ -388,8 +360,6 @@ export function EditGeneralInformationModal({
   const [bannerPickedUrl, setBannerPickedUrl] = useState<string | null>(null);
   const [thumbnailPickedUrl, setThumbnailPickedUrl] = useState<string | null>(null);
 
-  // Picker modal target
-  const [pickerTarget, setPickerTarget] = useState<"logo" | "banner" | "thumbnail" | null>(null);
 
   // Branding upload state
   const [brandingStatus, setBrandingStatus] = useState<"idle" | "uploading" | "done" | "error">("idle");
@@ -468,21 +438,6 @@ export function EditGeneralInformationModal({
     }
   }
 
-  function handlePickerSelect(url: string) {
-    if (pickerTarget === "logo") {
-      setLogoPickedUrl(url);
-      setLogoFile(null);
-    } else if (pickerTarget === "banner") {
-      setBannerPickedUrl(url);
-      setBannerFile(null);
-    } else if (pickerTarget === "thumbnail") {
-      setThumbnailPickedUrl(url);
-      setThumbnailFile(null);
-    }
-    setBrandingStatus("idle");
-    setPickerTarget(null);
-  }
-
   async function handleSubmit() {
     // If there are pending image changes, save those first
     if (hasBrandingChanges && brandingStatus !== "done") {
@@ -494,16 +449,6 @@ export function EditGeneralInformationModal({
 
   return (
     <>
-      {/* Nested media picker — renders above the drawer (z-[60] in its own overlay). */}
-      {pickerTarget && (
-        <MediaPickerModal
-          programId={programId}
-          brandId={brandId}
-          onSelect={handlePickerSelect}
-          onClose={() => setPickerTarget(null)}
-        />
-      )}
-
       <DrawerShell
         open={open}
         onClose={onClose}
@@ -631,10 +576,12 @@ export function EditGeneralInformationModal({
               file={logoFile}
               pickedUrl={logoPickedUrl}
               onFileChange={(f) => { setLogoFile(f); setBrandingStatus("idle"); }}
-              onPickFromLibrary={() => setPickerTarget("logo")}
+              onPick={(url) => { setLogoPickedUrl(url); setLogoFile(null); setBrandingStatus("idle"); }}
               onClear={() => { setLogoFile(null); setLogoPickedUrl(null); setBrandingStatus("idle"); }}
               uploadStatus={brandingStatus}
               hint="Square or 4:3 ratio recommended. PNG/JPG up to 2 MB."
+              programId={programId}
+              brandId={brandId}
             />
             <ImageUploadField
               label="Main Banner Image"
@@ -642,10 +589,12 @@ export function EditGeneralInformationModal({
               file={bannerFile}
               pickedUrl={bannerPickedUrl}
               onFileChange={(f) => { setBannerFile(f); setBrandingStatus("idle"); }}
-              onPickFromLibrary={() => setPickerTarget("banner")}
+              onPick={(url) => { setBannerPickedUrl(url); setBannerFile(null); setBrandingStatus("idle"); }}
               onClear={() => { setBannerFile(null); setBannerPickedUrl(null); setBrandingStatus("idle"); }}
               uploadStatus={brandingStatus}
               hint="16:9 ratio recommended (e.g. 1200×675). PNG/JPG up to 2 MB."
+              programId={programId}
+              brandId={brandId}
             />
             <ImageUploadField
               label="Thumbnail Image"
@@ -653,10 +602,12 @@ export function EditGeneralInformationModal({
               file={thumbnailFile}
               pickedUrl={thumbnailPickedUrl}
               onFileChange={(f) => { setThumbnailFile(f); setBrandingStatus("idle"); }}
-              onPickFromLibrary={() => setPickerTarget("thumbnail")}
+              onPick={(url) => { setThumbnailPickedUrl(url); setThumbnailFile(null); setBrandingStatus("idle"); }}
               onClear={() => { setThumbnailFile(null); setThumbnailPickedUrl(null); setBrandingStatus("idle"); }}
               uploadStatus={brandingStatus}
               hint="Used on program cards and listings. PNG/JPG up to 2 MB."
+              programId={programId}
+              brandId={brandId}
             />
           </div>
         </FormSection>

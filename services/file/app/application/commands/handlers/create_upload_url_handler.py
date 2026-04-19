@@ -30,8 +30,8 @@ class CreateUploadUrlHandler:
     ]
     ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 
-    MAX_DOCUMENT_SIZE = 10 * 1024 * 1024  # 10 MB
-    MAX_IMAGE_SIZE = 5 * 1024 * 1024      # 5 MB
+    MAX_DOCUMENT_SIZE = 50 * 1024 * 1024  # 50 MB — client passes docs through as-is
+    MAX_IMAGE_SIZE = 20 * 1024 * 1024     # 20 MB — safety net; client compresses images first
 
     def __init__(
         self,
@@ -110,6 +110,8 @@ class CreateUploadUrlHandler:
             metadata=merged_metadata,
             program_id=command.program_id,
             asset_type=command.asset_type,
+            title=command.title,
+            alt_text=command.alt_text,
             status=FileStatus.PROCESSING,
         )
 

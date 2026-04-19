@@ -799,6 +799,11 @@ export type MediaFile = {
   download_url: string | null;
   uploaded_at: string;
   updated_at: string | null;
+  title: string | null;
+  alt_text: string | null;
+  width: number | null;
+  height: number | null;
+  status: string;
 };
 
 export type PaginatedMedia = {
@@ -877,6 +882,8 @@ export type UploadContext = {
   programId?: string;
   participantId?: string;
   assetType?: string;
+  title?: string;
+  altText?: string;
 };
 
 export type CreateUploadUrlResponse = {
@@ -922,6 +929,69 @@ export function isSupportedUploadMime(mime: string): boolean {
 }
 
 /**
+ * Compress an image file client-side using an offscreen Canvas before upload.
+ *
+ * Strategy:
+ *  - GIF → returned as-is (re-encoding breaks animation)
+ *  - Images already ≤ COMPRESS_THRESHOLD_BYTES → returned as-is
+ *  - All other images:
+ *      1. Resize longest edge to ≤ MAX_DIMENSION
+ *      2. Re-encode as WebP at QUALITY (alpha-safe, best compression ratio)
+ *      3. If the result is somehow *larger* than the original, return the original
+ *
+ * Documents (PDF/Word/Excel) are never touched — pass them in as-is.
+ */
+export async function compressImageFile(
+  file: File,
+  {
+    maxDimension = 2400,
+    quality = 0.85,
+    thresholdBytes = 1 * 1024 * 1024, // compress any image > 1 MB
+  }: { maxDimension?: number; quality?: number; thresholdBytes?: number } = {},
+): Promise<File> {
+  // Non-images and GIFs pass through unchanged
+  if (!file.type.startsWith("image/") || file.type === "image/gif") return file;
+  // Already small enough
+  if (file.size <= thresholdBytes) return file;
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+
+      const { naturalWidth: w, naturalHeight: h } = img;
+      const scale = Math.min(1, maxDimension / Math.max(w, h));
+      const newW = Math.round(w * scale);
+      const newH = Math.round(h * scale);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = newW;
+      canvas.height = newH;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { resolve(file); return; }
+
+      ctx.drawImage(img, 0, 0, newW, newH);
+
+      canvas.toBlob(
+        (blob) => {
+          if (!blob || blob.size >= file.size) { resolve(file); return; }
+          // Rename to .webp so the MIME is consistent
+          const baseName = file.name.replace(/\.[^.]+$/, "");
+          resolve(new File([blob], `${baseName}.webp`, { type: "image/webp", lastModified: Date.now() }));
+        },
+        "image/webp",
+        quality,
+      );
+    };
+
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); resolve(file); };
+    img.src = objectUrl;
+  });
+}
+
+/**
  * Ask the gateway for a presigned PUT URL and reserve a File row in PROCESSING.
  * The server validates MIME + size before issuing the URL, so a 400/413 here
  * means the file is rejected up-front (no bytes wasted).
@@ -942,6 +1012,8 @@ export function requestUploadUrl(
       program_id: ctx.programId,
       participant_id: ctx.participantId,
       asset_type: ctx.assetType,
+      title: ctx.title,
+      alt_text: ctx.altText,
     }),
   });
 }
@@ -1031,14 +1103,18 @@ export async function uploadFileViaPresignedUrl(
   onProgress?: (progress: UploadProgress) => void,
   signal?: AbortSignal,
 ): Promise<UploadResult> {
-  if (!isSupportedUploadMime(file.type)) {
+  // Compress images client-side first so the declared size & bytes are already reduced
+  // before we hit the server's size validation.
+  const processedFile = await compressImageFile(file);
+
+  if (!isSupportedUploadMime(processedFile.type)) {
     throw new Error(
-      `Unsupported file type: ${file.type || "unknown"}. Allowed: PDF, Word, Excel, JPEG/PNG/WebP/GIF.`,
+      `Unsupported file type: ${processedFile.type || "unknown"}. Allowed: PDF, Word, Excel, JPEG/PNG/WebP/GIF.`,
     );
   }
-  const url = await requestUploadUrl(file, ctx);
-  await putFileToStorage(file, url.upload_url, onProgress, signal);
-  await markFileReady(url.file_id, ctx.brandId, file.size);
+  const url = await requestUploadUrl(processedFile, ctx);
+  await putFileToStorage(processedFile, url.upload_url, onProgress, signal);
+  await markFileReady(url.file_id, ctx.brandId, processedFile.size);
   return {
     fileId: url.file_id,
     publicUrl: url.public_url,

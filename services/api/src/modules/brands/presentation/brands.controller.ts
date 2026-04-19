@@ -7,6 +7,7 @@ import { ChangeType } from '@prisma/client';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
+import { CacheInvalidate } from '@shared/decorators/cache-invalidate.decorator';
 import { ListBrandsQuery } from '../application/queries/list-brands.query';
 import { GetBrandDetailQuery } from '../application/queries/get-brand-detail.query';
 import { ListBrandSponsorsQuery } from '../application/queries/list-brand-sponsors.query';
@@ -108,6 +109,7 @@ export class BrandsController {
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'Brand', action: ChangeType.update })
+    @CacheInvalidate(['landing:home:*', 'landing:programs:*', 'landing:program:*'])
     @ApiOperation({ summary: 'Update a brand' })
     @ApiConsumes('multipart/form-data')
     @UseInterceptors(FileFieldsInterceptor([
@@ -133,6 +135,7 @@ export class BrandsController {
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'Brand', action: ChangeType.update })
+    @CacheInvalidate(['landing:home:*', 'landing:programs:*', 'landing:program:*'])
     @ApiOperation({ summary: 'Update brand details' })
     @ApiConsumes('multipart/form-data')
     @UseInterceptors(FileFieldsInterceptor([

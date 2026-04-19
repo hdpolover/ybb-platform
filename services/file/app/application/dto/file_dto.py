@@ -25,6 +25,10 @@ class FileDto(BaseModel):
     program_id: Optional[str] = None
     asset_type: Optional[str] = None
     status: str = "PROCESSING"
+    alt_text: Optional[str] = None
+    title: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
 
     @staticmethod
     def from_entity(file: File, download_url: Optional[str] = None, url: Optional[str] = None) -> 'FileDto':
@@ -47,6 +51,10 @@ class FileDto(BaseModel):
             program_id=file.program_id,
             asset_type=file.asset_type,
             status=file.status,
+            alt_text=file.alt_text,
+            title=file.title,
+            width=file.width,
+            height=file.height,
         )
 
 
@@ -69,6 +77,8 @@ class CreateUploadUrlRequestDto(BaseModel):
     program_id: Optional[str] = None
     participant_id: Optional[str] = None
     asset_type: Optional[str] = None
+    title: Optional[str] = None
+    alt_text: Optional[str] = None
 
 
 class CreateUploadUrlResponseDto(BaseModel):

@@ -119,6 +119,14 @@ async function request<T>(
     headers,
   });
 
+  if (response.status === 401) {
+    ["access_token", "refresh_token", "admin_auth_session"].forEach((key) =>
+      window.localStorage.removeItem(key),
+    );
+    window.location.href = "/login";
+    throw new Error("Session expired. Redirecting to login...");
+  }
+
   if (!response.ok) {
     throw new Error(await readErrorMessage(response));
   }

@@ -26,6 +26,7 @@ import { ProgressStepDto } from './dto/participant-progress-response.dto';
 import { Public } from '../../../shared/decorators/public.decorator';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
 import { AuditTrail } from '../../../shared/decorators/audit-trail.decorator';
+import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
 import { ChangeType } from '@prisma/client';
 
 interface AuthenticatedRequest extends ExpressRequest {
@@ -143,6 +144,7 @@ export class ProgramsController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Program not found' })
   @AuditTrail({ entityType: 'Program', action: ChangeType.update })
+  @CacheInvalidate(['landing:programs:*', 'landing:program:*', 'landing:home:*'])
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateProgramDto,
@@ -190,6 +192,7 @@ export class ProgramsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update program branding (logo, banner, thumbnail)' })
   @ApiConsumes('multipart/form-data')
+  @CacheInvalidate(['landing:programs:*', 'landing:program:*', 'landing:home:*'])
   @UseInterceptors(FileFieldsInterceptor([
     { name: 'logo', maxCount: 1 },
     { name: 'banner', maxCount: 1 },
