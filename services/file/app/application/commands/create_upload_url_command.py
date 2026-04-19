@@ -21,4 +21,6 @@ class CreateUploadUrlCommand:
     participant_id: Optional[str] = None
     asset_type: Optional[str] = None
     metadata: Optional[dict] = None
+    title: Optional[str] = None
+    alt_text: Optional[str] = None
     expires_in_seconds: int = 300  # presigned URL TTL; matches test-prep-platform default

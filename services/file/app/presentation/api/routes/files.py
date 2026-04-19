@@ -134,6 +134,8 @@ async def request_upload_url(
             program_id=body.program_id,
             participant_id=body.participant_id,
             asset_type=body.asset_type,
+            title=body.title,
+            alt_text=body.alt_text,
         )
         return await handler.execute(command)
     except InvalidFileTypeException as e:

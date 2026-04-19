@@ -24,6 +24,14 @@ import {
   uploadFileViaPresignedUrl,
   type MediaFile,
 } from "@/src/shared/api-client";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetFooter,
+} from "@/src/ui/sheet";
 
 const ASSET_TYPE_LABELS: Record<string, string> = {
   all: "All",
@@ -165,10 +173,14 @@ function MediaDetailPanel({
         <dl className="space-y-2 text-[11px]">
           {[
             { label: "Filename", value: file.original_filename },
+            { label: "Title", value: file.title ?? "—" },
+            { label: "Alt Text", value: file.alt_text ?? "—" },
             { label: "Type", value: file.content_type },
             { label: "Size", value: formatBytes(file.size) },
+            ...(file.width && file.height ? [{ label: "Dimensions", value: `${file.width} × ${file.height}` }] : []),
             { label: "Asset Type", value: file.asset_type ?? "—" },
             { label: "Bucket", value: file.bucket },
+            { label: "Status", value: file.status },
             { label: "Uploaded", value: new Date(file.uploaded_at).toLocaleString() },
           ].map(({ label, value }) => (
             <div key={label} className="flex justify-between gap-2">
@@ -215,15 +227,17 @@ function MediaDetailPanel({
   );
 }
 
-// ─── Upload Zone ──────────────────────────────────────────────────────────────
+// ─── Upload Sheet ─────────────────────────────────────────────────────────────
 
-function UploadZone({
+function UploadSheet({
+  open,
   programId,
   brandId,
   userId,
   onUploaded,
   onClose,
 }: {
+  open: boolean;
   programId: string;
   brandId: string;
   userId: string;
@@ -231,24 +245,56 @@ function UploadZone({
   onClose: () => void;
 }) {
   const [files, setFiles] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
   const [assetType, setAssetType] = useState("gallery");
+  const [title, setTitle] = useState("");
+  const [altText, setAltText] = useState("");
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Reset state when sheet opens
+  useEffect(() => {
+    if (open) {
+      setFiles([]);
+      setPreviews([]);
+      setAssetType("gallery");
+      setTitle("");
+      setAltText("");
+    }
+  }, [open]);
+
+  // Generate object-URL previews for image files
+  function applyFiles(newFiles: File[]) {
+    // Revoke previous previews to avoid memory leaks
+    previews.forEach((p) => URL.revokeObjectURL(p));
+    const urls = newFiles.map((f) =>
+      f.type.startsWith("image/") ? URL.createObjectURL(f) : "",
+    );
+    setFiles(newFiles);
+    setPreviews(urls);
+  }
+
+  // Revoke on unmount
+  useEffect(() => () => { previews.forEach((p) => { if (p) URL.revokeObjectURL(p); }); }, []);
+
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
-    setFiles(Array.from(e.dataTransfer.files));
+    applyFiles(Array.from(e.dataTransfer.files));
   }
 
   async function handleUpload() {
     if (!files.length) return;
     setUploading(true);
+    const hasImages = files.some((f) => f.type.startsWith("image/"));
     const toastId = toast.loading(
-      files.length === 1
-        ? `Uploading "${files[0].name}"…`
-        : `Uploading ${files.length} files…`,
+      hasImages
+        ? files.length === 1
+          ? `Processing & uploading "${files[0].name}"…`
+          : `Processing & uploading ${files.length} files…`
+        : files.length === 1
+          ? `Uploading "${files[0].name}"…`
+          : `Uploading ${files.length} files…`,
     );
-    // Close modal immediately so user isn't blocked
     onClose();
     const settled = await Promise.allSettled(
       files.map((file) =>
@@ -258,6 +304,8 @@ function UploadZone({
           bucket: assetType,
           programId,
           assetType,
+          title: title.trim() || undefined,
+          altText: altText.trim() || undefined,
         }),
       ),
     );
@@ -284,27 +332,26 @@ function UploadZone({
     setUploading(false);
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-lg rounded-xl border border-zinc-200 bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4">
-          <div>
-            <h2 className="text-sm font-bold text-zinc-900">Upload Media</h2>
-            <p className="text-[11px] text-zinc-500">Upload images or documents to the program media library.</p>
-          </div>
-          <button
-            type="button"
-            className="flex h-7 w-7 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
-            onClick={onClose}
-          >
-            <XMarkIcon className="h-4 w-4" />
-          </button>
-        </div>
+  const multiFile = files.length > 1;
 
-        <div className="space-y-4 p-5">
+  return (
+    <Sheet open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <SheetContent side="right" className="flex w-full max-w-md flex-col p-0 sm:max-w-md">
+        <SheetHeader className="border-b border-zinc-200 px-6 py-5">
+          <SheetTitle>Upload Media</SheetTitle>
+          <SheetDescription>
+            Upload images or documents to the program media library.
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="flex-1 overflow-y-auto space-y-5 px-6 py-5">
           {/* Drop Zone */}
           <div
-            className="flex min-h-[120px] cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-zinc-300 bg-zinc-50 p-6 text-center transition hover:border-blue-400 hover:bg-blue-50/30"
+            className={`relative flex min-h-[130px] cursor-pointer flex-col items-center justify-center overflow-hidden rounded-lg border-2 border-dashed text-center transition ${
+              files.length > 0
+                ? "border-blue-400 bg-blue-50/20"
+                : "border-zinc-300 bg-zinc-50 hover:border-blue-400 hover:bg-blue-50/30"
+            }`}
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleDrop}
             onClick={() => inputRef.current?.click()}
@@ -312,14 +359,57 @@ function UploadZone({
             tabIndex={0}
             onKeyDown={(e) => e.key === "Enter" && inputRef.current?.click()}
           >
-            <CloudArrowUpIcon className="mb-2 h-8 w-8 text-zinc-400" />
-            {files.length > 0 ? (
-              <p className="text-xs font-semibold text-blue-600">{files.length} file(s) selected</p>
-            ) : (
+            {/* Single image preview */}
+            {files.length === 1 && previews[0] ? (
               <>
+                <img
+                  src={previews[0]}
+                  alt={files[0].name}
+                  className="max-h-48 max-w-full rounded object-contain p-2"
+                />
+                <p className="mt-1 px-3 pb-2 text-[11px] font-medium text-blue-600 truncate max-w-full">
+                  {files[0].name}
+                </p>
+              </>
+            ) : files.length === 1 ? (
+              /* Single non-image */
+              <div className="flex flex-col items-center gap-1.5 p-6">
+                <DocumentIcon className="h-10 w-10 text-zinc-400" />
+                <p className="text-xs font-semibold text-blue-600">{files[0].name}</p>
+              </div>
+            ) : files.length > 1 ? (
+              /* Multi-file grid preview */
+              <div className="flex flex-col items-center gap-2 p-4">
+                <div className="flex flex-wrap justify-center gap-1.5">
+                  {previews.slice(0, 6).map((src, i) =>
+                    src ? (
+                      <img
+                        key={i}
+                        src={src}
+                        alt={files[i].name}
+                        className="h-14 w-14 rounded object-cover border border-zinc-200"
+                      />
+                    ) : (
+                      <div key={i} className="flex h-14 w-14 items-center justify-center rounded border border-zinc-200 bg-zinc-100">
+                        <DocumentIcon className="h-6 w-6 text-zinc-400" />
+                      </div>
+                    ),
+                  )}
+                  {files.length > 6 && (
+                    <div className="flex h-14 w-14 items-center justify-center rounded border border-zinc-200 bg-zinc-100 text-xs font-semibold text-zinc-500">
+                      +{files.length - 6}
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs font-semibold text-blue-600">{files.length} files selected</p>
+              </div>
+            ) : (
+              /* Empty state */
+              <div className="flex flex-col items-center gap-1 p-6">
+                <CloudArrowUpIcon className="h-8 w-8 text-zinc-400" />
                 <p className="text-xs font-semibold text-zinc-700">Drag & drop or click to select</p>
                 <p className="text-[11px] text-zinc-400">Images up to 5 MB, documents up to 10 MB</p>
-              </>
+              </div>
             )}
             <input
               ref={inputRef}
@@ -327,17 +417,17 @@ function UploadZone({
               multiple
               className="hidden"
               accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"
-              onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+              onChange={(e) => applyFiles(Array.from(e.target.files ?? []))}
             />
           </div>
 
           {/* Asset Type */}
           <div>
-            <label className="mb-1 block text-[11px] font-medium text-zinc-600">Asset Type</label>
+            <label className="mb-1.5 block text-xs font-medium text-zinc-700">Asset Type</label>
             <select
               value={assetType}
               onChange={(e) => setAssetType(e.target.value)}
-              className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             >
               {Object.entries(ASSET_TYPE_LABELS).filter(([k]) => k !== "all").map(([value, label]) => (
                 <option key={value} value={value}>{label}</option>
@@ -345,22 +435,58 @@ function UploadZone({
             </select>
           </div>
 
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={onClose} className="rounded-md border border-zinc-200 px-4 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50">
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleUpload}
-              disabled={uploading || files.length === 0}
-              className="rounded-md bg-blue-500 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
-            >
-              {`Upload${files.length > 0 ? ` (${files.length})` : ""}`}
-            </button>
+          {/* Title */}
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-zinc-700">
+              Title
+              <span className="ml-1 text-[10px] font-normal text-zinc-400">(optional)</span>
+            </label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder={multiFile ? "Applies to all uploaded files" : "e.g. Program Banner 2026"}
+              maxLength={255}
+              className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
+          </div>
+
+          {/* Alt Text */}
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-zinc-700">
+              Alt Text
+              <span className="ml-1 text-[10px] font-normal text-zinc-400">(images only, optional)</span>
+            </label>
+            <input
+              type="text"
+              value={altText}
+              onChange={(e) => setAltText(e.target.value)}
+              placeholder={multiFile ? "Applies to all uploaded files" : "Describe the image for accessibility"}
+              maxLength={500}
+              className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
           </div>
         </div>
-      </div>
-    </div>
+
+        <SheetFooter className="border-t border-zinc-200 px-6 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleUpload}
+            disabled={uploading || files.length === 0}
+            className="rounded-md bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
+          >
+            {files.length > 0 ? `Upload (${files.length})` : "Upload"}
+          </button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -680,16 +806,15 @@ export default function MediaLibraryPage() {
         )}
       </div>
 
-      {/* Upload Modal */}
-      {showUpload && (
-        <UploadZone
-          programId={params.programId}
-          brandId={brandId}
-          userId={userId}
-          onUploaded={() => { setShowUpload(false); fetchMedia(); }}
-          onClose={() => setShowUpload(false)}
-        />
-      )}
+      {/* Upload Sheet */}
+      <UploadSheet
+        open={showUpload}
+        programId={params.programId}
+        brandId={brandId}
+        userId={userId}
+        onUploaded={() => { setShowUpload(false); fetchMedia(); }}
+        onClose={() => setShowUpload(false)}
+      />
 
       {/* Delete Confirm Modal */}
       {deleteTarget && (

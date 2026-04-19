@@ -64,8 +64,6 @@ export class AdminProgramsController {
     }
 
     return {
-      message: 'Program found',
-      data: {
         id: program.id,
         name: program.name,
         slug: program.slug,
@@ -95,7 +93,6 @@ export class AdminProgramsController {
         metaDescription: program.metaDescription ?? null,
         deletedAt: program.deletedAt ?? null,
         brand: program.brand,
-      },
     };
   }
 }
