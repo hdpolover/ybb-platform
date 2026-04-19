@@ -437,7 +437,8 @@ export function autoSlug(input: string): string {
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/[^a-z0-9\s]+/g, '')   // strip punctuation (hyphens, apostrophes, etc.) without introducing a separator
+    .replace(/\s+/g, '_')            // whitespace runs → single underscore
     .replace(/^_+|_+$/g, '');
   if (!normalized) return '';
   const prefixed = /^[0-9]/.test(normalized) ? `f_${normalized}` : normalized;
