@@ -21,6 +21,9 @@ import { UpdateBrandSettingsHandler } from './application/commands/handlers/upda
 import { UpdateBrandMetadataHandler } from './application/commands/handlers/update-brand-metadata.handler';
 import { AssignBrandAdminHandler } from './application/commands/handlers/assign-brand-admin.handler';
 import { RemoveBrandAdminHandler } from './application/commands/handlers/remove-brand-admin.handler';
+import { CreateSponsorHandler } from './application/commands/handlers/create-sponsor.handler';
+import { UpdateSponsorHandler } from './application/commands/handlers/update-sponsor.handler';
+import { DeleteSponsorHandler } from './application/commands/handlers/delete-sponsor.handler';
 
 @Module({
     imports: [CqrsModule, AuthModule, FilesModule, UsersModule, ProgramsModule],
@@ -49,6 +52,9 @@ import { RemoveBrandAdminHandler } from './application/commands/handlers/remove-
         UpdateBrandMetadataHandler,
         AssignBrandAdminHandler,
         RemoveBrandAdminHandler,
+        CreateSponsorHandler,
+        UpdateSponsorHandler,
+        DeleteSponsorHandler,
     ],
 })
 export class BrandsModule { }

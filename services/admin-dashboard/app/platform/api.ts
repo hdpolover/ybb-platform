@@ -196,7 +196,7 @@ export async function updatePlatformBrandIdentity(
     isActive?: boolean;
     logo?: File | null;
     banner?: File | null;
-    userId: string;
+    userId?: string;
   },
 ): Promise<PlatformBrandDetail> {
   // Upload logo + banner via the presigned flow before the save call so the
@@ -209,6 +209,7 @@ export async function updatePlatformBrandIdentity(
   let bannerUrl: string | undefined;
 
   if (input.logo) {
+    if (!input.userId) throw new Error("userId is required when uploading a logo.");
     const result = await uploadFileViaPresignedUrl(input.logo, {
       userId: input.userId,
       brandId,
@@ -222,6 +223,7 @@ export async function updatePlatformBrandIdentity(
   }
 
   if (input.banner) {
+    if (!input.userId) throw new Error("userId is required when uploading a banner.");
     const result = await uploadFileViaPresignedUrl(input.banner, {
       userId: input.userId,
       brandId,
@@ -244,6 +246,23 @@ export async function updatePlatformBrandIdentity(
   if (input.isActive != null) formData.set("isActive", String(input.isActive));
   if (logoUrl) formData.set("logoUrl", logoUrl);
   if (bannerUrl) formData.set("bannerUrl", bannerUrl);
+  return request<PlatformBrandDetail>(`/brands/${brandId}`, { method: "PUT", body: formData });
+}
+
+/**
+ * Uploads brand logo/banner directly as multipart to PUT /brands/:id.
+ * Matches the program branding approach — no presigned URLs, no userId needed.
+ */
+export function updatePlatformBrandMedia(
+  brandId: string,
+  brand: { name: string; slug: string },
+  files: { logo?: File | null; banner?: File | null },
+): Promise<PlatformBrandDetail> {
+  const formData = new FormData();
+  formData.set("name", brand.name);
+  formData.set("slug", brand.slug);
+  if (files.logo) formData.append("logo", files.logo);
+  if (files.banner) formData.append("banner", files.banner);
   return request<PlatformBrandDetail>(`/brands/${brandId}`, { method: "PUT", body: formData });
 }
 
@@ -426,10 +445,62 @@ export type BrandSponsor = {
   websiteUrl: string | null;
   tier: string | null;
   order: number;
+  description?: string | null;
 };
 
 export function listBrandSponsors(brandId: string): Promise<BrandSponsor[]> {
   return request<BrandSponsor[]>(`/brands/${brandId}/sponsors`);
+}
+
+export function createBrandSponsor(
+  brandId: string,
+  input: {
+    name: string;
+    type: string;
+    tier?: string;
+    websiteUrl?: string;
+    description?: string;
+    order?: number;
+    logo?: File | null;
+  },
+): Promise<BrandSponsor> {
+  const formData = new FormData();
+  formData.set("name", input.name);
+  formData.set("type", input.type);
+  if (input.tier) formData.set("tier", input.tier);
+  if (input.websiteUrl) formData.set("websiteUrl", input.websiteUrl);
+  if (input.description) formData.set("description", input.description);
+  if (input.order != null) formData.set("order", String(input.order));
+  if (input.logo) formData.append("logo", input.logo);
+  return request<BrandSponsor>(`/brands/${brandId}/sponsors`, { method: "POST", body: formData });
+}
+
+export function updateBrandSponsor(
+  brandId: string,
+  sponsorId: string,
+  input: {
+    name?: string;
+    type?: string;
+    tier?: string | null;
+    websiteUrl?: string | null;
+    description?: string | null;
+    order?: number;
+    logo?: File | null;
+  },
+): Promise<BrandSponsor> {
+  const formData = new FormData();
+  if (input.name != null) formData.set("name", input.name);
+  if (input.type != null) formData.set("type", input.type);
+  if (input.tier !== undefined) formData.set("tier", input.tier ?? "");
+  if (input.websiteUrl !== undefined) formData.set("websiteUrl", input.websiteUrl ?? "");
+  if (input.description !== undefined) formData.set("description", input.description ?? "");
+  if (input.order != null) formData.set("order", String(input.order));
+  if (input.logo) formData.append("logo", input.logo);
+  return request<BrandSponsor>(`/brands/${brandId}/sponsors/${sponsorId}`, { method: "PUT", body: formData });
+}
+
+export function deleteBrandSponsor(brandId: string, sponsorId: string): Promise<void> {
+  return request<void>(`/brands/${brandId}/sponsors/${sponsorId}`, { method: "DELETE" });
 }
 
 // ─── Brand Admins ─────────────────────────────────────────────────────────────

@@ -114,6 +114,9 @@ export class SponsorResponseDto {
     @ApiProperty({ required: false })
     tier?: string;
 
+    @ApiProperty({ required: false })
+    description?: string;
+
     @ApiProperty()
     order: number;
 }

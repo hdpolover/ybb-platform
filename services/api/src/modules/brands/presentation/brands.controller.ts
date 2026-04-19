@@ -20,8 +20,12 @@ import { UpdateBrandSettingsCommand } from '../application/commands/update-brand
 import { UpdateBrandMetadataCommand } from '../application/commands/update-brand-metadata.command';
 import { AssignBrandAdminCommand } from '../application/commands/assign-brand-admin.command';
 import { RemoveBrandAdminCommand } from '../application/commands/remove-brand-admin.command';
+import { CreateSponsorCommand } from '../application/commands/create-sponsor.command';
+import { UpdateSponsorCommand } from '../application/commands/update-sponsor.command';
+import { DeleteSponsorCommand } from '../application/commands/delete-sponsor.command';
 import { GetBrandMetadataQuery } from '../application/queries/get-brand-metadata.query';
 import { BrandResponseDto, SponsorResponseDto } from './dto/brand.dto';
+import { CreateSponsorDto, UpdateSponsorDto } from './dto/sponsor.dto';
 import { CreateBrandDto } from './dto/create-brand.dto';
 import { UpdateBrandDto } from './dto/update-brand.dto';
 import { UpdateBrandDetailsDto } from './dto/update-brand-details.dto';
@@ -82,6 +86,57 @@ export class BrandsController {
         return this.queryBus.execute(new ListBrandSponsorsQuery(id));
     }
 
+    @Post(':id/sponsors')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @AuditTrail({ entityType: 'Sponsor', action: ChangeType.create })
+    @ApiOperation({ summary: 'Create a brand sponsor' })
+    @ApiConsumes('multipart/form-data')
+    @UseInterceptors(FileInterceptor('logo'))
+    @ApiResponse({ status: 201, description: 'Sponsor created', type: SponsorResponseDto })
+    async createSponsor(
+        @Param('id', ParseUUIDPipe) id: string,
+        @Body() dto: CreateSponsorDto,
+        @UploadedFile() logo: Express.Multer.File | undefined,
+        @CurrentUser() user: CurrentUserData,
+    ): Promise<SponsorResponseDto> {
+        return this.commandBus.execute(new CreateSponsorCommand(id, dto, user.userId, logo));
+    }
+
+    @Put(':id/sponsors/:sponsorId')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @AuditTrail({ entityType: 'Sponsor', action: ChangeType.update })
+    @ApiOperation({ summary: 'Update a brand sponsor' })
+    @ApiConsumes('multipart/form-data')
+    @UseInterceptors(FileInterceptor('logo'))
+    @ApiResponse({ status: 200, description: 'Sponsor updated', type: SponsorResponseDto })
+    @ApiResponse({ status: 404, description: 'Sponsor not found' })
+    async updateSponsor(
+        @Param('id', ParseUUIDPipe) id: string,
+        @Param('sponsorId', ParseUUIDPipe) sponsorId: string,
+        @Body() dto: UpdateSponsorDto,
+        @UploadedFile() logo: Express.Multer.File | undefined,
+        @CurrentUser() user: CurrentUserData,
+    ): Promise<SponsorResponseDto> {
+        return this.commandBus.execute(new UpdateSponsorCommand(id, sponsorId, dto, user.userId, logo));
+    }
+
+    @Delete(':id/sponsors/:sponsorId')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @HttpCode(HttpStatus.NO_CONTENT)
+    @AuditTrail({ entityType: 'Sponsor', action: ChangeType.delete })
+    @ApiOperation({ summary: 'Delete a brand sponsor' })
+    @ApiResponse({ status: 204, description: 'Sponsor deleted' })
+    @ApiResponse({ status: 404, description: 'Sponsor not found' })
+    async deleteSponsor(
+        @Param('id', ParseUUIDPipe) id: string,
+        @Param('sponsorId', ParseUUIDPipe) sponsorId: string,
+    ): Promise<void> {
+        return this.commandBus.execute(new DeleteSponsorCommand(id, sponsorId));
+    }
+
     @Post()
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
@@ -109,7 +164,7 @@ export class BrandsController {
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'Brand', action: ChangeType.update })
-    @CacheInvalidate(['landing:home:*', 'landing:programs:*', 'landing:program:*'])
+    @CacheInvalidate(['landing:home:*', 'landing:programs:*', 'landing:program:*', 'landing:settings:*'])
     @ApiOperation({ summary: 'Update a brand' })
     @ApiConsumes('multipart/form-data')
     @UseInterceptors(FileFieldsInterceptor([
@@ -135,7 +190,7 @@ export class BrandsController {
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'Brand', action: ChangeType.update })
-    @CacheInvalidate(['landing:home:*', 'landing:programs:*', 'landing:program:*'])
+    @CacheInvalidate(['landing:home:*', 'landing:programs:*', 'landing:program:*', 'landing:settings:*'])
     @ApiOperation({ summary: 'Update brand details' })
     @ApiConsumes('multipart/form-data')
     @UseInterceptors(FileFieldsInterceptor([
