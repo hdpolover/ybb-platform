@@ -12,6 +12,7 @@ import {
     ListProgramPartnersQuery,
     ListProgramResourcesQuery,
     ListProgramPricingTiersQuery,
+    GetPricingTierByIdQuery,
     ListProgramRequirementsQuery,
     ListProgramEssaysQuery,
     ListProgramParticipationCategoriesQuery,
@@ -266,6 +267,37 @@ export class ListProgramPricingTiersHandler {
             validFrom: undefined,
             validUntil: undefined
         }));
+    }
+}
+
+@Injectable()
+export class GetPricingTierByIdHandler {
+    constructor(
+        @Inject('IProgramContentRepository')
+        private readonly repository: IProgramContentRepository,
+    ) { }
+
+    async execute(query: GetPricingTierByIdQuery) {
+        const tier = await this.repository.findPricingTierById(query.tierId);
+        if (!tier) return null;
+        return {
+            ...tier,
+            price: Number(tier.price),
+            description: tier.description ?? undefined,
+            capacity: tier.capacity ?? undefined,
+            benefits: tier.benefits ?? undefined,
+            feeType: tier.feeType ?? undefined,
+            allowedCategories: tier.allowedCategories ?? undefined,
+            icon: tier.icon ?? undefined,
+            requirements: tier.requirements ?? undefined,
+            validityPeriods: tier.validityPeriods.map(vp => ({
+                id: vp.id,
+                pricingTierId: vp.pricingTierId,
+                startDate: vp.startDate,
+                endDate: vp.endDate,
+                description: vp.description ?? undefined,
+            })),
+        };
     }
 }
 

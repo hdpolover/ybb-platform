@@ -2,7 +2,7 @@ import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { Inject, NotFoundException, BadRequestException } from '@nestjs/common';
 import { IProgramContentRepository } from '@core/interfaces/repositories/program-content.repository.interface';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
-import { Prisma, PricingFeeType, ApplicationCategory, ProgramPricingTier, ProgramRequirement } from '@prisma/client';
+import { Prisma, PricingFeeType, ApplicationCategory, ProgramPricingTier, ProgramRequirement, PricingTierValidityPeriod } from '@prisma/client';
 import { StorageService } from '../../../../files/application/storage.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import {
@@ -16,6 +16,7 @@ import {
     CreateProgramPartnerCommand, UpdateProgramPartnerCommand, DeleteProgramPartnerCommand,
     CreateProgramResourceCommand, UpdateProgramResourceCommand, DeleteProgramResourceCommand,
     CreateProgramPricingTierCommand, UpdateProgramPricingTierCommand, DeleteProgramPricingTierCommand,
+    CreateValidityPeriodCommand, UpdateValidityPeriodCommand, DeleteValidityPeriodCommand,
     CreateProgramRequirementCommand, UpdateProgramRequirementCommand, DeleteProgramRequirementCommand,
     CreateProgramEssayCommand, UpdateProgramEssayCommand, DeleteProgramEssayCommand,
     CreateProgramParticipationCategoryCommand, UpdateProgramParticipationCategoryCommand, DeleteProgramParticipationCategoryCommand
@@ -670,7 +671,41 @@ export class DeleteProgramPricingTierHandler implements ICommandHandler<DeletePr
     }
 }
 
-// --- Requirement Handlers ---
+// --- Validity Period Handlers ---
+@CommandHandler(CreateValidityPeriodCommand)
+export class CreateValidityPeriodHandler implements ICommandHandler<CreateValidityPeriodCommand> {
+    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    async execute(command: CreateValidityPeriodCommand) {
+        const dto = {
+            pricingTierId: command.dto.pricingTierId,
+            startDate: new Date(command.dto.startDate),
+            endDate: new Date(command.dto.endDate),
+            description: command.dto.description,
+        };
+        return this.repository.createValidityPeriod(dto as Partial<PricingTierValidityPeriod>);
+    }
+}
+@CommandHandler(UpdateValidityPeriodCommand)
+export class UpdateValidityPeriodHandler implements ICommandHandler<UpdateValidityPeriodCommand> {
+    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    async execute(command: UpdateValidityPeriodCommand) {
+        const existing = await this.repository.findValidityPeriodById(command.id);
+        if (!existing) throw new NotFoundException(`Validity period ${command.id} not found`);
+        const dto = {
+            startDate: command.dto.startDate ? new Date(command.dto.startDate) : undefined,
+            endDate: command.dto.endDate ? new Date(command.dto.endDate) : undefined,
+            description: command.dto.description,
+        };
+        return this.repository.updateValidityPeriod(command.id, dto as Partial<PricingTierValidityPeriod>);
+    }
+}
+@CommandHandler(DeleteValidityPeriodCommand)
+export class DeleteValidityPeriodHandler implements ICommandHandler<DeleteValidityPeriodCommand> {
+    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    async execute(command: DeleteValidityPeriodCommand) {
+        return this.repository.deleteValidityPeriod(command.id);
+    }
+}
 @CommandHandler(CreateProgramRequirementCommand)
 export class CreateProgramRequirementHandler implements ICommandHandler<CreateProgramRequirementCommand> {
     constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}

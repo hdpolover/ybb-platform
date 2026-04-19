@@ -38,6 +38,10 @@ export class ListProgramPricingTiersQuery {
     constructor(public readonly programId: string) { }
 }
 
+export class GetPricingTierByIdQuery {
+    constructor(public readonly tierId: string) { }
+}
+
 export class ListProgramRequirementsQuery {
     constructor(public readonly programId: string) { }
 }

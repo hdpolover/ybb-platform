@@ -3,7 +3,7 @@ import { CalendarDaysIcon } from "@heroicons/react/24/solid";
 import { AddPeriodAction, EditPeriodAction, DeletePeriodAction } from "./periodActions";
 
 export type PeriodRow = {
-  id: number;
+  id: string;
   name: string;
   base: boolean;
   typeLabel: "Base Period" | "Continuation";
@@ -16,7 +16,15 @@ export type PeriodRow = {
   fromParentInfo?: string;
 };
 
-export function PaymentPeriodsTable({ data }: { data: PeriodRow[] }) {
+export function PaymentPeriodsTable({
+  data,
+  tierId,
+  onRefresh,
+}: {
+  data: PeriodRow[];
+  tierId: string;
+  onRefresh?: () => void;
+}) {
   const baseRows = data.filter((row) => row.base);
 
   return (
@@ -31,7 +39,7 @@ export function PaymentPeriodsTable({ data }: { data: PeriodRow[] }) {
             <p className="text-sm text-zinc-500">List of active schedules for this payment.</p>
           </div>
         </div>
-        <AddPeriodAction />
+        <AddPeriodAction tierId={tierId} onSaved={onRefresh} />
       </div>
 
       <div className="mt-4 overflow-x-auto rounded-xl border border-zinc-200 bg-white">
@@ -89,8 +97,8 @@ export function PaymentPeriodsTable({ data }: { data: PeriodRow[] }) {
                       </td>
                       <td className="px-6 py-4 align-top text-right">
                         <div className="inline-flex items-center justify-end gap-2">
-                          <EditPeriodAction period={baseRow} />
-                          <DeletePeriodAction id={baseRow.id} />
+                          <EditPeriodAction period={baseRow} onSaved={onRefresh} />
+                          <DeletePeriodAction id={baseRow.id} onDeleted={onRefresh} />
                         </div>
                       </td>
                     </tr>
@@ -133,8 +141,8 @@ export function PaymentPeriodsTable({ data }: { data: PeriodRow[] }) {
                         </td>
                         <td className="px-6 py-4 align-top text-right">
                           <div className="inline-flex items-center justify-end gap-2">
-                            <EditPeriodAction period={child} />
-                            <DeletePeriodAction id={child.id} />
+                            <EditPeriodAction period={child} onSaved={onRefresh} />
+                            <DeletePeriodAction id={child.id} onDeleted={onRefresh} />
                           </div>
                         </td>
                       </tr>

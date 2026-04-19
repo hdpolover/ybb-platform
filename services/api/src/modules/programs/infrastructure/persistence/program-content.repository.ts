@@ -10,6 +10,7 @@ import {
     ProgramPartner,
     ProgramResource,
     ProgramPricingTier,
+    PricingTierValidityPeriod,
     ProgramRequirement,
     ApplicationFormField,
     ProgramEssay,
@@ -241,8 +242,22 @@ export class ProgramContentRepository implements IProgramContentRepository {
     async deletePricingTier(id: string): Promise<void> {
         await this.prisma.programPricingTier.delete({ where: { id } });
     }
-    async findPricingTierById(id: string): Promise<ProgramPricingTier | null> {
-        return this.prisma.programPricingTier.findUnique({ where: { id } });
+    async findPricingTierById(id: string): Promise<ProgramPricingTierWithPeriods | null> {
+        return this.prisma.programPricingTier.findUnique({ where: { id }, include: { validityPeriods: { orderBy: { startDate: 'asc' } } } });
+    }
+
+    // CRUD for Validity Periods
+    async createValidityPeriod(data: Record<string, unknown>): Promise<PricingTierValidityPeriod> {
+        return this.prisma.pricingTierValidityPeriod.create({ data: data as Prisma.PricingTierValidityPeriodUncheckedCreateInput });
+    }
+    async updateValidityPeriod(id: string, data: Record<string, unknown>): Promise<PricingTierValidityPeriod> {
+        return this.prisma.pricingTierValidityPeriod.update({ where: { id }, data: data as Prisma.PricingTierValidityPeriodUncheckedUpdateInput });
+    }
+    async deleteValidityPeriod(id: string): Promise<void> {
+        await this.prisma.pricingTierValidityPeriod.delete({ where: { id } });
+    }
+    async findValidityPeriodById(id: string): Promise<PricingTierValidityPeriod | null> {
+        return this.prisma.pricingTierValidityPeriod.findUnique({ where: { id } });
     }
 
     // CRUD for Requirements

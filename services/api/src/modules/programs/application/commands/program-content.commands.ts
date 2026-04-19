@@ -9,6 +9,7 @@ import {
     CreateProgramPartnerDto, UpdateProgramPartnerDto,
     CreateProgramResourceDto, UpdateProgramResourceDto,
     CreateProgramPricingTierDto, UpdateProgramPricingTierDto,
+    CreateValidityPeriodDto, UpdateValidityPeriodDto,
     CreateProgramRequirementDto, UpdateProgramRequirementDto,
     CreateProgramEssayDto, UpdateProgramEssayDto,
     CreateProgramParticipationCategoryDto, UpdateProgramParticipationCategoryDto
@@ -166,6 +167,17 @@ export class UpdateProgramPricingTierCommand {
     constructor(public readonly id: string, public readonly dto: UpdateProgramPricingTierDto, public readonly userId: string) { }
 }
 export class DeleteProgramPricingTierCommand {
+    constructor(public readonly id: string, public readonly userId: string) { }
+}
+
+// Validity Period
+export class CreateValidityPeriodCommand {
+    constructor(public readonly dto: CreateValidityPeriodDto, public readonly userId: string) { }
+}
+export class UpdateValidityPeriodCommand {
+    constructor(public readonly id: string, public readonly dto: UpdateValidityPeriodDto, public readonly userId: string) { }
+}
+export class DeleteValidityPeriodCommand {
     constructor(public readonly id: string, public readonly userId: string) { }
 }
 

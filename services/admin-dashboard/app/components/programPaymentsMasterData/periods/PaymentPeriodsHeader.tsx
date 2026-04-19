@@ -3,18 +3,33 @@
 import { useRouter } from "next/navigation";
 import { CreditCardIcon, CalendarDaysIcon, CheckCircleIcon } from "@heroicons/react/24/solid";
 
-const mockPaymentDetails = {
-  name: "Fully Funded Registration Fee",
-  category: "Registration",
-  type: "Fully Funded",
-  usdAmount: 10,
-  active: true,
-  totalPeriods: 3,
-  description: "Initial registration fee required for all delegates selecting the fully funded route.",
-};
+export interface PaymentTierDetail {
+  name: string;
+  category: string;
+  type: string;
+  usdAmount: number;
+  active: boolean;
+  totalPeriods: number;
+  description: string;
+}
 
-export function PaymentPeriodsHeader({ programName }: { programName: string }) {
+export function PaymentPeriodsHeader({
+  programName,
+  tierDetail,
+}: {
+  programName: string;
+  tierDetail?: PaymentTierDetail;
+}) {
   const router = useRouter();
+  const details = tierDetail ?? {
+    name: "—",
+    category: "—",
+    type: "—",
+    usdAmount: 0,
+    active: false,
+    totalPeriods: 0,
+    description: "Loading…",
+  };
 
   return (
     <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
@@ -41,10 +56,10 @@ export function PaymentPeriodsHeader({ programName }: { programName: string }) {
               <CreditCardIcon className="h-4 w-4" />
             </span>
           </div>
-          <div className="mt-2 text-sm font-semibold text-zinc-900">{mockPaymentDetails.name}</div>
+          <div className="mt-2 text-sm font-semibold text-zinc-900">{details.name}</div>
           <div className="mt-2 flex flex-wrap gap-2">
-            <span className="inline-flex rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-blue-700">{mockPaymentDetails.category}</span>
-            <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-emerald-700">{mockPaymentDetails.type}</span>
+            <span className="inline-flex rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-blue-700">{details.category}</span>
+            <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-emerald-700">{details.type}</span>
           </div>
         </div>
 
@@ -55,12 +70,12 @@ export function PaymentPeriodsHeader({ programName }: { programName: string }) {
               <CheckCircleIcon className="h-4 w-4" />
             </span>
           </div>
-          <div className="mt-2 text-sm font-semibold text-zinc-900">${mockPaymentDetails.usdAmount.toFixed(2)}</div>
+          <div className="mt-2 text-sm font-semibold text-zinc-900">${details.usdAmount.toFixed(2)}</div>
           <div className="mt-2 flex items-center gap-2">
-            <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide ${mockPaymentDetails.active ? "bg-emerald-100 text-emerald-700" : "bg-zinc-100 text-zinc-600"}`}>
-              {mockPaymentDetails.active ? "Active" : "Inactive"}
+            <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide ${details.active ? "bg-emerald-100 text-emerald-700" : "bg-zinc-100 text-zinc-600"}`}>
+              {details.active ? "Active" : "Inactive"}
             </span>
-            <span className="text-xs font-medium text-zinc-500">Total Periods: {mockPaymentDetails.totalPeriods}</span>
+            <span className="text-xs font-medium text-zinc-500">Total Periods: {details.totalPeriods}</span>
           </div>
         </div>
 
@@ -71,7 +86,7 @@ export function PaymentPeriodsHeader({ programName }: { programName: string }) {
               <CalendarDaysIcon className="h-4 w-4" />
             </span>
           </div>
-          <p className="mt-2 text-sm text-zinc-700 leading-relaxed">{mockPaymentDetails.description}</p>
+          <p className="mt-2 text-sm text-zinc-700 leading-relaxed">{details.description}</p>
         </div>
       </div>
     </section>
