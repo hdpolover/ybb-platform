@@ -1,4 +1,4 @@
-import { IsBoolean, IsNotEmpty, IsNumber, IsOptional, IsString, IsEnum, IsJSON } from 'class-validator';
+import { IsBoolean, IsNumber, IsOptional, IsString, IsEnum, IsNotEmpty } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export enum FormFieldType {
@@ -20,10 +20,10 @@ export class CreateApplicationFormFieldDto {
   @IsString()
   section?: string;
 
-  @ApiProperty({ description: 'Database field name (key)' })
+  @ApiPropertyOptional({ description: 'Custom-field storage key. Required when source=custom. Ignored when source=system.' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  fieldName: string;
+  fieldName?: string;
 
   @ApiProperty({ description: 'Label displayed to the user' })
   @IsString()
@@ -76,4 +76,14 @@ export class CreateApplicationFormFieldDto {
   @IsOptional()
   @IsNumber()
   order?: number;
+
+  @ApiPropertyOptional({ description: "Field source: 'system' | 'custom'. Defaults to 'custom'." })
+  @IsOptional()
+  @IsString()
+  source?: 'system' | 'custom';
+
+  @ApiPropertyOptional({ description: 'When source=system, the system catalog key this field references.' })
+  @IsOptional()
+  @IsString()
+  systemFieldKey?: string;
 }

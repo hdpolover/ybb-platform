@@ -78,6 +78,7 @@ import { ProgramContentRepository } from './infrastructure/persistence/program-c
 import { ProgramRepository } from './infrastructure/persistence/program.repository';
 import { PrismaService } from '../../shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '../../shared/infrastructure/cache/cache.service';
+import { FormFieldKeyValidator } from './application/validators/form-field-key.validator';
 
 @Module({
   imports: [CqrsModule, AuthModule, UsersModule, FilesModule],
@@ -154,6 +155,7 @@ import { CacheService } from '../../shared/infrastructure/cache/cache.service';
     DeleteProgramAnnouncementHandler,
 
     CacheService,
+    FormFieldKeyValidator,
     {
       provide: 'IProgramContentRepository',
       useClass: ProgramContentRepository,
