@@ -198,3 +198,56 @@ export async function deleteSystemFormField(id: string): Promise<void> {
     throw new Error(await readErrorMessage(response));
   }
 }
+
+// -------- Template mutations (super-admin only) --------
+
+export type CreateFormTemplateFieldInput = {
+  source: "system" | "custom";
+  systemFieldKey?: string;
+  name?: string;
+  label?: string;
+  type?: string;
+  section?: string;
+  isRequired?: boolean;
+  order?: number;
+};
+
+export type CreateFormTemplateInput = {
+  name: string;
+  description?: string;
+  category?: string;
+  isDefault?: boolean;
+  fields: CreateFormTemplateFieldInput[];
+};
+
+export type UpdateFormTemplateInput = Partial<Omit<CreateFormTemplateInput, "fields">> & {
+  fields?: CreateFormTemplateFieldInput[];
+};
+
+export async function createFormTemplate(input: CreateFormTemplateInput): Promise<FormTemplateDetail> {
+  const response = await fetch(buildApiUrl("/form-templates"), {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return jsonOrThrow<FormTemplateDetail>(response);
+}
+
+export async function updateFormTemplate(id: string, input: UpdateFormTemplateInput): Promise<FormTemplateDetail> {
+  const response = await fetch(buildApiUrl(`/form-templates/${encodeURIComponent(id)}`), {
+    method: "PATCH",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return jsonOrThrow<FormTemplateDetail>(response);
+}
+
+export async function deleteFormTemplate(id: string): Promise<void> {
+  const response = await fetch(buildApiUrl(`/form-templates/${encodeURIComponent(id)}`), {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response));
+  }
+}
