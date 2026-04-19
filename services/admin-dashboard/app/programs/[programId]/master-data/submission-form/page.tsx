@@ -2,7 +2,7 @@ import { HeaderSection } from "@/app/components/submissionsMasterData/HeaderSect
 import { TabNavigation } from "@/app/components/submissionsMasterData/TabNavigation";
 import { FormFieldsTable } from "@/app/components/submissionsMasterData/form-fields/FormFieldsTable";
 import { ParticipationCategoriesTable } from "@/app/components/submissionsMasterData/categories/ParticipationCategoriesTable";
-import { SubThemesTable, SubThemeRow } from "@/app/components/submissionsMasterData/subthemes/SubThemesTable";
+import { SubThemesTable } from "@/app/components/submissionsMasterData/subthemes/SubThemesTable";
 import { SubmissionEssaysTable } from "@/app/components/submissionsMasterData/essays/SubmissionEssaysTable";
 
 function formatProgramName(programId: string | null): string {
@@ -13,12 +13,6 @@ function formatProgramName(programId: string | null): string {
   return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 }
 
-const MOCK_SUBTHEMES: SubThemeRow[] = [
-  { id: 1, name: "Sustainable Development & Climate Action", description: "Youth-led initiatives on SDGs, climate resilience, and green innovation.", status: "Active" },
-  { id: 2, name: "Innovation, Technology & Future of Work", description: "Discussions on digital transformation, AI, and future skills.", status: "Active" },
-  { id: 3, name: "Cultural Diplomacy & Global Citizenship", description: "Exploring cross-cultural collaboration, peace-building, and youth diplomacy.", status: "Inactive" },
-];
-
 export default async function SubmissionFormPage({
   params,
   searchParams,
@@ -28,12 +22,10 @@ export default async function SubmissionFormPage({
 }) {
   const resolvedParams = await params;
   const resolvedSearchParams = await searchParams;
-  
+
   const programId = resolvedParams.programId;
   const programName = formatProgramName(programId);
   const activeTab = resolvedSearchParams.tab || "categories";
-
-  // Nantinya: const categories = await fetchCategories(programId);
 
   return (
     <main className="space-y-4">
@@ -47,7 +39,7 @@ export default async function SubmissionFormPage({
         <div className="pt-2">
           {activeTab === "fields" && <FormFieldsTable programId={programId} />}
           {activeTab === "categories" && <ParticipationCategoriesTable programId={programId} />}
-          {activeTab === "subthemes" && <SubThemesTable data={MOCK_SUBTHEMES} />}
+          {activeTab === "subthemes" && <SubThemesTable programId={programId} />}
           {activeTab === "essays" && <SubmissionEssaysTable programId={programId} />}
         </div>
       </section>

@@ -9,7 +9,7 @@ import {
   QueueListIcon,
   TrashIcon,
 } from "@heroicons/react/24/solid";
-import { buildApiUrl, getAccessToken, readErrorMessage } from "@/app/components/submissionsMasterData/api";
+import { buildApiUrl, getAccessToken, readErrorMessage, readJsonData } from "@/app/components/submissionsMasterData/api";
 
 type FormFieldStatus = "idle" | "loading" | "saving";
 
@@ -397,7 +397,7 @@ export function FormFieldsTable({ programId }: { programId: string }) {
         throw new Error(await readErrorMessage(response));
       }
 
-      const payload = (await response.json()) as ApplicationFormFieldRow[];
+      const payload = await readJsonData<ApplicationFormFieldRow[]>(response);
       const sortedPayload = [...payload].sort((left, right) => left.order - right.order);
       setFields(sortedPayload);
       setStatus("idle");

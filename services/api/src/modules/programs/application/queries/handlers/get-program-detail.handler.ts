@@ -229,6 +229,7 @@ export class GetProgramDetailHandler {
       location: program.location,
       thumbnailUrl: program.thumbnailUrl,
       bannerUrl: program.bannerUrl,
+      logoUrl: program.logoUrl,
       videoUrl: program.videoUrl,
       status: program.status,
       isVisibleToUsers: program.isVisibleToUsers,

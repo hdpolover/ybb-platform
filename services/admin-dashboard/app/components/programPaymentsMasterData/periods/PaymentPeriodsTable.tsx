@@ -10,6 +10,8 @@ export type PeriodRow = {
   description: string;
   start: string;
   end: string;
+  startRaw: string;
+  endRaw: string;
   order: number;
   status: "Active" | "Inactive";
   isUpcoming?: boolean;

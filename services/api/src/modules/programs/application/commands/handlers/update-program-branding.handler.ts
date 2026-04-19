@@ -3,12 +3,14 @@ import { Inject, NotFoundException } from '@nestjs/common';
 import { UpdateProgramBrandingCommand } from '../update-program-branding.command';
 import { StorageService } from '../../../../files/application/storage.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
 
 @CommandHandler(UpdateProgramBrandingCommand)
 export class UpdateProgramBrandingHandler implements ICommandHandler<UpdateProgramBrandingCommand> {
     constructor(
         private readonly storageService: StorageService,
         private readonly prisma: PrismaService,
+        private readonly cacheService: CacheService,
     ) {}
 
     async execute(command: UpdateProgramBrandingCommand) {
@@ -60,10 +62,14 @@ export class UpdateProgramBrandingHandler implements ICommandHandler<UpdateProgr
         }
 
         if (Object.keys(updates).length > 0) {
-            return this.prisma.program.update({
+            const updated = await this.prisma.program.update({
                 where: { id: programId },
                 data: updates
             });
+            try {
+                await this.cacheService.invalidateByPatterns([`landing:*:${brandId}`, 'program:*']);
+            } catch { /* non-critical */ }
+            return updated;
         }
 
         return program;

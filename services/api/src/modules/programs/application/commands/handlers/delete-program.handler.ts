@@ -4,6 +4,7 @@ import { DeleteProgramCommand } from '../delete-program.command';
 import { IProgramRepository } from '@core/interfaces/repositories/program.repository.interface';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
 import { UserActivityLog } from '@core/entities/user-activity-log.entity';
+import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
 
 @CommandHandler(DeleteProgramCommand)
 export class DeleteProgramHandler implements ICommandHandler<DeleteProgramCommand> {
@@ -12,6 +13,7 @@ export class DeleteProgramHandler implements ICommandHandler<DeleteProgramComman
         private readonly programRepository: IProgramRepository,
         @Inject(IUserActivityLogRepository)
         private readonly activityLogRepository: IUserActivityLogRepository,
+        private readonly cacheService: CacheService,
     ) {}
 
     async execute(command: DeleteProgramCommand): Promise<void> {
@@ -23,6 +25,13 @@ export class DeleteProgramHandler implements ICommandHandler<DeleteProgramComman
         }
 
         await this.programRepository.delete(programId);
+
+        try {
+            await this.cacheService.invalidateByPatterns([
+                `landing:*:${existingProgram.brandId}`,
+                'program:*',
+            ]);
+        } catch { /* non-critical */ }
 
         // Log activity
         await this.activityLogRepository.create(new UserActivityLog(

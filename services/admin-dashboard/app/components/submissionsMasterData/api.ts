@@ -27,3 +27,18 @@ export async function readErrorMessage(response: Response): Promise<string> {
 
   return `Request failed with status ${response.status}.`;
 }
+
+/**
+ * Parse a NestJS response and unwrap the global TransformInterceptor envelope
+ * (`{ statusCode, message, data, meta? }`). Returns the inner `data` if
+ * present, otherwise the raw payload. Matches the behavior of
+ * `src/shared/api-client.ts::request()` so callers don't need to know the
+ * envelope shape.
+ */
+export async function readJsonData<T>(response: Response): Promise<T> {
+  const payload = (await response.json()) as unknown;
+  if (payload && typeof payload === "object" && "data" in (payload as Record<string, unknown>)) {
+    return (payload as { data: T }).data;
+  }
+  return payload as T;
+}

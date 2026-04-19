@@ -378,6 +378,9 @@ export class ProgramDetailResponseDto {
   bannerUrl?: string;
 
   @ApiProperty()
+  logoUrl?: string;
+
+  @ApiProperty()
   videoUrl?: string;
 
   @ApiProperty()

@@ -21,10 +21,10 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
     ) {}
 
     async execute(query: GetPortalPaymentsQuery): Promise<PortalPaymentResponseDto> {
-        const { userId } = query;
+        const { userId, programId } = query;
 
         // Check cache first
-        const cacheKey = CACHE_KEYS.PORTAL_PAYMENTS(userId);
+        const cacheKey = CACHE_KEYS.PORTAL_PAYMENTS(userId, programId);
         const cached = await this.cacheService.get<PortalPaymentResponseDto>(cacheKey);
         if (cached) {
             return cached;
@@ -34,9 +34,9 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
         const participant = await this.portalCacheService.getParticipantProfile(userId);
         if (!participant) throw new NotFoundException('Participant not found');
 
-        // Get latest application
+        // Get latest application (filter by programId if provided)
         const application = await this.prisma.participantApplication.findFirst({
-            where: { participantId: participant.id },
+            where: { participantId: participant.id, ...(programId ? { programId } : {}) },
             select: {
                 id: true,
                 applicationCategory: true,

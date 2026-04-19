@@ -33,6 +33,8 @@ function periodToRow(vp: ValidityPeriod, index: number): PeriodRow {
     description: vp.description ?? "",
     start: fmt(vp.startDate),
     end: fmt(vp.endDate),
+    startRaw: vp.startDate,
+    endRaw: vp.endDate,
     order: index + 1,
     status: isActive ? "Active" : "Inactive",
     isUpcoming,

@@ -59,6 +59,15 @@ export class ProgramResponseDto {
   })
   status: string;
 
+  @ApiProperty({ required: false, nullable: true })
+  logoUrl?: string | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  bannerUrl?: string | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  thumbnailUrl?: string | null;
+
   @ApiProperty({ example: '2025-11-25T16:00:00.000Z' })
   createdAt: Date;
 

@@ -53,6 +53,13 @@ export class ListProgramEssaysQuery {
     ) { }
 }
 
+export class ListProgramSubthemesQuery {
+    constructor(
+        public readonly programId: string,
+        public readonly includeInactive = false,
+    ) { }
+}
+
 export class ListProgramParticipationCategoriesQuery {
     constructor(
         public readonly programId: string,

@@ -11,13 +11,14 @@ documents + images — no audio, no video.
 
 ## Decisions
 
-- **Storage:** single DO Space (`ybb-media`), region `sgp1`. Per-brand isolation
-  via path prefix `{env}/{brand_id}/...`, not per-brand Spaces.
-- **Visibility:** all files public for now. Access control remains at the
-  application layer; a future flip to private is a config change on the bucket
-  category since `get_presigned_url()` already exists.
-- **Storage class stays `MinIOStorage`** for now — `minio-py` is S3-compatible
-  and already works with Spaces via config. Rename is optional cosmetic follow-up.
+- **Storage:** single DO Space (`ybb-platform`), region `sgp1`. Per-brand
+  isolation via path prefix `{env}/{brand_id}/...`, not per-brand Spaces.
+- **Visibility:** all objects public-read via a bucket policy on `ybb-platform`
+  (`s3:GetObject` for `*`). A future flip to private is a policy swap + flipping
+  consumers to `get_presigned_url()` instead of `get_public_url()`.
+- **Storage class stays `MinIOStorage`** — `minio-py` is S3-compatible and works
+  with Spaces via endpoint/region config. Rename to `S3Storage` is a cosmetic
+  follow-up.
 - **Legacy `POST /files/upload` is kept.** Server-side generators (PDF receipts,
   certificates, Excel exports) still need a multipart path.
 - **NestJS `services/api/` does not own upload logic** — it only proxies to the
@@ -83,13 +84,50 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
   left alone for backwards compat. TypeScript compiles clean
   (only pre-existing error in an unrelated module).
 
-### Frontend (admin-dashboard)
+### Frontend (admin-dashboard, `ybb-platform/services/admin-dashboard/`)
 
-- [x] **8. Upload plumbing** — `lib/api/files.ts` (`uploadFile()` three-step
-  helper + MIME allowlist), `hooks/useFileUpload.ts` (state machine with XHR
-  progress + cancel), `components/ui/FileUploader.tsx` (dropzone + progress
-  UI). Type-checks clean against Next.js 16 / React 19.
-- [ ] **9. Migrate one document-upload UI** to the new flow as a dogfood test.
+- [x] **8. Upload plumbing** — added to the shared api-client
+  (`src/shared/api-client.ts`): `requestUploadUrl`, `putFileToStorage` (raw XHR
+  so progress is observable), `markFileReady`, `uploadFileViaPresignedUrl`
+  one-shot helper. Plus `src/shared/hooks/useFileUpload.ts` for single-file UIs
+  that want a progress bar.
+- [x] **9. Three real surfaces wired to the new flow:**
+    - **Media library** — `app/programs/[programId]/media/page.tsx` batch-uploads
+      via `uploadFileViaPresignedUrl` in `Promise.allSettled`.
+    - **Brand identity (logo + banner)** — `updatePlatformBrandIdentity` in
+      `app/platform/api.ts` uploads files via presigned first, then submits
+      `logoUrl`/`bannerUrl` string fields to `PUT /brands/:id`. The
+      `UpdateBrandHandler` already accepted these URL fields; no DTO change
+      needed.
+    - **Program photo gallery** — `createProgramGalleryItem` /
+      `updateProgramGalleryItem` upload via presigned then POST JSON to
+      `/programs/:id/gallery` with `imageUrl`. Required a `year` column added
+      to `ProgramGallery` (migration
+      `20260419120000_add_program_gallery_year`) + `year` fields on both
+      Create/Update DTOs.
+
+### Operations (one-time Space setup)
+
+- [x] **10. Bucket policy + CORS** — `services/file/scripts/configure_spaces.sh`
+  applies a public-read `s3:GetObject` bucket policy and a CORS rule allowing
+  GET/PUT/HEAD/POST/DELETE from the configured origins. Idempotent;
+  re-runnable. Applied to dev Space with `CORS_ORIGINS=*`; re-run against
+  staging/prod with narrower origins before go-live.
+
+```bash
+# dev (already applied)
+./scripts/configure_spaces.sh
+
+# staging
+ENV_FILE=./.env.staging \
+CORS_ORIGINS="https://admin-staging.ybbhub.com,https://landing-staging.ybbhub.com" \
+./scripts/configure_spaces.sh
+
+# prod
+ENV_FILE=./.env.prod \
+CORS_ORIGINS="https://admin.ybbhub.com,https://www.ybbhub.com" \
+./scripts/configure_spaces.sh
+```
 
 ## MIME allowlist (no audio / video)
 
@@ -106,15 +144,59 @@ IMAGE_MIMES = { image/jpeg, image/png, image/webp, image/gif }
 
 Size caps: 10 MB documents, 5 MB images (match existing handler).
 
-## Open questions / follow-ups
+## Gotchas hit during implementation (keep as reference)
+
+Each of these cost ≥1 debugging loop; listed here so the next person doesn't
+repeat them.
+
+- **Presigned URL signature is bound to the signed host.** The old
+  `MinIOStorage.get_presigned_{upload,}url` rewrote the URL's host from the
+  internal endpoint to `MINIO_PUBLIC_ENDPOINT` after signing. Worked for raw
+  unsigned GETs but broke every signed PUT with
+  `SignatureDoesNotMatch`. Fix: rewrite only in `get_public_url()`; return
+  presigned URLs unmodified.
+- **`bucket_exists` requires `HeadBucket` perms.** On managed S3 (Spaces, R2)
+  the API key often has object-only perms. `bucket_exists` → `make_bucket`
+  dance inside `get_presigned_upload_url` was failing with `AccessDenied` even
+  for a valid bucket. Dropped the check — buckets are provisioned out of band.
+- **Double response envelopes.** NestJS has a global `TransformInterceptor`
+  that wraps every controller return in `{statusCode, message, data}`. Any
+  controller that additionally returns `{success: true, data: ...}` ends up
+  double-wrapped, and the admin-dashboard's `request()` helper (which unwraps
+  once) hands the frontend the outer object — so `result.files`,
+  `url.upload_url` etc. are `undefined`. Fixed in `files.controller.ts` and
+  `admin-media.controller.ts`; **new controllers must return raw DTOs.**
+- **Docker env vars don't refresh on `restart`.** `docker restart <container>`
+  keeps the env snapshot taken at container-create time. After editing `.env`,
+  you must `docker compose up -d --force-recreate <service>` for new vars to
+  take effect (e.g. changing `MINIO_BUCKET`).
+- **Postgres init-SQL drifted from Prisma migrations.** The postgres-file
+  container's `database/init/02-create-tables.sql` creates the `files` table
+  at an older schema version than `prisma/migrations/*/_init`, so a first-ever
+  `prisma migrate deploy` tries to `CREATE TABLE` on top of existing tables
+  and errors. We baselined by applying migration SQLs directly + seeding
+  `_prisma_migrations` manually. **Long-term fix:** delete the init SQL and
+  let Prisma own the schema end-to-end (separate ticket).
+- **`PROCESSING` rows pollute the media library when clients crash.** If the
+  browser requests an upload URL but never calls `/ready` (tab closed,
+  network drop, bug), the row sits in PROCESSING forever. `list_files_by_program`
+  now filters to `status='READY'` only. Consider a periodic sweeper that
+  deletes PROCESSING rows older than ~1h.
+
+## Open follow-ups
 
 - **Auth between admin-dashboard → NestJS → file service.** Currently the file
-  service trusts `user_id`/`brand_id` form fields. Gateway should pass a
-  service-to-service token; decide shape before exposing publicly.
-- **CDN domain.** Needs to be picked (`cdn.ybb.org`?) and CORS + `X-Robots-Tag:
-  noindex, nofollow` configured at the Space level.
-- **Legacy rename.** `minio_storage.py` → `s3_storage.py` at some point — name
-  is misleading once MinIO is gone from prod.
+  service trusts `user_id`/`brand_id` form fields from any caller. Gateway
+  should pass a service-to-service token; decide shape before the file service
+  is exposed publicly.
+- **Orphaned-upload sweeper.** Background job that deletes `status='PROCESSING'`
+  rows older than 1h and removes the corresponding Spaces object if it exists.
+- **`minio_storage.py` → `s3_storage.py` rename.** Name is misleading now that
+  MinIO is gone from prod. Pure cosmetic; low priority.
+- **Postgres init-SQL removal.** See gotcha above — let Prisma own the schema.
+- **CDN in front of Spaces** (`cdn.ybbhub.com` in staging/prod envs). Needs the
+  CDN provisioned + `X-Robots-Tag: noindex, nofollow` set at the edge to keep
+  uploaded docs out of search indexes.
 
 ## Changelog
 
@@ -137,25 +219,30 @@ Size caps: 10 MB documents, 5 MB images (match existing handler).
   `ybb-platform/services/admin-dashboard/`, not the near-empty `/admin-dashboard`
   scaffold. Deleted the misplaced client + hook + component from the scaffold
   and re-implemented them inside the real project, plus wired them into three
-  real surfaces:
-    - **Media library** (`app/programs/[programId]/media/page.tsx`) — batch
-      uploads via `uploadFileViaPresignedUrl` replacing
-      `uploadProgramMediaFile`.
-    - **Brand identity** (`BrandEditPage > IdentityTab`) — `updatePlatformBrandIdentity`
-      now uploads logo + banner via presigned, passes `logoUrl`/`bannerUrl`
-      strings to `PUT /brands/:id`. No backend change needed — the DTO already
-      accepts those URL fields; the handler only overwrites them if a file is
-      attached.
-    - **Program photo gallery** (`master-data/program-photos/page.tsx`) —
-      `createProgramGalleryItem` / `updateProgramGalleryItem` now use
-      presigned upload. Required backend additions: `year` column on
-      `ProgramGallery` (migration `20260419120000_add_program_gallery_year`),
-      `year` field on both Create/Update DTOs. Un-referenced stub components
-      in `app/components/programPhotosMasterData/` were deleted as dead code.
-    - Also extended the standalone `/gallery` controller (in the gallery
-      module) with PATCH/DELETE and `image_url` support — not currently
-      consumed by admin-dashboard but non-breaking and useful for future
-      integrations.
-  Full admin-dashboard + api tsc passes clean for all changed files. Prisma
-  migration for `year` not yet applied to the api service DB; will auto-run
-  via the api's `docker-entrypoint` on next container start.
+  real surfaces: media library, brand identity, program photo gallery.
+  Extended standalone `/gallery` controller with PATCH/DELETE + `image_url`
+  support as a bonus. Full admin-dashboard + api tsc passes clean.
+- **2026-04-19** — end-to-end smoke-tested against DO Spaces. Hit and fixed,
+  in order: (a) bucket name `ybb` → `ybb-platform`; (b) `bucket_exists` probe
+  failing with `AccessDenied`; (c) host-rewrite breaking AWS4 signatures; (d)
+  double response-wrap causing `upload_url: undefined`; (e) same double-wrap
+  on `listMedia` hiding the files array; (f) stale `PROCESSING` rows filling
+  the list → added `status='READY'` filter to `find_by_program`; (g)
+  `PricingTierValidityPeriod` missing import in `program-content.repository.ts`
+  blocking `nest --watch` recompiles. Full three-step flow verified: browser
+  `POST /files/upload-url` → `PUT` to Spaces → `PATCH /ready` → row shows up.
+- **2026-04-19** — applied public-read bucket policy and CORS rules to the
+  `ybb-platform` Space. Captured as
+  `services/file/scripts/configure_spaces.sh` so staging/prod Spaces can be
+  configured identically. Public thumbnails now render in the media library.
+- **2026-04-19** — silenced Loki + OTEL connection-refused spam by probing
+  the collector's TCP port at startup and skipping handler/exporter install
+  if it's unreachable (`app/infrastructure/telemetry/loki.py`,
+  `otel.py`). No impact on environments where the observability stack is
+  actually running — the probe succeeds and handlers attach normally.
+
+## Status: DONE (for dev)
+
+All three upload surfaces work end-to-end against DO Spaces. Remaining work
+is operational: narrow CORS origins for staging/prod before go-live, and the
+items in "Open follow-ups" above.

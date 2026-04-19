@@ -5,6 +5,12 @@ import { PencilSquareIcon, TrashIcon, CalendarDaysIcon } from "@heroicons/react/
 import type { PeriodRow } from "./PaymentPeriodsTable";
 import { createValidityPeriod, updateValidityPeriod, deleteValidityPeriod } from "@/app/platform/api";
 
+function toDatetimeLocal(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 // FORM MODAL COMPONENT
 function PeriodModal({
   isOpen,
@@ -104,13 +110,13 @@ function PeriodModal({
               <label className="mb-1.5 block text-xs font-medium text-zinc-500">
                 Start Date & Time <span className="text-rose-500">*</span>
               </label>
-              <input name="startDate" type="datetime-local" className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100" required />
+              <input name="startDate" type="datetime-local" defaultValue={initialData?.startRaw ? toDatetimeLocal(initialData.startRaw) : undefined} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100" required />
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-medium text-zinc-500">
                 End Date & Time <span className="text-rose-500">*</span>
               </label>
-              <input name="endDate" type="datetime-local" className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100" required />
+              <input name="endDate" type="datetime-local" defaultValue={initialData?.endRaw ? toDatetimeLocal(initialData.endRaw) : undefined} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100" required />
             </div>
           </div>
 

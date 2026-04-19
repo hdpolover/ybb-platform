@@ -8,7 +8,7 @@ import {
   TrashIcon,
   UsersIcon,
 } from "@heroicons/react/24/solid";
-import { buildApiUrl, getAccessToken, readErrorMessage } from "@/app/components/submissionsMasterData/api";
+import { buildApiUrl, getAccessToken, readErrorMessage, readJsonData } from "@/app/components/submissionsMasterData/api";
 
 export interface ParticipationCategoryRow {
   id: string;
@@ -197,7 +197,7 @@ export function ParticipationCategoriesTable({ programId }: { programId: string 
         throw new Error(await readErrorMessage(response));
       }
 
-      const payload = (await response.json()) as Array<{
+      const payload = await readJsonData<Array<{
         id: string;
         programId: string;
         name: string;
@@ -206,7 +206,7 @@ export function ParticipationCategoriesTable({ programId }: { programId: string 
         eligibility?: string;
         order: number;
         isActive: boolean;
-      }>;
+      }>>(response);
 
       setData(
         payload.map((item) => ({

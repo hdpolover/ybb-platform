@@ -16,6 +16,7 @@ import {
     ListProgramRequirementsQuery,
     ListProgramEssaysQuery,
     ListProgramParticipationCategoriesQuery,
+    ListProgramSubthemesQuery,
 } from '../list-program-content.queries';
 
 async function resolveProgramId(
@@ -365,6 +366,31 @@ export class ListProgramParticipationCategoriesHandler {
             description: item.description ?? undefined,
             benefits: item.benefits ?? undefined,
             eligibility: item.eligibility ?? undefined,
+        }));
+    }
+}
+
+@Injectable()
+export class ListProgramSubthemesHandler {
+    constructor(
+        @Inject('IProgramContentRepository')
+        private readonly repository: IProgramContentRepository,
+        @Inject('IProgramRepository')
+        private readonly programRepository: IProgramRepository,
+    ) { }
+
+    async execute(query: ListProgramSubthemesQuery) {
+        const programId = await resolveProgramId(this.programRepository, query.programId);
+        if (!programId) return [];
+
+        const items = await this.repository.findSubthemesByProgramId(programId, query.includeInactive);
+        return items.map(item => ({
+            id: item.id,
+            programId: item.programId,
+            name: item.name,
+            description: item.description ?? undefined,
+            order: item.order,
+            isActive: item.isActive,
         }));
     }
 }

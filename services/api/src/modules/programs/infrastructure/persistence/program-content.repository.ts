@@ -12,6 +12,7 @@ import {
     ProgramPricingTier,
     PricingTierValidityPeriod,
     ProgramRequirement,
+    ProgramSubtheme,
     ApplicationFormField,
     ProgramEssay,
     ProgramParticipationCategory,
@@ -335,5 +336,31 @@ export class ProgramContentRepository implements IProgramContentRepository {
     }
     async findParticipationCategoryById(id: string): Promise<ProgramParticipationCategory | null> {
         return this.prisma.programParticipationCategory.findUnique({ where: { id } });
+    }
+
+    // CRUD for Subthemes
+    async findSubthemesByProgramId(programId: string, includeInactive = false): Promise<ProgramSubtheme[]> {
+        return this.prisma.programSubtheme.findMany({
+            where: includeInactive
+                ? { programId, deletedAt: null }
+                : { programId, isActive: true, deletedAt: null },
+            orderBy: { order: 'asc' },
+        });
+    }
+    async createSubtheme(data: Record<string, unknown>): Promise<ProgramSubtheme> {
+        return this.prisma.programSubtheme.create({ data: data as Prisma.ProgramSubthemeUncheckedCreateInput });
+    }
+    async updateSubtheme(id: string, data: Record<string, unknown>): Promise<ProgramSubtheme> {
+        return this.prisma.programSubtheme.update({ where: { id }, data: data as Prisma.ProgramSubthemeUncheckedUpdateInput });
+    }
+    async deleteSubtheme(id: string): Promise<void> {
+        // Soft-delete to match the schema's deletedAt convention on this model.
+        await this.prisma.programSubtheme.update({
+            where: { id },
+            data: { deletedAt: new Date(), isActive: false },
+        });
+    }
+    async findSubthemeById(id: string): Promise<ProgramSubtheme | null> {
+        return this.prisma.programSubtheme.findUnique({ where: { id } });
     }
 } // Re-closing the class
