@@ -77,14 +77,18 @@ model ApplicationFormField {
   // ... existing columns unchanged ...
 
   source          String  @default("custom") @db.VarChar(16)   // 'system' | 'custom'
-  systemFieldKey  String? @map("system_field_key") @db.VarChar(64)  // matches SystemFormFieldDefinition.key when source = 'system'
+  systemFieldKey  String? @map("system_field_key") @db.VarChar(64)  // matches SystemFormFieldDefinition.key when source = 'system' (intentionally not a FK — loose coupling so catalog soft-deletes don't cascade-break)
 
-  @@unique([programId, name, deletedAt], map: "application_form_fields_program_name_uq")
+  // In Prisma: plain @@index — Prisma 7 can't express partial unique indexes in the DSL
+  @@index([programId, name], map: "application_form_fields_program_name_uq")
+  // Real uniqueness is enforced in the migration SQL as a partial index:
+  //   CREATE UNIQUE INDEX application_form_fields_program_name_uq
+  //     ON application_form_fields (program_id, name) WHERE deleted_at IS NULL;
   // (existing indexes retained)
 }
 ```
 
-The unique index includes `deletedAt` so soft-deleted rows don't block re-creation with the same key.
+Uniqueness is enforced as a **partial unique index** `WHERE deleted_at IS NULL`, not a composite unique on `(program_id, name, deleted_at)`. Postgres treats each `NULL` in a composite UNIQUE as distinct, so a plain composite would silently allow duplicate active rows. The partial index closes that gap; soft-deleted rows no longer participate in the uniqueness check, so re-creation after soft-delete works naturally.
 
 ### 5.3 New: `application_form_templates`
 
