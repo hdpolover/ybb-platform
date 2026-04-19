@@ -72,6 +72,11 @@ import {
   UpdateApplicationFormFieldHandler,
   DeleteApplicationFormFieldHandler,
 } from './application/commands/handlers/application-form-field.handler';
+import {
+  CreateSystemFormFieldHandler,
+  UpdateSystemFormFieldHandler,
+  DeleteSystemFormFieldHandler,
+} from './application/commands/handlers/system-form-field.handler';
 import { GetApplicationFormFieldsHandler } from './application/queries/handlers/get-application-form-fields.handler';
 import { GetSystemFormFieldsHandler } from './application/queries/handlers/get-system-form-fields.handler';
 import { GetParticipantProgressHandler } from './application/queries/handlers/get-participant-progress.handler';
@@ -145,6 +150,9 @@ import { FormFieldKeyValidator } from './application/validators/form-field-key.v
     DeleteApplicationFormFieldHandler,
     GetApplicationFormFieldsHandler,
     GetSystemFormFieldsHandler,
+    CreateSystemFormFieldHandler,
+    UpdateSystemFormFieldHandler,
+    DeleteSystemFormFieldHandler,
 
     // Participation Info Handlers
     UpsertParticipationInfoHandler,
