@@ -16,6 +16,7 @@ import {
 } from "@/app/components/submissionsMasterData/api";
 import { FormFieldEditor } from "./FormFieldEditor";
 import { AddFieldDialog } from "./AddFieldDialog";
+import { CopyFromTemplateDialog } from "./CopyFromTemplateDialog";
 
 export interface ApplicationFormFieldRow {
   id: string;
@@ -65,6 +66,7 @@ export function FormFieldsTable({ programId }: { programId: string }) {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [copyTemplateOpen, setCopyTemplateOpen] = useState(false);
   const [editingField, setEditingField] = useState<ApplicationFormFieldRow | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -142,14 +144,23 @@ export function FormFieldsTable({ programId }: { programId: string }) {
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600"
-        >
-          <PlusIcon className="h-4 w-4" />
-          <span>Add Field</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setCopyTemplateOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+          >
+            <span>Copy from template</span>
+          </button>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600"
+          >
+            <PlusIcon className="h-4 w-4" />
+            <span>Add Field</span>
+          </button>
+        </div>
       </div>
 
       {errorMessage ? (
@@ -266,6 +277,16 @@ export function FormFieldsTable({ programId }: { programId: string }) {
         onClose={() => setAddDialogOpen(false)}
         onSaved={() => {
           setAddDialogOpen(false);
+          void loadFields();
+        }}
+      />
+
+      <CopyFromTemplateDialog
+        open={copyTemplateOpen}
+        programId={programId}
+        onClose={() => setCopyTemplateOpen(false)}
+        onApplied={() => {
+          setCopyTemplateOpen(false);
           void loadFields();
         }}
       />
