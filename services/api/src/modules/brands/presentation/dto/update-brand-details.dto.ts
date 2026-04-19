@@ -50,6 +50,11 @@ export class UpdateBrandDetailsDto {
     @IsUrl()
     websiteUrl?: string;
 
+    @ApiProperty({ required: false, example: 'https://chinayouthsummit.com', description: 'Landing deployment URL — drives cache revalidation.' })
+    @IsOptional()
+    @IsUrl()
+    landingUrl?: string;
+
     @ApiProperty({ required: false, example: 'contact@example.com' })
     @IsOptional()
     @IsEmail()

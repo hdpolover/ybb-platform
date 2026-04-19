@@ -57,6 +57,7 @@ export class UpdateBrandDetailsHandler implements ICommandHandler<UpdateBrandDet
             mission: dto.mission,
             primaryColor: dto.primaryColor,
             websiteUrl: dto.websiteUrl,
+            landingUrl: dto.landingUrl,
             contactEmail: dto.contactEmail,
             contactPhone: dto.contactPhone,
             contactWhatsapp: dto.contactWhatsapp,
@@ -70,7 +71,10 @@ export class UpdateBrandDetailsHandler implements ICommandHandler<UpdateBrandDet
             metaKeywords: dto.metaKeywords,
         });
 
-        await this.landingRevalidation.revalidateSettings();
+        await this.landingRevalidation.revalidateForBrand(id, {
+            landingUrl: updatedBrand.landingUrl,
+            websiteUrl: updatedBrand.websiteUrl,
+        });
         return this.mapToDto(updatedBrand);
     }
 
@@ -83,6 +87,7 @@ export class UpdateBrandDetailsHandler implements ICommandHandler<UpdateBrandDet
         dto.logoUrl = brand.logoUrl;
         dto.bannerUrl = brand.bannerUrl;
         dto.websiteUrl = brand.websiteUrl;
+        dto.landingUrl = brand.landingUrl;
         dto.primaryColor = brand.primaryColor;
         dto.about = brand.about;
         dto.vision = brand.vision;

@@ -15,6 +15,11 @@ model Brand {
 
   // Brand/Website Information
   websiteUrl   String? @map("website_url") @db.VarChar(255)
+  // Canonical public landing URL (origin only, e.g. https://chinayouthsummit.com).
+  // Distinct from websiteUrl because some brands point that at a marketing site
+  // while the Next.js landing lives elsewhere. Used by the admin API to notify
+  // /api/settings/revalidate when brand data changes.
+  landingUrl   String? @map("landing_url") @db.VarChar(255)
   about        String? @db.Text
   vision       String? @db.Text
   mission      String? @db.Text

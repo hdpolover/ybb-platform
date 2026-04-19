@@ -53,9 +53,13 @@ export class UpdateBrandHandler implements ICommandHandler<UpdateBrandCommand> {
 
         // Invalidate all landing page caches for this brand
         await this.invalidateLandingCaches(id);
-        // Also nudge the landing Next.js app to drop its server-side settings
-        // cache so logo/color changes show up instantly instead of after ~60s.
-        await this.landingRevalidation.revalidateSettings();
+        // Also nudge THIS brand's landing Next.js app to drop its server-side
+        // settings cache so logo/color changes show up instantly. Pass the
+        // fresh websiteUrl so we don't re-read the DB.
+        await this.landingRevalidation.revalidateForBrand(id, {
+            landingUrl: updatedBrand.landingUrl,
+            websiteUrl: updatedBrand.websiteUrl,
+        });
 
         return updatedBrand;
     }

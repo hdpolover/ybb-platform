@@ -9,6 +9,7 @@ export class Brand {
         public readonly logoUrl: string | null,
         public readonly bannerUrl: string | null,
         public readonly websiteUrl: string | null,
+        public readonly landingUrl: string | null,
         public readonly primaryColor: string | null,
         
         // Extended Details

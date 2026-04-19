@@ -91,7 +91,10 @@ export class CreateBrandHandler implements ICommandHandler<CreateBrandCommand> {
             new Date(),
         ));
 
-        await this.landingRevalidation.revalidateSettings();
+        await this.landingRevalidation.revalidateForBrand(brand.id, {
+            landingUrl: brand.landingUrl,
+            websiteUrl: brand.websiteUrl,
+        });
         return brand;
     }
 

@@ -52,7 +52,10 @@ export class UpdateBrandSettingsHandler implements ICommandHandler<UpdateBrandSe
 
         const updatedBrand = await this.brandRepository.update(id, brandUpdate);
 
-        await this.landingRevalidation.revalidateSettings();
+        await this.landingRevalidation.revalidateForBrand(id, {
+            landingUrl: updatedBrand.landingUrl,
+            websiteUrl: updatedBrand.websiteUrl,
+        });
         return this.mapToDto(updatedBrand);
     }
 
@@ -65,6 +68,7 @@ export class UpdateBrandSettingsHandler implements ICommandHandler<UpdateBrandSe
         dto.logoUrl = brand.logoUrl;
         dto.bannerUrl = brand.bannerUrl;
         dto.websiteUrl = brand.websiteUrl;
+        dto.landingUrl = brand.landingUrl;
         dto.primaryColor = brand.primaryColor;
         dto.about = brand.about;
         dto.vision = brand.vision;

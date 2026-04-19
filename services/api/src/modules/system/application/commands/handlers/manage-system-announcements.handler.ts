@@ -1,5 +1,6 @@
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import {
   ListAllSystemAnnouncementsCommand,
@@ -68,7 +69,7 @@ export class CreateSystemAnnouncementHandler
         actionLabel: dto.actionLabel ?? null,
         startDate: dto.startDate ? new Date(dto.startDate) : null,
         endDate: dto.endDate ? new Date(dto.endDate) : null,
-        metadata: dto.metadata ?? {},
+        metadata: (dto.metadata ?? {}) as Prisma.InputJsonValue,
         createdBy,
       },
     });
@@ -107,7 +108,7 @@ export class UpdateSystemAnnouncementHandler
         ...(dto.actionLabel !== undefined && { actionLabel: dto.actionLabel }),
         ...(dto.startDate !== undefined && { startDate: dto.startDate ? new Date(dto.startDate) : null }),
         ...(dto.endDate !== undefined && { endDate: dto.endDate ? new Date(dto.endDate) : null }),
-        ...(dto.metadata !== undefined && { metadata: dto.metadata }),
+        ...(dto.metadata !== undefined && { metadata: dto.metadata as Prisma.InputJsonValue }),
         updatedBy,
       },
     });

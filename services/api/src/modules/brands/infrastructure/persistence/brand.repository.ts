@@ -56,6 +56,7 @@ export class BrandRepository implements IBrandRepository {
                 description: data.description,
                 logoUrl: data.logoUrl,
                 websiteUrl: data.websiteUrl,
+                landingUrl: data.landingUrl,
                 primaryColor: data.primaryColor,
                 contactEmail: data.contactEmail,
                 isActive: data.isActive ?? true,
@@ -95,6 +96,7 @@ export class BrandRepository implements IBrandRepository {
                 logoUrl: data.logoUrl,
                 bannerUrl: data.bannerUrl,
                 websiteUrl: data.websiteUrl,
+                landingUrl: data.landingUrl,
                 primaryColor: data.primaryColor,
                 
                 about: data.about,
@@ -189,6 +191,7 @@ export class BrandRepository implements IBrandRepository {
             prismaEntity.logoUrl,
             prismaEntity.bannerUrl, // New
             prismaEntity.websiteUrl,
+            prismaEntity.landingUrl,
             prismaEntity.primaryColor,
 
             prismaEntity.about,

@@ -37,6 +37,7 @@ export class GetBrandDetailHandler implements IQueryHandler<GetBrandDetailQuery>
                 ? (brand.bannerUrl.startsWith('http') ? brand.bannerUrl : `${this.storageUrl}/${brand.bannerUrl}`)
                 : null,
             websiteUrl: brand.websiteUrl || null,
+            landingUrl: brand.landingUrl || null,
             primaryColor: brand.primaryColor || null,
             
             about: brand.about || null,

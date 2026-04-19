@@ -181,6 +181,7 @@ function IdentitySheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved
     slug: brand.slug ?? "",
     description: brand.description ?? "",
     websiteUrl: brand.websiteUrl ?? "",
+    landingUrl: brand.landingUrl ?? "",
     primaryColor: brand.primaryColor ?? "",
     contactEmail: brand.contactEmail ?? "",
     isActive: brand.isActive ?? true,
@@ -200,6 +201,7 @@ function IdentitySheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved
       slug: brand.slug ?? "",
       description: brand.description ?? "",
       websiteUrl: brand.websiteUrl ?? "",
+      landingUrl: brand.landingUrl ?? "",
       primaryColor: brand.primaryColor ?? "",
       contactEmail: brand.contactEmail ?? "",
       isActive: brand.isActive ?? true,
@@ -232,6 +234,7 @@ function IdentitySheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved
         slug: form.slug,
         description: form.description || undefined,
         websiteUrl: form.websiteUrl || undefined,
+        landingUrl: form.landingUrl || undefined,
         primaryColor: form.primaryColor || undefined,
         contactEmail: form.contactEmail || undefined,
         isActive: form.isActive,
@@ -287,7 +290,8 @@ function IdentitySheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved
             <FieldInput label="Name" id="name" value={form.name} onChange={(v) => set("name", v)} placeholder="Brand name" />
             <FieldInput label="Slug" id="slug" value={form.slug} onChange={(v) => set("slug", v)} placeholder="brand-slug" hint="URL-friendly identifier" />
             <FieldTextarea label="Description" id="description" value={form.description} onChange={(v) => set("description", v)} placeholder="Short description" rows={3} />
-            <FieldInput label="Website URL" id="websiteUrl" value={form.websiteUrl} onChange={(v) => set("websiteUrl", v)} placeholder="https://example.com" />
+            <FieldInput label="Website URL" id="websiteUrl" value={form.websiteUrl} onChange={(v) => set("websiteUrl", v)} placeholder="https://example.com" hint="Marketing / primary website (may differ from the landing deployment)." />
+            <FieldInput label="Landing URL" id="landingUrl" value={form.landingUrl} onChange={(v) => set("landingUrl", v)} placeholder="https://chinayouthsummit.com" hint="Where the Next.js landing app is deployed. Drives cache revalidation when brand data changes." />
             <ColorField label="Primary Color" id="primaryColor" value={form.primaryColor} onChange={(v) => set("primaryColor", v)} />
             <FieldInput label="Contact Email" id="contactEmail" value={form.contactEmail} onChange={(v) => set("contactEmail", v)} type="email" placeholder="contact@brand.com" />
             <FieldCheckbox label="Active" id="isActive" checked={form.isActive} onChange={(v) => set("isActive", v)} hint="Inactive brands are hidden from public view" />

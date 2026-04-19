@@ -18,7 +18,10 @@ export class DeleteBrandHandler implements ICommandHandler<DeleteBrandCommand> {
         if (!brand) {
             throw new NotFoundException(`Brand with ID ${id} not found`);
         }
+        // Capture the landing URL BEFORE delete — the row is gone afterward so
+        // a later lookup would miss. Prefer landingUrl; fall back to websiteUrl.
+        const landingUrl = brand.landingUrl || brand.websiteUrl;
         await this.brandRepository.delete(id);
-        await this.landingRevalidation.revalidateSettings();
+        await this.landingRevalidation.revalidateLandingUrl(landingUrl);
     }
 }

@@ -39,6 +39,11 @@ export class CreateBrandDto {
     @IsUrl()
     websiteUrl?: string;
 
+    @ApiProperty({ required: false, description: 'Canonical public landing deployment URL (e.g. https://chinayouthsummit.com). Used to trigger cache revalidation when brand data changes.' })
+    @IsOptional()
+    @IsUrl()
+    landingUrl?: string;
+
     @ApiProperty({ required: false, example: '#FF0000' })
     @IsOptional()
     @IsHexColor()
