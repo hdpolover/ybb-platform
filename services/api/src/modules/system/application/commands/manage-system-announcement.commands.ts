@@ -40,3 +40,7 @@ export class TogglePublishSystemAnnouncementCommand {
     public readonly updatedBy: string,
   ) {}
 }
+
+export class GetAdminSystemAnnouncementCommand {
+  constructor(public readonly id: string) {}
+}

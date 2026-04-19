@@ -5,6 +5,7 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { StorageService } from '../../../../files/application/storage.service';
 import { UpdateSponsorCommand } from '../update-sponsor.command';
 import { SponsorResponseDto } from '../../../presentation/dto/brand.dto';
+import { LandingRevalidationService } from '../../services/landing-revalidation.service';
 
 @CommandHandler(UpdateSponsorCommand)
 export class UpdateSponsorHandler implements ICommandHandler<UpdateSponsorCommand> {
@@ -14,6 +15,7 @@ export class UpdateSponsorHandler implements ICommandHandler<UpdateSponsorComman
         private readonly prisma: PrismaService,
         private readonly storageService: StorageService,
         private readonly configService: ConfigService,
+        private readonly landingRevalidation: LandingRevalidationService,
     ) {
         const rawUrl = this.configService.get('STORAGE_PUBLIC_URL', 'http://localhost:9000');
         this.storageUrl = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
@@ -27,7 +29,7 @@ export class UpdateSponsorHandler implements ICommandHandler<UpdateSponsorComman
         });
         if (!sponsor) throw new NotFoundException('Sponsor not found');
 
-        let logoPath: string | undefined;
+        let logoUrl: string | undefined;
         if (file) {
             const result = await this.storageService.uploadFile(
                 file,
@@ -35,7 +37,7 @@ export class UpdateSponsorHandler implements ICommandHandler<UpdateSponsorComman
                 brandId,
                 'brands/sponsor-logos',
             );
-            logoPath = result.path;
+            logoUrl = result.url;
         }
 
         const updated = await this.prisma.sponsor.update({
@@ -48,15 +50,21 @@ export class UpdateSponsorHandler implements ICommandHandler<UpdateSponsorComman
                 ...(dto.description !== undefined ? { description: dto.description ?? null } : {}),
                 ...(dto.order !== undefined ? { order: dto.order } : {}),
                 ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
-                ...(logoPath ? { logoUrl: logoPath } : {}),
+                ...(logoUrl ? { logoUrl } : {}),
             },
         });
+
+        await this.landingRevalidation.revalidateSettings();
 
         return {
             id: updated.id,
             name: updated.name,
             type: updated.type,
-            logoUrl: updated.logoUrl ? `${this.storageUrl}/${updated.logoUrl}` : undefined,
+            // Legacy rows may hold a storage path; prepend storageUrl as a
+            // safety net so the frontend always receives an http(s) URL.
+            logoUrl: updated.logoUrl
+                ? (updated.logoUrl.startsWith('http') ? updated.logoUrl : `${this.storageUrl}/${updated.logoUrl}`)
+                : undefined,
             websiteUrl: updated.websiteUrl ?? undefined,
             tier: updated.tier ?? undefined,
             description: updated.description ?? undefined,

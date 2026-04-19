@@ -5,6 +5,7 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { StorageService } from '../../../../files/application/storage.service';
 import { CreateSponsorCommand } from '../create-sponsor.command';
 import { SponsorResponseDto } from '../../../presentation/dto/brand.dto';
+import { LandingRevalidationService } from '../../services/landing-revalidation.service';
 
 @CommandHandler(CreateSponsorCommand)
 export class CreateSponsorHandler implements ICommandHandler<CreateSponsorCommand> {
@@ -14,6 +15,7 @@ export class CreateSponsorHandler implements ICommandHandler<CreateSponsorComman
         private readonly prisma: PrismaService,
         private readonly storageService: StorageService,
         private readonly configService: ConfigService,
+        private readonly landingRevalidation: LandingRevalidationService,
     ) {
         const rawUrl = this.configService.get('STORAGE_PUBLIC_URL', 'http://localhost:9000');
         this.storageUrl = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
@@ -25,7 +27,7 @@ export class CreateSponsorHandler implements ICommandHandler<CreateSponsorComman
         const brand = await this.prisma.brand.findUnique({ where: { id: brandId } });
         if (!brand) throw new NotFoundException('Brand not found');
 
-        let logoPath: string | undefined;
+        let logoUrl: string | undefined;
         if (file) {
             const result = await this.storageService.uploadFile(
                 file,
@@ -33,7 +35,7 @@ export class CreateSponsorHandler implements ICommandHandler<CreateSponsorComman
                 brandId,
                 'brands/sponsor-logos',
             );
-            logoPath = result.path;
+            logoUrl = result.url;
         }
 
         const sponsor = await this.prisma.sponsor.create({
@@ -46,15 +48,21 @@ export class CreateSponsorHandler implements ICommandHandler<CreateSponsorComman
                 description: dto.description ?? null,
                 order: dto.order ?? 0,
                 isActive: true,
-                ...(logoPath ? { logoUrl: logoPath } : {}),
+                ...(logoUrl ? { logoUrl } : {}),
             },
         });
+
+        await this.landingRevalidation.revalidateSettings();
 
         return {
             id: sponsor.id,
             name: sponsor.name,
             type: sponsor.type,
-            logoUrl: sponsor.logoUrl ? `${this.storageUrl}/${sponsor.logoUrl}` : undefined,
+            // Legacy rows may hold a storage path instead of an http(s) URL;
+            // prepend storageUrl for those so the frontend always gets a URL.
+            logoUrl: sponsor.logoUrl
+                ? (sponsor.logoUrl.startsWith('http') ? sponsor.logoUrl : `${this.storageUrl}/${sponsor.logoUrl}`)
+                : undefined,
             websiteUrl: sponsor.websiteUrl ?? undefined,
             tier: sponsor.tier ?? undefined,
             description: sponsor.description ?? undefined,

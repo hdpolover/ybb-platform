@@ -18,6 +18,7 @@ import {
   UpdateSystemAnnouncementCommand,
   DeleteSystemAnnouncementCommand,
   TogglePublishSystemAnnouncementCommand,
+  GetAdminSystemAnnouncementCommand,
 } from '../application/commands/manage-system-announcement.commands';
 import {
   SystemAnnouncementResponseDto,
@@ -82,6 +83,16 @@ export class SystemAnnouncementsController {
         return this.commandBus.execute(
             new ListAllSystemAnnouncementsCommand(query.page ?? 1, query.limit ?? 20, query.brandId),
         );
+    }
+
+    @Get('admin/:id')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Admin: get a single announcement with all fields' })
+    @ApiResponse({ status: 200, type: AdminSystemAnnouncementResponseDto })
+    async adminGetById(@Param('id') id: string) {
+        return this.commandBus.execute(new GetAdminSystemAnnouncementCommand(id));
     }
 
     @Post('admin')

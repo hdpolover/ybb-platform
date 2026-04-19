@@ -6,6 +6,7 @@ import { Brand } from '@core/entities/brand.entity';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
 import { StorageService } from '../../../../files/application/storage.service';
 import { UserActivityLog } from '@core/entities/user-activity-log.entity';
+import { LandingRevalidationService } from '../../services/landing-revalidation.service';
 
 @CommandHandler(CreateBrandCommand)
 export class CreateBrandHandler implements ICommandHandler<CreateBrandCommand> {
@@ -15,6 +16,7 @@ export class CreateBrandHandler implements ICommandHandler<CreateBrandCommand> {
         @Inject(IUserActivityLogRepository)
         private readonly activityLogRepository: IUserActivityLogRepository,
         private readonly storageService: StorageService,
+        private readonly landingRevalidation: LandingRevalidationService,
     ) {}
 
     async execute(command: CreateBrandCommand): Promise<Brand> {
@@ -89,6 +91,7 @@ export class CreateBrandHandler implements ICommandHandler<CreateBrandCommand> {
             new Date(),
         ));
 
+        await this.landingRevalidation.revalidateSettings();
         return brand;
     }
 

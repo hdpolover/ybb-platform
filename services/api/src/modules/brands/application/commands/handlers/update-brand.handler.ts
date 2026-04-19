@@ -5,6 +5,7 @@ import { IBrandRepository } from '@core/interfaces/repositories/brand.repository
 import { Brand } from '@core/entities/brand.entity';
 import { StorageService } from '../../../../files/application/storage.service';
 import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
+import { LandingRevalidationService } from '../../services/landing-revalidation.service';
 
 @CommandHandler(UpdateBrandCommand)
 export class UpdateBrandHandler implements ICommandHandler<UpdateBrandCommand> {
@@ -13,6 +14,7 @@ export class UpdateBrandHandler implements ICommandHandler<UpdateBrandCommand> {
         private readonly brandRepository: IBrandRepository,
         private readonly storageService: StorageService,
         private readonly cacheService: CacheService,
+        private readonly landingRevalidation: LandingRevalidationService,
     ) { }
 
     async execute(command: UpdateBrandCommand): Promise<Brand> {
@@ -51,6 +53,9 @@ export class UpdateBrandHandler implements ICommandHandler<UpdateBrandCommand> {
 
         // Invalidate all landing page caches for this brand
         await this.invalidateLandingCaches(id);
+        // Also nudge the landing Next.js app to drop its server-side settings
+        // cache so logo/color changes show up instantly instead of after ~60s.
+        await this.landingRevalidation.revalidateSettings();
 
         return updatedBrand;
     }

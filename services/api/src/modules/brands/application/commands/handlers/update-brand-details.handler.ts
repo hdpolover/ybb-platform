@@ -5,6 +5,7 @@ import { IBrandRepository } from '@core/interfaces/repositories/brand.repository
 import { BrandResponseDto } from '../../../presentation/dto/brand.dto';
 import { StorageService } from '../../../../files/application/storage.service';
 import { Brand } from '@core/entities/brand.entity';
+import { LandingRevalidationService } from '../../services/landing-revalidation.service';
 
 @CommandHandler(UpdateBrandDetailsCommand)
 export class UpdateBrandDetailsHandler implements ICommandHandler<UpdateBrandDetailsCommand> {
@@ -12,6 +13,7 @@ export class UpdateBrandDetailsHandler implements ICommandHandler<UpdateBrandDet
         @Inject('IBrandRepository')
         private readonly brandRepository: IBrandRepository,
         private readonly storageService: StorageService,
+        private readonly landingRevalidation: LandingRevalidationService,
     ) {}
 
     async execute(command: UpdateBrandDetailsCommand): Promise<BrandResponseDto> {
@@ -68,6 +70,7 @@ export class UpdateBrandDetailsHandler implements ICommandHandler<UpdateBrandDet
             metaKeywords: dto.metaKeywords,
         });
 
+        await this.landingRevalidation.revalidateSettings();
         return this.mapToDto(updatedBrand);
     }
 

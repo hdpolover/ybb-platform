@@ -7,6 +7,7 @@ import {
   UpdateSystemAnnouncementCommand,
   DeleteSystemAnnouncementCommand,
   TogglePublishSystemAnnouncementCommand,
+  GetAdminSystemAnnouncementCommand,
 } from '../manage-system-announcement.commands';
 
 @Injectable()
@@ -156,5 +157,22 @@ export class TogglePublishSystemAnnouncementHandler
     });
 
     return updated;
+  }
+}
+
+@Injectable()
+@CommandHandler(GetAdminSystemAnnouncementCommand)
+export class GetAdminSystemAnnouncementHandler
+  implements ICommandHandler<GetAdminSystemAnnouncementCommand>
+{
+  constructor(private readonly prisma: PrismaService) {}
+
+  async execute(command: GetAdminSystemAnnouncementCommand) {
+    const { id } = command;
+
+    const announcement = await this.prisma.systemAnnouncement.findUnique({ where: { id } });
+    if (!announcement) throw new NotFoundException(`Announcement ${id} not found`);
+
+    return announcement;
   }
 }

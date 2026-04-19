@@ -962,6 +962,10 @@ export type SystemAnnouncement = {
   updatedAt: string;
 };
 
+export function getSystemAnnouncementAdmin(id: string): Promise<SystemAnnouncement> {
+  return request<SystemAnnouncement>(`/system/announcements/admin/${id}`);
+}
+
 export function listSystemAnnouncements(params?: {
   page?: number;
   limit?: number;

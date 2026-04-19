@@ -1,10 +1,13 @@
 import { Module } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
+import { HttpModule } from '@nestjs/axios';
+import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from '../auth/auth.module';
 import { FilesModule } from '../files/files.module';
 import { UsersModule } from '../users/users.module';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { ProgramsModule } from '../programs/programs.module';
+import { LandingRevalidationService } from './application/services/landing-revalidation.service';
 import { BrandsController } from './presentation/brands.controller';
 import { BrandRepository } from './infrastructure/persistence/brand.repository';
 import { SponsorRepository } from './infrastructure/persistence/sponsor.repository';
@@ -26,9 +29,10 @@ import { UpdateSponsorHandler } from './application/commands/handlers/update-spo
 import { DeleteSponsorHandler } from './application/commands/handlers/delete-sponsor.handler';
 
 @Module({
-    imports: [CqrsModule, AuthModule, FilesModule, UsersModule, ProgramsModule],
+    imports: [CqrsModule, HttpModule, ConfigModule, AuthModule, FilesModule, UsersModule, ProgramsModule],
     controllers: [BrandsController],
     providers: [
+        LandingRevalidationService,
         {
             provide: 'IBrandRepository',
             useClass: BrandRepository,
