@@ -4,6 +4,7 @@ import { AuthModule } from '@modules/auth/auth.module';
 import { UsersModule } from '@modules/users/users.module';
 import { FilesModule } from '@modules/files/files.module';
 import { ProgramsController } from './presentation/programs.controller';
+import { AdminProgramsController } from './presentation/admin-programs.controller';
 import { ProgramScheduleController } from './presentation/program-schedule.controller';
 import { ProgramPeopleController } from './presentation/program-people.controller';
 import { ProgramContentController } from './presentation/program-content.controller';
@@ -82,6 +83,7 @@ import { CacheService } from '../../shared/infrastructure/cache/cache.service';
   imports: [CqrsModule, AuthModule, UsersModule, FilesModule],
   controllers: [
     ProgramsController,
+    AdminProgramsController,
     ProgramScheduleController,
     ProgramPeopleController,
     ProgramContentController,

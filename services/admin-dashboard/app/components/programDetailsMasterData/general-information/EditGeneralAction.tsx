@@ -52,22 +52,21 @@ export function EditGeneralAction({
         <span>Edit General Information</span>
       </button>
 
-      {isOpen && (
-        <EditGeneralInformationModal
-          programId={programId}
-          brandId={brandId}
-          programName={programName}
-          initialValues={initialValues}
-          currentLogoUrl={currentLogoUrl}
-          currentBannerUrl={currentBannerUrl}
-          currentThumbnailUrl={currentThumbnailUrl}
-          onSubmit={handleSubmit}
-          onBrandingUploaded={onBrandingUploaded}
-          isSaving={isSaving}
-          errorMessage={errorMessage}
-          onClose={() => setIsOpen(false)}
-        />
-      )}
+      <EditGeneralInformationModal
+        open={isOpen}
+        programId={programId}
+        brandId={brandId}
+        programName={programName}
+        initialValues={initialValues}
+        currentLogoUrl={currentLogoUrl}
+        currentBannerUrl={currentBannerUrl}
+        currentThumbnailUrl={currentThumbnailUrl}
+        onSubmit={handleSubmit}
+        onBrandingUploaded={onBrandingUploaded}
+        isSaving={isSaving}
+        errorMessage={errorMessage}
+        onClose={() => setIsOpen(false)}
+      />
     </>
   );
 }

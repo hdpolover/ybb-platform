@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { DocumentTextIcon, CalendarDaysIcon, MapPinIcon } from "@heroicons/react/24/solid";
 import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
+import { FormSection } from "@/src/ui/drawer/form-section";
 
 export interface ProgramSpecificsFormValues {
   location: string;
@@ -103,15 +104,11 @@ export function EditProgramSpecificsModal({
         admin area. This form is limited to program-admin operational settings.
       </div>
 
-      {/* Operations */}
-      <section className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-5">
-        <div className="mb-4 flex items-center gap-3 border-b border-zinc-200 pb-3">
-          <MapPinIcon className="h-5 w-5 text-blue-500" />
-          <div>
-            <h3 className="text-base font-bold text-zinc-900">Operations</h3>
-            <p className="text-xs text-zinc-500">Configure venue, capacity, and registration controls.</p>
-          </div>
-        </div>
+      <FormSection
+        icon={MapPinIcon}
+        title="Operations"
+        description="Configure venue, capacity, and registration controls."
+      >
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
           <div>
             <label className="mb-1.5 block text-xs font-medium text-zinc-500">Location</label>
@@ -151,17 +148,13 @@ export function EditProgramSpecificsModal({
             Require payment
           </label>
         </div>
-      </section>
+      </FormSection>
 
-      {/* Registration & Payment */}
-      <section className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-5">
-        <div className="mb-4 flex items-center gap-3 border-b border-zinc-200 pb-3">
-          <CalendarDaysIcon className="h-5 w-5 text-blue-500" />
-          <div>
-            <h3 className="text-base font-bold text-zinc-900">Registration &amp; Payment</h3>
-            <p className="text-xs text-zinc-500">Set the application window and payment defaults.</p>
-          </div>
-        </div>
+      <FormSection
+        icon={CalendarDaysIcon}
+        title="Registration & Payment"
+        description="Set the application window and payment defaults."
+      >
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
           <div>
             <label className="mb-1.5 block text-xs font-medium text-zinc-500">Registration Open Date</label>
@@ -202,17 +195,13 @@ export function EditProgramSpecificsModal({
             />
           </div>
         </div>
-      </section>
+      </FormSection>
 
-      {/* Participant-facing content */}
-      <section className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-5">
-        <div className="mb-4 flex items-center gap-3 border-b border-zinc-200 pb-3">
-          <DocumentTextIcon className="h-5 w-5 text-blue-500" />
-          <div>
-            <h3 className="text-base font-bold text-zinc-900">Participant-Facing Content</h3>
-            <p className="text-xs text-zinc-500">Operational copy used during registration and payment flows.</p>
-          </div>
-        </div>
+      <FormSection
+        icon={DocumentTextIcon}
+        title="Participant-Facing Content"
+        description="Operational copy used during registration and payment flows."
+      >
         <div className="space-y-5">
           <div>
             <label className="mb-1.5 block text-xs font-medium text-zinc-500">Requirements Description</label>
@@ -242,7 +231,7 @@ export function EditProgramSpecificsModal({
             />
           </div>
         </div>
-      </section>
+      </FormSection>
     </DrawerShell>
   );
 }
