@@ -39,6 +39,33 @@ Before shipping:
 - [ ] **Schema migration reviewed.** Open `services/api/prisma/migrations/20260419133848_add_form_field_catalog_and_templates/migration.sql` and confirm it matches the spec's data model (3 new tables, 2 new columns, 1 partial unique index, expected FKs and indexes).
 - [ ] **Drift check.** `git status` on `dev` should show no unrelated working-tree changes; if it does, address them before cutting.
 
+## Feature flag
+
+The new catalog picker UX is gated behind `NEXT_PUBLIC_FF_FORM_FIELD_CATALOG_V2` (admin dashboard only). Default is `false`.
+
+**What the flag controls (ON = flag true):**
+- "Add Field" opens the catalog picker (system fields grouped by category + "Create custom field" fallback).
+- "Copy from template" button appears in the form-fields table header.
+- After creating a new program, the default-template prompt appears.
+
+**What is always on (flag has no effect):**
+- Refactored custom-field editor — hidden storage key + auto-slug from label + advanced toggle.
+- Server-side key validator + reserved-word blocking on all create/update paths (from the API side — flag doesn't touch the backend).
+- Super-admin pages at `/platform/system-form-fields` and `/platform/form-templates` (role-gated; no old counterpart to fall back to).
+
+**Enable for internal team first:**
+
+```bash
+# In the admin-dashboard deployment env (Dokploy or docker-compose override)
+NEXT_PUBLIC_FF_FORM_FIELD_CATALOG_V2=true
+```
+
+Then redeploy the admin dashboard image. Next.js reads `NEXT_PUBLIC_*` at build time, so a redeploy is required.
+
+**Roll back the UI without reverting code:** set the env var to `false` (or remove it), rebuild, redeploy.
+
+**Full rollback:** revert the admin dashboard commits and redeploy. Note that the backend changes are additive and can stay — they don't depend on the flag.
+
 ## Deploy sequence
 
 ### Step 1 — Apply the Prisma migration
