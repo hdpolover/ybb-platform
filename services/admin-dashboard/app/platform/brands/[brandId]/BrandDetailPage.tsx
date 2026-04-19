@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   ExternalLink,
   Globe,
+  ImageIcon,
   Layers,
   Mail,
   MapPin,
@@ -16,6 +17,7 @@ import {
   Save,
   Settings2,
   Trash2,
+  Upload,
   Users,
   X,
 } from "lucide-react";
@@ -156,6 +158,155 @@ function Section({
 }
 
 // ─── Inline Sheets ────────────────────────────────────────────────────────────
+
+// ─── Media Sheet ─────────────────────────────────────────────────────────────
+
+function MediaSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(brand.logoUrl ?? null);
+  const [bannerPreview, setBannerPreview] = useState<string | null>(brand.bannerUrl ?? null);
+
+  function onFileChange(
+    e: React.ChangeEvent<HTMLInputElement>,
+    setFile: (f: File | null) => void,
+    setPreview: (url: string | null) => void,
+  ) {
+    const file = e.target.files?.[0] ?? null;
+    setFile(file);
+    if (file) setPreview(URL.createObjectURL(file));
+    setError(null);
+    setSuccess(null);
+  }
+
+  async function handleSave() {
+    if (!logoFile && !bannerFile) {
+      setError("Select at least one image to upload.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      await updatePlatformBrandIdentity(brand.id, {
+        name: brand.name,
+        slug: brand.slug,
+        logo: logoFile ?? undefined,
+        banner: bannerFile ?? undefined,
+      });
+      setSuccess("Media saved.");
+      setLogoFile(null);
+      setBannerFile(null);
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => {
+          setOpen(true);
+          setLogoFile(null);
+          setBannerFile(null);
+          setLogoPreview(brand.logoUrl ?? null);
+          setBannerPreview(brand.bannerUrl ?? null);
+          setError(null);
+          setSuccess(null);
+        }}
+      >
+        <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit Media
+      </Button>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent side="right" className="sm:max-w-md overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Edit Media</SheetTitle>
+          </SheetHeader>
+          <div className="mt-6 space-y-6">
+            <SheetMsg message={error} variant="error" />
+            <SheetMsg message={success} variant="success" />
+
+            {/* Logo */}
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-zinc-700">Logo</p>
+              <div className="flex items-center gap-4">
+                <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 overflow-hidden">
+                  {logoPreview ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={logoPreview} alt="Logo preview" className="h-full w-full object-contain p-1" />
+                  ) : (
+                    <ImageIcon className="h-8 w-8 text-zinc-300" />
+                  )}
+                </div>
+                <div className="flex-1">
+                  <label
+                    htmlFor="logoUpload"
+                    className="flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-zinc-300 bg-zinc-50 px-3 py-2 text-xs text-zinc-500 hover:border-zinc-400 hover:bg-zinc-100"
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    {logoFile ? logoFile.name : "Upload new logo…"}
+                  </label>
+                  <input
+                    id="logoUpload"
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    onChange={(e) => onFileChange(e, setLogoFile, setLogoPreview)}
+                  />
+                  <p className="mt-1 text-xs text-zinc-400">PNG, JPG, SVG, WEBP recommended</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Banner */}
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-zinc-700">Banner</p>
+              <div className="h-28 w-full overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50">
+                {bannerPreview ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={bannerPreview} alt="Banner preview" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full items-center justify-center">
+                    <ImageIcon className="h-8 w-8 text-zinc-300" />
+                  </div>
+                )}
+              </div>
+              <label
+                htmlFor="bannerUpload"
+                className="flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-zinc-300 bg-zinc-50 px-3 py-2 text-xs text-zinc-500 hover:border-zinc-400 hover:bg-zinc-100"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                {bannerFile ? bannerFile.name : "Upload new banner…"}
+              </label>
+              <input
+                id="bannerUpload"
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                onChange={(e) => onFileChange(e, setBannerFile, setBannerPreview)}
+              />
+              <p className="text-xs text-zinc-400">Recommended: 1200×400 or wider. PNG, JPG.</p>
+            </div>
+          </div>
+          <SheetFooter className="mt-6">
+            <Button onClick={handleSave} loading={saving} disabled={saving || (!logoFile && !bannerFile)}>
+              <Save className="mr-1.5 h-4 w-4" /> Save
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+    </>
+  );
+}
 
 function IdentitySheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved: () => void }) {
   const [open, setOpen] = useState(false);
@@ -488,28 +639,42 @@ function SettingsSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved
 function OverviewTab({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved: () => void }) {
   return (
     <div className="space-y-4">
-      {(brand.bannerUrl || brand.logoUrl) && (
-        <Card className="overflow-hidden">
-          {brand.bannerUrl && (
-            <div className="relative h-36 w-full bg-zinc-100">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={brand.bannerUrl} alt="Brand banner" className="h-full w-full object-cover" />
+      {/* Media card — always visible so banner/logo are always editable */}
+      <Card className="overflow-hidden">
+        {brand.bannerUrl ? (
+          <div className="relative h-36 w-full bg-zinc-100">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={brand.bannerUrl} alt="Brand banner" className="h-full w-full object-cover" />
+          </div>
+        ) : (
+          <div className="flex h-28 w-full items-center justify-center bg-zinc-50">
+            <ImageIcon className="h-8 w-8 text-zinc-300" />
+          </div>
+        )}
+        <CardContent className="flex items-center justify-between py-3">
+          <div className="flex items-center gap-4">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 overflow-hidden">
+              {brand.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={brand.logoUrl} alt={`${brand.name} logo`} className="h-full w-full object-contain p-1" />
+              ) : (
+                <ImageIcon className="h-6 w-6 text-zinc-300" />
+              )}
             </div>
-          )}
-          {brand.logoUrl && (
-            <CardContent className="flex items-center gap-4 py-4">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={brand.logoUrl} alt={`${brand.name} logo`} className="h-14 w-14 rounded-lg border border-zinc-200 object-contain p-1" />
-              <div>
-                <p className="text-xs text-zinc-500">Logo</p>
+            <div>
+              <p className="text-xs text-zinc-500">Logo</p>
+              {brand.logoUrl ? (
                 <a href={brand.logoUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
                   Open <ExternalLink className="h-3 w-3" />
                 </a>
-              </div>
-            </CardContent>
-          )}
-        </Card>
-      )}
+              ) : (
+                <p className="text-xs text-zinc-400">No logo uploaded</p>
+              )}
+            </div>
+          </div>
+          <MediaSheet brand={brand} onSaved={onSaved} />
+        </CardContent>
+      </Card>
 
       <Section
         title="About"

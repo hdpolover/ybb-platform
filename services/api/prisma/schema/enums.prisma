@@ -19,7 +19,6 @@ enum AssessmentStatus {
 enum Gender {
   male
   female
-  other
 }
 
 enum ApplicationCategory {

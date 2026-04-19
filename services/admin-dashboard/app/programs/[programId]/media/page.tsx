@@ -16,6 +16,7 @@ import {
   ClipboardDocumentIcon,
 } from "@heroicons/react/24/outline";
 import { CheckCircleIcon } from "@heroicons/react/24/solid";
+import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
 import {
   listProgramMedia,
@@ -232,7 +233,6 @@ function UploadZone({
   const [files, setFiles] = useState<File[]>([]);
   const [assetType, setAssetType] = useState("gallery");
   const [uploading, setUploading] = useState(false);
-  const [results, setResults] = useState<{ name: string; ok: boolean; error?: string }[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   function handleDrop(e: React.DragEvent) {
@@ -243,18 +243,39 @@ function UploadZone({
   async function handleUpload() {
     if (!files.length) return;
     setUploading(true);
-    const newResults: typeof results = [];
-    for (const file of files) {
-      try {
-        await uploadProgramMediaFile({ programId, brandId, userId, file, assetType, bucket: assetType });
-        newResults.push({ name: file.name, ok: true });
-      } catch (err) {
-        newResults.push({ name: file.name, ok: false, error: err instanceof Error ? err.message : "Upload failed" });
-      }
+    const toastId = toast.loading(
+      files.length === 1
+        ? `Uploading "${files[0].name}"…`
+        : `Uploading ${files.length} files…`,
+    );
+    // Close modal immediately so user isn't blocked
+    onClose();
+    const settled = await Promise.allSettled(
+      files.map((file) =>
+        uploadProgramMediaFile({ programId, brandId, userId, file, assetType, bucket: assetType }),
+      ),
+    );
+    const succeeded = settled.filter((r) => r.status === "fulfilled").length;
+    const failed = settled.filter((r) => r.status === "rejected");
+    if (failed.length === 0) {
+      toast.success(
+        succeeded === 1 ? `"${files[0].name}" uploaded.` : `${succeeded} files uploaded.`,
+        { id: toastId },
+      );
+      onUploaded();
+    } else if (succeeded > 0) {
+      toast.warning(
+        `${succeeded} uploaded, ${failed.length} failed: ${(failed[0].reason as Error)?.message ?? "unknown error"}.`,
+        { id: toastId },
+      );
+      onUploaded();
+    } else {
+      toast.error(
+        `Upload failed: ${(failed[0].reason as Error)?.message ?? "unknown error"}.`,
+        { id: toastId },
+      );
     }
-    setResults(newResults);
     setUploading(false);
-    if (newResults.some((r) => r.ok)) onUploaded();
   }
 
   return (
@@ -318,32 +339,18 @@ function UploadZone({
             </select>
           </div>
 
-          {/* Upload results */}
-          {results.length > 0 && (
-            <ul className="space-y-1">
-              {results.map((r) => (
-                <li key={r.name} className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-[11px] ${r.ok ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
-                  <span className="truncate font-medium">{r.name}</span>
-                  <span className="ml-auto shrink-0">{r.ok ? "Uploaded" : r.error}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-
           <div className="flex justify-end gap-2">
             <button type="button" onClick={onClose} className="rounded-md border border-zinc-200 px-4 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50">
-              {results.length > 0 ? "Close" : "Cancel"}
+              Cancel
             </button>
-            {results.length === 0 && (
-              <button
-                type="button"
-                onClick={handleUpload}
-                disabled={uploading || files.length === 0}
-                className="rounded-md bg-blue-500 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
-              >
-                {uploading ? "Uploading…" : `Upload ${files.length > 0 ? `(${files.length})` : ""}`}
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={handleUpload}
+              disabled={uploading || files.length === 0}
+              className="rounded-md bg-blue-500 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
+            >
+              {`Upload${files.length > 0 ? ` (${files.length})` : ""}`}
+            </button>
           </div>
         </div>
       </div>

@@ -186,6 +186,8 @@ export function updatePlatformBrandIdentity(
     primaryColor?: string;
     contactEmail?: string;
     isActive?: boolean;
+    logo?: File | null;
+    banner?: File | null;
   },
 ): Promise<PlatformBrandDetail> {
   const formData = new FormData();
@@ -196,6 +198,8 @@ export function updatePlatformBrandIdentity(
   if (input.primaryColor != null) formData.set("primaryColor", input.primaryColor);
   if (input.contactEmail != null) formData.set("contactEmail", input.contactEmail);
   if (input.isActive != null) formData.set("isActive", String(input.isActive));
+  if (input.logo) formData.set("logo", input.logo);
+  if (input.banner) formData.set("banner", input.banner);
   return request<PlatformBrandDetail>(`/brands/${brandId}`, { method: "PUT", body: formData });
 }
 
