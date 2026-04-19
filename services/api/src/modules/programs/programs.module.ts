@@ -13,6 +13,7 @@ import { ProgramParticipationController } from './presentation/program-participa
 import { ProgramLandingController } from './presentation/program-landing.controller';
 import { ProgramExchangeRateController } from './presentation/program-exchange-rate.controller';
 import { ProgramAnnouncementsController } from './presentation/program-announcements.controller';
+import { SystemFormFieldsController } from './presentation/system-form-fields.controller';
 import {
   ListProgramAnnouncementsHandler,
   CreateProgramAnnouncementHandler,
@@ -72,6 +73,7 @@ import {
   DeleteApplicationFormFieldHandler,
 } from './application/commands/handlers/application-form-field.handler';
 import { GetApplicationFormFieldsHandler } from './application/queries/handlers/get-application-form-fields.handler';
+import { GetSystemFormFieldsHandler } from './application/queries/handlers/get-system-form-fields.handler';
 import { GetParticipantProgressHandler } from './application/queries/handlers/get-participant-progress.handler';
 import { UpdateExchangeRateHandler } from './application/commands/handlers/update-exchange-rate.handler';
 import { ProgramContentRepository } from './infrastructure/persistence/program-content.repository';
@@ -93,6 +95,7 @@ import { FormFieldKeyValidator } from './application/validators/form-field-key.v
     ProgramLandingController,
     ProgramExchangeRateController,
     ProgramAnnouncementsController,
+    SystemFormFieldsController,
   ],
   providers: [
     ListProgramsHandler,
@@ -141,7 +144,8 @@ import { FormFieldKeyValidator } from './application/validators/form-field-key.v
     UpdateApplicationFormFieldHandler,
     DeleteApplicationFormFieldHandler,
     GetApplicationFormFieldsHandler,
-    
+    GetSystemFormFieldsHandler,
+
     // Participation Info Handlers
     UpsertParticipationInfoHandler,
     DeleteParticipationInfoHandler,
