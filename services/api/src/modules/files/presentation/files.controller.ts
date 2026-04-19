@@ -166,11 +166,13 @@ export class FilesController {
   @ApiResponse({ status: 201, description: 'Upload URL issued' })
   async requestUploadUrl(
     @Body() dto: CreateUploadUrlRequest,
-  ): Promise<{ success: boolean; data: CreateUploadUrlResponse }> {
+  ): Promise<CreateUploadUrlResponse> {
+    // Return raw data; the global TransformInterceptor wraps it as
+    // `{ statusCode, message, data }`. Wrapping here would double-envelope.
     this.logger.log(`Requesting upload URL for ${dto.filename} (brand ${dto.brand_id})`);
     const data = await this.fileServiceClient.createUploadUrl(dto);
     this.metricsService.fileUploadsTotal.inc({ file_type: dto.bucket ?? 'documents' });
-    return { success: true, data };
+    return data;
   }
 
   @Patch(':fileId/ready')
@@ -183,11 +185,10 @@ export class FilesController {
     @Param('fileId') fileId: string,
     @Query('brand_id') brandId: string,
     @Query('actual_size') actualSize?: string,
-  ): Promise<{ success: boolean; data: FileResponse }> {
+  ): Promise<FileResponse> {
     this.logger.log(`Marking file ready: ${fileId} (brand ${brandId})`);
     const size = actualSize ? Number(actualSize) : undefined;
-    const data = await this.fileServiceClient.markFileReady(fileId, brandId, size);
-    return { success: true, data };
+    return this.fileServiceClient.markFileReady(fileId, brandId, size);
   }
 
   @Post('presigned-upload-url')
