@@ -92,7 +92,13 @@ export interface IProgramContentRepository {
     createPricingTier(data: Partial<ProgramPricingTier>): Promise<ProgramPricingTier>;
     updatePricingTier(id: string, data: Partial<ProgramPricingTier>): Promise<ProgramPricingTier>;
     deletePricingTier(id: string): Promise<void>;
-    findPricingTierById(id: string): Promise<ProgramPricingTier | null>;
+    findPricingTierById(id: string): Promise<ProgramPricingTierWithPeriods | null>;
+
+    // CRUD for Validity Periods
+    createValidityPeriod(data: Partial<PricingTierValidityPeriod>): Promise<PricingTierValidityPeriod>;
+    updateValidityPeriod(id: string, data: Partial<PricingTierValidityPeriod>): Promise<PricingTierValidityPeriod>;
+    deleteValidityPeriod(id: string): Promise<void>;
+    findValidityPeriodById(id: string): Promise<PricingTierValidityPeriod | null>;
 
     // CRUD for Requirements
     createRequirement(data: Partial<ProgramRequirement>): Promise<ProgramRequirement>;

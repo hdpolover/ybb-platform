@@ -670,7 +670,114 @@ export function deletePlatformProgram(programId: string): Promise<void> {
   });
 }
 
-// ─── Ambassador Types ─────────────────────────────────────────────────────────
+// ─── Pricing Tiers & Validity Periods ─────────────────────────────────────────
+
+export type ValidityPeriod = {
+  id: string;
+  pricingTierId: string;
+  startDate: string;
+  endDate: string;
+  description?: string;
+};
+
+export type PricingTier = {
+  id: string;
+  programId: string;
+  name: string;
+  description?: string;
+  price: number;
+  currency: string;
+  feeType?: string;
+  allowedCategories?: string[];
+  capacity?: number;
+  soldCount: number;
+  isActive: boolean;
+  order: number;
+  icon?: string;
+  validityPeriods: ValidityPeriod[];
+};
+
+export function getPricingTiers(programId: string): Promise<PricingTier[]> {
+  return request<PricingTier[]>(`/programs/${programId}/pricing-tiers`);
+}
+
+export function getPricingTierById(tierId: string): Promise<PricingTier | null> {
+  return request<PricingTier | null>(`/programs/pricing-tiers/${tierId}`);
+}
+
+export function createPricingTier(
+  programId: string,
+  data: {
+    name: string;
+    description?: string;
+    price: number;
+    currency: string;
+    feeType?: string;
+    allowedCategories?: string[];
+    capacity?: number;
+    isActive?: boolean;
+    order?: number;
+    icon?: string;
+    validFrom: string;
+    validUntil: string;
+  },
+): Promise<PricingTier> {
+  return request<PricingTier>(`/programs/${programId}/pricing-tiers`, {
+    method: "POST",
+    body: JSON.stringify({ ...data, programId }),
+  });
+}
+
+export function updatePricingTier(
+  tierId: string,
+  data: Partial<{
+    name: string;
+    description: string;
+    price: number;
+    currency: string;
+    feeType: string;
+    allowedCategories: string[];
+    capacity: number;
+    isActive: boolean;
+    order: number;
+    icon: string;
+    validFrom: string;
+    validUntil: string;
+  }>,
+): Promise<PricingTier> {
+  return request<PricingTier>(`/programs/pricing-tiers/${tierId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deletePricingTier(tierId: string): Promise<void> {
+  return request<void>(`/programs/pricing-tiers/${tierId}`, { method: "DELETE" });
+}
+
+export function createValidityPeriod(
+  tierId: string,
+  data: { startDate: string; endDate: string; description?: string },
+): Promise<ValidityPeriod> {
+  return request<ValidityPeriod>(`/programs/pricing-tiers/${tierId}/periods`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateValidityPeriod(
+  periodId: string,
+  data: { startDate?: string; endDate?: string; description?: string },
+): Promise<ValidityPeriod> {
+  return request<ValidityPeriod>(`/programs/validity-periods/${periodId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteValidityPeriod(periodId: string): Promise<void> {
+  return request<void>(`/programs/validity-periods/${periodId}`, { method: "DELETE" });
+}
 
 export type AmbassadorRow = {
   id: string;

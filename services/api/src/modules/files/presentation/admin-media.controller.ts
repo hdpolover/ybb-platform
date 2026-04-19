@@ -68,8 +68,11 @@ export class AdminMediaController {
     @Query('page') page = 1,
     @Query('limit') limit = 50,
   ) {
+    // Return the raw paginated payload; the global TransformInterceptor adds
+    // the `{ statusCode, message, data }` envelope. Wrapping here would
+    // double-envelope and break the admin-dashboard's `listProgramMedia`.
     this.logger.log(`Listing media for program ${programId}`);
-    const data = await this.fileServiceClient.listProgramMedia({
+    return this.fileServiceClient.listProgramMedia({
       programId,
       brandId,
       assetType,
@@ -77,11 +80,6 @@ export class AdminMediaController {
       page: Number(page),
       limit: Number(limit),
     });
-
-    return {
-      success: true,
-      data,
-    };
   }
 
   @Post()
@@ -111,15 +109,12 @@ export class AdminMediaController {
       undefined, // no participant_id for program-level media
     );
 
+    // Raw payload; TransformInterceptor supplies the envelope.
     return {
-      success: true,
-      message: 'File uploaded successfully',
-      data: {
-        file: uploadResult.fileInfo,
-        url: uploadResult.url,
-        path: uploadResult.path,
-        asset_type: assetType,
-      },
+      file: uploadResult.fileInfo,
+      url: uploadResult.url,
+      path: uploadResult.path,
+      asset_type: assetType,
     };
   }
 

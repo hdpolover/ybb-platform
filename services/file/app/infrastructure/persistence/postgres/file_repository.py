@@ -50,11 +50,19 @@ class PostgresFileRepository(IFileRepository):
         page: int = 1,
         limit: int = 50,
     ) -> tuple[List[File], int]:
-        """Find all non-deleted files for a program with optional filters."""
+        """Find all non-deleted, READY files for a program with optional filters.
+
+        PROCESSING rows are hidden from the media library — they represent
+        reserved upload slots that haven't been confirmed on storage yet (the
+        client either crashed between the signed PUT and the `/ready` call, or
+        is still mid-upload). Showing them would surface rows that may not
+        have any bytes in the bucket.
+        """
         where: dict = {
             "program_id": program_id,
             "brand_id": brand_id,
             "is_deleted": False,
+            "status": "READY",
         }
         if asset_type:
             where["asset_type"] = asset_type

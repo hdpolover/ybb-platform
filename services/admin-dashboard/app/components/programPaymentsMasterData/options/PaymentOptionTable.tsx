@@ -9,6 +9,7 @@ import {
 
 export interface PaymentOptionRow {
   id: number;
+  _id: string; // real UUID from backend
   optionName: string;
   category: "Registration Fee" | "Program Fee 1" | "Program Fee 2";
   fundingType: "All" | "Self Funded" | "Fully Funded";
@@ -24,12 +25,16 @@ export interface PaymentOptionRow {
   description: string;
 }
 
-export function ProgramPaymentsTable({ 
-  data, 
-  currentSearch 
-}: { 
-  data: PaymentOptionRow[], 
-  currentSearch: string 
+export function ProgramPaymentsTable({
+  data,
+  currentSearch,
+  onRefresh,
+  programId,
+}: {
+  data: PaymentOptionRow[];
+  currentSearch: string;
+  onRefresh?: () => void;
+  programId?: string;
 }) {
   return (
     <div className="space-y-4">
@@ -38,7 +43,7 @@ export function ProgramPaymentsTable({
           <h2 className="text-base font-bold text-zinc-900">Payment Options</h2>
           <p className="text-sm text-zinc-500">Configure payment options, funding types, and their active periods.</p>
         </div>
-        <AddPaymentOptionAction />
+        <AddPaymentOptionAction programId={programId} onSaved={onRefresh} />
       </div>
 
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -132,9 +137,9 @@ export function ProgramPaymentsTable({
                   
                   <td className="px-6 py-4 align-top text-right">
                     <div className="inline-flex items-center justify-end gap-2">
-                      <ManagePeriodsAction optionId={row.id} />
-                      <EditPaymentOptionAction option={row} />
-                      <DeletePaymentOptionAction id={row.id} />
+                      <ManagePeriodsAction optionId={row._id} />
+                      <EditPaymentOptionAction option={row} onSaved={onRefresh} />
+                      <DeletePaymentOptionAction id={row._id} onDeleted={onRefresh} />
                     </div>
                   </td>
                 </tr>

@@ -18,6 +18,7 @@ import {
 
 import {
   ListProgramPricingTiersQuery,
+  GetPricingTierByIdQuery,
   ListProgramRequirementsQuery,
   ListProgramEssaysQuery,
   ListProgramParticipationCategoriesQuery,
@@ -26,6 +27,7 @@ import { GetApplicationFormFieldsQuery } from '../application/queries/get-applic
 
 import {
   ListProgramPricingTiersHandler,
+  GetPricingTierByIdHandler,
   ListProgramRequirementsHandler,
   ListProgramEssaysHandler,
   ListProgramParticipationCategoriesHandler,
@@ -34,6 +36,7 @@ import { GetApplicationFormFieldsHandler } from '../application/queries/handlers
 
 import {
   CreateProgramPricingTierDto, UpdateProgramPricingTierDto,
+  CreateValidityPeriodDto, UpdateValidityPeriodDto,
   CreateProgramRequirementDto, UpdateProgramRequirementDto,
   CreateProgramEssayDto, UpdateProgramEssayDto,
   CreateProgramParticipationCategoryDto, UpdateProgramParticipationCategoryDto,
@@ -43,6 +46,7 @@ import { UpdateApplicationFormFieldDto } from '../application/dto/application-fo
 
 import {
   CreateProgramPricingTierCommand, UpdateProgramPricingTierCommand, DeleteProgramPricingTierCommand,
+  CreateValidityPeriodCommand, UpdateValidityPeriodCommand, DeleteValidityPeriodCommand,
   CreateProgramRequirementCommand, UpdateProgramRequirementCommand, DeleteProgramRequirementCommand,
   CreateProgramEssayCommand, UpdateProgramEssayCommand, DeleteProgramEssayCommand,
   CreateProgramParticipationCategoryCommand, UpdateProgramParticipationCategoryCommand, DeleteProgramParticipationCategoryCommand,
@@ -55,6 +59,7 @@ import {
 
 import {
   CreateProgramPricingTierHandler, UpdateProgramPricingTierHandler, DeleteProgramPricingTierHandler,
+  CreateValidityPeriodHandler, UpdateValidityPeriodHandler, DeleteValidityPeriodHandler,
   CreateProgramRequirementHandler, UpdateProgramRequirementHandler, DeleteProgramRequirementHandler,
   CreateProgramEssayHandler, UpdateProgramEssayHandler, DeleteProgramEssayHandler,
   CreateProgramParticipationCategoryHandler, UpdateProgramParticipationCategoryHandler, DeleteProgramParticipationCategoryHandler,
@@ -70,6 +75,7 @@ import {
 export class ProgramApplicationConfigController {
   constructor(
     private readonly listProgramPricingTiersHandler: ListProgramPricingTiersHandler,
+    private readonly getPricingTierByIdHandler: GetPricingTierByIdHandler,
     private readonly listProgramRequirementsHandler: ListProgramRequirementsHandler,
     private readonly listProgramEssaysHandler: ListProgramEssaysHandler,
     private readonly listProgramParticipationCategoriesHandler: ListProgramParticipationCategoriesHandler,
@@ -77,6 +83,9 @@ export class ProgramApplicationConfigController {
     private readonly createProgramPricingTierHandler: CreateProgramPricingTierHandler,
     private readonly updateProgramPricingTierHandler: UpdateProgramPricingTierHandler,
     private readonly deleteProgramPricingTierHandler: DeleteProgramPricingTierHandler,
+    private readonly createValidityPeriodHandler: CreateValidityPeriodHandler,
+    private readonly updateValidityPeriodHandler: UpdateValidityPeriodHandler,
+    private readonly deleteValidityPeriodHandler: DeleteValidityPeriodHandler,
     private readonly createProgramRequirementHandler: CreateProgramRequirementHandler,
     private readonly updateProgramRequirementHandler: UpdateProgramRequirementHandler,
     private readonly deleteProgramRequirementHandler: DeleteProgramRequirementHandler,
@@ -98,6 +107,13 @@ export class ProgramApplicationConfigController {
   @ApiResponse({ status: 200, type: [ProgramPricingTierResponseDto] })
   async getPricingTiers(@Param('id') id: string): Promise<ProgramPricingTierResponseDto[]> {
     return this.listProgramPricingTiersHandler.execute(new ListProgramPricingTiersQuery(id)) as unknown as Promise<ProgramPricingTierResponseDto[]>;
+  }
+
+  @Get('pricing-tiers/:tierId')
+  @Public()
+  @ApiOperation({ summary: 'Get a single pricing tier with its validity periods' })
+  async getPricingTierById(@Param('tierId') tierId: string) {
+    return this.getPricingTierByIdHandler.execute(new GetPricingTierByIdQuery(tierId));
   }
 
   @Post(':id/pricing-tiers')
@@ -122,6 +138,31 @@ export class ProgramApplicationConfigController {
   @ApiOperation({ summary: 'Delete pricing tier' })
   async deletePricingTier(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
     return this.deleteProgramPricingTierHandler.execute(new DeleteProgramPricingTierCommand(itemId, req.user.id));
+  }
+
+  // --- Validity Period Endpoints ---
+  @Post('pricing-tiers/:tierId/periods')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Add validity period to a pricing tier' })
+  async addValidityPeriod(@Param('tierId') tierId: string, @Body() dto: CreateValidityPeriodDto, @Request() req: AuthenticatedRequest) {
+    return this.createValidityPeriodHandler.execute(new CreateValidityPeriodCommand({ ...dto, pricingTierId: tierId }, req.user.id));
+  }
+
+  @Put('validity-periods/:periodId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update a validity period' })
+  async updateValidityPeriod(@Param('periodId') periodId: string, @Body() dto: UpdateValidityPeriodDto, @Request() req: AuthenticatedRequest) {
+    return this.updateValidityPeriodHandler.execute(new UpdateValidityPeriodCommand(periodId, dto, req.user.id));
+  }
+
+  @Delete('validity-periods/:periodId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete a validity period' })
+  async deleteValidityPeriod(@Param('periodId') periodId: string, @Request() req: AuthenticatedRequest) {
+    return this.deleteValidityPeriodHandler.execute(new DeleteValidityPeriodCommand(periodId, req.user.id));
   }
 
   // --- Requirement Endpoints ---

@@ -899,6 +899,46 @@ export class CreateProgramPricingTierDto {
     order?: number;
 }
 
+// Validity Period DTOs
+export class CreateValidityPeriodDto {
+    @ApiProperty()
+    @IsUUID()
+    @IsNotEmpty()
+    pricingTierId: string;
+
+    @ApiProperty()
+    @IsDateString()
+    @IsNotEmpty()
+    startDate: string;
+
+    @ApiProperty()
+    @IsDateString()
+    @IsNotEmpty()
+    endDate: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    description?: string;
+}
+
+export class UpdateValidityPeriodDto {
+    @ApiProperty({ required: false })
+    @IsDateString()
+    @IsOptional()
+    startDate?: string;
+
+    @ApiProperty({ required: false })
+    @IsDateString()
+    @IsOptional()
+    endDate?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    description?: string;
+}
+
 export class UpdateProgramPricingTierDto {
     @ApiProperty({ required: false })
     @IsString()
