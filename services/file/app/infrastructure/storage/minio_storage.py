@@ -122,47 +122,28 @@ class MinIOStorage(IStorageService):
             raise StorageException(f"Delete error: {e}")
     
     async def get_presigned_url(
-        self, 
-        bucket: str, 
-        object_name: str, 
+        self,
+        bucket: str,
+        object_name: str,
         expiry_seconds: int = 3600
     ) -> str:
-        """
-        Get presigned URL for direct download.
-        
-        Generates URL using internal client, then rewrites the endpoint
-        to the public endpoint for browser accessibility.
+        """Get presigned URL for direct download.
+
+        Returns the URL as signed by the SDK. We do NOT rewrite the host to
+        a public CDN here — the AWS4 signature is bound to the signed host,
+        and substituting hosts breaks signature validation (the server rejects
+        the request with SignatureDoesNotMatch). Callers that need a CDN URL
+        for unsigned public reads should call `get_public_url` instead.
         """
         try:
             from datetime import timedelta
-            
-            # Generate presigned URL using internal client
-            url = self.client.presigned_get_object(
+
+            return self.client.presigned_get_object(
                 bucket_name=bucket,
                 object_name=object_name,
-                expires=timedelta(seconds=expiry_seconds)
+                expires=timedelta(seconds=expiry_seconds),
             )
-            
-            # Rewrite URL to use public endpoint if different
-            if self.public_endpoint and self.public_endpoint != self.endpoint:
-                # Determine the protocols
-                internal_protocol = "https" if self.secure else "http"
-                public_protocol = "https" if self.public_secure else "http"
-                
-                # Replace the internal endpoint with public endpoint
-                internal_base = f"{internal_protocol}://{self.endpoint}"
-                public_base = f"{public_protocol}://{self.public_endpoint}"
-                
-                # Try to replace endpoint + bucket first (e.g. https://do.com/bucket -> https://cdn.com)
-                # This handles the case where the custom domain maps directly to the bucket
-                internal_base_with_bucket = f"{internal_base}/{bucket}"
-                if internal_base_with_bucket in url:
-                    url = url.replace(internal_base_with_bucket, public_base, 1)
-                else:
-                    url = url.replace(internal_base, public_base, 1)
-            
-            return url
-            
+
         except S3Error as e:
             raise StorageException(f"MinIO presigned URL failed: {e}")
         except Exception as e:
@@ -176,38 +157,26 @@ class MinIOStorage(IStorageService):
     ) -> str:
         """Get presigned URL for direct upload.
 
-        Note: we do NOT call `bucket_exists` + `make_bucket` here. On DO Spaces
-        (and other managed S3s) the API key typically lacks `HeadBucket` /
-        `CreateBucket` permissions on the whole Space — only object-level
-        access under the bucket — so that check would fail with AccessDenied
-        even though the bucket is valid. Buckets are provisioned out of band.
+        Notes:
+        - We do NOT call `bucket_exists` + `make_bucket`. On managed S3s (DO
+          Spaces, R2) the API key typically lacks `HeadBucket` / `CreateBucket`
+          on the Space, so that check fails with AccessDenied even though the
+          bucket is valid. Buckets are provisioned out of band.
+        - We do NOT rewrite the URL to the public endpoint here. The AWS4
+          signature is bound to the host it was signed for — changing the host
+          breaks the signature, causing DO Spaces to reject the PUT with
+          SignatureDoesNotMatch. The public endpoint rewrite only applies to
+          unsigned URLs (see `get_public_url`).
         """
         try:
             from datetime import timedelta
 
-            # Generate URL
-            url = self.client.presigned_put_object(
+            return self.client.presigned_put_object(
                 bucket_name=bucket,
                 object_name=object_name,
-                expires=timedelta(seconds=expiry_seconds)
+                expires=timedelta(seconds=expiry_seconds),
             )
-            
-            # Rewrite URL to use public endpoint if different
-            if self.public_endpoint and self.public_endpoint != self.endpoint:
-                internal_protocol = "https" if self.secure else "http"
-                public_protocol = "https" if self.public_secure else "http"
-                
-                internal_base = f"{internal_protocol}://{self.endpoint}"
-                public_base = f"{public_protocol}://{self.public_endpoint}"
-                
-                internal_base_with_bucket = f"{internal_base}/{bucket}"
-                if internal_base_with_bucket in url:
-                    url = url.replace(internal_base_with_bucket, public_base, 1)
-                else:
-                    url = url.replace(internal_base, public_base, 1)
-            
-            return url
-            
+
         except S3Error as e:
             raise StorageException(f"MinIO presigned PUT failed: {e}")
         except Exception as e:
