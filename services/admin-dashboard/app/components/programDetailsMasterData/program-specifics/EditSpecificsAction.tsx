@@ -39,16 +39,15 @@ export function EditSpecificsAction({
         <span>Edit Operational Settings</span>
       </button>
 
-      {isOpen && (
-        <EditProgramSpecificsModal
-          programName={programName}
-          initialValues={initialValues}
-          onSubmit={handleSubmit}
-          isSaving={isSaving}
-          errorMessage={errorMessage}
-          onClose={() => setIsOpen(false)}
-        />
-      )}
+      <EditProgramSpecificsModal
+        open={isOpen}
+        programName={programName}
+        initialValues={initialValues}
+        onSubmit={handleSubmit}
+        isSaving={isSaving}
+        errorMessage={errorMessage}
+        onClose={() => setIsOpen(false)}
+      />
     </>
   );
 }

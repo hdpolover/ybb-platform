@@ -4,7 +4,11 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { EyeIcon, PencilSquareIcon, TrashIcon, PlusIcon, CreditCardIcon } from "@heroicons/react/24/solid";
+import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
 import type { PaymentMethodRow } from "./PaymentMethodsTable";
+
+const INPUT_CLS =
+  "block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
 
 // SEARCH COMPONENT
 export function SearchInput({ initialSearch }: { initialSearch: string }) {
@@ -50,11 +54,9 @@ function PaymentMethodFormModal({
   onClose: () => void;
   initialData?: PaymentMethodRow;
 }) {
-  if (!isOpen) return null;
   const isEditMode = !!initialData;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // eslint-disable-next-line react-hooks/rules-of-hooks
   const [selectedImageName, setSelectedImageName] = useState<string | null>(initialData?.imageSrc ?? null);
 
   const handleSubmit = (event: React.FormEvent) => {
@@ -63,81 +65,110 @@ function PaymentMethodFormModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 sm:p-6 text-left">
-      <div className="w-full max-w-2xl overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-6 py-5">
-          <div>
-            <h3 className="text-lg font-bold text-zinc-900">
-              {isEditMode ? "Edit Payment Method" : "Add Payment Method"}
-            </h3>
-            <p className="mt-1 text-sm text-zinc-500">
-              {isEditMode
-                ? "Update configuration for this payment method."
-                : "Define a new payment method and usage instructions."}
-            </p>
-          </div>
-          <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700">
-            <span className="text-xl leading-none">×</span>
+    <DrawerShell
+      open={isOpen}
+      onClose={onClose}
+      title={isEditMode ? "Edit Payment Method" : "Add Payment Method"}
+      description={
+        isEditMode
+          ? "Update configuration for this payment method."
+          : "Define a new payment method and usage instructions."
+      }
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100"
+          >
+            Cancel
           </button>
+          <button
+            type="submit"
+            form="payment-method-form"
+            className="rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600"
+          >
+            Save Changes
+          </button>
+        </>
+      }
+    >
+      <form id="payment-method-form" onSubmit={handleSubmit} className="space-y-5">
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-zinc-500">
+            Method Name <span className="text-rose-500">*</span>
+          </label>
+          <input
+            type="text"
+            defaultValue={initialData?.name}
+            className={INPUT_CLS}
+            placeholder="e.g., Credit / Debit Card (Visa/Mastercard)"
+            required
+          />
         </div>
 
-        <form id="payment-method-form" onSubmit={handleSubmit} className="space-y-5 px-6 py-6 max-h-[70vh] overflow-y-auto">
+        <div className="grid gap-5 md:grid-cols-2">
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Method Name <span className="text-rose-500">*</span></label>
-            <input type="text" defaultValue={initialData?.name} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100" placeholder="e.g., Credit / Debit Card (Visa/Mastercard)" required />
+            <label className="mb-1.5 block text-xs font-medium text-zinc-500">
+              Payment Type <span className="text-rose-500">*</span>
+            </label>
+            <select defaultValue={initialData?.paymentType || "Manual"} className={INPUT_CLS}>
+              <option value="Manual">Manual</option>
+              <option value="Gateway">Gateway</option>
+            </select>
           </div>
-
-          <div className="grid gap-5 md:grid-cols-2">
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-zinc-500">Payment Type <span className="text-rose-500">*</span></label>
-              <select defaultValue={initialData?.paymentType || "Manual"} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
-                <option value="Manual">Manual</option>
-                <option value="Gateway">Gateway</option>
-              </select>
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-zinc-500">Status <span className="text-rose-500">*</span></label>
-              <select defaultValue={initialData?.status || "Active"} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-              </select>
-            </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-zinc-500">
+              Status <span className="text-rose-500">*</span>
+            </label>
+            <select defaultValue={initialData?.status || "Active"} className={INPUT_CLS}>
+              <option value="Active">Active</option>
+              <option value="Inactive">Inactive</option>
+            </select>
           </div>
+        </div>
 
-          <div className="space-y-2">
-            <label className="block text-xs font-medium text-zinc-500">Payment Method Image</label>
-            <p className="text-xs text-zinc-500">Upload an image for the payment method (recommended size: 200x100px).</p>
-            <button
-              type="button"
-              className="flex h-32 w-full items-center justify-center rounded-lg border-2 border-dashed border-zinc-300 bg-zinc-50 text-center transition hover:border-blue-400 hover:bg-blue-50/40"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <div className="space-y-1.5 px-4">
-                <div className="text-sm font-semibold text-zinc-700">
-                  {selectedImageName ? "Image selected" : "Drop image here or click to upload."}
-                </div>
-                {selectedImageName ? (
-                  <div className="truncate text-xs font-medium text-blue-600">{selectedImageName}</div>
-                ) : (
-                  <div className="text-xs text-zinc-500">Supported formats: JPG, PNG, GIF. Max size: 2MB</div>
-                )}
+        <div className="space-y-2">
+          <label className="block text-xs font-medium text-zinc-500">Payment Method Image</label>
+          <p className="text-xs text-zinc-500">
+            Upload an image for the payment method (recommended size: 200x100px).
+          </p>
+          <button
+            type="button"
+            className="flex h-32 w-full items-center justify-center rounded-lg border-2 border-dashed border-zinc-300 bg-zinc-50 text-center transition hover:border-blue-400 hover:bg-blue-50/40"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <div className="space-y-1.5 px-4">
+              <div className="text-sm font-semibold text-zinc-700">
+                {selectedImageName ? "Image selected" : "Drop image here or click to upload."}
               </div>
-            </button>
-            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => setSelectedImageName(e.target.files?.[0]?.name ?? null)} />
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Description</label>
-            <textarea rows={5} defaultValue={initialData?.description} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm leading-relaxed text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100" placeholder="Explain how to use this payment method." />
-          </div>
-        </form>
-
-        <div className="flex items-center justify-end gap-3 border-t border-zinc-200 bg-zinc-50 px-6 py-4">
-          <button type="button" onClick={onClose} className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100">Cancel</button>
-          <button type="submit" form="payment-method-form" className="rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600">Save Changes</button>
+              {selectedImageName ? (
+                <div className="truncate text-xs font-medium text-blue-600">{selectedImageName}</div>
+              ) : (
+                <div className="text-xs text-zinc-500">Supported formats: JPG, PNG, GIF. Max size: 2MB</div>
+              )}
+            </div>
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => setSelectedImageName(e.target.files?.[0]?.name ?? null)}
+          />
         </div>
-      </div>
-    </div>
+
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-zinc-500">Description</label>
+          <textarea
+            rows={5}
+            defaultValue={initialData?.description}
+            className={INPUT_CLS}
+            placeholder="Explain how to use this payment method."
+          />
+        </div>
+      </form>
+    </DrawerShell>
   );
 }
 

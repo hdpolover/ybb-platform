@@ -7,8 +7,10 @@ import { PortalController } from './presentation/portal.controller';
 import { GetPortalDashboardHandler } from './application/queries/handlers/get-portal-dashboard.handler';
 import { GetPortalSubmissionsHandler } from './application/queries/handlers/get-portal-submissions.handler';
 import { GetPortalPaymentsHandler } from './application/queries/handlers/get-portal-payments.handler';
+import { GetPortalPaymentDetailHandler } from './application/queries/handlers/get-portal-payment-detail.handler';
 import { GetPortalDocumentsHandler } from './application/queries/handlers/get-portal-documents.handler';
 import { PortalCacheService } from './application/services/portal-cache.service';
+import { ConfirmPortalPaymentHandler } from './application/commands/handlers/confirm-portal-payment.handler';
 
 // New — Submissions
 import { PortalSubmissionsController } from './presentation/portal-submissions.controller';
@@ -34,14 +36,16 @@ import { DownloadCertificateHandler } from './application/commands/handlers/down
         GetPortalDashboardHandler,
         GetPortalSubmissionsHandler,
         GetPortalPaymentsHandler,
+        GetPortalPaymentDetailHandler,
         GetPortalDocumentsHandler,
         // New query handlers
         GetPortalSubmissionDetailHandler,
         GetPortalCertificatesHandler,
-        // New command handlers
+        // Command handlers
         SaveSubmissionSectionHandler,
         PortalSubmitApplicationHandler,
         DownloadCertificateHandler,
+        ConfirmPortalPaymentHandler,
     ],
 })
 export class PortalModule { }
