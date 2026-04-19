@@ -18,11 +18,10 @@ import { seedFormTemplates } from './seed-form-templates';
 async function main() {
   log('🚀 Starting Full Database Seed...');
   try {
-    // Only clean database in development/staging or if env variable FORCE_CLEAN is set
-    // In production, we generally want to UPSERT data, not wipe it.
-    if (process.env.NODE_ENV === 'production') {
-      log('ℹ️ Environment is production. Skipping cleanDatabase() to preserve data.');
-    } else {
+    // cleanDatabase() is intentionally NOT called here — it would wipe all user data.
+    // Run `ts-node prisma/seeds/clean.ts` explicitly if you need a fresh start.
+    if (process.env.FORCE_CLEAN === 'true') {
+      log('⚠️  FORCE_CLEAN=true detected. Wiping database...');
       await cleanDatabase();
     }
 

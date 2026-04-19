@@ -190,7 +190,7 @@ func main() {
 	)
 
 	paymentMethodHandler := handlers.NewPaymentMethodHandler(paymentMethodRepo)
-	gatewayConfigHandler := handlers.NewGatewayConfigHandler(gatewayConfigRepo)
+	gatewayConfigHandler := handlers.NewGatewayConfigHandler(gatewayConfigRepo, paymentMethodRepo)
 
 	// Initialize Intent Handlers
 	createIntentHandler := commandHandlers.NewCreateIntentHandler(intentRepo)

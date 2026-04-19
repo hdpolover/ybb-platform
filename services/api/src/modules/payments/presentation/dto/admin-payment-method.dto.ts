@@ -37,63 +37,76 @@ export class CreatePaymentMethodDto {
     @IsString()
     code: string;
 
-    @ApiProperty()
+    @ApiProperty({ required: false })
+    @IsOptional()
     @IsBoolean()
-    is_active: boolean;
+    is_active?: boolean;
 
-    @ApiProperty()
+    @ApiProperty({ required: false })
+    @IsOptional()
     @IsString()
-    display_name: string;
+    display_name?: string;
 
-    @ApiProperty()
+    @ApiProperty({ required: false })
+    @IsOptional()
     @IsString()
-    description: string;
+    description?: string;
 
-    @ApiProperty()
+    @ApiProperty({ required: false })
+    @IsOptional()
     @IsString()
-    icon: string;
+    icon?: string;
 
-    @ApiProperty()
+    @ApiProperty({ required: false })
+    @IsOptional()
     @IsString()
-    gateway_name: string;
+    gateway_name?: string;
 
-    @ApiProperty()
+    @ApiProperty({ required: false })
+    @IsOptional()
     @IsString()
-    gateway_type: string;
+    gateway_type?: string;
 
-    @ApiProperty()
+    @ApiProperty({ required: false })
+    @IsOptional()
     @IsString()
-    bank_name: string;
+    bank_name?: string;
 
-    @ApiProperty()
+    @ApiProperty({ required: false })
+    @IsOptional()
     @IsString()
-    account_number: string;
+    account_number?: string;
 
-    @ApiProperty()
+    @ApiProperty({ required: false })
+    @IsOptional()
     @IsString()
-    account_name: string;
+    account_name?: string;
 
-    @ApiProperty()
+    @ApiProperty({ required: false })
+    @IsOptional()
     @IsString()
-    instructions: string;
+    instructions?: string;
 
-    @ApiProperty()
+    @ApiProperty({ required: false })
+    @IsOptional()
     @IsBoolean()
-    requires_proof: boolean;
+    requires_proof?: boolean;
 
-    @ApiProperty()
+    @ApiProperty({ required: false })
+    @IsOptional()
     @IsString()
-    admin_instructions: string;
+    admin_instructions?: string;
 
-    @ApiProperty({ type: FeeConfigDto })
+    @ApiProperty({ type: FeeConfigDto, required: false })
     @IsOptional()
     @ValidateNested()
     @Type(() => FeeConfigDto)
     config?: FeeConfigDto;
 
-    @ApiProperty()
+    @ApiProperty({ required: false })
+    @IsOptional()
     @IsNumber()
-    sort_order: number;
+    sort_order?: number;
 }
 
 export class UpdatePaymentMethodDto extends CreatePaymentMethodDto {}

@@ -21,10 +21,14 @@ type GatewayConfigRepository interface {
 	// FindByID returns a single config by primary key.
 	FindByID(ctx context.Context, id string) (*entities.GatewayConfig, error)
 
-	// Create persists a new gateway config.
+	// Create persists a new gateway config. If cfg.IsActive is true, any other
+	// active rows for the same provider are flipped to inactive in the same
+	// transaction to preserve the one-active-per-provider invariant.
 	Create(ctx context.Context, cfg *entities.GatewayConfig) error
 
-	// Update saves changes to an existing gateway config.
+	// Update saves changes to an existing gateway config. If the post-update
+	// row has IsActive=true, other active rows for the same provider are
+	// deactivated within the same transaction.
 	Update(ctx context.Context, cfg *entities.GatewayConfig) error
 
 	// Delete soft-deletes a gateway config by ID.

@@ -46,14 +46,19 @@ export class AnnouncementsStrategy implements ILandingPageStrategy {
         },
         {
           type: 'announcement_list',
-          data: announcements.map(a => ({
-            id: a.id,
-            title: a.title,
-            summary: a.summary,
-            date: a.publishedAt,
-            type: a.type,
-            url: a.actionUrl
-          })),
+          data: announcements.map(a => {
+            const meta = (a.metadata as Record<string, unknown>) ?? {};
+            return {
+              id: a.id,
+              title: a.title,
+              excerpt: a.summary ?? null,
+              image: (meta.imageUrl as string) ?? null,
+              author: (meta.author as string) ?? null,
+              date: a.publishedAt,
+              href: a.actionUrl ?? null,
+              category: a.type,
+            };
+          }),
         },
       ],
     };

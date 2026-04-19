@@ -70,6 +70,20 @@ export const platformNavSections: NavSection[] = [
     ],
   },
   {
+    id: "financial",
+    title: "Financial",
+    items: [
+      { id: "payment-gateways", label: "Payment Gateways", href: "/platform/payment-gateways", icon: CreditCard },
+    ],
+  },
+  {
+    id: "content",
+    title: "Content",
+    items: [
+      { id: "system-announcements", label: "Announcements", href: "/platform/announcements", icon: Bell },
+    ],
+  },
+  {
     id: "insights",
     title: "Insights",
     items: [

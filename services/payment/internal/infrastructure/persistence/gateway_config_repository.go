@@ -85,7 +85,15 @@ func (r *GatewayConfigRepository) Create(ctx context.Context, cfg *entities.Gate
 	if err != nil {
 		return err
 	}
-	if err := r.db.WithContext(ctx).Create(encrypted).Error; err != nil {
+	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if encrypted.IsActive {
+			if err := deactivateOtherActive(tx, encrypted.Provider, ""); err != nil {
+				return err
+			}
+		}
+		return tx.Create(encrypted).Error
+	})
+	if err != nil {
 		return fmt.Errorf("failed to create gateway config: %w", err)
 	}
 	// Propagate DB-assigned fields (ID, timestamps) back to the caller's struct,
@@ -101,10 +109,33 @@ func (r *GatewayConfigRepository) Update(ctx context.Context, cfg *entities.Gate
 	if err != nil {
 		return err
 	}
-	if err := r.db.WithContext(ctx).Save(encrypted).Error; err != nil {
+	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if encrypted.IsActive {
+			if err := deactivateOtherActive(tx, encrypted.Provider, encrypted.ID); err != nil {
+				return err
+			}
+		}
+		return tx.Save(encrypted).Error
+	})
+	if err != nil {
 		return fmt.Errorf("failed to update gateway config: %w", err)
 	}
 	cfg.UpdatedAt = encrypted.UpdatedAt
+	return nil
+}
+
+// deactivateOtherActive flips is_active=false on every row for `provider`
+// except `exceptID` (pass "" when creating a new row). Called inside a
+// transaction so the partial unique index never sees two active rows at once.
+func deactivateOtherActive(tx *gorm.DB, provider, exceptID string) error {
+	q := tx.Model(&entities.GatewayConfig{}).
+		Where("provider = ? AND is_active = true", provider)
+	if exceptID != "" {
+		q = q.Where("id <> ?", exceptID)
+	}
+	if err := q.Update("is_active", false).Error; err != nil {
+		return fmt.Errorf("deactivate other active configs for %q: %w", provider, err)
+	}
 	return nil
 }
 

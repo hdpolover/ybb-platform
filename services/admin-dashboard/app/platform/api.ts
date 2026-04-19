@@ -213,7 +213,9 @@ export async function updatePlatformBrandIdentity(
     const result = await uploadFileViaPresignedUrl(input.logo, {
       userId: input.userId,
       brandId,
-      bucket: "brand-logos",
+      // Matches the PUBLIC_CATEGORIES whitelist on the file service so the
+      // returned public URL is actually reachable without a signature.
+      bucket: "brands/logos",
       assetType: "logo",
     });
     if (!result.publicUrl) {
@@ -227,7 +229,7 @@ export async function updatePlatformBrandIdentity(
     const result = await uploadFileViaPresignedUrl(input.banner, {
       userId: input.userId,
       brandId,
-      bucket: "brand-banners",
+      bucket: "brands/banners",
       assetType: "banner",
     });
     if (!result.publicUrl) {

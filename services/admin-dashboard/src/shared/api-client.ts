@@ -249,17 +249,38 @@ export type ProgramGalleryItem = {
   isActive: boolean;
 };
 
+// Mirrors the Go PaymentMethodEntity on the payment service (snake_case keys
+// over the wire). Keep field names in sync with
+// services/payment/internal/domain/entities/payment_method.go.
+export type PaymentMethodType = "AUTOMATIC" | "MANUAL";
+
+export type PaymentMethodFeeConfig = {
+  fixed_fee: number;
+  percentage_fee: number;
+  min_fee: number;
+  currency: string;
+  is_surcharge: boolean;
+};
+
 export type PaymentMethod = {
   id: string;
   name: string;
   code: string;
-  type: string;
-  paymentType: string;
-  isActive: boolean;
-  iconUrl: string | null;
-  minAmount: number | null;
-  maxAmount: number | null;
-  currencies: string[];
+  type: PaymentMethodType;
+  is_active: boolean;
+  display_name: string;
+  description: string;
+  icon: string;
+  gateway_name: string;
+  gateway_type: string;
+  bank_name: string;
+  account_number: string;
+  account_name: string;
+  instructions: string;
+  requires_proof: boolean;
+  admin_instructions: string;
+  sort_order: number;
+  config?: PaymentMethodFeeConfig;
 };
 
 export type Application = {
@@ -695,8 +716,141 @@ export function updatePaymentMethod(id: string, input: Partial<PaymentMethod>): 
   });
 }
 
+// Create/update a payment method with an optional icon file. The icon is
+// uploaded via the presigned-URL flow first, then the resulting public URL is
+// written to the `icon` field — matching the Go entity and the NestJS
+// controller's UUID→URL resolver. Mirrors the gallery-item pattern.
+export async function createPaymentMethodWithIcon(
+  input: Partial<PaymentMethod> & {
+    name: string;
+    code: string;
+    iconFile?: File;
+    userId?: string;
+    brandId?: string;
+  },
+): Promise<PaymentMethod> {
+  const { iconFile, userId, brandId, ...rest } = input;
+  const payload: Partial<PaymentMethod> = { ...rest };
+  if (iconFile) {
+    if (!userId || !brandId) {
+      throw new Error("userId and brandId are required when uploading an icon.");
+    }
+    const upload = await uploadFileViaPresignedUrl(iconFile, {
+      userId,
+      brandId,
+      bucket: "payment-methods",
+      assetType: "payment-method-icon",
+    });
+    if (!upload.publicUrl) {
+      throw new Error("Upload succeeded but no public URL was returned.");
+    }
+    payload.icon = upload.publicUrl;
+  }
+  return request<PaymentMethod>("/admin/payments/methods", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updatePaymentMethodWithIcon(
+  id: string,
+  input: Partial<PaymentMethod> & {
+    iconFile?: File;
+    userId?: string;
+    brandId?: string;
+  },
+): Promise<PaymentMethod> {
+  const { iconFile, userId, brandId, ...rest } = input;
+  const payload: Partial<PaymentMethod> = { ...rest };
+  if (iconFile) {
+    if (!userId || !brandId) {
+      throw new Error("userId and brandId are required when uploading an icon.");
+    }
+    const upload = await uploadFileViaPresignedUrl(iconFile, {
+      userId,
+      brandId,
+      bucket: "payment-methods",
+      assetType: "payment-method-icon",
+    });
+    if (!upload.publicUrl) {
+      throw new Error("Upload succeeded but no public URL was returned.");
+    }
+    payload.icon = upload.publicUrl;
+  }
+  return request<PaymentMethod>(`/admin/payments/methods/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function deletePaymentMethod(id: string): Promise<void> {
   return request<void>(`/admin/payments/methods/${id}`, { method: "DELETE" });
+}
+
+// ─── Payment Gateway Configs ─────────────────────────────────────────────────
+
+export const SUPPORTED_GATEWAY_PROVIDERS = ["midtrans", "xendit", "stripe", "paypal"] as const;
+export type GatewayProvider = typeof SUPPORTED_GATEWAY_PROVIDERS[number];
+export type GatewayMode = "sandbox" | "production";
+
+// Mirrors the Go GatewayConfig entity. Credential fields come back decrypted
+// from the payment service — never log or persist them client-side.
+export type GatewayConfig = {
+  id: string;
+  brand_id: string | null;
+  provider: GatewayProvider;
+  mode: GatewayMode;
+  server_key: string;
+  client_key: string;
+  webhook_secret: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreateGatewayConfigInput = {
+  provider: GatewayProvider;
+  mode?: GatewayMode;
+  server_key: string;
+  client_key: string;
+  webhook_secret?: string;
+  is_active?: boolean;
+  brand_id?: string;
+};
+
+export type UpdateGatewayConfigInput = Partial<CreateGatewayConfigInput>;
+
+export function listGatewayConfigs(): Promise<GatewayConfig[]> {
+  return request<GatewayConfig[]>("/admin/payment-gateways");
+}
+
+export function getGatewayConfig(id: string): Promise<GatewayConfig> {
+  return request<GatewayConfig>(`/admin/payment-gateways/${id}`);
+}
+
+export function createGatewayConfig(input: CreateGatewayConfigInput): Promise<GatewayConfig> {
+  return request<GatewayConfig>("/admin/payment-gateways", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateGatewayConfig(id: string, input: UpdateGatewayConfigInput): Promise<GatewayConfig> {
+  return request<GatewayConfig>(`/admin/payment-gateways/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export function setGatewayActive(id: string, is_active: boolean): Promise<GatewayConfig> {
+  return request<GatewayConfig>(`/admin/payment-gateways/${id}/active`, {
+    method: "PATCH",
+    body: JSON.stringify({ is_active }),
+  });
+}
+
+export function deleteGatewayConfig(id: string): Promise<void> {
+  return request<void>(`/admin/payment-gateways/${id}`, { method: "DELETE" });
 }
 
 // ─── Applications / Submissions / Participants ────────────────────────────────
@@ -781,6 +935,95 @@ export function updateProgramAnnouncement(
 
 export function deleteProgramAnnouncement(id: string): Promise<void> {
   return request<void>(`/programs/announcements/${id}`, { method: "DELETE" });
+}
+
+// ─── System Announcements ─────────────────────────────────────────────────────
+
+export type SystemAnnouncement = {
+  id: string;
+  title: string;
+  content: string;
+  summary: string | null;
+  targetAudience: string;
+  brandId: string | null;
+  programId: string | null;
+  priority: string;
+  type: string;
+  isPublished: boolean;
+  publishedAt: string | null;
+  isDismissible: boolean;
+  showBanner: boolean;
+  actionUrl: string | null;
+  actionLabel: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export function listSystemAnnouncements(params?: {
+  page?: number;
+  limit?: number;
+  brandId?: string;
+}): Promise<Paginated<SystemAnnouncement>> {
+  const q = new URLSearchParams();
+  if (params?.page) q.set("page", String(params.page));
+  if (params?.limit) q.set("limit", String(params.limit));
+  if (params?.brandId) q.set("brandId", params.brandId);
+  return request<Paginated<SystemAnnouncement>>(
+    `/system/announcements/admin/all?${q}`,
+  );
+}
+
+export function createSystemAnnouncement(input: {
+  title: string;
+  content: string;
+  summary?: string;
+  targetAudience?: string;
+  brandId?: string;
+  programId?: string;
+  priority?: string;
+  type?: string;
+  isPublished?: boolean;
+  isDismissible?: boolean;
+  showBanner?: boolean;
+  actionUrl?: string;
+  actionLabel?: string;
+  startDate?: string;
+  endDate?: string;
+  metadata?: Record<string, unknown>;
+}): Promise<SystemAnnouncement> {
+  return request<SystemAnnouncement>("/system/announcements/admin", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateSystemAnnouncement(
+  id: string,
+  input: Partial<Parameters<typeof createSystemAnnouncement>[0]>,
+): Promise<SystemAnnouncement> {
+  return request<SystemAnnouncement>(`/system/announcements/admin/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteSystemAnnouncement(id: string): Promise<void> {
+  return request<void>(`/system/announcements/admin/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export function publishSystemAnnouncement(
+  id: string,
+  publish: boolean,
+): Promise<SystemAnnouncement> {
+  return request<SystemAnnouncement>(
+    `/system/announcements/admin/${id}/publish?publish=${publish}`,
+    { method: "POST" },
+  );
 }
 
 // ─── Media Library ────────────────────────────────────────────────────────────

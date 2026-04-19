@@ -39,7 +39,7 @@ export default function AnnouncementsPage() {
     setLoading(true); setError(null);
     try {
       const res = await listProgramAnnouncements(params.programId, { page, limit });
-      setItems(res.data); setTotal(res.meta.total);
+      setItems(res.data ?? []); setTotal(res.meta?.total ?? 0);
     } catch (err) { setError(err instanceof Error ? err.message : "Failed to load"); }
     finally { setLoading(false); }
   }, [params.programId, page]);

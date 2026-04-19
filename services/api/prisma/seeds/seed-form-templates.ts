@@ -68,21 +68,31 @@ export async function seedFormTemplates() {
         },
       });
 
-  // Idempotent: wipe this template's field rows, then recreate from source list
-  await prisma.applicationFormTemplateField.deleteMany({
-    where: { templateId: template.id },
-  });
+  // Idempotent: upsert each field by systemFieldKey so existing customizations are preserved.
+  // New fields in STANDARD_FIELDS are added; existing ones are left untouched.
+  const existingKeys = new Set(
+    (await prisma.applicationFormTemplateField.findMany({
+      where: { templateId: template.id, source: 'system' },
+      select: { systemFieldKey: true },
+    })).map((f: any) => f.systemFieldKey),
+  );
 
-  await prisma.applicationFormTemplateField.createMany({
-    data: STANDARD_FIELDS.map((f) => ({
-      templateId: template.id,
-      source: 'system',
-      systemFieldKey: f.key,
-      section: f.section,
-      isRequired: f.isRequired,
-      order: f.order,
-    })),
-  });
+  const newFields = STANDARD_FIELDS.filter((f) => !existingKeys.has(f.key));
+  if (newFields.length > 0) {
+    await prisma.applicationFormTemplateField.createMany({
+      data: newFields.map((f) => ({
+        templateId: template.id,
+        source: 'system',
+        systemFieldKey: f.key,
+        section: f.section,
+        isRequired: f.isRequired,
+        order: f.order,
+      })),
+    });
+    log(`  ↳ Added ${newFields.length} new field(s) to template`);
+  } else {
+    log(`  ↳ All fields already present, skipping`);
+  }
 
   log(`✓ Seeded template "${STANDARD_TEMPLATE_NAME}" with ${STANDARD_FIELDS.length} fields`);
 }

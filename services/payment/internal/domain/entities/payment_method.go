@@ -26,14 +26,14 @@ type FeeConfig struct {
 
 // PaymentMethodEntity represents a configurable payment method
 type PaymentMethodEntity struct {
-	ID          string            `gorm:"type:uuid;primaryKey"`
-	Name        string            `gorm:"type:varchar(100);not null;unique"` // e.g., "Bank BCA", "Midtrans", "GoPay"
-	Type        PaymentMethodType `gorm:"type:varchar(20);not null;index"`
-	Code        string            `gorm:"type:varchar(50);not null;unique"` // e.g., "bank_bca", "midtrans", "gopay"
-	IsActive    bool              `gorm:"not null;default:true;index"`
-	DisplayName string            `gorm:"type:varchar(100);not null"` // User-facing name
-	Description string            `gorm:"type:text"`
-	Icon        string            `gorm:"type:varchar(255)"` // Icon URL or identifier
+	ID          string            `gorm:"type:uuid;primaryKey"                json:"id"`
+	Name        string            `gorm:"type:varchar(100);not null;unique"   json:"name"`         // e.g., "Bank BCA", "Midtrans", "GoPay"
+	Type        PaymentMethodType `gorm:"type:varchar(20);not null;index"     json:"type"`
+	Code        string            `gorm:"type:varchar(50);not null;unique"    json:"code"`         // e.g., "bank_bca", "midtrans", "gopay"
+	IsActive    bool              `gorm:"not null;default:true;index"         json:"is_active"`
+	DisplayName string            `gorm:"type:varchar(100);not null"          json:"display_name"` // User-facing name
+	Description string            `gorm:"type:text"                           json:"description"`
+	Icon        string            `gorm:"type:varchar(255)"                   json:"icon"`         // Icon URL or identifier
 
 	// --- Automatic Payment Fields ---
 	GatewayName string `gorm:"type:varchar(50)" json:"gateway_name" example:""`
