@@ -25,6 +25,10 @@ import { UserActivityLogResponseDto, UserSecurityLogResponseDto } from './dto/us
 import { CreateDeletionRequestDto, DeletionRequestResponseDto } from './dto/deletion-request.dto';
 import { CreateDeletionRequestCommand } from '../application/commands/create-deletion-request.command';
 import { CreateDeletionRequestHandler } from '../application/commands/handlers/create-deletion-request.handler';
+import { ActivateUserHandler } from '../application/commands/handlers/activate-user.handler';
+import { DeactivateUserHandler } from '../application/commands/handlers/deactivate-user.handler';
+import { ActivateUserCommand } from '../application/commands/activate-user.command';
+import { DeactivateUserCommand } from '../application/commands/deactivate-user.command';
 import { CurrentUser, CurrentUserData } from '../../../shared/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/infrastructure/guards/roles.guard';
@@ -51,6 +55,8 @@ export class UsersController {
     private readonly listUserActivityLogsHandler: ListUserActivityLogsHandler,
     private readonly listUserSecurityLogsHandler: ListUserSecurityLogsHandler,
     private readonly createDeletionRequestHandler: CreateDeletionRequestHandler,
+    private readonly activateUserHandler: ActivateUserHandler,
+    private readonly deactivateUserHandler: DeactivateUserHandler,
     private readonly cacheService: CacheService,
   ) { }
 
@@ -233,5 +239,29 @@ export class UsersController {
     }
 
     return result;
+  }
+
+  @Patch(':id/activate')
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Activate a user account' })
+  @ApiResponse({ status: 200, description: 'User successfully activated', type: UserResponseDto })
+  @AuditTrail({ entityType: 'User', action: ChangeType.update })
+  async activateUser(
+    @Param('id') id: string,
+    @Query('brandId') brandId: string,
+  ): Promise<UserResponseDto> {
+    return this.activateUserHandler.execute(new ActivateUserCommand(id, brandId));
+  }
+
+  @Patch(':id/deactivate')
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Deactivate a user account' })
+  @ApiResponse({ status: 200, description: 'User successfully deactivated', type: UserResponseDto })
+  @AuditTrail({ entityType: 'User', action: ChangeType.update })
+  async deactivateUser(
+    @Param('id') id: string,
+    @Query('brandId') brandId: string,
+  ): Promise<UserResponseDto> {
+    return this.deactivateUserHandler.execute(new DeactivateUserCommand(id, brandId));
   }
 }
