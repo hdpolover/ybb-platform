@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.prod
-    container_name: ybb-file
+    container_name: ybb-prod-file
     restart: always
     environment:
       PYTHON_ENV: production
