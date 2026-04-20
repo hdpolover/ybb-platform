@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Users, UserCheck, MailCheck, Loader2 } from "lucide-react";
+import { Users, UserCheck, Loader2 } from "lucide-react";
 import {
   listUsers,
   activateUser,
   deactivateUser,
   resendVerificationEmail,
+  getAdminAnalytics,
   type User,
+  type AdminAnalytics,
 } from "@/src/shared/api-client";
-import { getAdminAnalytics, type AdminAnalytics } from "@/src/shared/api-client";
 import { useAuth } from "../../contexts/AuthContext";
 import { PageHeader } from "@/src/admin/page-header";
 import { StatCard } from "@/src/admin/stat-card";
@@ -48,24 +49,34 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [actionLoadingType, setActionLoadingType] = useState<"toggle" | "resend" | null>(null);
   const [actionMessage, setActionMessage] = useState<{ id: string; text: string; ok: boolean } | null>(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [roleFilter, setRoleFilter] = useState("");
   const limit = 20;
 
+  const fetchAnalytics = useCallback(async () => {
+    try {
+      const res = await getAdminAnalytics(brandId);
+      setAnalytics(res);
+    } catch {
+      // analytics errors are non-critical; page error handles listUsers failures
+    }
+  }, [brandId]);
+
+  useEffect(() => {
+    fetchAnalytics();
+  }, [fetchAnalytics]);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const skip = (page - 1) * limit;
-      const [usersRes, analyticsRes] = await Promise.all([
-        listUsers({ brandId, skip, take: limit, role: roleFilter || undefined }),
-        getAdminAnalytics(brandId),
-      ]);
-      setUsers(usersRes);
-      setAnalytics(analyticsRes);
-      setHasMore(usersRes.length === limit);
+      const res = await listUsers({ brandId, skip, take: limit, role: roleFilter || undefined });
+      setUsers(res);
+      setHasMore(res.length === limit);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load users");
     } finally {
@@ -78,6 +89,7 @@ export default function UsersPage() {
   }, [fetchData]);
 
   const handleRoleFilterChange = (value: string) => {
+    setActionMessage(null);
     setRoleFilter(value);
     setPage(1);
   };
@@ -88,7 +100,9 @@ export default function UsersPage() {
       if (!window.confirm(`Deactivate ${user.email}?`)) return;
     }
 
+    const nextIsActive = !user.isActive;
     setActionLoadingId(user.id);
+    setActionLoadingType("toggle");
     setActionMessage(null);
     try {
       if (user.isActive) {
@@ -97,9 +111,9 @@ export default function UsersPage() {
         await activateUser(user.id, brandId);
       }
       setUsers((prev) =>
-        prev.map((u) => (u.id === user.id ? { ...u, isActive: !u.isActive } : u)),
+        prev.map((u) => (u.id === user.id ? { ...u, isActive: nextIsActive } : u)),
       );
-      setActionMessage({ id: user.id, text: user.isActive ? "Deactivated" : "Activated", ok: true });
+      setActionMessage({ id: user.id, text: nextIsActive ? "Activated" : "Deactivated", ok: true });
     } catch (err) {
       setActionMessage({
         id: user.id,
@@ -108,11 +122,17 @@ export default function UsersPage() {
       });
     } finally {
       setActionLoadingId(null);
+      setActionLoadingType(null);
     }
   };
 
   const handleResendVerification = async (user: User) => {
+    if (!brandSlug) {
+      setActionMessage({ id: user.id, text: "No brand context — cannot send email", ok: false });
+      return;
+    }
     setActionLoadingId(user.id);
+    setActionLoadingType("resend");
     setActionMessage(null);
     try {
       await resendVerificationEmail(user.email, brandSlug);
@@ -125,10 +145,9 @@ export default function UsersPage() {
       });
     } finally {
       setActionLoadingId(null);
+      setActionLoadingType(null);
     }
   };
-
-  const verifiedCount = users.filter((u) => u.emailVerified).length;
 
   return (
     <div className="space-y-6">
@@ -136,7 +155,7 @@ export default function UsersPage() {
         title="Platform Users"
         description="Manage all users and participants across the platform"
         actions={
-          <Button variant="outline" size="sm" onClick={fetchData} loading={loading}>
+          <Button variant="outline" size="sm" onClick={() => { fetchAnalytics(); fetchData(); }} loading={loading}>
             Refresh
           </Button>
         }
@@ -162,10 +181,10 @@ export default function UsersPage() {
           icon={Users}
         />
         <StatCard
-          title="Verified"
-          value={verifiedCount}
-          description="Email verified (this page)"
-          icon={MailCheck}
+          title="Participants"
+          value={loading ? "..." : (analytics?.participants.total ?? 0)}
+          description="Accepted participants"
+          icon={UserCheck}
         />
       </div>
 
@@ -264,7 +283,7 @@ export default function UsersPage() {
                           disabled={isActing}
                           onClick={() => handleActivateDeactivate(user)}
                         >
-                          {isActing ? (
+                          {isActing && actionLoadingType === "toggle" ? (
                             <Loader2 className="h-3 w-3 animate-spin" />
                           ) : user.isActive ? (
                             "Deactivate"
@@ -279,7 +298,11 @@ export default function UsersPage() {
                           title={user.emailVerified ? "Already verified" : "Resend verification email"}
                           onClick={() => handleResendVerification(user)}
                         >
-                          {isActing ? <Loader2 className="h-3 w-3 animate-spin" /> : "Resend"}
+                          {isActing && actionLoadingType === "resend" ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            "Resend"
+                          )}
                         </Button>
                       </div>
                     </TableCell>
@@ -297,7 +320,7 @@ export default function UsersPage() {
                 variant="outline"
                 size="sm"
                 disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
+                onClick={() => { setActionMessage(null); setPage((p) => p - 1); }}
               >
                 Previous
               </Button>
@@ -305,7 +328,7 @@ export default function UsersPage() {
                 variant="outline"
                 size="sm"
                 disabled={!hasMore}
-                onClick={() => setPage((p) => p + 1)}
+                onClick={() => { setActionMessage(null); setPage((p) => p + 1); }}
               >
                 Next
               </Button>
