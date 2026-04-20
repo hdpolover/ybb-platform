@@ -24,6 +24,8 @@ import { ListUserSecurityLogsHandler } from './application/queries/handlers/list
 import { AccountDeletionRequestRepository } from './infrastructure/persistence/account-deletion-request.repository';
 import { IAccountDeletionRequestRepository } from '@core/interfaces/repositories/account-deletion-request.repository.interface';
 import { CreateDeletionRequestHandler } from './application/commands/handlers/create-deletion-request.handler';
+import { ActivateUserHandler } from './application/commands/handlers/activate-user.handler';
+import { DeactivateUserHandler } from './application/commands/handlers/deactivate-user.handler';
 import { ReviewDeletionRequestHandler } from './application/commands/handlers/review-deletion-request.handler';
 import { ListDeletionRequestsHandler } from './application/queries/handlers/list-deletion-requests.handler';
 import { DeletionRequestsController } from './presentation/deletion-requests.controller';
@@ -50,6 +52,8 @@ import { CacheModule } from '@shared/infrastructure/cache/cache.module';
     ListUserActivityLogsHandler,
     ListUserSecurityLogsHandler,
     CreateDeletionRequestHandler,
+    ActivateUserHandler,
+    DeactivateUserHandler,
     ReviewDeletionRequestHandler,
     ListDeletionRequestsHandler,
 
