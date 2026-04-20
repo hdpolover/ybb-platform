@@ -164,25 +164,25 @@ export default function UsersPage() {
       <div className="grid gap-4 md:grid-cols-4">
         <StatCard
           title="Total Users"
-          value={loading ? "..." : (analytics?.users.total ?? 0)}
+          value={analytics === null ? "..." : (analytics.users.total ?? 0)}
           description="All registered accounts"
           icon={Users}
         />
         <StatCard
           title="Active"
-          value={loading ? "..." : (analytics?.users.active ?? 0)}
+          value={analytics === null ? "..." : (analytics.users.active ?? 0)}
           description="Active accounts"
           icon={UserCheck}
         />
         <StatCard
           title="New This Month"
-          value={loading ? "..." : (analytics?.users.new_this_month ?? 0)}
+          value={analytics === null ? "..." : (analytics.users.new_this_month ?? 0)}
           description="Joined this month"
           icon={Users}
         />
         <StatCard
           title="Participants"
-          value={loading ? "..." : (analytics?.participants.total ?? 0)}
+          value={analytics === null ? "..." : (analytics.participants.total ?? 0)}
           description="Accepted participants"
           icon={UserCheck}
         />
