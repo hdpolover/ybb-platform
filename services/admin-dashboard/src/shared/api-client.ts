@@ -121,8 +121,8 @@ export type User = {
   brandId: string | null;
   isActive: boolean;
   emailVerified: boolean;
-  isOnboardingCompleted: boolean;
   role?: string;
+  isOnboardingCompleted: boolean;
   createdAt: string;
   updatedAt: string;
 };
