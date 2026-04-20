@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
+export type UserRoleEnriched = 'admin' | 'participant' | 'ambassador' | 'none';
+
 export class UserResponseDto {
   @ApiProperty()
   id: string;
@@ -17,7 +19,7 @@ export class UserResponseDto {
   emailVerified: boolean;
 
   @ApiPropertyOptional({ enum: ['admin', 'participant', 'ambassador', 'none'] })
-  role?: string;
+  role?: UserRoleEnriched;
 
   @ApiProperty()
   createdAt: Date;
