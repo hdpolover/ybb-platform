@@ -27,7 +27,7 @@ export class GetUsersHandler {
     const ids = users.map((u) => u.id);
 
     const rows = await this.prisma.user.findMany({
-      where: { id: { in: ids } },
+      where: { id: { in: ids }, deletedAt: null },
       select: {
         id: true,
         admin: { select: { id: true } },
