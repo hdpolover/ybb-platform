@@ -1,10 +1,8 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { GetUsersQuery } from '../get-users.query';
-import { UserResponseDto } from '@modules/users/presentation/dto/user-response.dto';
+import { UserResponseDto, UserRoleEnriched } from '@modules/users/presentation/dto/user-response.dto';
 import { IUserRepository } from '@core/interfaces/repositories/user.repository.interface';
 import { User } from '@core/entities/user.entity';
-import { CacheService } from '@shared/infrastructure/cache/cache.service';
-import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 
 @Injectable()
@@ -12,24 +10,15 @@ export class GetUsersHandler {
   constructor(
     @Inject(IUserRepository)
     private readonly userRepository: IUserRepository,
-    private readonly cacheService: CacheService,
     private readonly prisma: PrismaService,
   ) {}
 
   async execute(query: GetUsersQuery): Promise<UserResponseDto[]> {
     const skip = query.skip ?? 0;
     const take = query.take ?? 10;
-    const role = query.role || 'all';
-    const cacheKey = CACHE_KEYS.USER_LIST(query.brandId, skip, take) + `:${role}`;
-
-    const cached = await this.cacheService.get<UserResponseDto[]>(cacheKey);
-    if (cached) return cached;
 
     const users = await this.userRepository.findAll(query.brandId, skip, take, query.role);
-    const dtos = await this.enrichWithRoles(users);
-
-    await this.cacheService.set(cacheKey, dtos, CACHE_TTL.SHORT);
-    return dtos;
+    return this.enrichWithRoles(users);
   }
 
   private async enrichWithRoles(users: User[]): Promise<UserResponseDto[]> {
@@ -38,7 +27,7 @@ export class GetUsersHandler {
     const ids = users.map((u) => u.id);
 
     const rows = await this.prisma.user.findMany({
-      where: { id: { in: ids }, deletedAt: null },
+      where: { id: { in: ids } },
       select: {
         id: true,
         admin: { select: { id: true } },
@@ -47,7 +36,7 @@ export class GetUsersHandler {
       },
     });
 
-    const roleMap = new Map<string, string>();
+    const roleMap = new Map<string, UserRoleEnriched>();
     for (const row of rows) {
       if (row.admin) roleMap.set(row.id, 'admin');
       else if (row.participant) roleMap.set(row.id, 'participant');
