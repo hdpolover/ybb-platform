@@ -2,6 +2,7 @@ import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { DeactivateUserCommand } from '../deactivate-user.command';
 import { UserResponseDto } from '@modules/users/presentation/dto/user-response.dto';
 import { IUserRepository } from '@core/interfaces/repositories/user.repository.interface';
+import { User } from '@core/entities/user.entity';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 
 @Injectable()
@@ -21,14 +22,18 @@ export class DeactivateUserHandler {
 
     await this.cacheService.invalidateByPattern(`user:list:${command.brandId}:*`);
 
+    return this.toDto(updated);
+  }
+
+  private toDto(user: User): UserResponseDto {
     return {
-      id: updated.id,
-      brandId: updated.brandId,
-      email: updated.email,
-      isActive: updated.isActive,
-      emailVerified: updated.emailVerified,
-      createdAt: updated.createdAt,
-      updatedAt: updated.updatedAt,
+      id: user.id,
+      brandId: user.brandId,
+      email: user.email,
+      isActive: user.isActive,
+      emailVerified: user.emailVerified,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
     };
   }
 }

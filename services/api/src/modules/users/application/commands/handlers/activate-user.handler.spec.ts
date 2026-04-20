@@ -44,7 +44,9 @@ describe('ActivateUserHandler', () => {
     const result = await handler.execute(command);
 
     expect(mockRepository.findById).toHaveBeenCalledWith('user-1', 'brand-1');
-    expect(mockRepository.update).toHaveBeenCalled();
+    expect(mockRepository.update).toHaveBeenCalledWith(
+      expect.objectContaining({ isActive: true }),
+    );
     expect(mockCacheService.invalidateByPattern).toHaveBeenCalledWith('user:list:brand-1:*');
     expect(result.isActive).toBe(true);
   });
