@@ -21,6 +21,7 @@ import {
   type GeneralInformationFormValues,
 } from "@/app/components/programDetailsMasterData/general-information/EditGeneralInformationModal";
 import { buildApiUrl, getAccessToken, readErrorMessage } from "@/app/components/submissionsMasterData/api";
+import { ExchangeRateTab } from "@/app/components/programDetailsMasterData/exchange-rate/ExchangeRateTab";
 
 type ProgramDetail = {
   id: string;
@@ -501,7 +502,7 @@ export default function ProgramDetailsPage({
               isSaving={isSaving}
               errorMessage={saveError}
             />
-          ) : null}
+          ) : activeTab === "exchange-rate" ? null : null}
         </div>
 
         <div className="border-t border-zinc-100 pt-4">
@@ -515,6 +516,8 @@ export default function ProgramDetailsPage({
             </div>
           ) : activeTab === "general" && generalInformationData ? (
             <GeneralInformationTab data={generalInformationData} />
+          ) : activeTab === "exchange-rate" ? (
+            <ExchangeRateTab programId={programId} />
           ) : programSpecificsData ? (
             <ProgramSpecificsTab data={programSpecificsData} />
           ) : (
