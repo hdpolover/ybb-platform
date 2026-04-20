@@ -1,10 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { FolderOpen, Layers, BarChart2, Users } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import {
+  FolderOpen,
+  Layers,
+  Users,
+  TrendingUp,
+  UserCheck,
+  PlayCircle,
+  ShieldCheck,
+  Activity,
+} from "lucide-react";
 import { PageHeader } from "@/src/admin/page-header";
-import { listPlatformBrands, listPlatformPrograms } from "./api";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/src/ui/table";
+import { listPlatformBrands, type PlatformBrand } from "./api";
+import { getAdminAnalytics, type AdminAnalytics } from "@/src/shared/api-client";
+import { useAuth } from "@/app/contexts/AuthContext";
 
 const quickActions = [
   {
@@ -27,100 +39,132 @@ const quickActions = [
   },
 ];
 
+type StatCard = {
+  id: string;
+  title: string;
+  value: string | number;
+  description: string;
+  icon: React.ElementType;
+  href: string;
+  iconClassName: string;
+  backgroundClassName: string;
+};
+
 export default function PlatformDashboard() {
-  const [categoryCount, setCategoryCount] = useState(0);
-  const [programCount, setProgramCount] = useState(0);
-  const [publishedCount, setPublishedCount] = useState(0);
-  const [activeCategoryCount, setActiveCategoryCount] = useState(0);
+  const { adminProfile } = useAuth();
+  const brandId = adminProfile?.assignedBrands?.[0]?.brandId;
+
+  const [brands, setBrands] = useState<PlatformBrand[] | null>(null);
+  const [analytics, setAnalytics] = useState<AdminAnalytics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [pageError, setPageError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let isMounted = true;
+  const loadOverview = useCallback(async () => {
+    setIsLoading(true);
+    setPageError(null);
 
-    async function loadOverview() {
-      setIsLoading(true);
-      setPageError(null);
-
-      try {
-        const [brands, programs] = await Promise.all([
-          listPlatformBrands(),
-          listPlatformPrograms({ page: 1, limit: 100 }),
-        ]);
-
-        if (!isMounted) {
-          return;
-        }
-
-        setCategoryCount(brands.length);
-        setActiveCategoryCount(brands.filter((brand) => brand.isActive).length);
-        setProgramCount(programs.total);
-        setPublishedCount(programs.data.filter((program) => program.isPublished).length);
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-
-        setPageError(error instanceof Error ? error.message : "Failed to load platform overview.");
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
+    try {
+      const [brandsData, analyticsData] = await Promise.all([
+        listPlatformBrands(),
+        getAdminAnalytics(brandId),
+      ]);
+      setBrands(brandsData);
+      setAnalytics(analyticsData);
+    } catch (error) {
+      setPageError(error instanceof Error ? error.message : "Failed to load platform overview.");
+    } finally {
+      setIsLoading(false);
     }
+  }, [brandId]);
 
+  useEffect(() => {
     loadOverview();
+  }, [loadOverview]);
 
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  const activeBrandCount = brands?.filter((b) => b.isActive).length ?? 0;
 
-  const stats: DashboardStat[] = useMemo(
-    () => [
-      {
-        id: "categories",
-        title: "Brands",
-        value: categoryCount,
-        description: `${activeCategoryCount} active brands`,
-        icon: FolderOpen,
-        href: "/platform/brands",
-        iconClassName: "text-blue-600",
-        backgroundClassName: "bg-blue-50",
-      },
-      {
-        id: "programs",
-        title: "Programs",
-        value: programCount,
-        description: "Total programs across all brands",
-        icon: Layers,
-        href: "/platform/programs",
-        iconClassName: "text-emerald-600",
-        backgroundClassName: "bg-emerald-50",
-      },
-      {
-        id: "published-programs",
-        title: "Published Programs",
-        value: publishedCount,
-        description: "Visible or launch-ready programs",
-        icon: BarChart2,
-        href: "/platform/programs",
-        iconClassName: "text-amber-600",
-        backgroundClassName: "bg-amber-50",
-      },
-      {
-        id: "admins",
-        title: "Administrators",
-        value: "Manage",
-        description: "Platform and program admin access",
-        icon: Users,
-        href: "/platform/admins",
-        iconClassName: "text-zinc-700",
-        backgroundClassName: "bg-zinc-100",
-      },
-    ],
-    [activeCategoryCount, categoryCount, programCount, publishedCount],
-  );
+  const stats: StatCard[] = [
+    {
+      id: "brands",
+      title: "Brands",
+      value: isLoading ? "..." : (brands?.length ?? 0),
+      description: `${activeBrandCount} active brands`,
+      icon: FolderOpen,
+      href: "/platform/brands",
+      iconClassName: "text-blue-600",
+      backgroundClassName: "bg-blue-50",
+    },
+    {
+      id: "programs",
+      title: "Programs",
+      value: isLoading ? "..." : (analytics?.programs.total ?? 0),
+      description: `${analytics?.programs.published ?? 0} published`,
+      icon: Layers,
+      href: "/platform/programs",
+      iconClassName: "text-emerald-600",
+      backgroundClassName: "bg-emerald-50",
+    },
+    {
+      id: "users",
+      title: "Users",
+      value: isLoading ? "..." : (analytics?.users.total ?? 0),
+      description: `${analytics?.users.new_this_month ?? 0} new this month`,
+      icon: Users,
+      href: "/platform/admins",
+      iconClassName: "text-violet-600",
+      backgroundClassName: "bg-violet-50",
+    },
+    {
+      id: "applications",
+      title: "Applications",
+      value: isLoading ? "..." : (analytics?.applications.total ?? 0),
+      description: "All time",
+      icon: TrendingUp,
+      href: "/platform/analytics",
+      iconClassName: "text-amber-600",
+      backgroundClassName: "bg-amber-50",
+    },
+    {
+      id: "participants",
+      title: "Participants",
+      value: isLoading ? "..." : (analytics?.participants.total ?? 0),
+      description: "Accepted participants",
+      icon: UserCheck,
+      href: "/platform/analytics",
+      iconClassName: "text-teal-600",
+      backgroundClassName: "bg-teal-50",
+    },
+    {
+      id: "active-programs",
+      title: "Active Programs",
+      value: isLoading ? "..." : (analytics?.programs.active ?? 0),
+      description: "Currently running",
+      icon: PlayCircle,
+      href: "/platform/programs",
+      iconClassName: "text-green-600",
+      backgroundClassName: "bg-green-50",
+    },
+    {
+      id: "active-users",
+      title: "Active Users",
+      value: isLoading ? "..." : (analytics?.users.active ?? 0),
+      description: "Verified accounts",
+      icon: Activity,
+      href: "/platform/admins",
+      iconClassName: "text-indigo-600",
+      backgroundClassName: "bg-indigo-50",
+    },
+    {
+      id: "admins",
+      title: "Administrators",
+      value: "Manage",
+      description: "Platform and program admin access",
+      icon: ShieldCheck,
+      href: "/platform/admins",
+      iconClassName: "text-zinc-700",
+      backgroundClassName: "bg-zinc-100",
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -141,9 +185,7 @@ export default function PlatformDashboard() {
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <p className="text-sm font-medium text-zinc-600">{stat.title}</p>
-                  <p className="mt-2 text-3xl font-bold text-zinc-900">
-                    {isLoading && typeof stat.value === "number" ? "..." : stat.value}
-                  </p>
+                  <p className="mt-2 text-3xl font-bold text-zinc-900">{stat.value}</p>
                   <p className="mt-1 text-xs text-zinc-500">{stat.description}</p>
                 </div>
                 <div className={`rounded-lg p-3 ${stat.backgroundClassName}`}>
@@ -178,13 +220,38 @@ export default function PlatformDashboard() {
         </div>
       </div>
 
-      {/* Recent Activity placeholder */}
+      {/* Top Programs */}
       <div className="rounded-lg border border-zinc-200 bg-white p-6">
-        <h2 className="text-lg font-semibold text-zinc-900">Recent Activity</h2>
-        <div className="mt-4 text-center text-zinc-500">
-          <BarChart2 className="mx-auto h-12 w-12 text-zinc-300" />
-          <p className="mt-2 text-sm">Activity tracking coming soon</p>
-        </div>
+        <h2 className="text-lg font-semibold text-zinc-900">Top Programs by Applicants</h2>
+        {isLoading ? (
+          <p className="mt-4 text-sm text-zinc-400">Loading…</p>
+        ) : (
+          <Table className="mt-4">
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-10">#</TableHead>
+                <TableHead>Program</TableHead>
+                <TableHead className="text-right">Applicants</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {(analytics?.top_programs ?? []).map((p: { id: string; name: string; applicants: number }, idx: number) => (
+                <TableRow key={p.id}>
+                  <TableCell className="text-zinc-500">{idx + 1}</TableCell>
+                  <TableCell className="font-medium">{p.name}</TableCell>
+                  <TableCell className="text-right font-semibold">{p.applicants}</TableCell>
+                </TableRow>
+              ))}
+              {!analytics?.top_programs?.length && (
+                <TableRow>
+                  <TableCell colSpan={3} className="py-6 text-center text-zinc-400">
+                    No data yet.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        )}
       </div>
     </div>
   );
