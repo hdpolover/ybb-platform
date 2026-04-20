@@ -88,7 +88,7 @@ export default function PlatformDashboard() {
       id: "brands",
       title: "Brands",
       value: isLoading ? "..." : (brands?.length ?? 0),
-      description: `${activeBrandCount} active brands`,
+      description: isLoading ? "" : `${activeBrandCount} active brands`,
       icon: FolderOpen,
       href: "/platform/brands",
       iconClassName: "text-blue-600",
@@ -98,7 +98,7 @@ export default function PlatformDashboard() {
       id: "programs",
       title: "Programs",
       value: isLoading ? "..." : (analytics?.programs.total ?? 0),
-      description: `${analytics?.programs.published ?? 0} published`,
+      description: isLoading ? "" : `${analytics?.programs.published ?? 0} published`,
       icon: Layers,
       href: "/platform/programs",
       iconClassName: "text-emerald-600",
@@ -108,7 +108,7 @@ export default function PlatformDashboard() {
       id: "users",
       title: "Users",
       value: isLoading ? "..." : (analytics?.users.total ?? 0),
-      description: `${analytics?.users.new_this_month ?? 0} new this month`,
+      description: isLoading ? "" : `${analytics?.users.new_this_month ?? 0} new this month`,
       icon: Users,
       href: "/platform/admins",
       iconClassName: "text-violet-600",
@@ -173,33 +173,37 @@ export default function PlatformDashboard() {
         description="Overview of all brands, programs, and platform-wide metrics"
       />
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <Link
-              key={stat.id}
-              href={stat.href}
-              className="group rounded-lg border border-zinc-200 bg-white p-5 shadow-sm transition hover:border-blue-300 hover:shadow-md"
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-zinc-600">{stat.title}</p>
-                  <p className="mt-2 text-3xl font-bold text-zinc-900">{stat.value}</p>
-                  <p className="mt-1 text-xs text-zinc-500">{stat.description}</p>
-                </div>
-                <div className={`rounded-lg p-3 ${stat.backgroundClassName}`}>
-                  <Icon className={`h-6 w-6 ${stat.iconClassName}`} />
-                </div>
-              </div>
-            </Link>
-          );
-        })}
-      </div>
-
+      {/* Error banner — show at top, always */}
       {pageError ? (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {pageError}
+        </div>
+      ) : null}
+
+      {/* Stat grid — only when not errored or data already loaded */}
+      {(!pageError || brands !== null || analytics !== null) ? (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {stats.map((stat) => {
+            const Icon = stat.icon;
+            return (
+              <Link
+                key={stat.id}
+                href={stat.href}
+                className="group rounded-lg border border-zinc-200 bg-white p-5 shadow-sm transition hover:border-blue-300 hover:shadow-md"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-zinc-600">{stat.title}</p>
+                    <p className="mt-2 text-3xl font-bold text-zinc-900">{stat.value}</p>
+                    <p className="mt-1 text-xs text-zinc-500">{stat.description}</p>
+                  </div>
+                  <div className={`rounded-lg p-3 ${stat.backgroundClassName}`}>
+                    <Icon className={`h-6 w-6 ${stat.iconClassName}`} />
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
         </div>
       ) : null}
 
@@ -235,7 +239,7 @@ export default function PlatformDashboard() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(analytics?.top_programs ?? []).map((p: { id: string; name: string; applicants: number }, idx: number) => (
+              {(analytics?.top_programs ?? []).map((p, idx) => (
                 <TableRow key={p.id}>
                   <TableCell className="text-zinc-500">{idx + 1}</TableCell>
                   <TableCell className="font-medium">{p.name}</TableCell>
