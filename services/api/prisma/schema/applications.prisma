@@ -217,6 +217,9 @@ model ApplicationInvoice {
   status        PaymentStatus @default(unpaid)
   paidAt        DateTime?     @map("paid_at") @db.Timestamptz(6)
 
+  // Exchange rate snapshot at time of payment — locked so past invoices are unaffected by future rate changes
+  exchangeRateSnapshot Decimal? @map("exchange_rate_snapshot") @db.Decimal(10, 2)
+
   // Link to external transaction ID from Payment Service for reference
   externalTransactionId String? @map("external_transaction_id") @db.VarChar(100)
   // Link to payment-service PaymentIntent (the user's obligation)

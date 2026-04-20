@@ -23,6 +23,16 @@ export function TabNavigation({ activeTab }: { activeTab: string }) {
       >
         Program Specifics
       </Link>
+      <Link
+        href="?tab=exchange-rate"
+        className={`rounded-md px-4 py-2 text-sm font-semibold transition-all ${
+          activeTab === "exchange-rate"
+            ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200"
+            : "text-zinc-500 hover:text-zinc-700"
+        }`}
+      >
+        Exchange Rate
+      </Link>
     </div>
   );
 }

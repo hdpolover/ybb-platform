@@ -84,7 +84,8 @@ export class PaymentEventsController {
             }
 
         } catch (error) {
-            this.logger.error(`Failed to handle payment.succeeded: ${error.message}`, error.stack);
+            const err = error instanceof Error ? error : new Error(String(error));
+            this.logger.error(`Failed to handle payment.succeeded: ${err.message}`, err.stack);
         } finally {
             const duration = (Date.now() - start) / 1000;
             this.metricsService.jobProcessingDuration.observe({ 
@@ -108,7 +109,14 @@ export class PaymentEventsController {
             include: {
                 participant: {
                     select: { id: true, userId: true }
-                }
+                },
+                program: {
+                    select: {
+                        id: true,
+                        usdInIdr: true,
+                        brand: { select: { settings: { select: { usdInIdr: true } } } },
+                    },
+                },
             }
         });
 
@@ -139,6 +147,14 @@ export class PaymentEventsController {
 
                 // Create invoice if pricing tier exists
                 if (application.pricingTierId) {
+                    // Snapshot rate: program-level > brand fallback > hardcoded default
+                    const exchangeRateSnapshot =
+                        application.program?.usdInIdr != null
+                            ? Number(application.program.usdInIdr)
+                            : application.program?.brand?.settings?.usdInIdr != null
+                              ? Number(application.program.brand.settings.usdInIdr)
+                              : null;
+
                     await repos.tx.applicationInvoice.create({
                         data: {
                             applicationId: applicationId,
@@ -147,6 +163,7 @@ export class PaymentEventsController {
                             currency: currency,
                             status: PaymentStatus.paid,
                             paidAt: new Date(),
+                            exchangeRateSnapshot: exchangeRateSnapshot,
                             externalTransactionId: transactionId,
                             externalIntentId: intentId || null,
                             paymentMethod: method,
@@ -202,7 +219,8 @@ export class PaymentEventsController {
                 }
             }
         } catch (error) {
-            this.logger.error(`Failed to handle payment.failed: ${error.message}`, error.stack);
+            const err = error instanceof Error ? error : new Error(String(error));
+            this.logger.error(`Failed to handle payment.failed: ${err.message}`, err.stack);
         } finally {
             const duration = (Date.now() - start) / 1000;
             this.metricsService.jobProcessingDuration.observe({ 
@@ -237,7 +255,8 @@ export class PaymentEventsController {
                 this.logger.debug(`Invalidated local cache for user ${userId} (reason: ${reason})`);
             }
         } catch (error) {
-            this.logger.error(`Failed to invalidate cache for user ${userId}: ${error.message}`);
+            const err = error instanceof Error ? error : new Error(String(error));
+            this.logger.error(`Failed to invalidate cache for user ${userId}: ${err.message}`);
             // Don't throw - cache invalidation failures shouldn't break payment processing
         }
     }
