@@ -122,6 +122,7 @@ export type User = {
   isActive: boolean;
   emailVerified: boolean;
   isOnboardingCompleted: boolean;
+  role?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -383,6 +384,45 @@ export function listUsers(params?: {
 export function getUser(id: string, brandId?: string): Promise<User> {
   const q = brandId ? `?brandId=${brandId}` : "";
   return request<User>(`/users/${id}${q}`);
+}
+
+export function activateUser(id: string, brandId: string): Promise<User> {
+  return request<User>(`/users/${id}/activate?brandId=${encodeURIComponent(brandId)}`, {
+    method: 'PATCH',
+  });
+}
+
+export function deactivateUser(id: string, brandId: string): Promise<User> {
+  return request<User>(`/users/${id}/deactivate?brandId=${encodeURIComponent(brandId)}`, {
+    method: 'PATCH',
+  });
+}
+
+export function resendVerificationEmail(
+  email: string,
+  brandSlug: string,
+): Promise<{ success: boolean; message: string }> {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (!baseUrl) throw new Error('NEXT_PUBLIC_API_URL is not configured.');
+
+  return fetch(`${baseUrl}/auth/resend-verification`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-brand-domain': brandSlug,
+    },
+    body: JSON.stringify({ email }),
+  }).then(async (res) => {
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(
+        Array.isArray(body.message)
+          ? body.message.join(', ')
+          : body.message ?? `Request failed with status ${res.status}.`,
+      );
+    }
+    return res.json();
+  });
 }
 
 // ─── Brands / Settings ───────────────────────────────────────────────────────
