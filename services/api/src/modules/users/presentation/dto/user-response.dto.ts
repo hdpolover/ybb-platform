@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UserResponseDto {
   @ApiProperty()
@@ -15,6 +15,9 @@ export class UserResponseDto {
 
   @ApiProperty()
   emailVerified: boolean;
+
+  @ApiPropertyOptional({ enum: ['admin', 'participant', 'ambassador', 'none'] })
+  role?: string;
 
   @ApiProperty()
   createdAt: Date;
