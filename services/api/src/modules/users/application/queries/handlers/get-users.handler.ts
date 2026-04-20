@@ -5,6 +5,7 @@ import { IUserRepository } from '@core/interfaces/repositories/user.repository.i
 import { User } from '@core/entities/user.entity';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 
 @Injectable()
 export class GetUsersHandler {
@@ -12,7 +13,8 @@ export class GetUsersHandler {
     @Inject(IUserRepository)
     private readonly userRepository: IUserRepository,
     private readonly cacheService: CacheService,
-  ) { }
+    private readonly prisma: PrismaService,
+  ) {}
 
   async execute(query: GetUsersQuery): Promise<UserResponseDto[]> {
     const skip = query.skip ?? 0;
@@ -20,38 +22,48 @@ export class GetUsersHandler {
     const role = query.role || 'all';
     const cacheKey = CACHE_KEYS.USER_LIST(query.brandId, skip, take) + `:${role}`;
 
-    // Check cache first
     const cached = await this.cacheService.get<UserResponseDto[]>(cacheKey);
-    if (cached) {
-      return cached;
-    }
+    if (cached) return cached;
 
-    // Fetch from database
-    const users = await this.userRepository.findAll(
-      query.brandId,
-      skip,
-      take,
-      query.role,
-    );
+    const users = await this.userRepository.findAll(query.brandId, skip, take, query.role);
+    const dtos = await this.enrichWithRoles(users);
 
-    const dtos = users.map(user => this.toDto(user));
-
-    // Cache for 2 minutes (shorter for lists)
     await this.cacheService.set(cacheKey, dtos, CACHE_TTL.SHORT);
-
     return dtos;
   }
 
-  private toDto(user: User): UserResponseDto {
-    return {
+  private async enrichWithRoles(users: User[]): Promise<UserResponseDto[]> {
+    if (users.length === 0) return [];
+
+    const ids = users.map((u) => u.id);
+
+    const rows = await this.prisma.user.findMany({
+      where: { id: { in: ids }, deletedAt: null },
+      select: {
+        id: true,
+        admin: { select: { id: true } },
+        participant: { select: { id: true } },
+        ambassador: { select: { id: true } },
+      },
+    });
+
+    const roleMap = new Map<string, string>();
+    for (const row of rows) {
+      if (row.admin) roleMap.set(row.id, 'admin');
+      else if (row.participant) roleMap.set(row.id, 'participant');
+      else if (row.ambassador) roleMap.set(row.id, 'ambassador');
+      else roleMap.set(row.id, 'none');
+    }
+
+    return users.map((user) => ({
       id: user.id,
       brandId: user.brandId,
       email: user.email,
       isActive: user.isActive,
       emailVerified: user.emailVerified,
+      role: roleMap.get(user.id) ?? 'none',
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
-    };
+    }));
   }
 }
-
