@@ -245,7 +245,8 @@ export class UsersController {
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Activate a user account' })
   @ApiResponse({ status: 200, description: 'User successfully activated', type: UserResponseDto })
-  @AuditTrail({ entityType: 'User', action: ChangeType.update })
+  @AuditTrail({ entityType: 'User', action: ChangeType.status_change })
+  @ApiQuery({ name: 'brandId', required: true, type: String })
   async activateUser(
     @Param('id') id: string,
     @Query('brandId') brandId: string,
@@ -257,7 +258,8 @@ export class UsersController {
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Deactivate a user account' })
   @ApiResponse({ status: 200, description: 'User successfully deactivated', type: UserResponseDto })
-  @AuditTrail({ entityType: 'User', action: ChangeType.update })
+  @AuditTrail({ entityType: 'User', action: ChangeType.status_change })
+  @ApiQuery({ name: 'brandId', required: true, type: String })
   async deactivateUser(
     @Param('id') id: string,
     @Query('brandId') brandId: string,
