@@ -2,15 +2,16 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { 
-  PencilSquareIcon, 
-  TrashIcon, 
-  PlusIcon, 
-  CalendarDaysIcon, 
-  ExclamationTriangleIcon 
+import {
+  PencilSquareIcon,
+  TrashIcon,
+  PlusIcon,
+  CalendarDaysIcon,
+  ExclamationTriangleIcon
 } from "@heroicons/react/24/solid";
 import type { PaymentOptionRow } from "./PaymentOptionTable";
 import { createPricingTier, updatePricingTier, deletePricingTier } from "@/app/platform/api";
+import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
 
 // SEARCH COMPONENT
 export function PaymentOptionSearch({ initialSearch }: { initialSearch: string }) {
@@ -46,8 +47,8 @@ export function PaymentOptionSearch({ initialSearch }: { initialSearch: string }
   );
 }
 
-// FORM MODAL COMPONENT (Internal)
-function PaymentOptionModal({
+// FORM DRAWER COMPONENT (Internal)
+function PaymentOptionDrawer({
   isOpen,
   onClose,
   onSaved,
@@ -64,10 +65,9 @@ function PaymentOptionModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!isOpen) return null;
-
   const feeTypeValue =
-    initialData?.category === "Registration Fee" ? "registration_fee" : "program_fee";
+    initialData?.category === "Registration Fee" ? "registration_fee" :
+    initialData?.category === "Program Fee 2" ? "program_fee_2" : "program_fee_1";
   const allowedCatsValue = (() => {
     if (!initialData) return "self_funded,fully_funded";
     if (initialData.fundingType === "Self Funded") return "self_funded";
@@ -87,8 +87,8 @@ function PaymentOptionModal({
     const feeType = fd.get("feeType") as string;
     const allowedCategoriesRaw = fd.get("allowedCategories") as string;
     const isActive = fd.get("isActive") === "true";
-    const validFrom = fd.get("validFrom") as string;
-    const validUntil = fd.get("validUntil") as string;
+    const validFrom = fd.get("validFrom") as string | null;
+    const validUntil = fd.get("validUntil") as string | null;
     const allowedCategories = allowedCategoriesRaw
       ? allowedCategoriesRaw.split(",").map((c) => c.trim())
       : [];
@@ -98,12 +98,15 @@ function PaymentOptionModal({
     try {
       if (isEditMode && initialData) {
         await updatePricingTier(initialData._id, {
-          name, description, price, currency, feeType, allowedCategories, isActive, validFrom, validUntil,
+          name, description, price, currency, feeType, allowedCategories, isActive,
+          ...(validFrom ? { validFrom } : {}),
+          ...(validUntil ? { validUntil } : {}),
         });
       } else {
         if (!programId) throw new Error("Program ID is required");
+        if (!validFrom || !validUntil) throw new Error("Valid From and Valid Until are required");
         await createPricingTier(programId, {
-          name, description, price, currency, feeType, allowedCategories, isActive, validFrom, validUntil,
+          name, description, price, currency, feeType, allowedCategories, validFrom, validUntil,
         });
       }
       onClose();
@@ -115,103 +118,119 @@ function PaymentOptionModal({
     }
   };
 
+  const footer = (
+    <>
+      <button
+        type="button"
+        onClick={onClose}
+        className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100"
+      >
+        Cancel
+      </button>
+      <button
+        type="submit"
+        form="payment-option-form"
+        disabled={saving}
+        className="rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:opacity-60"
+      >
+        {saving ? "Saving…" : isEditMode ? "Save Changes" : "Add Option"}
+      </button>
+    </>
+  );
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 sm:p-6 text-left">
-      <div className="w-full max-w-3xl overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-2xl text-left">
-        <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-6 py-5">
+    <DrawerShell
+      open={isOpen}
+      onClose={onClose}
+      title={isEditMode ? "Edit Payment Option" : "Add Payment Option"}
+      description="Configure payment amount, funding type, and status."
+      error={error}
+      footer={footer}
+      locked={saving}
+    >
+      <form id="payment-option-form" className="space-y-5" onSubmit={handleSubmit}>
+        <div className="grid gap-5 md:grid-cols-2">
           <div>
-            <h3 className="text-lg font-bold text-zinc-900">
-              {isEditMode ? "Edit Payment Option" : "Add Payment Option"}
-            </h3>
-            <p className="mt-1 text-sm text-zinc-500">Configure payment amount, funding type, and status.</p>
+            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Option Name</label>
+            <input name="name" type="text" defaultValue={initialData?.optionName} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100" required />
           </div>
-          <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700">
-            <span className="text-xl leading-none">×</span>
-          </button>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Fee Type</label>
+            <select name="feeType" defaultValue={feeTypeValue} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+              <option value="registration_fee">Registration Fee</option>
+              <option value="program_fee_1">Program Fee 1</option>
+              <option value="program_fee_2">Program Fee 2</option>
+            </select>
+          </div>
         </div>
 
-        <form id="payment-option-form" className="space-y-5 px-6 py-6 max-h-[70vh] overflow-y-auto" onSubmit={handleSubmit}>
-          {error && (
-            <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>
-          )}
+        <div className="grid gap-5 md:grid-cols-3">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Allowed Categories</label>
+            <select name="allowedCategories" defaultValue={allowedCatsValue} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+              <option value="self_funded,fully_funded">All</option>
+              <option value="self_funded">Self Funded</option>
+              <option value="fully_funded">Fully Funded</option>
+            </select>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-zinc-500">USD Amount</label>
+            <input name="price" type="number" step="0.01" defaultValue={initialData?.amountUsd} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100" required />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Currency</label>
+            <select name="currency" defaultValue="USD" className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+              <option value="USD">USD</option>
+              <option value="IDR">IDR</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-zinc-500">Description</label>
+          <textarea name="description" rows={3} defaultValue={initialData?.description} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm leading-relaxed text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+        </div>
+
+        {isEditMode && (
+          <div className="w-48">
+            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Status</label>
+            <select name="isActive" defaultValue={initialData?.status !== "Inactive" ? "true" : "false"} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+              <option value="true">Active</option>
+              <option value="false">Inactive</option>
+            </select>
+          </div>
+        )}
+
+        {/* Create: always show period dates. Edit: only if periods already exist */}
+        {(!isEditMode || initialData?.currentActivePeriodRange || initialData?.lastActivePeriodRange) && (
           <div className="grid gap-5 md:grid-cols-2">
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-zinc-500">Option Name</label>
-              <input name="name" type="text" defaultValue={initialData?.optionName} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100" required />
+              <label className="mb-1.5 block text-xs font-medium text-zinc-500">
+                Valid From {!isEditMode && <span className="text-rose-500">*</span>}
+              </label>
+              <input name="validFrom" type="datetime-local" className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100" required={!isEditMode} />
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-zinc-500">Fee Type</label>
-              <select name="feeType" defaultValue={feeTypeValue} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
-                <option value="registration_fee">Registration Fee</option>
-                <option value="program_fee">Program Fee</option>
-              </select>
+              <label className="mb-1.5 block text-xs font-medium text-zinc-500">
+                Valid Until {!isEditMode && <span className="text-rose-500">*</span>}
+              </label>
+              <input name="validUntil" type="datetime-local" className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100" required={!isEditMode} />
             </div>
           </div>
+        )}
 
-          <div className="grid gap-5 md:grid-cols-3">
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-zinc-500">Allowed Categories</label>
-              <select name="allowedCategories" defaultValue={allowedCatsValue} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
-                <option value="self_funded,fully_funded">All</option>
-                <option value="self_funded">Self Funded</option>
-                <option value="fully_funded">Fully Funded</option>
-              </select>
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-zinc-500">USD Amount</label>
-              <input name="price" type="number" step="0.01" defaultValue={initialData?.amountUsd} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100" required />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-zinc-500">Currency</label>
-              <select name="currency" defaultValue="USD" className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
-                <option value="USD">USD</option>
-                <option value="IDR">IDR</option>
-              </select>
-            </div>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <div className="flex items-start gap-2">
+            <ExclamationTriangleIcon className="mt-0.5 h-4 w-4 flex-none text-amber-500" />
+            <p className="text-xs text-zinc-700">
+              {isEditMode
+                ? "Fine-grained wave periods are managed from the Periods page for this option."
+                : "Valid From / Until sets the initial active window. Add more wave periods from the Periods page after saving."}
+            </p>
           </div>
-
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Description</label>
-            <textarea name="description" rows={3} defaultValue={initialData?.description} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm leading-relaxed text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
-          </div>
-
-          <div className="grid gap-5 md:grid-cols-3">
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-zinc-500">Status</label>
-              <select name="isActive" defaultValue={initialData?.status !== "Inactive" ? "true" : "false"} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
-                <option value="true">Active</option>
-                <option value="false">Inactive</option>
-              </select>
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-zinc-500">Valid From</label>
-              <input name="validFrom" type="datetime-local" className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100" required />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-zinc-500">Valid Until</label>
-              <input name="validUntil" type="datetime-local" className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100" required />
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-            <div className="flex items-start gap-2">
-              <ExclamationTriangleIcon className="mt-0.5 h-4 w-4 flex-none text-amber-500" />
-              <p className="text-xs text-zinc-700">
-                <b className="text-zinc-900">Valid From / Until</b> is the overall active window.
-                Fine-grained wave periods are managed from the Periods page.
-              </p>
-            </div>
-          </div>
-        </form>
-
-        <div className="flex items-center justify-end gap-3 border-t border-zinc-200 bg-zinc-50 px-6 py-4">
-          <button type="button" onClick={onClose} className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100">Cancel</button>
-          <button type="submit" form="payment-option-form" disabled={saving} className="rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:opacity-60">
-            {saving ? "Saving…" : isEditMode ? "Save Changes" : "Add Option"}
-          </button>
         </div>
-      </div>
-    </div>
+      </form>
+    </DrawerShell>
   );
 }
 
@@ -230,7 +249,7 @@ export function AddPaymentOptionAction({
         <PlusIcon className="h-4 w-4" />
         <span>Add Payment Option</span>
       </button>
-      <PaymentOptionModal isOpen={isOpen} onClose={() => setIsOpen(false)} onSaved={onSaved} programId={programId} />
+      <PaymentOptionDrawer isOpen={isOpen} onClose={() => setIsOpen(false)} onSaved={onSaved} programId={programId} />
     </>
   );
 }
@@ -269,7 +288,7 @@ export function EditPaymentOptionAction({
       >
         <PencilSquareIcon className="h-4 w-4" />
       </button>
-      <PaymentOptionModal isOpen={isOpen} onClose={() => setIsOpen(false)} onSaved={onSaved} initialData={option} />
+      <PaymentOptionDrawer isOpen={isOpen} onClose={() => setIsOpen(false)} onSaved={onSaved} initialData={option} />
     </>
   );
 }

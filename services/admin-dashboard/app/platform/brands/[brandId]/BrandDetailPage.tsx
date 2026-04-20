@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -1509,6 +1509,27 @@ function SponsorSheet({
     logo: null,
     logoPreview: sponsor?.logoUrl ?? null,
   });
+  const [logoImgError, setLogoImgError] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  // Reset form state when sheet opens (handles re-open with stale data)
+  function handleOpenChange(next: boolean) {
+    if (next) {
+      setForm({
+        name: sponsor?.name ?? "",
+        type: sponsor?.type ?? "corporate",
+        tier: sponsor?.tier ?? "",
+        websiteUrl: sponsor?.websiteUrl ?? "",
+        description: sponsor?.description ?? "",
+        order: String(sponsor?.order ?? 0),
+        logo: null,
+        logoPreview: sponsor?.logoUrl ?? null,
+      });
+      setLogoImgError(false);
+      setError(null);
+    }
+    setOpen(next);
+  }
 
   function setField<K extends keyof SponsorForm>(k: K, v: SponsorForm[K]) {
     setForm((f) => ({ ...f, [k]: v }));
@@ -1517,8 +1538,12 @@ function SponsorSheet({
 
   function onLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] ?? null;
+    if (!file) return;
     setField("logo", file);
-    if (file) setField("logoPreview", URL.createObjectURL(file));
+    setLogoImgError(false);
+    const reader = new FileReader();
+    reader.onload = (ev) => setField("logoPreview", ev.target?.result as string);
+    reader.readAsDataURL(file);
   }
 
   async function handleSave() {
@@ -1550,10 +1575,12 @@ function SponsorSheet({
     }
   }
 
+  const hasValidPreview = form.logoPreview && !logoImgError;
+
   return (
     <>
-      <span onClick={() => setOpen(true)}>{trigger}</span>
-      <Sheet open={open} onOpenChange={setOpen}>
+      <span onClick={() => handleOpenChange(true)}>{trigger}</span>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-md">
           <SheetHeader>
             <SheetTitle>{sponsor ? "Edit Sponsor" : "Add Sponsor"}</SheetTitle>
@@ -1612,11 +1639,50 @@ function SponsorSheet({
 
             <div className="space-y-1.5">
               <Label>Logo</Label>
-              {form.logoPreview && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={form.logoPreview} alt="Logo preview" className="mb-2 h-16 rounded border border-zinc-200 object-contain p-1" />
+              <button
+                type="button"
+                onClick={() => logoInputRef.current?.click()}
+                className="flex h-32 w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-lg border-2 border-dashed border-zinc-300 bg-zinc-50 transition hover:border-blue-400 hover:bg-blue-50/30"
+              >
+                {hasValidPreview ? (
+                  <div className="relative flex h-full w-full items-center justify-center p-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={form.logoPreview!}
+                      alt="Logo preview"
+                      className="max-h-full max-w-full object-contain"
+                      onError={() => setLogoImgError(true)}
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition hover:bg-black/20">
+                      <span className="rounded bg-white/90 px-2 py-1 text-xs font-medium text-zinc-700 opacity-0 transition group-hover:opacity-100">
+                        Change logo
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <ImageIcon className="h-8 w-8 text-zinc-400" />
+                    <div className="text-center">
+                      <p className="text-sm font-medium text-zinc-700">
+                        {form.logo ? form.logo.name : "Click to upload logo"}
+                      </p>
+                      <p className="text-xs text-zinc-500">PNG, JPG, WebP · Max 5MB</p>
+                    </div>
+                  </>
+                )}
+              </button>
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={onLogoChange}
+              />
+              {hasValidPreview && (
+                <p className="text-xs text-zinc-500">
+                  {form.logo ? `New: ${form.logo.name}` : "Current logo — click above to change"}
+                </p>
               )}
-              <Input type="file" accept="image/*" onChange={onLogoChange} />
             </div>
           </div>
           <SheetFooter className="mt-6">

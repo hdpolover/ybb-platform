@@ -36,7 +36,8 @@ async function invalidateLandingCacheByProgramId(
             select: { brandId: true },
         });
         if (program?.brandId) {
-            await cacheService.invalidateByPatterns([`landing:*:${program.brandId}`, 'program:*']);
+            await cacheService.invalidateBrandLandingCaches(program.brandId);
+            await cacheService.invalidateByPattern('program:*');
         }
     } catch { /* non-critical */ }
 }
@@ -46,7 +47,8 @@ async function invalidateLandingCacheByBrandId(
     cacheService: CacheService,
 ): Promise<void> {
     try {
-        await cacheService.invalidateByPatterns([`landing:*:${brandId}`, 'program:*']);
+        await cacheService.invalidateBrandLandingCaches(brandId);
+        await cacheService.invalidateByPattern('program:*');
     } catch { /* non-critical */ }
 }
 // ─────────────────────────────────────────────────────────────────────────────
@@ -689,18 +691,27 @@ export class CreateProgramPricingTierHandler implements ICommandHandler<CreatePr
              }
         }
 
-        const { feeType, allowedCategories, ...rest } = command.dto;
+        const { feeType, allowedCategories, validFrom, validUntil, ...rest } = command.dto;
         const dto = {
             ...rest,
             price: new Prisma.Decimal(command.dto.price),
-            validFrom: new Date(command.dto.validFrom),
-            validUntil: new Date(command.dto.validUntil),
             feeType: command.dto.feeType ? command.dto.feeType as PricingFeeType : undefined,
-            allowedCategories: command.dto.allowedCategories 
-                ? command.dto.allowedCategories.map(c => c as ApplicationCategory) 
+            allowedCategories: command.dto.allowedCategories
+                ? command.dto.allowedCategories.map(c => c as ApplicationCategory)
                 : undefined
         };
         const result = await this.repository.createPricingTier(dto as Partial<ProgramPricingTier>);
+
+        // Auto-create initial validity period from validFrom/validUntil if provided
+        if (validFrom && validUntil) {
+            await this.repository.createValidityPeriod({
+                pricingTierId: result.id,
+                startDate: new Date(validFrom),
+                endDate: new Date(validUntil),
+                description: 'Default period',
+            });
+        }
+
         await invalidateLandingCacheByProgramId(command.dto.programId, this.prisma, this.cacheService);
         return result;
     }
@@ -742,15 +753,14 @@ export class UpdateProgramPricingTierHandler implements ICommandHandler<UpdatePr
              }
         }
 
-        const { feeType, allowedCategories, ...rest } = command.dto;
+        // validFrom/validUntil are not fields on ProgramPricingTier — managed via PricingTierValidityPeriod
+        const { feeType, allowedCategories, validFrom: _vf, validUntil: _vu, ...rest } = command.dto;
         const dto = {
             ...rest,
             price: command.dto.price ? new Prisma.Decimal(command.dto.price) : undefined,
-            validFrom: command.dto.validFrom ? new Date(command.dto.validFrom) : undefined,
-            validUntil: command.dto.validUntil ? new Date(command.dto.validUntil) : undefined,
             feeType: command.dto.feeType ? command.dto.feeType as PricingFeeType : undefined,
-            allowedCategories: command.dto.allowedCategories 
-                ? command.dto.allowedCategories.map(c => c as ApplicationCategory) 
+            allowedCategories: command.dto.allowedCategories
+                ? command.dto.allowedCategories.map(c => c as ApplicationCategory)
                 : undefined
         };
         const result = await this.repository.updatePricingTier(command.id, dto as Partial<ProgramPricingTier>);
@@ -801,7 +811,8 @@ export class CreateValidityPeriodHandler implements ICommandHandler<CreateValidi
                 select: { program: { select: { brandId: true } } },
             });
             if (tier?.program?.brandId) {
-                await this.cacheService.invalidateByPatterns([`landing:*:${tier.program.brandId}`, 'program:*']);
+                await this.cacheService.invalidateBrandLandingCaches(tier.program.brandId);
+                await this.cacheService.invalidateByPattern('program:*');
             }
         } catch { /* non-critical */ }
     }
@@ -832,7 +843,8 @@ export class UpdateValidityPeriodHandler implements ICommandHandler<UpdateValidi
                 select: { program: { select: { brandId: true } } },
             });
             if (tier?.program?.brandId) {
-                await this.cacheService.invalidateByPatterns([`landing:*:${tier.program.brandId}`, 'program:*']);
+                await this.cacheService.invalidateBrandLandingCaches(tier.program.brandId);
+                await this.cacheService.invalidateByPattern('program:*');
             }
         } catch { /* non-critical */ }
     }
@@ -859,7 +871,8 @@ export class DeleteValidityPeriodHandler implements ICommandHandler<DeleteValidi
                 select: { program: { select: { brandId: true } } },
             });
             if (tier?.program?.brandId) {
-                await this.cacheService.invalidateByPatterns([`landing:*:${tier.program.brandId}`, 'program:*']);
+                await this.cacheService.invalidateBrandLandingCaches(tier.program.brandId);
+                await this.cacheService.invalidateByPattern('program:*');
             }
         } catch { /* non-critical */ }
     }

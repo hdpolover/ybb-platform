@@ -73,10 +73,8 @@ export class UpdateProgramHandler implements ICommandHandler<UpdateProgramComman
      */
     private async invalidateLandingCaches(brandId: string): Promise<void> {
         try {
-            await this.cacheService.invalidateByPatterns([
-                `landing:*:${brandId}`,      // All landing pages for this brand
-                `program:*`,                  // All program caches
-            ]);
+            await this.cacheService.invalidateBrandLandingCaches(brandId);
+            await this.cacheService.invalidateByPattern('program:*');
         } catch (error) {
             // Log but don't throw - cache invalidation failures shouldn't break updates
             console.error('Failed to invalidate landing caches:', error);

@@ -7,10 +7,14 @@ import {
 
 export interface ProgramSpecificsData {
   schedule: {
+    year: string;
+    theme: string;
     startDate: string;
     endDate: string;
     applicationDeadline: string;
     status: string;
+    isPublished: string;
+    isActive: string;
     visibility: string;
   };
   operations: {
@@ -22,6 +26,7 @@ export interface ProgramSpecificsData {
     requirePayment: string;
     currency: string;
     registrationFee: string;
+    usdInIdr: string;
   };
   participantContent: {
     requirementsDescription: string;
@@ -30,10 +35,43 @@ export interface ProgramSpecificsData {
   };
 }
 
+function RegistrationStatusBadge({ status }: { status: string }) {
+  const colorMap: Record<string, string> = {
+    Open: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    Closed: "border-rose-200 bg-rose-50 text-rose-700",
+    Scheduled: "border-amber-200 bg-amber-50 text-amber-700",
+    Disabled: "border-zinc-200 bg-zinc-100 text-zinc-500",
+  };
+  const cls = colorMap[status] ?? "border-zinc-200 bg-zinc-100 text-zinc-500";
+  return (
+    <dd className={`inline-flex items-center justify-center rounded-full border px-4 py-1.5 text-xs font-bold uppercase tracking-wide ${cls}`}>
+      {status}
+    </dd>
+  );
+}
+
+function PublishedBadge({ value }: { value: string }) {
+  const isPublished = value === "Published";
+  return (
+    <dd className={`inline-flex items-center justify-center rounded-full border px-4 py-1.5 text-xs font-bold uppercase tracking-wide ${isPublished ? "border-blue-200 bg-blue-50 text-blue-700" : "border-zinc-200 bg-zinc-100 text-zinc-500"}`}>
+      {value}
+    </dd>
+  );
+}
+
+function ActiveBadge({ value }: { value: string }) {
+  const isActive = value === "Active";
+  return (
+    <dd className={`inline-flex items-center justify-center rounded-full border px-4 py-1.5 text-xs font-bold uppercase tracking-wide ${isActive ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-zinc-200 bg-zinc-100 text-zinc-500"}`}>
+      {value}
+    </dd>
+  );
+}
+
 export function ProgramSpecificsTab({ data }: { data: ProgramSpecificsData }) {
   return (
     <div className="space-y-6 pt-2">
-      {/* Identitas Program */}
+      {/* Program Shell Snapshot */}
       <section className="rounded-xl border border-zinc-200 bg-zinc-50/40 p-6 shadow-sm">
         <div className="mb-5 flex items-center justify-between gap-3 border-b border-zinc-200 pb-4">
           <div className="flex items-center gap-3">
@@ -50,7 +88,19 @@ export function ProgramSpecificsTab({ data }: { data: ProgramSpecificsData }) {
           <IdentificationIcon className="hidden h-6 w-6 text-blue-400 md:block" />
         </div>
 
-        <dl className="grid gap-5 md:grid-cols-2 lg:grid-cols-5">
+        <dl className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Year</dt>
+            <dd className="rounded-md border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 shadow-sm">
+              {data.schedule.year}
+            </dd>
+          </div>
+          <div className="lg:col-span-3">
+            <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Theme</dt>
+            <dd className="rounded-md border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 shadow-sm">
+              {data.schedule.theme}
+            </dd>
+          </div>
           <div>
             <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Start Date</dt>
             <dd className="rounded-md border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 shadow-sm">
@@ -74,6 +124,14 @@ export function ProgramSpecificsTab({ data }: { data: ProgramSpecificsData }) {
             <dd className="inline-flex items-center justify-center rounded-full border border-zinc-200 bg-white px-4 py-1.5 text-xs font-bold uppercase tracking-wide text-zinc-700">
               {data.schedule.status}
             </dd>
+          </div>
+          <div>
+            <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Published</dt>
+            <PublishedBadge value={data.schedule.isPublished} />
+          </div>
+          <div>
+            <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Active</dt>
+            <ActiveBadge value={data.schedule.isActive} />
           </div>
           <div>
             <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Visibility</dt>
@@ -114,9 +172,7 @@ export function ProgramSpecificsTab({ data }: { data: ProgramSpecificsData }) {
           </div>
           <div>
             <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Registration Status</dt>
-            <dd className="inline-flex items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 px-4 py-1.5 text-xs font-bold uppercase tracking-wide text-emerald-700">
-              {data.operations.registrationStatus}
-            </dd>
+            <RegistrationStatusBadge status={data.operations.registrationStatus} />
           </div>
           <div>
             <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Registration Window</dt>
@@ -154,7 +210,7 @@ export function ProgramSpecificsTab({ data }: { data: ProgramSpecificsData }) {
           <CurrencyDollarIcon className="hidden h-6 w-6 text-blue-400 md:block" />
         </div>
 
-        <dl className="grid gap-5 md:grid-cols-2">
+        <dl className="grid gap-5 md:grid-cols-3">
           <div>
             <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Currency</dt>
             <dd className="rounded-md border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 shadow-sm">
@@ -165,6 +221,12 @@ export function ProgramSpecificsTab({ data }: { data: ProgramSpecificsData }) {
             <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Registration Fee</dt>
             <dd className="rounded-md border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 shadow-sm">
               {data.operations.registrationFee}
+            </dd>
+          </div>
+          <div>
+            <dt className="mb-1.5 block text-xs font-medium text-zinc-500">USD → IDR Rate</dt>
+            <dd className="rounded-md border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 shadow-sm">
+              {data.operations.usdInIdr}
             </dd>
           </div>
         </dl>
@@ -184,7 +246,7 @@ export function ProgramSpecificsTab({ data }: { data: ProgramSpecificsData }) {
           </div>
           <DocumentTextIcon className="hidden h-6 w-6 text-blue-400 md:block" />
         </div>
-        
+
         <dl className="grid gap-5">
           <div>
             <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Requirements Description</dt>

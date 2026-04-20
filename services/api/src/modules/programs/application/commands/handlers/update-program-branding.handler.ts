@@ -67,7 +67,8 @@ export class UpdateProgramBrandingHandler implements ICommandHandler<UpdateProgr
                 data: updates
             });
             try {
-                await this.cacheService.invalidateByPatterns([`landing:*:${brandId}`, 'program:*']);
+                await this.cacheService.invalidateBrandLandingCaches(brandId);
+                await this.cacheService.invalidateByPattern('program:*');
             } catch { /* non-critical */ }
             return updated;
         }

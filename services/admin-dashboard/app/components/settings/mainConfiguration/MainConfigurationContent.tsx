@@ -4,7 +4,6 @@ import {
   BoltIcon,
   CurrencyDollarIcon,
   EnvelopeIcon,
-  ExclamationTriangleIcon,
   PowerIcon,
   UserGroupIcon,
 } from "@heroicons/react/24/solid";
@@ -12,8 +11,6 @@ import {
 export type EmailVerificationMode = "Optional" | "Required";
 
 export type MainConfigurationContentProps = {
-  maintenanceEnabled: boolean;
-  onToggleMaintenance: () => void;
   registrationOpen: boolean;
   onToggleRegistration: () => void;
   emailVerification: EmailVerificationMode;
@@ -22,11 +19,12 @@ export type MainConfigurationContentProps = {
   onToggleProgramActive: () => void;
   usdToIdrRate: number;
   onChangeUsdToIdrRate: (value: number) => void;
+  saving: boolean;
+  onSave: () => void;
+  onCancel: () => void;
 };
 
 export function MainConfigurationContent({
-  maintenanceEnabled,
-  onToggleMaintenance,
   registrationOpen,
   onToggleRegistration,
   emailVerification,
@@ -35,6 +33,9 @@ export function MainConfigurationContent({
   onToggleProgramActive,
   usdToIdrRate,
   onChangeUsdToIdrRate,
+  saving,
+  onSave,
+  onCancel,
 }: MainConfigurationContentProps) {
   return (
     <section className="space-y-3">
@@ -52,7 +53,6 @@ export function MainConfigurationContent({
         </div>
 
         <div className="grid gap-4 lg:grid-cols-2">
-          {/* Pengaturan status sistem utama */}
           <div className="space-y-3 rounded-md border border-zinc-200 bg-zinc-50/80 px-3 py-3 md:px-4">
             <div className="mb-1 flex items-center gap-2">
               <BoltIcon className="h-4 w-4 text-amber-500 md:h-5 md:w-5" />
@@ -62,48 +62,6 @@ export function MainConfigurationContent({
             </div>
 
             <div className="space-y-3 text-xs md:text-sm">
-              {/* Mode maintenance / perbaikan */}
-              <div className="flex items-center justify-between gap-3 rounded-md bg-white px-3 py-2.5">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-900 md:text-sm">
-                    <ExclamationTriangleIcon className="h-4 w-4 text-amber-500" />
-                    <span>Maintenance Mode</span>
-                  </div>
-                  <p className="text-[11px] text-zinc-500 md:text-xs">
-                    When enabled, the site will be inaccessible to users and display a
-                    maintenance message.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={onToggleMaintenance}
-                    className={`relative inline-flex h-5 w-9 items-center rounded-full border text-[11px] shadow-sm transition-colors ${
-                      maintenanceEnabled
-                        ? "border-emerald-400 bg-emerald-400"
-                        : "border-zinc-300 bg-zinc-200"
-                    }`}
-                    aria-label="Toggle maintenance mode"
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                        maintenanceEnabled ? "translate-x-4" : "translate-x-0.5"
-                      }`}
-                    />
-                  </button>
-                  <span
-                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                      maintenanceEnabled
-                        ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100"
-                        : "bg-zinc-50 text-zinc-600 ring-1 ring-zinc-200"
-                    }`}
-                  >
-                    {maintenanceEnabled ? "Enabled" : "Disabled"}
-                  </span>
-                </div>
-              </div>
-
-              {/* Status registrasi dibuka atau ditutup */}
               <div className="flex items-center justify-between gap-3 rounded-md bg-white px-3 py-2.5">
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-900 md:text-sm">
@@ -111,8 +69,7 @@ export function MainConfigurationContent({
                     <span>Registration Open</span>
                   </div>
                   <p className="text-[11px] text-zinc-500 md:text-xs">
-                    When enabled, users can register for the program. When disabled,
-                    registration will be closed.
+                    When enabled, users can register for the program.
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -144,7 +101,6 @@ export function MainConfigurationContent({
                 </div>
               </div>
 
-              {/* Status wajib verifikasi email */}
               <div className="flex items-center justify-between gap-3 rounded-md bg-white px-3 py-2.5">
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-900 md:text-sm">
@@ -152,8 +108,7 @@ export function MainConfigurationContent({
                     <span>Email Verification Required</span>
                   </div>
                   <p className="text-[11px] text-zinc-500 md:text-xs">
-                    When enabled, users must verify their email address before accessing the
-                    system.
+                    When enabled, users must verify their email before accessing the system.
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -169,9 +124,7 @@ export function MainConfigurationContent({
                   >
                     <span
                       className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                        emailVerification === "Required"
-                          ? "translate-x-4"
-                          : "translate-x-0.5"
+                        emailVerification === "Required" ? "translate-x-4" : "translate-x-0.5"
                       }`}
                     />
                   </button>
@@ -187,7 +140,6 @@ export function MainConfigurationContent({
                 </div>
               </div>
 
-              {/* Status program lagi aktif atau nonaktif */}
               <div className="flex items-center justify-between gap-3 rounded-md bg-white px-3 py-2.5">
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-900 md:text-sm">
@@ -195,8 +147,7 @@ export function MainConfigurationContent({
                     <span>Program Active Status</span>
                   </div>
                   <p className="text-[11px] text-zinc-500 md:text-xs">
-                    When enabled, the program is active and operational. When disabled, the
-                    program is considered inactive.
+                    When enabled, the program is active and operational.
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -230,7 +181,6 @@ export function MainConfigurationContent({
             </div>
           </div>
 
-          {/* Pengaturan default finansial / keuangan */}
           <div className="space-y-3 rounded-md border border-zinc-200 bg-zinc-50/80 px-3 py-3 md:px-4">
             <div className="mb-1 flex items-center gap-2">
               <CurrencyDollarIcon className="h-4 w-4 text-emerald-500 md:h-5 md:w-5" />
@@ -265,15 +215,19 @@ export function MainConfigurationContent({
         <div className="mt-3 flex items-center justify-end gap-2 border-t border-zinc-200 bg-zinc-50 px-0 py-2.5">
           <button
             type="button"
-            className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-sm hover:bg-zinc-100 md:text-sm"
+            onClick={onCancel}
+            disabled={saving}
+            className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-sm hover:bg-zinc-100 disabled:opacity-60 md:text-sm"
           >
-            Cancel
+            Reset
           </button>
           <button
             type="button"
-            className="rounded-md border border-blue-500 bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-600 md:text-sm"
+            onClick={onSave}
+            disabled={saving}
+            className="rounded-md border border-blue-500 bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-600 disabled:opacity-60 md:text-sm"
           >
-            Save Changes
+            {saving ? "Saving…" : "Save Changes"}
           </button>
         </div>
       </div>

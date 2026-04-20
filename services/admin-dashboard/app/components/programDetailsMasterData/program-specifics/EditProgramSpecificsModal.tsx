@@ -1,11 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DocumentTextIcon, CalendarDaysIcon, MapPinIcon } from "@heroicons/react/24/solid";
+import { DocumentTextIcon, CalendarDaysIcon, MapPinIcon, IdentificationIcon } from "@heroicons/react/24/solid";
 import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
 import { FormSection } from "@/src/ui/drawer/form-section";
 
 export interface ProgramSpecificsFormValues {
+  year: string;
+  theme: string;
+  startDate: string;
+  endDate: string;
+  applicationDeadline: string;
+  isPublished: boolean;
+  isActive: boolean;
   location: string;
   capacity: string;
   registrationOpenDate: string;
@@ -14,13 +21,13 @@ export interface ProgramSpecificsFormValues {
   requirePayment: boolean;
   currency: string;
   registrationFee: string;
+  usdInIdr: string;
   requirementsDescription: string;
   benefitsDescription: string;
   termsAndConditions: string;
 }
 
 interface EditProgramSpecificsModalProps {
-  /** The drawer is always rendered; parent controls visibility with `open`. */
   open?: boolean;
   programName: string;
   initialValues: ProgramSpecificsFormValues;
@@ -33,10 +40,6 @@ interface EditProgramSpecificsModalProps {
 const INPUT_CLS =
   "block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
 
-/**
- * The component name stays `EditProgramSpecificsModal` for import compatibility,
- * but internally it's now a right-side drawer wrapping the same form.
- */
 export function EditProgramSpecificsModal({
   open = true,
   programName,
@@ -70,9 +73,9 @@ export function EditProgramSpecificsModal({
       title="Edit Program Specifics"
       description={
         <>
-          Update operational settings for{" "}
-          <span className="font-semibold text-zinc-900">{programName}</span> — registration
-          windows, fees, capacity, and participant-facing copy.
+          Update settings for{" "}
+          <span className="font-semibold text-zinc-900">{programName}</span> — dates, registration,
+          fees, capacity, and participant-facing copy.
         </>
       }
       error={errorMessage}
@@ -99,10 +102,81 @@ export function EditProgramSpecificsModal({
         </>
       }
     >
-      <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-        Top-level shell fields such as brand, year, and main program dates stay in the platform
-        admin area. This form is limited to program-admin operational settings.
-      </div>
+      <FormSection
+        icon={IdentificationIcon}
+        title="Program Shell"
+        description="Core identifiers and schedule for this program cohort."
+      >
+        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Year</label>
+            <input
+              type="number"
+              min="2000"
+              max="2100"
+              value={formValues.year}
+              onChange={(event) => updateField("year", event.target.value)}
+              className={INPUT_CLS}
+            />
+          </div>
+          <div className="xl:col-span-3">
+            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Theme</label>
+            <input
+              type="text"
+              value={formValues.theme}
+              onChange={(event) => updateField("theme", event.target.value)}
+              className={INPUT_CLS}
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Start Date</label>
+            <input
+              type="date"
+              value={formValues.startDate}
+              onChange={(event) => updateField("startDate", event.target.value)}
+              className={INPUT_CLS}
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-zinc-500">End Date</label>
+            <input
+              type="date"
+              value={formValues.endDate}
+              onChange={(event) => updateField("endDate", event.target.value)}
+              className={INPUT_CLS}
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Application Deadline</label>
+            <input
+              type="date"
+              value={formValues.applicationDeadline}
+              onChange={(event) => updateField("applicationDeadline", event.target.value)}
+              className={INPUT_CLS}
+            />
+          </div>
+          <div className="flex flex-col justify-end gap-2">
+            <label className="flex items-center gap-3 rounded-md border border-zinc-200 bg-white px-3 py-2.5 text-sm font-medium text-zinc-700 shadow-sm">
+              <input
+                type="checkbox"
+                checked={formValues.isPublished}
+                onChange={(event) => updateField("isPublished", event.target.checked)}
+                className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+              />
+              Published
+            </label>
+            <label className="flex items-center gap-3 rounded-md border border-zinc-200 bg-white px-3 py-2.5 text-sm font-medium text-zinc-700 shadow-sm">
+              <input
+                type="checkbox"
+                checked={formValues.isActive}
+                onChange={(event) => updateField("isActive", event.target.checked)}
+                className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+              />
+              Active (accept applications)
+            </label>
+          </div>
+        </div>
+      </FormSection>
 
       <FormSection
         icon={MapPinIcon}
@@ -152,7 +226,7 @@ export function EditProgramSpecificsModal({
 
       <FormSection
         icon={CalendarDaysIcon}
-        title="Registration & Payment"
+        title="Registration &amp; Payment"
         description="Set the application window and payment defaults."
       >
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
@@ -192,6 +266,18 @@ export function EditProgramSpecificsModal({
               value={formValues.registrationFee}
               onChange={(event) => updateField("registrationFee", event.target.value)}
               className={INPUT_CLS}
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-zinc-500">USD → IDR Rate</label>
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={formValues.usdInIdr}
+              onChange={(event) => updateField("usdInIdr", event.target.value)}
+              className={INPUT_CLS}
+              placeholder="e.g. 16000"
             />
           </div>
         </div>

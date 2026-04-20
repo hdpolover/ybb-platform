@@ -68,7 +68,7 @@ export class PaymentAdminController {
                 })
             );
 
-            await this.cacheService.set(cacheKey, data, CACHE_TTL.HOUR);
+            await this.cacheService.set(cacheKey, data, CACHE_TTL.MEDIUM);
 
             return data;
         } catch (error) {

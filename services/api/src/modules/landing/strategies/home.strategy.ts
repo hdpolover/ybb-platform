@@ -40,7 +40,7 @@ export class HomeStrategy implements ILandingPageStrategy {
           isPublished: true,
           isActive: true,
         },
-        orderBy: { startDate: 'asc' },
+        orderBy: { startDate: 'desc' },
         include: {
           gallery: {
             where: { isActive: true },

@@ -79,19 +79,31 @@ export async function migrateBrands() {
 
         console.log('Brand migration complete.');
 
-        // Cleanup: Remove brands that are NOT in the remote MySQL 
+        // Cleanup: Remove brands that are NOT in the remote MySQL
         // to match "remove the ones not from remote db"
         const remoteIds = categories.map(c => c.id);
         const allLocalBrands = await prisma.brand.findMany();
 
         for (const local of allLocalBrands) {
-            if (local.legacyId && !remoteIds.includes(local.legacyId)) {
-                console.log(`[CLEANUP] Deleting brand ${local.name} (Legacy ID ${local.legacyId} no longer in remote)`);
+            const shouldDelete =
+                (local.legacyId && !remoteIds.includes(local.legacyId)) ||
+                !local.legacyId;
+
+            if (!shouldDelete) continue;
+
+            const reason = local.legacyId
+                ? `Legacy ID ${local.legacyId} no longer in remote`
+                : 'No legacyId, strictly matching remote';
+
+            try {
                 await prisma.brand.delete({ where: { id: local.id } });
-            } else if (!local.legacyId) {
-                // Also remove brands that don't have a legacyId (dummy/manual ones)
-                console.log(`[CLEANUP] Deleting brand ${local.name} (No legacyId, strictly matching remote)`);
-                await prisma.brand.delete({ where: { id: local.id } });
+                console.log(`[CLEANUP] Deleted brand ${local.name} (${reason})`);
+            } catch (e: any) {
+                if (e?.code === 'P2003') {
+                    console.warn(`[CLEANUP] Skipped brand ${local.name} — FK constraint (${reason})`);
+                } else {
+                    throw e;
+                }
             }
         }
     } finally {

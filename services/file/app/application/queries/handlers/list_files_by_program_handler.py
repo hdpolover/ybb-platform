@@ -6,11 +6,15 @@ from app.domain.repositories.file_repository import IFileRepository
 from app.domain.services.storage_service import IStorageService
 
 
-# Buckets that serve public URLs directly (no presigned token needed)
+# Buckets that serve public URLs directly (no presigned token needed).
+# Includes singular path-segment forms (e.g. 'banner' from .../banner/file.webp).
 PUBLIC_CATEGORIES = {
     'gallery', 'programs', 'banners', 'assets', 'partners',
     'sponsors', 'speakers', 'content', 'announcements', 'faq',
     'payment_icons', 'payment_methods',
+    'banner', 'logo', 'thumbnail',
+    'brands', 'brands/logos', 'brands/banners', 'brands/sponsor-logos',
+    'programs/banners', 'programs/logos', 'programs/thumbnails',
 }
 
 

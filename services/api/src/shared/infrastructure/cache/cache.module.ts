@@ -26,10 +26,13 @@ import { PrismaModule } from '../prisma/prisma.module';
           : `redis://${redisHost}:${redisPort}`;
 
         return {
-          store: new Keyv({
-            store: new KeyvRedis(redisUrl),
-            ttl: 300000, // 5 minutes default
-          }),
+          stores: [
+            new Keyv({
+              store: new KeyvRedis(redisUrl),
+              namespace: undefined, // Disable "keyv:" prefix — keys stored as-is so SCAN patterns match
+              ttl: 300000, // 5 minutes default
+            }),
+          ],
         };
       },
       inject: [ConfigService],
