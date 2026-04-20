@@ -69,7 +69,7 @@ export class UpdateBrandHandler implements ICommandHandler<UpdateBrandCommand> {
      */
     private async invalidateLandingCaches(brandId: string): Promise<void> {
         try {
-            await this.cacheService.invalidateByPattern(`landing:*:${brandId}`);
+            await this.cacheService.invalidateBrandLandingCaches(brandId);
         } catch (error) {
             console.error('Failed to invalidate landing caches:', error);
         }

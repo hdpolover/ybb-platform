@@ -15,5 +15,5 @@ export default function MainConfigurationPage({
     accessiblePrograms.find((program) => program.programId === programId)?.programName ??
     "Selected Program";
 
-  return <MainConfigurationSettings programName={programName} />;
+  return <MainConfigurationSettings programId={programId} programName={programName} />;
 }

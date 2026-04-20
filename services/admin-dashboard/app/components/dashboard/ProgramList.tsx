@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { RectangleStackIcon } from "@heroicons/react/24/outline";
 import { useAuth } from "@/app/contexts/AuthContext";
 
@@ -31,6 +31,27 @@ function StatusBadge({ isActive }: { isActive: boolean }) {
   );
 }
 
+function ProgramLogo({ logoUrl, name }: { logoUrl?: string | null; name: string }) {
+  const [errored, setErrored] = useState(false);
+  if (logoUrl && !errored) {
+    return (
+      <div className="flex h-14 w-14 flex-none items-center justify-center overflow-hidden rounded-xl bg-zinc-100">
+        <img
+          src={logoUrl}
+          alt={name}
+          className="h-full w-full object-contain"
+          onError={() => setErrored(true)}
+        />
+      </div>
+    );
+  }
+  return (
+    <div className="flex h-14 w-14 flex-none items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+      <RectangleStackIcon className="h-7 w-7" />
+    </div>
+  );
+}
+
 function ProgramCard({
   program,
   onSelectProgram,
@@ -44,9 +65,7 @@ function ProgramCard({
       onClick={() => onSelectProgram(program.programId)}
       className="flex w-full items-stretch gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-3 text-left shadow-sm transition hover:border-blue-400 hover:shadow-md"
     >
-      <div className="flex h-14 w-14 flex-none items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-        <RectangleStackIcon className="h-7 w-7" />
-      </div>
+      <ProgramLogo logoUrl={program.logoUrl} name={program.programName} />
       <div className="flex flex-1 flex-col justify-center gap-1 overflow-hidden text-sm">
         <div className="truncate font-semibold text-zinc-900">{program.programName}</div>
         <div className="flex flex-wrap items-center gap-2 text-[12px] text-zinc-500">

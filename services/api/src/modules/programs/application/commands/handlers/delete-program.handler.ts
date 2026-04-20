@@ -27,10 +27,8 @@ export class DeleteProgramHandler implements ICommandHandler<DeleteProgramComman
         await this.programRepository.delete(programId);
 
         try {
-            await this.cacheService.invalidateByPatterns([
-                `landing:*:${existingProgram.brandId}`,
-                'program:*',
-            ]);
+            await this.cacheService.invalidateBrandLandingCaches(existingProgram.brandId);
+            await this.cacheService.invalidateByPattern('program:*');
         } catch { /* non-critical */ }
 
         // Log activity

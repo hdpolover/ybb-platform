@@ -442,6 +442,30 @@ export function getAdminAnalytics(brandId?: string): Promise<AdminAnalytics> {
   return request<AdminAnalytics>(`/stats/admin/analytics${q}`);
 }
 
+// ─── Program Config ───────────────────────────────────────────────────────────
+
+export type ProgramConfig = {
+  id: string;
+  isActive: boolean;
+  allowRegistration: boolean;
+  requireEmailVerification: boolean;
+  usdInIdr: number | null;
+};
+
+export function getProgramConfig(programId: string): Promise<ProgramConfig> {
+  return request<ProgramConfig>(`/programs/${programId}`);
+}
+
+export function updateProgramConfig(
+  programId: string,
+  input: Partial<Omit<ProgramConfig, "id">>,
+): Promise<ProgramConfig> {
+  return request<ProgramConfig>(`/programs/${programId}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
 // ─── Program Content — FAQs ──────────────────────────────────────────────────
 
 export function listProgramFaqs(programId: string): Promise<ProgramFaq[]> {

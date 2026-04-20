@@ -3,6 +3,14 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/app/contexts/AuthContext";
 
+function LogoImg({ src, alt, className = "h-full w-full object-contain" }: { src: string; alt: string; className?: string }) {
+  const [errored, setErrored] = useState(false);
+  if (errored) {
+    return <span className="text-[10px] font-bold text-zinc-400">{alt.slice(0, 2).toUpperCase()}</span>;
+  }
+  return <img src={src} alt={alt} className={className} onError={() => setErrored(true)} />;
+}
+
 type ProgramSelectProps = {
   selectedProgramId: string | null;
   onChangeSelectedProgram: (programId: string | null) => void;
@@ -60,13 +68,9 @@ export function ProgramSelect({
         className="flex w-full items-center justify-between rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-left text-xs font-medium text-zinc-700 shadow-sm hover:bg-zinc-100"
       >
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded bg-white">
+          <div className="flex h-10 w-10 flex-none items-center justify-center overflow-hidden rounded-md border border-zinc-100 bg-white p-0.5">
             {currentProgram ? (
-              <img
-                src={currentProgram.logoPath}
-                alt={currentProgram.shortName}
-                className="h-7 w-7 object-contain"
-              />
+              <LogoImg src={currentProgram.logoPath} alt={currentProgram.shortName} />
             ) : (
               <span className="text-base font-semibold text-blue-600">?</span>
             )}
@@ -112,12 +116,8 @@ export function ProgramSelect({
                   className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-[11px] hover:bg-zinc-50"
                 >
                   <div className="flex items-center gap-2">
-                    <div className="flex h-7 w-7 items-center justify-center overflow-hidden rounded bg-white">
-                      <img
-                        src={program.logoPath}
-                        alt={program.shortName}
-                        className="h-7 w-7 object-contain"
-                      />
+                    <div className="flex h-7 w-7 flex-none items-center justify-center overflow-hidden rounded border border-zinc-100 bg-white p-0.5">
+                      <LogoImg src={program.logoPath} alt={program.shortName} />
                     </div>
                     <div className="flex flex-col leading-tight">
                       <span className="text-[11px] font-semibold text-zinc-800">
@@ -163,12 +163,8 @@ export function ProgramSelect({
                     className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-[11px] hover:bg-zinc-50"
                   >
                     <div className="flex items-center gap-2">
-                      <div className="flex h-7 w-7 items-center justify-center overflow-hidden rounded bg-white">
-                        <img
-                          src={program.logoPath}
-                          alt={program.shortName}
-                          className="h-7 w-7 object-contain grayscale"
-                        />
+                      <div className="flex h-7 w-7 flex-none items-center justify-center overflow-hidden rounded border border-zinc-100 bg-white p-0.5">
+                        <LogoImg src={program.logoPath} alt={program.shortName} className="h-full w-full object-contain grayscale" />
                       </div>
                       <div className="flex flex-col leading-tight">
                         <span className="text-[11px] font-semibold text-zinc-800">

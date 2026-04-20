@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsOptional, IsString, IsUrl, IsEmail } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class UpdateBrandDetailsDto {
     @ApiProperty({ required: false, description: 'Brief description of the brand/program category.' })
@@ -75,12 +76,18 @@ export class UpdateBrandDetailsDto {
     @IsString()
     contactAddress?: string;
 
-    @ApiProperty({ 
-        required: false, 
+    @ApiProperty({
+        required: false,
         description: 'JSON object of social media links (e.g., {"instagram": "...", "linkedin": "..."})',
         example: { instagram: 'https://instagram.com/ybb', linkedin: 'https://linkedin.com/company/ybb' }
     })
     @IsOptional()
+    @Transform(({ value }) => {
+        if (typeof value === 'string') {
+            try { return JSON.parse(value); } catch { return value; }
+        }
+        return value;
+    })
     socialMediaLinks?: Record<string, string>;
 
     @ApiProperty({ required: false, example: 'Jakarta, Indonesia' })

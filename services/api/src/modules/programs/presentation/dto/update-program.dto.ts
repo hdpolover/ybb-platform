@@ -32,6 +32,11 @@ export class UpdateProgramDto {
     @IsOptional()
     year?: number;
 
+    @ApiProperty({ description: 'Program theme', required: false })
+    @IsString()
+    @IsOptional()
+    theme?: string;
+
     @ApiProperty({ description: 'Start date', required: false })
     @IsDateString()
     @IsOptional()

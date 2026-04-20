@@ -16,13 +16,14 @@ export class CacheService {
   async invalidateByPattern(pattern: string): Promise<void> {
     const startTime = Date.now();
     try {
-      // Get the underlying Redis client from the store
-      const store = (this.cacheManager as unknown as { store?: { client?: { keys: (p: string) => Promise<string[]>; del: (...k: string[]) => Promise<void> } } }).store;
-      if (store?.client) {
-        const keys = await store.client.keys(pattern);
-        if (keys.length > 0) {
-          await store.client.del(...keys);
-        }
+      const client = this.getRedisClient();
+      if (!client) {
+        console.warn(`[CacheService] No Redis client found — skipping invalidation for pattern: ${pattern}`);
+        return;
+      }
+      const keys = await this.scanKeys(client, pattern);
+      if (keys.length > 0) {
+        await client.del(...keys);
       }
       this.metricsService?.recordLatency('invalidate_pattern', Date.now() - startTime);
     } catch (error) {
@@ -31,11 +32,55 @@ export class CacheService {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private getRedisClient(): any | null {
+    // cache-manager v7 path: cacheManager.stores[0].store.client (Keyv → KeyvRedis → ioredis)
+    const stores = (this.cacheManager as unknown as { stores?: unknown[] }).stores;
+    if (Array.isArray(stores) && stores.length > 0) {
+      const client = (stores[0] as { store?: { client?: unknown } })?.store?.client;
+      if (client) return client;
+    }
+    // cache-manager v4 fallback: cacheManager.store.client
+    const store = (this.cacheManager as unknown as { store?: { client?: unknown } }).store;
+    if ((store as { client?: unknown })?.client) return (store as { client: unknown }).client;
+    return null;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async scanKeys(client: any, pattern: string): Promise<string[]> {
+    const keys: string[] = [];
+    let cursor = '0';
+    do {
+      const [newCursor, batch] = await client.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+      cursor = newCursor;
+      keys.push(...(batch as string[]));
+    } while (cursor !== '0');
+    return keys;
+  }
+
   /**
    * Invalidate multiple patterns at once
    */
   async invalidateByPatterns(patterns: string[]): Promise<void> {
     await Promise.all(patterns.map((pattern) => this.invalidateByPattern(pattern)));
+  }
+
+  /**
+   * Invalidate all landing-page cache keys for a given brand.
+   * Replaces the incorrect `landing:*:{brandId}` pattern which misses multi-segment keys
+   * like `landing:program:{brandId}:{slug}` and `landing:faqs:{brandId}:*`.
+   */
+  async invalidateBrandLandingCaches(brandId: string): Promise<void> {
+    await this.invalidateByPatterns([
+      `landing:home:${brandId}`,
+      `landing:about:${brandId}`,
+      `landing:programs:${brandId}`,
+      `landing:program:${brandId}:*`,
+      `landing:partners:${brandId}`,
+      `landing:announcements:${brandId}`,
+      `landing:faqs:${brandId}:*`,
+      `landing:settings:${brandId}`,
+    ]);
   }
 
   /**
@@ -88,12 +133,10 @@ export class CacheService {
    */
   async clearAll(): Promise<void> {
     const startTime = Date.now();
-    // Try to use Redis FLUSHDB via store
-    const store = (this.cacheManager as unknown as { store?: { client?: { flushdb?: () => Promise<void> } } }).store;
-    if (store?.client) {
-      await store.client.flushdb?.();
+    const client = this.getRedisClient();
+    if (client) {
+      await client.flushdb();
     } else {
-      // Fallback for cache-manager v7
       const stores = (this.cacheManager as unknown as { stores?: Array<{ clear?: () => Promise<void> }> }).stores;
       if (stores && stores.length > 0) {
         await Promise.all(stores.map((s) => s.clear?.()));

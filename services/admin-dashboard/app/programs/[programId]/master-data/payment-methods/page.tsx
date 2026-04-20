@@ -54,8 +54,8 @@ export default function PaymentMethodsPage() {
   async function handleDelete() {
     if (!deleteTarget) return;
     setDeleteLoading(true);
-    try { await deletePaymentMethod(deleteTarget.id); setDeleteTarget(null); fetch(); }
-    catch (err) { alert(err instanceof Error ? err.message : "Delete failed"); }
+    try { await deletePaymentMethod(deleteTarget.id); toast.success("Payment method deleted."); setDeleteTarget(null); fetch(); }
+    catch (err) { toast.error(err instanceof Error ? err.message : "Delete failed"); }
     finally { setDeleteLoading(false); }
   }
 
@@ -82,7 +82,7 @@ export default function PaymentMethodsPage() {
               <tr>
                 <th className="w-14 px-3 py-2 font-semibold">Icon</th>
                 <th className="px-3 py-2 font-semibold">Name</th>
-                <th className="px-3 py-2 font-semibold">Code</th>
+                <th className="px-3 py-2 font-semibold">Details</th>
                 <th className="px-3 py-2 font-semibold">Type</th>
                 <th className="px-3 py-2 font-semibold">Status</th>
                 <th className="px-3 py-2 text-right font-semibold">Actions</th>
@@ -108,8 +108,23 @@ export default function PaymentMethodsPage() {
                     <div className="font-medium text-zinc-900">{label || <span className="text-zinc-400">Unnamed</span>}</div>
                     {m.display_name && m.name && m.display_name !== m.name && <div className="text-[10px] text-zinc-400">{m.name}</div>}
                   </td>
-                  <td className="px-3 py-2 text-zinc-600 font-mono">{m.code ?? ""}</td>
-                  <td className="px-3 py-2 text-zinc-600">{m.type ?? ""}</td>
+                  <td className="px-3 py-2 text-zinc-500">
+                    {m.type === "MANUAL" && m.bank_name ? (
+                      <div>
+                        <div className="font-medium text-zinc-700">{m.bank_name}</div>
+                        {m.account_number && <div className="text-[10px] text-zinc-400">{m.account_number}{m.account_name ? ` · ${m.account_name}` : ""}</div>}
+                      </div>
+                    ) : m.type === "AUTOMATIC" && m.gateway_name ? (
+                      <div className="font-medium text-zinc-700">{m.gateway_name}{m.gateway_type ? ` / ${m.gateway_type}` : ""}</div>
+                    ) : (
+                      <span className="text-zinc-400">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className={`rounded px-2 py-0.5 text-[10px] font-semibold ${m.type === "MANUAL" ? "bg-blue-50 text-blue-700" : "bg-purple-50 text-purple-700"}`}>
+                      {m.type === "MANUAL" ? "Manual" : "Automatic"}
+                    </span>
+                  </td>
                   <td className="px-3 py-2">{m.is_active ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Active</span> : <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-600">Inactive</span>}</td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex items-center justify-end gap-1">

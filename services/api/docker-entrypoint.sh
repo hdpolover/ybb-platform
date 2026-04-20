@@ -19,11 +19,16 @@ if [ $EXIT_CODE -ne 0 ]; then
   exit $EXIT_CODE
 fi
 
-echo "🌱 Running seed script to ensure reference data..."
-if [ "$NODE_ENV" = "production" ] || [ "$NODE_ENV" = "staging" ]; then
-  npm run seed:prod
-else
-  npm run prisma:seed
+echo "🌱 Seeding reference data (auth providers, form fields, templates)..."
+npm run seed:reference
+
+if [ "$RUN_SEED" = "true" ]; then
+  echo "🌱 Running full seed..."
+  if [ "$NODE_ENV" = "production" ] || [ "$NODE_ENV" = "staging" ]; then
+    npm run seed:prod
+  else
+    npm run prisma:seed
+  fi
 fi
 
 echo "✅ Database ready!"

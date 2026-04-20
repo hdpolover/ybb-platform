@@ -144,7 +144,7 @@ export class ProgramsController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Program not found' })
   @AuditTrail({ entityType: 'Program', action: ChangeType.update })
-  @CacheInvalidate(['landing:programs:*', 'landing:program:*', 'landing:home:*', 'landing:settings:*'])
+  @CacheInvalidate(['landing:programs:*', 'landing:program:*', 'landing:home:*', 'landing:settings:*', 'program:detail:*'])
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateProgramDto,
@@ -192,7 +192,7 @@ export class ProgramsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update program branding (logo, banner, thumbnail)' })
   @ApiConsumes('multipart/form-data')
-  @CacheInvalidate(['landing:programs:*', 'landing:program:*', 'landing:home:*', 'landing:settings:*'])
+  @CacheInvalidate(['landing:programs:*', 'landing:program:*', 'landing:home:*', 'landing:settings:*', 'program:detail:*'])
   @UseInterceptors(FileFieldsInterceptor([
     { name: 'logo', maxCount: 1 },
     { name: 'banner', maxCount: 1 },

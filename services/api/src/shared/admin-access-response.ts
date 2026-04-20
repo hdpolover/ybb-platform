@@ -199,6 +199,12 @@ export function buildAccessiblePrograms(params: {
     .sort(sortPrograms);
 }
 
+function sanitizeLogoUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.includes('X-Amz-')) return null;
+  return url;
+}
+
 function mapProgramSummary(
   program: ProgramSummaryLike,
   assignment: AdminProgramAssignmentLike | undefined,
@@ -217,14 +223,14 @@ function mapProgramSummary(
     startDate: program.startDate,
     endDate: program.endDate,
     logoUrl:
-      program.logoUrl ??
-      program.logoColorUrl ??
-      program.logoWhiteUrl ??
-      program.logoIconUrl ??
-      program.brand.logoUrl ??
-      program.brand.logoColorUrl ??
-      program.brand.logoWhiteUrl ??
-      program.brand.logoIconUrl ??
+      sanitizeLogoUrl(program.logoUrl) ??
+      sanitizeLogoUrl(program.logoColorUrl) ??
+      sanitizeLogoUrl(program.logoWhiteUrl) ??
+      sanitizeLogoUrl(program.logoIconUrl) ??
+      sanitizeLogoUrl(program.brand.logoUrl) ??
+      sanitizeLogoUrl(program.brand.logoColorUrl) ??
+      sanitizeLogoUrl(program.brand.logoWhiteUrl) ??
+      sanitizeLogoUrl(program.brand.logoIconUrl) ??
       null,
     role: assignment?.roleInProgram || null,
     permissions: normalizePermissions(assignment?.permissions),

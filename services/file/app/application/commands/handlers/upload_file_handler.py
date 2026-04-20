@@ -47,6 +47,11 @@ class UploadFileHandler:
         'brands',
         'brands/logos',
         'brands/banners',
+        'brands/sponsor-logos',
+        # Program sub-buckets — must be public so banners/logos render without presigned auth
+        'programs/banners',
+        'programs/logos',
+        'programs/thumbnails',
     ]
     
     def __init__(

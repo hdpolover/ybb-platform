@@ -9,11 +9,16 @@ from app.domain.exceptions.file_exceptions import FileNotFoundException
 class GetFileHandler:
     """Handler for getting file information."""
     
-    # Public categories that support direct URL access
+    # Public categories that support direct URL access.
+    # Includes singular path-segment forms (e.g. 'banner' from .../banner/file.webp)
+    # as well as the full bucket-path forms used at upload time.
     PUBLIC_CATEGORIES = [
         'gallery', 'programs', 'banners', 'assets', 'partners',
         'sponsors', 'speakers', 'content', 'announcements', 'faq',
-        'payment_icons', 'payment_methods'
+        'payment_icons', 'payment_methods',
+        'banner', 'logo', 'thumbnail',
+        'brands', 'brands/logos', 'brands/banners', 'brands/sponsor-logos',
+        'programs/banners', 'programs/logos', 'programs/thumbnails',
     ]
     
     def __init__(

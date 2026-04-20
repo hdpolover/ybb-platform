@@ -26,6 +26,8 @@ type ProgramDetail = {
   id: string;
   name: string;
   slug: string;
+  year: number;
+  theme?: string | null;
   description?: string | null;
   shortDescription?: string | null;
   startDate?: string | null;
@@ -40,11 +42,15 @@ type ProgramDetail = {
   bannerUrl?: string | null;
   videoUrl?: string | null;
   status: string;
+  isPublished: boolean;
+  isActive: boolean;
   isVisibleToUsers: boolean;
   allowRegistration: boolean;
   requirePayment: boolean;
   currency?: string | null;
   registrationFee?: number | null;
+  enableCurrencyConversion?: boolean | null;
+  usdInIdr?: number | null;
   requirementsDescription?: string | null;
   benefitsDescription?: string | null;
   termsAndConditions?: string | null;
@@ -159,20 +165,24 @@ function toGeneralInformationData(detail: ProgramDetail): GeneralInformationData
     additionalInfo: formatDisplayValue(detail.metaDescription ?? detail.shortDescription),
     coreValues: {
       vision: formatDisplayValue(detail.metaTitle),
-      mission: ["Dedicated program-content APIs are still needed for full general-information editing."],
+      mission: [],
     },
-    objectives: ["Program shell and operational settings are now sourced from live program data."],
-    benefits: [formatDisplayValue(detail.benefitsDescription)],
+    objectives: [],
+    benefits: detail.benefitsDescription ? [detail.benefitsDescription] : [],
   };
 }
 
 function toProgramSpecificsData(detail: ProgramDetail): ProgramSpecificsData {
   return {
     schedule: {
+      year: String(detail.year),
+      theme: formatDisplayValue(detail.theme),
       startDate: formatDate(detail.startDate),
       endDate: formatDate(detail.endDate),
       applicationDeadline: formatDate(detail.applicationDeadline),
       status: formatDisplayValue(detail.status),
+      isPublished: detail.isPublished ? "Published" : "Not published",
+      isActive: detail.isActive ? "Active" : "Inactive",
       visibility: detail.isVisibleToUsers ? "Visible" : "Hidden",
     },
     operations: {
@@ -187,6 +197,7 @@ function toProgramSpecificsData(detail: ProgramDetail): ProgramSpecificsData {
         typeof detail.registrationFee === "number"
           ? `${detail.currency ?? "USD"} ${detail.registrationFee}`
           : "Not configured",
+      usdInIdr: detail.usdInIdr != null ? String(detail.usdInIdr) : "Not configured",
     },
     participantContent: {
       requirementsDescription: formatDisplayValue(detail.requirementsDescription),
@@ -211,6 +222,13 @@ function toGeneralFormValues(detail: ProgramDetail): GeneralInformationFormValue
 
 function toSpecificsFormValues(detail: ProgramDetail): ProgramSpecificsFormValues {
   return {
+    year: String(detail.year),
+    theme: detail.theme ?? "",
+    startDate: toDateInputValue(detail.startDate),
+    endDate: toDateInputValue(detail.endDate),
+    applicationDeadline: toDateInputValue(detail.applicationDeadline),
+    isPublished: detail.isPublished,
+    isActive: detail.isActive,
     location: detail.location ?? "",
     capacity: detail.capacity !== null && detail.capacity !== undefined ? String(detail.capacity) : "",
     registrationOpenDate: toDateInputValue(detail.registrationOpenDate),
@@ -220,6 +238,7 @@ function toSpecificsFormValues(detail: ProgramDetail): ProgramSpecificsFormValue
     currency: detail.currency ?? "USD",
     registrationFee:
       typeof detail.registrationFee === "number" ? String(detail.registrationFee) : "",
+    usdInIdr: detail.usdInIdr != null ? String(detail.usdInIdr) : "",
     requirementsDescription: detail.requirementsDescription ?? "",
     benefitsDescription: detail.benefitsDescription ?? "",
     termsAndConditions: detail.termsAndConditions ?? "",
@@ -327,6 +346,13 @@ export default function ProgramDetailsPage({
 
     try {
       const payload = {
+        year: values.year.trim() === "" ? undefined : Number(values.year),
+        theme: values.theme.trim() || undefined,
+        startDate: values.startDate || undefined,
+        endDate: values.endDate || undefined,
+        applicationDeadline: values.applicationDeadline || undefined,
+        isPublished: values.isPublished,
+        isActive: values.isActive,
         location: values.location.trim() || undefined,
         capacity: values.capacity.trim() === "" ? undefined : Number(values.capacity),
         registrationOpenDate: values.registrationOpenDate || undefined,
@@ -335,6 +361,7 @@ export default function ProgramDetailsPage({
         requirePayment: values.requirePayment,
         currency: values.currency.trim().toUpperCase() || undefined,
         registrationFee: values.registrationFee.trim() === "" ? undefined : Number(values.registrationFee),
+        usdInIdr: values.usdInIdr.trim() === "" ? undefined : Number(values.usdInIdr),
         requirementsDescription: values.requirementsDescription.trim() || undefined,
         benefitsDescription: values.benefitsDescription.trim() || undefined,
         termsAndConditions: values.termsAndConditions.trim() || undefined,
@@ -355,8 +382,9 @@ export default function ProgramDetailsPage({
 
       await response.json() as ApiEnvelope<unknown>;
 
-      const refreshedResponse = await fetch(buildApiUrl(`/programs/${encodeURIComponent(programDetail.id)}`), {
+      const refreshedResponse = await fetch(buildApiUrl(`/admin/programs/${encodeURIComponent(programDetail.id)}`), {
         cache: "no-store",
+        headers: { Authorization: `Bearer ${accessToken}` },
       });
 
       if (!refreshedResponse.ok) {
@@ -414,8 +442,9 @@ export default function ProgramDetailsPage({
 
       await response.json() as ApiEnvelope<unknown>;
 
-      const refreshedResponse = await fetch(buildApiUrl(`/programs/${encodeURIComponent(programDetail.id)}`), {
+      const refreshedResponse = await fetch(buildApiUrl(`/admin/programs/${encodeURIComponent(programDetail.id)}`), {
         cache: "no-store",
+        headers: { Authorization: `Bearer ${accessToken}` },
       });
 
       if (!refreshedResponse.ok) {
@@ -452,7 +481,11 @@ export default function ProgramDetailsPage({
               currentThumbnailUrl={programDetail?.thumbnailUrl}
               onSave={handleSaveGeneral}
               onBrandingUploaded={() => {
-                void fetch(buildApiUrl(`/programs/${encodeURIComponent(programId)}`), { cache: "no-store" })
+                const token = getAccessToken();
+                void fetch(buildApiUrl(`/admin/programs/${encodeURIComponent(programId)}`), {
+                  cache: "no-store",
+                  headers: token ? { Authorization: `Bearer ${token}` } : {},
+                })
                   .then((r) => r.json() as Promise<ApiEnvelope<ProgramDetail>>)
                   .then((envelope) => setProgramDetail(envelope.data))
                   .catch(() => null);
