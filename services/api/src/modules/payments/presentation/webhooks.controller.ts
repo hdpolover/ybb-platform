@@ -9,27 +9,24 @@ import {
     HttpStatus,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { HttpService } from '@nestjs/axios';
 import { Request, Response } from 'express';
-import { firstValueFrom } from 'rxjs';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { WebhookValidationService } from '../infrastructure/webhook-validation.service';
+import { PaymentServiceHttpClient } from '../infrastructure/services/payment-service-http.client';
 
 @ApiTags('Webhooks')
 @Controller('webhooks/payment')
 export class WebhooksController {
     private readonly logger = new Logger(WebhooksController.name);
-    private readonly paymentServiceUrl: string;
     private readonly paymentServiceInternalKey: string;
 
     constructor(
         private readonly configService: ConfigService,
-        private readonly httpService: HttpService,
+        private readonly paymentServiceClient: PaymentServiceHttpClient,
         private readonly webhookValidation: WebhookValidationService,
     ) {
-        this.paymentServiceUrl = this.configService.get<string>('PAYMENT_SERVICE_URL') || '';
         this.paymentServiceInternalKey = this.configService.get<string>('PAYMENT_SERVICE_INTERNAL_KEY', '');
-        if (!this.paymentServiceUrl) {
+        if (!this.configService.get<string>('PAYMENT_SERVICE_URL')) {
             this.logger.warn('PAYMENT_SERVICE_URL is not defined');
         }
     }
@@ -46,7 +43,7 @@ export class WebhooksController {
     ) {
         this.logger.log(`Received webhook for gateway: ${gateway}`);
 
-        if (!this.paymentServiceUrl) {
+        if (!this.configService.get<string>('PAYMENT_SERVICE_URL')) {
             throw new HttpException('Payment Service Not Configured', HttpStatus.SERVICE_UNAVAILABLE);
         }
 
@@ -59,26 +56,24 @@ export class WebhooksController {
             });
         }
 
-        const targetUrl = `${this.paymentServiceUrl}/api/v1/payments/webhook/${gateway}`;
+        const targetPath = `/api/v1/payments/webhook/${gateway}`;
         
         try {
-            const { data, status } = await firstValueFrom(
-                this.httpService.post(targetUrl, req.body, {
-                    headers: {
-                        ...(req.headers as Record<string, string | undefined>),
-                        ...this.buildInternalHeaders(),
-                        host: undefined, 
-                        'content-length': undefined,
-                    },
-                })
-            );
+            const { data, status } = await this.paymentServiceClient.post(targetPath, req.body, {
+                headers: {
+                    ...(req.headers as Record<string, string | undefined>),
+                    ...this.buildInternalHeaders(),
+                    host: undefined,
+                    'content-length': undefined,
+                },
+            });
 
-            this.logger.log(`Forwarded webhook to ${targetUrl}, Status: ${status}`);
+            this.logger.log(`Forwarded webhook to payment service path ${targetPath}, Status: ${status}`);
             return res.status(status).json(data);
 
         } catch (error: unknown) {
             const err = error as { message?: string; response?: { status: number; data: unknown } };
-            this.logger.error(`Failed to forward webhook to ${targetUrl}`, err.message);
+            this.logger.error(`Failed to forward webhook to ${targetPath}`, err.message);
             
             if (err.response) {
                 return res.status(err.response.status).json(err.response.data);

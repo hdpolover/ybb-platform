@@ -14,7 +14,6 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
-import { firstValueFrom } from 'rxjs';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 import { Roles } from '@modules/auth/application/decorators/roles.decorator';
@@ -26,6 +25,7 @@ import {
     UpdateGatewayConfigDto,
     SetGatewayActiveDto,
 } from './dto/admin-gateway-config.dto';
+import { PaymentServiceHttpClient } from '../infrastructure/services/payment-service-http.client';
 
 // Thin forwarder to the Go payment service /gateway-configs endpoints.
 // Credential fields flow through as plaintext on the wire (over TLS within
@@ -36,15 +36,13 @@ import {
 @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 @ApiBearerAuth()
 export class GatewayAdminController {
-    private readonly paymentServiceUrl: string;
     private readonly paymentServiceInternalKey: string;
     private readonly logger = new Logger(GatewayAdminController.name);
 
     constructor(
-        private readonly httpService: HttpService,
+        private readonly paymentServiceClient: PaymentServiceHttpClient,
         private readonly configService: ConfigService,
     ) {
-        this.paymentServiceUrl = this.configService.get<string>('PAYMENT_SERVICE_URL', 'http://payment-service:8002');
         this.paymentServiceInternalKey = this.configService.get<string>('PAYMENT_SERVICE_INTERNAL_KEY', '');
     }
 
@@ -53,11 +51,9 @@ export class GatewayAdminController {
     @ApiResponse({ status: 200 })
     async list() {
         try {
-            const { data } = await firstValueFrom(
-                this.httpService.get(`${this.paymentServiceUrl}/api/v1/gateway-configs`, {
-                    headers: this.buildInternalHeaders(),
-                }),
-            );
+            const { data } = await this.paymentServiceClient.get('/api/v1/gateway-configs', {
+                headers: this.buildInternalHeaders(),
+            });
             return data;
         } catch (error) {
             this.handleError(error);
@@ -68,11 +64,9 @@ export class GatewayAdminController {
     @ApiOperation({ summary: 'Get a gateway configuration' })
     async getById(@Param('id') id: string) {
         try {
-            const { data } = await firstValueFrom(
-                this.httpService.get(`${this.paymentServiceUrl}/api/v1/gateway-configs/${id}`, {
-                    headers: this.buildInternalHeaders(),
-                }),
-            );
+            const { data } = await this.paymentServiceClient.get(`/api/v1/gateway-configs/${id}`, {
+                headers: this.buildInternalHeaders(),
+            });
             return data;
         } catch (error) {
             this.handleError(error);
@@ -86,11 +80,9 @@ export class GatewayAdminController {
     @ApiResponse({ status: 201 })
     async create(@Body() body: CreateGatewayConfigDto) {
         try {
-            const { data } = await firstValueFrom(
-                this.httpService.post(`${this.paymentServiceUrl}/api/v1/gateway-configs`, body, {
-                    headers: this.buildInternalHeaders(),
-                }),
-            );
+            const { data } = await this.paymentServiceClient.post('/api/v1/gateway-configs', body, {
+                headers: this.buildInternalHeaders(),
+            });
             return data;
         } catch (error) {
             this.handleError(error);
@@ -103,11 +95,9 @@ export class GatewayAdminController {
     @ApiBody({ type: UpdateGatewayConfigDto })
     async update(@Param('id') id: string, @Body() body: UpdateGatewayConfigDto) {
         try {
-            const { data } = await firstValueFrom(
-                this.httpService.put(`${this.paymentServiceUrl}/api/v1/gateway-configs/${id}`, body, {
-                    headers: this.buildInternalHeaders(),
-                }),
-            );
+            const { data } = await this.paymentServiceClient.put(`/api/v1/gateway-configs/${id}`, body, {
+                headers: this.buildInternalHeaders(),
+            });
             return data;
         } catch (error) {
             this.handleError(error);
@@ -120,11 +110,9 @@ export class GatewayAdminController {
     @ApiBody({ type: SetGatewayActiveDto })
     async setActive(@Param('id') id: string, @Body() body: SetGatewayActiveDto) {
         try {
-            const { data } = await firstValueFrom(
-                this.httpService.patch(`${this.paymentServiceUrl}/api/v1/gateway-configs/${id}/active`, body, {
-                    headers: this.buildInternalHeaders(),
-                }),
-            );
+            const { data } = await this.paymentServiceClient.patch(`/api/v1/gateway-configs/${id}/active`, body, {
+                headers: this.buildInternalHeaders(),
+            });
             return data;
         } catch (error) {
             this.handleError(error);
@@ -136,11 +124,9 @@ export class GatewayAdminController {
     @ApiOperation({ summary: 'Delete a gateway configuration (blocked if referenced)' })
     async delete(@Param('id') id: string) {
         try {
-            const { data } = await firstValueFrom(
-                this.httpService.delete(`${this.paymentServiceUrl}/api/v1/gateway-configs/${id}`, {
-                    headers: this.buildInternalHeaders(),
-                }),
-            );
+            const { data } = await this.paymentServiceClient.delete(`/api/v1/gateway-configs/${id}`, {
+                headers: this.buildInternalHeaders(),
+            });
             return data;
         } catch (error) {
             this.handleError(error);

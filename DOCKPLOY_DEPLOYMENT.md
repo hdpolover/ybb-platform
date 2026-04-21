@@ -81,6 +81,7 @@ For every service:
     - `REDIS_PASSWORD`
     - `RABBITMQ_DEFAULT_USER`, `RABBITMQ_DEFAULT_PASS`
     - `PAYMENT_SERVICE_URL`: `http://ybb-prod-payment:8002`
+    - `PAYMENT_SERVICE_FALLBACK_URL`: `https://payments.ybbhub.com` (used when internal Docker DNS fails)
     - `PAYMENT_SERVICE_INTERNAL_KEY`
     - `FILE_SERVICE_URL`: `http://ybb-prod-file:8001`
     - `STORAGE_PUBLIC_URL`

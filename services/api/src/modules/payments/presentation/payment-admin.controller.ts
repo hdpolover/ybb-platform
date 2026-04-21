@@ -14,7 +14,6 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
-import { firstValueFrom } from 'rxjs';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 import { Roles } from '@modules/auth/application/decorators/roles.decorator';
@@ -27,6 +26,7 @@ import { ChangeType } from '@prisma/client';
 
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
+import { PaymentServiceHttpClient } from '../infrastructure/services/payment-service-http.client';
 
 @ApiTags('Admin Payments')
 @Controller('admin/payments')
@@ -34,18 +34,16 @@ import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 @ApiBearerAuth()
 export class PaymentAdminController {
-    private readonly paymentServiceUrl: string;
     private readonly paymentServiceInternalKey: string;
     private readonly logger = new Logger(PaymentAdminController.name);
 
     constructor(
-        private readonly httpService: HttpService,
+        private readonly paymentServiceClient: PaymentServiceHttpClient,
         private readonly configService: ConfigService,
         private readonly fileService: FileServiceClient,
         private readonly cacheService: CacheService,
     ) {
         this.logger.log("Using HTTP Payment Admin Controller");
-        this.paymentServiceUrl = this.configService.get<string>('PAYMENT_SERVICE_URL', 'http://payment-service:8002');
         this.paymentServiceInternalKey = this.configService.get<string>('PAYMENT_SERVICE_INTERNAL_KEY', '');
     }
 
@@ -61,12 +59,10 @@ export class PaymentAdminController {
             const cached = await this.cacheService.get(cacheKey);
             if (cached) return cached;
 
-            const { data } = await firstValueFrom(
-                this.httpService.get(`${this.paymentServiceUrl}/api/v1/payment-methods`, {
-                    params: query,
-                    headers: this.buildInternalHeaders(),
-                })
-            );
+            const { data } = await this.paymentServiceClient.get('/api/v1/payment-methods', {
+                params: query,
+                headers: this.buildInternalHeaders(),
+            });
 
             await this.cacheService.set(cacheKey, data, CACHE_TTL.MEDIUM);
 
@@ -89,11 +85,9 @@ export class PaymentAdminController {
 
             this.logger.log(`Creating payment method with icon: ${body.icon}`);
 
-            const { data } = await firstValueFrom(
-                this.httpService.post(`${this.paymentServiceUrl}/api/v1/payment-methods`, body, {
-                    headers: this.buildInternalHeaders(),
-                })
-            );
+            const { data } = await this.paymentServiceClient.post('/api/v1/payment-methods', body, {
+                headers: this.buildInternalHeaders(),
+            });
 
             await this.cacheService.invalidateByPattern('payment:methods:*');
 
@@ -110,11 +104,9 @@ export class PaymentAdminController {
     @ApiResponse({ status: 200, description: 'Payment method detail' })
     async getMethod(@Param('id') id: string) {
         try {
-            const { data } = await firstValueFrom(
-                this.httpService.get(`${this.paymentServiceUrl}/api/v1/payment-methods/${id}`, {
-                    headers: this.buildInternalHeaders(),
-                })
-            );
+            const { data } = await this.paymentServiceClient.get(`/api/v1/payment-methods/${id}`, {
+                headers: this.buildInternalHeaders(),
+            });
             return data;
         } catch (error) {
             this.handleError(error);
@@ -132,11 +124,9 @@ export class PaymentAdminController {
                 body.icon = await this.resolveIconUrl(body.icon, user);
             }
 
-            const { data } = await firstValueFrom(
-                this.httpService.put(`${this.paymentServiceUrl}/api/v1/payment-methods/${id}`, body, {
-                    headers: this.buildInternalHeaders(),
-                })
-            );
+            const { data } = await this.paymentServiceClient.put(`/api/v1/payment-methods/${id}`, body, {
+                headers: this.buildInternalHeaders(),
+            });
 
             await this.cacheService.invalidateByPattern('payment:methods:*');
 
@@ -152,11 +142,9 @@ export class PaymentAdminController {
     @ApiResponse({ status: 200, description: 'Payment method deleted' })
     async deleteMethod(@Param('id') id: string) {
         try {
-            const { data } = await firstValueFrom(
-                this.httpService.delete(`${this.paymentServiceUrl}/api/v1/payment-methods/${id}`, {
-                    headers: this.buildInternalHeaders(),
-                })
-            );
+            const { data } = await this.paymentServiceClient.delete(`/api/v1/payment-methods/${id}`, {
+                headers: this.buildInternalHeaders(),
+            });
 
             await this.cacheService.invalidateByPattern('payment:methods:*');
 
