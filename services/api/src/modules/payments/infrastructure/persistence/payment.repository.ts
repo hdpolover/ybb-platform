@@ -1,9 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
-import { firstValueFrom } from 'rxjs';
 import { IPaymentRepository } from '@core/interfaces/repositories/payment.repository.interface';
 import { Payment } from '@core/entities/payment.entity';
+import { PaymentServiceHttpClient } from '../services/payment-service-http.client';
 
 interface PaymentDto {
   id: string;
@@ -24,20 +23,19 @@ interface PaymentTransactionDto {
   proof_file_url?: string;
 }
 
+interface PaymentListResponseDto {
+    payments?: PaymentDto[];
+}
+
 @Injectable()
 export class PaymentRepository implements IPaymentRepository {
-    private readonly paymentServiceUrl: string;
     private readonly paymentServiceInternalKey: string;
     private readonly logger = new Logger(PaymentRepository.name);
 
     constructor(
-        private readonly httpService: HttpService,
+        private readonly paymentServiceClient: PaymentServiceHttpClient,
         private readonly configService: ConfigService,
     ) {
-        this.paymentServiceUrl = this.configService.get<string>(
-            'PAYMENT_SERVICE_URL',
-            'http://payment-service:8080',
-        );
         this.paymentServiceInternalKey = this.configService.get<string>(
             'PAYMENT_SERVICE_INTERNAL_KEY',
             '',
@@ -46,11 +44,9 @@ export class PaymentRepository implements IPaymentRepository {
 
     async findByUserId(userId: string): Promise<Payment[]> {
         try {
-            const { data } = await firstValueFrom(
-                this.httpService.get(`${this.paymentServiceUrl}/api/v1/payments/user/${userId}`, {
-                    headers: this.buildInternalHeaders(),
-                }),
-            );
+            const { data } = await this.paymentServiceClient.get<PaymentListResponseDto>(`/api/v1/payments/user/${userId}`, {
+                headers: this.buildInternalHeaders(),
+            });
 
             const payments = Array.isArray(data?.payments) ? data.payments : [];
             if (payments.length === 0) {
@@ -67,11 +63,9 @@ export class PaymentRepository implements IPaymentRepository {
 
     async findById(id: string): Promise<Payment | null> {
         try {
-            const { data } = await firstValueFrom(
-                this.httpService.get(`${this.paymentServiceUrl}/api/v1/payments/${id}`, {
-                    headers: this.buildInternalHeaders(),
-                }),
-            );
+            const { data } = await this.paymentServiceClient.get<PaymentDto>(`/api/v1/payments/${id}`, {
+                headers: this.buildInternalHeaders(),
+            });
             return this.mapToEntity(data);
         } catch (error) {
             this.logger.error(`Error fetching payment ${id}`, error);

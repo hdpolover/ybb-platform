@@ -51,11 +51,34 @@ export class CacheService {
     const keys: string[] = [];
     let cursor = '0';
     do {
-      const [newCursor, batch] = await client.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+      const scanResult = await client.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+      const { cursor: newCursor, keys: batch } = this.normalizeScanResult(scanResult);
       cursor = newCursor;
-      keys.push(...(batch as string[]));
+      keys.push(...batch);
     } while (cursor !== '0');
     return keys;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private normalizeScanResult(result: any): { cursor: string; keys: string[] } {
+    if (Array.isArray(result)) {
+      const [cursor, keys] = result;
+      return {
+        cursor: String(cursor),
+        keys: Array.isArray(keys) ? keys.map((key) => String(key)) : [],
+      };
+    }
+
+    if (result && typeof result === 'object') {
+      const cursor = 'cursor' in result ? String(result.cursor) : '0';
+      const keys = 'keys' in result && Array.isArray(result.keys)
+        ? result.keys.map((key: unknown) => String(key))
+        : [];
+
+      return { cursor, keys };
+    }
+
+    throw new TypeError('Unsupported Redis SCAN response format');
   }
 
   /**

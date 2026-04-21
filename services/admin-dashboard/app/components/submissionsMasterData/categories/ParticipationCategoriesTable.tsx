@@ -269,17 +269,16 @@ export function ParticipationCategoriesTable({ programId }: { programId: string 
       return;
     }
 
+    const isEditing = Boolean(formState.id);
     const payload = {
-      programId,
       name: formState.name.trim(),
       description: formState.description.trim() || undefined,
       benefits: formState.benefits.trim() || undefined,
       eligibility: formState.eligibility.trim() || undefined,
       order,
-      isActive: formState.status === "Active",
+      ...(isEditing ? { isActive: formState.status === "Active" } : { programId, isActive: formState.status === "Active" }),
     };
 
-    const isEditing = Boolean(formState.id);
     const path = isEditing
       ? `/programs/participation-categories/${encodeURIComponent(formState.id as string)}`
       : `/programs/${encodeURIComponent(programId)}/participation-categories`;
