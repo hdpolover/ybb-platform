@@ -269,8 +269,13 @@ func registerGateways(
 		registered = append(registered, "stripe(env)")
 	}
 	if cfg.PayPalClientID != "" && cfg.PayPalSecret != "" {
-		gatewayFactory.Register(infraGateways.NewPayPalGateway(cfg.PayPalClientID, cfg.PayPalSecret, cfg.PayPalMode))
-		registered = append(registered, "paypal(env)")
+		paypalGateway, err := infraGateways.NewPayPalGateway(cfg.PayPalClientID, cfg.PayPalSecret, cfg.PayPalMode)
+		if err != nil {
+			logger.Warnf("Skipping PayPal env gateway registration: %v", err)
+		} else {
+			gatewayFactory.Register(paypalGateway)
+			registered = append(registered, "paypal(env)")
+		}
 	}
 
 	// --- Step 2: DB configs override env-var registrations ---
@@ -298,12 +303,17 @@ func registerGateways(
 				gatewayFactory.Register(infraGateways.NewStripeGateway(dbCfg.ServerKey))
 				registered = append(registered, "stripe(db)")
 			case "paypal":
-				gatewayFactory.Register(infraGateways.NewPayPalGateway(
+				paypalGateway, err := infraGateways.NewPayPalGateway(
 					dbCfg.ServerKey, // client_id stored in server_key
 					dbCfg.ClientKey, // secret stored in client_key
 					env,
-				))
-				registered = append(registered, "paypal(db)")
+				)
+				if err != nil {
+					logger.Warnf("Skipping PayPal DB gateway registration for config %s: %v", dbCfg.ID, err)
+				} else {
+					gatewayFactory.Register(paypalGateway)
+					registered = append(registered, "paypal(db)")
+				}
 			default:
 				logger.Warnf("Unknown provider %q in gateway_configs, skipping", dbCfg.Provider)
 			}
