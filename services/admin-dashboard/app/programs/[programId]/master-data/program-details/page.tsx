@@ -481,15 +481,19 @@ export default function ProgramDetailsPage({
               currentBannerUrl={programDetail?.bannerUrl}
               currentThumbnailUrl={programDetail?.thumbnailUrl}
               onSave={handleSaveGeneral}
-              onBrandingUploaded={() => {
+              onBrandingUploaded={async () => {
                 const token = getAccessToken();
-                void fetch(buildApiUrl(`/admin/programs/${encodeURIComponent(programId)}`), {
+                const refreshedResponse = await fetch(buildApiUrl(`/admin/programs/${encodeURIComponent(programId)}`), {
                   cache: "no-store",
                   headers: token ? { Authorization: `Bearer ${token}` } : {},
-                })
-                  .then((r) => r.json() as Promise<ApiEnvelope<ProgramDetail>>)
-                  .then((envelope) => setProgramDetail(envelope.data))
-                  .catch(() => null);
+                });
+
+                if (!refreshedResponse.ok) {
+                  throw new Error(await readErrorMessage(refreshedResponse));
+                }
+
+                const refreshedEnvelope = (await refreshedResponse.json()) as ApiEnvelope<ProgramDetail>;
+                setProgramDetail(refreshedEnvelope.data);
               }}
               isSaving={isGeneralSaving}
               errorMessage={generalSaveError}

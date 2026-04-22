@@ -79,7 +79,8 @@ export default function TimelinesPage() {
             <thead className="bg-zinc-50 text-zinc-600">
               <tr>
                 <th className="px-3 py-2 font-semibold">Title</th>
-                <th className="px-3 py-2 font-semibold">Date</th>
+                <th className="px-3 py-2 font-semibold">Start Date</th>
+                <th className="px-3 py-2 font-semibold">End Date</th>
                 <th className="px-3 py-2 font-semibold">Type</th>
                 <th className="px-3 py-2 font-semibold">Status</th>
                 <th className="px-3 py-2 text-right font-semibold">Actions</th>
@@ -92,6 +93,7 @@ export default function TimelinesPage() {
                 <tr key={t.id} className={idx % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}>
                   <td className="px-3 py-2 font-medium text-zinc-900">{t.title}</td>
                   <td className="px-3 py-2 text-zinc-600">{new Date(t.date).toLocaleDateString()}</td>
+                  <td className="px-3 py-2 text-zinc-600">{t.endDate ? new Date(t.endDate).toLocaleDateString() : <span className="text-zinc-300">—</span>}</td>
                   <td className="px-3 py-2 text-zinc-600">{t.type}</td>
                   <td className="px-3 py-2">{t.isActive ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Active</span> : <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-600">Inactive</span>}</td>
                   <td className="px-3 py-2 text-right">
@@ -135,6 +137,7 @@ function TimelineSheet({
 }) {
   const [title, setTitle] = useState(item?.title ?? "");
   const [date, setDate] = useState(item?.date ? item.date.split("T")[0] : "");
+  const [endDate, setEndDate] = useState(item?.endDate ? item.endDate.split("T")[0] : "");
   const [description, setDescription] = useState(item?.description ?? "");
   const [isActive, setIsActive] = useState(item?.isActive ?? true);
   const [loading, setLoading] = useState(false);
@@ -144,6 +147,7 @@ function TimelineSheet({
     if (open) {
       setTitle(item?.title ?? "");
       setDate(item?.date ? item.date.split("T")[0] : "");
+      setEndDate(item?.endDate ? item.endDate.split("T")[0] : "");
       setDescription(item?.description ?? "");
       setIsActive(item?.isActive ?? true);
       setError(null);
@@ -154,10 +158,10 @@ function TimelineSheet({
     e.preventDefault(); setLoading(true); setError(null);
     try {
       if (item) {
-        await updateProgramTimelineItem(item.id, { title, date, description, isActive });
+        await updateProgramTimelineItem(item.id, { title, date, endDate: endDate || undefined, description, isActive });
         toast.success("Timeline item updated.");
       } else {
-        await createProgramTimelineItem(programId, { title, date, description });
+        await createProgramTimelineItem(programId, { title, date, endDate: endDate || undefined, description });
         toast.success("Timeline item created.");
       }
       onSaved(); onClose();
@@ -184,8 +188,11 @@ function TimelineSheet({
             <Field label="Title" required>
               <input required type="text" value={title} onChange={(e) => setTitle(e.target.value)} className={inputCls} />
             </Field>
-            <Field label="Date" required>
+            <Field label="Start Date" required>
               <input required type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+            </Field>
+            <Field label="End Date">
+              <input type="date" value={endDate} min={date || undefined} onChange={(e) => setEndDate(e.target.value)} className={inputCls} />
             </Field>
             <Field label="Description">
               <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className={inputCls} />

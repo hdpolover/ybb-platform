@@ -452,7 +452,7 @@ export type BrandSponsor = {
 };
 
 export function listBrandSponsors(brandId: string): Promise<BrandSponsor[]> {
-  return request<BrandSponsor[]>(`/brands/${brandId}/sponsors`);
+  return request<BrandSponsor[]>(`/brands/${brandId}/sponsors`, { cache: "no-store" });
 }
 
 export function createBrandSponsor(
@@ -465,6 +465,7 @@ export function createBrandSponsor(
     description?: string;
     order?: number;
     logo?: File | null;
+    logoUrl?: string | null;
   },
 ): Promise<BrandSponsor> {
   const formData = new FormData();
@@ -475,6 +476,7 @@ export function createBrandSponsor(
   if (input.description) formData.set("description", input.description);
   if (input.order != null) formData.set("order", String(input.order));
   if (input.logo) formData.append("logo", input.logo);
+  if (input.logoUrl?.trim()) formData.set("logoUrl", input.logoUrl.trim());
   return request<BrandSponsor>(`/brands/${brandId}/sponsors`, { method: "POST", body: formData });
 }
 
@@ -489,6 +491,7 @@ export function updateBrandSponsor(
     description?: string | null;
     order?: number;
     logo?: File | null;
+    logoUrl?: string | null;
   },
 ): Promise<BrandSponsor> {
   const formData = new FormData();
@@ -499,6 +502,7 @@ export function updateBrandSponsor(
   if (input.description !== undefined) formData.set("description", input.description ?? "");
   if (input.order != null) formData.set("order", String(input.order));
   if (input.logo) formData.append("logo", input.logo);
+  if (input.logoUrl !== undefined) formData.set("logoUrl", input.logoUrl?.trim() ?? "");
   return request<BrandSponsor>(`/brands/${brandId}/sponsors/${sponsorId}`, { method: "PUT", body: formData });
 }
 

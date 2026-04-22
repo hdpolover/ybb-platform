@@ -14,6 +14,11 @@ export class CreateProgramTimelineDto {
     @IsNotEmpty()
     date: string;
 
+    @ApiProperty({ required: false, nullable: true })
+    @IsDateString()
+    @IsOptional()
+    endDate?: string;
+
     @ApiProperty()
     @IsString()
     @IsNotEmpty()
@@ -40,6 +45,11 @@ export class UpdateProgramTimelineDto {
     @IsDateString()
     @IsOptional()
     date?: string;
+
+    @ApiProperty({ required: false, nullable: true })
+    @IsDateString()
+    @IsOptional()
+    endDate?: string;
 
     @ApiProperty({ required: false })
     @IsString()

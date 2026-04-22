@@ -63,7 +63,8 @@ export class CreateProgramTimelineHandler implements ICommandHandler<CreateProgr
     async execute(command: CreateProgramTimelineCommand) {
         const dto = {
             ...command.dto,
-            date: new Date(command.dto.date)
+            date: new Date(command.dto.date),
+            endDate: command.dto.endDate ? new Date(command.dto.endDate) : undefined,
         };
         const result = await this.repository.createTimeline(dto);
         // Log activity here if needed
@@ -76,7 +77,8 @@ export class UpdateProgramTimelineHandler implements ICommandHandler<UpdateProgr
     async execute(command: UpdateProgramTimelineCommand) {
         const dto = {
             ...command.dto,
-            date: command.dto.date ? new Date(command.dto.date) : undefined
+            date: command.dto.date ? new Date(command.dto.date) : undefined,
+            endDate: command.dto.endDate ? new Date(command.dto.endDate) : undefined,
         };
         return this.repository.updateTimeline(command.id, dto);
     }

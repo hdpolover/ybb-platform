@@ -7,6 +7,9 @@ export class ProgramTimelineResponseDto {
     @ApiProperty()
     date: Date;
 
+    @ApiProperty({ required: false, nullable: true })
+    endDate?: Date | null;
+
     @ApiProperty()
     title: string;
 
@@ -15,6 +18,15 @@ export class ProgramTimelineResponseDto {
 
     @ApiProperty({ required: false })
     icon?: string;
+
+    @ApiProperty()
+    order: number;
+
+    @ApiProperty()
+    isActive: boolean;
+
+    @ApiProperty({ required: false })
+    type?: string;
 }
 
 export class ProgramScheduleResponseDto {
