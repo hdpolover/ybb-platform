@@ -94,15 +94,18 @@ export class CacheService {
    * like `landing:program:{brandId}:{slug}` and `landing:faqs:{brandId}:*`.
    */
   async invalidateBrandLandingCaches(brandId: string): Promise<void> {
-    await this.invalidateByPatterns([
+    await this.invalidateKeys([
       `landing:home:${brandId}`,
       `landing:about:${brandId}`,
       `landing:programs:${brandId}`,
-      `landing:program:${brandId}:*`,
       `landing:partners:${brandId}`,
       `landing:announcements:${brandId}`,
-      `landing:faqs:${brandId}:*`,
       `landing:settings:${brandId}`,
+    ]);
+
+    await this.invalidateByPatterns([
+      `landing:program:${brandId}:*`,
+      `landing:faqs:${brandId}:*`,
     ]);
   }
 

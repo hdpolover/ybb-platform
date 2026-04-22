@@ -47,7 +47,7 @@ export class SettingsStrategy {
             },
             brand: {
                 name: category.name,
-                logo_url: category.logoUrl || '',
+                logo_url: program?.logoUrl || category.logoUrl || '',
                 logo_white_url: category.logoWhiteUrl || undefined,
                 logo_color_url: category.logoColorUrl || undefined,
                 logo_icon_url: category.logoIconUrl || undefined,
