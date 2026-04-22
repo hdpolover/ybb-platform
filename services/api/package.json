@@ -20,6 +20,7 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "migration:run": "npx prisma migrate deploy",
     "seed:prod": "npm run build:seed && node dist/prisma/seeds/main-prod.js",
+    "seed:prod:submission-config": "npm run build:seed && node dist/prisma/seeds/main-prod-submission-config.js",
     "build:seed": "tsc --project tsconfig.seed.json",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
