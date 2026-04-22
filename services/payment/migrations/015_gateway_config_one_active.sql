@@ -3,6 +3,12 @@
 -- A partial unique index catches concurrent activations that the application
 -- layer might miss. Matches the repository/handler guard in code.
 
+ALTER TABLE payment_gateway_configs
+    ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+
+ALTER TABLE payment_methods
+    ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_gateway_config_one_active_per_provider
     ON payment_gateway_configs (provider)
     WHERE is_active = true AND deleted_at IS NULL;
