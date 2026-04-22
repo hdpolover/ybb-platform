@@ -54,6 +54,7 @@ export type AdminProfile = {
   permissions: string[];
   customPermissions: string[];
   assignedPrograms: AdminProgram[];
+  accessiblePrograms: AdminProgram[];
   assignedBrands: AdminBrand[];
 };
 
@@ -290,7 +291,6 @@ function computeAccessConfig(profile: AdminProfile | null): AdminAccessConfig {
   const canAccessPlatform =
     isSuperAdmin ||
     profile.accessLevel >= 5 ||
-    profile.assignedBrands.length > 0 ||
     permissionSet.has("platform_access") ||
     permissionSet.has("platform.manage") ||
     permissionSet.has("admin.manage");

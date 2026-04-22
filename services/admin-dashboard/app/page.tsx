@@ -4,7 +4,6 @@ import Link from "next/link";
 import Image from "next/image";
 import {
   BuildingOffice2Icon,
-  RectangleStackIcon,
   ArrowRightIcon,
   UserCircleIcon,
 } from "@heroicons/react/24/outline";
@@ -20,10 +19,15 @@ export default function LandingPage() {
     adminProfile, 
     adminAccessLevel, 
     accessConfig,
-    isPlatformAdmin, 
-    assignedPrograms,
+    accessiblePrograms,
     logout,
   } = useAuth();
+
+  const accessibleBrandCount = new Set(accessiblePrograms.map((program) => program.brandId)).size;
+  const activeProgramCount = accessiblePrograms.filter((program) => program.isActive).length;
+  const welcomeMessage = accessConfig.canAccessPlatform
+    ? "Choose what to manage today. Platform access stays separate from program dashboards."
+    : `You can manage ${accessiblePrograms.length} program${accessiblePrograms.length !== 1 ? "s" : ""}${accessibleBrandCount > 0 ? ` across ${accessibleBrandCount} brand${accessibleBrandCount !== 1 ? "s" : ""}` : ""}.`;
 
   const handleSelectProgram = (programId: string | null) => {
     if (programId) {
@@ -127,120 +131,66 @@ export default function LandingPage() {
       {/* Content Utama ( Main Content ) */}
       <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-8 py-8">
         {/* Section Welcome */}
-        <section>
-          <h1 className="mb-2 text-2xl font-bold text-zinc-900">
-            Welcome back, {adminProfile.fullName.split(' ')[0]}!
-          </h1>
-          <p className="text-sm text-zinc-600">
-            {accessConfig.canAccessPlatform 
-              ? "Choose your administration mode to get started"
-              : `You have access to ${assignedPrograms.length} program${assignedPrograms.length !== 1 ? 's' : ''}`
-            }
-          </p>
-        </section>
+        <section className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h1 className="mb-2 text-2xl font-bold text-zinc-900">
+              Welcome back, {adminProfile.fullName.split(" ")[0]}!
+            </h1>
+            <p className="text-sm text-zinc-600">{welcomeMessage}</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs font-medium text-zinc-700 shadow-sm">
+                {accessiblePrograms.length} program{accessiblePrograms.length !== 1 ? "s" : ""}
+              </span>
+              <span className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs font-medium text-zinc-700 shadow-sm">
+                {activeProgramCount} active
+              </span>
+              {accessibleBrandCount > 0 ? (
+                <span className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs font-medium text-zinc-700 shadow-sm">
+                  {accessibleBrandCount} brand{accessibleBrandCount !== 1 ? "s" : ""}
+                </span>
+              ) : null}
+            </div>
+          </div>
 
-        {/* mode Admin Card ( Khusus buat Admin ) */}
-        {accessConfig.canAccessPlatform && (
-          <section className="grid gap-4 md:grid-cols-2">
-            {/* Admin Cardnya ( Platformnya ) */}
+          {accessConfig.canAccessPlatform ? (
             <Link
               href="/platform"
-              className="group rounded-lg border border-zinc-200 bg-white p-6 shadow-sm transition-all hover:border-blue-300 hover:shadow-md"
+              className="group flex w-full max-w-md items-center gap-4 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm transition-all hover:border-blue-300 hover:shadow-md"
             >
-              <div className="flex items-start gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-50 text-blue-600 transition-colors group-hover:bg-blue-600 group-hover:text-white">
-                  <BuildingOffice2Icon className="h-7 w-7" />
-                </div>
-                <div className="flex-1">
-                  <h2 className="mb-1 text-base font-semibold text-zinc-900">
-                    Platform Administration
-                  </h2>
-                  <p className="mb-3 text-sm text-zinc-600">
-                    Manage categories, programs, users, admins, and platform-wide analytics
-                  </p>
-                  <div className="flex items-center gap-1 text-sm font-medium text-blue-600 transition-all group-hover:gap-2">
-                    <span>Go to Platform Admin</span>
-                    <ArrowRightIcon className="h-4 w-4" />
-                  </div>
-                </div>
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-50 text-blue-600 transition-colors group-hover:bg-blue-600 group-hover:text-white">
+                <BuildingOffice2Icon className="h-7 w-7" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-semibold text-zinc-900">Platform Administration</h2>
+                <p className="mt-1 text-sm text-zinc-600">
+                  Manage brands, programs, users, admins, and analytics.
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1 text-sm font-medium text-blue-600 transition-all group-hover:gap-2">
+                <span>Open</span>
+                <ArrowRightIcon className="h-4 w-4" />
               </div>
             </Link>
-
-            {/* Program Card Admin */}
-            <div className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
-              <div className="flex items-start gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-                  <RectangleStackIcon className="h-7 w-7" />
-                </div>
-                <div className="flex-1">
-                  <h2 className="mb-1 text-base font-semibold text-zinc-900">
-                    Program Administration
-                  </h2>
-                  <p className="text-sm text-zinc-600">
-                    {accessConfig.canAccessPrograms
-                      ? "Manage specific program operations, applications, payments, and participants"
-                      : "No program assignments are available for this admin yet."}
-                  </p>
-                  {accessConfig.canAccessPrograms ? (
-                    <p className="mt-3 text-xs font-medium text-zinc-500">
-                      Select a program below to continue.
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          </section>
-        )}
+          ) : null}
+        </section>
 
         {/* Pemilihan Program Programnya */}
         <section className="flex flex-1 flex-col min-h-0">
           <div className="mb-4">
             <h2 className="text-lg font-semibold text-zinc-900">
-              {accessConfig.canAccessPlatform ? "Select a Program" : "Your Programs"}
+              {accessConfig.canAccessPlatform ? "Program Administration" : "Your Programs"}
             </h2>
             <p className="mt-1 text-sm text-zinc-600">
               {accessConfig.canAccessPlatform 
-                ? "Choose a program to access program-specific administration"
-                : "Click on a program to access its dashboard"
+                ? "Browse program dashboards by brand and switch between grid or list layouts."
+                : "Filter your accessible programs by brand and open the dashboard you need."
               }
             </p>
           </div>
 
           <div className="flex-1 min-h-0">
             <div className="h-full overflow-y-auto pr-1">
-              {/* Nunjukin program yang ke filter buat admin */}
-              {accessConfig.canAccessPlatform ? (
-                <ProgramList onSelectProgram={handleSelectProgram} />
-              ) : (
-                <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                  {assignedPrograms.map((program) => (
-                    <button
-                      key={program.programId}
-                      onClick={() => handleSelectProgram(program.programId)}
-                      className="group rounded-lg border border-zinc-200 bg-white p-5 text-left shadow-sm transition-all hover:border-emerald-300 hover:shadow-md"
-                    >
-                      <div className="mb-3 flex items-start justify-between">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-                          <RectangleStackIcon className="h-6 w-6" />
-                        </div>
-                        <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600">
-                          {program.programYear}
-                        </span>
-                      </div>
-                      
-                      <h3 className="mb-1 font-semibold text-zinc-900">{program.programName}</h3>
-                      <p className="mb-3 text-xs text-zinc-500">
-                        Role: <span className="font-medium capitalize text-zinc-700">{program.roleInProgram}</span>
-                      </p>
-
-                      <div className="flex items-center gap-1 text-sm font-medium text-emerald-600 transition-all group-hover:gap-2">
-                        <span>Open Dashboard</span>
-                        <ArrowRightIcon className="h-4 w-4" />
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
+              <ProgramList onSelectProgram={handleSelectProgram} />
             </div>
           </div>
         </section>
