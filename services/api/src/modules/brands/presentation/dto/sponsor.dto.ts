@@ -26,6 +26,11 @@ export class CreateSponsorDto {
     @IsString()
     description?: string;
 
+    @ApiProperty({ required: false, nullable: true })
+    @IsOptional()
+    @IsString()
+    logoUrl?: string;
+
     @ApiProperty({ required: false, default: 0 })
     @IsOptional()
     @Type(() => Number)
@@ -58,6 +63,11 @@ export class UpdateSponsorDto {
     @IsOptional()
     @IsString()
     description?: string;
+
+    @ApiProperty({ required: false, nullable: true })
+    @IsOptional()
+    @IsString()
+    logoUrl?: string;
 
     @ApiProperty({ required: false })
     @IsOptional()

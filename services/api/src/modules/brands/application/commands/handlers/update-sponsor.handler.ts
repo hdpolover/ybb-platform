@@ -7,6 +7,15 @@ import { UpdateSponsorCommand } from '../update-sponsor.command';
 import { SponsorResponseDto } from '../../../presentation/dto/brand.dto';
 import { LandingRevalidationService } from '../../services/landing-revalidation.service';
 
+function normalizeOptionalString(value?: string): string | null | undefined {
+    if (value === undefined) {
+        return undefined;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+
 @CommandHandler(UpdateSponsorCommand)
 export class UpdateSponsorHandler implements ICommandHandler<UpdateSponsorCommand> {
     private readonly storageUrl: string;
@@ -29,6 +38,7 @@ export class UpdateSponsorHandler implements ICommandHandler<UpdateSponsorComman
         });
         if (!sponsor) throw new NotFoundException('Sponsor not found');
 
+        const normalizedLogoUrl = normalizeOptionalString(dto.logoUrl);
         let logoUrl: string | undefined;
         if (file) {
             const result = await this.storageService.uploadFile(
@@ -43,14 +53,15 @@ export class UpdateSponsorHandler implements ICommandHandler<UpdateSponsorComman
         const updated = await this.prisma.sponsor.update({
             where: { id: sponsorId },
             data: {
-                ...(dto.name !== undefined ? { name: dto.name } : {}),
-                ...(dto.type !== undefined ? { type: dto.type } : {}),
-                ...(dto.tier !== undefined ? { tier: dto.tier ?? null } : {}),
-                ...(dto.websiteUrl !== undefined ? { websiteUrl: dto.websiteUrl ?? null } : {}),
-                ...(dto.description !== undefined ? { description: dto.description ?? null } : {}),
+                ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+                ...(dto.type !== undefined ? { type: dto.type.trim() } : {}),
+                ...(dto.tier !== undefined ? { tier: normalizeOptionalString(dto.tier) ?? null } : {}),
+                ...(dto.websiteUrl !== undefined ? { websiteUrl: normalizeOptionalString(dto.websiteUrl) ?? null } : {}),
+                ...(dto.description !== undefined ? { description: normalizeOptionalString(dto.description) ?? null } : {}),
                 ...(dto.order !== undefined ? { order: dto.order } : {}),
                 ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
-                ...(logoUrl ? { logoUrl } : {}),
+                ...(file ? { logoUrl } : {}),
+                ...(file === undefined && dto.logoUrl !== undefined ? { logoUrl: normalizedLogoUrl ?? null } : {}),
             },
         });
 

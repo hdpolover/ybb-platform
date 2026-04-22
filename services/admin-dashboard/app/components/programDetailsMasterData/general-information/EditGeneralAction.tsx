@@ -14,7 +14,7 @@ interface EditGeneralActionProps {
   currentBannerUrl?: string | null;
   currentThumbnailUrl?: string | null;
   onSave: (values: GeneralInformationFormValues) => Promise<void>;
-  onBrandingUploaded?: () => void;
+  onBrandingUploaded?: () => Promise<void> | void;
   isSaving: boolean;
   errorMessage: string | null;
 }
@@ -33,6 +33,7 @@ export function EditGeneralAction({
   errorMessage,
 }: EditGeneralActionProps) {
   const [isOpen, setIsOpen] = useState<boolean>(false);
+  const [modalSessionKey, setModalSessionKey] = useState(0);
 
   const handleSubmit = async (values: GeneralInformationFormValues) => {
     await onSave(values);
@@ -44,7 +45,10 @@ export function EditGeneralAction({
       <button
         type="button"
         className="inline-flex items-center justify-center gap-1.5 rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
-        onClick={() => setIsOpen(true)}
+        onClick={() => {
+          setModalSessionKey((current) => current + 1);
+          setIsOpen(true);
+        }}
         aria-expanded={isOpen}
         aria-controls="edit-general-modal"
       >
@@ -53,6 +57,7 @@ export function EditGeneralAction({
       </button>
 
       <EditGeneralInformationModal
+        key={`${programId}-${modalSessionKey}`}
         open={isOpen}
         programId={programId}
         brandId={brandId}

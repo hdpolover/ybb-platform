@@ -25,9 +25,12 @@ export class ListBrandSponsorsHandler implements IQueryHandler<ListBrandSponsors
             id: sponsor.id,
             name: sponsor.name,
             type: sponsor.type,
-            logoUrl: sponsor.logoUrl ? `${this.storageUrl}/${sponsor.logoUrl}` : undefined,
+            logoUrl: sponsor.logoUrl
+                ? (sponsor.logoUrl.startsWith('http') ? sponsor.logoUrl : `${this.storageUrl}/${sponsor.logoUrl}`)
+                : undefined,
             websiteUrl: sponsor.websiteUrl || undefined,
             tier: sponsor.tier || undefined,
+            description: sponsor.description || undefined,
             order: sponsor.order,
         }));
     }

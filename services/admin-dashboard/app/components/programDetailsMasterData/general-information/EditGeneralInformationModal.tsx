@@ -15,6 +15,7 @@ import {
 } from "@heroicons/react/24/solid";
 import { buildApiUrl, getAccessToken, readErrorMessage } from "@/app/components/submissionsMasterData/api";
 import { listProgramMedia, type MediaFile } from "@/src/shared/api-client";
+import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
 import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
 import { FormSection } from "@/src/ui/drawer/form-section";
 
@@ -43,7 +44,7 @@ interface EditGeneralInformationModalProps {
   currentBannerUrl?: string | null;
   currentThumbnailUrl?: string | null;
   onSubmit: (values: GeneralInformationFormValues) => Promise<void>;
-  onBrandingUploaded?: () => void;
+  onBrandingUploaded?: () => Promise<void> | void;
   isSaving: boolean;
   errorMessage: string | null;
   onClose: () => void;
@@ -372,6 +373,22 @@ export function EditGeneralInformationModal({
     logoPickedUrl !== null ||
     bannerPickedUrl !== null ||
     thumbnailPickedUrl !== null;
+  const hasGeneralChanges =
+    formValues.name !== initialValues.name ||
+    formValues.slug !== initialValues.slug ||
+    formValues.shortDescription !== initialValues.shortDescription ||
+    formValues.description !== initialValues.description ||
+    formValues.videoUrl !== initialValues.videoUrl ||
+    formValues.metaTitle !== initialValues.metaTitle ||
+    formValues.metaDescription !== initialValues.metaDescription ||
+    formValues.isVisibleToUsers !== initialValues.isVisibleToUsers;
+  const isSubmitting = isSaving || brandingStatus === "uploading";
+  const drawerError = errorMessage ?? brandingError;
+
+  function resetBrandingState() {
+    setBrandingStatus("idle");
+    setBrandingError(null);
+  }
 
   function updateField<K extends keyof GeneralInformationFormValues>(
     key: K,
@@ -429,7 +446,7 @@ export function EditGeneralInformationModal({
       }
 
       setBrandingStatus("done");
-      onBrandingUploaded?.();
+      await onBrandingUploaded?.();
       return true;
     } catch (err) {
       setBrandingStatus("error");
@@ -444,7 +461,15 @@ export function EditGeneralInformationModal({
       const ok = await handleUploadBranding();
       if (!ok) return; // Upload failed — keep modal open with error shown
     }
-    await onSubmit(formValues);
+
+    if (hasGeneralChanges) {
+      await onSubmit(formValues);
+      return;
+    }
+
+    if (hasBrandingChanges) {
+      onClose();
+    }
   }
 
   return (
@@ -459,15 +484,21 @@ export function EditGeneralInformationModal({
             <span className="font-semibold text-zinc-900">{programName}</span>.
           </>
         }
-        error={errorMessage}
-        locked={isSaving || brandingStatus === "uploading"}
+        error={drawerError}
+        locked={isSubmitting}
         width="sm:max-w-4xl"
         footer={
           <>
+            {brandingStatus === "uploading" ? (
+              <span className="mr-auto inline-flex items-center gap-2 text-sm font-medium text-blue-600">
+                <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                Uploading images...
+              </span>
+            ) : null}
             <button
               type="button"
               onClick={onClose}
-              disabled={isSaving}
+              disabled={isSubmitting}
               className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 disabled:opacity-50"
             >
               Cancel
@@ -475,10 +506,14 @@ export function EditGeneralInformationModal({
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={isSaving}
+              disabled={isSubmitting}
               className="rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:opacity-60"
             >
-              {isSaving ? "Saving…" : "Save Changes"}
+              {brandingStatus === "uploading"
+                ? "Uploading images..."
+                : isSaving
+                  ? "Saving..."
+                  : "Save Changes"}
             </button>
           </>
         }
@@ -563,21 +598,15 @@ export function EditGeneralInformationModal({
             </>
           }
         >
-          {brandingError && (
-            <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-              {brandingError}
-            </div>
-          )}
-
           <div className="grid gap-5 md:grid-cols-3">
             <ImageUploadField
               label="Logo Image"
               currentUrl={currentLogoUrl}
               file={logoFile}
               pickedUrl={logoPickedUrl}
-              onFileChange={(f) => { setLogoFile(f); setBrandingStatus("idle"); }}
-              onPick={(url) => { setLogoPickedUrl(url); setLogoFile(null); setBrandingStatus("idle"); }}
-              onClear={() => { setLogoFile(null); setLogoPickedUrl(null); setBrandingStatus("idle"); }}
+              onFileChange={(f) => { setLogoFile(f); resetBrandingState(); }}
+              onPick={(url) => { setLogoPickedUrl(url); setLogoFile(null); resetBrandingState(); }}
+              onClear={() => { setLogoFile(null); setLogoPickedUrl(null); resetBrandingState(); }}
               uploadStatus={brandingStatus}
               hint="Square or 4:3 ratio recommended. PNG/JPG up to 2 MB."
               programId={programId}
@@ -588,9 +617,9 @@ export function EditGeneralInformationModal({
               currentUrl={currentBannerUrl}
               file={bannerFile}
               pickedUrl={bannerPickedUrl}
-              onFileChange={(f) => { setBannerFile(f); setBrandingStatus("idle"); }}
-              onPick={(url) => { setBannerPickedUrl(url); setBannerFile(null); setBrandingStatus("idle"); }}
-              onClear={() => { setBannerFile(null); setBannerPickedUrl(null); setBrandingStatus("idle"); }}
+              onFileChange={(f) => { setBannerFile(f); resetBrandingState(); }}
+              onPick={(url) => { setBannerPickedUrl(url); setBannerFile(null); resetBrandingState(); }}
+              onClear={() => { setBannerFile(null); setBannerPickedUrl(null); resetBrandingState(); }}
               uploadStatus={brandingStatus}
               hint="16:9 ratio recommended (e.g. 1200×675). PNG/JPG up to 2 MB."
               programId={programId}
@@ -601,9 +630,9 @@ export function EditGeneralInformationModal({
               currentUrl={currentThumbnailUrl}
               file={thumbnailFile}
               pickedUrl={thumbnailPickedUrl}
-              onFileChange={(f) => { setThumbnailFile(f); setBrandingStatus("idle"); }}
-              onPick={(url) => { setThumbnailPickedUrl(url); setThumbnailFile(null); setBrandingStatus("idle"); }}
-              onClear={() => { setThumbnailFile(null); setThumbnailPickedUrl(null); setBrandingStatus("idle"); }}
+              onFileChange={(f) => { setThumbnailFile(f); resetBrandingState(); }}
+              onPick={(url) => { setThumbnailPickedUrl(url); setThumbnailFile(null); resetBrandingState(); }}
+              onClear={() => { setThumbnailFile(null); setThumbnailPickedUrl(null); resetBrandingState(); }}
               uploadStatus={brandingStatus}
               hint="Used on program cards and listings. PNG/JPG up to 2 MB."
               programId={programId}
@@ -617,11 +646,9 @@ export function EditGeneralInformationModal({
           title="Program Description"
           description="Full description displayed on the program landing page."
         >
-          <textarea
-            rows={5}
-            value={formValues.description}
-            onChange={(e) => updateField("description", e.target.value)}
-            className={INPUT_CLS}
+          <RichTextEditor
+            content={formValues.description}
+            onChange={(html) => updateField("description", html)}
             placeholder="Describe the program in detail…"
           />
         </FormSection>

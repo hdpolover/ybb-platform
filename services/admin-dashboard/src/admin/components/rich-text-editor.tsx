@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
@@ -108,6 +108,15 @@ export function RichTextEditor({ content = "", placeholder, onChange }: RichText
       onChange?.(editor.getHTML());
     },
   });
+
+  useEffect(() => {
+    if (!editor) return;
+
+    const nextContent = content || "";
+    if (editor.getHTML() === nextContent) return;
+
+    editor.commands.setContent(nextContent, { emitUpdate: false });
+  }, [content, editor]);
 
   const setLink = useCallback(() => {
     if (!editor) return;

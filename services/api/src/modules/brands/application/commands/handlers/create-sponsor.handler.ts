@@ -7,6 +7,15 @@ import { CreateSponsorCommand } from '../create-sponsor.command';
 import { SponsorResponseDto } from '../../../presentation/dto/brand.dto';
 import { LandingRevalidationService } from '../../services/landing-revalidation.service';
 
+function normalizeOptionalString(value?: string): string | null {
+    if (value === undefined) {
+        return null;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+
 @CommandHandler(CreateSponsorCommand)
 export class CreateSponsorHandler implements ICommandHandler<CreateSponsorCommand> {
     private readonly storageUrl: string;
@@ -27,7 +36,7 @@ export class CreateSponsorHandler implements ICommandHandler<CreateSponsorComman
         const brand = await this.prisma.brand.findUnique({ where: { id: brandId } });
         if (!brand) throw new NotFoundException('Brand not found');
 
-        let logoUrl: string | undefined;
+        let logoUrl = normalizeOptionalString(dto.logoUrl) ?? undefined;
         if (file) {
             const result = await this.storageService.uploadFile(
                 file,
@@ -41,11 +50,11 @@ export class CreateSponsorHandler implements ICommandHandler<CreateSponsorComman
         const sponsor = await this.prisma.sponsor.create({
             data: {
                 brandId,
-                name: dto.name,
-                type: dto.type,
-                tier: dto.tier ?? null,
-                websiteUrl: dto.websiteUrl ?? null,
-                description: dto.description ?? null,
+                name: dto.name.trim(),
+                type: dto.type.trim(),
+                tier: normalizeOptionalString(dto.tier),
+                websiteUrl: normalizeOptionalString(dto.websiteUrl),
+                description: normalizeOptionalString(dto.description),
                 order: dto.order ?? 0,
                 isActive: true,
                 ...(logoUrl ? { logoUrl } : {}),

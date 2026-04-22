@@ -1929,6 +1929,84 @@ function SponsorSheet({
   });
   const [logoImgError, setLogoImgError] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [programs, setPrograms] = useState<PlatformProgram[]>([]);
+  const [programsLoading, setProgramsLoading] = useState(false);
+  const [programsError, setProgramsError] = useState<string | null>(null);
+  const [selectedProgramId, setSelectedProgramId] = useState("");
+  const [files, setFiles] = useState<MediaFile[]>([]);
+  const [filesLoading, setFilesLoading] = useState(false);
+  const [filesError, setFilesError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const pendingLogoPreviewUrl = useMemo(
+    () => (form.logo ? URL.createObjectURL(form.logo) : null),
+    [form.logo],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (pendingLogoPreviewUrl) {
+        URL.revokeObjectURL(pendingLogoPreviewUrl);
+      }
+    };
+  }, [pendingLogoPreviewUrl]);
+
+  const loadFiles = useCallback(
+    async (programId: string) => {
+      if (!programId) {
+        setFiles([]);
+        setFilesError(null);
+        return;
+      }
+
+      setFilesLoading(true);
+      setFilesError(null);
+
+      try {
+        const result = await listProgramMedia({
+          programId,
+          brandId,
+          limit: 100,
+        });
+        setFiles((result.files ?? []).filter(isImageMediaFile));
+      } catch (err) {
+        setFiles([]);
+        setFilesError(err instanceof Error ? err.message : "Failed to load media.");
+      } finally {
+        setFilesLoading(false);
+      }
+    },
+    [brandId],
+  );
+
+  const openLibrary = useCallback(async () => {
+    setPickerOpen(true);
+    setSearch("");
+    setProgramsLoading(true);
+    setProgramsError(null);
+
+    try {
+      const result = await listPlatformPrograms({ brandId, limit: 100 });
+      setPrograms(result.data);
+
+      const nextProgramId = result.data[0]?.id ?? "";
+      setSelectedProgramId(nextProgramId);
+
+      if (nextProgramId) {
+        await loadFiles(nextProgramId);
+      } else {
+        setFiles([]);
+        setFilesError(null);
+      }
+    } catch (err) {
+      setPrograms([]);
+      setProgramsError(err instanceof Error ? err.message : "Failed to load programs.");
+      setFiles([]);
+      setFilesError(null);
+    } finally {
+      setProgramsLoading(false);
+    }
+  }, [brandId, loadFiles]);
 
   // Reset form state when sheet opens (handles re-open with stale data)
   function handleOpenChange(next: boolean) {
@@ -1945,6 +2023,17 @@ function SponsorSheet({
       });
       setLogoImgError(false);
       setError(null);
+      setPickerOpen(false);
+      setPrograms([]);
+      setProgramsLoading(false);
+      setProgramsError(null);
+      setSelectedProgramId("");
+      setFiles([]);
+      setFilesLoading(false);
+      setFilesError(null);
+      setSearch("");
+    } else {
+      setPickerOpen(false);
     }
     setOpen(next);
   }
@@ -1959,9 +2048,10 @@ function SponsorSheet({
     if (!file) return;
     setField("logo", file);
     setLogoImgError(false);
-    const reader = new FileReader();
-    reader.onload = (ev) => setField("logoPreview", ev.target?.result as string);
-    reader.readAsDataURL(file);
+    if (!form.logoPreview && sponsor?.logoUrl) {
+      setField("logoPreview", sponsor.logoUrl);
+    }
+    e.target.value = "";
   }
 
   async function handleSave() {
@@ -1970,19 +2060,33 @@ function SponsorSheet({
     setSaving(true);
     setError(null);
     try {
-      const payload = {
-        name: form.name.trim(),
-        type: form.type,
-        tier: form.tier || undefined,
-        websiteUrl: form.websiteUrl || undefined,
-        description: form.description || undefined,
-        order: parseInt(form.order, 10) || 0,
-        logo: form.logo,
-      };
+      const tier = form.tier.trim();
+      const websiteUrl = form.websiteUrl.trim();
+      const description = form.description.trim();
+      const logoUrl = form.logo ? undefined : (form.logoPreview?.trim() || null);
+
       if (sponsor) {
-        await updateBrandSponsor(brandId, sponsor.id, payload);
+        await updateBrandSponsor(brandId, sponsor.id, {
+          name: form.name.trim(),
+          type: form.type.trim(),
+          tier: tier || null,
+          websiteUrl: websiteUrl || null,
+          description: description || null,
+          order: parseInt(form.order, 10) || 0,
+          logo: form.logo,
+          logoUrl,
+        });
       } else {
-        await createBrandSponsor(brandId, payload);
+        await createBrandSponsor(brandId, {
+          name: form.name.trim(),
+          type: form.type.trim(),
+          ...(tier ? { tier } : {}),
+          ...(websiteUrl ? { websiteUrl } : {}),
+          ...(description ? { description } : {}),
+          order: parseInt(form.order, 10) || 0,
+          logo: form.logo,
+          ...(logoUrl ? { logoUrl } : {}),
+        });
       }
       setOpen(false);
       onSaved();
@@ -1993,7 +2097,15 @@ function SponsorSheet({
     }
   }
 
-  const hasValidPreview = form.logoPreview && !logoImgError;
+  const previewUrl = pendingLogoPreviewUrl ?? form.logoPreview ?? null;
+  const hasValidPreview = previewUrl && !logoImgError;
+  const visibleFiles = search.trim()
+    ? files.filter((file) =>
+        (file.original_filename || file.filename || "")
+          .toLowerCase()
+          .includes(search.trim().toLowerCase()),
+      )
+    : files;
 
   return (
     <>
@@ -2060,13 +2172,13 @@ function SponsorSheet({
               <button
                 type="button"
                 onClick={() => logoInputRef.current?.click()}
-                className="flex h-32 w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-lg border-2 border-dashed border-zinc-300 bg-zinc-50 transition hover:border-blue-400 hover:bg-blue-50/30"
+                className="group flex h-32 w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-lg border-2 border-dashed border-zinc-300 bg-zinc-50 transition hover:border-blue-400 hover:bg-blue-50/30"
               >
                 {hasValidPreview ? (
                   <div className="relative flex h-full w-full items-center justify-center p-3">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={form.logoPreview!}
+                      src={previewUrl!}
                       alt="Logo preview"
                       className="max-h-full max-w-full object-contain"
                       onError={() => setLogoImgError(true)}
@@ -2089,6 +2201,28 @@ function SponsorSheet({
                   </>
                 )}
               </button>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" type="button" onClick={() => logoInputRef.current?.click()}>
+                  <Upload className="mr-1 h-3.5 w-3.5" /> Upload logo
+                </Button>
+                <Button size="sm" variant="outline" type="button" onClick={() => void openLibrary()}>
+                  <Layers className="mr-1 h-3.5 w-3.5" /> Media library
+                </Button>
+                {(form.logo || form.logoPreview) ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    type="button"
+                    onClick={() => {
+                      setField("logo", null);
+                      setField("logoPreview", null);
+                      setLogoImgError(false);
+                    }}
+                  >
+                    <X className="mr-1 h-3.5 w-3.5" /> Clear
+                  </Button>
+                ) : null}
+              </div>
               <input
                 ref={logoInputRef}
                 type="file"
@@ -2098,9 +2232,12 @@ function SponsorSheet({
               />
               {hasValidPreview && (
                 <p className="text-xs text-zinc-500">
-                  {form.logo ? `New: ${form.logo.name}` : "Current logo — click above to change"}
+                  {form.logo ? `New: ${form.logo.name}` : "Current logo selected"}
                 </p>
               )}
+              <p className="text-xs text-zinc-400">
+                Upload a new logo or choose one from a program media library for this brand.
+              </p>
             </div>
           </div>
           <SheetFooter className="mt-6">
@@ -2111,6 +2248,111 @@ function SponsorSheet({
           </SheetFooter>
         </SheetContent>
       </Sheet>
+      <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+        <DialogContent className="max-w-4xl overflow-hidden p-0">
+          <DialogHeader className="border-b border-zinc-200 px-6 py-4">
+            <DialogTitle>Pick Sponsor Logo</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3 border-b border-zinc-200 bg-zinc-50/70 px-6 py-4">
+            <div className="grid gap-3 md:grid-cols-[minmax(0,220px)_1fr]">
+              <div className="space-y-1.5">
+                <Label htmlFor="sponsor-program-picker">Program media library</Label>
+                <select
+                  id="sponsor-program-picker"
+                  value={selectedProgramId}
+                  onChange={(event) => {
+                    const nextProgramId = event.target.value;
+                    setSelectedProgramId(nextProgramId);
+                    void loadFiles(nextProgramId);
+                  }}
+                  disabled={programsLoading || programs.length === 0}
+                  className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                >
+                  {programs.length === 0 ? <option value="">No programs available</option> : null}
+                  {programs.map((program) => (
+                    <option key={program.id} value={program.id}>
+                      {program.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="sponsor-logo-search">Search images</Label>
+                <Input
+                  id="sponsor-logo-search"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search media files..."
+                />
+              </div>
+            </div>
+
+            {programsError ? (
+              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {programsError}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="max-h-[60vh] overflow-y-auto px-6 py-4">
+            {programsLoading ? (
+              <div className="py-12 text-center text-sm text-zinc-500">Loading programs…</div>
+            ) : programs.length === 0 ? (
+              <div className="py-12 text-center text-sm text-zinc-500">
+                No programs are available for this brand yet. Upload a new logo instead.
+              </div>
+            ) : filesLoading ? (
+              <div className="py-12 text-center text-sm text-zinc-500">Loading media…</div>
+            ) : filesError ? (
+              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {filesError}
+              </div>
+            ) : visibleFiles.length === 0 ? (
+              <div className="py-12 text-center text-sm text-zinc-500">
+                No matching images were found for the selected program.
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+                {visibleFiles.map((file) => {
+                  const url = file.url ?? file.download_url;
+                  return (
+                    <button
+                      key={file.id}
+                      type="button"
+                      onClick={() => {
+                        if (!url) {
+                          return;
+                        }
+
+                        setField("logo", null);
+                        setField("logoPreview", url);
+                        setLogoImgError(false);
+                        setPickerOpen(false);
+                      }}
+                      className="overflow-hidden rounded-lg border border-zinc-200 bg-white text-left shadow-sm transition hover:border-blue-400 hover:shadow-md"
+                    >
+                      <div className="flex h-28 items-center justify-center bg-zinc-100">
+                        {url ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img src={url} alt={file.original_filename} className="h-full w-full object-cover" />
+                        ) : (
+                          <ImageIcon className="h-6 w-6 text-zinc-300" />
+                        )}
+                      </div>
+                      <div className="px-2 py-1.5">
+                        <p className="truncate text-[11px] font-medium text-zinc-800">{file.original_filename}</p>
+                        <p className="truncate text-[10px] text-zinc-400">{file.asset_type ?? file.content_type}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -2189,7 +2431,13 @@ function SponsorsTab({ brandId }: { brandId: string }) {
                           <ImageIcon className="h-3.5 w-3.5" />
                         </div>
                       )}
-                      <p className="font-medium text-zinc-900">{s.name}</p>
+                      <div className="min-w-0">
+                        <p className="font-medium text-zinc-900">{s.name}</p>
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                          <span>Order {s.order}</span>
+                          {s.description ? <span className="truncate max-w-[260px]">{s.description}</span> : null}
+                        </div>
+                      </div>
                     </div>
                   </td>
                   <td className="px-4 py-3 capitalize text-zinc-600">{s.type.replace("_", " ")}</td>
