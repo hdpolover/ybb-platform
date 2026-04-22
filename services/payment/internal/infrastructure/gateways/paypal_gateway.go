@@ -14,7 +14,7 @@ type PayPalGateway struct {
 	client *paypal.Client
 }
 
-func NewPayPalGateway(clientID, secret, mode string) *PayPalGateway {
+func NewPayPalGateway(clientID, secret, mode string) (*PayPalGateway, error) {
 	// Tentukan Base URL (Sandbox atau Live)
 	apiBase := paypal.APIBaseSandBox
 	if mode == "live" {
@@ -24,8 +24,7 @@ func NewPayPalGateway(clientID, secret, mode string) *PayPalGateway {
 	// Inisialisasi Client
 	c, err := paypal.NewClient(clientID, secret, apiBase)
 	if err != nil {
-		// Sebaiknya handle error, tapi untuk constructor panic/log fatal oke
-		log.Fatalf("Error creating PayPal client: %v", err)
+		return nil, fmt.Errorf("create PayPal client: %w", err)
 	}
 
 	// Ambil Access Token pertama kali
@@ -36,7 +35,7 @@ func NewPayPalGateway(clientID, secret, mode string) *PayPalGateway {
 
 	return &PayPalGateway{
 		client: c,
-	}
+	}, nil
 }
 
 func (g *PayPalGateway) GetName() string {
