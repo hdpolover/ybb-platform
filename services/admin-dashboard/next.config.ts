@@ -4,6 +4,18 @@ const nextConfig: NextConfig = {
   // Standalone output for Docker optimization
   output: "standalone",
 
+  // TipTap v3 packages use a nested "types" condition in their exports map that
+  // Turbopack cannot resolve. Listing them here forces Next.js to bundle them
+  // directly (bypassing the exports resolution), which fixes the build.
+  transpilePackages: [
+    "@tiptap/extension-image",
+    "@tiptap/extension-link",
+    "@tiptap/extension-placeholder",
+    "@tiptap/extension-text-align",
+    "@tiptap/extension-text-style",
+    "@tiptap/extension-underline",
+  ],
+
   // TypeScript configuration
   typescript: {
     ignoreBuildErrors: true,

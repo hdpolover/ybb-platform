@@ -6,11 +6,9 @@ import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
-import CharacterCount from "@tiptap/extension-character-count";
 import TextAlign from "@tiptap/extension-text-align";
 import Underline from "@tiptap/extension-underline";
 import { TextStyle } from "@tiptap/extension-text-style";
-import Color from "@tiptap/extension-color";
 import {
   Bold,
   Italic,
@@ -91,14 +89,12 @@ export function RichTextEditor({ content = "", placeholder, onChange }: RichText
       StarterKit,
       Underline,
       TextStyle,
-      Color,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       Link.configure({ openOnClick: false, linkOnPaste: true }),
       Image.configure({ allowBase64: false }),
       Placeholder.configure({
         placeholder: placeholder ?? "Write your announcement here…",
       }),
-      CharacterCount,
     ],
     content,
     editorProps: {
@@ -138,9 +134,6 @@ export function RichTextEditor({ content = "", placeholder, onChange }: RichText
   }, [editor, imageUrl]);
 
   if (!editor) return null;
-
-  const charCount = editor.storage.characterCount?.characters?.() ?? 0;
-  const wordCount = editor.storage.characterCount?.words?.() ?? 0;
 
   return (
     <div className="flex flex-col rounded-lg border border-zinc-200 bg-white">
@@ -332,12 +325,6 @@ export function RichTextEditor({ content = "", placeholder, onChange }: RichText
       {/* Editor area */}
       <div className="px-5 py-4">
         <EditorContent editor={editor} />
-      </div>
-
-      {/* Footer */}
-      <div className="flex items-center justify-end gap-4 border-t border-zinc-100 px-4 py-1.5">
-        <span className="text-[10px] text-zinc-400">{wordCount} words</span>
-        <span className="text-[10px] text-zinc-400">{charCount} characters</span>
       </div>
 
       {/* Link dialog */}
