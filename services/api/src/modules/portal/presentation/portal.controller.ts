@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, Param, Query, UseGuards, UnauthorizedException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { QueryBus } from '@nestjs/cqrs';
+import { ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 import {
@@ -18,9 +19,12 @@ import {
     PortalPaymentDetailResponseDto,
     ConfirmPortalPaymentDto,
     ConfirmPortalPaymentResponseDto,
+    PortalPaymentMethodDto,
 } from './dto/portal-payment.dto';
 import { PortalDocumentResponseDto } from './dto/portal-document.dto';
 import { ConfirmPortalPaymentHandler } from '../application/commands/handlers/confirm-portal-payment.handler';
+import { PaymentServiceHttpClient } from '../../payments/infrastructure/services/payment-service-http.client';
+import type { AdminPaymentMethod } from '../../payments/common/proto/payment.interface';
 
 @ApiTags('Portal')
 @Controller('portal')
@@ -30,6 +34,8 @@ export class PortalController {
     constructor(
         private readonly queryBus: QueryBus,
         private readonly confirmPortalPaymentHandler: ConfirmPortalPaymentHandler,
+        private readonly paymentServiceClient: PaymentServiceHttpClient,
+        private readonly configService: ConfigService,
     ) {}
 
     @Get('dashboard')
@@ -102,6 +108,37 @@ export class PortalController {
                 },
             ),
         );
+    }
+
+    @Get('payment-methods')
+    @ApiOperation({ summary: 'Get available manual payment methods for participants' })
+    @ApiResponse({ status: 200, type: [PortalPaymentMethodDto] })
+    async getPaymentMethods(): Promise<PortalPaymentMethodDto[]> {
+        try {
+            const internalKey = this.configService.get<string>('PAYMENT_SERVICE_INTERNAL_KEY', '');
+            const headers = internalKey ? { 'X-Internal-Service-Key': internalKey } : {};
+            const { data } = await this.paymentServiceClient.get<AdminPaymentMethod[] | { data: AdminPaymentMethod[] }>(
+                '/api/v1/payment-methods',
+                { params: { is_active: true }, headers },
+            );
+            const methods: AdminPaymentMethod[] = Array.isArray(data) ? data : ((data as { data?: AdminPaymentMethod[] })?.data ?? []);
+            return methods
+                .filter(m => m.is_active)
+                .map(m => ({
+                    id: m.id,
+                    code: m.code,
+                    display_name: m.display_name,
+                    bank_name: m.bank_name,
+                    account_number: m.account_number,
+                    account_name: m.account_name,
+                    instructions: m.instructions,
+                    icon: m.icon,
+                    requires_proof: m.requires_proof,
+                    type: m.type,
+                }));
+        } catch {
+            return [];
+        }
     }
 
     @Get('documents')

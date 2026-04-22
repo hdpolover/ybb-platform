@@ -284,7 +284,6 @@ export function updatePlatformBrandDetails(
     defaultLocation?: string;
     defaultCountry?: string;
     defaultTimezone?: string;
-    requireEmailVerification?: boolean;
     metaTitle?: string;
     metaDescription?: string;
     metaKeywords?: string;
@@ -302,7 +301,6 @@ export function updatePlatformBrandDetails(
   if (input.defaultLocation != null) formData.set("defaultLocation", input.defaultLocation);
   if (input.defaultCountry != null) formData.set("defaultCountry", input.defaultCountry);
   if (input.defaultTimezone != null) formData.set("defaultTimezone", input.defaultTimezone);
-  if (input.requireEmailVerification != null) formData.set("requireEmailVerification", String(input.requireEmailVerification));
   if (input.metaTitle != null) formData.set("metaTitle", input.metaTitle);
   if (input.metaDescription != null) formData.set("metaDescription", input.metaDescription);
   if (input.metaKeywords != null) formData.set("metaKeywords", input.metaKeywords);

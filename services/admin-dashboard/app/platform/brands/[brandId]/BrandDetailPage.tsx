@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -26,6 +26,7 @@ import { EmptyState } from "@/src/admin/empty-state";
 import { Button } from "@/src/ui/button";
 import { Badge } from "@/src/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/src/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/src/ui/dialog";
 import { Input } from "@/src/ui/input";
 import { Label } from "@/src/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/src/ui/tabs";
@@ -37,6 +38,11 @@ import {
   SheetTitle,
 } from "@/src/ui/sheet";
 import { useAuth } from "@/app/contexts/AuthContext";
+import {
+  listProgramMedia,
+  uploadFileViaPresignedUrl,
+  type MediaFile,
+} from "@/src/shared/api-client";
 import {
   getPlatformBrand,
   listPlatformPrograms,
@@ -89,6 +95,306 @@ function FieldView({ label, value }: { label: string; value?: React.ReactNode })
   );
 }
 
+
+  function normalizeBenefitGroup(group: Partial<BenefitGroup> | undefined, index: number): BenefitGroup {
+    return {
+      id:
+        typeof group?.id === "string" && group.id.trim().length > 0
+          ? group.id
+          : `group_${Date.now()}_${index}`,
+      title: typeof group?.title === "string" ? group.title : "",
+      imageUrl: typeof group?.imageUrl === "string" ? group.imageUrl : "",
+      items:
+        Array.isArray(group?.items) && group.items.length > 0
+          ? group.items.map((item) => (typeof item === "string" ? item : ""))
+          : [""],
+    };
+  }
+
+  function normalizeBenefitGroups(groups: BrandMetadata["benefits"] extends { groups: infer G } ? G : never): BenefitGroup[] {
+    return (groups ?? []).map((group, index) => normalizeBenefitGroup(group, index));
+  }
+
+  function isImageMediaFile(file: MediaFile): boolean {
+    return file.content_type?.startsWith("image/") ?? false;
+  }
+
+  function BenefitGroupImageField({
+    brandId,
+    groupId,
+    value,
+    pendingFile,
+    onFileChange,
+    onUrlChange,
+    onClear,
+  }: {
+    brandId: string;
+    groupId: string;
+    value?: string;
+    pendingFile: File | null;
+    onFileChange: (file: File | null) => void;
+    onUrlChange: (url: string) => void;
+    onClear: () => void;
+  }) {
+    const inputRef = useRef<HTMLInputElement>(null);
+    const [pickerOpen, setPickerOpen] = useState(false);
+    const [programs, setPrograms] = useState<PlatformProgram[]>([]);
+    const [programsLoading, setProgramsLoading] = useState(false);
+    const [programsError, setProgramsError] = useState<string | null>(null);
+    const [selectedProgramId, setSelectedProgramId] = useState("");
+    const [files, setFiles] = useState<MediaFile[]>([]);
+    const [filesLoading, setFilesLoading] = useState(false);
+    const [filesError, setFilesError] = useState<string | null>(null);
+    const [search, setSearch] = useState("");
+    const pendingPreviewUrl = useMemo(
+      () => (pendingFile ? URL.createObjectURL(pendingFile) : null),
+      [pendingFile],
+    );
+
+    useEffect(() => {
+      return () => {
+        if (pendingPreviewUrl) {
+          URL.revokeObjectURL(pendingPreviewUrl);
+        }
+      };
+    }, [pendingPreviewUrl]);
+
+    const loadFiles = useCallback(
+      async (programId: string) => {
+        if (!programId) {
+          setFiles([]);
+          setFilesError(null);
+          return;
+        }
+
+        setFilesLoading(true);
+        setFilesError(null);
+
+        try {
+          const result = await listProgramMedia({
+            programId,
+            brandId,
+            limit: 100,
+          });
+          setFiles((result.files ?? []).filter(isImageMediaFile));
+        } catch (err) {
+          setFiles([]);
+          setFilesError(err instanceof Error ? err.message : "Failed to load media.");
+        } finally {
+          setFilesLoading(false);
+        }
+      },
+      [brandId],
+    );
+
+    const openLibrary = useCallback(async () => {
+      setPickerOpen(true);
+      setSearch("");
+      setProgramsLoading(true);
+      setProgramsError(null);
+
+      try {
+        const result = await listPlatformPrograms({ brandId, limit: 100 });
+        setPrograms(result.data);
+
+        const nextProgramId = result.data[0]?.id ?? "";
+        setSelectedProgramId(nextProgramId);
+
+        if (nextProgramId) {
+          await loadFiles(nextProgramId);
+        } else {
+          setFiles([]);
+          setFilesError(null);
+        }
+      } catch (err) {
+        setPrograms([]);
+        setProgramsError(err instanceof Error ? err.message : "Failed to load programs.");
+        setFiles([]);
+        setFilesError(null);
+      } finally {
+        setProgramsLoading(false);
+      }
+    }, [brandId, loadFiles]);
+
+    const previewUrl = pendingPreviewUrl ?? value ?? null;
+    const visibleFiles = search.trim()
+      ? files.filter((file) =>
+          (file.original_filename || file.filename || "")
+            .toLowerCase()
+            .includes(search.trim().toLowerCase()),
+        )
+      : files;
+
+    return (
+      <div className="space-y-2">
+        <Label htmlFor={`g-img-${groupId}`}>Image</Label>
+
+        <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
+          <div
+            className="flex h-40 items-center justify-center bg-zinc-50 cursor-pointer"
+            onClick={() => inputRef.current?.click()}
+          >
+            {previewUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={previewUrl} alt="Benefit group preview" className="h-full w-full object-cover" />
+            ) : (
+              <div className="flex flex-col items-center gap-2 text-zinc-400">
+                <ImageIcon className="h-8 w-8" />
+                <span className="text-xs">Upload or pick an image</span>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2 border-t border-zinc-100 p-3">
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" type="button" onClick={() => inputRef.current?.click()}>
+                <Upload className="mr-1 h-3.5 w-3.5" /> Upload image
+              </Button>
+              <Button size="sm" variant="outline" type="button" onClick={() => void openLibrary()}>
+                <Layers className="mr-1 h-3.5 w-3.5" /> Media library
+              </Button>
+              {(pendingFile || value) ? (
+                <Button size="sm" variant="ghost" type="button" onClick={onClear}>
+                  <X className="mr-1 h-3.5 w-3.5" /> Clear
+                </Button>
+              ) : null}
+            </div>
+
+            <Input
+              id={`g-img-${groupId}`}
+              value={value ?? ""}
+              onChange={(event) => onUrlChange(event.target.value)}
+              placeholder="https://..."
+            />
+            <p className="text-xs text-zinc-400">
+              Paste a direct URL, upload a new image, or choose one from a program media library.
+            </p>
+            {pendingFile ? (
+              <p className="text-xs font-medium text-blue-600">
+                {pendingFile.name} selected. Save changes to upload and persist it.
+              </p>
+            ) : null}
+          </div>
+        </div>
+
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0] ?? null;
+            onFileChange(file);
+            event.target.value = "";
+          }}
+        />
+
+        <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+          <DialogContent className="max-w-4xl overflow-hidden p-0">
+            <DialogHeader className="border-b border-zinc-200 px-6 py-4">
+              <DialogTitle>Pick Benefit Image</DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-3 border-b border-zinc-200 bg-zinc-50/70 px-6 py-4">
+              <div className="grid gap-3 md:grid-cols-[minmax(0,220px)_1fr]">
+                <div className="space-y-1.5">
+                  <Label htmlFor={`benefit-program-${groupId}`}>Program media library</Label>
+                  <select
+                    id={`benefit-program-${groupId}`}
+                    value={selectedProgramId}
+                    onChange={(event) => {
+                      const nextProgramId = event.target.value;
+                      setSelectedProgramId(nextProgramId);
+                      void loadFiles(nextProgramId);
+                    }}
+                    disabled={programsLoading || programs.length === 0}
+                    className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                  >
+                    {programs.length === 0 ? <option value="">No programs available</option> : null}
+                    {programs.map((program) => (
+                      <option key={program.id} value={program.id}>
+                        {program.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor={`benefit-search-${groupId}`}>Search images</Label>
+                  <Input
+                    id={`benefit-search-${groupId}`}
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Search media files..."
+                  />
+                </div>
+              </div>
+
+              {programsError ? (
+                <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {programsError}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="max-h-[60vh] overflow-y-auto px-6 py-4">
+              {programsLoading ? (
+                <div className="py-12 text-center text-sm text-zinc-500">Loading programs…</div>
+              ) : programs.length === 0 ? (
+                <div className="py-12 text-center text-sm text-zinc-500">
+                  No programs are available for this brand yet. Upload a new image instead.
+                </div>
+              ) : filesLoading ? (
+                <div className="py-12 text-center text-sm text-zinc-500">Loading media…</div>
+              ) : filesError ? (
+                <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {filesError}
+                </div>
+              ) : visibleFiles.length === 0 ? (
+                <div className="py-12 text-center text-sm text-zinc-500">
+                  No matching images were found for the selected program.
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+                  {visibleFiles.map((file) => {
+                    const url = file.url ?? file.download_url;
+                    return (
+                      <button
+                        key={file.id}
+                        type="button"
+                        onClick={() => {
+                          if (!url) {
+                            return;
+                          }
+
+                          onUrlChange(url);
+                          setPickerOpen(false);
+                        }}
+                        className="overflow-hidden rounded-lg border border-zinc-200 bg-white text-left shadow-sm transition hover:border-blue-400 hover:shadow-md"
+                      >
+                        <div className="flex h-28 items-center justify-center bg-zinc-100">
+                          {url ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img src={url} alt={file.original_filename} className="h-full w-full object-cover" />
+                          ) : (
+                            <ImageIcon className="h-6 w-6 text-zinc-300" />
+                          )}
+                        </div>
+                        <div className="px-2 py-1.5">
+                          <p className="truncate text-[11px] font-medium text-zinc-800">{file.original_filename}</p>
+                          <p className="truncate text-[10px] text-zinc-400">{file.asset_type ?? file.content_type}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  }
 function FieldInput({
   label, id, value, onChange, placeholder, type = "text", hint,
 }: {
@@ -354,7 +660,6 @@ function DetailsSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved:
     defaultLocation: brand.defaultLocation ?? "",
     defaultCountry: brand.defaultCountry ?? "",
     defaultTimezone: brand.defaultTimezone ?? "",
-    requireEmailVerification: brand.requireEmailVerification ?? false,
     metaTitle: brand.metaTitle ?? "",
     metaDescription: brand.metaDescription ?? "",
     metaKeywords: brand.metaKeywords ?? "",
@@ -375,7 +680,6 @@ function DetailsSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved:
         defaultLocation: form.defaultLocation || undefined,
         defaultCountry: form.defaultCountry || undefined,
         defaultTimezone: form.defaultTimezone || undefined,
-        requireEmailVerification: form.requireEmailVerification,
         metaTitle: form.metaTitle || undefined,
         metaDescription: form.metaDescription || undefined,
         metaKeywords: form.metaKeywords || undefined,
@@ -406,7 +710,6 @@ function DetailsSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved:
             <FieldInput label="Default Location" id="defaultLocation" value={form.defaultLocation} onChange={(v) => set("defaultLocation", v)} placeholder="Jakarta, Indonesia" />
             <FieldInput label="Default Country" id="defaultCountry" value={form.defaultCountry} onChange={(v) => set("defaultCountry", v)} placeholder="ID" />
             <FieldInput label="Default Timezone" id="defaultTimezone" value={form.defaultTimezone} onChange={(v) => set("defaultTimezone", v)} placeholder="Asia/Jakarta" />
-            <FieldCheckbox label="Require Email Verification" id="requireEmailVerification" checked={form.requireEmailVerification} onChange={(v) => set("requireEmailVerification", v)} />
             <div className="border-t border-zinc-100 pt-4">
               <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">SEO</p>
               <div className="space-y-4">
@@ -901,35 +1204,103 @@ function BenefitsSheet({
   initial: BrandMetadata["benefits"];
   onSaved: (updated: BrandMetadata) => void;
 }) {
+  const { adminProfile } = useAuth();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [eyebrow, setEyebrow] = useState(initial?.eyebrow ?? "");
   const [title, setTitle] = useState(initial?.title ?? "");
-  const [groups, setGroups] = useState<BenefitGroup[]>(initial?.groups ?? []);
+  const [groups, setGroups] = useState<BenefitGroup[]>(normalizeBenefitGroups(initial?.groups));
+  const [pendingImages, setPendingImages] = useState<Record<string, File | null>>({});
 
   function resetState() {
     setEyebrow(initial?.eyebrow ?? "");
     setTitle(initial?.title ?? "");
-    setGroups(initial?.groups ?? []);
+    setGroups(normalizeBenefitGroups(initial?.groups));
+    setPendingImages({});
     setError(null);
   }
 
   function addGroup() {
     setGroups((gs) => [
       ...gs,
-      { id: `group_${Date.now()}`, title: "", imageUrl: "", items: [""] },
+      normalizeBenefitGroup({ title: "", imageUrl: "", items: [""] }, gs.length),
     ]);
   }
 
   function removeGroup(idx: number) {
-    setGroups((gs) => gs.filter((_, i) => i !== idx));
+    setGroups((gs) => {
+      const target = gs[idx];
+      if (target) {
+        setPendingImages((current) => {
+          const next = { ...current };
+          delete next[target.id];
+          return next;
+        });
+      }
+
+      return gs.filter((_, i) => i !== idx);
+    });
   }
 
   function setGroupField(idx: number, field: keyof BenefitGroup, value: string) {
     setGroups((gs) =>
       gs.map((g, i) => (i === idx ? { ...g, [field]: value } : g)),
     );
+  }
+
+  function setGroupImageFile(idx: number, file: File | null) {
+    setGroups((gs) => {
+      const target = gs[idx];
+      if (!target) {
+        return gs;
+      }
+
+      setPendingImages((current) => ({
+        ...current,
+        [target.id]: file,
+      }));
+
+      return gs;
+    });
+  }
+
+  function setGroupImageUrl(idx: number, url: string) {
+    setGroups((gs) =>
+      gs.map((group, groupIndex) =>
+        groupIndex === idx ? { ...group, imageUrl: url } : group,
+      ),
+    );
+
+    setPendingImages((current) => {
+      const target = groups[idx];
+      if (!target) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[target.id];
+      return next;
+    });
+  }
+
+  function clearGroupImage(idx: number) {
+    setGroups((gs) =>
+      gs.map((group, groupIndex) =>
+        groupIndex === idx ? { ...group, imageUrl: "" } : group,
+      ),
+    );
+
+    setPendingImages((current) => {
+      const target = groups[idx];
+      if (!target) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[target.id];
+      return next;
+    });
   }
 
   function setGroupItems(idx: number, items: string[]) {
@@ -940,10 +1311,49 @@ function BenefitsSheet({
     setSaving(true);
     setError(null);
     try {
+      if (Object.values(pendingImages).some(Boolean) && !adminProfile?.userId) {
+        throw new Error("An admin user session is required before images can be uploaded.");
+      }
+
+      const resolvedGroups = await Promise.all(
+        groups.map(async (group) => {
+          const pendingFile = pendingImages[group.id];
+          let imageUrl = group.imageUrl || undefined;
+
+          if (pendingFile) {
+            const upload = await uploadFileViaPresignedUrl(pendingFile, {
+              userId: adminProfile!.userId,
+              brandId,
+              bucket: "brands",
+              assetType: "image",
+              title: pendingFile.name,
+              altText: group.title || title || eyebrow || "Benefit group image",
+            });
+
+            if (!upload.publicUrl) {
+              throw new Error(`Image upload succeeded for ${pendingFile.name} but no public URL was returned.`);
+            }
+
+            imageUrl = upload.publicUrl;
+          }
+
+          return {
+            ...group,
+            imageUrl,
+            items: group.items.map((item) => item.trim()).filter(Boolean),
+          };
+        }),
+      );
+
       const updated = await updatePlatformBrandMetadata(brandId, {
-        benefits: { eyebrow, title, groups },
+        benefits: {
+          eyebrow,
+          title,
+          groups: resolvedGroups,
+        },
       });
       onSaved(updated);
+      setPendingImages({});
       setOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save.");
@@ -976,7 +1386,7 @@ function BenefitsSheet({
               </div>
               <div className="space-y-4">
                 {groups.map((group, gi) => (
-                  <div key={gi} className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 space-y-3">
+                  <div key={group.id} className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <p className="text-xs font-medium text-zinc-500">Group {gi + 1}</p>
                       <Button size="sm" variant="ghost" onClick={() => removeGroup(gi)}>
@@ -984,7 +1394,15 @@ function BenefitsSheet({
                       </Button>
                     </div>
                     <FieldInput label="Title" id={`g-title-${gi}`} value={group.title} onChange={(v) => setGroupField(gi, "title", v)} placeholder="Benefits for High School Students" />
-                    <FieldInput label="Image URL" id={`g-img-${gi}`} value={group.imageUrl ?? ""} onChange={(v) => setGroupField(gi, "imageUrl", v)} placeholder="https://..." />
+                    <BenefitGroupImageField
+                      brandId={brandId}
+                      groupId={group.id}
+                      value={group.imageUrl}
+                      pendingFile={pendingImages[group.id] ?? null}
+                      onFileChange={(file) => setGroupImageFile(gi, file)}
+                      onUrlChange={(url) => setGroupImageUrl(gi, url)}
+                      onClear={() => clearGroupImage(gi)}
+                    />
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between">
                         <Label>Benefit Items</Label>
@@ -1023,7 +1441,7 @@ function BenefitsSheet({
                   </div>
                 ))}
                 {groups.length === 0 && (
-                  <p className="text-sm text-zinc-400 text-center py-4">No groups yet. Click "Add Group" to create one.</p>
+                  <p className="py-4 text-center text-sm text-zinc-400">No groups yet. Add a group to create one.</p>
                 )}
               </div>
             </div>

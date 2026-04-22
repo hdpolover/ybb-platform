@@ -47,6 +47,6 @@ import { CacheModule } from '@shared/infrastructure/cache/cache.module';
         CreateIntentHandler,
         ProcessPaymentHandler,
     ],
-    exports: ['IPaymentRepository'],
+    exports: ['IPaymentRepository', PaymentServiceHttpClient],
 })
 export class PaymentsModule { }
