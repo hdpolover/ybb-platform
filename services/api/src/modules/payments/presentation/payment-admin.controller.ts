@@ -90,6 +90,7 @@ export class PaymentAdminController {
             });
 
             await this.cacheService.invalidateByPattern('payment:methods:*');
+            await this.cacheService.invalidateByPattern('landing:home:*');
 
             return data;
         } catch (error) {
@@ -129,6 +130,7 @@ export class PaymentAdminController {
             });
 
             await this.cacheService.invalidateByPattern('payment:methods:*');
+            await this.cacheService.invalidateByPattern('landing:home:*');
 
             return data;
         } catch (error) {
@@ -147,6 +149,7 @@ export class PaymentAdminController {
             });
 
             await this.cacheService.invalidateByPattern('payment:methods:*');
+            await this.cacheService.invalidateByPattern('landing:home:*');
 
             return data;
         } catch (error) {

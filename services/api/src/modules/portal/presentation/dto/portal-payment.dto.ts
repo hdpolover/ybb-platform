@@ -1,6 +1,19 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsString, IsNotEmpty, IsOptional, IsIn } from 'class-validator';
 
+export class PortalPaymentMethodDto {
+    @ApiProperty() id: string;
+    @ApiProperty() code: string;
+    @ApiProperty() display_name: string;
+    @ApiProperty() bank_name: string;
+    @ApiProperty() account_number: string;
+    @ApiProperty() account_name: string;
+    @ApiProperty() instructions: string;
+    @ApiProperty() icon: string;
+    @ApiProperty() requires_proof: boolean;
+    @ApiProperty() type: string;
+}
+
 export class PaymentItemDto {
     @ApiProperty()
     id: string;

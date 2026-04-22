@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
 import { AuthModule } from '../auth/auth.module';
+import { PaymentsModule } from '../payments/payments.module';
 
 // Existing
 import { PortalController } from './presentation/portal.controller';
@@ -24,7 +25,7 @@ import { GetPortalCertificatesHandler } from './application/queries/handlers/get
 import { DownloadCertificateHandler } from './application/commands/handlers/download-certificate.handler';
 
 @Module({
-    imports: [CqrsModule, AuthModule],
+    imports: [CqrsModule, AuthModule, PaymentsModule],
     controllers: [
         PortalController,
         PortalSubmissionsController,

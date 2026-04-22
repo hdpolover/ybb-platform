@@ -3,6 +3,7 @@ import { Request as ExpressRequest } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
 import { Public } from '../../../shared/decorators/public.decorator';
+import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
 
 interface AuthenticatedRequest extends ExpressRequest {
   user: { id: string; userId: string };
@@ -130,6 +131,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add pricing tier' })
+  @CacheInvalidate(['landing:home:*', 'landing:programs:*', 'landing:program:*', 'program:detail:*'])
   async addPricingTier(@Param('id') programId: string, @Body() dto: CreateProgramPricingTierDto, @Request() req: AuthenticatedRequest) {
     return this.createProgramPricingTierHandler.execute(new CreateProgramPricingTierCommand(dto, req.user.id));
   }
@@ -138,6 +140,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update pricing tier' })
+  @CacheInvalidate(['landing:home:*', 'landing:programs:*', 'landing:program:*', 'program:detail:*'])
   async updatePricingTier(@Param('itemId') itemId: string, @Body() dto: UpdateProgramPricingTierDto, @Request() req: AuthenticatedRequest) {
     return this.updateProgramPricingTierHandler.execute(new UpdateProgramPricingTierCommand(itemId, dto, req.user.id));
   }
@@ -146,6 +149,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete pricing tier' })
+  @CacheInvalidate(['landing:home:*', 'landing:programs:*', 'landing:program:*', 'program:detail:*'])
   async deletePricingTier(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
     return this.deleteProgramPricingTierHandler.execute(new DeleteProgramPricingTierCommand(itemId, req.user.id));
   }
@@ -155,6 +159,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add validity period to a pricing tier' })
+  @CacheInvalidate(['landing:home:*', 'landing:programs:*', 'landing:program:*', 'program:detail:*'])
   async addValidityPeriod(@Param('tierId') tierId: string, @Body() dto: CreateValidityPeriodDto, @Request() req: AuthenticatedRequest) {
     return this.createValidityPeriodHandler.execute(new CreateValidityPeriodCommand({ ...dto, pricingTierId: tierId }, req.user.id));
   }
@@ -163,6 +168,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a validity period' })
+  @CacheInvalidate(['landing:home:*', 'landing:programs:*', 'landing:program:*', 'program:detail:*'])
   async updateValidityPeriod(@Param('periodId') periodId: string, @Body() dto: UpdateValidityPeriodDto, @Request() req: AuthenticatedRequest) {
     return this.updateValidityPeriodHandler.execute(new UpdateValidityPeriodCommand(periodId, dto, req.user.id));
   }
@@ -171,6 +177,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a validity period' })
+  @CacheInvalidate(['landing:home:*', 'landing:programs:*', 'landing:program:*', 'program:detail:*'])
   async deleteValidityPeriod(@Param('periodId') periodId: string, @Request() req: AuthenticatedRequest) {
     return this.deleteValidityPeriodHandler.execute(new DeleteValidityPeriodCommand(periodId, req.user.id));
   }
