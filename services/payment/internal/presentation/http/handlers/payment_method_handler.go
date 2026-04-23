@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ybb-platform/payment/internal/domain/entities"
@@ -93,7 +94,11 @@ func (h *PaymentMethodHandler) Update(c *gin.Context) {
 
 	existing, err := h.repo.FindByID(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Payment method not found"})
+		if strings.Contains(err.Error(), "payment method not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Payment method not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve payment method: " + err.Error()})
+		}
 		return
 	}
 
