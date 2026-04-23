@@ -7,6 +7,7 @@ import {
   PowerIcon,
   UserGroupIcon,
 } from "@heroicons/react/24/solid";
+import type { ExchangeRateHistoryItem } from "@/src/shared/api-client";
 
 export type EmailVerificationMode = "Optional" | "Required";
 
@@ -19,6 +20,9 @@ export type MainConfigurationContentProps = {
   onToggleProgramActive: () => void;
   usdToIdrRate: number;
   onChangeUsdToIdrRate: (value: number) => void;
+  exchangeRateReason: string;
+  onChangeExchangeRateReason: (value: string) => void;
+  rateHistory: ExchangeRateHistoryItem[];
   saving: boolean;
   onSave: () => void;
   onCancel: () => void;
@@ -33,6 +37,9 @@ export function MainConfigurationContent({
   onToggleProgramActive,
   usdToIdrRate,
   onChangeUsdToIdrRate,
+  exchangeRateReason,
+  onChangeExchangeRateReason,
+  rateHistory,
   saving,
   onSave,
   onCancel,
@@ -208,6 +215,55 @@ export function MainConfigurationContent({
                   <span className="text-[11px] font-medium text-zinc-700">IDR</span>
                 </div>
               </div>
+
+              <div className="rounded-md bg-white px-3 py-2.5">
+                <label className="mb-1 block text-[11px] font-medium text-zinc-700 md:text-xs">
+                  Reason for rate change <span className="font-normal text-zinc-400">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={exchangeRateReason}
+                  onChange={(e) => onChangeExchangeRateReason(e.target.value)}
+                  placeholder="e.g. Bank Indonesia rate update April 2026"
+                  className="w-full rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1.5 text-[11px] text-zinc-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 md:text-xs"
+                />
+              </div>
+
+              {rateHistory.length > 0 && (
+                <div className="rounded-md bg-white px-3 py-2.5">
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-500 md:text-xs">
+                    Rate Change History
+                  </p>
+                  <div className="divide-y divide-zinc-100">
+                    {rateHistory.map((item) => (
+                      <div key={item.id} className="flex items-start justify-between gap-2 py-1.5">
+                        <div className="space-y-0.5">
+                          <p className="text-[11px] text-zinc-900 md:text-xs">
+                            <span className="font-medium text-red-500">
+                              {Number(item.oldRate).toLocaleString()}
+                            </span>
+                            {" → "}
+                            <span className="font-medium text-emerald-600">
+                              {Number(item.newRate).toLocaleString()}
+                            </span>
+                            {" IDR"}
+                          </p>
+                          {item.reason && (
+                            <p className="text-[10px] italic text-zinc-500">{item.reason}</p>
+                          )}
+                        </div>
+                        <span className="shrink-0 text-[10px] text-zinc-400">
+                          {new Date(item.createdAt).toLocaleDateString("en-GB", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

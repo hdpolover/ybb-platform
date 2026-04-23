@@ -92,6 +92,11 @@ export class UpdateProgramDto {
     @IsOptional()
     allowRegistration?: boolean;
 
+    @ApiProperty({ description: 'Require email verification before accessing the program', required: false })
+    @IsBoolean()
+    @IsOptional()
+    requireEmailVerification?: boolean;
+
     @ApiProperty({ description: 'Require payment', required: false })
     @IsBoolean()
     @IsOptional()
