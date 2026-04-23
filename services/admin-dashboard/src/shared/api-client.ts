@@ -368,6 +368,14 @@ export function listAdminRoles(): Promise<AdminRole[]> {
   return request<AdminRole[]>("/admin-roles");
 }
 
+// ─── Maintenance ──────────────────────────────────────────────────────────────
+
+export function clearAllCache(): Promise<{ message: string; timestamp: string }> {
+  return request<{ message: string; timestamp: string }>("/cache/clear", {
+    method: "DELETE",
+  });
+}
+
 // ─── Users ────────────────────────────────────────────────────────────────────
 
 export function listUsers(params?: {
