@@ -2,11 +2,18 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Menu, Home, Bell } from "lucide-react";
+import { Menu, Home, Bell, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/src/ui/button";
 import { AdminSidebar } from "./admin-sidebar";
 import type { NavSection } from "@/lib/nav-config";
+import { clearAllCache } from "@/src/shared/api-client";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/src/ui/tooltip";
 
 // ─── Navbar ───────────────────────────────────────────────────────────────────
 
@@ -25,6 +32,23 @@ export function AdminNavbar({
   userMenu,
   homeHref = "/",
 }: AdminNavbarProps) {
+  const [clearing, setClearing] = React.useState(false);
+  const [cleared, setCleared] = React.useState(false);
+
+  async function handleClearCache() {
+    if (clearing) return;
+    setClearing(true);
+    try {
+      await clearAllCache();
+      setCleared(true);
+      setTimeout(() => setCleared(false), 3000);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to clear cache.");
+    } finally {
+      setClearing(false);
+    }
+  }
+
   return (
     <header className="flex h-16 shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-4 shadow-sm sm:px-6">
       <div className="flex items-center gap-3">
@@ -41,6 +65,29 @@ export function AdminNavbar({
       </div>
 
       <div className="flex items-center gap-2">
+        <TooltipProvider delayDuration={300}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleClearCache}
+                disabled={clearing}
+                aria-label="Clear cache"
+                className={cn(
+                  "text-zinc-500",
+                  cleared && "text-green-600",
+                  clearing && "animate-pulse",
+                )}
+              >
+                <Trash2 className="h-5 w-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {clearing ? "Clearing…" : cleared ? "Cache cleared!" : "Clear cache"}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         <Button variant="ghost" size="icon" className="text-zinc-500" onClick={() => {}}>
           <Link href={homeHref} aria-label="Home" className="flex items-center justify-center">
             <Home className="h-5 w-5" />
