@@ -133,6 +133,15 @@ export class ProgramFaqResponseDto {
 
     @ApiProperty()
     answer: string;
+
+    @ApiProperty({ required: false })
+    category?: string;
+
+    @ApiProperty()
+    order: number;
+
+    @ApiProperty()
+    isActive: boolean;
 }
 
 export class ProgramTeamResponseDto {
