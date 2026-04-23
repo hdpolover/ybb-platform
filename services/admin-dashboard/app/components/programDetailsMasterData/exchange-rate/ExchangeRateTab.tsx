@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { CurrencyDollarIcon, ClockIcon } from "@heroicons/react/24/solid";
-import { buildApiUrl, getAccessToken, readErrorMessage } from "@/app/components/submissionsMasterData/api";
+import { buildApiUrl, getAccessToken, readErrorMessage, readJsonData } from "@/app/components/submissionsMasterData/api";
 
 interface ExchangeRateData {
   programId: string;
@@ -69,8 +69,8 @@ export function ExchangeRateTab({ programId }: { programId: string }) {
       if (!rateRes.ok) throw new Error(await readErrorMessage(rateRes));
       if (!histRes.ok) throw new Error(await readErrorMessage(histRes));
 
-      const rateEnv = await rateRes.json() as ExchangeRateData;
-      const histEnv = await histRes.json() as HistoryResponse;
+      const rateEnv = await readJsonData<ExchangeRateData>(rateRes);
+      const histEnv = await readJsonData<HistoryResponse>(histRes);
 
       setCurrent(rateEnv);
       setHistory(histEnv.history ?? []);

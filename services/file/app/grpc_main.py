@@ -243,58 +243,89 @@ class FileService(file_service_pb2_grpc.FileServiceServicer):
             await context.abort(grpc.StatusCode.INTERNAL, str(e))
 
     async def UploadFile(self, request_iterator, context):
-        metadata = None
+        METADATA_TIMEOUT = 30   # seconds to receive first metadata packet
+        UPLOAD_TIMEOUT   = 300  # seconds for the full upload to DO Spaces
+
         read_fd, write_fd = os.pipe()
-        
-        # Get first request for metadata
+        file_reader = None
+        upload_task = None
+
+        def _close_pipes():
+            try:
+                if file_reader and not file_reader.closed:
+                    file_reader.close()
+            except Exception:
+                pass
+
         try:
-            first_request = await request_iterator.__anext__()
-            if first_request.HasField('metadata'):
-                metadata = first_request.metadata
-            else:
+            # ── 1. Receive metadata (first packet) ───────────────────────────
+            try:
+                first_request = await asyncio.wait_for(
+                    request_iterator.__anext__(), timeout=METADATA_TIMEOUT
+                )
+            except asyncio.TimeoutError:
+                os.close(read_fd)
+                os.close(write_fd)
+                await context.abort(grpc.StatusCode.DEADLINE_EXCEEDED, "Timed out waiting for upload metadata")
+                return
+            except StopAsyncIteration:
+                os.close(read_fd)
+                os.close(write_fd)
+                await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "Empty request")
+                return
+
+            if not first_request.HasField('metadata'):
                 os.close(read_fd)
                 os.close(write_fd)
                 await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "First message must be metadata")
-        except StopAsyncIteration:
-            os.close(read_fd)
-            os.close(write_fd)
-            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "Empty request")
+                return
 
-        file_size = metadata.size if metadata.size > 0 else -1
-        
-        # Create reader for MinIO (it will run in a separate thread)
-        file_reader = os.fdopen(read_fd, 'rb')
+            metadata = first_request.metadata
+            file_reader = os.fdopen(read_fd, 'rb')
 
-        command = UploadFileCommand(
-            file_data=file_reader,
-            filename=metadata.filename,
-            content_type=metadata.content_type,
-            size=metadata.size,
-            user_id=metadata.user_id,
-            brand_id=metadata.brand_id,
-            bucket=metadata.bucket,
-            program_id=metadata.program_id if metadata.program_id else None,
-            participant_id=metadata.participant_id if metadata.participant_id else None,
-            metadata={} 
-        )
+            command = UploadFileCommand(
+                file_data=file_reader,
+                filename=metadata.filename,
+                content_type=metadata.content_type,
+                size=metadata.size,
+                user_id=metadata.user_id,
+                brand_id=metadata.brand_id,
+                bucket=metadata.bucket,
+                program_id=metadata.program_id if metadata.program_id else None,
+                participant_id=metadata.participant_id if metadata.participant_id else None,
+                metadata={}
+            )
 
-        try:
-            # Start Upload Task (Consumer) - Logic runs in thread because of MinIOStorage update
+            # Cancel upload task if the RPC is terminated externally
+            def _on_rpc_done(_ctx):
+                if upload_task and not upload_task.done():
+                    upload_task.cancel()
+
+            context.add_done_callback(_on_rpc_done)
+
+            # ── 2. Start upload consumer task ─────────────────────────────────
             upload_task = asyncio.create_task(self.upload_handler.execute(command))
-            
-            # Start Streaming (Producer)
+
+            # ── 3. Stream chunks → pipe (producer) ───────────────────────────
             with os.fdopen(write_fd, 'wb') as writer:
                 async for request in request_iterator:
+                    if context.cancelled():
+                        upload_task.cancel()
+                        await context.abort(grpc.StatusCode.CANCELLED, "RPC cancelled by client")
+                        return
                     if request.HasField('chunk_data'):
                         writer.write(request.chunk_data)
-            
-            # Start awaiting result
-            result = await upload_task
-            
-            # Cleanup
-            file_reader.close()
+            # write_fd closed here by the context manager → signals EOF to reader
 
-            # Publish Event
+            # ── 4. Await upload with hard timeout ─────────────────────────────
+            try:
+                result = await asyncio.wait_for(upload_task, timeout=UPLOAD_TIMEOUT)
+            except asyncio.TimeoutError:
+                upload_task.cancel()
+                raise Exception(f"Upload to storage timed out after {UPLOAD_TIMEOUT}s")
+
+            _close_pipes()
+
             await self.messaging.publish_event("file.uploaded", {
                 "file_id": result.id,
                 "filename": result.original_filename,
@@ -313,13 +344,14 @@ class FileService(file_service_pb2_grpc.FileServiceServicer):
                 size=result.size,
                 bucket=result.bucket
             )
+
         except Exception as e:
             logging.error(f"Streaming upload failed: {e}")
-            if not file_reader.closed:
-                file_reader.close()
-            # Ensure write_fd is closed if error happened before with block exit?
-            # os.fdopen(write_fd) context manager handles it.
-            await context.abort(grpc.StatusCode.INTERNAL, str(e))
+            _close_pipes()
+            if upload_task and not upload_task.done():
+                upload_task.cancel()
+            if not context.cancelled():
+                await context.abort(grpc.StatusCode.INTERNAL, str(e))
 
     async def GetFile(self, request, context):
         query = GetFileQuery(
