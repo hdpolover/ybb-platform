@@ -184,7 +184,7 @@ export type ProgramFaq = {
   programId: string;
   question: string;
   answer: string;
-  category: string;
+  category: string | null;
   order: number;
   isActive: boolean;
 };
@@ -208,10 +208,12 @@ export type ProgramTestimonial = {
   brandId: string | null;
   name: string;
   role: string | null;
-  country: string | null;
-  content: string;
-  photoUrl: string | null;
-  isActive: boolean;
+  company: string | null;
+  testimonial: string;
+  type: string;
+  avatarUrl: string | null;
+  rating: number | null;
+  isFeatured: boolean | null;
 };
 
 export type ProgramTimeline = {
@@ -559,7 +561,10 @@ export function createProgramFaq(
   });
 }
 
-export function updateProgramFaq(id: string, input: Partial<ProgramFaq>): Promise<ProgramFaq> {
+export function updateProgramFaq(
+  id: string,
+  input: { question?: string; answer?: string; category?: string; order?: number; isActive?: boolean },
+): Promise<ProgramFaq> {
   return request<ProgramFaq>(`/programs/faqs/${id}`, {
     method: "PUT",
     body: JSON.stringify(input),
@@ -630,7 +635,7 @@ export function listProgramTestimonials(programId: string): Promise<ProgramTesti
 
 export function createProgramTestimonial(
   programId: string,
-  input: { name: string; role?: string; country?: string; content: string; programId?: string },
+  input: { name: string; role?: string; company?: string; testimonial: string; avatarUrl?: string },
 ): Promise<ProgramTestimonial> {
   return request<ProgramTestimonial>(`/programs/${programId}/testimonials`, {
     method: "POST",
@@ -640,7 +645,7 @@ export function createProgramTestimonial(
 
 export function updateProgramTestimonial(
   id: string,
-  input: Partial<ProgramTestimonial>,
+  input: { name?: string; role?: string; company?: string; testimonial?: string; avatarUrl?: string },
 ): Promise<ProgramTestimonial> {
   return request<ProgramTestimonial>(`/programs/testimonials/${id}`, {
     method: "PUT",

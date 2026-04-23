@@ -517,6 +517,11 @@ export class CreateProgramFaqDto {
     answer: string;
 
     @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    category?: string;
+
+    @ApiProperty({ required: false })
     @IsNumber()
     @IsOptional()
     order?: number;
@@ -532,6 +537,11 @@ export class UpdateProgramFaqDto {
     @IsString()
     @IsOptional()
     answer?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    category?: string;
 
     @ApiProperty({ required: false })
     @IsNumber()

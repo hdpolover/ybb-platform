@@ -21,7 +21,15 @@ import {
   SheetFooter,
 } from "@/src/ui/sheet";
 
-const FAQ_CATEGORIES = ["Basic", "Event Details", "Registration", "Payments"];
+const FAQ_CATEGORIES: { value: string; label: string }[] = [
+  { value: "general", label: "General" },
+  { value: "registration", label: "Registration" },
+  { value: "payment", label: "Payment" },
+  { value: "event_details", label: "Event Details" },
+  { value: "accommodation", label: "Accommodation" },
+  { value: "visa", label: "Visa" },
+  { value: "other", label: "Other" },
+];
 
 export default function ProgramFaqsPage() {
   const params = useParams<{ programId: string }>();
@@ -37,7 +45,7 @@ export default function ProgramFaqsPage() {
   const programName =
     accessiblePrograms.find((p) => p.programId === params.programId)?.programName ?? "Selected Program";
 
-  const fetch = useCallback(async () => {
+  const load = useCallback(async () => {
     if (!params.programId) return;
     setLoading(true); setError(null);
     try { setFaqs(await listProgramFaqs(params.programId)); }
@@ -45,7 +53,7 @@ export default function ProgramFaqsPage() {
     finally { setLoading(false); }
   }, [params.programId]);
 
-  useEffect(() => { fetch(); }, [fetch]);
+  useEffect(() => { load(); }, [load]);
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -54,7 +62,7 @@ export default function ProgramFaqsPage() {
       await deleteProgramFaq(deleteTarget.id);
       toast.success("FAQ deleted.");
       setDeleteTarget(null);
-      fetch();
+      load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Delete failed");
     } finally { setDeleteLoading(false); }
@@ -74,7 +82,7 @@ export default function ProgramFaqsPage() {
         <div className="mb-3 flex items-center justify-between">
           <p className="text-[11px] text-zinc-500">{faqs.length} FAQ(s)</p>
           <div className="flex gap-2">
-            <button type="button" onClick={fetch} className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50"><ArrowPathIcon className="h-3.5 w-3.5" />Refresh</button>
+            <button type="button" onClick={load} className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50"><ArrowPathIcon className="h-3.5 w-3.5" />Refresh</button>
             <button type="button" onClick={() => setShowCreate(true)} className="inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600"><PlusIcon className="h-3.5 w-3.5" />Add FAQ</button>
           </div>
         </div>
@@ -100,7 +108,12 @@ export default function ProgramFaqsPage() {
                     <div className="font-medium text-zinc-900">{f.question}</div>
                     <div className="mt-0.5 line-clamp-1 text-zinc-500">{f.answer}</div>
                   </td>
-                  <td className="px-3 py-2 text-zinc-600">{f.category || "—"}</td>
+                  <td className="px-3 py-2">
+                    {f.category
+                      ? <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">{FAQ_CATEGORIES.find((c) => c.value === f.category)?.label ?? f.category}</span>
+                      : <span className="text-zinc-400">—</span>
+                    }
+                  </td>
                   <td className="px-3 py-2">
                     {f.isActive
                       ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700"><CheckCircleIcon className="h-3 w-3" />Active</span>
@@ -125,7 +138,7 @@ export default function ProgramFaqsPage() {
         programId={params.programId}
         item={editTarget ?? undefined}
         onClose={() => { setShowCreate(false); setEditTarget(null); }}
-        onSaved={fetch}
+        onSaved={load}
       />
 
       {deleteTarget && (
@@ -155,7 +168,7 @@ function FaqSheet({
 }) {
   const [question, setQuestion] = useState(item?.question ?? "");
   const [answer, setAnswer] = useState(item?.answer ?? "");
-  const [category, setCategory] = useState(item?.category ?? "Basic");
+  const [category, setCategory] = useState(item?.category ?? "general");
   const [order, setOrder] = useState(String(item?.order ?? "1"));
   const [isActive, setIsActive] = useState(item?.isActive ?? true);
   const [loading, setLoading] = useState(false);
@@ -165,7 +178,7 @@ function FaqSheet({
     if (open) {
       setQuestion(item?.question ?? "");
       setAnswer(item?.answer ?? "");
-      setCategory(item?.category ?? "Basic");
+      setCategory(item?.category ?? "general");
       setOrder(String(item?.order ?? "1"));
       setIsActive(item?.isActive ?? true);
       setError(null);
@@ -212,7 +225,7 @@ function FaqSheet({
             <div className="grid grid-cols-2 gap-3">
               <Field label="Category">
                 <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputCls}>
-                  {FAQ_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                  {FAQ_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
               </Field>
               <Field label="Order">
@@ -220,8 +233,8 @@ function FaqSheet({
               </Field>
             </div>
             {item && (
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} className="h-3.5 w-3.5" />
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} className="h-3.5 w-3.5 rounded" />
                 <span className="text-[11px] font-medium text-zinc-700">Active</span>
               </label>
             )}
@@ -238,7 +251,7 @@ function FaqSheet({
             <button
               type="submit"
               disabled={loading}
-              className="rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:opacity-60"
+              className="rounded-md bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:opacity-60"
             >
               {loading ? "Saving…" : item ? "Save Changes" : "Create FAQ"}
             </button>
@@ -274,3 +287,4 @@ function Field({ label, required, children }: { label: string; required?: boolea
 }
 
 const inputCls = "block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
+
