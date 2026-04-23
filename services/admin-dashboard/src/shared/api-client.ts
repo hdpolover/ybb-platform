@@ -498,12 +498,49 @@ export function getProgramConfig(programId: string): Promise<ProgramConfig> {
 
 export function updateProgramConfig(
   programId: string,
-  input: Partial<Omit<ProgramConfig, "id">>,
+  input: Partial<Omit<ProgramConfig, "id" | "usdInIdr">>,
 ): Promise<ProgramConfig> {
   return request<ProgramConfig>(`/programs/${programId}`, {
     method: "PUT",
     body: JSON.stringify(input),
   });
+}
+
+// ─── Exchange Rate ────────────────────────────────────────────────────────────
+
+export type ExchangeRateHistoryItem = {
+  id: string;
+  oldRate: number;
+  newRate: number;
+  changedBy: string;
+  reason?: string;
+  createdAt: string;
+};
+
+export type ExchangeRateHistory = {
+  history: ExchangeRateHistoryItem[];
+  total: number;
+};
+
+export function updateExchangeRate(
+  programId: string,
+  usdInIdr: number,
+  reason?: string,
+): Promise<{ programId: string; usdInIdr: number; source: string; updatedAt: string }> {
+  return request(`/programs/${programId}/exchange-rate`, {
+    method: "PUT",
+    body: JSON.stringify({ usdInIdr, reason }),
+  });
+}
+
+export function getExchangeRateHistory(
+  programId: string,
+  page = 1,
+  limit = 20,
+): Promise<ExchangeRateHistory> {
+  return request<ExchangeRateHistory>(
+    `/programs/${programId}/exchange-rate/history?page=${page}&limit=${limit}`,
+  );
 }
 
 // ─── Program Content — FAQs ──────────────────────────────────────────────────
