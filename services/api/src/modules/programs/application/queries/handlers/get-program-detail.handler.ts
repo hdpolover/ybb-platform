@@ -222,6 +222,7 @@ export class GetProgramDetailHandler {
       slug: program.slug,
       description: program.description,
       shortDescription: program.shortDescription,
+      programType: program.programType,
       startDate: program.startDate,
       endDate: program.endDate,
       registrationOpenDate: program.registrationOpenDate,

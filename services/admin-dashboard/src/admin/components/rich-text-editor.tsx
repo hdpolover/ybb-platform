@@ -85,6 +85,7 @@ export function RichTextEditor({ content = "", placeholder, onChange }: RichText
   const [imageUrl, setImageUrl] = useState("");
 
   const editor = useEditor({
+    immediatelyRender: false,
     extensions: [
       StarterKit,
       Underline,

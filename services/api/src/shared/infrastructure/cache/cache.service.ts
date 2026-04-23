@@ -161,7 +161,12 @@ export class CacheService {
     const startTime = Date.now();
     const client = this.getRedisClient();
     if (client) {
-      await client.flushdb();
+      // Use SCAN + DEL to clear all keys — avoids flushdb which may not be available
+      // on the wrapped ioredis client exposed through Keyv/cache-manager.
+      const keys = await this.scanKeys(client, '*');
+      if (keys.length > 0) {
+        await client.del(...keys);
+      }
     } else {
       const stores = (this.cacheManager as unknown as { stores?: Array<{ clear?: () => Promise<void> }> }).stores;
       if (stores && stores.length > 0) {

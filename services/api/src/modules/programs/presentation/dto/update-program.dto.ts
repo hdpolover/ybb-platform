@@ -37,6 +37,11 @@ export class UpdateProgramDto {
     @IsOptional()
     theme?: string;
 
+    @ApiProperty({ description: 'Program type (e.g. Cohort, Conference, Workshop)', required: false })
+    @IsString()
+    @IsOptional()
+    programType?: string;
+
     @ApiProperty({ description: 'Start date', required: false })
     @IsDateString()
     @IsOptional()

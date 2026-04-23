@@ -2,12 +2,10 @@
 
 import {
   BoltIcon,
-  CurrencyDollarIcon,
   EnvelopeIcon,
   PowerIcon,
   UserGroupIcon,
 } from "@heroicons/react/24/solid";
-import type { ExchangeRateHistoryItem } from "@/src/shared/api-client";
 
 export type EmailVerificationMode = "Optional" | "Required";
 
@@ -18,11 +16,6 @@ export type MainConfigurationContentProps = {
   onToggleEmailVerification: () => void;
   programActive: boolean;
   onToggleProgramActive: () => void;
-  usdToIdrRate: number;
-  onChangeUsdToIdrRate: (value: number) => void;
-  exchangeRateReason: string;
-  onChangeExchangeRateReason: (value: string) => void;
-  rateHistory: ExchangeRateHistoryItem[];
   saving: boolean;
   onSave: () => void;
   onCancel: () => void;
@@ -35,11 +28,6 @@ export function MainConfigurationContent({
   onToggleEmailVerification,
   programActive,
   onToggleProgramActive,
-  usdToIdrRate,
-  onChangeUsdToIdrRate,
-  exchangeRateReason,
-  onChangeExchangeRateReason,
-  rateHistory,
   saving,
   onSave,
   onCancel,
@@ -59,7 +47,7 @@ export function MainConfigurationContent({
           </div>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="space-y-3">
           <div className="space-y-3 rounded-md border border-zinc-200 bg-zinc-50/80 px-3 py-3 md:px-4">
             <div className="mb-1 flex items-center gap-2">
               <BoltIcon className="h-4 w-4 text-amber-500 md:h-5 md:w-5" />
@@ -185,85 +173,6 @@ export function MainConfigurationContent({
                   </span>
                 </div>
               </div>
-            </div>
-          </div>
-
-          <div className="space-y-3 rounded-md border border-zinc-200 bg-zinc-50/80 px-3 py-3 md:px-4">
-            <div className="mb-1 flex items-center gap-2">
-              <CurrencyDollarIcon className="h-4 w-4 text-emerald-500 md:h-5 md:w-5" />
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-600 md:text-[13px]">
-                Financial Defaults
-              </h3>
-            </div>
-
-            <div className="space-y-3 text-xs md:text-sm">
-              <div className="flex items-center justify-between gap-3 rounded-md bg-white px-3 py-2.5">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-900 md:text-sm">
-                    <span>USD to IDR Rate</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-zinc-500">1 USD =</span>
-                  <input
-                    type="number"
-                    min={0}
-                    value={usdToIdrRate}
-                    onChange={(event) => onChangeUsdToIdrRate(Number(event.target.value) || 0)}
-                    className="w-28 rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-right text-[11px] text-zinc-900 shadow-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 md:w-32 md:text-xs"
-                  />
-                  <span className="text-[11px] font-medium text-zinc-700">IDR</span>
-                </div>
-              </div>
-
-              <div className="rounded-md bg-white px-3 py-2.5">
-                <label className="mb-1 block text-[11px] font-medium text-zinc-700 md:text-xs">
-                  Reason for rate change <span className="font-normal text-zinc-400">(optional)</span>
-                </label>
-                <input
-                  type="text"
-                  value={exchangeRateReason}
-                  onChange={(e) => onChangeExchangeRateReason(e.target.value)}
-                  placeholder="e.g. Bank Indonesia rate update April 2026"
-                  className="w-full rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1.5 text-[11px] text-zinc-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 md:text-xs"
-                />
-              </div>
-
-              {rateHistory.length > 0 && (
-                <div className="rounded-md bg-white px-3 py-2.5">
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-500 md:text-xs">
-                    Rate Change History
-                  </p>
-                  <div className="divide-y divide-zinc-100">
-                    {rateHistory.map((item) => (
-                      <div key={item.id} className="flex items-start justify-between gap-2 py-1.5">
-                        <div className="space-y-0.5">
-                          <p className="text-[11px] text-zinc-900 md:text-xs">
-                            <span className="font-medium text-red-500">
-                              {Number(item.oldRate).toLocaleString()}
-                            </span>
-                            {" → "}
-                            <span className="font-medium text-emerald-600">
-                              {Number(item.newRate).toLocaleString()}
-                            </span>
-                            {" IDR"}
-                          </p>
-                          {item.reason && (
-                            <p className="text-[10px] italic text-zinc-500">{item.reason}</p>
-                          )}
-                        </div>
-                        <span className="shrink-0 text-[10px] text-zinc-400">
-                          {new Date(item.createdAt).toLocaleDateString("en-GB", {
-                            day: "2-digit",
-                            month: "short",
-                            year: "numeric",
-                          })}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </div>

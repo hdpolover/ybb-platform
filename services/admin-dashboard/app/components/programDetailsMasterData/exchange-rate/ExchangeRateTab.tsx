@@ -73,8 +73,8 @@ export function ExchangeRateTab({ programId }: { programId: string }) {
       const histEnv = await histRes.json() as HistoryResponse;
 
       setCurrent(rateEnv);
-      setHistory(histEnv.history);
-      setHistoryTotal(histEnv.total);
+      setHistory(histEnv.history ?? []);
+      setHistoryTotal(histEnv.total ?? 0);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Failed to load exchange rate.");
     } finally {

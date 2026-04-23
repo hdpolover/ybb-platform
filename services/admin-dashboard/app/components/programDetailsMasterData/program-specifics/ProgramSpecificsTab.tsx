@@ -21,8 +21,6 @@ export interface ProgramSpecificsData {
     location: string;
     capacity: string;
     registrationStatus: string;
-    registrationWindow: string;
-    allowRegistration: string;
     requirePayment: string;
     currency: string;
     registrationFee: string;
@@ -175,18 +173,6 @@ export function ProgramSpecificsTab({ data }: { data: ProgramSpecificsData }) {
             <RegistrationStatusBadge status={data.operations.registrationStatus} />
           </div>
           <div>
-            <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Registration Window</dt>
-            <dd className="rounded-md border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 shadow-sm">
-              {data.operations.registrationWindow}
-            </dd>
-          </div>
-          <div>
-            <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Allow Registration</dt>
-            <dd className="rounded-md border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 shadow-sm">
-              {data.operations.allowRegistration}
-            </dd>
-          </div>
-          <div>
             <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Payment Required</dt>
             <dd className="rounded-md border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 shadow-sm">
               {data.operations.requirePayment}
@@ -250,21 +236,21 @@ export function ProgramSpecificsTab({ data }: { data: ProgramSpecificsData }) {
         <dl className="grid gap-5">
           <div>
             <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Requirements Description</dt>
-            <dd className="rounded-md border border-zinc-200 bg-white p-5 text-sm font-semibold text-zinc-900 shadow-sm">
-              {data.participantContent.requirementsDescription}
-            </dd>
+            <dd className="rounded-md border border-zinc-200 bg-white p-5 text-sm leading-relaxed text-zinc-800 shadow-sm"
+              dangerouslySetInnerHTML={{ __html: data.participantContent.requirementsDescription }}
+            />
           </div>
           <div>
             <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Benefits Description</dt>
-            <dd className="rounded-md border border-zinc-200 bg-white p-5 text-sm leading-relaxed text-zinc-800 shadow-sm">
-              {data.participantContent.benefitsDescription}
-            </dd>
+            <dd className="rounded-md border border-zinc-200 bg-white p-5 text-sm leading-relaxed text-zinc-800 shadow-sm"
+              dangerouslySetInnerHTML={{ __html: data.participantContent.benefitsDescription }}
+            />
           </div>
           <div>
             <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Terms &amp; Conditions</dt>
-            <dd className="rounded-md border border-zinc-200 bg-white p-5 text-sm leading-relaxed text-zinc-800 shadow-sm">
-              {data.participantContent.termsAndConditions}
-            </dd>
+            <dd className="rounded-md border border-zinc-200 bg-white p-5 text-sm leading-relaxed text-zinc-800 shadow-sm"
+              dangerouslySetInnerHTML={{ __html: data.participantContent.termsAndConditions }}
+            />
           </div>
         </dl>
       </section>

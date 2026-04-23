@@ -6,6 +6,7 @@ export class Program {
         public readonly slug: string,
         public readonly description: string | null,
         public readonly shortDescription: string | null,
+        public readonly programType: string | null,
         public readonly year: number,
         public readonly startDate: Date,
         public readonly endDate: Date,
