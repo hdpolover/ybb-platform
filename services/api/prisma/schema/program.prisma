@@ -137,6 +137,7 @@ model Program {
   description         String?  @db.Text
   shortDescription    String?  @map("short_description") @db.VarChar(500)
   theme               String?  @db.VarChar(255) // Main Program Theme
+  programType         String?  @map("program_type") @db.VarChar(100) // e.g. Cohort, Conference, Workshop
   year                Int
   startDate           DateTime @map("start_date") @db.Date
   endDate             DateTime @map("end_date") @db.Date

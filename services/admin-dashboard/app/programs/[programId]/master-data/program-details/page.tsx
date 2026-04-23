@@ -31,6 +31,7 @@ type ProgramDetail = {
   theme?: string | null;
   description?: string | null;
   shortDescription?: string | null;
+  programType?: string | null;
   startDate?: string | null;
   endDate?: string | null;
   applicationDeadline?: string | null;
@@ -128,48 +129,17 @@ function getRegistrationStatus(detail: ProgramDetail): string {
   return "Open";
 }
 
-function getRegistrationWindow(detail: ProgramDetail): string {
-  const openDate = formatDate(detail.registrationOpenDate);
-  const closeDate = formatDate(detail.registrationCloseDate);
-
-  if (openDate === "Not configured" && closeDate === "Not configured") {
-    return "Not configured";
-  }
-
-  return `${openDate} - ${closeDate}`;
-}
-
 function toGeneralInformationData(detail: ProgramDetail): GeneralInformationData {
   return {
     brandName: detail.brand.name,
-    programType: "Program cohort",
+    programType: formatDisplayValue(detail.programType),
     tagline: formatDisplayValue(detail.shortDescription),
-    websiteUrl: detail.slug ? `/programs/${detail.slug}` : "Not configured",
     media: {
       logo: detail.logoUrl ?? null,
       mainBanner: detail.bannerUrl ?? null,
       mainVideoUrl: formatDisplayValue(detail.videoUrl),
     },
     description: formatDisplayValue(detail.description),
-    contact: {
-      team: "Program admin team",
-      location: formatDisplayValue(detail.location),
-      email: "Not configured",
-    },
-    socialMedia: {
-      instagram: "Not configured",
-      tiktok: "Not configured",
-      youtube: "Not configured",
-      telegram: "Not configured",
-      sponsorCanva: "Not configured",
-    },
-    additionalInfo: formatDisplayValue(detail.metaDescription ?? detail.shortDescription),
-    coreValues: {
-      vision: formatDisplayValue(detail.metaTitle),
-      mission: [],
-    },
-    objectives: [],
-    benefits: detail.benefitsDescription ? [detail.benefitsDescription] : [],
   };
 }
 
@@ -190,8 +160,6 @@ function toProgramSpecificsData(detail: ProgramDetail): ProgramSpecificsData {
       location: formatDisplayValue(detail.location),
       capacity: formatDisplayValue(detail.capacity),
       registrationStatus: getRegistrationStatus(detail),
-      registrationWindow: getRegistrationWindow(detail),
-      allowRegistration: detail.allowRegistration ? "Enabled" : "Disabled",
       requirePayment: detail.requirePayment ? "Required" : "Not required",
       currency: formatDisplayValue(detail.currency ?? "USD"),
       registrationFee:
@@ -211,7 +179,7 @@ function toProgramSpecificsData(detail: ProgramDetail): ProgramSpecificsData {
 function toGeneralFormValues(detail: ProgramDetail): GeneralInformationFormValues {
   return {
     name: detail.name ?? "",
-    slug: detail.slug ?? "",
+    programType: detail.programType ?? "",
     shortDescription: detail.shortDescription ?? "",
     description: detail.description ?? "",
     videoUrl: detail.videoUrl ?? "",
@@ -229,17 +197,9 @@ function toSpecificsFormValues(detail: ProgramDetail): ProgramSpecificsFormValue
     endDate: toDateInputValue(detail.endDate),
     applicationDeadline: toDateInputValue(detail.applicationDeadline),
     isPublished: detail.isPublished,
-    isActive: detail.isActive,
     location: detail.location ?? "",
     capacity: detail.capacity !== null && detail.capacity !== undefined ? String(detail.capacity) : "",
-    registrationOpenDate: toDateInputValue(detail.registrationOpenDate),
-    registrationCloseDate: toDateInputValue(detail.registrationCloseDate),
-    allowRegistration: detail.allowRegistration,
     requirePayment: detail.requirePayment,
-    currency: detail.currency ?? "USD",
-    registrationFee:
-      typeof detail.registrationFee === "number" ? String(detail.registrationFee) : "",
-    usdInIdr: detail.usdInIdr != null ? String(detail.usdInIdr) : "",
     requirementsDescription: detail.requirementsDescription ?? "",
     benefitsDescription: detail.benefitsDescription ?? "",
     termsAndConditions: detail.termsAndConditions ?? "",
@@ -353,16 +313,9 @@ export default function ProgramDetailsPage({
         endDate: values.endDate || undefined,
         applicationDeadline: values.applicationDeadline || undefined,
         isPublished: values.isPublished,
-        isActive: values.isActive,
         location: values.location.trim() || undefined,
         capacity: values.capacity.trim() === "" ? undefined : Number(values.capacity),
-        registrationOpenDate: values.registrationOpenDate || undefined,
-        registrationCloseDate: values.registrationCloseDate || undefined,
-        allowRegistration: values.allowRegistration,
         requirePayment: values.requirePayment,
-        currency: values.currency.trim().toUpperCase() || undefined,
-        registrationFee: values.registrationFee.trim() === "" ? undefined : Number(values.registrationFee),
-        usdInIdr: values.usdInIdr.trim() === "" ? undefined : Number(values.usdInIdr),
         requirementsDescription: values.requirementsDescription.trim() || undefined,
         benefitsDescription: values.benefitsDescription.trim() || undefined,
         termsAndConditions: values.termsAndConditions.trim() || undefined,
@@ -419,7 +372,7 @@ export default function ProgramDetailsPage({
     try {
       const payload = {
         name: values.name.trim() || undefined,
-        slug: values.slug.trim() || undefined,
+        programType: values.programType.trim() || undefined,
         shortDescription: values.shortDescription.trim() || undefined,
         description: values.description.trim() || undefined,
         videoUrl: values.videoUrl.trim() || undefined,

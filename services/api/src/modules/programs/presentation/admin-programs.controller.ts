@@ -82,6 +82,7 @@ export class AdminProgramsController {
         videoUrl: program.videoUrl ?? null,
         year: program.year,
         theme: program.theme ?? null,
+        programType: program.programType ?? null,
         status: program.status,
         isPublished: program.isPublished,
         isActive: program.isActive,

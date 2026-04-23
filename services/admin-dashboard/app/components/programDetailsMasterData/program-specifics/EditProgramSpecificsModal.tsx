@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DocumentTextIcon, CalendarDaysIcon, MapPinIcon, IdentificationIcon } from "@heroicons/react/24/solid";
+import { DocumentTextIcon, MapPinIcon, IdentificationIcon } from "@heroicons/react/24/solid";
 import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
 import { FormSection } from "@/src/ui/drawer/form-section";
+import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
 
 export interface ProgramSpecificsFormValues {
   year: string;
@@ -12,16 +13,9 @@ export interface ProgramSpecificsFormValues {
   endDate: string;
   applicationDeadline: string;
   isPublished: boolean;
-  isActive: boolean;
   location: string;
   capacity: string;
-  registrationOpenDate: string;
-  registrationCloseDate: string;
-  allowRegistration: boolean;
   requirePayment: boolean;
-  currency: string;
-  registrationFee: string;
-  usdInIdr: string;
   requirementsDescription: string;
   benefitsDescription: string;
   termsAndConditions: string;
@@ -165,15 +159,6 @@ export function EditProgramSpecificsModal({
               />
               Published
             </label>
-            <label className="flex items-center gap-3 rounded-md border border-zinc-200 bg-white px-3 py-2.5 text-sm font-medium text-zinc-700 shadow-sm">
-              <input
-                type="checkbox"
-                checked={formValues.isActive}
-                onChange={(event) => updateField("isActive", event.target.checked)}
-                className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
-              />
-              Active (accept applications)
-            </label>
           </div>
         </div>
       </FormSection>
@@ -183,7 +168,7 @@ export function EditProgramSpecificsModal({
         title="Operations"
         description="Configure venue, capacity, and registration controls."
       >
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-5 md:grid-cols-2">
           <div>
             <label className="mb-1.5 block text-xs font-medium text-zinc-500">Location</label>
             <input
@@ -203,16 +188,9 @@ export function EditProgramSpecificsModal({
               className={INPUT_CLS}
             />
           </div>
-          <label className="flex items-center gap-3 rounded-md border border-zinc-200 bg-white px-3 py-2.5 text-sm font-medium text-zinc-700 shadow-sm">
-            <input
-              type="checkbox"
-              checked={formValues.allowRegistration}
-              onChange={(event) => updateField("allowRegistration", event.target.checked)}
-              className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
-            />
-            Allow registration
-          </label>
-          <label className="flex items-center gap-3 rounded-md border border-zinc-200 bg-white px-3 py-2.5 text-sm font-medium text-zinc-700 shadow-sm">
+        </div>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <label className="flex cursor-pointer items-center gap-3 rounded-md border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50">
             <input
               type="checkbox"
               checked={formValues.requirePayment}
@@ -225,65 +203,6 @@ export function EditProgramSpecificsModal({
       </FormSection>
 
       <FormSection
-        icon={CalendarDaysIcon}
-        title="Registration &amp; Payment"
-        description="Set the application window and payment defaults."
-      >
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Registration Open Date</label>
-            <input
-              type="date"
-              value={formValues.registrationOpenDate}
-              onChange={(event) => updateField("registrationOpenDate", event.target.value)}
-              className={INPUT_CLS}
-            />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Registration Close Date</label>
-            <input
-              type="date"
-              value={formValues.registrationCloseDate}
-              onChange={(event) => updateField("registrationCloseDate", event.target.value)}
-              className={INPUT_CLS}
-            />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Currency</label>
-            <input
-              type="text"
-              value={formValues.currency}
-              onChange={(event) => updateField("currency", event.target.value.toUpperCase())}
-              className={`${INPUT_CLS} uppercase`}
-            />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Registration Fee</label>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={formValues.registrationFee}
-              onChange={(event) => updateField("registrationFee", event.target.value)}
-              className={INPUT_CLS}
-            />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-zinc-500">USD → IDR Rate</label>
-            <input
-              type="number"
-              min="0"
-              step="1"
-              value={formValues.usdInIdr}
-              onChange={(event) => updateField("usdInIdr", event.target.value)}
-              className={INPUT_CLS}
-              placeholder="e.g. 16000"
-            />
-          </div>
-        </div>
-      </FormSection>
-
-      <FormSection
         icon={DocumentTextIcon}
         title="Participant-Facing Content"
         description="Operational copy used during registration and payment flows."
@@ -291,29 +210,26 @@ export function EditProgramSpecificsModal({
         <div className="space-y-5">
           <div>
             <label className="mb-1.5 block text-xs font-medium text-zinc-500">Requirements Description</label>
-            <textarea
-              rows={4}
-              value={formValues.requirementsDescription}
-              onChange={(event) => updateField("requirementsDescription", event.target.value)}
-              className={INPUT_CLS}
+            <RichTextEditor
+              content={formValues.requirementsDescription}
+              onChange={(html) => updateField("requirementsDescription", html)}
+              placeholder="Describe what participants need to qualify…"
             />
           </div>
           <div>
             <label className="mb-1.5 block text-xs font-medium text-zinc-500">Benefits Description</label>
-            <textarea
-              rows={4}
-              value={formValues.benefitsDescription}
-              onChange={(event) => updateField("benefitsDescription", event.target.value)}
-              className={INPUT_CLS}
+            <RichTextEditor
+              content={formValues.benefitsDescription}
+              onChange={(html) => updateField("benefitsDescription", html)}
+              placeholder="Describe the benefits participants will receive…"
             />
           </div>
           <div>
             <label className="mb-1.5 block text-xs font-medium text-zinc-500">Terms &amp; Conditions</label>
-            <textarea
-              rows={5}
-              value={formValues.termsAndConditions}
-              onChange={(event) => updateField("termsAndConditions", event.target.value)}
-              className={INPUT_CLS}
+            <RichTextEditor
+              content={formValues.termsAndConditions}
+              onChange={(html) => updateField("termsAndConditions", html)}
+              placeholder="Enter the terms and conditions…"
             />
           </div>
         </div>

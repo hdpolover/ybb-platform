@@ -5,9 +5,6 @@ import { toast } from "sonner";
 import {
   getProgramConfig,
   updateProgramConfig,
-  updateExchangeRate,
-  getExchangeRateHistory,
-  type ExchangeRateHistoryItem,
 } from "@/src/shared/api-client";
 import { MainConfigurationHeader } from "./mainConfiguration/MainConfigurationHeader";
 import { MainConfigurationContent } from "./mainConfiguration/MainConfigurationContent";
@@ -24,24 +21,11 @@ export function MainConfigurationSettings({
   const [registrationOpen, setRegistrationOpen] = useState(true);
   const [emailVerification, setEmailVerification] = useState<"Optional" | "Required">("Required");
   const [programActive, setProgramActive] = useState(true);
-  const [usdToIdrRate, setUsdToIdrRate] = useState(16900);
-  const [originalRate, setOriginalRate] = useState(16900);
-  const [exchangeRateReason, setExchangeRateReason] = useState("");
-  const [rateHistory, setRateHistory] = useState<ExchangeRateHistoryItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const programStatusLabel = programActive ? "Active" : "Inactive";
   const registrationStatusLabel = registrationOpen ? "Open" : "Closed";
-
-  const loadHistory = useCallback(async () => {
-    try {
-      const result = await getExchangeRateHistory(programId, 1, 10);
-      setRateHistory(result.history);
-    } catch {
-      // non-critical — don't toast
-    }
-  }, [programId]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -50,36 +34,23 @@ export function MainConfigurationSettings({
       setRegistrationOpen(config.allowRegistration);
       setEmailVerification(config.requireEmailVerification ? "Required" : "Optional");
       setProgramActive(config.isActive);
-      const rate = config.usdInIdr ?? 16900;
-      setUsdToIdrRate(rate);
-      setOriginalRate(rate);
-      await loadHistory();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load settings");
     } finally {
       setLoading(false);
     }
-  }, [programId, loadHistory]);
+  }, [programId]);
 
   useEffect(() => { load(); }, [load]);
 
   async function handleSave() {
     setSaving(true);
     try {
-      // Save system settings (without usdInIdr — handled separately)
       await updateProgramConfig(programId, {
         isActive: programActive,
         allowRegistration: registrationOpen,
         requireEmailVerification: emailVerification === "Required",
       });
-
-      // Save exchange rate via dedicated endpoint (records history)
-      if (usdToIdrRate !== originalRate) {
-        await updateExchangeRate(programId, usdToIdrRate, exchangeRateReason || undefined);
-        setOriginalRate(usdToIdrRate);
-        setExchangeRateReason("");
-        await loadHistory();
-      }
 
       toast.success("Settings saved.");
     } catch (err) {
@@ -111,11 +82,6 @@ export function MainConfigurationSettings({
           }
           programActive={programActive}
           onToggleProgramActive={() => setProgramActive((p) => !p)}
-          usdToIdrRate={usdToIdrRate}
-          onChangeUsdToIdrRate={setUsdToIdrRate}
-          exchangeRateReason={exchangeRateReason}
-          onChangeExchangeRateReason={setExchangeRateReason}
-          rateHistory={rateHistory}
           saving={saving}
           onSave={handleSave}
           onCancel={load}

@@ -22,9 +22,31 @@ import { FormSection } from "@/src/ui/drawer/form-section";
 const INPUT_CLS =
   "block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
 
+const PROGRAM_TYPE_OPTIONS = [
+  "Cohort",
+  "Conference",
+  "Workshop",
+  "Summit",
+  "Exchange",
+  "Fellowship",
+  "Competition",
+  "Seminar",
+  "Bootcamp",
+  "Other",
+];
+
+function toAutoSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
+}
+
 export interface GeneralInformationFormValues {
   name: string;
-  slug: string;
+  programType: string;
   shortDescription: string;
   description: string;
   videoUrl: string;
@@ -375,7 +397,7 @@ export function EditGeneralInformationModal({
     thumbnailPickedUrl !== null;
   const hasGeneralChanges =
     formValues.name !== initialValues.name ||
-    formValues.slug !== initialValues.slug ||
+    formValues.programType !== initialValues.programType ||
     formValues.shortDescription !== initialValues.shortDescription ||
     formValues.description !== initialValues.description ||
     formValues.videoUrl !== initialValues.videoUrl ||
@@ -532,16 +554,26 @@ export function EditGeneralInformationModal({
                     onChange={(e) => updateField("name", e.target.value)}
                     className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   />
+                  <p className="mt-1 text-[11px] text-zinc-400">
+                    URL: <span className="font-mono">/programs/{toAutoSlug(formValues.name) || "…"}</span>
+                    <span className="ml-1 italic">(auto-generated)</span>
+                  </p>
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-xs font-medium text-zinc-500">URL Slug</label>
-                  <input
-                    type="text"
-                    value={formValues.slug}
-                    onChange={(e) => updateField("slug", e.target.value)}
+                  <label className="mb-1.5 block text-xs font-medium text-zinc-500">Program Type</label>
+                  <select
+                    value={formValues.programType}
+                    onChange={(e) => updateField("programType", e.target.value)}
                     className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                    placeholder="e.g. japan-youth-summit-2026"
-                  />
+                  >
+                    <option value="">Select a type…</option>
+                    {PROGRAM_TYPE_OPTIONS.map((opt) => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                    {formValues.programType && !PROGRAM_TYPE_OPTIONS.includes(formValues.programType) && (
+                      <option value={formValues.programType}>{formValues.programType}</option>
+                    )}
+                  </select>
                 </div>
                 <div className="md:col-span-2">
                   <label className="mb-1.5 block text-xs font-medium text-zinc-500">Tagline / Short Description</label>
