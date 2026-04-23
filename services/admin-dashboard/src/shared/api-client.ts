@@ -212,9 +212,13 @@ export type ProgramTestimonial = {
   company: string | null;
   testimonial: string;
   type: string;
+  videoUrl: string | null;
+  thumbnailUrl: string | null;
   avatarUrl: string | null;
   rating: number | null;
   isFeatured: boolean | null;
+  isActive: boolean;
+  order: number;
 };
 
 export type ProgramTimeline = {
@@ -644,7 +648,17 @@ export function listProgramTestimonials(programId: string): Promise<ProgramTesti
 
 export function createProgramTestimonial(
   programId: string,
-  input: { name: string; role?: string; company?: string; testimonial: string; avatarUrl?: string },
+  input: {
+    name: string;
+    role?: string;
+    company?: string;
+    testimonial: string;
+    avatarUrl?: string;
+    type?: string;
+    videoUrl?: string;
+    isActive?: boolean;
+    order?: number;
+  },
 ): Promise<ProgramTestimonial> {
   return request<ProgramTestimonial>(`/programs/${programId}/testimonials`, {
     method: "POST",
@@ -654,7 +668,16 @@ export function createProgramTestimonial(
 
 export function updateProgramTestimonial(
   id: string,
-  input: { name?: string; role?: string; company?: string; testimonial?: string; avatarUrl?: string },
+  input: {
+    name?: string;
+    role?: string;
+    company?: string;
+    testimonial?: string;
+    avatarUrl?: string;
+    type?: string;
+    videoUrl?: string;
+    isActive?: boolean;
+  },
 ): Promise<ProgramTestimonial> {
   return request<ProgramTestimonial>(`/programs/testimonials/${id}`, {
     method: "PUT",

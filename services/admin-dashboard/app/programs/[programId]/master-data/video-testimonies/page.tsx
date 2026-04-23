@@ -1,53 +1,60 @@
-import { VideoTestimonialsTable, type VideoTestimonyRow } from "@/app/components/videoTestimonialsMasterData/VideoTestimonialsTable";
+"use client";
 
-// --- UTILITY ---
-function formatProgramName(programId: string | null): string {
-  if (!programId) return "Selected Program";
-  const cleaned = programId.replace(/[-_]+/g, " ");
-  const words = cleaned.split(" ").filter(Boolean);
-  if (words.length === 0) return "Selected Program";
-  return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
-}
+import { useCallback, useEffect, useState } from "react";
+import { useParams } from "next/navigation";
+import { useAuth } from "@/app/contexts/AuthContext";
+import {
+  VideoTestimonialsTable,
+  type VideoTestimonyRow,
+} from "@/app/components/videoTestimonialsMasterData/VideoTestimonialsTable";
+import { listProgramTestimonials } from "@/src/shared/api-client";
 
-// --- MOCK DATA ---
-const MOCK_VIDEO_TESTIMONIALS: VideoTestimonyRow[] = [
-  {
-    id: 1,
-    thumbnailUrl: "/img/mock/video-thumb-1.jpg",
-    youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-    description: "A short highlight video from delegates sharing their experience at Japan Youth Summit.",
-    status: "active",
-  },
-  {
-    id: 2,
-    thumbnailUrl: "/img/mock/video-thumb-2.jpg",
-    youtubeUrl: "https://www.youtube.com/watch?v=oHg5SJYRHA0",
-    description: "Alumni stories on how the program helped them build an international network.",
-    status: "inactive",
-  },
-];
+export default function VideoTestimonialsPage() {
+  const params = useParams<{ programId: string }>();
+  const { accessiblePrograms } = useAuth();
+  const [items, setItems] = useState<VideoTestimonyRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
-export default async function VideoTestimonialsPage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ programId: string }>;
-  searchParams: Promise<{ search?: string }>;
-}) {
-  const resolvedParams = await params;
-  const resolvedSearchParams = await searchParams;
+  const program = accessiblePrograms.find((p) => p.programId === params.programId);
+  const programName = program?.programName ?? "Selected Program";
 
-  const programName = formatProgramName(resolvedParams.programId);
-  const searchQuery = resolvedSearchParams.search?.toLowerCase() || "";
+  const load = useCallback(async () => {
+    if (!params.programId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const all = await listProgramTestimonials(params.programId);
+      const videos = all
+        .filter((t) => t.type === "video")
+        .map((t) => ({
+          id: t.id,
+          name: t.name,
+          youtubeUrl: t.videoUrl ?? "",
+          description: t.testimonial,
+          isActive: t.isActive ?? true,
+        }));
+      setItems(videos);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load");
+    } finally {
+      setLoading(false);
+    }
+  }, [params.programId]);
 
-  const filteredData = MOCK_VIDEO_TESTIMONIALS.filter((row) => {
-    if (!searchQuery) return true;
-    return (
-      row.youtubeUrl.toLowerCase().includes(searchQuery) ||
-      row.description.toLowerCase().includes(searchQuery) ||
-      row.status.toLowerCase().includes(searchQuery)
-    );
-  });
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const filtered = search.trim()
+    ? items.filter(
+        (r) =>
+          r.youtubeUrl.toLowerCase().includes(search.toLowerCase()) ||
+          r.description.toLowerCase().includes(search.toLowerCase()) ||
+          r.name.toLowerCase().includes(search.toLowerCase()),
+      )
+    : items;
 
   return (
     <main className="space-y-4">
@@ -68,10 +75,19 @@ export default async function VideoTestimonialsPage({
       </section>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-        <VideoTestimonialsTable data={filteredData} currentSearch={searchQuery} />
+        {error && (
+          <p className="mb-3 rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-700">{error}</p>
+        )}
+        <VideoTestimonialsTable
+          data={filtered}
+          loading={loading}
+          programId={params.programId}
+          search={search}
+          onSearchChange={setSearch}
+          onRefresh={load}
+        />
       </section>
     </main>
   );
 }
 
-// TODO: Nanti implement halaman Video Testimonials lengkap ngikutin pattern halaman program-testimonies

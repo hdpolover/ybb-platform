@@ -1,6 +1,7 @@
-import { IsString, IsNotEmpty, IsOptional, IsDateString, IsNumber, IsBoolean, IsUUID, IsArray } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsDateString, IsNumber, IsBoolean, IsUUID, IsArray, IsEnum } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
+import { FaqCategory } from '@prisma/client';
 
 // Timeline DTOs
 export class CreateProgramTimelineDto {
@@ -516,10 +517,10 @@ export class CreateProgramFaqDto {
     @IsNotEmpty()
     answer: string;
 
-    @ApiProperty({ required: false })
-    @IsString()
+    @ApiProperty({ required: false, enum: FaqCategory })
+    @IsEnum(FaqCategory)
     @IsOptional()
-    category?: string;
+    category?: FaqCategory;
 
     @ApiProperty({ required: false })
     @IsNumber()
@@ -538,10 +539,10 @@ export class UpdateProgramFaqDto {
     @IsOptional()
     answer?: string;
 
-    @ApiProperty({ required: false })
-    @IsString()
+    @ApiProperty({ required: false, enum: FaqCategory })
+    @IsEnum(FaqCategory)
     @IsOptional()
-    category?: string;
+    category?: FaqCategory;
 
     @ApiProperty({ required: false })
     @IsNumber()

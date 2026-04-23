@@ -193,37 +193,15 @@ class MinIOStorage(IStorageService):
             return False
 
     def get_public_url(self, bucket: str, object_name: str) -> str:
-        """Get public URL by stripping signature from presigned URL."""
-        try:
-            from datetime import timedelta
-            
-            # Generate presigned URL
-            url = self.client.presigned_get_object(
-                bucket_name=bucket,
-                object_name=object_name,
-                expires=timedelta(seconds=300)
-            )
-            
-            # Rewrite URL to use public endpoint
-            if self.public_endpoint and self.public_endpoint != self.endpoint:
-                internal_protocol = "https" if self.secure else "http"
-                public_protocol = "https" if self.public_secure else "http"
-                
-                internal_base = f"{internal_protocol}://{self.endpoint}"
-                public_base = f"{public_protocol}://{self.public_endpoint}"
-                
-                internal_base_with_bucket = f"{internal_base}/{bucket}"
-                if internal_base_with_bucket in url:
-                    url = url.replace(internal_base_with_bucket, public_base, 1)
-                else:
-                    url = url.replace(internal_base, public_base, 1)
-            
-            # Strip query parameters (signature)
-            if '?' in url:
-                url = url.split('?')[0]
-                
-            return url
-            
-        except Exception:
-            return ""
+        """Construct a permanent public URL using the configured public endpoint.
+
+        Builds the URL directly from the known path — no storage API call, no
+        signed URL, no DNS dependency. The public endpoint (CDN or bucket
+        subdomain) already encodes the bucket, so only the object path is
+        appended.
+        """
+        public_protocol = "https" if self.public_secure else "http"
+        base = f"{public_protocol}://{self.public_endpoint}".rstrip('/')
+        path = object_name.lstrip('/')
+        return f"{base}/{path}"
 
