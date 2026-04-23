@@ -908,7 +908,10 @@ function OverviewTab({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved: 
         {brand.about ? (
           <div className="sm:col-span-2">
             <p className="text-xs font-medium text-zinc-500">About</p>
-            <p className="mt-0.5 text-sm text-zinc-900 whitespace-pre-wrap">{brand.about}</p>
+            <div
+              className="mt-0.5 text-sm text-zinc-900 [&_a]:text-blue-600 [&_a]:underline [&_h1]:mb-3 [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:mb-3 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:text-lg [&_h3]:font-semibold [&_li]:mb-1 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-5"
+              dangerouslySetInnerHTML={{ __html: brand.about }}
+            />
           </div>
         ) : (
           <p className="text-sm text-zinc-400 sm:col-span-2">No description added yet.</p>
@@ -916,13 +919,19 @@ function OverviewTab({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved: 
         {brand.vision && (
           <div>
             <p className="text-xs font-medium text-zinc-500">Vision</p>
-            <p className="mt-0.5 text-sm text-zinc-900 whitespace-pre-wrap">{brand.vision}</p>
+            <div
+              className="mt-0.5 text-sm text-zinc-900 [&_a]:text-blue-600 [&_a]:underline [&_h1]:mb-3 [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:mb-3 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:text-lg [&_h3]:font-semibold [&_li]:mb-1 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-5"
+              dangerouslySetInnerHTML={{ __html: brand.vision }}
+            />
           </div>
         )}
         {brand.mission && (
           <div>
             <p className="text-xs font-medium text-zinc-500">Mission</p>
-            <p className="mt-0.5 text-sm text-zinc-900 whitespace-pre-wrap">{brand.mission}</p>
+            <div
+              className="mt-0.5 text-sm text-zinc-900 [&_a]:text-blue-600 [&_a]:underline [&_h1]:mb-3 [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:mb-3 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:text-lg [&_h3]:font-semibold [&_li]:mb-1 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-5"
+              dangerouslySetInnerHTML={{ __html: brand.mission }}
+            />
           </div>
         )}
       </Section>
