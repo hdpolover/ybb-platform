@@ -16,6 +16,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@ne
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheInvalidate } from '@shared/decorators/cache-invalidate.decorator';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { ChangeType } from '@prisma/client';
@@ -79,6 +80,7 @@ export class ApplicationsController {
     private readonly listApplicationsHandler: ListApplicationsHandler,
     private readonly exportApplicationsHandler: ExportApplicationsHandler,
     private readonly cacheService: CacheService,
+    private readonly prisma: PrismaService,
   ) { }
 
   @Post()
@@ -190,6 +192,46 @@ export class ApplicationsController {
     });
 
     const result = await this.listApplicationsHandler.execute(query);
+
+    // Enrich applications with participant data and payment statuses via single batch lookup
+    if (result.applications.length > 0) {
+      const appIds = result.applications.map(a => a.id);
+      const enriched = await this.prisma.participantApplication.findMany({
+        where: { id: { in: appIds } },
+        select: {
+          id: true,
+          registrationPaymentStatus: true,
+          programPaymentStatus: true,
+          participant: {
+            include: { user: { select: { id: true, email: true } } },
+          },
+        },
+      });
+      const enrichMap = new Map(enriched.map(e => [e.id, e]));
+      result.applications = result.applications.map(app => {
+        const e = enrichMap.get(app.id);
+        if (!e) return app;
+        const p = e.participant;
+        return {
+          ...app,
+          registrationPaymentStatus: e.registrationPaymentStatus,
+          programPaymentStatus: e.programPaymentStatus,
+          participant: p ? {
+            id: p.id,
+            fullName: p.fullName,
+            nickName: p.nickName,
+            email: (p as any).user?.email ?? null,
+            phoneCountryCode: p.phoneCountryCode,
+            phoneNumber: p.phoneNumber,
+            originCountry: p.originCountry,
+            originCity: p.originCity,
+            nationality: p.nationality,
+            gender: p.gender,
+            profilePictureUrl: p.profilePictureUrl,
+          } : undefined,
+        };
+      });
+    }
 
     if (shouldCache) {
       try {

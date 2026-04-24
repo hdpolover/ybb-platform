@@ -470,6 +470,17 @@ export function getUser(id: string, brandId?: string): Promise<User> {
   return request<User>(`/users/${id}${q}`);
 }
 
+export function createUser(data: {
+  brandId: string;
+  email: string;
+  password: string;
+}): Promise<User> {
+  return request<User>("/users", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
 export function activateUser(id: string, brandId: string): Promise<User> {
   return request<User>(`/users/${id}/activate?brandId=${encodeURIComponent(brandId)}`, {
     method: 'PATCH',
@@ -1893,4 +1904,173 @@ export async function generateLoa(
 
 export function deleteDocumentTemplate(id: string): Promise<void> {
   return request<void>(`/programs/document-templates/${id}`, { method: 'DELETE' });
+}
+
+// ─── Program Invoices ────────────────────────────────────────────────────────
+
+export type InvoiceStatus = "unpaid" | "paid" | "processing" | "failed" | "refunded";
+
+export type InvoiceListItem = {
+  id: string;
+  applicationId: string;
+  amount: number;
+  currency: string;
+  status: InvoiceStatus;
+  paymentMethod: string | null;
+  paidAt: string | null;
+  externalTransactionId: string | null;
+  externalIntentId: string | null;
+  pricingTier: { id: string; name: string; feeType: string };
+  participant: { id: string; fullName: string; userId: string; email: string | null };
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type InvoiceDetail = InvoiceListItem & {
+  transaction: Record<string, unknown> | null;
+};
+
+export type InvoiceSummary = Record<InvoiceStatus, { count: number; amount: number }>;
+
+export async function listProgramInvoices(params: {
+  programId: string;
+  page?: number;
+  limit?: number;
+  status?: string;
+  search?: string;
+}): Promise<{ data: InvoiceListItem[]; meta: PaginatedMeta; summary: InvoiceSummary }> {
+  const q = new URLSearchParams({ programId: params.programId });
+  if (params.page) q.set("page", String(params.page));
+  if (params.limit) q.set("limit", String(params.limit));
+  if (params.status) q.set("status", params.status);
+  if (params.search) q.set("search", params.search);
+
+  // The TransformInterceptor unwraps { data: [], meta: {}, summary: {} } into
+  // { statusCode, data: [], meta: { meta: {...}, summary: {...} } }
+  // so we must use a raw fetch (not request()) to preserve the full structure.
+  const headers = new Headers();
+  headers.set("Authorization", `Bearer ${getAccessToken()}`);
+  const res = await fetch(buildApiUrl(`/admin/payments/invoices?${q.toString()}`), { headers });
+  if (!res.ok) throw new Error(await readErrorMessage(res));
+
+  const payload = await res.json() as {
+    data?: InvoiceListItem[];
+    meta?: Record<string, unknown> & { meta?: PaginatedMeta; summary?: InvoiceSummary };
+  };
+
+  const data = (payload.data ?? []) as InvoiceListItem[];
+  const rawMeta = (payload.meta ?? {}) as Record<string, unknown> & {
+    meta?: PaginatedMeta;
+    summary?: InvoiceSummary;
+  };
+  const meta = (rawMeta.meta ?? rawMeta) as PaginatedMeta;
+  const defaultSummary: InvoiceSummary = {
+    paid: { count: 0, amount: 0 },
+    unpaid: { count: 0, amount: 0 },
+    processing: { count: 0, amount: 0 },
+    failed: { count: 0, amount: 0 },
+    refunded: { count: 0, amount: 0 },
+  };
+  const summary = (rawMeta.summary ?? defaultSummary) as InvoiceSummary;
+
+  return { data, meta, summary };
+}
+
+export function getProgramInvoice(id: string): Promise<InvoiceDetail> {
+  return request<InvoiceDetail>(`/admin/payments/invoices/${id}`);
+}
+
+export function verifyInvoice(
+  id: string,
+  action: "approve" | "reject",
+  reason?: string,
+): Promise<unknown> {
+  return request<unknown>(`/admin/payments/invoices/${id}/verify`, {
+    method: "POST",
+    body: JSON.stringify({ action, reason }),
+  });
+}
+
+// ─── Ambassadors ──────────────────────────────────────────────────────────────
+
+export type Ambassador = {
+  id: string;
+  userId: string;
+  programId: string;
+  fullName: string;
+  phoneNumber: string | null;
+  referralCode: string;
+  institution: string | null;
+  gender: string | null;
+  totalReferrals: number;
+  successfulReferrals: number;
+  isActive: boolean;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  user?: { email: string };
+};
+
+export type AmbassadorListMeta = { total: number; page: number; limit: number; lastPage: number };
+
+export async function listAmbassadors(params: {
+  programId?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}): Promise<{ data: Ambassador[]; meta: AmbassadorListMeta }> {
+  const q = new URLSearchParams();
+  if (params.programId) q.set("programId", params.programId);
+  if (params.search) q.set("search", params.search);
+  if (params.page) q.set("page", String(params.page));
+  if (params.limit) q.set("limit", String(params.limit));
+  // Handler returns { data: array, meta } → TransformInterceptor Pattern-1 extracts array.
+  // Must use raw fetch to preserve meta alongside data.
+  const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/v1";
+  const res = await fetch(`${BASE}/admin/ambassadors?${q}`, {
+    headers: { Authorization: `Bearer ${getAccessToken()}` },
+  });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  const payload = await res.json();
+  const data: Ambassador[] = Array.isArray(payload.data) ? payload.data : [];
+  const rawMeta = (payload.meta ?? {}) as { meta?: AmbassadorListMeta };
+  const meta: AmbassadorListMeta = (rawMeta.meta ?? rawMeta) as AmbassadorListMeta ?? { total: 0, page: 1, limit: 20, lastPage: 1 };
+  return { data, meta };
+}
+
+export function createAmbassador(data: {
+  email: string;
+  fullName: string;
+  programId: string;
+  phoneNumber?: string;
+  institution?: string;
+  gender?: string;
+  notes?: string;
+}): Promise<Ambassador> {
+  return request<Ambassador>("/admin/ambassadors", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateAmbassador(
+  id: string,
+  data: { fullName?: string; phoneNumber?: string; institution?: string; gender?: string; notes?: string },
+): Promise<Ambassador> {
+  return request<Ambassador>(`/admin/ambassadors/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function activateAmbassador(id: string): Promise<unknown> {
+  return request<unknown>(`/admin/ambassadors/${id}/activate`, { method: "PATCH" });
+}
+
+export function deactivateAmbassador(id: string): Promise<unknown> {
+  return request<unknown>(`/admin/ambassadors/${id}/deactivate`, { method: "PATCH" });
+}
+
+export function deleteAmbassador(id: string): Promise<unknown> {
+  return request<unknown>(`/admin/ambassadors/${id}`, { method: "DELETE" });
 }

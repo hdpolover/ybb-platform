@@ -12,7 +12,6 @@ import {
     Logger
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiQuery } from '@nestjs/swagger';
-import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
@@ -22,11 +21,12 @@ import { CreatePaymentMethodDto, UpdatePaymentMethodDto } from './dto/admin-paym
 import { FileServiceClient } from '@modules/files/infrastructure/clients/file-service.client';
 import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
-import { ChangeType } from '@prisma/client';
+import { ChangeType, PaymentStatus, Prisma } from '@prisma/client';
 
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { PaymentServiceHttpClient } from '../infrastructure/services/payment-service-http.client';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 
 @ApiTags('Admin Payments')
 @Controller('admin/payments')
@@ -42,10 +42,152 @@ export class PaymentAdminController {
         private readonly configService: ConfigService,
         private readonly fileService: FileServiceClient,
         private readonly cacheService: CacheService,
+        private readonly prisma: PrismaService,
     ) {
         this.logger.log("Using HTTP Payment Admin Controller");
         this.paymentServiceInternalKey = this.configService.get<string>('PAYMENT_SERVICE_INTERNAL_KEY', '');
     }
+
+    // ─── Invoice Endpoints ────────────────────────────────────────────────────────
+
+    @Get('invoices')
+    @ApiOperation({ summary: 'List invoices for a program (Admin)' })
+    @ApiQuery({ name: 'programId', required: true })
+    @ApiQuery({ name: 'page', required: false })
+    @ApiQuery({ name: 'limit', required: false })
+    @ApiQuery({ name: 'status', required: false })
+    @ApiQuery({ name: 'search', required: false })
+    async listInvoices(@Query() query: Record<string, string>) {
+        const { programId, page = '1', limit = '20', status, search } = query;
+
+        if (!programId) throw new HttpException('programId is required', 400);
+
+        const pageNum = Math.max(1, parseInt(page, 10) || 1);
+        const limitNum = Math.min(Math.max(1, parseInt(limit, 10) || 20), 100);
+        const skip = (pageNum - 1) * limitNum;
+
+        const applicationFilter: Prisma.ParticipantApplicationWhereInput = { programId };
+        if (search?.trim()) {
+            applicationFilter.participant = {
+                OR: [
+                    { fullName: { contains: search.trim(), mode: 'insensitive' } },
+                    { user: { email: { contains: search.trim(), mode: 'insensitive' } } },
+                ],
+            };
+        }
+
+        const where: Prisma.ApplicationInvoiceWhereInput = { application: applicationFilter };
+        if (status) where.status = status as PaymentStatus;
+
+        const [invoices, total, summaryRows] = await Promise.all([
+            this.prisma.applicationInvoice.findMany({
+                where,
+                include: {
+                    application: {
+                        include: {
+                            participant: {
+                                include: { user: { select: { id: true, email: true } } },
+                            },
+                        },
+                    },
+                    pricingTier: { select: { id: true, name: true, feeType: true } },
+                },
+                orderBy: { createdAt: 'desc' },
+                skip,
+                take: limitNum,
+            }),
+            this.prisma.applicationInvoice.count({ where }),
+            this.prisma.applicationInvoice.groupBy({
+                by: ['status'],
+                where: { application: { programId } },
+                _count: { id: true },
+                _sum: { amount: true },
+            }),
+        ]);
+
+        const summary: Record<string, { count: number; amount: number }> = {
+            paid: { count: 0, amount: 0 },
+            unpaid: { count: 0, amount: 0 },
+            processing: { count: 0, amount: 0 },
+            failed: { count: 0, amount: 0 },
+            refunded: { count: 0, amount: 0 },
+        };
+        for (const row of summaryRows) {
+            summary[row.status] = { count: row._count.id, amount: Number(row._sum.amount ?? 0) };
+        }
+
+        return {
+            data: invoices.map((inv) => this.toInvoiceDto(inv)),
+            meta: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
+            summary,
+        };
+    }
+
+    @Get('invoices/:id')
+    @ApiOperation({ summary: 'Get invoice detail (Admin)' })
+    async getInvoice(@Param('id') id: string) {
+        const invoice = await this.prisma.applicationInvoice.findUnique({
+            where: { id },
+            include: {
+                application: {
+                    include: {
+                        participant: {
+                            include: { user: { select: { id: true, email: true } } },
+                        },
+                    },
+                },
+                pricingTier: { select: { id: true, name: true, feeType: true } },
+            },
+        });
+
+        if (!invoice) throw new HttpException('Invoice not found', 404);
+
+        let transaction: unknown = null;
+        if (invoice.externalTransactionId) {
+            try {
+                const { data } = await this.paymentServiceClient.get(
+                    `/api/v1/payments/${invoice.externalTransactionId}`,
+                    { headers: this.buildInternalHeaders() },
+                );
+                transaction = data;
+            } catch (e) {
+                this.logger.warn(`Failed to fetch transaction ${invoice.externalTransactionId}: ${e.message}`);
+            }
+        }
+
+        return { ...this.toInvoiceDto(invoice), transaction };
+    }
+
+    @Post('invoices/:id/verify')
+    @ApiOperation({ summary: 'Verify manual payment (approve/reject)' })
+    async verifyInvoice(
+        @Param('id') id: string,
+        @Body() body: { action: 'approve' | 'reject'; reason?: string },
+        @CurrentUser() user: CurrentUserData,
+    ) {
+        const invoice = await this.prisma.applicationInvoice.findUnique({
+            where: { id },
+            select: { externalTransactionId: true },
+        });
+
+        if (!invoice) throw new HttpException('Invoice not found', 404);
+        if (!invoice.externalTransactionId) {
+            throw new HttpException('No transaction linked to this invoice', 400);
+        }
+
+        try {
+            const { data } = await this.paymentServiceClient.post(
+                `/api/v1/payments/${invoice.externalTransactionId}/verify`,
+                { action: body.action, reason: body.reason ?? '', admin_id: user.userId },
+                { headers: this.buildInternalHeaders() },
+            );
+            return data;
+        } catch (error) {
+            this.handleError(error);
+        }
+    }
+
+    // ─── Payment Method Endpoints ─────────────────────────────────────────────────
 
     @Get('methods')
     @ApiOperation({ summary: 'List payment methods (Admin)' })
@@ -98,7 +240,6 @@ export class PaymentAdminController {
             this.handleError(error);
         }
     }
-
 
     @Get('methods/:id')
     @ApiOperation({ summary: 'Get payment method detail' })
@@ -157,10 +298,31 @@ export class PaymentAdminController {
         }
     }
 
-    /**
-     * Helper to resolve File ID (UUID) to full public URL.
-     * If the icon string is already a URL or not a UUID, it is returned as is.
-     */
+    // ─── Private Helpers ──────────────────────────────────────────────────────────
+
+    private toInvoiceDto(invoice: any) {
+        return {
+            id: invoice.id as string,
+            applicationId: invoice.applicationId as string,
+            amount: Number(invoice.amount),
+            currency: invoice.currency as string,
+            status: invoice.status as string,
+            paymentMethod: invoice.paymentMethod as string | null,
+            paidAt: invoice.paidAt ? (invoice.paidAt as Date).toISOString() : null,
+            externalTransactionId: invoice.externalTransactionId as string | null,
+            externalIntentId: invoice.externalIntentId as string | null,
+            pricingTier: invoice.pricingTier as { id: string; name: string; feeType: string },
+            participant: {
+                id: invoice.application.participant.id as string,
+                fullName: invoice.application.participant.fullName as string,
+                userId: invoice.application.participant.userId as string,
+                email: (invoice.application.participant.user?.email ?? null) as string | null,
+            },
+            createdAt: (invoice.createdAt as Date).toISOString(),
+            updatedAt: (invoice.updatedAt as Date).toISOString(),
+        };
+    }
+
     private async resolveIconUrl(icon: string, user: CurrentUserData): Promise<string> {
         this.logger.log(`Resolving icon UUID: ${icon}. User: ${user.userId}, Brand: ${user.brandId}`);
         if (!this.isValidUUID(icon)) {
@@ -172,8 +334,6 @@ export class PaymentAdminController {
             const fileInfo = await this.fileService.getFile(icon, user.userId, user.brandId);
             this.logger.log(`Resolved file info received`);
 
-            // Handle various possible response structures from File Service
-            // It might return { data: { url: ... } } or just { url: ... }
             const data = (fileInfo.data || fileInfo) as Record<string, string | undefined>;
             const resolvedUrl = data.url || data.display_url;
 

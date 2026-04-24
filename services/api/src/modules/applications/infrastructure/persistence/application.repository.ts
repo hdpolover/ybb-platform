@@ -76,6 +76,8 @@ export class ApplicationRepository implements IApplicationRepository {
         { motivationLetter: { contains: filters.search, mode: 'insensitive' } },
         { achievements: { contains: filters.search, mode: 'insensitive' } },
         { experiences: { contains: filters.search, mode: 'insensitive' } },
+        { participant: { fullName: { contains: filters.search, mode: 'insensitive' } } },
+        { participant: { user: { email: { contains: filters.search, mode: 'insensitive' } } } },
       ];
     }
 
