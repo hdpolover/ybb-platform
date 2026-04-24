@@ -1336,3 +1336,110 @@ export class UpdateProgramSubthemeDto {
     @IsOptional()
     isActive?: boolean;
 }
+
+// ─── Document Template DTOs ───────────────────────────────────────────────────
+
+export class CreateDocumentTemplateDto {
+    @ApiProperty()
+    @IsUUID()
+    @IsNotEmpty()
+    programId: string;
+
+    @ApiProperty()
+    @IsString()
+    @IsNotEmpty()
+    name: string;
+
+    @ApiProperty({ enum: ['agreement_letter', 'complementary_document'] })
+    @IsString()
+    @IsNotEmpty()
+    type: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    description?: string;
+
+    @ApiProperty({ required: false, description: 'Pre-uploaded file URL' })
+    @IsString()
+    @IsOptional()
+    templateUrl?: string;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    fileSize?: number;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    fileType?: string;
+
+    @ApiProperty({
+        required: false,
+        description: 'Audience type: all_registered | paid_any | paid_pricing_tier | specific_status',
+    })
+    @IsString()
+    @IsOptional()
+    audienceType?: string;
+
+    @ApiProperty({ required: false, description: 'JSON config for audience type' })
+    @IsOptional()
+    audienceConfig?: Record<string, unknown>;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    order?: number;
+}
+
+export class UpdateDocumentTemplateDto {
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    name?: string;
+
+    @ApiProperty({ required: false, enum: ['agreement_letter', 'complementary_document'] })
+    @IsString()
+    @IsOptional()
+    type?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    description?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    templateUrl?: string;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    fileSize?: number;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    fileType?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    audienceType?: string;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    audienceConfig?: Record<string, unknown>;
+
+    @ApiProperty({ required: false })
+    @IsNumber()
+    @IsOptional()
+    order?: number;
+
+    @ApiProperty({ required: false })
+    @IsBoolean()
+    @IsOptional()
+    isActive?: boolean;
+}
