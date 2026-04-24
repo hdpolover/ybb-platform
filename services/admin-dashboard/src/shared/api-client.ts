@@ -1663,3 +1663,120 @@ export async function updateProgramResource(
 export function deleteProgramResource(id: string): Promise<void> {
   return request<void>(`/programs/resources/${id}`, { method: "DELETE" });
 }
+
+// ─── Document Templates ───────────────────────────────────────────────────────
+
+export type DocumentTemplate = {
+  id: string;
+  programId: string;
+  name: string;
+  type: string; // 'agreement_letter' | 'complementary_document'
+  description?: string;
+  templateUrl?: string;
+  layoutConfig?: { fileSize?: number; fileType?: string };
+  audienceType: string;
+  audienceConfig: Record<string, unknown>;
+  order: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export function listDocumentTemplates(
+  programId: string,
+  type?: string,
+): Promise<DocumentTemplate[]> {
+  const qs = type ? `?type=${encodeURIComponent(type)}` : '';
+  return request<DocumentTemplate[]>(`/programs/${programId}/document-templates${qs}`);
+}
+
+export async function createDocumentTemplate(
+  programId: string,
+  input: {
+    name: string;
+    type: string;
+    description?: string;
+    audienceType?: string;
+    audienceConfig?: Record<string, unknown>;
+    order?: number;
+    file: File;
+    userId: string;
+    brandId: string;
+  },
+): Promise<DocumentTemplate> {
+  const upload = await uploadFileViaPresignedUrl(input.file, {
+    userId: input.userId,
+    brandId: input.brandId,
+    bucket: 'documents',
+    programId,
+    assetType: 'document-template',
+  });
+  if (!upload.publicUrl) throw new Error('Upload succeeded but no public URL was returned.');
+
+  return request<DocumentTemplate>(`/programs/${programId}/document-templates`, {
+    method: 'POST',
+    body: JSON.stringify({
+      programId,
+      name: input.name,
+      type: input.type,
+      description: input.description,
+      templateUrl: upload.publicUrl,
+      fileSize: input.file.size,
+      fileType: input.file.type,
+      audienceType: input.audienceType ?? 'all_registered',
+      audienceConfig: input.audienceConfig ?? {},
+      order: input.order ?? 0,
+    }),
+  });
+}
+
+export async function updateDocumentTemplate(
+  id: string,
+  input: {
+    name?: string;
+    type?: string;
+    description?: string;
+    audienceType?: string;
+    audienceConfig?: Record<string, unknown>;
+    order?: number;
+    isActive?: boolean;
+    file?: File;
+    userId?: string;
+    brandId?: string;
+  },
+): Promise<DocumentTemplate> {
+  let templateUrl: string | undefined;
+  let fileSize: number | undefined;
+  let fileType: string | undefined;
+
+  if (input.file) {
+    if (!input.userId || !input.brandId) {
+      throw new Error('userId and brandId required when uploading a new file.');
+    }
+    const upload = await uploadFileViaPresignedUrl(input.file, {
+      userId: input.userId,
+      brandId: input.brandId,
+      bucket: 'documents',
+      assetType: 'document-template',
+    });
+    if (!upload.publicUrl) throw new Error('Upload succeeded but no public URL was returned.');
+    templateUrl = upload.publicUrl;
+    fileSize = input.file.size;
+    fileType = input.file.type;
+  }
+
+  const { file: _f, userId: _u, brandId: _b, ...rest } = input;
+  void _f; void _u; void _b;
+
+  return request<DocumentTemplate>(`/programs/document-templates/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      ...rest,
+      ...(templateUrl ? { templateUrl, fileSize, fileType } : {}),
+    }),
+  });
+}
+
+export function deleteDocumentTemplate(id: string): Promise<void> {
+  return request<void>(`/programs/document-templates/${id}`, { method: 'DELETE' });
+}
