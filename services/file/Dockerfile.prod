@@ -37,7 +37,8 @@ COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
 EXPOSE 8001
+EXPOSE 50052
 
-# Run with entrypoint
+# Run with entrypoint (starts gRPC in background, then uvicorn as main process)
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "4"]

@@ -3,7 +3,7 @@ SERVICES := shared-rabbitmq api payment file notification admin-dashboard monito
 # RabbitMQ Port Map: Payment=5673, Notification=5674
 # gRPC Port Map: File=50052, Payment=50053
 
-.PHONY: all start stop restart logs status clean help $(SERVICES)
+.PHONY: all network start stop restart logs status clean help $(SERVICES)
 
 help:
 	@echo "YBB Platform (Microservices Edition)"
@@ -21,8 +21,14 @@ help:
 	@echo "make status          - Show status of all services"
 	@echo "make clean           - Stop and remove all containers"
 
+# Ensure shared cross-service Docker network exists
+network:
+	@docker network inspect ybb-network >/dev/null 2>&1 || docker network create ybb-network
+	@echo ">> ybb-network ready"
+
 # Generic Loop Targets
 start:
+	@$(MAKE) network
 	@if [ -z "$(service)" ]; then \
 		echo "Starting all services..."; \
 		for s in $(SERVICES); do \
