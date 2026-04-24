@@ -7,6 +7,11 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 const HELP_ASSET_KINDS = new Set(['link', 'video', 'file']);
 
 type HelpAsset = { kind: 'link' | 'video' | 'file'; label: string; url: string };
+type NormalizedOption = { label: string; value: string };
+
+function isDefined<T>(value: T | undefined): value is T {
+  return value !== undefined;
+}
 
 function normalizeHelpAssets(raw: unknown): HelpAsset[] | undefined {
   if (!Array.isArray(raw)) return undefined;
@@ -30,6 +35,58 @@ function normalizeHelpAssets(raw: unknown): HelpAsset[] | undefined {
 function normalizeOptions(raw: unknown): unknown {
   let source: unknown = raw;
 
+  const normalizeOption = (
+    item: unknown,
+    fallbackValue?: string,
+  ): NormalizedOption | undefined => {
+    if (typeof item === 'string') {
+      const value = item.trim();
+      if (!value) return undefined;
+      return { label: value, value };
+    }
+
+    // Legacy tuple-like shape: ["male", "Male"]
+    if (Array.isArray(item)) {
+      const first = typeof item[0] === 'string' ? item[0].trim() : '';
+      const second = typeof item[1] === 'string' ? item[1].trim() : '';
+      const label = second || first;
+      const value = first || second || fallbackValue || '';
+      if (!label && !value) return undefined;
+      return { label: label || value, value: value || label };
+    }
+
+    if (!item || typeof item !== 'object') {
+      return undefined;
+    }
+
+    const rec = item as Record<string, unknown>;
+    const rawLabel =
+      (typeof rec.label === 'string' && rec.label.trim()) ||
+      (typeof rec.text === 'string' && rec.text.trim()) ||
+      (typeof rec.name === 'string' && rec.name.trim()) ||
+      (typeof rec.value === 'string' && rec.value.trim()) ||
+      (typeof rec.id === 'string' && rec.id.trim()) ||
+      '';
+
+    const rawValue =
+      (typeof rec.value === 'string' && rec.value.trim()) ||
+      (typeof rec.id === 'string' && rec.id.trim()) ||
+      (typeof rec.label === 'string' && rec.label.trim()) ||
+      (typeof rec.text === 'string' && rec.text.trim()) ||
+      (typeof rec.name === 'string' && rec.name.trim()) ||
+      (fallbackValue ? fallbackValue.trim() : '') ||
+      '';
+
+    if (!rawLabel && !rawValue) {
+      return undefined;
+    }
+
+    return {
+      label: rawLabel || rawValue,
+      value: rawValue || rawLabel,
+    };
+  };
+
   if (typeof source === 'string') {
     const trimmed = source.trim();
     if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
@@ -42,7 +99,8 @@ function normalizeOptions(raw: unknown): unknown {
   }
 
   if (Array.isArray(source)) {
-    return source.length > 0 ? source : undefined;
+    const normalized = source.map((item) => normalizeOption(item)).filter(isDefined);
+    return normalized.length > 0 ? normalized : undefined;
   }
 
   if (!source || typeof source !== 'object') {
@@ -51,10 +109,14 @@ function normalizeOptions(raw: unknown): unknown {
 
   const rec = source as Record<string, unknown>;
   if (Array.isArray(rec.options)) {
-    return rec.options.length > 0 ? rec.options : undefined;
+    return normalizeOptions(rec.options);
   }
 
-  return Object.keys(rec).length > 0 ? rec : undefined;
+  const normalized = Object.entries(rec)
+    .map(([value, item]) => normalizeOption(item, value))
+    .filter(isDefined);
+
+  return normalized.length > 0 ? normalized : undefined;
 }
 
 @QueryHandler(GetApplicationFormFieldsQuery)

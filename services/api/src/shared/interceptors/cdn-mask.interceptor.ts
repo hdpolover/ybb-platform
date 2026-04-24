@@ -2,10 +2,10 @@ import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nes
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
-// Matches CDN file URLs where the filename is a UUID (documents, PDFs, etc.)
-// Does NOT match image files whose filenames are not UUIDs.
+// Matches storage/CDN file URLs where the filename is a UUID (documents, PDFs, etc.).
+// Covers both the public CDN and direct DigitalOcean Spaces links.
 const UUID_FILE_RE =
-  /https:\/\/cdn\.ybbhub\.com\/[^\s"'>]+\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.[a-z0-9]+/gi;
+  /https?:\/\/(?:cdn\.ybbhub\.com|[a-z0-9.-]+\.digitaloceanspaces\.com)\/[^\s"'>]+\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.[a-z0-9]+(?:\?[^\s"'>]*)?/gi;
 
 function maskUrls(value: unknown, apiBase: string): unknown {
   if (typeof value === 'string') {

@@ -42,7 +42,61 @@ export interface ApplicationFormFieldRow {
 
 const OPTION_FIELD_TYPES = new Set(["select", "radio", "checkbox"]);
 
-function normalizeOptions(raw: unknown): unknown {
+type NormalizedOption = { label: string; value: string };
+
+function normalizeOptionEntry(
+  item: unknown,
+  fallbackValue?: string,
+): NormalizedOption | undefined {
+  if (typeof item === "string") {
+    const value = item.trim();
+    if (!value) return undefined;
+    return { label: value, value };
+  }
+
+  // Legacy tuple-like shape: ["male", "Male"]
+  if (Array.isArray(item)) {
+    const first = typeof item[0] === "string" ? item[0].trim() : "";
+    const second = typeof item[1] === "string" ? item[1].trim() : "";
+    const label = second || first;
+    const value = first || second || (fallbackValue ?? "").trim();
+    if (!label && !value) return undefined;
+    return { label: label || value, value: value || label };
+  }
+
+  if (!item || typeof item !== "object") {
+    return undefined;
+  }
+
+  const rec = item as Record<string, unknown>;
+  const rawLabel =
+    (typeof rec.label === "string" && rec.label.trim()) ||
+    (typeof rec.text === "string" && rec.text.trim()) ||
+    (typeof rec.name === "string" && rec.name.trim()) ||
+    (typeof rec.value === "string" && rec.value.trim()) ||
+    (typeof rec.id === "string" && rec.id.trim()) ||
+    "";
+
+  const rawValue =
+    (typeof rec.value === "string" && rec.value.trim()) ||
+    (typeof rec.id === "string" && rec.id.trim()) ||
+    (typeof rec.label === "string" && rec.label.trim()) ||
+    (typeof rec.text === "string" && rec.text.trim()) ||
+    (typeof rec.name === "string" && rec.name.trim()) ||
+    (fallbackValue ?? "").trim() ||
+    "";
+
+  if (!rawLabel && !rawValue) {
+    return undefined;
+  }
+
+  return {
+    label: rawLabel || rawValue,
+    value: rawValue || rawLabel,
+  };
+}
+
+function normalizeOptions(raw: unknown): NormalizedOption[] | undefined {
   let source: unknown = raw;
 
   if (typeof source === "string") {
@@ -57,7 +111,10 @@ function normalizeOptions(raw: unknown): unknown {
   }
 
   if (Array.isArray(source)) {
-    return source.length > 0 ? source : undefined;
+    const normalized = source
+      .map((item) => normalizeOptionEntry(item))
+      .filter((item): item is NormalizedOption => item !== undefined);
+    return normalized.length > 0 ? normalized : undefined;
   }
 
   if (!source || typeof source !== "object") {
@@ -66,17 +123,18 @@ function normalizeOptions(raw: unknown): unknown {
 
   const rec = source as Record<string, unknown>;
   if (Array.isArray(rec.options)) {
-    return rec.options.length > 0 ? rec.options : undefined;
+    return normalizeOptions(rec.options);
   }
 
-  return Object.keys(rec).length > 0 ? rec : undefined;
+  const normalized = Object.entries(rec)
+    .map(([value, item]) => normalizeOptionEntry(item, value))
+    .filter((item): item is NormalizedOption => item !== undefined);
+
+  return normalized.length > 0 ? normalized : undefined;
 }
 
 function hasOptions(raw: unknown): boolean {
-  const normalized = normalizeOptions(raw);
-  if (!normalized) return false;
-  if (Array.isArray(normalized)) return normalized.length > 0;
-  return typeof normalized === "object" && Object.keys(normalized as Record<string, unknown>).length > 0;
+  return (normalizeOptions(raw)?.length ?? 0) > 0;
 }
 
 function formatSection(section?: string): string {
@@ -92,30 +150,7 @@ function formatOptions(options?: unknown): string {
   const normalized = normalizeOptions(options);
   if (!normalized) return "-";
 
-  if (Array.isArray(normalized)) {
-    return normalized
-      .map((option) => {
-        if (typeof option === "string") return option;
-        if (typeof option === "object" && option !== null) {
-          const record = option as Record<string, unknown>;
-          return String(record.label ?? record.value ?? "Option");
-        }
-        return String(option);
-      })
-      .join(", ");
-  }
-
-  const record = normalized as Record<string, unknown>;
-  return Object.entries(record)
-    .map(([value, label]) => {
-      if (typeof label === "string") return label;
-      if (label && typeof label === "object") {
-        const row = label as Record<string, unknown>;
-        return String(row.label ?? row.value ?? value);
-      }
-      return value;
-    })
-    .join(", ");
+  return normalized.map((option) => option.label || option.value).join(", ");
 }
 
 export function FormFieldsTable({ programId }: { programId: string }) {
