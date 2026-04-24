@@ -12,6 +12,14 @@ import {
     AvailablePaymentDto
 } from '../../../presentation/dto/portal-payment.dto';
 
+function getFeeTypePriority(feeType?: string | null): number {
+    const normalized = String(feeType ?? '').toLowerCase();
+    if (normalized === 'registration_fee') return 1;
+    if (normalized === 'program_fee_1' || normalized === 'full_fee') return 2;
+    if (normalized === 'program_fee_2') return 3;
+    return 99;
+}
+
 @Injectable()
 @QueryHandler(GetPortalPaymentsQuery)
 export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPaymentsQuery> {
@@ -128,17 +136,28 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                     return tier.allowedCategories.includes(currentCategory);
                 })
                 .sort((a, b) => {
-                    const aStart = a.validityPeriods[0]?.startDate?.getTime() ?? Number.MAX_SAFE_INTEGER;
-                    const bStart = b.validityPeriods[0]?.startDate?.getTime() ?? Number.MAX_SAFE_INTEGER;
+                    const aTypePriority = getFeeTypePriority(a.feeType);
+                    const bTypePriority = getFeeTypePriority(b.feeType);
+                    if (aTypePriority !== bTypePriority) {
+                        return aTypePriority - bTypePriority;
+                    }
+
+                    if (a.order !== b.order) {
+                        return a.order - b.order;
+                    }
+
+                    // Missing start date means "available immediately", so it should not be pushed last.
+                    const aStart = a.validityPeriods[0]?.startDate?.getTime() ?? 0;
+                    const bStart = b.validityPeriods[0]?.startDate?.getTime() ?? 0;
                     if (aStart !== bStart) {
                         return aStart - bStart;
                     }
 
-                    return a.order - b.order;
+                    return a.name.localeCompare(b.name);
                 });
 
             // Visibility rule:
-            // - tiers are shown in chronological order
+            // - tiers are shown in fee-stage order
             // - stop at the first tier that is unpaid/processing/failed/cancelled
             // - do not show future tiers before their start date
             const visibleTierIds = new Set<string>();
@@ -166,6 +185,7 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
 
                 const invoice = latestInvoiceByTier.get(tier.id);
                 const startDate = tier.validityPeriods[0]?.startDate;
+                const sequenceOrder = getFeeTypePriority(tier.feeType) * 1000 + tier.order;
 
                 if (invoice) {
                     const item: PaymentItemDto = {
@@ -181,7 +201,7 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                         type: tier.feeType,
                         pricingTierId: tier.id,
                         startDate: startDate || undefined,
-                        sequenceOrder: tier.order,
+                        sequenceOrder,
                     };
 
                     const normalizedStatus = String(invoice.status).toLowerCase();
@@ -204,7 +224,7 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                     currency: tier.currency,
                     type: tier.feeType,
                     startDate: startDate || undefined,
-                    sequenceOrder: tier.order,
+                    sequenceOrder,
                 });
                 totalDue += Number(tier.price);
             }

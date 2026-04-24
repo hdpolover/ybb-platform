@@ -1554,3 +1554,112 @@ export async function uploadFileViaPresignedUrl(
     bucket: url.bucket,
   };
 }
+
+// ─── Program Resources (Guidelines) ──────────────────────────────────────────
+
+export type ProgramResource = {
+  id: string;
+  programId: string;
+  title: string;
+  description?: string;
+  fileUrl: string;
+  fileSize?: number;
+  fileType?: string;
+  type: string;
+  isPublic: boolean;
+  order: number;
+  downloads: number;
+  isActive: boolean;
+};
+
+export function listProgramResources(programId: string): Promise<ProgramResource[]> {
+  return request<ProgramResource[]>(`/programs/${programId}/resources`);
+}
+
+export async function createProgramResource(
+  programId: string,
+  input: {
+    title: string;
+    description?: string;
+    type: string;
+    isPublic?: boolean;
+    order?: number;
+    file: File;
+    userId: string;
+    brandId: string;
+  },
+): Promise<ProgramResource> {
+  const upload = await uploadFileViaPresignedUrl(input.file, {
+    userId: input.userId,
+    brandId: input.brandId,
+    bucket: "resources",
+    programId,
+    assetType: "resource",
+  });
+  if (!upload.publicUrl) {
+    throw new Error("Upload succeeded but no public URL was returned.");
+  }
+  return request<ProgramResource>(`/programs/${programId}/resources`, {
+    method: "POST",
+    body: JSON.stringify({
+      programId,
+      title: input.title,
+      description: input.description,
+      fileUrl: upload.publicUrl,
+      fileSize: input.file.size,
+      fileType: input.file.type,
+      type: input.type,
+      isPublic: input.isPublic ?? true,
+      order: input.order ?? 0,
+    }),
+  });
+}
+
+export async function updateProgramResource(
+  id: string,
+  input: {
+    title?: string;
+    description?: string;
+    type?: string;
+    isPublic?: boolean;
+    order?: number;
+    isActive?: boolean;
+    file?: File;
+    userId?: string;
+    brandId?: string;
+  },
+): Promise<ProgramResource> {
+  let fileUrl: string | undefined;
+  let fileSize: number | undefined;
+  let fileType: string | undefined;
+  if (input.file) {
+    if (!input.userId || !input.brandId) {
+      throw new Error("userId and brandId required when uploading a new file.");
+    }
+    const upload = await uploadFileViaPresignedUrl(input.file, {
+      userId: input.userId,
+      brandId: input.brandId,
+      bucket: "resources",
+      assetType: "resource",
+    });
+    if (!upload.publicUrl) {
+      throw new Error("Upload succeeded but no public URL was returned.");
+    }
+    fileUrl = upload.publicUrl;
+    fileSize = input.file.size;
+    fileType = input.file.type;
+  }
+  const { file: _file, userId: _userId, brandId: _brandId, ...rest } = input;
+  void _file; void _userId; void _brandId;
+  return request<ProgramResource>(`/programs/resources/${id}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      ...rest,
+      ...(fileUrl ? { fileUrl, fileSize, fileType } : {}),
+    }),
+  });
+}
+
+export function deleteProgramResource(id: string): Promise<void> {
+  return request<void>(`/programs/resources/${id}`, { method: "DELETE" });
+}
