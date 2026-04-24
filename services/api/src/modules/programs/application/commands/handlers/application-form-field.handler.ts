@@ -92,8 +92,21 @@ export class CreateApplicationFormFieldHandler
           message: `Unknown or inactive system field key: ${dto.systemFieldKey}`,
         });
       }
+
+      const systemDto: Partial<CreateApplicationFormFieldDto> =
+        dto.options !== undefined
+          ? dto
+          : {
+              ...dto,
+              options: (
+                Array.isArray(definition.defaultOptions)
+                  ? (definition.defaultOptions as unknown[])
+                  : []
+              ) as string[] | Record<string, unknown>[],
+            };
+
       return this.repository.createFormField({
-        ...mapDtoToField(dto, definition.key),
+        ...mapDtoToField(systemDto, definition.key),
         source: 'system',
         systemFieldKey: definition.key,
         name: definition.key,

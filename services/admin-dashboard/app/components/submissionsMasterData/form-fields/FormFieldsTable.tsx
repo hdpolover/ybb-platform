@@ -14,6 +14,7 @@ import {
   readErrorMessage,
   readJsonData,
 } from "@/app/components/submissionsMasterData/api";
+import { fetchSystemFormFields, type SystemFormField } from "./catalog-api";
 import { FormFieldEditor } from "./FormFieldEditor";
 import { AddFieldDialog } from "./AddFieldDialog";
 import { CopyFromTemplateDialog } from "./CopyFromTemplateDialog";
@@ -23,6 +24,8 @@ export interface ApplicationFormFieldRow {
   id: string;
   section?: string;
   fieldName: string;
+  source?: "system" | "custom";
+  systemFieldKey?: string;
   label: string;
   placeholder?: string;
   helpText?: string;
@@ -37,6 +40,45 @@ export interface ApplicationFormFieldRow {
   order: number;
 }
 
+const OPTION_FIELD_TYPES = new Set(["select", "radio", "checkbox"]);
+
+function normalizeOptions(raw: unknown): unknown {
+  let source: unknown = raw;
+
+  if (typeof source === "string") {
+    const trimmed = source.trim();
+    if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+      try {
+        source = JSON.parse(trimmed);
+      } catch {
+        return undefined;
+      }
+    }
+  }
+
+  if (Array.isArray(source)) {
+    return source.length > 0 ? source : undefined;
+  }
+
+  if (!source || typeof source !== "object") {
+    return undefined;
+  }
+
+  const rec = source as Record<string, unknown>;
+  if (Array.isArray(rec.options)) {
+    return rec.options.length > 0 ? rec.options : undefined;
+  }
+
+  return Object.keys(rec).length > 0 ? rec : undefined;
+}
+
+function hasOptions(raw: unknown): boolean {
+  const normalized = normalizeOptions(raw);
+  if (!normalized) return false;
+  if (Array.isArray(normalized)) return normalized.length > 0;
+  return typeof normalized === "object" && Object.keys(normalized as Record<string, unknown>).length > 0;
+}
+
 function formatSection(section?: string): string {
   if (!section) return "-";
   return section
@@ -47,9 +89,11 @@ function formatSection(section?: string): string {
 }
 
 function formatOptions(options?: unknown): string {
-  if (!options) return "-";
-  if (Array.isArray(options)) {
-    return options
+  const normalized = normalizeOptions(options);
+  if (!normalized) return "-";
+
+  if (Array.isArray(normalized)) {
+    return normalized
       .map((option) => {
         if (typeof option === "string") return option;
         if (typeof option === "object" && option !== null) {
@@ -60,7 +104,18 @@ function formatOptions(options?: unknown): string {
       })
       .join(", ");
   }
-  return "-";
+
+  const record = normalized as Record<string, unknown>;
+  return Object.entries(record)
+    .map(([value, label]) => {
+      if (typeof label === "string") return label;
+      if (label && typeof label === "object") {
+        const row = label as Record<string, unknown>;
+        return String(row.label ?? row.value ?? value);
+      }
+      return value;
+    })
+    .join(", ");
 }
 
 export function FormFieldsTable({ programId }: { programId: string }) {
@@ -82,7 +137,37 @@ export function FormFieldsTable({ programId }: { programId: string }) {
       );
       if (!response.ok) throw new Error(await readErrorMessage(response));
       const payload = await readJsonData<ApplicationFormFieldRow[]>(response);
-      const sortedPayload = [...payload].sort((left, right) => left.order - right.order);
+
+      let catalogByKey = new Map<string, SystemFormField>();
+      try {
+        const catalog = await fetchSystemFormFields();
+        catalogByKey = new Map(catalog.map((row) => [row.key, row]));
+      } catch {
+        // Non-blocking: admin can still work without catalog fallback.
+      }
+
+      const hydratedPayload = payload.map((row) => {
+        const fieldType = row.fieldType.toLowerCase();
+        const normalizedOptions = normalizeOptions(row.options);
+
+        if (!OPTION_FIELD_TYPES.has(fieldType)) {
+          return { ...row, options: normalizedOptions };
+        }
+
+        if (hasOptions(normalizedOptions)) {
+          return { ...row, options: normalizedOptions };
+        }
+
+        const lookupKey = row.systemFieldKey || row.fieldName;
+        const fallbackOptions = normalizeOptions(catalogByKey.get(lookupKey)?.defaultOptions);
+
+        return {
+          ...row,
+          options: fallbackOptions,
+        };
+      });
+
+      const sortedPayload = [...hydratedPayload].sort((left, right) => left.order - right.order);
       setFields(sortedPayload);
     } catch (error) {
       setFields([]);

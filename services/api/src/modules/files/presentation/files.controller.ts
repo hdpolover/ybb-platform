@@ -162,7 +162,7 @@ export class FilesController {
     this.logger.log(`Download redirect: ${fileId} (user ${user.userId})`);
     let file: FileResponse;
     try {
-      file = await this.fileGrpcClient.getFile(fileId, user.userId, user.brandId);
+      file = (await this.fileGrpcClient.getFile(fileId, user.userId, user.brandId)) as unknown as FileResponse;
     } catch {
       file = await this.fileServiceClient.getFile(fileId, user.userId, user.brandId);
     }

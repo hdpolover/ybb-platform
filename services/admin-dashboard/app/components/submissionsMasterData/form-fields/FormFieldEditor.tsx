@@ -126,8 +126,34 @@ function optionsToRows(raw: unknown): OptionRow[] {
   }
   // Legacy wrapping shape some seeds used: { options: [...] }
   if (source && typeof source === "object" && !Array.isArray(source)) {
-    const wrapped = (source as Record<string, unknown>).options;
-    if (Array.isArray(wrapped)) source = wrapped;
+    const record = source as Record<string, unknown>;
+    const wrapped = record.options;
+    if (Array.isArray(wrapped)) {
+      source = wrapped;
+    } else {
+      // Legacy key-value map shape: { male: "Male", female: "Female" }
+      return Object.entries(record)
+        .map(([value, rawLabel]) => {
+          if (typeof rawLabel === "string") {
+            return { label: rawLabel || value, value };
+          }
+          if (rawLabel && typeof rawLabel === "object") {
+            const rec = rawLabel as Record<string, unknown>;
+            const label =
+              (typeof rec.label === "string" && rec.label)
+              || (typeof rec.text === "string" && rec.text)
+              || (typeof rec.name === "string" && rec.name)
+              || value;
+            const normalizedValue =
+              (typeof rec.value === "string" && rec.value)
+              || (typeof rec.id === "string" && rec.id)
+              || value;
+            return { label, value: normalizedValue };
+          }
+          return { label: value, value };
+        })
+        .filter((r) => r.label || r.value);
+    }
   }
   if (!Array.isArray(source)) return [];
 
@@ -334,7 +360,7 @@ export function FormFieldEditor({
       reportError("Field Key and Label are required.");
       return;
     }
-    if (needsOptions && state.options.filter((o) => o.label.trim()).length === 0) {
+    if (needsOptions && state.options.filter((o) => o.label.trim() || o.value.trim()).length === 0) {
       reportError("Add at least one option for this field type.");
       return;
     }
@@ -364,8 +390,12 @@ export function FormFieldEditor({
       order: state.order,
       options: needsOptions
         ? state.options
-            .filter((o) => o.label.trim())
-            .map((o) => ({ label: o.label.trim(), value: (o.value || o.label).trim() }))
+            .filter((o) => o.label.trim() || o.value.trim())
+            .map((o) => {
+              const label = (o.label || o.value).trim();
+              const value = (o.value || o.label).trim();
+              return { label, value };
+            })
         : undefined,
       validationRules: needsOptions ? undefined : pruneRules(state.validationRules),
     };
@@ -594,7 +624,7 @@ export function FormFieldEditor({
                 List what the applicant can pick from. The label is what they see; the value
                 is what we store (auto-filled based on the label).
               </p>
-              {state.options.filter((o) => o.label.trim()).length === 0 && (
+              {state.options.filter((o) => o.label.trim() || o.value.trim()).length === 0 && (
                 <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
                   At least one choice is required for a {state.fieldType} field. Add choices below before saving.
                 </p>

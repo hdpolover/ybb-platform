@@ -285,6 +285,12 @@ export class ApplicationFormFieldResponseDto {
     @ApiProperty()
     fieldName: string;
 
+    @ApiProperty({ required: false, enum: ['system', 'custom'] })
+    source?: 'system' | 'custom';
+
+    @ApiProperty({ required: false })
+    systemFieldKey?: string;
+
     @ApiProperty()
     label: string;
 
