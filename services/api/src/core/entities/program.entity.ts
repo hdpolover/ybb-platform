@@ -36,6 +36,7 @@ export class Program {
         public readonly requirementsDescription: string | null,
         public readonly benefitsDescription: string | null,
         public readonly termsAndConditions: string | null,
+        public readonly previewChecklistItems: string[],
         public readonly metaTitle: string | null,
         public readonly metaDescription: string | null,
         public readonly createdAt: Date,

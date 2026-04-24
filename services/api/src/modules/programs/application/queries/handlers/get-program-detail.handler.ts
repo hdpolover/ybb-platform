@@ -244,6 +244,7 @@ export class GetProgramDetailHandler {
       requirementsDescription: program.requirementsDescription,
       benefitsDescription: program.benefitsDescription,
       termsAndConditions: program.termsAndConditions,
+      previewChecklistItems: program.previewChecklistItems,
       metaTitle: program.metaTitle,
       metaDescription: program.metaDescription,
       brand: program.brand,

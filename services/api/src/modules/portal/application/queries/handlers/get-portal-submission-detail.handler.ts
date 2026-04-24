@@ -55,6 +55,7 @@ type ApplicationDetail = {
         id: string;
         name: string;
         termsAndConditions: string | null;
+        previewChecklistItems: string[];
         participationCategories: {
             id: string;
             name: string;
@@ -193,6 +194,7 @@ export class GetPortalSubmissionDetailHandler
                         id: true,
                         name: true,
                         termsAndConditions: true,
+                        previewChecklistItems: true,
                         participationCategories: {
                             where: { isActive: true },
                             select: {
@@ -774,7 +776,7 @@ export class GetPortalSubmissionDetailHandler
         requirements: SubmissionRequirementDto[],
     ): SubmissionPreviewDto {
         const personalData = (application.personalData as Record<string, unknown>) || {};
-        const checklists = this.buildPreviewChecklists(personalData);
+        const checklists = this.buildPreviewChecklists(personalData, application.program.previewChecklistItems ?? []);
         const paymentRequired = !this.isApplicationFullyFunded(application);
         const paymentPaid = application.registrationPaymentStatus === 'paid';
 
@@ -839,7 +841,19 @@ export class GetPortalSubmissionDetailHandler
         };
     }
 
-    private buildPreviewChecklists(personalData: Record<string, unknown>): SubmissionPreviewChecklistItemDto[] {
+    private buildPreviewChecklists(
+        personalData: Record<string, unknown>,
+        programChecklistItems: string[],
+    ): SubmissionPreviewChecklistItemDto[] {
+        if (programChecklistItems.length > 0) {
+            return programChecklistItems.map((label, index) => ({
+                key: `checklist_item_${index}`,
+                label,
+                required: true,
+                checked: false,
+            }));
+        }
+
         const readyToJoin = this.readBooleanFlag(personalData, [
             'preview_ready_to_join',
             'previewReadyToJoin',

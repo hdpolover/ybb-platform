@@ -17,7 +17,7 @@ import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
-import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
+import { Public } from '@shared/decorators/public.decorator';
 import { StorageService } from '../application/storage.service';
 import {
   CreateUploadUrlRequest,
@@ -27,6 +27,7 @@ import {
 } from '../infrastructure/clients/file-service.client';
 import { FileGrpcClient } from '../infrastructure/clients/file-grpc-client.service';
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 
 /**
  * Files Controller
@@ -39,6 +40,9 @@ import { MetricsService } from '@shared/infrastructure/monitoring/metrics.servic
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class FilesController {
+  private static readonly UUID_PATTERN =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
   private readonly logger = new Logger(FilesController.name);
 
   constructor(
@@ -46,7 +50,52 @@ export class FilesController {
     private readonly fileGrpcClient: FileGrpcClient,
     private readonly storageService: StorageService,
     private readonly metricsService: MetricsService,
+    private readonly prisma: PrismaService,
   ) {}
+
+  private async resolvePublicDownloadUrl(fileId: string): Promise<string | null> {
+    const normalizedFileId = fileId.trim().toLowerCase();
+    if (!FilesController.UUID_PATTERN.test(normalizedFileId)) {
+      return null;
+    }
+
+    const file = await this.prisma.file.findFirst({
+      where: { id: normalizedFileId },
+      select: { url: true },
+    });
+    if (file?.url) {
+      return file.url;
+    }
+
+    const suffix = `${normalizedFileId}.`;
+
+    const resource = await this.prisma.programResource.findFirst({
+      where: {
+        isActive: true,
+        fileUrl: {
+          contains: suffix,
+          mode: 'insensitive',
+        },
+      },
+      select: { fileUrl: true },
+    });
+    if (resource?.fileUrl) {
+      return resource.fileUrl;
+    }
+
+    const template = await this.prisma.documentTemplate.findFirst({
+      where: {
+        isActive: true,
+        templateUrl: {
+          contains: suffix,
+          mode: 'insensitive',
+        },
+      },
+      select: { templateUrl: true },
+    });
+
+    return template?.templateUrl ?? null;
+  }
 
   @Post('upload')
   @ApiOperation({ summary: 'Upload file to storage' })
@@ -162,22 +211,16 @@ export class FilesController {
     }
   }
 
+  @Public()
   @Get(':fileId/download')
-  @ApiOperation({ summary: 'Proxy-redirect to file CDN URL — masks the raw CDN path from clients' })
+  @ApiOperation({ summary: 'Public proxy-redirect to file URL for masked links opened in browser tabs' })
   @ApiResponse({ status: 302, description: 'Redirects to CDN URL' })
   async downloadFile(
     @Param('fileId') fileId: string,
-    @CurrentUser() user: CurrentUserData,
     @Res() res: Response,
   ): Promise<void> {
-    this.logger.log(`Download redirect: ${fileId} (user ${user.userId})`);
-    let file: FileResponse;
-    try {
-      file = (await this.fileGrpcClient.getFile(fileId, user.userId, user.brandId)) as unknown as FileResponse;
-    } catch {
-      file = await this.fileServiceClient.getFile(fileId, user.userId, user.brandId);
-    }
-    const url = (file.public_url ?? file.url ?? file.cdn_url) as string | undefined;
+    this.logger.log(`Public download redirect: ${fileId}`);
+    const url = await this.resolvePublicDownloadUrl(fileId);
     if (!url) throw new NotFoundException('File URL not available');
     res.setHeader('Cache-Control', 'no-store');
     res.redirect(302, url);

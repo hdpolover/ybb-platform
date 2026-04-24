@@ -2,16 +2,50 @@ import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nes
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
-// Matches storage/CDN file URLs where the filename is a UUID (documents, PDFs, etc.).
-// Covers both the public CDN and direct DigitalOcean Spaces links.
+// Matches storage/CDN URLs with UUID filenames across known public asset hosts.
+// Documents/downloadables are masked to the authenticated proxy URL, while
+// renderable media assets remain direct for frontend rendering.
 const UUID_FILE_RE =
-  /https?:\/\/(?:cdn\.ybbhub\.com|[a-z0-9.-]+\.digitaloceanspaces\.com)\/[^\s"'>]+\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.[a-z0-9]+(?:\?[^\s"'>]*)?/gi;
+  /https?:\/\/(?:cdn\.ybbhub\.com|files\.ybbhub\.com|storage\.ybbfoundation\.com|[a-z0-9.-]+\.digitaloceanspaces\.com)\/[^\s"'>]+\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([a-z0-9]+)(?:\?[^\s"'>]*)?/gi;
+
+const DIRECT_MEDIA_EXTENSIONS = new Set([
+  'jpg',
+  'jpeg',
+  'png',
+  'gif',
+  'webp',
+  'avif',
+  'svg',
+  'bmp',
+  'ico',
+  'tif',
+  'tiff',
+  'heic',
+  'heif',
+  'mp4',
+  'webm',
+  'mov',
+  'm4v',
+  'mkv',
+  'avi',
+  'mp3',
+  'wav',
+  'ogg',
+  'oga',
+  'flac',
+  'aac',
+  'm4a',
+  'opus',
+]);
 
 function maskUrls(value: unknown, apiBase: string): unknown {
   if (typeof value === 'string') {
-    return value.replace(UUID_FILE_RE, (_match, fileId: string) =>
-      `${apiBase}/v1/files/${fileId}/download`,
-    );
+    return value.replace(UUID_FILE_RE, (match, fileId: string, ext: string) => {
+      if (DIRECT_MEDIA_EXTENSIONS.has(ext.toLowerCase())) {
+        return match;
+      }
+      return `${apiBase}/v1/files/${fileId}/download`;
+    });
   }
   if (Array.isArray(value)) {
     return value.map((item) => maskUrls(item, apiBase));

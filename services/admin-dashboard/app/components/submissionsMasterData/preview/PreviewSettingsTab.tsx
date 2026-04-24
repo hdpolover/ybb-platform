@@ -182,7 +182,7 @@ export function PreviewSettingsTab({ programId }: { programId: string }) {
         </div>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-[2fr,1fr]">
+      <div className="grid gap-4 md:grid-cols-[2fr,1fr]">
         <div className="space-y-3 rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
           <div>
             <h3 className="text-sm font-semibold text-zinc-900">Disclaimer Content</h3>
