@@ -28,6 +28,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/src/ui/sheet";
+import { EmptyState } from "@/src/admin/empty-state";
 
 const DOC_TYPES = [
   { value: "agreement_letter", label: "Agreement Letter" },
@@ -135,12 +136,11 @@ export function ProgramDocumentsTable({ programId }: { programId: string }) {
             )}
             {!loading && items.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-10 text-center text-[12px] text-zinc-500">
-                  <div className="inline-flex flex-col items-center gap-1">
-                    <span className="inline-block h-8 w-8 rounded-full border border-dashed border-zinc-300" />
-                    <span className="font-medium">No documents found</span>
-                    <span className="text-[11px] text-zinc-400">Add a document to get started.</span>
-                  </div>
+                <td colSpan={6} className="px-3 py-10">
+                  <EmptyState
+                    title="No documents found"
+                    description="Add a document to get started."
+                  />
                 </td>
               </tr>
             )}
@@ -278,8 +278,8 @@ function DocumentSheet({
       setDescription(item?.description ?? "");
       setAudienceType(item?.audienceType ?? "all_registered");
       const cfg = item?.audienceConfig ?? {};
-      setPricingTierIds(((cfg.pricingTierIds as string[]) ?? []).join(", "));
-      setStatuses(((cfg.statuses as string[]) ?? []).join(", "));
+      setPricingTierIds((Array.isArray(cfg.pricingTierIds) ? cfg.pricingTierIds : []).join(", "));
+      setStatuses((Array.isArray(cfg.statuses) ? cfg.statuses : []).join(", "));
       setOrder(String(item?.order ?? 0));
       setIsActive(item?.isActive ?? true);
       setSelectedFile(null);
@@ -493,11 +493,11 @@ function ConfirmDelete({ name, loading, onCancel, onConfirm }: {
           Remove <span className="font-semibold">"{name}"</span>? This cannot be undone.
         </p>
         <div className="mt-4 flex justify-end gap-2">
-          <button onClick={onCancel}
+          <button type="button" onClick={onCancel}
             className="rounded-md border border-zinc-200 px-3 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50">
             Cancel
           </button>
-          <button onClick={onConfirm} disabled={loading}
+          <button type="button" onClick={onConfirm} disabled={loading}
             className="rounded-md bg-red-500 px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-60">
             {loading ? "Deleting…" : "Delete"}
           </button>
