@@ -39,6 +39,7 @@ async function renamePersonalDataKeysForProgram(
   prisma: PrismaClient,
   programId: string,
   renames: Map<string, string>,
+  dryRun: boolean,
 ): Promise<number> {
   if (renames.size === 0) return 0;
   const BATCH = 200;
@@ -71,10 +72,12 @@ async function renamePersonalDataKeysForProgram(
         }
       }
       if (changed) {
-        await prisma.participantApplication.update({
-          where: { id: app.id },
-          data: { personalData: next as never },
-        });
+        if (!dryRun) {
+          await prisma.participantApplication.update({
+            where: { id: app.id },
+            data: { personalData: next as never },
+          });
+        }
         total += 1;
       }
     }
@@ -87,6 +90,7 @@ async function renamePersonalDataKeysForProgram(
 async function dedupePerProgram(
   prisma: PrismaClient,
   programId: string,
+  dryRun: boolean,
 ): Promise<number> {
   const rows = await prisma.applicationFormField.findMany({
     where: { programId, deletedAt: null },
@@ -97,10 +101,12 @@ async function dedupePerProgram(
   let removed = 0;
   for (const r of rows) {
     if (seen.has(r.name)) {
-      await prisma.applicationFormField.update({
-        where: { id: r.id },
-        data: { deletedAt: new Date(), isActive: false },
-      });
+      if (!dryRun) {
+        await prisma.applicationFormField.update({
+          where: { id: r.id },
+          data: { deletedAt: new Date(), isActive: false },
+        });
+      }
       removed += 1;
     } else {
       seen.add(r.name);
@@ -111,7 +117,9 @@ async function dedupePerProgram(
 
 export async function migrateFormFieldCatalog(
   prisma: PrismaClient,
+  options: { dryRun?: boolean } = {},
 ): Promise<Report> {
+  const { dryRun = false } = options;
   const report: Report = {
     migratedToSystem: 0,
     aliasedAndRenamed: 0,
@@ -135,45 +143,53 @@ export async function migrateFormFieldCatalog(
     for (const f of fields) {
       const c = classifyLegacyFieldName(f.name, catalogKeys, magicKeys);
       if (c.status === 'aliased_to_system') {
-        await prisma.applicationFormField.update({
-          where: { id: f.id },
-          data: {
-            name: c.canonical,
-            source: 'system',
-            systemFieldKey: c.canonical,
-            validationRules: mergeLegacyMarker(f.validationRules, {
-              _legacy_name: f.name,
-            }) as never,
-          },
-        });
+        if (!dryRun) {
+          await prisma.applicationFormField.update({
+            where: { id: f.id },
+            data: {
+              name: c.canonical,
+              source: 'system',
+              systemFieldKey: c.canonical,
+              validationRules: mergeLegacyMarker(f.validationRules, {
+                _legacy_name: f.name,
+              }) as never,
+            },
+          });
+        }
         renames.set(f.name, c.canonical);
         report.aliasedAndRenamed += 1;
       } else if (c.status === 'system') {
         if (f.source !== 'system' || f.systemFieldKey !== c.canonical) {
-          await prisma.applicationFormField.update({
-            where: { id: f.id },
-            data: { source: 'system', systemFieldKey: c.canonical },
-          });
+          if (!dryRun) {
+            await prisma.applicationFormField.update({
+              where: { id: f.id },
+              data: { source: 'system', systemFieldKey: c.canonical },
+            });
+          }
         }
         report.migratedToSystem += 1;
       } else {
         if (!c.valid) {
-          await prisma.applicationFormField.update({
-            where: { id: f.id },
-            data: {
-              source: 'custom',
-              validationRules: mergeLegacyMarker(f.validationRules, {
-                _legacy_invalid_key: true,
-              }) as never,
-            },
-          });
+          if (!dryRun) {
+            await prisma.applicationFormField.update({
+              where: { id: f.id },
+              data: {
+                source: 'custom',
+                validationRules: mergeLegacyMarker(f.validationRules, {
+                  _legacy_invalid_key: true,
+                }) as never,
+              },
+            });
+          }
           report.flaggedInvalid += 1;
         } else {
           if (f.source !== 'custom') {
-            await prisma.applicationFormField.update({
-              where: { id: f.id },
-              data: { source: 'custom' },
-            });
+            if (!dryRun) {
+              await prisma.applicationFormField.update({
+                where: { id: f.id },
+                data: { source: 'custom' },
+              });
+            }
           }
           report.keptAsCustom += 1;
         }
@@ -184,15 +200,18 @@ export async function migrateFormFieldCatalog(
       prisma,
       programId,
       renames,
+      dryRun,
     );
 
-    report.deduped += await dedupePerProgram(prisma, programId);
+    report.deduped += await dedupePerProgram(prisma, programId, dryRun);
   }
 
   return report;
 }
 
 if (require.main === module) {
+  const dryRun =
+    process.argv.includes('--dry-run') || process.env.DRY_RUN === '1';
   const connectionString =
     process.env.DATABASE_URL ||
     'postgresql://ybb_user:ybb_password@localhost:5438/ybb_platform_db';
@@ -200,10 +219,22 @@ if (require.main === module) {
   const adapter = new PrismaPg(pool);
   const prisma = new PrismaClient({ adapter });
 
-  migrateFormFieldCatalog(prisma)
+  // eslint-disable-next-line no-console
+  console.log(
+    dryRun
+      ? '>>> DRY RUN: no writes will be performed. Remove --dry-run to apply.'
+      : '>>> APPLYING migration. Writes will be committed.',
+  );
+
+  migrateFormFieldCatalog(prisma, { dryRun })
     .then((report) => {
       // eslint-disable-next-line no-console
-      console.log('Form field catalog migration complete:', report);
+      console.log(
+        dryRun
+          ? 'Form field catalog migration (dry run) — counts show what WOULD change:'
+          : 'Form field catalog migration complete:',
+        report,
+      );
       // eslint-disable-next-line no-console
       console.log('Legacy aliases applied:', LEGACY_ALIASES);
     })

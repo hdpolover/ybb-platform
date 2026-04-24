@@ -138,7 +138,6 @@ function ScheduleSheet({
   const [startTime, setStartTime] = useState(item?.startTime ?? "");
   const [endTime, setEndTime] = useState(item?.endTime ?? "");
   const [location, setLocation] = useState(item?.location ?? "");
-  const [speaker, setSpeaker] = useState(item?.speaker ?? "");
   const [description, setDescription] = useState(item?.description ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -150,7 +149,6 @@ function ScheduleSheet({
       setStartTime(item?.startTime ?? "");
       setEndTime(item?.endTime ?? "");
       setLocation(item?.location ?? "");
-      setSpeaker(item?.speaker ?? "");
       setDescription(item?.description ?? "");
       setError(null);
     }
@@ -165,7 +163,6 @@ function ScheduleSheet({
         startTime: startTime || undefined,
         endTime: endTime || undefined,
         location: location || undefined,
-        speaker: speaker || undefined,
         description: description || undefined,
       };
       if (item) {
@@ -212,9 +209,6 @@ function ScheduleSheet({
             </div>
             <Field label="Location">
               <input type="text" value={location} onChange={(e) => setLocation(e.target.value)} className={inputCls} />
-            </Field>
-            <Field label="Speaker">
-              <input type="text" value={speaker} onChange={(e) => setSpeaker(e.target.value)} className={inputCls} />
             </Field>
             <Field label="Description">
               <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className={inputCls} />

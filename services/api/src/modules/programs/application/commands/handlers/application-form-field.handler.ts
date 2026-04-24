@@ -132,11 +132,19 @@ export class UpdateApplicationFormFieldHandler
 
   async execute(command: UpdateApplicationFormFieldCommand) {
     const { fieldId, dto } = command;
+
+    // Only validate the key when it's actually changing. Grandfathers legacy
+    // custom fields whose key later collided with a new catalog entry — they
+    // must remain editable without being forced through the catalog picker.
     if (dto.fieldName) {
-      try {
-        await this.keyValidator.validateCustomKey(dto.fieldName);
-      } catch (err) {
-        throw translateValidationError(err);
+      const existing = await this.repository.findFormFieldById(fieldId);
+      const keyChanged = !existing || existing.name !== dto.fieldName;
+      if (keyChanged) {
+        try {
+          await this.keyValidator.validateCustomKey(dto.fieldName);
+        } catch (err) {
+          throw translateValidationError(err);
+        }
       }
     }
     return this.repository.updateFormField(

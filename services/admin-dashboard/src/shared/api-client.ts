@@ -441,6 +441,14 @@ export function clearAllCache(): Promise<{ message: string; timestamp: string }>
   });
 }
 
+export function purgeQueues(): Promise<{
+  message: string;
+  queues: { queue: string; purged: number }[];
+  timestamp: string;
+}> {
+  return request("/queue/purge", { method: "DELETE" });
+}
+
 // ─── Users ────────────────────────────────────────────────────────────────────
 
 export function listUsers(params?: {
