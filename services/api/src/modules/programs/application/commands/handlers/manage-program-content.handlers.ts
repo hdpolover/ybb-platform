@@ -1011,7 +1011,7 @@ export class CreateDocumentTemplateHandler implements ICommandHandler<CreateDocu
             type: command.dto.type,
             description: command.dto.description,
             templateUrl,
-            layoutConfig: { fileSize, fileType },
+            ...(fileSize !== undefined || fileType !== undefined ? { layoutConfig: { fileSize, fileType } } : {}),
             audienceType: command.dto.audienceType ?? 'all_registered',
             audienceConfig: command.dto.audienceConfig ?? {},
             order: command.dto.order ?? 0,
@@ -1061,7 +1061,7 @@ export class UpdateDocumentTemplateHandler implements ICommandHandler<UpdateDocu
         const data: Record<string, unknown> = {
             ...command.dto,
             ...(templateUrl ? { templateUrl } : {}),
-            ...(fileSize || fileType
+            ...(fileSize !== undefined || fileType !== undefined
                 ? { layoutConfig: { fileSize, fileType } }
                 : {}),
         };
