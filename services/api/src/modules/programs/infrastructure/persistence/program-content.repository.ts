@@ -16,6 +16,8 @@ import {
     ApplicationFormField,
     ProgramEssay,
     ProgramParticipationCategory,
+    DocumentTemplate,
+    DocumentTemplateType,
     Prisma,
 } from '@prisma/client';
 import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service';
@@ -362,5 +364,48 @@ export class ProgramContentRepository implements IProgramContentRepository {
     }
     async findSubthemeById(id: string): Promise<ProgramSubtheme | null> {
         return this.prisma.programSubtheme.findUnique({ where: { id } });
+    }
+
+    // ─── Document Templates ───────────────────────────────────────────────────────
+
+    async findDocumentTemplatesByProgramId(
+        programId: string,
+        type?: string,
+    ): Promise<DocumentTemplate[]> {
+        return this.prisma.documentTemplate.findMany({
+            where: {
+                programId,
+                isActive: true,
+                deletedAt: null,
+                ...(type ? { type: type as DocumentTemplateType } : {}),
+            },
+            orderBy: { order: 'asc' },
+        });
+    }
+
+    async findDocumentTemplateById(id: string): Promise<DocumentTemplate | null> {
+        return this.prisma.documentTemplate.findFirst({
+            where: { id, deletedAt: null },
+        });
+    }
+
+    async createDocumentTemplate(data: Record<string, unknown>): Promise<DocumentTemplate> {
+        return this.prisma.documentTemplate.create({
+            data: data as Prisma.DocumentTemplateUncheckedCreateInput,
+        });
+    }
+
+    async updateDocumentTemplate(id: string, data: Record<string, unknown>): Promise<DocumentTemplate> {
+        return this.prisma.documentTemplate.update({
+            where: { id },
+            data: data as Prisma.DocumentTemplateUncheckedUpdateInput,
+        });
+    }
+
+    async deleteDocumentTemplate(id: string): Promise<void> {
+        await this.prisma.documentTemplate.update({
+            where: { id },
+            data: { deletedAt: new Date(), isActive: false },
+        });
     }
 } // Re-closing the class

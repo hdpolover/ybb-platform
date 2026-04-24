@@ -15,6 +15,7 @@ import {
     ProgramEssay,
     ProgramParticipationCategory,
     ProgramSubtheme,
+    DocumentTemplate,
 } from '@prisma/client';
 
 export type ProgramPricingTierWithPeriods = ProgramPricingTier & { validityPeriods: PricingTierValidityPeriod[] };
@@ -131,4 +132,11 @@ export interface IProgramContentRepository {
     updateSubtheme(id: string, data: Partial<ProgramSubtheme>): Promise<ProgramSubtheme>;
     deleteSubtheme(id: string): Promise<void>;
     findSubthemeById(id: string): Promise<ProgramSubtheme | null>;
+
+    // CRUD for Document Templates
+    findDocumentTemplatesByProgramId(programId: string, type?: string): Promise<DocumentTemplate[]>;
+    findDocumentTemplateById(id: string): Promise<DocumentTemplate | null>;
+    createDocumentTemplate(data: Record<string, unknown>): Promise<DocumentTemplate>;
+    updateDocumentTemplate(id: string, data: Record<string, unknown>): Promise<DocumentTemplate>;
+    deleteDocumentTemplate(id: string): Promise<void>;
 } // Re-closing the interface
