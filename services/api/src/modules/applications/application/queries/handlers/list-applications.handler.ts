@@ -34,6 +34,12 @@ export class ListApplicationsHandler {
           offset: query.filters.offset,
         },
       );
+    } else if (query.filters.programId && query.filters.participantId) {
+      const application = await this.applicationRepository.findByParticipantAndProgram(
+        query.filters.participantId,
+        query.filters.programId,
+      );
+      result = { applications: application ? [application] : [], total: application ? 1 : 0 };
     } else if (query.filters.programId) {
       result = await this.applicationRepository.findByProgram(
         query.filters.programId,

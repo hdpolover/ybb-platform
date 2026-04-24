@@ -79,18 +79,20 @@ export default function ProgramRundownsPage() {
             <thead className="bg-zinc-50 text-zinc-600">
               <tr>
                 <th className="px-3 py-2 font-semibold">Session</th>
+                <th className="px-3 py-2 font-semibold">Date</th>
                 <th className="px-3 py-2 font-semibold">Time</th>
                 <th className="px-3 py-2 font-semibold">Location</th>
                 <th className="px-3 py-2 text-right font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={4} className="px-3 py-6 text-center text-zinc-400">Loading…</td></tr>}
-              {!loading && items.length === 0 && <tr><td colSpan={4} className="px-3 py-6 text-center text-zinc-400">No sessions yet.</td></tr>}
+              {loading && <tr><td colSpan={5} className="px-3 py-6 text-center text-zinc-400">Loading…</td></tr>}
+              {!loading && items.length === 0 && <tr><td colSpan={5} className="px-3 py-6 text-center text-zinc-400">No sessions yet.</td></tr>}
               {!loading && items.map((s, idx) => (
                 <tr key={s.id} className={idx % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}>
-                  <td className="px-3 py-2 font-medium text-zinc-900">{s.title}</td>
-                  <td className="px-3 py-2 text-zinc-600">{s.startTime}{s.endTime ? " – " + s.endTime : ""}</td>
+                  <td className="px-3 py-2 font-medium text-zinc-900">{s.activity}</td>
+                  <td className="px-3 py-2 text-zinc-600">{formatDay(s.day)}</td>
+                  <td className="px-3 py-2 text-zinc-600">{s.startTime ? s.startTime + (s.endTime ? " – " + s.endTime : "") : "—"}</td>
                   <td className="px-3 py-2 text-zinc-600">{s.location ?? "—"}</td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex items-center justify-end gap-1">
@@ -113,7 +115,7 @@ export default function ProgramRundownsPage() {
         onSaved={fetch}
       />
 
-      {deleteTarget && <ConfirmDelete name={deleteTarget.title} loading={deleteLoading} onCancel={() => setDeleteTarget(null)} onConfirm={handleDelete} />}
+      {deleteTarget && <ConfirmDelete name={deleteTarget.activity} loading={deleteLoading} onCancel={() => setDeleteTarget(null)} onConfirm={handleDelete} />}
     </main>
   );
 }
@@ -131,20 +133,24 @@ function ScheduleSheet({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [title, setTitle] = useState(item?.title ?? "");
+  const [activity, setActivity] = useState(item?.activity ?? "");
+  const [day, setDay] = useState(toDateInputValue(item?.day));
   const [startTime, setStartTime] = useState(item?.startTime ?? "");
   const [endTime, setEndTime] = useState(item?.endTime ?? "");
   const [location, setLocation] = useState(item?.location ?? "");
+  const [speaker, setSpeaker] = useState(item?.speaker ?? "");
   const [description, setDescription] = useState(item?.description ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
-      setTitle(item?.title ?? "");
+      setActivity(item?.activity ?? "");
+      setDay(toDateInputValue(item?.day));
       setStartTime(item?.startTime ?? "");
       setEndTime(item?.endTime ?? "");
       setLocation(item?.location ?? "");
+      setSpeaker(item?.speaker ?? "");
       setDescription(item?.description ?? "");
       setError(null);
     }
@@ -153,11 +159,20 @@ function ScheduleSheet({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setLoading(true); setError(null);
     try {
+      const payload = {
+        day,
+        activity,
+        startTime: startTime || undefined,
+        endTime: endTime || undefined,
+        location: location || undefined,
+        speaker: speaker || undefined,
+        description: description || undefined,
+      };
       if (item) {
-        await updateProgramSchedule(item.id, { title, startTime, endTime: endTime || undefined, location: location || undefined, description: description || undefined });
+        await updateProgramSchedule(item.id, payload);
         toast.success("Session updated.");
       } else {
-        await createProgramSchedule(programId, { title, startTime, endTime: endTime || undefined, location: location || undefined, description: description || undefined });
+        await createProgramSchedule(programId, payload);
         toast.success("Session created.");
       }
       onSaved(); onClose();
@@ -181,19 +196,25 @@ function ScheduleSheet({
 
           <div className="flex-1 overflow-y-auto space-y-4 px-6 py-5">
             {error && <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
-            <Field label="Title" required>
-              <input required type="text" value={title} onChange={(e) => setTitle(e.target.value)} className={inputCls} />
+            <Field label="Activity" required>
+              <input required type="text" value={activity} onChange={(e) => setActivity(e.target.value)} className={inputCls} />
+            </Field>
+            <Field label="Date" required>
+              <input required type="date" value={day} onChange={(e) => setDay(e.target.value)} className={inputCls} />
             </Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Start Time" required>
-                <input required type="text" value={startTime} placeholder="e.g. 09:00" onChange={(e) => setStartTime(e.target.value)} className={inputCls} />
+              <Field label="Start Time">
+                <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={inputCls} />
               </Field>
               <Field label="End Time">
-                <input type="text" value={endTime} placeholder="e.g. 10:30" onChange={(e) => setEndTime(e.target.value)} className={inputCls} />
+                <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className={inputCls} />
               </Field>
             </div>
             <Field label="Location">
               <input type="text" value={location} onChange={(e) => setLocation(e.target.value)} className={inputCls} />
+            </Field>
+            <Field label="Speaker">
+              <input type="text" value={speaker} onChange={(e) => setSpeaker(e.target.value)} className={inputCls} />
             </Field>
             <Field label="Description">
               <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className={inputCls} />
@@ -247,3 +268,20 @@ function Field({ label, required, children }: { label: string; required?: boolea
 }
 
 const inputCls = "block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
+
+// `day` is stored as a free-form VARCHAR(100) on the backend. New entries use
+// ISO YYYY-MM-DD, but legacy rows may contain "Day 1", "Monday", etc. — coerce
+// to empty so the native date input doesn't throw on non-ISO values.
+function toDateInputValue(day: string | null | undefined): string {
+  if (!day) return "";
+  return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : "";
+}
+
+function formatDay(day: string | null | undefined): string {
+  if (!day) return "—";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    const d = new Date(day + "T00:00:00");
+    if (!isNaN(d.getTime())) return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  }
+  return day;
+}
