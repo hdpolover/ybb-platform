@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsNumber, IsDateString, IsBoolean, IsUUID, IsEnum } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsDateString, IsBoolean, IsUUID, IsEnum, IsArray } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { ProgramFormat } from '../../../../core/entities/program.entity';
 
@@ -134,6 +134,12 @@ export class UpdateProgramDto {
     @IsString()
     @IsOptional()
     termsAndConditions?: string;
+
+    @ApiProperty({ description: 'Checklist items shown on the preview step', required: false, type: [String] })
+    @IsArray()
+    @IsString({ each: true })
+    @IsOptional()
+    previewChecklistItems?: string[];
 
     @ApiProperty({ description: 'Is active', required: false })
     @IsBoolean()

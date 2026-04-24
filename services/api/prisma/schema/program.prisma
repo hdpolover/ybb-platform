@@ -178,6 +178,7 @@ model Program {
   requirementsDescription String? @map("requirements_description") @db.Text
   benefitsDescription     String? @map("benefits_description") @db.Text
   termsAndConditions      String? @map("terms_and_conditions") @db.Text
+  previewChecklistItems   String[] @map("preview_checklist_items")
 
   // SEO
   metaTitle       String? @map("meta_title") @db.VarChar(255)

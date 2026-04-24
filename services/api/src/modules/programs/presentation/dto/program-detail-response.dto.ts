@@ -416,6 +416,9 @@ export class ProgramDetailResponseDto {
   @ApiProperty()
   termsAndConditions?: string;
 
+  @ApiProperty({ type: [String] })
+  previewChecklistItems?: string[];
+
   @ApiProperty()
   metaTitle?: string;
 

@@ -98,6 +98,7 @@ export class AdminProgramsController {
         requirementsDescription: program.requirementsDescription ?? null,
         benefitsDescription: program.benefitsDescription ?? null,
         termsAndConditions: program.termsAndConditions ?? null,
+        previewChecklistItems: program.previewChecklistItems ?? [],
         metaTitle: program.metaTitle ?? null,
         metaDescription: program.metaDescription ?? null,
         deletedAt: program.deletedAt ?? null,
