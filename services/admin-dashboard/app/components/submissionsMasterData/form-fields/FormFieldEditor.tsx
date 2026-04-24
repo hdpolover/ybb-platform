@@ -328,6 +328,8 @@ export function FormFieldEditor({
     }
     const fieldName = state.fieldName.trim();
     const label = state.label.trim();
+    const initialFieldName = initialField?.fieldName?.trim() ?? "";
+    const fieldNameChanged = !isEditing || fieldName !== initialFieldName;
     if (!fieldName || !label) {
       reportError("Field Key and Label are required.");
       return;
@@ -343,18 +345,19 @@ export function FormFieldEditor({
       return;
     }
 
+    const normalizedHelpAssets = state.helpAssets
+      .map((a) => ({ kind: a.kind, label: a.label.trim(), url: a.url.trim() }))
+      .filter((a) => a.label && a.url);
+    const hadExistingHelpAssets = (initialField?.helpAssets?.length ?? 0) > 0;
+    const shouldSendHelpAssets = normalizedHelpAssets.length > 0 || hadExistingHelpAssets;
+
     const body: Record<string, unknown> = {
-      source: "custom",
       section: state.section || undefined,
-      fieldName,
       label,
       placeholder: state.placeholder.trim() || undefined,
       helpText: state.helpText.trim() || undefined,
       mediaUrl: state.mediaUrl.trim() || undefined,
       mediaAlt: state.mediaAlt.trim() || undefined,
-      helpAssets: state.helpAssets
-        .map((a) => ({ kind: a.kind, label: a.label.trim(), url: a.url.trim() }))
-        .filter((a) => a.label && a.url),
       fieldType: state.fieldType,
       isRequired: state.isRequired,
       defaultValue: state.defaultValue.trim() || undefined,
@@ -367,6 +370,18 @@ export function FormFieldEditor({
       validationRules: needsOptions ? undefined : pruneRules(state.validationRules),
     };
 
+    if (!isEditing) {
+      body.source = "custom";
+    }
+
+    if (fieldNameChanged) {
+      body.fieldName = fieldName;
+    }
+
+    if (shouldSendHelpAssets) {
+      body.helpAssets = normalizedHelpAssets;
+    }
+
     const path = isEditing
       ? `/programs/form-fields/${encodeURIComponent(initialField!.id)}`
       : `/programs/${encodeURIComponent(programId)}/form-fields`;
@@ -375,15 +390,31 @@ export function FormFieldEditor({
     setSaving(true);
     setError(null);
     try {
-      const response = await fetch(buildApiUrl(path), {
-        method,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-      });
-      if (!response.ok) throw new Error(await readErrorMessage(response));
+      const sendRequest = (requestBody: Record<string, unknown>) =>
+        fetch(buildApiUrl(path), {
+          method,
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+      let response = await sendRequest(body);
+      if (!response.ok) {
+        const message = await readErrorMessage(response);
+        const canRetryWithoutHelpAssets =
+          shouldSendHelpAssets && /helpassets\s+should\s+not\s+exist/i.test(message);
+
+        if (canRetryWithoutHelpAssets) {
+          const fallbackBody = { ...body };
+          delete fallbackBody.helpAssets;
+          response = await sendRequest(fallbackBody);
+        }
+
+        if (!response.ok) throw new Error(await readErrorMessage(response));
+      }
+
       onSaved();
       onClose();
     } catch (err) {

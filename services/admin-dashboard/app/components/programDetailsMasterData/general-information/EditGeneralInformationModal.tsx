@@ -35,6 +35,12 @@ const PROGRAM_TYPE_OPTIONS = [
   "Other",
 ];
 
+const PROGRAM_FORMAT_OPTIONS: { value: 'in_person' | 'hybrid' | 'online'; label: string }[] = [
+  { value: "in_person", label: "In-Person" },
+  { value: "hybrid", label: "Hybrid" },
+  { value: "online", label: "Online" },
+];
+
 function toAutoSlug(name: string): string {
   return name
     .toLowerCase()
@@ -47,6 +53,7 @@ function toAutoSlug(name: string): string {
 export interface GeneralInformationFormValues {
   name: string;
   programType: string;
+  programFormat: '' | 'in_person' | 'hybrid' | 'online';
   shortDescription: string;
   description: string;
   videoUrl: string;
@@ -398,6 +405,7 @@ export function EditGeneralInformationModal({
   const hasGeneralChanges =
     formValues.name !== initialValues.name ||
     formValues.programType !== initialValues.programType ||
+    formValues.programFormat !== initialValues.programFormat ||
     formValues.shortDescription !== initialValues.shortDescription ||
     formValues.description !== initialValues.description ||
     formValues.videoUrl !== initialValues.videoUrl ||
@@ -573,6 +581,19 @@ export function EditGeneralInformationModal({
                     {formValues.programType && !PROGRAM_TYPE_OPTIONS.includes(formValues.programType) && (
                       <option value={formValues.programType}>{formValues.programType}</option>
                     )}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-zinc-500">Program Format</label>
+                  <select
+                    value={formValues.programFormat}
+                    onChange={(e) => updateField("programFormat", e.target.value as GeneralInformationFormValues['programFormat'])}
+                    className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  >
+                    <option value="">Select a format…</option>
+                    {PROGRAM_FORMAT_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
                   </select>
                 </div>
                 <div className="md:col-span-2">
