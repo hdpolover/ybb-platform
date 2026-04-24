@@ -14,6 +14,7 @@ import {
     CreateProgramEssayDto, UpdateProgramEssayDto,
     CreateProgramParticipationCategoryDto, UpdateProgramParticipationCategoryDto,
     CreateProgramSubthemeDto, UpdateProgramSubthemeDto,
+    CreateDocumentTemplateDto, UpdateDocumentTemplateDto,
 } from '../../presentation/dto/create-update-program-content.dto';
 
 // Timeline
@@ -236,4 +237,27 @@ export class UpdateProgramSubthemeCommand {
 }
 export class DeleteProgramSubthemeCommand {
     constructor(public readonly id: string, public readonly userId: string) { }
+}
+
+// Document Template
+export class CreateDocumentTemplateCommand {
+    constructor(
+        public readonly dto: CreateDocumentTemplateDto,
+        public readonly userId: string,
+        public readonly file?: Express.Multer.File,
+    ) {}
+}
+export class UpdateDocumentTemplateCommand {
+    constructor(
+        public readonly id: string,
+        public readonly dto: UpdateDocumentTemplateDto,
+        public readonly userId: string,
+        public readonly file?: Express.Multer.File,
+    ) {}
+}
+export class DeleteDocumentTemplateCommand {
+    constructor(
+        public readonly id: string,
+        public readonly userId: string,
+    ) {}
 }

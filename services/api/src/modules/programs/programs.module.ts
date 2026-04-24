@@ -78,6 +78,7 @@ import {
   CreateProgramEssayHandler, UpdateProgramEssayHandler, DeleteProgramEssayHandler,
   CreateProgramParticipationCategoryHandler, UpdateProgramParticipationCategoryHandler, DeleteProgramParticipationCategoryHandler,
   CreateProgramSubthemeHandler, UpdateProgramSubthemeHandler, DeleteProgramSubthemeHandler,
+  CreateDocumentTemplateHandler, UpdateDocumentTemplateHandler, DeleteDocumentTemplateHandler,
 } from './application/commands/handlers/manage-program-content.handlers';
 import {
   CreateApplicationFormFieldHandler,
@@ -158,6 +159,7 @@ import { FormFieldKeyValidator } from './application/validators/form-field-key.v
     CreateProgramEssayHandler, UpdateProgramEssayHandler, DeleteProgramEssayHandler,
     CreateProgramParticipationCategoryHandler, UpdateProgramParticipationCategoryHandler, DeleteProgramParticipationCategoryHandler,
     CreateProgramSubthemeHandler, UpdateProgramSubthemeHandler, DeleteProgramSubthemeHandler,
+    CreateDocumentTemplateHandler, UpdateDocumentTemplateHandler, DeleteDocumentTemplateHandler,
     // Form Field Handlers
     CreateApplicationFormFieldHandler,
     UpdateApplicationFormFieldHandler,
