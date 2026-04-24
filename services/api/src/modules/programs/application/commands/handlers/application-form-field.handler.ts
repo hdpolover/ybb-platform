@@ -40,6 +40,7 @@ function mapDtoToField(
     ...(dto.helpText !== undefined ? { helpText: dto.helpText } : {}),
     ...(dto.mediaUrl !== undefined ? { mediaUrl: dto.mediaUrl } : {}),
     ...(dto.mediaAlt !== undefined ? { mediaAlt: dto.mediaAlt } : {}),
+    ...(dto.helpAssets !== undefined ? { helpAssets: dto.helpAssets } : {}),
     ...(dto.fieldType !== undefined ? { type: dto.fieldType } : {}),
     ...(dto.isRequired !== undefined ? { isRequired: dto.isRequired } : {}),
     ...(dto.options !== undefined ? { options: dto.options } : {}),

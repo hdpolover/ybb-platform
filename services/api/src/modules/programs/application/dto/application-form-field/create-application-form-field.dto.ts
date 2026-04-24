@@ -1,5 +1,16 @@
-import { IsBoolean, IsNumber, IsOptional, IsString, IsEnum, IsNotEmpty } from 'class-validator';
+import {
+  IsBoolean,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsEnum,
+  IsNotEmpty,
+  ValidateNested,
+  ArrayMaxSize,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { HelpAssetDto, HELP_ASSETS_MAX } from './help-asset.dto';
 
 export enum FormFieldType {
   TEXT = 'text',
@@ -28,7 +39,7 @@ export class CreateApplicationFormFieldDto {
   @ApiProperty({ description: 'Label displayed to the user' })
   @IsString()
   @IsNotEmpty()
-  label: string;
+  label!: string;
 
   @ApiPropertyOptional({ description: 'Placeholder text' })
   @IsOptional()
@@ -50,9 +61,19 @@ export class CreateApplicationFormFieldDto {
   @IsString()
   mediaAlt?: string;
 
+  @ApiPropertyOptional({
+    description: `Structured guidance items shown with the field (example links, tutorial videos, downloadable templates). Max ${HELP_ASSETS_MAX}.`,
+    type: [HelpAssetDto],
+  })
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => HelpAssetDto)
+  @ArrayMaxSize(HELP_ASSETS_MAX)
+  helpAssets?: HelpAssetDto[];
+
   @ApiProperty({ enum: FormFieldType, description: 'Type of the input field' })
   @IsEnum(FormFieldType)
-  fieldType: FormFieldType;
+  fieldType!: FormFieldType;
 
   @ApiPropertyOptional({ description: 'Is this field required?' })
   @IsOptional()

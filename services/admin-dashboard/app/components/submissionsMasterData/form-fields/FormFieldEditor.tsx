@@ -19,6 +19,7 @@ import { uploadFileViaPresignedUrl, type MediaFile } from "@/src/shared/api-clie
 import { OptionsRepeater, type OptionRow } from "./OptionsRepeater";
 import { ValidationRulesEditor, type ValidationRules } from "./ValidationRulesEditor";
 import { MediaLibraryPicker } from "./MediaLibraryPicker";
+import { HelpAssetsRepeater, type HelpAssetRow, HELP_ASSETS_MAX } from "./HelpAssetsRepeater";
 import type { ApplicationFormFieldRow } from "./FormFieldsTable";
 
 const SLUG_MAX_LEN = 64;
@@ -80,6 +81,7 @@ type EditorState = {
   helpText: string;
   mediaUrl: string;
   mediaAlt: string;
+  helpAssets: HelpAssetRow[];
   fieldType: string;
   isRequired: boolean;
   options: OptionRow[];
@@ -89,6 +91,22 @@ type EditorState = {
   fieldNameTouched: boolean;
   advancedOpen: boolean;
 };
+
+function helpAssetsFromRaw(raw: unknown): HelpAssetRow[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const rec = item as Record<string, unknown>;
+      const kind = typeof rec.kind === "string" ? rec.kind : "";
+      const label = typeof rec.label === "string" ? rec.label : "";
+      const url = typeof rec.url === "string" ? rec.url : "";
+      if (kind !== "link" && kind !== "video" && kind !== "file") return null;
+      return { kind, label, url } as HelpAssetRow;
+    })
+    .filter((r): r is HelpAssetRow => r !== null)
+    .slice(0, HELP_ASSETS_MAX);
+}
 
 /** Coerces whatever shape the server stored in `options` into {label,value} rows. */
 function optionsToRows(raw: unknown): OptionRow[] {
@@ -142,6 +160,7 @@ function toEditorState(field: ApplicationFormFieldRow | null): EditorState {
       helpText: "",
       mediaUrl: "",
       mediaAlt: "",
+      helpAssets: [],
       fieldType: "text",
       isRequired: false,
       options: [],
@@ -160,6 +179,7 @@ function toEditorState(field: ApplicationFormFieldRow | null): EditorState {
     helpText: field.helpText ?? "",
     mediaUrl: field.mediaUrl ?? "",
     mediaAlt: field.mediaAlt ?? "",
+    helpAssets: helpAssetsFromRaw(field.helpAssets),
     fieldType: field.fieldType,
     isRequired: field.isRequired,
     options: optionsToRows(field.options),
@@ -285,6 +305,9 @@ export function FormFieldEditor({
       helpText: state.helpText.trim() || undefined,
       mediaUrl: state.mediaUrl.trim() || undefined,
       mediaAlt: state.mediaAlt.trim() || undefined,
+      helpAssets: state.helpAssets
+        .map((a) => ({ kind: a.kind, label: a.label.trim(), url: a.url.trim() }))
+        .filter((a) => a.label && a.url),
       fieldType: state.fieldType,
       isRequired: state.isRequired,
       defaultValue: state.defaultValue.trim() || undefined,
@@ -587,6 +610,19 @@ export function FormFieldEditor({
                 />
               </Field>
             </div>
+          </section>
+
+          {/* Guidance items: links, videos, templates */}
+          <section className="space-y-2">
+            <h4 className="text-sm font-semibold text-zinc-900">Guidance Items</h4>
+            <p className="text-xs text-zinc-500">
+              Attach example links, tutorial videos, or downloadable templates. Each item appears as a
+              pill beneath the field on the applicant form and opens in a new tab.
+            </p>
+            <HelpAssetsRepeater
+              value={state.helpAssets}
+              onChange={(next) => patch("helpAssets", next)}
+            />
           </section>
         </div>
 

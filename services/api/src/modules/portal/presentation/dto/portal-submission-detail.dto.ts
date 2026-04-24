@@ -17,6 +17,13 @@ export interface FieldValidationRules {
     pattern?: string;
 }
 
+/** Supplementary guidance item shown beside a form field (example link, tutorial video, downloadable template) */
+export interface HelpAsset {
+    kind: 'link' | 'video' | 'file';
+    label: string;
+    url: string;
+}
+
 /**
  * Represents a single form field in a submission section
  */
@@ -44,6 +51,12 @@ export class SubmissionFormFieldDto {
 
     @ApiPropertyOptional({ example: 'T-shirt size guide' })
     mediaAlt?: string;
+
+    @ApiPropertyOptional({
+        description: 'Supplementary guidance items (example link, tutorial video, downloadable template).',
+        example: [{ kind: 'video', label: 'How to make a twibbon', url: 'https://youtube.com/watch?v=x' }],
+    })
+    helpAssets?: HelpAsset[];
 
     @ApiPropertyOptional({ example: ['Option 1', 'Option 2'] })
     options?: string[] | FieldOption[];

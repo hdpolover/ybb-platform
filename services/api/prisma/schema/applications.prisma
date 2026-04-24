@@ -94,6 +94,7 @@ model ApplicationFormField {
   helpText        String? @map("help_text") @db.Text
   mediaUrl        String? @map("media_url") @db.Text
   mediaAlt        String? @map("media_alt") @db.VarChar(255)
+  helpAssets      Json?   @default("[]") @map("help_assets") @db.Json
   options         Json?   @default("[]") @db.Json
   validationRules Json?   @default("{}") @map("validation_rules") @db.Json
   isRequired      Boolean @default(true) @map("is_required")
