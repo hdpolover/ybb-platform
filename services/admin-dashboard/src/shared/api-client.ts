@@ -72,6 +72,33 @@ export type Paginated<T> = {
   meta: PaginatedMeta;
 };
 
+// The API's TransformInterceptor wraps paginated responses as:
+// { statusCode, message, data: T[], meta: { meta: PaginatedMeta } | PaginatedMeta }
+// request() only returns payload.data (the array), discarding meta.
+// Use requestPaginated() for any endpoint that returns { data: [], meta: {} }.
+async function requestPaginated<T>(path: string, init?: RequestInit): Promise<Paginated<T>> {
+  const headers = new Headers(init?.headers);
+  headers.set("Authorization", `Bearer ${getAccessToken()}`);
+  if (
+    !(init?.body instanceof FormData) &&
+    init?.method &&
+    init.method !== "GET" &&
+    !headers.has("Content-Type")
+  ) {
+    headers.set("Content-Type", "application/json");
+  }
+  const res = await fetch(buildApiUrl(path), { ...init, headers });
+  if (!res.ok) throw new Error(await readErrorMessage(res));
+  const payload = await res.json() as {
+    data?: T[];
+    meta?: Record<string, unknown> & { meta?: PaginatedMeta };
+  };
+  const data: T[] = (payload.data ?? []) as T[];
+  const rawMeta = (payload.meta ?? {}) as Record<string, unknown> & { meta?: PaginatedMeta };
+  const meta = (rawMeta.meta ?? rawMeta) as PaginatedMeta;
+  return { data, meta };
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type AdminRole = {
@@ -344,7 +371,7 @@ export function listAdmins(params?: {
   if (params?.search) q.set("search", params.search);
   if (params?.roleId) q.set("roleId", params.roleId);
   if (params?.brandId) q.set("brandId", params.brandId);
-  return request<Paginated<Admin>>(`/admins?${q}`);
+  return requestPaginated<Admin>(`/admins?${q}`);
 }
 
 export function getAdmin(id: string): Promise<Admin> {
@@ -1043,7 +1070,7 @@ export function listProgramAnnouncements(
   if (params?.limit) q.set("limit", String(params.limit));
   if (params?.type) q.set("type", params.type);
   if (params?.priority) q.set("priority", params.priority);
-  return request<Paginated<ProgramAnnouncement>>(
+  return requestPaginated<ProgramAnnouncement>(
     `/programs/${programId}/announcements?${q}`,
   );
 }
@@ -1118,7 +1145,7 @@ export function listSystemAnnouncements(params?: {
   if (params?.page) q.set("page", String(params.page));
   if (params?.limit) q.set("limit", String(params.limit));
   if (params?.brandId) q.set("brandId", params.brandId);
-  return request<Paginated<SystemAnnouncement>>(
+  return requestPaginated<SystemAnnouncement>(
     `/system/announcements/admin/all?${q}`,
   );
 }

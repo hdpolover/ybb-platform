@@ -106,7 +106,7 @@ export class SystemAnnouncementsController {
         @CurrentUser() user: CurrentUserData,
     ) {
         return this.commandBus.execute(
-            new CreateSystemAnnouncementCommand(dto, user.userId),
+            new CreateSystemAnnouncementCommand(dto, user.adminId ?? user.userId),
         );
     }
 
@@ -122,7 +122,7 @@ export class SystemAnnouncementsController {
         @CurrentUser() user: CurrentUserData,
     ) {
         return this.commandBus.execute(
-            new UpdateSystemAnnouncementCommand(id, dto, user.userId),
+            new UpdateSystemAnnouncementCommand(id, dto, user.adminId ?? user.userId),
         );
     }
 
@@ -137,7 +137,7 @@ export class SystemAnnouncementsController {
         @CurrentUser() user: CurrentUserData,
     ) {
         return this.commandBus.execute(
-            new DeleteSystemAnnouncementCommand(id, user.userId),
+            new DeleteSystemAnnouncementCommand(id, user.adminId ?? user.userId),
         );
     }
 
@@ -154,7 +154,7 @@ export class SystemAnnouncementsController {
         @CurrentUser() user: CurrentUserData,
     ) {
         return this.commandBus.execute(
-            new TogglePublishSystemAnnouncementCommand(id, publish !== 'false', user.userId),
+            new TogglePublishSystemAnnouncementCommand(id, publish !== 'false', user.adminId ?? user.userId),
         );
     }
 }
