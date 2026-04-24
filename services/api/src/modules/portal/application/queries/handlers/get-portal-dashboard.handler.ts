@@ -114,9 +114,14 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                                     select: { id: true }
                                 }
                             }
+                        },
+                        pricingTiers: {
+                            where: { isActive: true, deletedAt: null, feeType: 'registration_fee' },
+                            select: { id: true, allowedCategories: true }
                         }
                     }
                 },
+                registrationPaymentStatus: true,
                 invoices: {
                     select: {
                         id: true,
@@ -142,12 +147,27 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
         if (latestApplication) {
             alerts = this.generateAlerts(latestApplication);
             
+            const tiers = latestApplication.program.pricingTiers as unknown as { allowedCategories: string[] }[];
+            const hasSelfFundedTier = tiers.some(t => t.allowedCategories.includes('self_funded'));
+            const hasFullyFundedTier = tiers.some(t => t.allowedCategories.includes('fully_funded'));
+            const bothTiersActive = hasSelfFundedTier && hasFullyFundedTier;
+
+            const hasSuccessfulPayment =
+                latestApplication.invoices.some(inv => inv.status === 'paid') ||
+                latestApplication.registrationPaymentStatus === 'paid';
+            const isSelfFunded = latestApplication.applicationCategory === 'self_funded';
+            // Self-funded with a successful payment cannot switch up to fully-funded
+            const canSwitchCategory =
+                bothTiersActive &&
+                ['draft', 'submitted'].includes(latestApplication.status) &&
+                !(isSelfFunded && hasSuccessfulPayment);
+
             activeAppSummary = {
                 id: latestApplication.id,
                 programName: latestApplication.program.name,
                 status: latestApplication.status,
                 category: latestApplication.applicationCategory || 'general',
-                canSwitchCategory: ['draft', 'submitted'].includes(latestApplication.status),
+                canSwitchCategory,
                 progress: calculateSubmissionProgress(latestApplication),
                 currentStep: determineSubmissionCurrentStep(latestApplication),
                 daysUntilDeadline: this.calculateDaysUntilDeadline(latestApplication.program.applicationDeadline),

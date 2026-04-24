@@ -47,8 +47,11 @@ export class SwitchApplicationCategoryHandler {
     const hasSuccessfulInvoice = application.invoices.some(inv => inv.status === successfulPaymentStatus);
     const hasSuccessfulRegistrationPayment = application.registrationPaymentStatus === successfulPaymentStatus;
 
-    if (hasSuccessfulInvoice || hasSuccessfulRegistrationPayment) {
-      throw new BadRequestException('Cannot switch category because a successful payment exists.');
+    // Fully-funded → self-funded is allowed even with a prior payment (reimburse flow).
+    // Self-funded → fully-funded is blocked once a successful payment exists.
+    const isSelfFundedSwitchingUp = application.applicationCategory === 'self_funded' && targetCategory === 'fully_funded';
+    if (isSelfFundedSwitchingUp && (hasSuccessfulInvoice || hasSuccessfulRegistrationPayment)) {
+      throw new BadRequestException('Cannot switch to Fully Funded after a successful payment exists.');
     }
 
     // 4. Validate Target Category Eligibility

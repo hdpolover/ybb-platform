@@ -157,4 +157,19 @@ export class PortalSubmissionDetailResponseDto {
 
     @ApiProperty({ description: 'Document requirements with upload status', type: [SubmissionRequirementDto] })
     requirements: SubmissionRequirementDto[];
+
+    @ApiPropertyOptional({ example: 'Jane Doe' })
+    participantName?: string;
+
+    @ApiPropertyOptional({ example: 'participant-uuid-123' })
+    participantId?: string;
+
+    @ApiPropertyOptional({ example: 'user-uuid-123' })
+    participantAccountId?: string;
+
+    @ApiPropertyOptional({ example: 'Istanbul, Turkey' })
+    participantLocation?: string;
+
+    @ApiPropertyOptional({ example: 'https://cdn.example.com/profiles/participant.jpg' })
+    participantAvatarUrl?: string;
 }
