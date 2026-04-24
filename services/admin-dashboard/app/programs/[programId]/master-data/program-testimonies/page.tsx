@@ -10,7 +10,6 @@ import {
   PhotoIcon,
   XMarkIcon,
   UserCircleIcon,
-  StarIcon,
 } from "@heroicons/react/24/outline";
 import { StarIcon as StarSolidIcon } from "@heroicons/react/24/solid";
 import { useAuth } from "@/app/contexts/AuthContext";
@@ -51,7 +50,8 @@ export default function ProgramTestimoniesPage() {
     setLoading(true);
     setError(null);
     try {
-      setItems(await listProgramTestimonials(params.programId));
+      const all = await listProgramTestimonials(params.programId);
+      setItems(all.filter((t) => t.type !== "video"));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
     } finally {
@@ -118,8 +118,8 @@ export default function ProgramTestimoniesPage() {
               <tr>
                 <th className="px-3 py-2 font-semibold">Name</th>
                 <th className="px-3 py-2 font-semibold">Role / Company</th>
+                <th className="px-3 py-2 font-semibold">Category</th>
                 <th className="px-3 py-2 font-semibold">Testimonial</th>
-                <th className="px-3 py-2 font-semibold">Type / Rating</th>
                 <th className="px-3 py-2 text-right font-semibold">Actions</th>
               </tr>
             </thead>
@@ -161,20 +161,14 @@ export default function ProgramTestimoniesPage() {
                     {[t.role, t.company].filter(Boolean).join(" / ") || "—"}
                   </td>
                   <td className="px-3 py-2">
-                    <div className="line-clamp-2 max-w-xs text-zinc-600">{t.testimonial}</div>
+                    <span className={`inline-flex w-fit items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                      t.category === "alumni" ? "bg-amber-50 text-amber-700" : "bg-blue-50 text-blue-700"
+                    }`}>
+                      {t.category ?? "delegate"}
+                    </span>
                   </td>
                   <td className="px-3 py-2">
-                    <div className="flex flex-col gap-1">
-                      <span className={`inline-flex w-fit items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${t.type === "VIDEO" ? "bg-purple-50 text-purple-700" : "bg-blue-50 text-blue-700"}`}>
-                        {t.type || "TEXT"}
-                      </span>
-                      {t.rating != null && (
-                        <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-500">
-                          <StarIcon className="h-3 w-3" />
-                          {t.rating}
-                        </span>
-                      )}
-                    </div>
+                    <div className="line-clamp-2 max-w-xs text-zinc-600">{t.testimonial}</div>
                   </td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex items-center justify-end gap-1">
@@ -261,6 +255,7 @@ function TestimonialSheet({
   const [role, setRole] = useState(item?.role ?? "");
   const [company, setCompany] = useState(item?.company ?? "");
   const [testimonial, setTestimonial] = useState(item?.testimonial ?? "");
+  const [category, setCategory] = useState<"delegate" | "alumni">("delegate");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(item?.avatarUrl ?? null);
   const [saving, setSaving] = useState(false);
@@ -273,6 +268,7 @@ function TestimonialSheet({
       setRole(item?.role ?? "");
       setCompany(item?.company ?? "");
       setTestimonial(item?.testimonial ?? "");
+      setCategory("delegate");
       setSelectedFile(null);
       setPreviewUrl(item?.avatarUrl ?? null);
       setError(null);
@@ -311,9 +307,9 @@ function TestimonialSheet({
         avatarUrl = upload.publicUrl;
       }
       if (isEdit && item) {
-        await updateProgramTestimonial(item.id, { name, role, company, testimonial, ...(avatarUrl ? { avatarUrl } : {}) });
+        await updateProgramTestimonial(item.id, { name, role, company, testimonial, brandId, category, ...(avatarUrl ? { avatarUrl } : {}) });
       } else {
-        await createProgramTestimonial(programId, { name, role, company, testimonial, ...(avatarUrl ? { avatarUrl } : {}) });
+        await createProgramTestimonial(programId, { name, role, company, testimonial, brandId, category, ...(avatarUrl ? { avatarUrl } : {}) });
       }
       onSaved();
       onClose();
@@ -432,6 +428,21 @@ function TestimonialSheet({
               placeholder="e.g., Delegate – Japan Youth Summit 2025"
               className={inputCls}
             />
+          </div>
+
+          {/* Category */}
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-zinc-600">
+              Category <span className="text-rose-500">*</span>
+            </label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value as "delegate" | "alumni")}
+              className={inputCls}
+            >
+              <option value="delegate">Delegate — shown in Testimonials section</option>
+              <option value="alumni">Alumni — shown in Alumni Stories section</option>
+            </select>
           </div>
 
           {/* Testimonial */}

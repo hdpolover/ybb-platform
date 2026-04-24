@@ -19,6 +19,7 @@ export default function VideoTestimonialsPage() {
 
   const program = accessiblePrograms.find((p) => p.programId === params.programId);
   const programName = program?.programName ?? "Selected Program";
+  const brandId = program?.brandId ?? "";
 
   const load = useCallback(async () => {
     if (!params.programId) return;
@@ -82,6 +83,7 @@ export default function VideoTestimonialsPage() {
           data={filtered}
           loading={loading}
           programId={params.programId}
+          brandId={brandId}
           search={search}
           onSearchChange={setSearch}
           onRefresh={load}

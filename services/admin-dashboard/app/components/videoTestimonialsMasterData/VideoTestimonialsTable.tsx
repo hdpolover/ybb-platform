@@ -38,6 +38,7 @@ export function VideoTestimonialsTable({
   data,
   loading,
   programId,
+  brandId,
   search,
   onSearchChange,
   onRefresh,
@@ -45,6 +46,7 @@ export function VideoTestimonialsTable({
   data: VideoTestimonyRow[];
   loading: boolean;
   programId: string;
+  brandId: string;
   search: string;
   onSearchChange: (v: string) => void;
   onRefresh: () => void;
@@ -59,7 +61,7 @@ export function VideoTestimonialsTable({
             Manage video testimonials embedded on the program landing pages.
           </p>
         </div>
-        <AddVideoAction programId={programId} onSuccess={onRefresh} />
+        <AddVideoAction programId={programId} brandId={brandId} onSuccess={onRefresh} />
       </div>
 
       {/* Search */}

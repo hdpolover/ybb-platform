@@ -436,9 +436,24 @@ export class CreateProgramTestimonialDto {
     @IsNumber()
     @IsOptional()
     order?: number;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    category?: string;
 }
 
 export class UpdateProgramTestimonialDto {
+    @ApiProperty({ required: false })
+    @IsUUID()
+    @IsOptional()
+    brandId?: string;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    category?: string;
+
     @ApiProperty({ required: false })
     @IsString()
     @IsOptional()
