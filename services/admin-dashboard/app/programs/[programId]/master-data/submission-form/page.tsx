@@ -1,3 +1,8 @@
+"use client";
+
+import { use } from "react";
+import { useSearchParams } from "next/navigation";
+import { useAuth } from "@/app/contexts/AuthContext";
 import { HeaderSection } from "@/app/components/submissionsMasterData/HeaderSection";
 import { TabNavigation } from "@/app/components/submissionsMasterData/TabNavigation";
 import { FormFieldsTable } from "@/app/components/submissionsMasterData/form-fields/FormFieldsTable";
@@ -5,27 +10,19 @@ import { ParticipationCategoriesTable } from "@/app/components/submissionsMaster
 import { SubThemesTable } from "@/app/components/submissionsMasterData/subthemes/SubThemesTable";
 import { SubmissionEssaysTable } from "@/app/components/submissionsMasterData/essays/SubmissionEssaysTable";
 
-function formatProgramName(programId: string | null): string {
-  if (!programId) return "Selected Program";
-  const cleaned = programId.replace(/[-_]+/g, " ");
-  const words = cleaned.split(" ").filter(Boolean);
-  if (words.length === 0) return "Selected Program";
-  return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
-}
-
-export default async function SubmissionFormPage({
+export default function SubmissionFormPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ programId: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams?: Promise<{ tab?: string }>;
 }) {
-  const resolvedParams = await params;
-  const resolvedSearchParams = await searchParams;
+  const { programId } = use(params);
+  const searchParams = useSearchParams();
+  const activeTab = searchParams.get("tab") ?? "categories";
 
-  const programId = resolvedParams.programId;
-  const programName = formatProgramName(programId);
-  const activeTab = resolvedSearchParams.tab || "categories";
+  const { accessiblePrograms } = useAuth();
+  const programName =
+    accessiblePrograms.find((p) => p.programId === programId)?.programName ?? "Selected Program";
 
   return (
     <main className="space-y-4">

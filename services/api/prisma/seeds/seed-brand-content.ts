@@ -37,6 +37,11 @@ export async function seedBrandContent() {
   });
 
   // 2. Social Feeds (Instagram Placeholders)
+  const iysContentSeeded = (await prisma.sponsor.count({ where: { brandId: iys.id } })) > 0;
+  if (iysContentSeeded) {
+    log('  → IYS brand content already seeded, skipping');
+    log('✅ Brand Content seeded for IYS (skipped)');
+  } else {
   await prisma.brandSocialFeed.deleteMany({ where: { brandId: iys.id } });
   await prisma.brandSocialFeed.createMany({
     data: [
@@ -254,6 +259,7 @@ export async function seedBrandContent() {
   });
 
   log('✅ Brand Content (Settings, Socials, Sponsors, Team, Testimonials, Legal) seeded for IYS');
+  } // end if (!iysContentSeeded)
 
   // ==========================================
   // CYS Brand Content
@@ -293,6 +299,12 @@ export async function seedBrandContent() {
   });
 
   // CYS Social Feeds
+  const cysContentSeeded = (await prisma.sponsor.count({ where: { brandId: cys.id } })) > 0;
+  if (cysContentSeeded) {
+    log('  → CYS brand content already seeded, skipping');
+    log('✅ Brand Content seeded for CYS (skipped)');
+    return;
+  }
   await prisma.brandSocialFeed.deleteMany({ where: { brandId: cys.id } });
   await prisma.brandSocialFeed.createMany({
     data: [

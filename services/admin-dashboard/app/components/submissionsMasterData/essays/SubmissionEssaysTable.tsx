@@ -272,8 +272,10 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
       return;
     }
 
+    const isEditing = Boolean(formState.id);
+
     const payload = {
-      programId,
+      ...(isEditing ? {} : { programId }),
       question: formState.question.trim(),
       description: formState.description.trim() || undefined,
       wordLimit: parsedWordLimit,
@@ -281,8 +283,6 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
       order,
       isActive: formState.status === "Active",
     };
-
-    const isEditing = Boolean(formState.id);
     const path = isEditing
       ? `/programs/essays/${encodeURIComponent(formState.id as string)}`
       : `/programs/${encodeURIComponent(programId)}/essays`;

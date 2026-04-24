@@ -86,7 +86,16 @@ export async function seedIYSPrograms() {
   // ==========================================
   // 3. Seed Content for IYS 2026
   // ==========================================
-  
+
+  const iysContentSeeded =
+    (await prisma.programEssay.count({ where: { programId: iys2026.id } })) > 0 ||
+    (await prisma.applicationFormField.count({ where: { programId: iys2026.id } })) > 0;
+  if (iysContentSeeded) {
+    log('  → IYS 2026 content already seeded, skipping');
+    log('✅ IYS Programs seeded');
+    return;
+  }
+
   // Essays
   const essays = [
     { 

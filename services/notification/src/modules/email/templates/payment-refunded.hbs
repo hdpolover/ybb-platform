@@ -1,5 +1,5 @@
 <div style="text-align: center;">
-    <h2 style="font-size: 24px; font-weight: 700; color: #111827; margin: 0 0 24px;">
+    <h2 style="font-size: 24px; font-weight: 700; color: {{theme.primaryDark}}; margin: 0 0 24px;">
         Refund Initiated
     </h2>
 
@@ -11,9 +11,9 @@
         A refund of <strong>{{currency}} {{amount}}</strong> has been initiated for your recent payment.
     </p>
 
-    <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; text-align: left; margin-bottom: 24px; max-width: 400px; margin-left: auto; margin-right: auto;">
+        <div style="background-color: {{theme.primaryMuted}}; border: 1px solid {{theme.border}}; border-radius: 8px; padding: 20px; text-align: left; margin-bottom: 24px; max-width: 400px; margin-left: auto; margin-right: auto;">
          <p style="font-size: 14px; color: #6b7280; margin: 0 0 4px;">Original Order ID</p>
-         <p style="font-size: 16px; font-weight: 500; color: #111827; margin: 0; font-family: monospace;">{{orderId}}</p>
+            <p style="font-size: 16px; font-weight: 500; color: {{theme.primaryDark}}; margin: 0; font-family: monospace;">{{orderId}}</p>
     </div>
 
     <p style="font-size: 14px; color: #6b7280;">
