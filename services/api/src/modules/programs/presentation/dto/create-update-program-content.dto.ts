@@ -1350,8 +1350,8 @@ export class CreateDocumentTemplateDto {
     @IsNotEmpty()
     name: string;
 
-    @ApiProperty({ enum: ['agreement_letter', 'complementary_document'] })
-    @IsIn(['agreement_letter', 'complementary_document'])
+    @ApiProperty({ enum: ['agreement_letter', 'complementary_document', 'letter_of_acceptance'] })
+    @IsIn(['agreement_letter', 'complementary_document', 'letter_of_acceptance'])
     @IsString()
     @IsNotEmpty()
     type: string;
@@ -1365,6 +1365,19 @@ export class CreateDocumentTemplateDto {
     @IsString()
     @IsOptional()
     templateUrl?: string;
+
+    @ApiProperty({ required: false, description: 'Tiptap HTML body for LOA templates' })
+    @IsString()
+    @IsOptional()
+    htmlContent?: string;
+
+    @ApiProperty({ required: false, description: 'Placeholder token definitions for LOA templates' })
+    @IsOptional()
+    placeholders?: Array<{ key: string; label: string; source: string }>;
+
+    @ApiProperty({ required: false, description: 'Layout config (LOA: pageSize/margins/headerHtml/footerHtml/logoUrl/signatureUrl; file-based: fileSize/fileType)' })
+    @IsOptional()
+    layoutConfig?: Record<string, unknown>;
 
     @ApiProperty({ required: false })
     @IsNumber()
@@ -1403,8 +1416,8 @@ export class UpdateDocumentTemplateDto {
     @IsOptional()
     name?: string;
 
-    @ApiProperty({ required: false, enum: ['agreement_letter', 'complementary_document'] })
-    @IsIn(['agreement_letter', 'complementary_document'])
+    @ApiProperty({ required: false, enum: ['agreement_letter', 'complementary_document', 'letter_of_acceptance'] })
+    @IsIn(['agreement_letter', 'complementary_document', 'letter_of_acceptance'])
     @IsString()
     @IsOptional()
     type?: string;
@@ -1418,6 +1431,19 @@ export class UpdateDocumentTemplateDto {
     @IsString()
     @IsOptional()
     templateUrl?: string;
+
+    @ApiProperty({ required: false, description: 'Tiptap HTML body for LOA templates' })
+    @IsString()
+    @IsOptional()
+    htmlContent?: string;
+
+    @ApiProperty({ required: false, description: 'Placeholder token definitions for LOA templates' })
+    @IsOptional()
+    placeholders?: Array<{ key: string; label: string; source: string }>;
+
+    @ApiProperty({ required: false, description: 'Layout config (LOA: pageSize/margins/headerHtml/footerHtml/logoUrl/signatureUrl; file-based: fileSize/fileType)' })
+    @IsOptional()
+    layoutConfig?: Record<string, unknown>;
 
     @ApiProperty({ required: false })
     @IsNumber()

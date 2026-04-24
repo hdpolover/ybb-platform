@@ -6,6 +6,9 @@ export class DocumentTemplate {
         public readonly type: string,
         public readonly templateUrl: string | null,
         public readonly isActive: boolean,
+        public readonly htmlContent?: string | null,
+        public readonly placeholders?: Array<{ key: string; label: string; source: string }> | null,
+        public readonly layoutConfig?: Record<string, unknown> | null,
     ) { }
 }
 

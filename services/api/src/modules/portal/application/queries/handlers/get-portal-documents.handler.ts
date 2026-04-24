@@ -128,6 +128,17 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
                         documentType: 'complementary_document',
                         updatedAt: tmpl.updatedAt,
                     });
+                } else if (tmpl.type === 'letter_of_acceptance' && participantDoc?.fileUrl) {
+                    myDocuments.push({
+                        id: participantDoc.id ?? tmpl.id,
+                        title: tmpl.name,
+                        description: tmpl.description ?? '',
+                        category: 'document_template',
+                        fileUrl: participantDoc.fileUrl,
+                        status: 'verified',
+                        documentType: 'letter_of_acceptance',
+                        updatedAt: participantDoc.generatedAt ?? tmpl.updatedAt,
+                    });
                 }
             }
 

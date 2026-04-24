@@ -42,6 +42,7 @@ import {
   CreateProgramFaqCommand, UpdateProgramFaqCommand, DeleteProgramFaqCommand,
   CreateProgramResourceCommand, UpdateProgramResourceCommand, DeleteProgramResourceCommand,
   CreateDocumentTemplateCommand, UpdateDocumentTemplateCommand, DeleteDocumentTemplateCommand,
+  GenerateLOACommand,
 } from '../application/commands/program-content.commands';
 
 import {
@@ -50,6 +51,7 @@ import {
   CreateProgramFaqHandler, UpdateProgramFaqHandler, DeleteProgramFaqHandler,
   CreateProgramResourceHandler, UpdateProgramResourceHandler, DeleteProgramResourceHandler,
   CreateDocumentTemplateHandler, UpdateDocumentTemplateHandler, DeleteDocumentTemplateHandler,
+  GenerateLOAHandler,
 } from '../application/commands/handlers/manage-program-content.handlers';
 
 @ApiTags('Program Content')
@@ -76,6 +78,7 @@ export class ProgramContentController {
     private readonly createDocumentTemplateHandler: CreateDocumentTemplateHandler,
     private readonly updateDocumentTemplateHandler: UpdateDocumentTemplateHandler,
     private readonly deleteDocumentTemplateHandler: DeleteDocumentTemplateHandler,
+    private readonly generateLOAHandler: GenerateLOAHandler,
   ) {}
 
   // --- Gallery Endpoints ---
@@ -289,5 +292,20 @@ export class ProgramContentController {
     @Request() req: ExpressRequest & { user: { id: string } },
   ) {
     return this.deleteDocumentTemplateHandler.execute(new DeleteDocumentTemplateCommand(id, req.user.id));
+  }
+
+  @Post(':programId/document-templates/:templateId/generate')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Generate LOA PDF(s) for one participant or all eligible participants' })
+  async generateLOA(
+    @Param('programId') programId: string,
+    @Param('templateId') templateId: string,
+    @Body() body: { participantId?: string; bulk?: boolean },
+    @Request() req: ExpressRequest & { user: { id: string } },
+  ) {
+    return this.generateLOAHandler.execute(
+      new GenerateLOACommand(programId, templateId, req.user.id, body.participantId, body.bulk),
+    );
   }
 }

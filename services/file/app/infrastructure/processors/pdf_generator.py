@@ -164,20 +164,77 @@ def generate_from_template_sync(
     # Render template with data
     template = Template(template_html)
     rendered_html = template.render(**data)
-    
+
     # This would use weasyprint for HTML to PDF conversion
     # For now, returning a simple implementation
-    
+
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4)
     story = []
-    
+
     # Parse and add rendered content (simplified)
     story.append(Paragraph(rendered_html, styles['Normal']))
-    
+
     doc.build(story)
     buffer.seek(0)
     return buffer.read()
+
+
+def generate_loa_sync(
+    html_content: str,
+    header_html: str,
+    footer_html: str,
+    page_size: str,
+    margins: Dict[str, Any],
+    placeholder_data: Dict[str, Any],
+    document_number: str,
+) -> bytes:
+    """Generate LOA PDF from Tiptap HTML using WeasyPrint."""
+    from weasyprint import HTML, CSS  # type: ignore
+
+    def replace_tokens(text: str) -> str:
+        for key, value in placeholder_data.items():
+            text = text.replace(key, str(value) if value is not None else '')
+        return text
+
+    body = replace_tokens(html_content)
+    header = replace_tokens(header_html or '')
+    footer = replace_tokens(footer_html or '')
+
+    top = margins.get('top', 40)
+    right = margins.get('right', 40)
+    bottom = margins.get('bottom', 40)
+    left = margins.get('left', 40)
+    page_size_css = 'A4' if str(page_size).upper() == 'A4' else 'Letter'
+
+    full_html = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page {{
+    size: {page_size_css};
+    margin: {top}pt {right}pt {bottom}pt {left}pt;
+  }}
+  body {{
+    font-family: Arial, sans-serif;
+    font-size: 11pt;
+    line-height: 1.6;
+    color: #000;
+  }}
+  .loa-header {{ margin-bottom: 24pt; }}
+  .loa-body {{ }}
+  .loa-footer {{ margin-top: 32pt; }}
+</style>
+</head>
+<body>
+  <div class="loa-header">{header}</div>
+  <div class="loa-body">{body}</div>
+  <div class="loa-footer">{footer}</div>
+</body>
+</html>"""
+
+    return HTML(string=full_html).write_pdf()
 
 
 class PDFGeneratorService:
@@ -220,5 +277,28 @@ class PDFGeneratorService:
             generate_from_template_sync,
             template_html,
             data
+        )
+        return BytesIO(pdf_bytes)
+
+    async def generate_loa(
+        self,
+        html_content: str,
+        header_html: str,
+        footer_html: str,
+        page_size: str,
+        margins: Dict[str, Any],
+        placeholder_data: Dict[str, Any],
+        document_number: str,
+    ) -> BytesIO:
+        """Generate LOA PDF from Tiptap HTML using WeasyPrint."""
+        pdf_bytes = await run_in_processpool(
+            generate_loa_sync,
+            html_content,
+            header_html,
+            footer_html,
+            page_size,
+            margins,
+            placeholder_data,
+            document_number,
         )
         return BytesIO(pdf_bytes)
