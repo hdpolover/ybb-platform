@@ -169,6 +169,7 @@ enum DocumentTemplateType {
   certificate_speaker
   letter_recommendation
   agreement_letter
+  complementary_document
   custom
 }
 

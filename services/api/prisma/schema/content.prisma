@@ -413,6 +413,11 @@ model DocumentTemplate {
 
   // Status
   isActive  Boolean   @default(true) @map("is_active")
+
+  // Visibility / Audience Rules
+  audienceType   String @default("all_registered") @map("audience_type") @db.VarChar(50)
+  audienceConfig Json   @default("{}") @map("audience_config") @db.Json
+
   order     Int       @default(0)
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
