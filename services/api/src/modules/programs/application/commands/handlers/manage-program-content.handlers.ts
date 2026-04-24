@@ -1,9 +1,10 @@
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { Inject, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Inject, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { IProgramContentRepository } from '@core/interfaces/repositories/program-content.repository.interface';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
 import { Prisma, PricingFeeType, ApplicationCategory, ProgramPricingTier, ProgramRequirement, PricingTierValidityPeriod } from '@prisma/client';
 import { StorageService } from '../../../../files/application/storage.service';
+import { FileServiceClient } from '../../../../files/infrastructure/clients/file-service.client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
 import {
@@ -23,6 +24,7 @@ import {
     CreateProgramParticipationCategoryCommand, UpdateProgramParticipationCategoryCommand, DeleteProgramParticipationCategoryCommand,
     CreateProgramSubthemeCommand, UpdateProgramSubthemeCommand, DeleteProgramSubthemeCommand,
     CreateDocumentTemplateCommand, UpdateDocumentTemplateCommand, DeleteDocumentTemplateCommand,
+    GenerateLOACommand,
 } from '../program-content.commands';
 
 // ─── Shared cache-invalidation helpers ───────────────────────────────────────
@@ -1020,7 +1022,10 @@ export class CreateDocumentTemplateHandler implements ICommandHandler<CreateDocu
             type: command.dto.type,
             description: command.dto.description,
             templateUrl,
-            ...(fileSize !== undefined || fileType !== undefined ? { layoutConfig: { fileSize, fileType } } : {}),
+            htmlContent: command.dto.htmlContent,
+            placeholders: command.dto.placeholders,
+            // Explicit layoutConfig from DTO takes precedence; fall back to file metadata for file-based templates
+            layoutConfig: command.dto.layoutConfig ?? (fileSize !== undefined || fileType !== undefined ? { fileSize, fileType } : undefined),
             audienceType: command.dto.audienceType ?? 'all_registered',
             audienceConfig: command.dto.audienceConfig ?? {},
             order: command.dto.order ?? 0,
@@ -1071,11 +1076,12 @@ export class UpdateDocumentTemplateHandler implements ICommandHandler<UpdateDocu
         const data: Record<string, unknown> = {
             ...command.dto,
             ...(templateUrl ? { templateUrl } : {}),
-            ...(fileSize !== undefined || fileType !== undefined
+            // Only derive layoutConfig from file metadata when no explicit layoutConfig provided (LOA templates pass their own)
+            ...((fileSize !== undefined || fileType !== undefined) && !command.dto.layoutConfig
                 ? { layoutConfig: { fileSize, fileType } }
                 : {}),
         };
-        // Remove file-specific fields from DTO spread
+        // Remove file-specific helper fields from DTO spread
         delete data.fileSize;
         delete data.fileType;
 
@@ -1100,6 +1106,158 @@ export class DeleteDocumentTemplateHandler implements ICommandHandler<DeleteDocu
         await this.repository.deleteDocumentTemplate(command.id);
         await invalidateLandingCacheByProgramId(template.programId, this.prisma, this.cacheService);
         await invalidatePortalDocumentCaches(this.cacheService);
+    }
+}
+
+@CommandHandler(GenerateLOACommand)
+export class GenerateLOAHandler implements ICommandHandler<GenerateLOACommand> {
+    private readonly logger = new Logger(GenerateLOAHandler.name);
+
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly storageService: StorageService,
+        private readonly fileServiceClient: FileServiceClient,
+        private readonly cacheService: CacheService,
+    ) {}
+
+    async execute(command: GenerateLOACommand): Promise<{ generated: number; failed: number }> {
+        const template = await this.prisma.documentTemplate.findFirst({
+            where: { id: command.templateId, deletedAt: null },
+        });
+        if (!template) throw new NotFoundException('Document template not found');
+        if (template.type !== 'letter_of_acceptance') {
+            throw new BadRequestException('Template must be of type letter_of_acceptance');
+        }
+        if (!template.htmlContent) {
+            throw new BadRequestException('Template has no HTML content');
+        }
+
+        const program = await this.prisma.program.findUnique({ where: { id: command.programId } });
+        if (!program) throw new NotFoundException('Program not found');
+
+        // Resolve applications to generate for
+        const whereClause: Record<string, unknown> = { programId: command.programId, deletedAt: null };
+        if (command.participantId) {
+            whereClause.participantId = command.participantId;
+        } else if (command.bulk) {
+            whereClause.status = 'accepted';
+        } else {
+            throw new BadRequestException('Provide participantId or bulk: true');
+        }
+
+        const applications = await this.prisma.participantApplication.findMany({
+            where: whereClause as Prisma.ParticipantApplicationWhereInput,
+            include: {
+                participant: true,
+                participationCategory: true,
+            },
+        });
+
+        if (applications.length === 0) return { generated: 0, failed: 0 };
+
+        const layoutConfig = (template.layoutConfig ?? {}) as Record<string, unknown>;
+        const placeholders = (template.placeholders ?? []) as Array<{ key: string; source: string }>;
+        const year = new Date().getFullYear();
+
+        let generated = 0;
+        let failed = 0;
+
+        for (const app of applications) {
+            try {
+                // Sequential count for document number (MVP — safe enough for typical LOA volumes)
+                const existingCount = await this.prisma.participantDocument.count({
+                    where: { templateId: template.id },
+                });
+                const seq = String(existingCount + 1).padStart(6, '0');
+                const documentNumber = `LOA-${year}-${seq}`;
+
+                // Build placeholder substitution map
+                const generatedAt = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+                const sourceMap: Record<string, string> = {
+                    'participant.fullName': app.participant.fullName,
+                    'program.name': program.name,
+                    'program.batch': String(program.year),
+                    'generated_at': generatedAt,
+                    'participant_document.documentNumber': documentNumber,
+                    'application.participationCategory.name': app.participationCategory?.name ?? '',
+                };
+                const placeholderData: Record<string, string> = {};
+                for (const p of placeholders) {
+                    placeholderData[p.key] = sourceMap[p.source] ?? '';
+                }
+                // Always include document number token even if not in placeholders definition
+                placeholderData['{{document_number}}'] = documentNumber;
+
+                const pdfBuffer = await this.fileServiceClient.generateLoa({
+                    html_content: template.htmlContent,
+                    header_html: (layoutConfig.headerHtml as string) ?? '',
+                    footer_html: (layoutConfig.footerHtml as string) ?? '',
+                    page_size: (layoutConfig.pageSize as string) ?? 'A4',
+                    margins: (layoutConfig.margins as { top: number; right: number; bottom: number; left: number }) ?? { top: 40, right: 40, bottom: 40, left: 40 },
+                    placeholder_data: placeholderData,
+                    document_number: documentNumber,
+                });
+
+                const multerFile: Express.Multer.File = {
+                    buffer: pdfBuffer,
+                    originalname: `${documentNumber}.pdf`,
+                    mimetype: 'application/pdf',
+                    size: pdfBuffer.length,
+                    fieldname: 'file',
+                    encoding: '7bit',
+                    destination: '',
+                    filename: `${documentNumber}.pdf`,
+                    path: '',
+                    stream: null as never,
+                };
+
+                const uploadResult = await this.storageService.uploadFile(
+                    multerFile,
+                    command.userId,
+                    program.brandId,
+                    'documents',
+                    program.id,
+                );
+
+                const existingDoc = await this.prisma.participantDocument.findFirst({
+                    where: { applicationId: app.id, templateId: template.id },
+                });
+
+                if (existingDoc) {
+                    await this.prisma.participantDocument.update({
+                        where: { id: existingDoc.id },
+                        data: {
+                            fileUrl: uploadResult.url,
+                            documentNumber,
+                            generatedAt: new Date(),
+                            isPublic: false,
+                        },
+                    });
+                } else {
+                    await this.prisma.participantDocument.create({
+                        data: {
+                            applicationId: app.id,
+                            templateId: template.id,
+                            name: `Letter of Acceptance – ${program.name}`,
+                            type: 'letter_of_acceptance',
+                            fileUrl: uploadResult.url,
+                            fileType: 'pdf',
+                            documentNumber,
+                            generatedAt: new Date(),
+                            isPublic: false,
+                        },
+                    });
+                }
+
+                generated++;
+            } catch (err) {
+                this.logger.error(`Failed to generate LOA for application ${app.id}: ${err instanceof Error ? err.message : String(err)}`);
+                failed++;
+            }
+        }
+
+        await invalidatePortalDocumentCaches(this.cacheService);
+        return { generated, failed };
     }
 }
 

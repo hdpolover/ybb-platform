@@ -1666,14 +1666,35 @@ export function deleteProgramResource(id: string): Promise<void> {
 
 // ─── Document Templates ───────────────────────────────────────────────────────
 
+export type DocumentTemplatePlaceholder = {
+  key: string;
+  label: string;
+  source: string;
+};
+
+export type DocumentTemplateLayoutConfig = {
+  // File-based templates
+  fileSize?: number;
+  fileType?: string;
+  // LOA templates
+  pageSize?: string;
+  margins?: { top: number; right: number; bottom: number; left: number };
+  headerHtml?: string;
+  footerHtml?: string;
+  logoUrl?: string;
+  signatureUrl?: string;
+};
+
 export type DocumentTemplate = {
   id: string;
   programId: string;
   name: string;
-  type: string; // 'agreement_letter' | 'complementary_document'
+  type: string; // 'agreement_letter' | 'complementary_document' | 'letter_of_acceptance'
   description?: string;
   templateUrl?: string;
-  layoutConfig?: { fileSize?: number; fileType?: string };
+  htmlContent?: string;
+  placeholders?: DocumentTemplatePlaceholder[];
+  layoutConfig?: DocumentTemplateLayoutConfig;
   audienceType: string;
   audienceConfig: Record<string, unknown>;
   order: number;
@@ -1699,19 +1720,34 @@ export async function createDocumentTemplate(
     audienceType?: string;
     audienceConfig?: Record<string, unknown>;
     order?: number;
-    file: File;
-    userId: string;
-    brandId: string;
+    // File-based templates
+    file?: File;
+    userId?: string;
+    brandId?: string;
+    // LOA templates
+    htmlContent?: string;
+    placeholders?: DocumentTemplatePlaceholder[];
+    layoutConfig?: DocumentTemplateLayoutConfig;
   },
 ): Promise<DocumentTemplate> {
-  const upload = await uploadFileViaPresignedUrl(input.file, {
-    userId: input.userId,
-    brandId: input.brandId,
-    bucket: 'documents',
-    programId,
-    assetType: 'document-template',
-  });
-  if (!upload.publicUrl) throw new Error('Upload succeeded but no public URL was returned.');
+  let templateUrl: string | undefined;
+  let fileSize: number | undefined;
+  let fileType: string | undefined;
+
+  if (input.file) {
+    if (!input.userId || !input.brandId) throw new Error('userId and brandId required when uploading a file.');
+    const upload = await uploadFileViaPresignedUrl(input.file, {
+      userId: input.userId,
+      brandId: input.brandId,
+      bucket: 'documents',
+      programId,
+      assetType: 'document-template',
+    });
+    if (!upload.publicUrl) throw new Error('Upload succeeded but no public URL was returned.');
+    templateUrl = upload.publicUrl;
+    fileSize = input.file.size;
+    fileType = input.file.type;
+  }
 
   return request<DocumentTemplate>(`/programs/${programId}/document-templates`, {
     method: 'POST',
@@ -1720,9 +1756,10 @@ export async function createDocumentTemplate(
       name: input.name,
       type: input.type,
       description: input.description,
-      templateUrl: upload.publicUrl,
-      fileSize: input.file.size,
-      fileType: input.file.type,
+      ...(templateUrl ? { templateUrl, fileSize, fileType } : {}),
+      ...(input.htmlContent !== undefined ? { htmlContent: input.htmlContent } : {}),
+      ...(input.placeholders !== undefined ? { placeholders: input.placeholders } : {}),
+      ...(input.layoutConfig !== undefined ? { layoutConfig: input.layoutConfig } : {}),
       audienceType: input.audienceType ?? 'all_registered',
       audienceConfig: input.audienceConfig ?? {},
       order: input.order ?? 0,
@@ -1740,9 +1777,14 @@ export async function updateDocumentTemplate(
     audienceConfig?: Record<string, unknown>;
     order?: number;
     isActive?: boolean;
+    // File-based templates
     file?: File;
     userId?: string;
     brandId?: string;
+    // LOA templates
+    htmlContent?: string;
+    placeholders?: DocumentTemplatePlaceholder[];
+    layoutConfig?: DocumentTemplateLayoutConfig;
   },
 ): Promise<DocumentTemplate> {
   let templateUrl: string | undefined;
@@ -1775,6 +1817,17 @@ export async function updateDocumentTemplate(
       ...(templateUrl ? { templateUrl, fileSize, fileType } : {}),
     }),
   });
+}
+
+export async function generateLoa(
+  programId: string,
+  templateId: string,
+  body: { participantId?: string; bulk?: boolean },
+): Promise<{ generated: number; failed: number }> {
+  return request<{ generated: number; failed: number }>(
+    `/programs/${programId}/document-templates/${templateId}/generate`,
+    { method: 'POST', body: JSON.stringify(body) },
+  );
 }
 
 export function deleteDocumentTemplate(id: string): Promise<void> {

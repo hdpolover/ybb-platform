@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ProfileHeader, ProfileHeaderData } from "@/app/components/participants/ProfileHeader";
 import { ParticipantProfileTabs } from "@/app/components/participants/ParticipantProfileTabs";
+import { GenerateLoaButton } from "@/app/components/participants/GenerateLoaButton";
 import { PersonalDetails } from "@/app/components/participants/tabs/PersonalDetailsTab";
 import { ProfessionalProfile } from "@/app/components/participants/tabs/ProfessionalProfileTab";
 import { EntryInformation } from "@/app/components/participants/tabs/EntryInformationTab";
@@ -83,10 +84,13 @@ export default async function ParticipantDetailPage({
 
   return (
     <div className="mx-auto w-full space-y-6">
-      <div className="flex items-center gap-2 text-sm font-medium text-zinc-500">
-        <Link href={`/programs/${programId}/dashboard`} className="hover:text-zinc-800 transition-colors">Dashboard</Link>
-        <span>&gt;</span>
-        <span className="font-semibold text-blue-600">Detail Participant</span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm font-medium text-zinc-500">
+          <Link href={`/programs/${programId}/dashboard`} className="hover:text-zinc-800 transition-colors">Dashboard</Link>
+          <span>&gt;</span>
+          <span className="font-semibold text-blue-600">Detail Participant</span>
+        </div>
+        <GenerateLoaButton programId={programId} participantId={accountId} />
       </div>
 
       <div className="w-full min-h-[600px] rounded-xl border border-zinc-200 bg-white p-8 shadow-sm">

@@ -261,3 +261,12 @@ export class DeleteDocumentTemplateCommand {
         public readonly userId: string,
     ) {}
 }
+export class GenerateLOACommand {
+    constructor(
+        public readonly programId: string,
+        public readonly templateId: string,
+        public readonly userId: string,
+        public readonly participantId?: string,
+        public readonly bulk?: boolean,
+    ) {}
+}

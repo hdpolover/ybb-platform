@@ -51,6 +51,16 @@ class CertificateRequest(BaseModel):
     certificate_type: str = "completion"  # completion or participation
 
 
+class LoaRequest(BaseModel):
+    html_content: str
+    header_html: str = ""
+    footer_html: str = ""
+    page_size: str = "A4"
+    margins: Dict[str, Any] = {"top": 40, "right": 40, "bottom": 40, "left": 40}
+    placeholder_data: Dict[str, Any] = {}
+    document_number: str = ""
+
+
 # Excel Export Endpoints
 @router.post("/export/participants")
 async def export_participant_report(
@@ -168,6 +178,32 @@ async def generate_offer_letter(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate offer letter: {str(e)}")
+
+
+@router.post("/generate/loa")
+async def generate_loa(
+    request: LoaRequest,
+    pdf_service: PDFGeneratorService = Depends(get_pdf_generator_service)
+):
+    """Generate Letter of Acceptance PDF from Tiptap HTML template."""
+    try:
+        pdf_file = await pdf_service.generate_loa(
+            html_content=request.html_content,
+            header_html=request.header_html,
+            footer_html=request.footer_html,
+            page_size=request.page_size,
+            margins=request.margins,
+            placeholder_data=request.placeholder_data,
+            document_number=request.document_number,
+        )
+        filename = f"loa_{request.document_number or 'document'}.pdf"
+        return Response(
+            content=pdf_file.getvalue(),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate LOA: {str(e)}")
 
 
 # Certificate Generation Endpoints

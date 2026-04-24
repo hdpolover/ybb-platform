@@ -291,6 +291,33 @@ export class FileServiceClient {
   }
 
   /**
+   * Generate LOA PDF from Tiptap HTML via WeasyPrint.
+   */
+  async generateLoa(params: {
+    html_content: string;
+    header_html: string;
+    footer_html: string;
+    page_size: string;
+    margins: { top: number; right: number; bottom: number; left: number };
+    placeholder_data: Record<string, string>;
+    document_number: string;
+  }): Promise<Buffer> {
+    try {
+      const response: AxiosResponse<ArrayBuffer> = await firstValueFrom(
+        this.httpService.post(
+          `${this.fileServiceUrl}/api/v1/documents/generate/loa`,
+          params,
+          { responseType: 'arraybuffer' },
+        ),
+      );
+      return Buffer.from(response.data);
+    } catch (error: unknown) {
+      this.logger.error(`Failed to generate LOA: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    }
+  }
+
+  /**
    * Verify certificate by hash
    */
   async verifyCertificate(verificationHash: string): Promise<FileResponse> {
