@@ -80,9 +80,12 @@ export class CreateApplicationFormFieldDto {
   @IsBoolean()
   isRequired?: boolean;
 
-  @ApiPropertyOptional({ description: 'Options for select/radio/checkbox (JSON)', type: 'array', items: { type: 'string' } })
+  @ApiPropertyOptional({
+    description:
+      'Options for select/radio/checkbox (raw JSON). Supports string arrays and label/value object arrays.',
+  })
   @IsOptional()
-  options?: string[] | Record<string, unknown>[];
+  options?: unknown;
 
   @ApiPropertyOptional({ description: 'Validation rules (JSON)' })
   @IsOptional()

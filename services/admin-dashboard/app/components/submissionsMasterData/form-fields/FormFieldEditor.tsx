@@ -137,6 +137,13 @@ function optionsToRows(raw: unknown): OptionRow[] {
           if (typeof rawLabel === "string") {
             return { label: rawLabel || value, value };
           }
+          if (Array.isArray(rawLabel)) {
+            const first = typeof rawLabel[0] === "string" ? rawLabel[0].trim() : "";
+            const second = typeof rawLabel[1] === "string" ? rawLabel[1].trim() : "";
+            const label = second || first || value;
+            const normalizedValue = first || second || value;
+            return { label, value: normalizedValue };
+          }
           if (rawLabel && typeof rawLabel === "object") {
             const rec = rawLabel as Record<string, unknown>;
             const label =
@@ -160,6 +167,13 @@ function optionsToRows(raw: unknown): OptionRow[] {
   return source
     .map((item) => {
       if (typeof item === "string") return { label: item, value: item };
+      if (Array.isArray(item)) {
+        const first = typeof item[0] === "string" ? item[0].trim() : "";
+        const second = typeof item[1] === "string" ? item[1].trim() : "";
+        const label = second || first;
+        const value = first || second;
+        return { label, value };
+      }
       if (item && typeof item === "object") {
         const rec = item as Record<string, unknown>;
         const rawLabel =
