@@ -17,6 +17,7 @@ import {
     ListProgramEssaysQuery,
     ListProgramParticipationCategoriesQuery,
     ListProgramSubthemesQuery,
+    ListDocumentTemplatesQuery,
 } from '../list-program-content.queries';
 
 async function resolveProgramId(
@@ -392,5 +393,22 @@ export class ListProgramSubthemesHandler {
             order: item.order,
             isActive: item.isActive,
         }));
+    }
+}
+
+@Injectable()
+export class ListDocumentTemplatesHandler {
+    constructor(
+        @Inject('IProgramContentRepository')
+        private readonly repository: IProgramContentRepository,
+        @Inject('IProgramRepository')
+        private readonly programRepository: IProgramRepository,
+    ) { }
+
+    async execute(query: ListDocumentTemplatesQuery) {
+        const programId = await resolveProgramId(this.programRepository, query.programId);
+        if (!programId) return [];
+
+        return this.repository.findDocumentTemplatesByProgramId(programId, query.type);
     }
 }
