@@ -384,6 +384,7 @@ export class ProgramContentRepository implements IProgramContentRepository {
     }
 
     async findDocumentTemplateById(id: string): Promise<DocumentTemplate | null> {
+        // findFirst (not findUnique) to include deletedAt:null filter
         return this.prisma.documentTemplate.findFirst({
             where: { id, deletedAt: null },
         });
@@ -408,4 +409,4 @@ export class ProgramContentRepository implements IProgramContentRepository {
             data: { deletedAt: new Date(), isActive: false },
         });
     }
-} // Re-closing the class
+}
