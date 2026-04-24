@@ -7,9 +7,35 @@ type ParticipantProfile = {
     id: string;
     userId: string;
     fullName: string;
+    nickName: string | null;
+    displayName: string | null;
+    gender: string | null;
+    phoneCountryCode: string | null;
     phoneNumber: string | null;
     birthdate: Date | null;
     nationality: string | null;
+    nationalityCode: string | null;
+    originCountry: string | null;
+    originCity: string | null;
+    originAddress: string | null;
+    currentCountry: string | null;
+    currentCity: string | null;
+    currentAddress: string | null;
+    educationLevel: string | null;
+    institution: string | null;
+    major: string | null;
+    occupation: string | null;
+    organizations: string | null;
+    instagramUsername: string | null;
+    tshirtSize: string | null;
+    medicalConditions: string | null;
+    emergencyContactRelation: string | null;
+    emergencyContactCountryCode: string | null;
+    emergencyContactPhone: string | null;
+    profilePictureUrl: string | null;
+    resumeUrl: string | null;
+    knowledgeSource: string | null;
+    referralCode: string | null;
     createdAt: Date;
     updatedAt: Date;
     user: {
@@ -45,7 +71,7 @@ export class PortalCacheService {
         const cacheKey = CACHE_KEYS.PARTICIPANT_PROFILE(userId);
         const cached = await this.cacheService.get<ParticipantProfile>(cacheKey);
         
-        if (cached) {
+        if (cached && Object.prototype.hasOwnProperty.call(cached, 'displayName')) {
             return cached;
         }
 
@@ -55,9 +81,35 @@ export class PortalCacheService {
                 id: true,
                 userId: true,
                 fullName: true,
+                nickName: true,
+                displayName: true,
+                gender: true,
+                phoneCountryCode: true,
                 phoneNumber: true,
                 birthdate: true,
                 nationality: true,
+                nationalityCode: true,
+                originCountry: true,
+                originCity: true,
+                originAddress: true,
+                currentCountry: true,
+                currentCity: true,
+                currentAddress: true,
+                educationLevel: true,
+                institution: true,
+                major: true,
+                occupation: true,
+                organizations: true,
+                instagramUsername: true,
+                tshirtSize: true,
+                medicalConditions: true,
+                emergencyContactRelation: true,
+                emergencyContactCountryCode: true,
+                emergencyContactPhone: true,
+                profilePictureUrl: true,
+                resumeUrl: true,
+                knowledgeSource: true,
+                referralCode: true,
                 createdAt: true,
                 updatedAt: true,
                 user: {

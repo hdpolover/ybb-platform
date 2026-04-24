@@ -37,8 +37,10 @@ export class SaveSubmissionSectionHandler {
             orderBy: { updatedAt: 'desc' },
             select: {
                 id: true,
+                programId: true,
                 status: true,
                 applicationCategory: true,
+                participationCategoryId: true,
                 personalData: true,
                 essayAnswers: true,
                 uploadedFiles: true,
@@ -54,6 +56,7 @@ export class SaveSubmissionSectionHandler {
         }
 
         const updateData = this.buildUpdatePayload(section, application, data);
+        await this.applyCategorySelection(updateData, application.programId, data);
 
         await this.prisma.participantApplication.update({
             where: { id: application.id },
@@ -93,15 +96,9 @@ export class SaveSubmissionSectionHandler {
             case SubmissionSection.MISCELLANEOUS:
             case SubmissionSection.ADDITIONAL_INFO: {
                 const existing = (application.personalData as Record<string, unknown>) || {};
-                const updateData: Record<string, unknown> = {
+                return {
                     personalData: { ...existing, ...normalizedData },
                 };
-
-                if (typeof data.category === 'string' && this.isApplicationCategory(data.category)) {
-                    updateData.applicationCategory = data.category;
-                }
-
-                return updateData;
             }
             case SubmissionSection.ESSAYS: {
                 const existing = (application.essayAnswers as Record<string, unknown>) || {};
@@ -123,11 +120,102 @@ export class SaveSubmissionSectionHandler {
             delete normalized.program_id;
         }
 
+        if (normalized.programId !== undefined) {
+            delete normalized.programId;
+        }
+
         return normalized;
     }
 
     private isApplicationCategory(value: string): value is ApplicationCategory {
         return value === ApplicationCategory.fully_funded || value === ApplicationCategory.self_funded;
+    }
+
+    private async applyCategorySelection(
+        updateData: Record<string, unknown>,
+        programId: string,
+        data: Record<string, unknown>,
+    ): Promise<void> {
+        const rawCategory = this.extractCategoryValue(data);
+        if (rawCategory === null) return;
+
+        if (!rawCategory) {
+            updateData.applicationCategory = null;
+            updateData.participationCategoryId = null;
+            return;
+        }
+
+        if (this.isApplicationCategory(rawCategory)) {
+            updateData.applicationCategory = rawCategory;
+            updateData.participationCategoryId = null;
+            return;
+        }
+
+        if (!this.isUuid(rawCategory)) {
+            return;
+        }
+
+        const category = await this.prisma.programParticipationCategory.findFirst({
+            where: {
+                id: rawCategory,
+                programId,
+                isActive: true,
+            },
+            select: {
+                id: true,
+                name: true,
+            },
+        });
+
+        if (!category) {
+            return;
+        }
+
+        updateData.participationCategoryId = category.id;
+
+        const mappedCategory = this.mapCategoryNameToApplicationCategory(category.name);
+        if (mappedCategory) {
+            updateData.applicationCategory = mappedCategory;
+        }
+    }
+
+    private extractCategoryValue(data: Record<string, unknown>): string | null {
+        const keys = [
+            'category',
+            'application_category',
+            'applicationCategory',
+            'participation_category',
+            'participationCategory',
+            'participation_category_id',
+            'participationCategoryId',
+        ];
+
+        for (const key of keys) {
+            if (typeof data[key] === 'string') {
+                const value = data[key].trim();
+                return value;
+            }
+        }
+
+        return null;
+    }
+
+    private mapCategoryNameToApplicationCategory(name: string): ApplicationCategory | null {
+        const normalized = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+        if (normalized === 'fullyfunded' || normalized === 'fullyfund') {
+            return ApplicationCategory.fully_funded;
+        }
+
+        if (normalized === 'selffunded' || normalized === 'selffund') {
+            return ApplicationCategory.self_funded;
+        }
+
+        return null;
+    }
+
+    private isUuid(value: string): boolean {
+        return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
     }
 
     private async invalidateCaches(userId: string, programId?: string): Promise<void> {
