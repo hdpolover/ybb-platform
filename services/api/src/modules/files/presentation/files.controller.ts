@@ -115,8 +115,8 @@ export class FilesController {
           path: uploadResult.path
         },
       };
-    } catch (error) {
-      this.logger.error(`Failed to upload file: ${error.message}`);
+    } catch (error: unknown) {
+      this.logger.error(`Failed to upload file: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
   }
