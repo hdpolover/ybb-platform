@@ -52,6 +52,15 @@ async function invalidateLandingCacheByBrandId(
         await cacheService.invalidateByPattern('program:*');
     } catch { /* non-critical */ }
 }
+async function invalidatePortalDocumentCaches(
+    cacheService: CacheService,
+): Promise<void> {
+    try {
+        // PORTAL_DOCUMENTS(userId) generates `portal:documents:{userId}`.
+        // Wildcard invalidation clears all participants' cached document lists.
+        await cacheService.invalidateByPattern('portal:documents:*');
+    } catch { /* non-critical */ }
+}
 // ─────────────────────────────────────────────────────────────────────────────
 
 // --- Timeline Handlers ---
@@ -1019,6 +1028,7 @@ export class CreateDocumentTemplateHandler implements ICommandHandler<CreateDocu
 
         const result = await this.repository.createDocumentTemplate(data);
         await invalidateLandingCacheByProgramId(command.dto.programId, this.prisma, this.cacheService);
+        await invalidatePortalDocumentCaches(this.cacheService);
         return result;
     }
 }
@@ -1071,6 +1081,7 @@ export class UpdateDocumentTemplateHandler implements ICommandHandler<UpdateDocu
 
         const result = await this.repository.updateDocumentTemplate(command.id, data);
         await invalidateLandingCacheByProgramId(template.programId, this.prisma, this.cacheService);
+        await invalidatePortalDocumentCaches(this.cacheService);
         return result;
     }
 }
@@ -1088,6 +1099,7 @@ export class DeleteDocumentTemplateHandler implements ICommandHandler<DeleteDocu
         if (!template) throw new NotFoundException('Document template not found');
         await this.repository.deleteDocumentTemplate(command.id);
         await invalidateLandingCacheByProgramId(template.programId, this.prisma, this.cacheService);
+        await invalidatePortalDocumentCaches(this.cacheService);
     }
 }
 

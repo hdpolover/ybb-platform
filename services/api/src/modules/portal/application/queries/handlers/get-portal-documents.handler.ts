@@ -106,7 +106,7 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
 
                 if (tmpl.type === 'agreement_letter') {
                     myDocuments.push({
-                        id: participantDoc?.id ?? tmpl.id,
+                        id: tmpl.id,
                         title: tmpl.name,
                         description: tmpl.description ?? '',
                         category: 'document_template',
