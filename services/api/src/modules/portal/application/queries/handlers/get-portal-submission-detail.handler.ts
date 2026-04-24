@@ -11,7 +11,29 @@ import {
     SubmissionFormFieldDto,
     SubmissionEssayDto,
     SubmissionRequirementDto,
+    HelpAsset,
 } from '../../../presentation/dto/portal-submission-detail.dto';
+
+const HELP_ASSET_KINDS = new Set(['link', 'video', 'file']);
+
+function normalizeHelpAssets(raw: unknown): HelpAsset[] | undefined {
+    if (!Array.isArray(raw)) return undefined;
+    const out: HelpAsset[] = [];
+    for (const item of raw) {
+        if (!item || typeof item !== 'object') continue;
+        const rec = item as Record<string, unknown>;
+        if (
+            typeof rec.kind !== 'string' ||
+            !HELP_ASSET_KINDS.has(rec.kind) ||
+            typeof rec.label !== 'string' ||
+            typeof rec.url !== 'string'
+        ) {
+            continue;
+        }
+        out.push({ kind: rec.kind as HelpAsset['kind'], label: rec.label, url: rec.url });
+    }
+    return out.length > 0 ? out : undefined;
+}
 
 type ApplicationDetail = {
     id: string;
@@ -40,6 +62,7 @@ type ApplicationDetail = {
             helpText: string | null;
             mediaUrl: string | null;
             mediaAlt: string | null;
+            helpAssets: unknown;
             options: unknown;
             validationRules: unknown;
             isRequired: boolean;
@@ -182,6 +205,7 @@ export class GetPortalSubmissionDetailHandler
                                 helpText: true,
                                 mediaUrl: true,
                                 mediaAlt: true,
+                                helpAssets: true,
                                 options: true,
                                 validationRules: true,
                                 isRequired: true,
@@ -241,6 +265,7 @@ export class GetPortalSubmissionDetailHandler
                 helpText: field.helpText || undefined,
                 mediaUrl: field.mediaUrl || undefined,
                 mediaAlt: field.mediaAlt || undefined,
+                helpAssets: normalizeHelpAssets(field.helpAssets),
                 options: this.resolveFieldOptions(field as unknown as SubmissionFormFieldDto, application),
                 validationRules: (field.validationRules || undefined) as import('../../../presentation/dto/portal-submission-detail.dto').FieldValidationRules | undefined,
                 isRequired: field.isRequired,

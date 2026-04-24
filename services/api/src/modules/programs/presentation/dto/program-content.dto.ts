@@ -300,6 +300,9 @@ export class ApplicationFormFieldResponseDto {
     @ApiProperty({ required: false })
     mediaAlt?: string;
 
+    @ApiProperty({ required: false, type: 'array', items: { type: 'object' } })
+    helpAssets?: Array<{ kind: 'link' | 'video' | 'file'; label: string; url: string }>;
+
     @ApiProperty()
     fieldType: string;
 

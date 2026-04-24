@@ -17,6 +17,7 @@ import {
 import { FormFieldEditor } from "./FormFieldEditor";
 import { AddFieldDialog } from "./AddFieldDialog";
 import { CopyFromTemplateDialog } from "./CopyFromTemplateDialog";
+import type { HelpAssetRow } from "./HelpAssetsRepeater";
 
 export interface ApplicationFormFieldRow {
   id: string;
@@ -27,6 +28,7 @@ export interface ApplicationFormFieldRow {
   helpText?: string;
   mediaUrl?: string;
   mediaAlt?: string;
+  helpAssets?: HelpAssetRow[];
   fieldType: string;
   isRequired: boolean;
   options?: unknown;

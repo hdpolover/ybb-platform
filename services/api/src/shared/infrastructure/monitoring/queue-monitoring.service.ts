@@ -1,15 +1,17 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { Connection, Channel } from 'amqplib';
 import * as amqp from 'amqplib';
 import { MetricsService } from './metrics.service';
 
+type AmqpConnection = Awaited<ReturnType<typeof amqp.connect>>;
+type AmqpChannel = Awaited<ReturnType<AmqpConnection['createChannel']>>;
+
 @Injectable()
 export class QueueMonitoringService implements OnModuleInit, OnModuleDestroy {
-    private connection: Connection | null = null;
-    private channel: Channel | null = null;
+    private connection: AmqpConnection | null = null;
+    private channel: AmqpChannel | null = null;
     private readonly logger = new Logger(QueueMonitoringService.name);
-    private intervalParams: NodeJS.Timeout | null = null;
+    private intervalParams: ReturnType<typeof setInterval> | null = null;
 
     private readonly queues = [
         'api-service-payment-events',
@@ -44,7 +46,8 @@ export class QueueMonitoringService implements OnModuleInit, OnModuleDestroy {
 
         for (const queue of this.queues) {
             try {
-                const info = await this.channel.assertQueue(queue, { passive: true });
+                // checkQueue is a passive declare — throws 404 if queue doesn't exist
+                const info = await this.channel.checkQueue(queue);
                 this.metricsService.jobQueueDepth.set({ queue_name: queue }, info.messageCount);
                 this.metricsService.jobQueueConsumers.set({ queue_name: queue }, info.consumerCount);
             } catch (error) {

@@ -1,7 +1,7 @@
 import { Injectable, OnModuleDestroy, OnModuleInit, Logger } from '@nestjs/common';
 import { connect, AmqpConnectionManager, ChannelWrapper } from 'amqp-connection-manager';
 import { ConfigService } from '@nestjs/config';
-import { Options } from 'amqplib';
+import { Channel, Options } from 'amqplib';
 
 @Injectable()
 export class RabbitMQProducerService implements OnModuleInit, OnModuleDestroy {
@@ -27,9 +27,8 @@ export class RabbitMQProducerService implements OnModuleInit, OnModuleDestroy {
 
     this.channelWrapper = this.connection.createChannel({
       json: true,
-      setup: (channel: { assertExchange: (name: string, type: string, options: object) => Promise<void> }) => {
-        // Assert exchange to be safe, though init script usually does it
-        return channel.assertExchange(this.exchange, 'topic', { durable: true });
+      setup: async (channel: Channel): Promise<void> => {
+        await channel.assertExchange(this.exchange, 'topic', { durable: true });
       },
     });
   }
