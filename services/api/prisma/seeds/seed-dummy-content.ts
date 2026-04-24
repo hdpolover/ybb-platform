@@ -58,6 +58,12 @@ async function seedDummyProgram(brandId: string, brandSlug: string, brandName: s
     }
   });
 
+  const dummyContentSeeded = (await prisma.programTimeline.count({ where: { programId: program.id } })) > 0;
+  if (dummyContentSeeded) {
+    log(`  → ${brandName} dummy content already seeded, skipping`);
+    return;
+  }
+
   // Seed Timeline
   await prisma.programTimeline.deleteMany({ where: { programId: program.id } });
   await prisma.programTimeline.createMany({

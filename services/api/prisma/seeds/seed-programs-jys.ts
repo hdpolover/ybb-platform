@@ -79,6 +79,15 @@ export async function seedJYSPrograms() {
     },
   });
 
+  const jysContentSeeded =
+    (await prisma.programEssay.count({ where: { programId: jys2026.id } })) > 0 ||
+    (await prisma.applicationFormField.count({ where: { programId: jys2026.id } })) > 0;
+  if (jysContentSeeded) {
+    log('  → JYS 2026 content already seeded, skipping');
+    log('✅ Exhaustive JYS Programs seeded');
+    return;
+  }
+
   // ==========================================
   // Objectives
   // ==========================================

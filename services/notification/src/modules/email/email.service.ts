@@ -13,6 +13,8 @@ export class EmailService {
     private readonly logger = new Logger(EmailService.name);
     private readonly templateCache = new Map<string, hbs.TemplateDelegate>();
 
+    private readonly defaultThemePrimary = '#1D4ED8';
+
     constructor(private configService: ConfigService) {
         const resendKey = this.configService.get('RESEND_API_KEY');
         if (resendKey) {
@@ -67,11 +69,122 @@ export class EmailService {
         }
     }
 
+    private normalizeHexColor(color: unknown): string | null {
+        if (typeof color !== 'string') {
+            return null;
+        }
+
+        const trimmed = color.trim();
+        const match = trimmed.match(/^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
+
+        if (!match) {
+            return null;
+        }
+
+        let hex = match[1];
+        if (hex.length === 3) {
+            hex = hex
+                .split('')
+                .map((char) => `${char}${char}`)
+                .join('');
+        }
+
+        return `#${hex.toUpperCase()}`;
+    }
+
+    private hexToRgb(hex: string): { r: number; g: number; b: number } {
+        const normalized = hex.replace('#', '');
+        const r = parseInt(normalized.slice(0, 2), 16);
+        const g = parseInt(normalized.slice(2, 4), 16);
+        const b = parseInt(normalized.slice(4, 6), 16);
+
+        return { r, g, b };
+    }
+
+    private rgbToHex(r: number, g: number, b: number): string {
+        const channelToHex = (channel: number) => {
+            const clamped = Math.max(0, Math.min(255, Math.round(channel)));
+            return clamped.toString(16).padStart(2, '0').toUpperCase();
+        };
+
+        return `#${channelToHex(r)}${channelToHex(g)}${channelToHex(b)}`;
+    }
+
+    private mixHex(baseHex: string, targetHex: string, ratio: number): string {
+        const base = this.hexToRgb(baseHex);
+        const target = this.hexToRgb(targetHex);
+        const safeRatio = Math.max(0, Math.min(1, ratio));
+
+        return this.rgbToHex(
+            base.r + (target.r - base.r) * safeRatio,
+            base.g + (target.g - base.g) * safeRatio,
+            base.b + (target.b - base.b) * safeRatio,
+        );
+    }
+
+    private getReadableTextColor(backgroundHex: string): string {
+        const { r, g, b } = this.hexToRgb(backgroundHex);
+        const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+        return luminance > 0.6 ? '#111827' : '#FFFFFF';
+    }
+
+    private buildTheme(brand?: any) {
+        const colorCandidates = [
+            brand?.primaryColor,
+            brand?.theme?.primaryColor,
+            brand?.settings?.primaryColor,
+            brand?.metadata?.primaryColor,
+            brand?.metadata?.theme?.primaryColor,
+        ];
+
+        let resolvedPrimary: string | null = null;
+        for (const candidate of colorCandidates) {
+            const normalized = this.normalizeHexColor(candidate);
+            if (normalized) {
+                resolvedPrimary = normalized;
+                break;
+            }
+        }
+
+        const primary = resolvedPrimary ?? this.defaultThemePrimary;
+
+        return {
+            primary,
+            primaryDark: this.mixHex(primary, '#000000', 0.25),
+            primarySoft: this.mixHex(primary, '#FFFFFF', 0.86),
+            primaryMuted: this.mixHex(primary, '#FFFFFF', 0.93),
+            border: this.mixHex(primary, '#FFFFFF', 0.76),
+            onPrimary: this.getReadableTextColor(primary),
+        };
+    }
+
+    private enrichTemplateData(data: any) {
+        const safeData = data && typeof data === 'object' ? data : {};
+        const theme = this.buildTheme(safeData.brand);
+
+        const brand =
+            safeData.brand && typeof safeData.brand === 'object'
+                ? {
+                      ...safeData.brand,
+                      primaryColor:
+                          this.normalizeHexColor(safeData.brand.primaryColor) ?? theme.primary,
+                  }
+                : safeData.brand;
+
+        return {
+            ...safeData,
+            brand,
+            theme,
+        };
+    }
+
     private async compileTemplate(templateName: string, data: any): Promise<string> {
+        const templateData = this.enrichTemplateData(data);
+
         // Check cache first
         const cached = this.templateCache.get(templateName);
         if (cached) {
-            return this.renderWithLayout(cached, data);
+            return this.renderWithLayout(cached, templateData);
         }
 
         const filePath = path.join(__dirname, 'templates', `${templateName}.hbs`);
@@ -86,7 +199,7 @@ export class EmailService {
             // Cache the compiled template
             this.templateCache.set(templateName, compiled);
 
-            return this.renderWithLayout(compiled, data);
+            return this.renderWithLayout(compiled, templateData);
         } catch (error) {
             this.logger.error(`Failed to load template: ${templateName} from ${filePath}`, error);
             throw error;

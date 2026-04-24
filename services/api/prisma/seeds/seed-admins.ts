@@ -209,9 +209,12 @@ export async function seedAdmins() {
       })
       .filter((assignment): assignment is NonNullable<typeof assignment> => Boolean(assignment));
 
-    await prisma.adminBrand.deleteMany({ where: { adminId: admin.id } });
-    if (brandAssignments.length > 0) {
-      await prisma.adminBrand.createMany({ data: brandAssignments });
+    for (const assignment of brandAssignments) {
+      await prisma.adminBrand.upsert({
+        where: { adminId_brandId: { adminId: assignment.adminId, brandId: assignment.brandId } },
+        update: { roleInBrand: assignment.roleInBrand, permissions: assignment.permissions },
+        create: assignment,
+      });
     }
 
     const programAssignments = (adminData.programAssignments || [])
@@ -231,9 +234,12 @@ export async function seedAdmins() {
       })
       .filter((assignment): assignment is NonNullable<typeof assignment> => Boolean(assignment));
 
-    await prisma.adminProgram.deleteMany({ where: { adminId: admin.id } });
-    if (programAssignments.length > 0) {
-      await prisma.adminProgram.createMany({ data: programAssignments });
+    for (const assignment of programAssignments) {
+      await prisma.adminProgram.upsert({
+        where: { adminId_programId: { adminId: assignment.adminId, programId: assignment.programId } },
+        update: { roleInProgram: assignment.roleInProgram, permissions: assignment.permissions },
+        create: assignment,
+      });
     }
   }
 
