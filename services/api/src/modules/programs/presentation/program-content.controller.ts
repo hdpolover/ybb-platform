@@ -239,6 +239,7 @@ export class ProgramContentController {
   }
 
   // --- Document Template Endpoints ---
+  @Public()
   @Get(':id/document-templates')
   @ApiOperation({ summary: 'List document templates for a program' })
   async listDocumentTemplates(
