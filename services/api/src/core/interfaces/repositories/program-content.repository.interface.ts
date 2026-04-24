@@ -139,4 +139,4 @@ export interface IProgramContentRepository {
     createDocumentTemplate(data: Record<string, unknown>): Promise<DocumentTemplate>;
     updateDocumentTemplate(id: string, data: Record<string, unknown>): Promise<DocumentTemplate>;
     deleteDocumentTemplate(id: string): Promise<void>;
-} // Re-closing the interface
+}
