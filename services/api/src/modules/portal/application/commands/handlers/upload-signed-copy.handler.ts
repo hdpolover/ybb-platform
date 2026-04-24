@@ -54,6 +54,11 @@ export class UploadSignedCopyHandler implements ICommandHandler<UploadSignedCopy
         );
 
         // Upsert ParticipantDocument
+        // NOTE: TOCTOU risk — a native prisma.upsert() would be safer, but the
+        // ParticipantDocument model has no @@unique([applicationId, templateId])
+        // constraint (templateId is nullable), so Prisma's upsert() cannot be
+        // used here. A DB-level unique partial index on (applicationId, templateId)
+        // WHERE templateId IS NOT NULL would allow migrating to the atomic form.
         const existing = await this.prisma.participantDocument.findFirst({
             where: { applicationId: application.id, templateId },
         });
