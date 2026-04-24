@@ -22,6 +22,9 @@ export function TabNavigation({ activeTab }: { activeTab: string }) {
       <Link href="?tab=essays" className={getLinkStyle("essays")} replace>
         Essays
       </Link>
+      <Link href="?tab=preview" className={getLinkStyle("preview")} replace>
+        Preview
+      </Link>
     </div>
   );
 }

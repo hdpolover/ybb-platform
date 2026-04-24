@@ -12,6 +12,9 @@ import {
     SubmissionFormFieldDto,
     SubmissionEssayDto,
     SubmissionRequirementDto,
+    SubmissionPreviewDto,
+    SubmissionPreviewChecklistItemDto,
+    SubmissionPreviewPrimaryActionDto,
     HelpAsset,
 } from '../../../presentation/dto/portal-submission-detail.dto';
 
@@ -40,13 +43,18 @@ type ApplicationDetail = {
     id: string;
     status: string;
     applicationCategory: string | null;
+    registrationPaymentStatus: string;
     participationCategoryId: string | null;
+    participationCategory: {
+        name: string;
+    } | null;
     personalData: unknown;
     essayAnswers: unknown;
     uploadedFiles: unknown;
     program: {
         id: string;
         name: string;
+        termsAndConditions: string | null;
         participationCategories: {
             id: string;
             name: string;
@@ -131,6 +139,7 @@ export class GetPortalSubmissionDetailHandler
         const sections = this.buildSections(application, participant);
         const essays = this.buildEssays(application);
         const requirements = this.buildRequirements(application);
+        const preview = this.buildPreview(application, sections, essays, requirements);
         const overallProgress = this.calculateProgress(sections, essays, requirements);
 
         const participantLocation = [participant.originCity, participant.originCountry]
@@ -146,6 +155,7 @@ export class GetPortalSubmissionDetailHandler
             sections,
             essays,
             requirements,
+            preview,
             participantName: participant.displayName || participant.fullName,
             participantId: participant.id,
             participantAccountId: participant.user.id,
@@ -168,7 +178,13 @@ export class GetPortalSubmissionDetailHandler
                 id: true,
                 status: true,
                 applicationCategory: true,
+                registrationPaymentStatus: true,
                 participationCategoryId: true,
+                participationCategory: {
+                    select: {
+                        name: true,
+                    },
+                },
                 personalData: true,
                 essayAnswers: true,
                 uploadedFiles: true,
@@ -176,6 +192,7 @@ export class GetPortalSubmissionDetailHandler
                     select: {
                         id: true,
                         name: true,
+                        termsAndConditions: true,
                         participationCategories: {
                             where: { isActive: true },
                             select: {
@@ -748,6 +765,212 @@ export class GetPortalSubmissionDetailHandler
             order: req.order,
             uploadedFile: (uploadedFiles[req.id] || undefined) as import('@core/entities/participant-application.entity').DocumentFile | undefined,
         }));
+    }
+
+    private buildPreview(
+        application: ApplicationDetail,
+        sections: SubmissionSectionDetailDto[],
+        essays: SubmissionEssayDto[],
+        requirements: SubmissionRequirementDto[],
+    ): SubmissionPreviewDto {
+        const personalData = (application.personalData as Record<string, unknown>) || {};
+        const checklists = this.buildPreviewChecklists(personalData);
+        const paymentRequired = !this.isApplicationFullyFunded(application);
+        const paymentPaid = application.registrationPaymentStatus === 'paid';
+
+        const pendingItems: string[] = [];
+
+        const incompleteSections = sections.filter(
+            (section) => section.fields.some((field) => field.isRequired) && section.status !== 'completed',
+        );
+        pendingItems.push(...incompleteSections.map((section) => `Complete ${section.title}`));
+
+        const missingRequiredEssays = essays.filter(
+            (essay) => essay.isRequired && !this.hasValue(essay.answer),
+        ).length;
+        if (missingRequiredEssays > 0) {
+            pendingItems.push(
+                `Complete ${missingRequiredEssays} required essay${missingRequiredEssays > 1 ? 's' : ''}`,
+            );
+        }
+
+        const missingRequiredDocuments = requirements.filter(
+            (requirement) => requirement.isRequired && !requirement.uploadedFile,
+        ).length;
+        if (missingRequiredDocuments > 0) {
+            pendingItems.push(
+                `Upload ${missingRequiredDocuments} required document${missingRequiredDocuments > 1 ? 's' : ''}`,
+            );
+        }
+
+        const uncheckedRequiredChecklist = checklists.filter(
+            (item) => item.required && !item.checked,
+        );
+        pendingItems.push(
+            ...uncheckedRequiredChecklist.map((item) => `Confirm: ${item.label}`),
+        );
+
+        if (paymentRequired && !paymentPaid) {
+            pendingItems.push('Complete registration payment');
+        }
+
+        const canSubmit = application.status === 'draft' && pendingItems.length === 0;
+        const primaryAction = this.buildPreviewPrimaryAction(
+            application,
+            paymentRequired,
+            paymentPaid,
+            canSubmit,
+            pendingItems,
+        );
+
+        return {
+            title: 'Preview & Confirmation',
+            description: 'Review your submission details before finalizing your application.',
+            termsAndConditionsHtml: application.program.termsAndConditions || undefined,
+            checklists,
+            primaryAction,
+            payment: {
+                required: paymentRequired,
+                paid: paymentPaid,
+                status: application.registrationPaymentStatus,
+            },
+            canSubmit,
+            pendingItems,
+        };
+    }
+
+    private buildPreviewChecklists(personalData: Record<string, unknown>): SubmissionPreviewChecklistItemDto[] {
+        const readyToJoin = this.readBooleanFlag(personalData, [
+            'preview_ready_to_join',
+            'previewReadyToJoin',
+            'ready_to_join',
+            'readyToJoin',
+        ]);
+
+        const understandTerms = this.readBooleanFlag(personalData, [
+            'preview_understand_terms_and_conditions',
+            'previewUnderstandTermsAndConditions',
+            'understand_terms_and_conditions',
+            'understandTermsAndConditions',
+        ]);
+
+        return [
+            {
+                key: 'ready_to_join',
+                label: 'I am ready to join this program.',
+                required: true,
+                checked: readyToJoin,
+            },
+            {
+                key: 'understand_terms_and_conditions',
+                label: 'I understand and agree to the Terms & Conditions.',
+                required: true,
+                checked: understandTerms,
+            },
+        ];
+    }
+
+    private buildPreviewPrimaryAction(
+        application: ApplicationDetail,
+        paymentRequired: boolean,
+        paymentPaid: boolean,
+        canSubmit: boolean,
+        pendingItems: string[],
+    ): SubmissionPreviewPrimaryActionDto {
+        if (application.status !== 'draft') {
+            return {
+                type: 'submit_application',
+                label: 'Submit Application',
+                enabled: false,
+                reason: `Application is already in "${application.status}" status.`,
+            };
+        }
+
+        if (paymentRequired && !paymentPaid) {
+            return {
+                type: 'complete_payment',
+                label: 'Make Payment',
+                enabled: true,
+                reason: 'Registration payment is required before final submission.',
+            };
+        }
+
+        if (canSubmit) {
+            return {
+                type: 'submit_application',
+                label: 'Submit Application',
+                enabled: true,
+            };
+        }
+
+        return {
+            type: 'submit_application',
+            label: 'Submit Application',
+            enabled: false,
+            reason: pendingItems[0] || 'Complete all required steps before submitting.',
+        };
+    }
+
+    private readBooleanFlag(record: Record<string, unknown>, keys: string[]): boolean {
+        for (const key of keys) {
+            const value = record[key];
+
+            if (typeof value === 'boolean') return value;
+
+            if (typeof value === 'number') {
+                if (value === 1) return true;
+                if (value === 0) return false;
+            }
+
+            if (typeof value === 'string') {
+                const normalized = value.trim().toLowerCase();
+                if (normalized === 'true' || normalized === '1' || normalized === 'yes') {
+                    return true;
+                }
+                if (normalized === 'false' || normalized === '0' || normalized === 'no') {
+                    return false;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private isApplicationFullyFunded(application: ApplicationDetail): boolean {
+        if (application.applicationCategory === 'fully_funded') {
+            return true;
+        }
+
+        const inferredCategory = this.mapCategoryNameToApplicationCategory(
+            application.participationCategory?.name,
+        );
+
+        return inferredCategory === 'fully_funded';
+    }
+
+    private mapCategoryNameToApplicationCategory(name: string | null | undefined): 'fully_funded' | 'self_funded' | null {
+        if (!name) return null;
+
+        const normalized = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+        if (
+            normalized === 'fullyfunded'
+            || normalized === 'fullyfund'
+            || normalized === 'fullfunded'
+            || normalized === 'fullscholarship'
+        ) {
+            return 'fully_funded';
+        }
+
+        if (
+            normalized === 'selffunded'
+            || normalized === 'selffund'
+            || normalized === 'selfsponsored'
+        ) {
+            return 'self_funded';
+        }
+
+        return null;
     }
 
     private calculateProgress(

@@ -101,6 +101,12 @@ export class SaveSubmissionSectionHandler {
                     personalData: { ...existing, ...normalizedData },
                 };
             }
+            case SubmissionSection.PREVIEW: {
+                const existing = (application.personalData as Record<string, unknown>) || {};
+                return {
+                    personalData: { ...existing, ...normalizedData },
+                };
+            }
             case SubmissionSection.ESSAYS: {
                 const existing = (application.essayAnswers as Record<string, unknown>) || {};
                 return { essayAnswers: { ...existing, ...data } };
@@ -140,7 +146,53 @@ export class SaveSubmissionSectionHandler {
             }
         }
 
+        this.normalizePreviewAcknowledgements(normalized);
+
         return normalized;
+    }
+
+    private normalizePreviewAcknowledgements(data: Record<string, unknown>): void {
+        const previewKeys = [
+            'preview_ready_to_join',
+            'previewReadyToJoin',
+            'ready_to_join',
+            'readyToJoin',
+            'preview_understand_terms_and_conditions',
+            'previewUnderstandTermsAndConditions',
+            'understand_terms_and_conditions',
+            'understandTermsAndConditions',
+        ];
+
+        for (const key of previewKeys) {
+            if (data[key] === undefined) continue;
+
+            const normalized = this.normalizeBooleanValue(data[key]);
+            if (normalized !== undefined) {
+                data[key] = normalized;
+            }
+        }
+    }
+
+    private normalizeBooleanValue(value: unknown): boolean | undefined {
+        if (typeof value === 'boolean') return value;
+        if (typeof value === 'number') {
+            if (value === 1) return true;
+            if (value === 0) return false;
+            return undefined;
+        }
+
+        if (typeof value !== 'string') return undefined;
+
+        const normalized = value.trim().toLowerCase();
+        if (normalized === 'true' || normalized === '1' || normalized === 'yes') {
+            return true;
+        }
+
+        if (normalized === 'false' || normalized === '0' || normalized === 'no') {
+            return false;
+        }
+
+        return undefined;
     }
 
     private isApplicationCategory(value: string): value is ApplicationCategory {

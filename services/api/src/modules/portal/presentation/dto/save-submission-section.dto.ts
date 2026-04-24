@@ -12,6 +12,7 @@ export enum SubmissionSection {
     ENTRY_INFORMATION = 'entry_information',
     MISCELLANEOUS = 'miscellaneous',
     ADDITIONAL_INFO = 'additional_info',
+    PREVIEW = 'preview',
     ESSAYS = 'essays',
     DOCUMENTS = 'documents',
 }
