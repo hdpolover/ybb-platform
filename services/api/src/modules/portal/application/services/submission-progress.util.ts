@@ -155,16 +155,6 @@ export function buildSubmissionProgressSections(application: ApplicationForProgr
         });
     }
 
-    if (!groupedFields.has('personal_info')) {
-        sections.push({
-            id: 'personal_info',
-            title: SECTION_TITLES.personal_info,
-            description: SECTION_DESCRIPTIONS.personal_info,
-            status: normalizeStatus([], personalData),
-            isRequired: Object.keys(personalData).length > 0,
-        });
-    }
-
     const essays = application.program?.essays || [];
     if (essays.length > 0) {
         const essayAnswers = (application.essayAnswers as Record<string, unknown>) || {};

@@ -299,18 +299,6 @@ export class GetPortalSubmissionDetailHandler
             });
         }
 
-        // Ensure personal_info exists even without form fields
-        if (!sectionMap.has('personal_info')) {
-            sections.unshift({
-                id: 'personal_info',
-                title: 'Personal Information',
-                description: sectionDescriptions.personal_info,
-                fields: [],
-                values: personalData,
-                status: Object.keys(personalData).length > 0 ? 'completed' : 'pending',
-            });
-        }
-
         return sections.sort(
             (left, right) => (sectionOrder[left.id] || Number.MAX_SAFE_INTEGER) - (sectionOrder[right.id] || Number.MAX_SAFE_INTEGER),
         );
