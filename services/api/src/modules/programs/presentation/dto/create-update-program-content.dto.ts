@@ -1368,6 +1368,7 @@ export class CreateDocumentTemplateDto {
     @ApiProperty({ required: false })
     @IsNumber()
     @IsOptional()
+    @Transform(({ value }) => (value === undefined || value === null || value === '' ? undefined : Number(value)))
     fileSize?: number;
 
     @ApiProperty({ required: false })
@@ -1390,6 +1391,7 @@ export class CreateDocumentTemplateDto {
     @ApiProperty({ required: false })
     @IsNumber()
     @IsOptional()
+    @Transform(({ value }) => (value === undefined || value === null || value === '' ? undefined : Number(value)))
     order?: number;
 }
 
@@ -1417,6 +1419,7 @@ export class UpdateDocumentTemplateDto {
     @ApiProperty({ required: false })
     @IsNumber()
     @IsOptional()
+    @Transform(({ value }) => (value === undefined || value === null || value === '' ? undefined : Number(value)))
     fileSize?: number;
 
     @ApiProperty({ required: false })
@@ -1436,6 +1439,7 @@ export class UpdateDocumentTemplateDto {
     @ApiProperty({ required: false })
     @IsNumber()
     @IsOptional()
+    @Transform(({ value }) => (value === undefined || value === null || value === '' ? undefined : Number(value)))
     order?: number;
 
     @ApiProperty({ required: false })
