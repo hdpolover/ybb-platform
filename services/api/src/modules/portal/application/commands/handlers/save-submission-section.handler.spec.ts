@@ -174,4 +174,38 @@ describe('SaveSubmissionSectionHandler', () => {
 
         expect(mockCacheService.invalidateKey).toHaveBeenCalledTimes(3);
     });
+
+    it('normalizes phone country code fields to dial code format', async () => {
+        mockPortalCacheService.getParticipantProfile.mockResolvedValue({
+            id: 'participant-1',
+            userId: 'user-1',
+        });
+
+        mockPrisma.participantApplication.findFirst.mockResolvedValue({
+            id: 'app-1',
+            status: 'draft',
+            personalData: {},
+            essayAnswers: {},
+            uploadedFiles: {},
+        });
+
+        mockPrisma.participantApplication.update.mockResolvedValue({});
+
+        await handler.execute(
+            new SaveSubmissionSectionCommand('user-1', 'contact_information', {
+                phone_country_code: 'ID',
+                emergency_country_code: '+905538803144',
+            }),
+        );
+
+        expect(mockPrisma.participantApplication.update).toHaveBeenCalledWith({
+            where: { id: 'app-1' },
+            data: {
+                personalData: {
+                    phone_country_code: '+62',
+                    emergency_country_code: '+90',
+                },
+            },
+        });
+    });
 });

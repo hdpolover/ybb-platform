@@ -57,15 +57,6 @@
           "hint": "Select your nationality from the list. The country name, code, and flag will be saved automatically."
         },
         {
-          "field": "picture_url",
-          "db_column": "picture_url",
-          "type": "file_upload",
-          "accepted_formats": ["jpg", "jpeg", "png"],
-          "required": false,
-          "label": "Profile Photo",
-          "hint": "Upload a recent passport-style photo. Use a clear, front-facing photo with a plain background."
-        },
-        {
           "field": "origin_address",
           "db_column": "origin_address",
           "type": "text",
@@ -295,11 +286,26 @@
         {
           "field": "knowledge_source",
           "db_column": "knowledge_source",
-          "type": "string",
+          "type": "select",
           "max_length": 50,
           "required": false,
           "label": "How Did You Hear About Us?",
-          "hint": "E.g. Instagram, TikTok, Friend, Campus, Website"
+          "hint": "Select where you heard about the program",
+          "options": [
+            "Instagram",
+            "TikTok",
+            "LinkedIn",
+            "Facebook",
+            "Twitter/X",
+            "YouTube",
+            "WhatsApp Group",
+            "Telegram Group",
+            "Friend / Referral",
+            "Search Engine (Google, Bing)",
+            "Email / Newsletter",
+            "Campus / School",
+            "Other"
+          ]
         },
         {
           "field": "source_account_name",

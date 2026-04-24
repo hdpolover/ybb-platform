@@ -5,6 +5,7 @@ import { IParticipantRepository } from '../../../../../core/interfaces/repositor
 import { ParticipantResponseDto } from '../../../presentation/dto/participant.dto';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
+import { normalizePhoneCountryCode } from '@shared/utils/phone-country-code';
 
 @CommandHandler(UpdateParticipantProfileCommand)
 export class UpdateParticipantProfileHandler implements ICommandHandler<UpdateParticipantProfileCommand> {
@@ -35,6 +36,14 @@ export class UpdateParticipantProfileHandler implements ICommandHandler<UpdatePa
         const updateData: Record<string, unknown> = { ...updateDto };
         if (updateData['birthdate']) {
             updateData['birthdate'] = new Date(updateData['birthdate'] as string);
+        }
+
+        if (typeof updateData['phoneCountryCode'] === 'string') {
+            updateData['phoneCountryCode'] = normalizePhoneCountryCode(updateData['phoneCountryCode']);
+        }
+
+        if (typeof updateData['emergencyContactCountryCode'] === 'string') {
+            updateData['emergencyContactCountryCode'] = normalizePhoneCountryCode(updateData['emergencyContactCountryCode']);
         }
 
         // Calculate New Completion Score

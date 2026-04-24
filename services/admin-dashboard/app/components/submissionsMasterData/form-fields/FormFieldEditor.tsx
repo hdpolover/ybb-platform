@@ -108,16 +108,45 @@ function helpAssetsFromRaw(raw: unknown): HelpAssetRow[] {
     .slice(0, HELP_ASSETS_MAX);
 }
 
-/** Coerces whatever shape the server stored in `options` into {label,value} rows. */
+/**
+ * Coerces whatever shape the server stored in `options` into {label,value}
+ * rows. Handles string arrays (`["S","M"]`), canonical object arrays
+ * (`[{label, value}]`), legacy keys (`text`/`name`/`id`), and — defensively —
+ * a JSON-encoded string of any of the above, in case the column was written
+ * by an older code path that stringified before saving.
+ */
 function optionsToRows(raw: unknown): OptionRow[] {
-  if (!Array.isArray(raw)) return [];
-  return raw
+  // Defensive: unwrap a JSON string if someone stored options stringified.
+  let source: unknown = raw;
+  if (typeof source === "string") {
+    const trimmed = source.trim();
+    if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+      try { source = JSON.parse(trimmed); } catch { /* fall through; yields [] */ }
+    }
+  }
+  // Legacy wrapping shape some seeds used: { options: [...] }
+  if (source && typeof source === "object" && !Array.isArray(source)) {
+    const wrapped = (source as Record<string, unknown>).options;
+    if (Array.isArray(wrapped)) source = wrapped;
+  }
+  if (!Array.isArray(source)) return [];
+
+  return source
     .map((item) => {
       if (typeof item === "string") return { label: item, value: item };
       if (item && typeof item === "object") {
         const rec = item as Record<string, unknown>;
-        const label = typeof rec.label === "string" ? rec.label : String(rec.value ?? "");
-        const value = typeof rec.value === "string" ? rec.value : label;
+        const rawLabel =
+          (typeof rec.label === "string" && rec.label) ||
+          (typeof rec.text === "string" && rec.text) ||
+          (typeof rec.name === "string" && rec.name) ||
+          "";
+        const rawValue =
+          (typeof rec.value === "string" && rec.value) ||
+          (typeof rec.id === "string" && rec.id) ||
+          "";
+        const label = rawLabel || rawValue;
+        const value = rawValue || label;
         return { label, value };
       }
       return { label: "", value: "" };
@@ -212,6 +241,7 @@ export function FormFieldEditor({
   const brandId =
     accessiblePrograms.find((p) => p.programId === programId)?.brandId ?? "";
   const mediaUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const errorBannerRef = useRef<HTMLDivElement | null>(null);
 
   const [state, setState] = useState<EditorState>(() => toEditorState(initialField));
   const [saving, setSaving] = useState(false);
@@ -219,13 +249,26 @@ export function FormFieldEditor({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [isUploadingMedia, setIsUploadingMedia] = useState(false);
 
-  // Reset state when the drawer opens against a different field
+  // Reset state when the drawer opens against a different field. Also clear
+  // `saving` defensively — if a prior save was interrupted (navigation, error
+  // in finally) the button would otherwise stay disabled on reopen.
   useEffect(() => {
     if (open) {
       setState(toEditorState(initialField));
       setError(null);
+      setSaving(false);
+      setIsUploadingMedia(false);
     }
   }, [open, initialField]);
+
+  function reportError(msg: string) {
+    setError(msg);
+    // The error banner is at the top of a scrolling drawer; the user is
+    // usually at the bottom when they click Save, so scroll it into view.
+    requestAnimationFrame(() => {
+      errorBannerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }
 
   const isEditing = !!initialField;
   const needsOptions = TYPES_WITH_OPTIONS.has(state.fieldType);
@@ -240,12 +283,12 @@ export function FormFieldEditor({
     }
 
     if (!adminProfile?.userId) {
-      setError("You must be signed in to upload media files.");
+      reportError("You must be signed in to upload media files.");
       return;
     }
 
     if (!brandId) {
-      setError("Unable to resolve brand context for upload.");
+      reportError("Unable to resolve brand context for upload.");
       return;
     }
 
@@ -272,27 +315,31 @@ export function FormFieldEditor({
         patch("mediaAlt", file.name);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to upload media file.");
+      reportError(err instanceof Error ? err.message : "Failed to upload media file.");
     } finally {
       setIsUploadingMedia(false);
     }
   }
 
   async function handleSave() {
+    if (isUploadingMedia) {
+      reportError("Please wait for the media upload to finish before saving.");
+      return;
+    }
     const fieldName = state.fieldName.trim();
     const label = state.label.trim();
     if (!fieldName || !label) {
-      setError("Field Key and Label are required.");
+      reportError("Field Key and Label are required.");
       return;
     }
     if (needsOptions && state.options.filter((o) => o.label.trim()).length === 0) {
-      setError("Add at least one option for this field type.");
+      reportError("Add at least one option for this field type.");
       return;
     }
 
     const token = getAccessToken();
     if (!token) {
-      setError("You must be signed in to save form fields.");
+      reportError("You must be signed in to save form fields.");
       return;
     }
 
@@ -340,7 +387,7 @@ export function FormFieldEditor({
       onSaved();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save form field.");
+      reportError(err instanceof Error ? err.message : "Failed to save form field.");
     } finally {
       setSaving(false);
     }
@@ -358,7 +405,10 @@ export function FormFieldEditor({
 
         <div className="space-y-6 px-6 py-6">
           {error && (
-            <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            <div
+              ref={errorBannerRef}
+              className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700"
+            >
               {error}
             </div>
           )}
@@ -506,11 +556,18 @@ export function FormFieldEditor({
           {/* Options (only for select/radio/checkbox) */}
           {needsOptions && (
             <section className="space-y-2">
-              <h4 className="text-sm font-semibold text-zinc-900">Choices</h4>
+              <h4 className="text-sm font-semibold text-zinc-900">
+                Choices <span className="text-rose-500">*</span>
+              </h4>
               <p className="text-xs text-zinc-500">
                 List what the applicant can pick from. The label is what they see; the value
                 is what we store (auto-filled based on the label).
               </p>
+              {state.options.filter((o) => o.label.trim()).length === 0 && (
+                <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                  At least one choice is required for a {state.fieldType} field. Add choices below before saving.
+                </p>
+              )}
               <OptionsRepeater
                 value={state.options}
                 onChange={(next) => patch("options", next)}
@@ -626,23 +683,31 @@ export function FormFieldEditor({
           </section>
         </div>
 
-        <div className="sticky bottom-0 z-10 flex items-center justify-end gap-3 border-t border-zinc-200 bg-white px-6 py-4">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={saving}
-            className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:opacity-60"
-          >
-            {saving ? "Saving…" : isEditing ? "Save Changes" : "Add Field"}
-          </button>
+        <div className="sticky bottom-0 z-10 border-t border-zinc-200 bg-white px-6 py-4">
+          {error && (
+            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              {error}
+            </div>
+          )}
+          <div className="flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || isUploadingMedia}
+              title={isUploadingMedia ? "Waiting for media upload to finish…" : undefined}
+              className="rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {saving ? "Saving…" : isUploadingMedia ? "Uploading…" : isEditing ? "Save Changes" : "Add Field"}
+            </button>
+          </div>
         </div>
 
         <MediaLibraryPicker
