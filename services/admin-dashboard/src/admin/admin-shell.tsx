@@ -2,13 +2,13 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Menu, Home, Bell, Trash2 } from "lucide-react";
+import { Menu, Home, Bell, Trash2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/src/ui/button";
 import { AdminSidebar } from "./admin-sidebar";
 import type { NavSection } from "@/lib/nav-config";
 import { toast } from "sonner";
-import { clearAllCache } from "@/src/shared/api-client";
+import { clearAllCache, purgeQueues } from "@/src/shared/api-client";
 import {
   Tooltip,
   TooltipContent,
@@ -43,6 +43,8 @@ export function AdminNavbar({
 }: AdminNavbarProps) {
   const [open, setOpen] = React.useState(false);
   const [clearing, setClearing] = React.useState(false);
+  const [queueOpen, setQueueOpen] = React.useState(false);
+  const [purging, setPurging] = React.useState(false);
 
   async function handleConfirm() {
     setClearing(true);
@@ -58,6 +60,21 @@ export function AdminNavbar({
       });
     } finally {
       setClearing(false);
+    }
+  }
+
+  async function handleQueuePurge() {
+    setPurging(true);
+    try {
+      const result = await purgeQueues();
+      setQueueOpen(false);
+      toast.success("Queues purged", { description: result.message });
+    } catch (err) {
+      toast.error("Failed to purge queues", {
+        description: err instanceof Error ? err.message : "An unexpected error occurred.",
+      });
+    } finally {
+      setPurging(false);
     }
   }
 
@@ -88,6 +105,32 @@ export function AdminNavbar({
         </DialogContent>
       </Dialog>
 
+      <Dialog open={queueOpen} onOpenChange={setQueueOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Purge queues?</DialogTitle>
+            <DialogDescription>
+              This will delete all pending messages in the reporting and notification queues.
+              Payment and audit queues are not affected. Use this to unstick a hung file
+              processing job.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setQueueOpen(false)} disabled={purging}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleQueuePurge}
+              disabled={purging}
+              className={cn(purging && "animate-pulse")}
+            >
+              {purging ? "Purging…" : "Purge queues"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <header className="flex h-16 shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-4 shadow-sm sm:px-6">
         <div className="flex items-center gap-3">
           <Button
@@ -104,6 +147,20 @@ export function AdminNavbar({
 
         <div className="flex items-center gap-2">
           <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setQueueOpen(true)}
+                  aria-label="Purge queues"
+                  className="text-zinc-500"
+                >
+                  <RefreshCw className="h-5 w-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Purge queues</TooltipContent>
+            </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button

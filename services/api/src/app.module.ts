@@ -10,6 +10,7 @@ import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.m
 import { GeoIpModule } from '@shared/infrastructure/geoip/geoip.module';
 import { CacheController } from '@shared/presentation/cache.controller';
 import { MetricsController } from '@shared/presentation/metrics.controller';
+import { QueueController } from '@shared/presentation/queue.controller';
 import { WinstonModule } from 'nest-winston';
 import * as winston from 'winston';
 const LokiTransport = require('winston-loki');
@@ -140,6 +141,6 @@ import { EmailTemplatesModule } from '@modules/email-templates/email-templates.m
     ReportingModule,
     AdminsModule,
   ],
-  controllers: [CacheController, MetricsController],
+  controllers: [CacheController, MetricsController, QueueController],
 })
 export class AppModule { }

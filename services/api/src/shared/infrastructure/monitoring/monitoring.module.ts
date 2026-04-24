@@ -8,7 +8,7 @@ import { MetricsController } from '../../presentation/metrics.controller';
 @Module({
     imports: [ConfigModule],
     providers: [MetricsService, QueueMonitoringService],
-    exports: [MetricsService],
+    exports: [MetricsService, QueueMonitoringService],
     controllers: [],
 })
 export class MonitoringModule {

@@ -187,7 +187,10 @@ describe('CreateApplicationFormFieldHandler', () => {
 });
 
 describe('UpdateApplicationFormFieldHandler', () => {
-  const mockRepo = { updateFormField: jest.fn() };
+  const mockRepo = {
+    updateFormField: jest.fn(),
+    findFormFieldById: jest.fn(),
+  };
   const mockValidator = { validateCustomKey: jest.fn() };
 
   let handler: UpdateApplicationFormFieldHandler;
@@ -205,6 +208,7 @@ describe('UpdateApplicationFormFieldHandler', () => {
   });
 
   it('validates fieldName when changing it', async () => {
+    mockRepo.findFormFieldById.mockResolvedValue({ id: 'f1', name: 'old_key' });
     mockValidator.validateCustomKey.mockResolvedValue(undefined);
     mockRepo.updateFormField.mockResolvedValue({ id: 'f1' });
 
@@ -229,5 +233,24 @@ describe('UpdateApplicationFormFieldHandler', () => {
     );
 
     expect(mockValidator.validateCustomKey).not.toHaveBeenCalled();
+  });
+
+  it('grandfathers legacy key that collides with catalog when unchanged on update', async () => {
+    // The custom field was created before `tshirt_size` became a catalog
+    // entry; the form re-submits the same key on save. Validation must be
+    // skipped so the user can still edit label/placeholder/etc.
+    mockRepo.findFormFieldById.mockResolvedValue({ id: 'f1', name: 'tshirt_size' });
+    mockRepo.updateFormField.mockResolvedValue({ id: 'f1' });
+
+    await handler.execute(
+      new UpdateApplicationFormFieldCommand(
+        'f1',
+        { fieldName: 'tshirt_size', label: 'T-Shirt Size (edited)' },
+        'u1',
+      ),
+    );
+
+    expect(mockValidator.validateCustomKey).not.toHaveBeenCalled();
+    expect(mockRepo.updateFormField).toHaveBeenCalled();
   });
 });

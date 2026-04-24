@@ -1,4 +1,9 @@
 import './tracing';
+// BigInt has no JSON serializer by default — convert to number when safe, string otherwise
+(BigInt.prototype as any).toJSON = function () {
+  const n = Number(this);
+  return Number.isSafeInteger(n) ? n : this.toString();
+};
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
