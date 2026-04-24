@@ -2,6 +2,7 @@ import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import {
   ListAllSystemAnnouncementsCommand,
   CreateSystemAnnouncementCommand,
@@ -10,6 +11,15 @@ import {
   TogglePublishSystemAnnouncementCommand,
   GetAdminSystemAnnouncementCommand,
 } from '../manage-system-announcement.commands';
+
+// Invalidates announcement cache. brandId=null means platform-wide → nuke all brands.
+async function invalidateAnnouncementCache(cache: CacheService, brandId: string | null) {
+  if (brandId) {
+    await cache.invalidateKey(`landing:announcements:${brandId}`);
+  } else {
+    await cache.invalidateByPattern('landing:announcements:*');
+  }
+}
 
 @Injectable()
 @CommandHandler(ListAllSystemAnnouncementsCommand)
@@ -46,7 +56,10 @@ export class ListAllSystemAnnouncementsHandler
 export class CreateSystemAnnouncementHandler
   implements ICommandHandler<CreateSystemAnnouncementCommand>
 {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: CacheService,
+  ) {}
 
   async execute(command: CreateSystemAnnouncementCommand) {
     const { dto, createdBy } = command;
@@ -74,6 +87,7 @@ export class CreateSystemAnnouncementHandler
       },
     });
 
+    await invalidateAnnouncementCache(this.cache, announcement.brandId);
     return announcement;
   }
 }
@@ -83,7 +97,10 @@ export class CreateSystemAnnouncementHandler
 export class UpdateSystemAnnouncementHandler
   implements ICommandHandler<UpdateSystemAnnouncementCommand>
 {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: CacheService,
+  ) {}
 
   async execute(command: UpdateSystemAnnouncementCommand) {
     const { id, dto, updatedBy } = command;
@@ -113,6 +130,7 @@ export class UpdateSystemAnnouncementHandler
       },
     });
 
+    await invalidateAnnouncementCache(this.cache, updated.brandId);
     return updated;
   }
 }
@@ -122,7 +140,10 @@ export class UpdateSystemAnnouncementHandler
 export class DeleteSystemAnnouncementHandler
   implements ICommandHandler<DeleteSystemAnnouncementCommand>
 {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: CacheService,
+  ) {}
 
   async execute(command: DeleteSystemAnnouncementCommand) {
     const { id } = command;
@@ -131,6 +152,7 @@ export class DeleteSystemAnnouncementHandler
     if (!existing) throw new NotFoundException(`Announcement ${id} not found`);
 
     await this.prisma.systemAnnouncement.delete({ where: { id } });
+    await invalidateAnnouncementCache(this.cache, existing.brandId);
     return { success: true, id };
   }
 }
@@ -140,7 +162,10 @@ export class DeleteSystemAnnouncementHandler
 export class TogglePublishSystemAnnouncementHandler
   implements ICommandHandler<TogglePublishSystemAnnouncementCommand>
 {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: CacheService,
+  ) {}
 
   async execute(command: TogglePublishSystemAnnouncementCommand) {
     const { id, publish, updatedBy } = command;
@@ -157,6 +182,7 @@ export class TogglePublishSystemAnnouncementHandler
       },
     });
 
+    await invalidateAnnouncementCache(this.cache, updated.brandId);
     return updated;
   }
 }

@@ -20,18 +20,17 @@ export class AnnouncementsStrategy implements ILandingPageStrategy {
       return cached;
     }
 
-    const announcements = category ? await this.prisma.systemAnnouncement.findMany({
+    const announcements = await this.prisma.systemAnnouncement.findMany({
       where: {
-        brandId: category.id,
         isPublished: true,
         OR: [
-          { targetAudience: 'all' },
-          // Add other public audiences if applicable
-        ]
+          { brandId: category?.id ?? undefined },
+          { brandId: null },
+        ],
       },
       orderBy: { publishedAt: 'desc' },
-      take: 10
-    }) : [];
+      take: 10,
+    });
 
     const result = {
       slug: 'announcements',

@@ -29,9 +29,7 @@ export class GetAdminsHandler {
 
         if (brandId) {
             where.adminBrands = {
-                some: {
-                    brandId: brandId
-                }
+                some: { brandId },
             };
         }
 
@@ -43,11 +41,11 @@ export class GetAdminsHandler {
                 orderBy: { createdAt: 'desc' },
                 include: {
                     user: {
-                        select: { email: true, isActive: true, lastLoginAt: true }
+                        select: { id: true, email: true, isActive: true, lastLoginAt: true, createdAt: true }
                     },
                     role: true,
                     adminBrands: {
-                        include: { brand: { select: { name: true } } }
+                        include: { brand: { select: { id: true, name: true } } }
                     }
                 }
             }),
@@ -58,16 +56,25 @@ export class GetAdminsHandler {
             data: data.map(admin => ({
                 id: admin.id,
                 fullName: admin.fullName,
-                email: admin.user.email,
-                isActive: admin.user.isActive,
-                lastLoginAt: admin.user.lastLoginAt,
-                role: admin.role?.name || 'No Role',
-                brands: admin.adminBrands.map(ab => ({
-                    id: ab.brandId,
-                    name: ab.brand.name,
-                    role: ab.roleInBrand
-                })),
-                createdAt: admin.createdAt
+                userId: admin.userId,
+                roleId: admin.roleId,
+                accessLevel: admin.accessLevel,
+                canManageAdmins: admin.canManageAdmins,
+                canAssignRoles: admin.canAssignRoles,
+                user: admin.user ? {
+                    id: admin.user.id,
+                    email: admin.user.email,
+                    isActive: admin.user.isActive,
+                    createdAt: admin.user.createdAt,
+                } : null,
+                role: admin.role ? {
+                    id: admin.role.id,
+                    name: admin.role.name,
+                    permissions: (admin.role.permissions ?? {}) as Record<string, boolean>,
+                } : null,
+                brandIds: admin.adminBrands.map(ab => ab.brandId),
+                createdAt: admin.createdAt,
+                updatedAt: admin.updatedAt,
             })),
             meta: {
                 total,

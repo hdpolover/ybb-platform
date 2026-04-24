@@ -234,7 +234,10 @@ export class EmailService {
             baseUrl = brand.websiteUrl.replace(/\/$/, '');
         }
 
-        const resetUrl = `${baseUrl}/auth/reset-password?token=${token}`;
+        const normalizedBaseUrl = /^https?:\/\//i.test(baseUrl)
+            ? baseUrl
+            : `https://${baseUrl}`;
+        const resetUrl = `${normalizedBaseUrl.replace(/\/$/, '')}/auth/reset-password?token=${encodeURIComponent(token)}`;
 
         const html = await this.compileTemplate('forgot-password', {
             name,

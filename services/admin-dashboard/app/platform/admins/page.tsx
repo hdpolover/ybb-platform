@@ -143,7 +143,7 @@ function EditAdminModal({
   onUpdated: () => void;
 }) {
   const [fullName, setFullName] = useState(admin.fullName);
-  const [isActive, setIsActive] = useState(admin.user.isActive);
+  const [isActive, setIsActive] = useState(admin.user?.isActive ?? true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -271,7 +271,7 @@ export default function AdminsPage() {
     }
   }
 
-  const activeCount = admins.filter((a) => a.user.isActive).length;
+  const activeCount = admins.filter((a) => a.user?.isActive).length;
 
   return (
     <div className="space-y-4">
@@ -376,12 +376,12 @@ export default function AdminsPage() {
                 admins.map((admin, idx) => (
                   <tr key={admin.id} className={idx % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}>
                     <td className="px-3 py-2 font-semibold text-zinc-900">{admin.fullName}</td>
-                    <td className="px-3 py-2 text-zinc-600">{admin.user.email}</td>
+                    <td className="px-3 py-2 text-zinc-600">{admin.user?.email ?? "—"}</td>
                     <td className="px-3 py-2 text-zinc-700">{admin.role?.name ?? "—"}</td>
                     <td className="px-3 py-2 text-zinc-500">
                       {new Date(admin.createdAt).toLocaleDateString()}
                     </td>
-                    <td className="px-3 py-2 text-right">{statusBadge(admin.user.isActive)}</td>
+                    <td className="px-3 py-2 text-right">{statusBadge(admin.user?.isActive ?? false)}</td>
                     <td className="px-3 py-2 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <button

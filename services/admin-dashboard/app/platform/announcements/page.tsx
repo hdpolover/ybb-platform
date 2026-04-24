@@ -159,7 +159,12 @@ export default function SystemAnnouncementsPage() {
                 items.map((a, idx) => (
                   <tr key={a.id} className={idx % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}>
                     <td className="max-w-xs truncate px-3 py-2 font-medium text-zinc-900">
-                      {a.title}
+                      <Link
+                        href={`/platform/announcements/${a.id}`}
+                        className="hover:text-blue-600 hover:underline"
+                      >
+                        {a.title}
+                      </Link>
                       {a.showBanner && (
                         <span className="ml-1.5 rounded-full bg-purple-50 px-1.5 py-0.5 text-[9px] font-semibold text-purple-700">
                           BANNER
