@@ -15,12 +15,18 @@ import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard
 import { FileServiceClient } from '../infrastructure/clients/file-service.client';
 import { FileGrpcClient } from '../infrastructure/clients/file-grpc-client.service';
 
+function safeFilename(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_.\-]/g, '_');
+}
+
+function errMsg(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /**
  * Documents Controller
- * 
- * Presentation Layer - REST API
- * Handles document generation requests (certificates, reports, PDFs)
- * and proxies them to the File Service
+ *
+ * Handles document generation (certificates, reports, PDFs) and proxies to File Service.
  */
 @ApiTags('Documents')
 @Controller('documents')
@@ -52,24 +58,14 @@ export class DocumentsController {
   ) {
     try {
       this.logger.log(`Generating participant report for: ${dto.program_name}`);
-      
       const buffer = await this.fileServiceClient.generateParticipantReport(dto);
-      
-      res.setHeader(
-        'Content-Type',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      );
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename=participants_${dto.program_name}.xlsx`,
-      );
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${safeFilename(`participants_${dto.program_name}`)}.xlsx"`);
       res.send(buffer);
-    } catch (error) {
-      this.logger.error(`Failed to generate participant report: ${error.message}`);
-      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
-        message: 'Failed to generate participant report',
-        error: error.message,
-      });
+    } catch (error: unknown) {
+      const msg = errMsg(error);
+      this.logger.error(`Failed to generate participant report: ${msg}`);
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ message: 'Failed to generate participant report', error: msg });
     }
   }
 
@@ -95,24 +91,14 @@ export class DocumentsController {
   ) {
     try {
       this.logger.log(`Generating payment report for: ${dto.program_name}`);
-      
       const buffer = await this.fileServiceClient.generatePaymentReport(dto);
-      
-      res.setHeader(
-        'Content-Type',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      );
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename=payments_${dto.program_name}.xlsx`,
-      );
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${safeFilename(`payments_${dto.program_name}`)}.xlsx"`);
       res.send(buffer);
-    } catch (error) {
-      this.logger.error(`Failed to generate payment report: ${error.message}`);
-      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
-        message: 'Failed to generate payment report',
-        error: error.message,
-      });
+    } catch (error: unknown) {
+      const msg = errMsg(error);
+      this.logger.error(`Failed to generate payment report: ${msg}`);
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ message: 'Failed to generate payment report', error: msg });
     }
   }
 
@@ -130,25 +116,15 @@ export class DocumentsController {
   ) {
     try {
       this.logger.log(`Generating custom report: ${dto.title}`);
-      
       const buffer = await this.fileServiceClient.generateCustomReport(dto);
-      
-      const sheetName = dto.sheet_name || 'Report';
-      res.setHeader(
-        'Content-Type',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      );
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename=${sheetName}.xlsx`,
-      );
+      const sheetName = safeFilename(dto.sheet_name || 'Report');
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${sheetName}.xlsx"`);
       res.send(buffer);
-    } catch (error) {
-      this.logger.error(`Failed to generate custom report: ${error.message}`);
-      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
-        message: 'Failed to generate custom report',
-        error: error.message,
-      });
+    } catch (error: unknown) {
+      const msg = errMsg(error);
+      this.logger.error(`Failed to generate custom report: ${msg}`);
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ message: 'Failed to generate custom report', error: msg });
     }
   }
 
@@ -174,30 +150,22 @@ export class DocumentsController {
   ) {
     try {
       this.logger.log(`Generating receipt: ${dto.transaction_data.receipt_number}`);
-      
-      // Use gRPC client
       const response = await this.fileGrpcClient.generateReceipt({
-          ...dto.transaction_data,
-          currency: 'IDR', // Default currency
-          additional_data: {
-              email: dto.transaction_data.payer_email,
-              phone: dto.transaction_data.payer_phone,
-              description: dto.transaction_data.description
-          }
+        ...dto.transaction_data,
+        currency: 'IDR',
+        additional_data: {
+          email: dto.transaction_data.payer_email,
+          phone: dto.transaction_data.payer_phone,
+          description: dto.transaction_data.description,
+        },
       });
-      
       res.setHeader('Content-Type', response.content_type);
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename=${response.filename}`,
-      );
+      res.setHeader('Content-Disposition', `attachment; filename="${safeFilename(response.filename)}"`);
       res.send(response.file_data);
-    } catch (error) {
-      this.logger.error(`Failed to generate receipt: ${error.message}`);
-      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
-        message: 'Failed to generate receipt',
-        error: error.message,
-      });
+    } catch (error: unknown) {
+      const msg = errMsg(error);
+      this.logger.error(`Failed to generate receipt: ${msg}`);
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ message: 'Failed to generate receipt', error: msg });
     }
   }
 
@@ -224,25 +192,15 @@ export class DocumentsController {
   ) {
     try {
       this.logger.log(`Generating offer letter for: ${dto.participant_data.name}`);
-      
-      const buffer = await this.fileServiceClient.generateOfferLetter(
-        dto.participant_data,
-        dto.program_data,
-      );
-      
-      const participantName = dto.participant_data.name.replace(/\s+/g, '_');
+      const buffer = await this.fileServiceClient.generateOfferLetter(dto.participant_data, dto.program_data);
+      const participantName = safeFilename(dto.participant_data.name);
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename=offer_letter_${participantName}.pdf`,
-      );
+      res.setHeader('Content-Disposition', `attachment; filename="offer_letter_${participantName}.pdf"`);
       res.send(buffer);
-    } catch (error) {
-      this.logger.error(`Failed to generate offer letter: ${error.message}`);
-      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
-        message: 'Failed to generate offer letter',
-        error: error.message,
-      });
+    } catch (error: unknown) {
+      const msg = errMsg(error);
+      this.logger.error(`Failed to generate offer letter: ${msg}`);
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ message: 'Failed to generate offer letter', error: msg });
     }
   }
 
@@ -261,50 +219,41 @@ export class DocumentsController {
         completion_date?: string;
         metadata?: Record<string, unknown>;
       };
-      certificate_type?: string; // Changed from enum to string to support 'award', 'speaker' etc.
+      certificate_type?: string;
       template_path?: string;
     },
     @Res() res: Response,
   ) {
     try {
       const certificateType = dto.certificate_type || 'completion';
-      this.logger.log(
-        `Generating ${certificateType} certificate for: ${dto.participant_data.name}`,
-      );
-      
-      // Combine metadata
+      this.logger.log(`Generating ${certificateType} certificate for: ${dto.participant_data.name}`);
+
       const combinedMetadata: Record<string, string> = {};
       if (dto.participant_data.metadata) {
-          Object.entries(dto.participant_data.metadata).forEach(([k, v]) => combinedMetadata[k] = String(v));
+        Object.entries(dto.participant_data.metadata).forEach(([k, v]) => { combinedMetadata[k] = String(v); });
       }
       if (dto.program_data.metadata) {
-          Object.entries(dto.program_data.metadata).forEach(([k, v]) => combinedMetadata[`program_${k}`] = String(v));
+        Object.entries(dto.program_data.metadata).forEach(([k, v]) => { combinedMetadata[`program_${k}`] = String(v); });
       }
       if (dto.template_path) {
-          combinedMetadata['template_path'] = dto.template_path;
+        combinedMetadata['template_path'] = dto.template_path;
       }
 
-      // Use gRPC client
       const response = await this.fileGrpcClient.generateCertificate({
-          participant_name: dto.participant_data.name,
-          program_name: dto.program_data.name,
-          issued_at: dto.program_data.completion_date || new Date().toISOString(),
-          template_type: certificateType,
-          metadata: combinedMetadata
+        participant_name: dto.participant_data.name,
+        program_name: dto.program_data.name,
+        issued_at: dto.program_data.completion_date || new Date().toISOString(),
+        template_type: certificateType,
+        metadata: combinedMetadata,
       });
-      
+
       res.setHeader('Content-Type', response.content_type);
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename=${response.filename}`,
-      );
+      res.setHeader('Content-Disposition', `attachment; filename="${safeFilename(response.filename)}"`);
       res.send(response.file_data);
-    } catch (error) {
-      this.logger.error(`Failed to generate certificate: ${error.message}`);
-      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
-        message: 'Failed to generate certificate',
-        error: error.message,
-      });
+    } catch (error: unknown) {
+      const msg = errMsg(error);
+      this.logger.error(`Failed to generate certificate: ${msg}`);
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ message: 'Failed to generate certificate', error: msg });
     }
   }
 
@@ -315,13 +264,10 @@ export class DocumentsController {
     try {
       this.logger.log(`Verifying certificate: ${hash}`);
       return await this.fileServiceClient.verifyCertificate(hash);
-    } catch (error) {
-      this.logger.error(`Failed to verify certificate: ${error.message}`);
-      return {
-        success: false,
-        message: 'Certificate verification failed',
-        error: error.message,
-      };
+    } catch (error: unknown) {
+      const msg = errMsg(error);
+      this.logger.error(`Failed to verify certificate: ${msg}`);
+      return { success: false, message: 'Certificate verification failed', error: msg };
     }
   }
 }

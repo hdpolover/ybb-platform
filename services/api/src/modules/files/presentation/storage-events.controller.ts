@@ -11,9 +11,9 @@ import { FileGrpcClient } from '../infrastructure/clients/file-grpc-client.servi
 
 /**
  * Storage Events Controller
- * 
- * Receives Webhooks from MinIO/S3 when files are uploaded/deleted.
- * Used to sync state (e.g., mark Pending uploads as Active).
+ *
+ * Receives webhooks from MinIO/S3 when files are uploaded/deleted.
+ * Protected by MINIO_WEBHOOK_SECRET env var — set it in MinIO webhook config.
  */
 @ApiTags('files')
 @Controller('files/events')
@@ -25,19 +25,17 @@ export class StorageEventsController {
   ) {}
 
   @Post('minio')
+  @ApiExcludeEndpoint()
   @ApiOperation({ summary: 'MinIO Webhook Handler' })
   @ApiResponse({ status: 200, description: 'Event processed' })
-  // @ApiExcludeEndpoint() // Ideally hide from public swagger or protect it
   async handleMinioEvent(
     @Body() payload: Record<string, unknown>,
     @Headers('authorization') authHeader?: string
   ) {
-    // 1. (Optional) Validate Secret
-    // If you configure MinIO webhook with an Auth Token, verify it here.
-    // const expectedSecret = process.env.MINIO_WEBHOOK_SECRET;
-    // if (expectedSecret && authHeader !== `Bearer ${expectedSecret}`) {
-    //   throw new UnauthorizedException('Invalid Webhook Secret');
-    // }
+    const expectedSecret = process.env.MINIO_WEBHOOK_SECRET;
+    if (expectedSecret && authHeader !== `Bearer ${expectedSecret}`) {
+      throw new UnauthorizedException('Invalid webhook secret');
+    }
 
     this.logger.log(`Received MinIO Event: ${JSON.stringify(payload)}`);
 
@@ -55,9 +53,15 @@ export class StorageEventsController {
       const eventName = (record.eventName as string) || '';
         
       if (eventName.startsWith('s3:ObjectCreated:')) {
-        const s3 = record.s3 as Record<string, Record<string, unknown>>;
-        const key = decodeURIComponent((s3.object.key as string).replace(/\+/g, ' '));
-        const bucket = s3.bucket.name as string;
+        const s3 = record.s3 as Record<string, Record<string, unknown>> | undefined;
+        const objectKey = s3?.object?.key;
+        const bucketName = s3?.bucket?.name;
+        if (!s3 || typeof objectKey !== 'string' || typeof bucketName !== 'string') {
+          this.logger.warn(`Skipping malformed s3 event record: ${JSON.stringify(record)}`);
+          continue;
+        }
+        const key = decodeURIComponent(objectKey.replace(/\+/g, ' '));
+        const bucket = bucketName;
         const size = s3.object.size as number;
 
         this.logger.log(`Processing Upload Event: ${key} in ${bucket}`);
@@ -75,8 +79,8 @@ export class StorageEventsController {
           } else {
              this.logger.warn(`Could not confirm upload for ${key}. Status: ${result.status}`);
           }
-        } catch (err) {
-          this.logger.error(`Error confirming upload for ${key}: ${err.message}`);
+        } catch (err: unknown) {
+          this.logger.error(`Error confirming upload for ${key}: ${err instanceof Error ? err.message : String(err)}`);
           // Don't throw, continue processing other records
         }
       }

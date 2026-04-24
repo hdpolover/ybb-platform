@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Delete,
@@ -72,14 +73,19 @@ export class AdminMediaController {
     // the `{ statusCode, message, data }` envelope. Wrapping here would
     // double-envelope and break the admin-dashboard's `listProgramMedia`.
     this.logger.log(`Listing media for program ${programId}`);
-    return this.fileServiceClient.listProgramMedia({
-      programId,
-      brandId,
-      assetType,
-      bucket,
-      page: Number(page),
-      limit: Number(limit),
-    });
+    try {
+      return await this.fileServiceClient.listProgramMedia({
+        programId,
+        brandId,
+        assetType,
+        bucket,
+        page: Number(page),
+        limit: Number(limit),
+      });
+    } catch (error: unknown) {
+      this.logger.error(`Failed to list media for program ${programId}: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    }
   }
 
   @Post()
@@ -97,25 +103,28 @@ export class AdminMediaController {
     @Body('asset_type') assetType?: string,
     @Body('bucket') bucket = 'gallery',
   ) {
-    this.logger.log(`Uploading media for program ${programId}: ${file?.originalname}`);
-
-    const uploadResult = await this.storageService.uploadFile(
-      file,
-      userId,
-      brandId,
-      bucket,
-      programId,
-      'ybb',   // tenant key — kept consistent with existing uploadFile calls
-      undefined, // no participant_id for program-level media
-    );
-
-    // Raw payload; TransformInterceptor supplies the envelope.
-    return {
-      file: uploadResult.fileInfo,
-      url: uploadResult.url,
-      path: uploadResult.path,
-      asset_type: assetType,
-    };
+    if (!file) throw new BadRequestException('No file provided');
+    this.logger.log(`Uploading media for program ${programId}: ${file.originalname}`);
+    try {
+      const uploadResult = await this.storageService.uploadFile(
+        file,
+        userId,
+        brandId,
+        bucket,
+        programId,
+        'ybb',
+        undefined,
+      );
+      return {
+        file: uploadResult.fileInfo,
+        url: uploadResult.url,
+        path: uploadResult.path,
+        asset_type: assetType,
+      };
+    } catch (error: unknown) {
+      this.logger.error(`Failed to upload media for program ${programId}: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    }
   }
 
   @Delete(':fileId')

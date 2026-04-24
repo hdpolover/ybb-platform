@@ -121,6 +121,17 @@ export class FilesController {
     }
   }
 
+  @Get('health/check')
+  @ApiOperation({ summary: 'Health check for files service' })
+  @ApiResponse({ status: 200, description: 'Service is healthy' })
+  async healthCheck() {
+    return {
+      service: 'files',
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+    };
+  }
+
   @Get(':fileId')
   @ApiOperation({ summary: 'Get file information and download URL' })
   @ApiResponse({ status: 200, description: 'File information retrieved successfully' })
@@ -132,21 +143,21 @@ export class FilesController {
     try {
       this.logger.log(`Retrieving file: ${fileId} for user ${userId}, brand ${brandId}`);
       
-      let result;
+      let result: FileResponse;
       // Try gRPC first
       try {
-         result = await this.fileGrpcClient.getFile(fileId, userId, brandId);
-      } catch (grpcError) {
-         this.logger.warn(`gRPC getFile failed, falling back to REST: ${grpcError.message}`);
+         result = (await this.fileGrpcClient.getFile(fileId, userId, brandId)) as unknown as FileResponse;
+      } catch (grpcError: unknown) {
+         this.logger.warn(`gRPC getFile failed, falling back to REST: ${grpcError instanceof Error ? grpcError.message : String(grpcError)}`);
          result = await this.fileServiceClient.getFile(fileId, userId, brandId);
       }
-      
+
       return {
         success: true,
         data: result,
       };
-    } catch (error) {
-      this.logger.error(`Failed to get file: ${error.message}`);
+    } catch (error: unknown) {
+      this.logger.error(`Failed to get file: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
   }
@@ -170,17 +181,6 @@ export class FilesController {
     if (!url) throw new NotFoundException('File URL not available');
     res.setHeader('Cache-Control', 'no-store');
     res.redirect(302, url);
-  }
-
-  @Get('health/check')
-  @ApiOperation({ summary: 'Health check for files service' })
-  @ApiResponse({ status: 200, description: 'Service is healthy' })
-  async healthCheck() {
-    return {
-      service: 'files',
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-    };
   }
 
   @Post('upload-url')
@@ -212,7 +212,8 @@ export class FilesController {
     @Query('actual_size') actualSize?: string,
   ): Promise<FileResponse> {
     this.logger.log(`Marking file ready: ${fileId} (brand ${brandId})`);
-    const size = actualSize ? Number(actualSize) : undefined;
+    const parsed = actualSize ? Number(actualSize) : NaN;
+    const size = !isNaN(parsed) ? parsed : undefined;
     return this.fileServiceClient.markFileReady(fileId, brandId, size);
   }
 
@@ -249,8 +250,8 @@ export class FilesController {
         success: true,
         data: result
       };
-    } catch (error) {
-      this.logger.error(`Failed to generate presigned upload URL: ${error.message}`);
+    } catch (error: unknown) {
+      this.logger.error(`Failed to generate presigned upload URL: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
   }

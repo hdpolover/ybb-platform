@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
+import FormData from 'form-data';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import { AxiosResponse } from 'axios';
@@ -77,7 +78,6 @@ export class FileServiceClient {
     programId?: string,
     participantId?: string,
   ): Promise<FileUploadResponse> {
-    const FormData = require('form-data');
     const formData = new FormData();
     formData.append('file', file.buffer, file.originalname);
     formData.append('user_id', userId);
