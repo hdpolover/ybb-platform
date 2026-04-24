@@ -10,11 +10,10 @@ export default function ProgramDocumentsPage({
   params: Promise<{ programId: string }>;
 }) {
   const { programId } = use(params);
-
   return (
     <div className="space-y-4">
       <ProgramDocumentsHeader />
-      <ProgramDocumentsTable />
+      <ProgramDocumentsTable programId={programId} />
     </div>
   );
 }
