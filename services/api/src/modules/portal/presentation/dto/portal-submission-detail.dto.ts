@@ -5,6 +5,7 @@ import { DocumentFile } from '@core/entities/participant-application.entity';
 export interface FieldOption {
     label: string;
     value: string;
+    description?: string;
 }
 
 /** Validation constraints for a form field */

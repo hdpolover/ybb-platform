@@ -10,10 +10,14 @@ import {
   Body,
   Query,
   Logger,
+  Res,
+  NotFoundException,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
+import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { StorageService } from '../application/storage.service';
 import {
   CreateUploadUrlRequest,
@@ -145,6 +149,27 @@ export class FilesController {
       this.logger.error(`Failed to get file: ${error.message}`);
       throw error;
     }
+  }
+
+  @Get(':fileId/download')
+  @ApiOperation({ summary: 'Proxy-redirect to file CDN URL — masks the raw CDN path from clients' })
+  @ApiResponse({ status: 302, description: 'Redirects to CDN URL' })
+  async downloadFile(
+    @Param('fileId') fileId: string,
+    @CurrentUser() user: CurrentUserData,
+    @Res() res: Response,
+  ): Promise<void> {
+    this.logger.log(`Download redirect: ${fileId} (user ${user.userId})`);
+    let file: FileResponse;
+    try {
+      file = await this.fileGrpcClient.getFile(fileId, user.userId, user.brandId);
+    } catch {
+      file = await this.fileServiceClient.getFile(fileId, user.userId, user.brandId);
+    }
+    const url = (file.public_url ?? file.url ?? file.cdn_url) as string | undefined;
+    if (!url) throw new NotFoundException('File URL not available');
+    res.setHeader('Cache-Control', 'no-store');
+    res.redirect(302, url);
   }
 
   @Get('health/check')

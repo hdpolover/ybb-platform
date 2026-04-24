@@ -3,6 +3,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
+import { KNOWLEDGE_SOURCES } from '../../../../metadata/metadata.constants';
 import { PortalCacheService } from '../../services/portal-cache.service';
 import { GetPortalSubmissionDetailQuery } from '../portal-queries';
 import {
@@ -49,6 +50,7 @@ type ApplicationDetail = {
         participationCategories: {
             id: string;
             name: string;
+            description: string | null;
             order: number;
             isActive: boolean;
         }[];
@@ -179,6 +181,7 @@ export class GetPortalSubmissionDetailHandler
                             select: {
                                 id: true,
                                 name: true,
+                                description: true,
                                 order: true,
                                 isActive: true,
                             },
@@ -260,7 +263,9 @@ export class GetPortalSubmissionDetailHandler
                 id: field.id,
                 name: field.name,
                 label: field.label,
-                type: this.isCategoryFieldName(field.name) ? 'select' : field.type,
+                type: this.isCategoryFieldName(field.name) || this.isKnowledgeSourceFieldName(field.name)
+                    ? 'select'
+                    : field.type,
                 placeholder: field.placeholder || undefined,
                 helpText: field.helpText || undefined,
                 mediaUrl: field.mediaUrl || undefined,
@@ -340,10 +345,7 @@ export class GetPortalSubmissionDetailHandler
 
         for (const field of fields) {
             if (this.isCategoryFieldName(field.name)) {
-                values[field.name] = this.preferValue(
-                    this.readCategoryValueFromPersonalData(personalData, field.name),
-                    application.participationCategoryId ?? application.applicationCategory ?? undefined,
-                );
+                values[field.name] = this.resolveCategoryFieldValue(application, personalData, field.name);
                 continue;
             }
 
@@ -372,10 +374,7 @@ export class GetPortalSubmissionDetailHandler
 
         for (const field of fields) {
             if (this.isCategoryFieldName(field.name)) {
-                values[field.name] = this.preferValue(
-                    this.readCategoryValueFromPersonalData(personalData, field.name),
-                    application.participationCategoryId ?? application.applicationCategory ?? undefined,
-                );
+                values[field.name] = this.resolveCategoryFieldValue(application, personalData, field.name);
                 continue;
             }
 
@@ -533,10 +532,15 @@ export class GetPortalSubmissionDetailHandler
             return this.resolveCategoryOptions(field, application);
         }
 
+        if (this.isKnowledgeSourceFieldName(field.name)) {
+            return this.resolveKnowledgeSourceOptions(field);
+        }
+
         if (this.isProgramSubthemeFieldName(field.name)) {
             return (application.program.subthemes || []).map((subtheme) => ({
                 label: subtheme.name,
                 value: subtheme.id,
+                description: subtheme.description || undefined,
             }));
         }
 
@@ -547,13 +551,29 @@ export class GetPortalSubmissionDetailHandler
         field: SubmissionFormFieldDto,
         application: ApplicationDetail,
     ): SubmissionFormFieldDto['options'] {
-        const fromParticipationCategories = (application.program.participationCategories || []).map((category) => {
-            const mapped = this.mapCategoryNameToApplicationCategory(category.name);
-            return {
-                label: category.name,
-                value: mapped ?? category.id,
-            };
-        });
+        const dedupeOptions = (options: Array<{ label: string; value: string; description?: string }>) => {
+            const deduped: Array<{ label: string; value: string; description?: string }> = [];
+            const seen = new Set<string>();
+
+            for (const item of options) {
+                if (!item.value || seen.has(item.value)) continue;
+                seen.add(item.value);
+                deduped.push(item);
+            }
+
+            return deduped;
+        };
+
+        const fromParticipationCategories = (application.program.participationCategories || []).map((category) => ({
+            label: category.name,
+            value: category.id,
+            description: category.description || undefined,
+        }));
+
+        const dedupedParticipation = dedupeOptions(fromParticipationCategories);
+        if (dedupedParticipation.length > 0) {
+            return dedupedParticipation;
+        }
 
         const fromFieldConfig = (field.options || []).map((option) => {
             if (typeof option === 'string') {
@@ -566,39 +586,59 @@ export class GetPortalSubmissionDetailHandler
             return {
                 label: option.label,
                 value: String(option.value),
+                description:
+                    typeof option.description === 'string' && option.description.trim().length > 0
+                        ? option.description
+                        : undefined,
             };
         });
 
-        const fundingFallback = [
-            { label: 'Fully Funded', value: 'fully_funded' },
-            { label: 'Self-Funded', value: 'self_funded' },
-        ];
+        return dedupeOptions(fromFieldConfig);
+    }
 
-        const merged = [...fromParticipationCategories, ...fromFieldConfig, ...fundingFallback];
-        const deduped: { label: string; value: string }[] = [];
+    private resolveKnowledgeSourceOptions(field: SubmissionFormFieldDto): SubmissionFormFieldDto['options'] {
+        const configuredOptions = (field.options || []).map((option) => {
+            if (typeof option === 'string') {
+                return {
+                    label: option,
+                    value: option,
+                };
+            }
+
+            return {
+                label: option.label,
+                value: String(option.value),
+                description:
+                    typeof option.description === 'string' && option.description.trim().length > 0
+                        ? option.description
+                        : undefined,
+            };
+        });
+
+        const metadataOptions = KNOWLEDGE_SOURCES.map((source) => ({
+            label: source,
+            value: source,
+        }));
+
+        const mergedOptions = [...configuredOptions, ...metadataOptions];
+        const deduped: Array<{ label: string; value: string; description?: string }> = [];
         const seen = new Set<string>();
 
-        for (const item of merged) {
-            if (!item.value || seen.has(item.value)) continue;
-            seen.add(item.value);
-            deduped.push(item);
+        for (const option of mergedOptions) {
+            const value = option.value.trim();
+            if (!value) continue;
+
+            const fingerprint = value.toLowerCase();
+            if (seen.has(fingerprint)) continue;
+
+            seen.add(fingerprint);
+            deduped.push({
+                ...option,
+                value,
+            });
         }
 
         return deduped;
-    }
-
-    private mapCategoryNameToApplicationCategory(value: string): 'fully_funded' | 'self_funded' | null {
-        const normalized = value.toLowerCase().replace(/[^a-z0-9]/g, '');
-
-        if (normalized === 'fullyfunded' || normalized === 'fullyfund') {
-            return 'fully_funded';
-        }
-
-        if (normalized === 'selffunded' || normalized === 'selffund') {
-            return 'self_funded';
-        }
-
-        return null;
     }
 
     private isCategoryFieldName(name: string): boolean {
@@ -607,6 +647,16 @@ export class GetPortalSubmissionDetailHandler
             || normalized === 'applicationcategory'
             || normalized === 'participationcategory'
             || normalized === 'participationcategoryid';
+    }
+
+    private isKnowledgeSourceFieldName(name: string): boolean {
+        const normalized = this.normalizeFieldName(name);
+
+        return normalized === 'knowledgesource'
+            || normalized === 'miscknowledgesource'
+            || normalized === 'sourceofinformation'
+            || normalized === 'programsource'
+            || normalized === 'howdidyouhearaboutus';
     }
 
     private isProgramIdFieldName(name: string): boolean {
@@ -640,6 +690,27 @@ export class GetPortalSubmissionDetailHandler
         }
 
         return undefined;
+    }
+
+    private resolveCategoryFieldValue(
+        application: ApplicationDetail,
+        personalData: Record<string, unknown>,
+        fieldName: string,
+    ): unknown {
+        const fromPersonalData = this.readCategoryValueFromPersonalData(personalData, fieldName);
+        const participationCategories = application.program.participationCategories || [];
+
+        if (participationCategories.length > 0) {
+            const allowedIds = new Set(participationCategories.map((category) => category.id));
+            const normalizedPersonalDataValue =
+                typeof fromPersonalData === 'string' && allowedIds.has(fromPersonalData)
+                    ? fromPersonalData
+                    : undefined;
+
+            return this.preferValue(application.participationCategoryId ?? undefined, normalizedPersonalDataValue);
+        }
+
+        return this.preferValue(fromPersonalData, application.applicationCategory ?? undefined);
     }
 
     private hasValue(value: unknown): boolean {

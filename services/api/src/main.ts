@@ -10,6 +10,7 @@ import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { setupSwagger } from './config/swagger.config';
 import { TransformInterceptor } from './shared/interceptors/transform.interceptor';
+import { CdnMaskInterceptor } from './shared/interceptors/cdn-mask.interceptor';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 
 async function bootstrap() {
@@ -60,6 +61,8 @@ async function bootstrap() {
 
   // Global Interceptor for standard response format
   app.useGlobalInterceptors(new TransformInterceptor());
+  // Rewrite CDN UUID-file URLs to proxy paths so raw CDN paths never reach clients
+  app.useGlobalInterceptors(new CdnMaskInterceptor());
 
   // API Versioning
   app.enableVersioning({

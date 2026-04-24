@@ -3,6 +3,7 @@ import { ApplicationCategory } from '@prisma/client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
+import { normalizePhoneCountryCode } from '@shared/utils/phone-country-code';
 import { PortalCacheService } from '../../services/portal-cache.service';
 import { SaveSubmissionSectionCommand } from '../../queries/portal-queries';
 import { SubmissionSection } from '../../../presentation/dto/save-submission-section.dto';
@@ -122,6 +123,21 @@ export class SaveSubmissionSectionHandler {
 
         if (normalized.programId !== undefined) {
             delete normalized.programId;
+        }
+
+        const phoneCountryCodeKeys = [
+            'phone_country_code',
+            'phoneCountryCode',
+            'emergency_country_code',
+            'emergencyCountryCode',
+            'emergency_contact_country_code',
+            'emergencyContactCountryCode',
+        ];
+
+        for (const key of phoneCountryCodeKeys) {
+            if (typeof normalized[key] === 'string') {
+                normalized[key] = normalizePhoneCountryCode(normalized[key]);
+            }
         }
 
         return normalized;
