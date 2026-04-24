@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsDateString, IsNumber, IsBoolean, IsUUID, IsArray, IsEnum } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsDateString, IsNumber, IsBoolean, IsUUID, IsArray, IsEnum, IsIn } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { FaqCategory } from '@prisma/client';
@@ -1351,6 +1351,7 @@ export class CreateDocumentTemplateDto {
     name: string;
 
     @ApiProperty({ enum: ['agreement_letter', 'complementary_document'] })
+    @IsIn(['agreement_letter', 'complementary_document'])
     @IsString()
     @IsNotEmpty()
     type: string;
@@ -1380,6 +1381,7 @@ export class CreateDocumentTemplateDto {
         required: false,
         description: 'Audience type: all_registered | paid_any | paid_pricing_tier | specific_status',
     })
+    @IsIn(['all_registered', 'paid_any', 'paid_pricing_tier', 'specific_status'])
     @IsString()
     @IsOptional()
     audienceType?: string;
@@ -1402,6 +1404,7 @@ export class UpdateDocumentTemplateDto {
     name?: string;
 
     @ApiProperty({ required: false, enum: ['agreement_letter', 'complementary_document'] })
+    @IsIn(['agreement_letter', 'complementary_document'])
     @IsString()
     @IsOptional()
     type?: string;
@@ -1428,6 +1431,7 @@ export class UpdateDocumentTemplateDto {
     fileType?: string;
 
     @ApiProperty({ required: false })
+    @IsIn(['all_registered', 'paid_any', 'paid_pricing_tier', 'specific_status'])
     @IsString()
     @IsOptional()
     audienceType?: string;
