@@ -183,6 +183,6 @@ function isAudienceEligible(
             return statuses.includes(application.status);
         }
         default:
-            return true;
+            return false;
     }
 }
