@@ -63,12 +63,14 @@ function VideoFormDrawer({
   isOpen,
   onClose,
   programId,
+  brandId,
   initialData,
   onSuccess,
 }: {
   isOpen: boolean;
   onClose: () => void;
   programId?: string;
+  brandId?: string;
   initialData?: VideoTestimonyRow;
   onSuccess: () => void;
 }) {
@@ -117,6 +119,8 @@ function VideoFormDrawer({
           testimonial: description.trim(),
           videoUrl: youtubeUrl.trim(),
           type: "video",
+          category: "alumni",
+          brandId,
         });
       }
       onSuccess();
@@ -246,8 +250,8 @@ function VideoFormDrawer({
   );
 }
 
-// ─── View Modal (dialog, not drawer — view-only content) ──────────────────────
-function VideoViewModal({
+// ─── View Drawer ───────────────────────────────────────────────────────────────
+function VideoViewDrawer({
   isOpen,
   onClose,
   row,
@@ -256,99 +260,87 @@ function VideoViewModal({
   onClose: () => void;
   row: VideoTestimonyRow;
 }) {
-  if (!isOpen) return null;
   const embedUrl = toEmbedUrl(row.youtubeUrl);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 sm:p-6">
-      <div className="w-full max-w-3xl overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-6 py-5">
-          <div>
-            <h3 className="text-lg font-bold text-zinc-900">{row.name}</h3>
-            <p className="mt-1 text-sm text-zinc-500">Preview the embedded video.</p>
+    <DrawerShell
+      open={isOpen}
+      onClose={onClose}
+      title={row.name}
+      description="Preview the embedded video."
+      width="sm:max-w-2xl"
+      footer={
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100"
+        >
+          Close
+        </button>
+      }
+    >
+      <div className="aspect-video w-full overflow-hidden rounded-xl border border-zinc-200 bg-black/90 shadow-inner">
+        {embedUrl ? (
+          <iframe
+            src={embedUrl}
+            title={row.name}
+            className="h-full w-full"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center text-sm font-medium text-zinc-300">
+            Invalid YouTube URL.
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700"
-          >
-            <span className="text-xl leading-none">×</span>
-          </button>
-        </div>
+        )}
+      </div>
 
-        <div className="space-y-5 px-6 py-6">
-          <div className="aspect-video w-full overflow-hidden rounded-xl border border-zinc-200 bg-black/90 shadow-inner">
-            {embedUrl ? (
-              <iframe
-                src={embedUrl}
-                title={row.name}
-                className="h-full w-full"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
+      <div className="space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/50 p-5">
+        <div>
+          <div className="mb-1 text-xs font-medium text-zinc-500">YouTube URL</div>
+          <a
+            href={row.youtubeUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="break-all text-sm font-medium text-blue-600 underline underline-offset-2"
+          >
+            {row.youtubeUrl}
+          </a>
+        </div>
+        <div>
+          <div className="mb-1 text-xs font-medium text-zinc-500">Status</div>
+          <span
+            className={`inline-flex items-center gap-1.5 rounded px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide ${
+              row.isActive ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-500"
+            }`}
+          >
+            {row.isActive ? (
+              <CheckCircleIcon className="h-4 w-4" />
             ) : (
-              <div className="flex h-full items-center justify-center text-sm font-medium text-zinc-300">
-                Invalid YouTube URL.
-              </div>
+              <XCircleIcon className="h-4 w-4" />
             )}
-          </div>
-
-          <div className="space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/50 p-5">
-            <div>
-              <div className="mb-1 text-xs font-medium text-zinc-500">YouTube URL</div>
-              <a
-                href={row.youtubeUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="break-all text-sm font-medium text-blue-600 underline underline-offset-2"
-              >
-                {row.youtubeUrl}
-              </a>
-            </div>
-            <div>
-              <div className="mb-1 text-xs font-medium text-zinc-500">Status</div>
-              <span
-                className={`inline-flex items-center gap-1.5 rounded px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide ${
-                  row.isActive ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-500"
-                }`}
-              >
-                {row.isActive ? (
-                  <CheckCircleIcon className="h-4 w-4" />
-                ) : (
-                  <XCircleIcon className="h-4 w-4" />
-                )}
-                {row.isActive ? "Active" : "Inactive"}
-              </span>
-            </div>
-            <div>
-              <div className="mb-1 text-xs font-medium text-zinc-500">Description</div>
-              <div className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-800">
-                {row.description}
-              </div>
-            </div>
-          </div>
+            {row.isActive ? "Active" : "Inactive"}
+          </span>
         </div>
-
-        <div className="flex items-center justify-end gap-3 border-t border-zinc-200 bg-zinc-50 px-6 py-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100"
-          >
-            Close
-          </button>
+        <div>
+          <div className="mb-1 text-xs font-medium text-zinc-500">Description</div>
+          <div className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-800">
+            {row.description}
+          </div>
         </div>
       </div>
-    </div>
+    </DrawerShell>
   );
 }
 
 // ─── Exported Action Buttons ───────────────────────────────────────────────────
 export function AddVideoAction({
   programId,
+  brandId,
   onSuccess,
 }: {
   programId: string;
+  brandId: string;
   onSuccess: () => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -366,6 +358,7 @@ export function AddVideoAction({
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
         programId={programId}
+        brandId={brandId}
         onSuccess={onSuccess}
       />
     </>
@@ -384,7 +377,7 @@ export function ViewVideoAction({ row }: { row: VideoTestimonyRow }) {
       >
         <PlayCircleIcon className="h-4 w-4" />
       </button>
-      <VideoViewModal isOpen={isOpen} onClose={() => setIsOpen(false)} row={row} />
+      <VideoViewDrawer isOpen={isOpen} onClose={() => setIsOpen(false)} row={row} />
     </>
   );
 }
