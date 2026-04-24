@@ -1,11 +1,16 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ProfileHeader, ProfileHeaderData } from "@/app/components/participants/ProfileHeader";
+import { ProfileHeader, type ProfileHeaderData } from "@/app/components/participants/ProfileHeader";
 import { ParticipantProfileTabs } from "@/app/components/participants/ParticipantProfileTabs";
 import { GenerateLoaButton } from "@/app/components/participants/GenerateLoaButton";
-import { PersonalDetails } from "@/app/components/participants/tabs/PersonalDetailsTab";
-import { ProfessionalProfile } from "@/app/components/participants/tabs/ProfessionalProfileTab";
-import { EntryInformation } from "@/app/components/participants/tabs/EntryInformationTab";
-import { Miscellaneous } from "@/app/components/participants/tabs/MiscellaneousTab";
+import type { PersonalDetails } from "@/app/components/participants/tabs/PersonalDetailsTab";
+import type { ProfessionalProfile } from "@/app/components/participants/tabs/ProfessionalProfileTab";
+import type { EntryInformation } from "@/app/components/participants/tabs/EntryInformationTab";
+import type { Miscellaneous } from "@/app/components/participants/tabs/MiscellaneousTab";
+import { listApplications, getApplication, type Application } from "@/src/shared/api-client";
 
 interface ParticipantData extends ProfileHeaderData {
   id: string;
@@ -15,72 +20,118 @@ interface ParticipantData extends ProfileHeaderData {
   misc: Miscellaneous;
 }
 
-const MOCK_PARTICIPANT: ParticipantData = {
-  id: "20099",
-  accountId: "73112691dc7bf42fe3",
-  name: "YAWSON SAMUEL",
-  avatarUrl: "",
-  email: "ahagpi2002@gmail.com",
-  phone: "+6182392830282",
-  location: "Sleman, Yogyakarta",
-  personal: {
-    fullName: "Aldi Subakti",
-    nickname: "Aldi",
-    gender: "Male",
-    birthDate: "12 December 1998",
-    nationality: "Indonesia",
-    originAddress: "Jl. Pahlawan No 1, Sleman, Yogyakarta",
-    currentAddress: "Jl. Pahlawan No 2, Sleman, Yogyakarta",
-    phone: "0823923903282",
-    emergencyPhone: "0892971287192",
-    contactRelation: "Father",
-    shirtSize: "XL",
-    diseaseHistory: "-",
-  },
-  professional: {
-    educationLevel: "Master's Degree",
-    institution: "University of Brawijaya",
-    major: "Information Systems",
-    organization: "BEM KM Universitas Brawijaya",
-    experience: [
-      { role: "Data Analyst", company: "Telkom" },
-      { role: "System Analyst Intern", company: "Data Academy" }
-    ],
-    achievements: [
-      "1st Place Winner, National Information Systems Competition",
-      "Finalist, National IT Business Case Competition",
-      "Certified IT Support Specialist"
-    ],
-    cvFileName: "CV_Aldi Subakti.pdf"
-  },
-  entry: {
-    category: "High School Innovators",
-    subtheme: "SDG 17 (Partnership for the Goals)",
-    source: "Friend Recommendation",
-    essayTitle: "Muslim Contributions to Justice",
-    essayContent: "Muslim Contributions to Justice, Inclusion, and Sustainability in a Complex World requires...",
-    keywords: ["User Experience", "User Interface", "Muslims", "Society", "Sustainability"],
-    reference: "Muslim Contributions to Justice"
-  },
-  misc: {
-    instagram: "https://instagram.com/yawonsml",
-    knowledgeSource: "Friend Recommendation",
-    sourceAccount: "Friend Recommendation",
-    twibbon: "https://instagram.com/yawonsml",
-    requirementLink: "https://requirementkys2026.com",
-    referralCode: "KYS7283913"
-  }
-};
+function mapToParticipantData(app: Application): ParticipantData {
+  const p = app.participant;
 
-export default async function ParticipantDetailPage({
-  params,
-}: {
-  params: Promise<{ programId: string; accountId: string }>;
-}) {
-  const { programId, accountId } = await params;
-  
-  // Simulasi fetch API
-  const participant = MOCK_PARTICIPANT;
+  const phone = [p?.phoneCountryCode, p?.phoneNumber].filter(Boolean).join(" ") || "—";
+  const location = [p?.originCity, p?.originCountry].filter(Boolean).join(", ") || "—";
+
+  const experiences: { role: string; company: string }[] = (() => {
+    try {
+      if (!app.experiences) return [];
+      const parsed = JSON.parse(app.experiences);
+      if (Array.isArray(parsed)) return parsed;
+      return [];
+    } catch {
+      return app.experiences
+        ? app.experiences.split("\n").filter(Boolean).map((l) => ({ role: l, company: "" }))
+        : [];
+    }
+  })();
+
+  const achievementsList: string[] = (() => {
+    try {
+      if (!app.achievements) return [];
+      const parsed = JSON.parse(app.achievements);
+      if (Array.isArray(parsed)) return parsed;
+      return [app.achievements];
+    } catch {
+      return app.achievements ? app.achievements.split("\n").filter(Boolean) : [];
+    }
+  })();
+
+  return {
+    id: app.id,
+    accountId: app.participantId,
+    name: p?.fullName ?? "—",
+    avatarUrl: p?.profilePictureUrl ?? "",
+    email: p?.email ?? "—",
+    phone,
+    location,
+    personal: {
+      fullName: p?.fullName ?? "—",
+      nickname: p?.nickName ?? "—",
+      gender: p?.gender ?? "—",
+      birthDate: p?.birthdate ? new Date(p.birthdate).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "—",
+      nationality: p?.nationality ?? "—",
+      originAddress: p?.originAddress ?? "—",
+      currentAddress: p?.currentAddress ?? "—",
+      phone,
+      emergencyPhone: [p?.emergencyContactCountryCode, p?.emergencyContactPhone].filter(Boolean).join(" ") || "—",
+      contactRelation: p?.emergencyContactRelation ?? "—",
+      shirtSize: p?.tshirtSize ?? "—",
+      diseaseHistory: p?.medicalConditions ?? "—",
+    },
+    professional: {
+      educationLevel: p?.educationLevel ?? "—",
+      institution: p?.institution ?? "—",
+      major: p?.major ?? "—",
+      organization: p?.organizations ?? "—",
+      experience: experiences,
+      achievements: achievementsList,
+      cvFileName: p?.resumeUrl ? p.resumeUrl.split("/").pop() ?? p.resumeUrl : "—",
+    },
+    entry: {
+      category: app.applicationCategory ?? "—",
+      subtheme: "—",
+      source: p?.knowledgeSource ?? "—",
+      essayTitle: "—",
+      essayContent: app.motivationLetter ?? "—",
+      keywords: [],
+      reference: "—",
+    },
+    misc: {
+      instagram: p?.instagramUsername ? `https://instagram.com/${p.instagramUsername.replace(/^@/, "")}` : "—",
+      knowledgeSource: p?.knowledgeSource ?? "—",
+      sourceAccount: "—",
+      twibbon: app.twibbonLink ?? "—",
+      requirementLink: "—",
+      referralCode: p?.referralCode ?? "—",
+    },
+  };
+}
+
+export default function ParticipantDetailPage() {
+  const params = useParams<{ programId: string; accountId: string }>();
+  const { programId, accountId } = params;
+
+  const [participant, setParticipant] = useState<ParticipantData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!programId || !accountId) return;
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const list = await listApplications({ programId, participantId: accountId, limit: 1 });
+        const apps = list.data;
+        if (!apps.length) throw new Error("No application found for this participant in this program.");
+        const full = await getApplication(apps[0].id);
+        if (!cancelled) setParticipant(mapToParticipantData(full));
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load participant.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
+  }, [programId, accountId]);
 
   return (
     <div className="mx-auto w-full space-y-6">
@@ -90,12 +141,22 @@ export default async function ParticipantDetailPage({
           <span>&gt;</span>
           <span className="font-semibold text-blue-600">Detail Participant</span>
         </div>
-        <GenerateLoaButton programId={programId} participantId={accountId} />
+        {participant && <GenerateLoaButton programId={programId} participantId={accountId} />}
       </div>
 
       <div className="w-full min-h-[600px] rounded-xl border border-zinc-200 bg-white p-8 shadow-sm">
-        <ProfileHeader data={participant} />
-        <ParticipantProfileTabs data={participant} />
+        {loading && (
+          <div className="flex items-center justify-center py-24 text-sm text-zinc-400">Loading participant…</div>
+        )}
+        {error && (
+          <div className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+        )}
+        {participant && (
+          <>
+            <ProfileHeader data={participant} />
+            <ParticipantProfileTabs data={participant} />
+          </>
+        )}
       </div>
     </div>
   );

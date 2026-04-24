@@ -51,6 +51,66 @@ export class GetApplicationHandler {
 
     const dto = this.applicationMapper.toDto(application, query.includeRelations);
 
+    if (query.includeRelations) {
+      try {
+        const participant = await this.prisma.participant.findUnique({
+          where: { id: application.participantId },
+          select: {
+            id: true, fullName: true, nickName: true,
+            birthdate: true, gender: true, nationality: true,
+            phoneCountryCode: true, phoneNumber: true,
+            originCity: true, originCountry: true, originAddress: true,
+            currentCity: true, currentCountry: true, currentAddress: true,
+            emergencyContactPhone: true, emergencyContactCountryCode: true,
+            emergencyContactRelation: true,
+            tshirtSize: true, medicalConditions: true,
+            educationLevel: true, institution: true, major: true, organizations: true,
+            instagramUsername: true, linkedinUrl: true, portfolioUrl: true,
+            knowledgeSource: true, referralCode: true,
+            profilePictureUrl: true, resumeUrl: true,
+            user: { select: { email: true } },
+          },
+        });
+        if (participant) {
+          dto.participant = {
+            id: participant.id,
+            fullName: participant.fullName,
+            nickName: participant.nickName,
+            email: participant.user?.email ?? '',
+            phoneCountryCode: participant.phoneCountryCode,
+            phoneNumber: participant.phoneNumber,
+            birthdate: participant.birthdate,
+            gender: participant.gender,
+            nationality: participant.nationality,
+            originCity: participant.originCity,
+            originCountry: participant.originCountry,
+            originAddress: participant.originAddress,
+            currentCity: participant.currentCity,
+            currentCountry: participant.currentCountry,
+            currentAddress: participant.currentAddress,
+            emergencyContactPhone: participant.emergencyContactPhone,
+            emergencyContactCountryCode: participant.emergencyContactCountryCode,
+            emergencyContactRelation: participant.emergencyContactRelation,
+            tshirtSize: participant.tshirtSize,
+            medicalConditions: participant.medicalConditions,
+            educationLevel: participant.educationLevel,
+            institution: participant.institution,
+            major: participant.major,
+            organizations: participant.organizations,
+            instagramUsername: participant.instagramUsername,
+            linkedinUrl: participant.linkedinUrl,
+            portfolioUrl: participant.portfolioUrl,
+            knowledgeSource: participant.knowledgeSource,
+            referralCode: participant.referralCode,
+            profilePictureUrl: participant.profilePictureUrl,
+            resumeUrl: participant.resumeUrl,
+          };
+        }
+      } catch (e) {
+        console.error('Failed to fetch participant for application', e);
+      }
+    }
+
     try {
         const payments = await this.paymentClient.getIntentsByReference({
             reference_type: 'application',

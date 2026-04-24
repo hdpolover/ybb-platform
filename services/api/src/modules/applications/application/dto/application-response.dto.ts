@@ -51,8 +51,35 @@ export class ApplicationResponseDto {
   participant?: {
     id: string;
     fullName: string;
+    nickName?: string | null;
     email: string;
-    phoneNumber?: string;
+    phoneCountryCode?: string | null;
+    phoneNumber?: string | null;
+    birthdate?: Date | null;
+    gender?: string | null;
+    nationality?: string | null;
+    originCity?: string | null;
+    originCountry?: string | null;
+    originAddress?: string | null;
+    currentCity?: string | null;
+    currentCountry?: string | null;
+    currentAddress?: string | null;
+    emergencyContactPhone?: string | null;
+    emergencyContactCountryCode?: string | null;
+    emergencyContactRelation?: string | null;
+    tshirtSize?: string | null;
+    medicalConditions?: string | null;
+    educationLevel?: string | null;
+    institution?: string | null;
+    major?: string | null;
+    organizations?: string | null;
+    instagramUsername?: string | null;
+    linkedinUrl?: string | null;
+    portfolioUrl?: string | null;
+    knowledgeSource?: string | null;
+    referralCode?: string | null;
+    profilePictureUrl?: string | null;
+    resumeUrl?: string | null;
   };
   program?: {
     id: string;

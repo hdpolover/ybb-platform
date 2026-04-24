@@ -264,12 +264,13 @@ export type ProgramTimeline = {
 export type ProgramSchedule = {
   id: string;
   programId: string;
-  title: string;
+  day: string;
+  activity: string;
   description: string | null;
-  startTime: string;
+  startTime: string | null;
   endTime: string | null;
   location: string | null;
-  speakerId: string | null;
+  speaker: string | null;
   order: number;
   isActive: boolean;
 };
@@ -329,13 +330,45 @@ export type Application = {
   scoreStatus: string | null;
   registrationPaymentStatus: string;
   programPaymentStatus: string;
+  motivationLetter?: string;
+  achievements?: string;
+  experiences?: string;
+  twibbonLink?: string;
+  referralCode?: string;
   createdAt: string;
   updatedAt: string;
   participant?: {
     id: string;
     fullName: string;
-    user?: { email: string };
-    originCountry: string | null;
+    nickName?: string | null;
+    email: string;
+    phoneCountryCode?: string | null;
+    phoneNumber?: string | null;
+    birthdate?: string | null;
+    gender?: string | null;
+    nationality?: string | null;
+    originCity?: string | null;
+    originCountry?: string | null;
+    originAddress?: string | null;
+    currentCity?: string | null;
+    currentCountry?: string | null;
+    currentAddress?: string | null;
+    emergencyContactPhone?: string | null;
+    emergencyContactCountryCode?: string | null;
+    emergencyContactRelation?: string | null;
+    tshirtSize?: string | null;
+    medicalConditions?: string | null;
+    educationLevel?: string | null;
+    institution?: string | null;
+    major?: string | null;
+    organizations?: string | null;
+    instagramUsername?: string | null;
+    linkedinUrl?: string | null;
+    portfolioUrl?: string | null;
+    knowledgeSource?: string | null;
+    referralCode?: string | null;
+    profilePictureUrl?: string | null;
+    resumeUrl?: string | null;
   };
   program?: { id: string; name: string };
 };
@@ -774,7 +807,16 @@ export function listProgramSchedules(programId: string): Promise<ProgramSchedule
 
 export function createProgramSchedule(
   programId: string,
-  input: { title: string; description?: string; startTime: string; endTime?: string; location?: string; order?: number },
+  input: {
+    day: string;
+    activity: string;
+    description?: string;
+    startTime?: string;
+    endTime?: string;
+    location?: string;
+    speaker?: string;
+    order?: number;
+  },
 ): Promise<ProgramSchedule> {
   return request<ProgramSchedule>(`/programs/${programId}/schedules`, {
     method: "POST",
@@ -784,7 +826,17 @@ export function createProgramSchedule(
 
 export function updateProgramSchedule(
   id: string,
-  input: Partial<ProgramSchedule>,
+  input: Partial<{
+    day: string;
+    activity: string;
+    description: string;
+    startTime: string;
+    endTime: string;
+    location: string;
+    speaker: string;
+    order: number;
+    isActive: boolean;
+  }>,
 ): Promise<ProgramSchedule> {
   return request<ProgramSchedule>(`/programs/schedules/${id}`, {
     method: "PUT",
@@ -1040,7 +1092,7 @@ export function deleteGatewayConfig(id: string): Promise<void> {
 
 // ─── Applications / Submissions / Participants ────────────────────────────────
 
-export function listApplications(params?: {
+export async function listApplications(params?: {
   programId?: string;
   participantId?: string;
   status?: string;
@@ -1057,7 +1109,8 @@ export function listApplications(params?: {
   if (params?.limit !== undefined) q.set("limit", String(params.limit));
   if (params?.offset !== undefined) q.set("offset", String(params.offset));
   if (params?.brandId) q.set("brandId", params.brandId);
-  return request<{ data: Application[]; total: number }>(`/applications?${q}`);
+  const raw = await request<{ applications?: Application[]; data?: Application[]; total: number }>(`/applications?${q}`);
+  return { data: raw.applications ?? raw.data ?? [], total: raw.total };
 }
 
 export function getApplication(id: string): Promise<Application> {
