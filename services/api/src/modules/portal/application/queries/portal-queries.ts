@@ -50,6 +50,14 @@ export class ConfirmPortalPaymentCommand {
   ) { }
 }
 
+export class EnsurePortalPaymentInvoiceCommand {
+  constructor(
+    public readonly userId: string,
+    public readonly pricingTierId: string,
+    public readonly programId?: string,
+  ) { }
+}
+
 // Documents
 export class GetPortalDocumentsQuery {
   constructor(public readonly userId: string) { }

@@ -26,6 +26,7 @@ import {
   Mic,
   Award,
   HelpCircle,
+  BookOpen,
   ShieldCheck,
   Shield,
   Menu,
@@ -180,6 +181,7 @@ export const programNavSections: NavSection[] = [
         children: [
           { id: "documents-program-documents", label: "Program Documents", href: "documents/program-documents", icon: FileText },
           { id: "documents-certificates", label: "Certificates", href: "documents/certificates", icon: FileBadge },
+          { id: "documents-program-guidelines", label: "Guidelines", href: "documents/program-guidelines", icon: BookOpen },
         ],
       },
       { id: "announcements", label: "Announcements", href: "announcements", icon: Bell },

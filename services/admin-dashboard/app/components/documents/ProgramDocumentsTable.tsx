@@ -1,8 +1,15 @@
 "use client";
 
 import React, { useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { DocumentTextIcon, EyeIcon, PencilSquareIcon, XMarkIcon } from "@heroicons/react/24/solid";
+import { DocumentTextIcon, EyeIcon, PencilSquareIcon } from "@heroicons/react/24/solid";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/src/ui/sheet";
 
 interface ProgramDocumentRow {
   id: number;
@@ -56,11 +63,11 @@ const mockProgramDocuments: ProgramDocumentRow[] = [
   },
 ];
 
+const inputCls =
+  "block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
+
 export function ProgramDocumentsTable() {
   const rows = mockProgramDocuments;
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const pathname = usePathname();
 
   const [page, setPage] = useState(1);
   const pageSize = 5;
@@ -70,7 +77,7 @@ export function ProgramDocumentsTable() {
   const endIndex = Math.min(startIndex + pageSize, rows.length);
   const visibleRows = rows.slice(startIndex, endIndex);
 
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   return (
     <section className="relative rounded-md border border-zinc-200 bg-white px-4 py-3 text-xs text-zinc-700 shadow-sm md:text-sm">
@@ -79,7 +86,7 @@ export function ProgramDocumentsTable() {
           <button
             type="button"
             className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-blue-600"
-            onClick={() => setShowAddModal(true)}
+            onClick={() => setSheetOpen(true)}
           >
             <DocumentTextIcon className="h-3.5 w-3.5" />
             <span>Add Document</span>
@@ -129,7 +136,7 @@ export function ProgramDocumentsTable() {
                     <div className="space-y-0.5">
                       <div className="font-semibold text-zinc-900">{row.name}</div>
                       {row.description && (
-                        <div className="text-[11px] text-zinc-500 line-clamp-2">{row.description}</div>
+                        <div className="line-clamp-2 text-[11px] text-zinc-500">{row.description}</div>
                       )}
                     </div>
                   </td>
@@ -149,20 +156,14 @@ export function ProgramDocumentsTable() {
                       <button
                         type="button"
                         className="flex h-7 w-7 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50"
-                        onClick={() => {
-                          // TODO: Nanti dibikin buka preview / detail dokumen
-                          console.info("View document clicked", row.id);
-                        }}
+                        onClick={() => console.info("View document clicked", row.id)}
                       >
                         <EyeIcon className="h-4 w-4" />
                       </button>
                       <button
                         type="button"
                         className="flex h-7 w-7 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50"
-                        onClick={() => {
-                          // TODO: Nanti disambungin ke fitur edit dokumen beneran
-                          console.info("Edit document clicked", row.id);
-                        }}
+                        onClick={() => console.info("Edit document clicked", row.id)}
                       >
                         <PencilSquareIcon className="h-4 w-4" />
                       </button>
@@ -199,16 +200,16 @@ export function ProgramDocumentsTable() {
         </div>
       </div>
 
-      {showAddModal && <AddDocumentModal onClose={() => setShowAddModal(false)} />}
+      <AddDocumentSheet open={sheetOpen} onClose={() => setSheetOpen(false)} />
     </section>
   );
 }
 
 function ProgramDocumentStatusBadge({ status }: { status: ProgramDocumentRow["status"] }) {
-  let className = "bg-zinc-100 text-zinc-700";
-
-  if (status === "Active") className = "bg-emerald-100 text-emerald-700";
-  else if (status === "Inactive") className = "bg-zinc-100 text-zinc-600";
+  const className =
+    status === "Active"
+      ? "bg-emerald-100 text-emerald-700"
+      : "bg-zinc-100 text-zinc-600";
 
   return (
     <span
@@ -219,102 +220,100 @@ function ProgramDocumentStatusBadge({ status }: { status: ProgramDocumentRow["st
   );
 }
 
-function AddDocumentModal({ onClose }: { onClose: () => void }) {
+function AddDocumentSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/40 px-4">
-      <div className="w-full max-w-lg rounded-md border border-zinc-200 bg-white p-4 text-sm shadow-lg">
-        <div className="mb-3 flex items-center justify-between">
-          <div>
-            <h2 className="text-base font-semibold text-zinc-900">Add Program Document</h2>
-            <p className="text-[11px] text-zinc-500">
-              Configure a new document template that can be used across participants in this program.
-            </p>
-          </div>
-          <button
-            type="button"
-            className="flex h-7 w-7 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600"
-            onClick={onClose}
-          >
-            <XMarkIcon className="h-4 w-4" />
-          </button>
-        </div>
+    <Sheet open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <SheetContent side="right" className="flex w-full max-w-lg flex-col p-0 sm:max-w-lg">
+        <form
+          className="flex h-full flex-col"
+          onSubmit={(e) => {
+            e.preventDefault();
+            // TODO: integrate save document
+            console.info("Save document clicked");
+            onClose();
+          }}
+        >
+          <SheetHeader className="border-b border-zinc-200 px-6 py-5">
+            <SheetTitle>Add Program Document</SheetTitle>
+            <SheetDescription>
+              Configure a new document template used across participants in this program.
+            </SheetDescription>
+          </SheetHeader>
 
-        <div className="space-y-3 text-xs">
-          <div>
-            <label className="mb-1 block text-[11px] font-medium text-zinc-700">
-              Document Name<span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="text"
-              className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              placeholder="e.g. Letter of Acceptance - Batch 2"
-            />
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
             <div>
               <label className="mb-1 block text-[11px] font-medium text-zinc-700">
-                Document Type<span className="text-rose-500">*</span>
+                Document Name <span className="text-rose-500">*</span>
               </label>
-              <select className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
-                <option>Letter of Acceptance (LOA)</option>
-                <option>Agreement Letter</option>
-                <option>Complementary Document</option>
-              </select>
+              <input
+                required
+                type="text"
+                className={inputCls}
+                placeholder="e.g. Letter of Acceptance - Batch 2"
+              />
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-zinc-700">
+                  Document Type <span className="text-rose-500">*</span>
+                </label>
+                <select required className={inputCls}>
+                  <option value="">Select type…</option>
+                  <option>Letter of Acceptance (LOA)</option>
+                  <option>Agreement Letter</option>
+                  <option>Complementary Document</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-zinc-700">
+                  Visibility
+                </label>
+                <select className={inputCls}>
+                  <option>Public</option>
+                  <option>Private</option>
+                </select>
+              </div>
             </div>
 
             <div>
-              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Document Visibility</label>
-              <select className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
-                <option>Public</option>
-                <option>Private</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="md:col-span-2">
-              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Description</label>
+              <label className="mb-1 block text-[11px] font-medium text-zinc-700">
+                Description
+              </label>
               <textarea
-                rows={3}
-                className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                rows={4}
+                className={`${inputCls} resize-none`}
                 placeholder="Short description of how and when this document is used."
               />
             </div>
-          </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
             <div>
               <label className="mb-1 block text-[11px] font-medium text-zinc-700">Status</label>
-              <select className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+              <select className={inputCls}>
                 <option>Active</option>
                 <option>Inactive</option>
               </select>
             </div>
           </div>
-        </div>
 
-        <div className="mt-4 flex items-center justify-end gap-2 text-xs">
-          <button
-            type="button"
-            className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 font-medium text-zinc-700 shadow-sm hover:bg-zinc-50"
-            onClick={onClose}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="rounded-md border border-blue-500 bg-blue-500 px-3 py-1.5 font-semibold text-white shadow-sm hover:bg-blue-600"
-            onClick={() => {
-              // TODO: integrate save document
-              console.info("Save document clicked");
-              onClose();
-            }}
-          >
-            Save Document
-          </button>
-        </div>
-      </div>
-    </div>
+          <SheetFooter className="border-t border-zinc-200 px-6 py-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="rounded-md bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600"
+            >
+              Save Document
+            </button>
+          </SheetFooter>
+        </form>
+      </SheetContent>
+    </Sheet>
   );
 }

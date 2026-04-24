@@ -229,3 +229,21 @@ export class ConfirmPortalPaymentResponseDto {
     @ApiProperty()
     message: string;
 }
+
+export class EnsurePortalPaymentInvoiceDto {
+    @ApiPropertyOptional({ description: 'Program ID to scope the participant application lookup' })
+    @IsString()
+    @IsOptional()
+    program_id?: string;
+}
+
+export class EnsurePortalPaymentInvoiceResponseDto {
+    @ApiProperty()
+    invoice_id: string;
+
+    @ApiProperty({ enum: ['existing', 'created'] })
+    source: 'existing' | 'created';
+
+    @ApiProperty()
+    message: string;
+}

@@ -11,6 +11,7 @@ import {
     GetPortalPaymentDetailQuery,
     GetPortalDocumentsQuery,
     ConfirmPortalPaymentCommand,
+    EnsurePortalPaymentInvoiceCommand,
 } from '../application/queries/portal-queries';
 import { PortalDashboardResponseDto } from './dto/portal-dashboard.dto';
 import { PortalSubmissionResponseDto } from './dto/portal-submission.dto';
@@ -20,9 +21,12 @@ import {
     ConfirmPortalPaymentDto,
     ConfirmPortalPaymentResponseDto,
     PortalPaymentMethodDto,
+    EnsurePortalPaymentInvoiceDto,
+    EnsurePortalPaymentInvoiceResponseDto,
 } from './dto/portal-payment.dto';
 import { PortalDocumentResponseDto } from './dto/portal-document.dto';
 import { ConfirmPortalPaymentHandler } from '../application/commands/handlers/confirm-portal-payment.handler';
+import { EnsurePortalPaymentInvoiceHandler } from '../application/commands/handlers/ensure-portal-payment-invoice.handler';
 import { PaymentServiceHttpClient } from '../../payments/infrastructure/services/payment-service-http.client';
 import type { AdminPaymentMethod } from '../../payments/common/proto/payment.interface';
 
@@ -34,6 +38,7 @@ export class PortalController {
     constructor(
         private readonly queryBus: QueryBus,
         private readonly confirmPortalPaymentHandler: ConfirmPortalPaymentHandler,
+        private readonly ensurePortalPaymentInvoiceHandler: EnsurePortalPaymentInvoiceHandler,
         private readonly paymentServiceClient: PaymentServiceHttpClient,
         private readonly configService: ConfigService,
     ) {}
@@ -107,6 +112,22 @@ export class PortalController {
                     gatewayToken: dto.gateway_token,
                 },
             ),
+        );
+    }
+
+    @Post('payments/tiers/:tierId/ensure-invoice')
+    @ApiOperation({ summary: 'Ensure invoice exists for selected program payment option' })
+    @ApiResponse({ status: 200, type: EnsurePortalPaymentInvoiceResponseDto })
+    async ensurePaymentInvoice(
+        @Param('tierId') tierId: string,
+        @Body() dto: EnsurePortalPaymentInvoiceDto,
+        @CurrentUser() user: CurrentUserData,
+    ): Promise<EnsurePortalPaymentInvoiceResponseDto> {
+        const userId = user.userId;
+        if (!userId) throw new UnauthorizedException();
+
+        return this.ensurePortalPaymentInvoiceHandler.execute(
+            new EnsurePortalPaymentInvoiceCommand(userId, tierId, dto.program_id),
         );
     }
 

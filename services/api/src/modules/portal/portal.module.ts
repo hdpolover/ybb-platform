@@ -12,6 +12,7 @@ import { GetPortalPaymentDetailHandler } from './application/queries/handlers/ge
 import { GetPortalDocumentsHandler } from './application/queries/handlers/get-portal-documents.handler';
 import { PortalCacheService } from './application/services/portal-cache.service';
 import { ConfirmPortalPaymentHandler } from './application/commands/handlers/confirm-portal-payment.handler';
+import { EnsurePortalPaymentInvoiceHandler } from './application/commands/handlers/ensure-portal-payment-invoice.handler';
 
 // New — Submissions
 import { PortalSubmissionsController } from './presentation/portal-submissions.controller';
@@ -47,6 +48,7 @@ import { DownloadCertificateHandler } from './application/commands/handlers/down
         PortalSubmitApplicationHandler,
         DownloadCertificateHandler,
         ConfirmPortalPaymentHandler,
+        EnsurePortalPaymentInvoiceHandler,
     ],
 })
 export class PortalModule { }
