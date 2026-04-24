@@ -22,6 +22,7 @@ import {
     CreateProgramEssayCommand, UpdateProgramEssayCommand, DeleteProgramEssayCommand,
     CreateProgramParticipationCategoryCommand, UpdateProgramParticipationCategoryCommand, DeleteProgramParticipationCategoryCommand,
     CreateProgramSubthemeCommand, UpdateProgramSubthemeCommand, DeleteProgramSubthemeCommand,
+    CreateDocumentTemplateCommand, UpdateDocumentTemplateCommand, DeleteDocumentTemplateCommand,
 } from '../program-content.commands';
 
 // ─── Shared cache-invalidation helpers ───────────────────────────────────────
@@ -967,6 +968,126 @@ export class DeleteProgramSubthemeHandler implements ICommandHandler<DeleteProgr
     constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
     async execute(command: DeleteProgramSubthemeCommand) {
         return this.repository.deleteSubtheme(command.id);
+    }
+}
+
+// ─── Document Template Handlers ───────────────────────────────────────────────
+
+@CommandHandler(CreateDocumentTemplateCommand)
+export class CreateDocumentTemplateHandler implements ICommandHandler<CreateDocumentTemplateCommand> {
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly storageService: StorageService,
+        private readonly prisma: PrismaService,
+        private readonly cacheService: CacheService,
+    ) {}
+
+    async execute(command: CreateDocumentTemplateCommand) {
+        let templateUrl = command.dto.templateUrl;
+        let fileSize: number | undefined = command.dto.fileSize;
+        let fileType = command.dto.fileType;
+
+        if (command.file) {
+            const program = await this.prisma.program.findUnique({
+                where: { id: command.dto.programId },
+            });
+            if (!program) throw new NotFoundException('Program not found');
+
+            const result = await this.storageService.uploadFile(
+                command.file,
+                command.userId,
+                program.brandId,
+                'documents',
+                program.id,
+            );
+            templateUrl = result.url;
+            fileSize = command.file.size;
+            fileType = command.file.mimetype;
+        }
+
+        const data = {
+            programId: command.dto.programId,
+            name: command.dto.name,
+            type: command.dto.type,
+            description: command.dto.description,
+            templateUrl,
+            layoutConfig: { fileSize, fileType },
+            audienceType: command.dto.audienceType ?? 'all_registered',
+            audienceConfig: command.dto.audienceConfig ?? {},
+            order: command.dto.order ?? 0,
+        };
+
+        const result = await this.repository.createDocumentTemplate(data);
+        await invalidateLandingCacheByProgramId(command.dto.programId, this.prisma, this.cacheService);
+        return result;
+    }
+}
+
+@CommandHandler(UpdateDocumentTemplateCommand)
+export class UpdateDocumentTemplateHandler implements ICommandHandler<UpdateDocumentTemplateCommand> {
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly storageService: StorageService,
+        private readonly prisma: PrismaService,
+        private readonly cacheService: CacheService,
+    ) {}
+
+    async execute(command: UpdateDocumentTemplateCommand) {
+        const template = await this.repository.findDocumentTemplateById(command.id);
+        if (!template) throw new NotFoundException('Document template not found');
+
+        let templateUrl = command.dto.templateUrl;
+        let fileSize = command.dto.fileSize;
+        let fileType = command.dto.fileType;
+
+        if (command.file) {
+            const program = await this.prisma.program.findUnique({
+                where: { id: template.programId },
+            });
+            if (!program) throw new NotFoundException('Program not found');
+
+            const result = await this.storageService.uploadFile(
+                command.file,
+                command.userId,
+                program.brandId,
+                'documents',
+                program.id,
+            );
+            templateUrl = result.url;
+            fileSize = command.file.size;
+            fileType = command.file.mimetype;
+        }
+
+        const data: Record<string, unknown> = {
+            ...command.dto,
+            ...(templateUrl ? { templateUrl } : {}),
+            ...(fileSize || fileType
+                ? { layoutConfig: { fileSize, fileType } }
+                : {}),
+        };
+        // Remove file-specific fields from DTO spread
+        delete data.fileSize;
+        delete data.fileType;
+
+        const result = await this.repository.updateDocumentTemplate(command.id, data);
+        await invalidateLandingCacheByProgramId(template.programId, this.prisma, this.cacheService);
+        return result;
+    }
+}
+
+@CommandHandler(DeleteDocumentTemplateCommand)
+export class DeleteDocumentTemplateHandler implements ICommandHandler<DeleteDocumentTemplateCommand> {
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly prisma: PrismaService,
+        private readonly cacheService: CacheService,
+    ) {}
+
+    async execute(command: DeleteDocumentTemplateCommand) {
+        const template = await this.repository.findDocumentTemplateById(command.id);
+        if (!template) throw new NotFoundException('Document template not found');
+        await this.repository.deleteDocumentTemplate(command.id);
+        await invalidateLandingCacheByProgramId(template.programId, this.prisma, this.cacheService);
     }
 }
 
