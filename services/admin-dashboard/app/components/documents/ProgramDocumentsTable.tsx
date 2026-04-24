@@ -450,7 +450,7 @@ function DocumentSheet({
                   </label>
                   <input type="text" value={statuses}
                     onChange={(e) => setStatuses(e.target.value)}
-                    placeholder="approved, selected" className={inputCls} />
+                    placeholder="accepted, waitlisted" className={inputCls} />
                 </div>
               )}
             </div>
