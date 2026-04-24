@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { LoginHandler } from './login.handler';
 import { LoginCommand } from '../login.command';
@@ -48,6 +49,10 @@ describe('LoginHandler', () => {
 
   const mockJwtService = {
     sign: jest.fn().mockReturnValue('mock-token'),
+  };
+
+  const mockConfigService = {
+    get: jest.fn((key: string, fallback?: string) => fallback),
   };
 
   const mockAuthLoggingService = {
@@ -107,6 +112,7 @@ describe('LoginHandler', () => {
         LoginHandler,
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: JwtService, useValue: mockJwtService },
+        { provide: ConfigService, useValue: mockConfigService },
         { provide: AuthLoggingService, useValue: mockAuthLoggingService },
         { provide: GeoIpService, useValue: mockGeoIpService },
         { provide: MetricsService, useValue: mockMetricsService },
@@ -330,5 +336,43 @@ describe('LoginHandler', () => {
     );
 
     await expect(handler.execute(command)).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('rejects unverified user when selected program requires verification even if brand does not', async () => {
+    mockPrismaService.user.findUnique.mockResolvedValueOnce({
+      ...brandOneUser,
+      emailVerified: false,
+      brand: {
+        ...brandOneUser.brand,
+        requireEmailVerification: false,
+      },
+    });
+
+    mockPrismaService.program.findUnique.mockResolvedValueOnce({
+      id: 'program-1',
+      brandId: 'brand-1',
+      requireEmailVerification: true,
+    });
+
+    const command = new LoginCommand(
+      'same@example.com',
+      'password123',
+      '127.0.0.1',
+      'Mozilla/5.0',
+      'brand-1',
+      'program-1',
+    );
+
+    await expect(handler.execute(command)).rejects.toThrow(
+      'Email not verified. Please verify your email before logging in.',
+    );
+
+    expect(mockPrismaService.program.findUnique).toHaveBeenCalledWith({
+      where: { id: 'program-1' },
+      select: {
+        brandId: true,
+        requireEmailVerification: true,
+      },
+    });
   });
 });

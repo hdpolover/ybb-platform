@@ -10,6 +10,7 @@ import {
 } from "@heroicons/react/24/solid";
 import { buildApiUrl, getAccessToken, readErrorMessage, readJsonData } from "@/app/components/submissionsMasterData/api";
 import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
+import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
 
 const INPUT_CLS =
   "block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
@@ -61,6 +62,37 @@ function toCategoryState(category?: ParticipationCategoryRow): CategoryModalStat
     order: String(category.order ?? 0),
     status: category.status,
   };
+}
+
+function normalizeRichText(value: string): string | undefined {
+  const html = value.trim();
+  if (!html) {
+    return undefined;
+  }
+
+  const plain = html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, "")
+    .trim();
+
+  return plain ? html : undefined;
+}
+
+function toPlainPreview(value?: string): string {
+  if (!value) {
+    return "-";
+  }
+
+  const text = value
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return text || "-";
 }
 
 function CategoryModal({
@@ -122,30 +154,30 @@ function CategoryModal({
       </div>
       <div>
         <label className="mb-1.5 block text-xs font-medium text-zinc-500">Description</label>
-        <textarea
-          rows={3}
-          value={formState.description}
-          onChange={(event) => onChange({ description: event.target.value })}
-          className={INPUT_CLS}
+        <RichTextEditor
+          content={formState.description}
+          onChange={(html) => onChange({ description: html })}
+          placeholder="Describe this participation category..."
+          className="[&_.ProseMirror]:min-h-[140px]"
         />
       </div>
       <div className="grid gap-5 md:grid-cols-2">
         <div>
           <label className="mb-1.5 block text-xs font-medium text-zinc-500">Benefits</label>
-          <textarea
-            rows={3}
-            value={formState.benefits}
-            onChange={(event) => onChange({ benefits: event.target.value })}
-            className={INPUT_CLS}
+          <RichTextEditor
+            content={formState.benefits}
+            onChange={(html) => onChange({ benefits: html })}
+            placeholder="Highlight category benefits..."
+            className="[&_.ProseMirror]:min-h-[140px]"
           />
         </div>
         <div>
           <label className="mb-1.5 block text-xs font-medium text-zinc-500">Eligibility</label>
-          <textarea
-            rows={3}
-            value={formState.eligibility}
-            onChange={(event) => onChange({ eligibility: event.target.value })}
-            className={INPUT_CLS}
+          <RichTextEditor
+            content={formState.eligibility}
+            onChange={(html) => onChange({ eligibility: html })}
+            placeholder="Define eligibility criteria..."
+            className="[&_.ProseMirror]:min-h-[140px]"
           />
         </div>
       </div>
@@ -272,9 +304,9 @@ export function ParticipationCategoriesTable({ programId }: { programId: string 
     const isEditing = Boolean(formState.id);
     const payload = {
       name: formState.name.trim(),
-      description: formState.description.trim() || undefined,
-      benefits: formState.benefits.trim() || undefined,
-      eligibility: formState.eligibility.trim() || undefined,
+      description: normalizeRichText(formState.description),
+      benefits: normalizeRichText(formState.benefits),
+      eligibility: normalizeRichText(formState.eligibility),
       order,
       ...(isEditing ? { isActive: formState.status === "Active" } : { programId, isActive: formState.status === "Active" }),
     };
@@ -401,11 +433,11 @@ export function ParticipationCategoriesTable({ programId }: { programId: string 
                   <tr key={row.id} className="transition-colors hover:bg-zinc-50/50">
                     <td className="px-6 py-4 align-top text-xs font-medium text-zinc-500">{index + 1}</td>
                     <td className="px-6 py-4 align-top font-semibold text-zinc-900">{row.name}</td>
-                    <td className="px-6 py-4 align-top text-zinc-600">{row.description || "-"}</td>
+                    <td className="px-6 py-4 align-top text-zinc-600">{toPlainPreview(row.description)}</td>
                     <td className="px-6 py-4 align-top text-zinc-600">
                       <div className="space-y-1 text-xs">
-                        <div><span className="font-semibold text-zinc-700">Benefits:</span> {row.benefits || "-"}</div>
-                        <div><span className="font-semibold text-zinc-700">Eligibility:</span> {row.eligibility || "-"}</div>
+                        <div><span className="font-semibold text-zinc-700">Benefits:</span> {toPlainPreview(row.benefits)}</div>
+                        <div><span className="font-semibold text-zinc-700">Eligibility:</span> {toPlainPreview(row.eligibility)}</div>
                       </div>
                     </td>
                     <td className="px-6 py-4 align-top text-zinc-600">{row.order}</td>

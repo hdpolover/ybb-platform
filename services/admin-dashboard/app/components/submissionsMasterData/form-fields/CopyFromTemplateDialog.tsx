@@ -35,27 +35,30 @@ export function CopyFromTemplateDialog({
 }: CopyFromTemplateDialogProps) {
   const [templates, setTemplates] = useState<FormTemplateSummary[]>([]);
   const [loadingList, setLoadingList] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<FormTemplateDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [mode, setMode] = useState<"append" | "replace">("append");
   const [confirmText, setConfirmText] = useState("");
   const [applying, setApplying] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [applyError, setApplyError] = useState<string | null>(null);
 
   // Load template list when the dialog opens
   useEffect(() => {
     if (!open) return;
     setSelectedId(null);
     setDetail(null);
+    setTemplates([]);
     setMode("append");
     setConfirmText("");
-    setError(null);
+    setListError(null);
+    setApplyError(null);
     setLoadingList(true);
     fetchFormTemplates()
       .then((rows) => setTemplates(rows))
       .catch((err) =>
-        setError(err instanceof Error ? err.message : "Failed to load templates"),
+        setListError(err instanceof Error ? err.message : "Failed to load templates"),
       )
       .finally(() => setLoadingList(false));
   }, [open]);
@@ -67,12 +70,9 @@ export function CopyFromTemplateDialog({
       return;
     }
     setLoadingDetail(true);
-    setError(null);
     fetchFormTemplateDetail(selectedId)
       .then(setDetail)
-      .catch((err) =>
-        setError(err instanceof Error ? err.message : "Failed to load template detail"),
-      )
+      .catch(() => setDetail(null))
       .finally(() => setLoadingDetail(false));
   }, [selectedId]);
 
@@ -84,7 +84,7 @@ export function CopyFromTemplateDialog({
   async function handleApply() {
     if (!selectedId) return;
     setApplying(true);
-    setError(null);
+    setApplyError(null);
     try {
       const result = await applyTemplateToProgram(programId, selectedId, mode);
       const skippedCopy =
@@ -103,7 +103,7 @@ export function CopyFromTemplateDialog({
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to apply template.";
-      setError(message);
+      setApplyError(message);
       toast.error(message);
     } finally {
       setApplying(false);
@@ -124,9 +124,9 @@ export function CopyFromTemplateDialog({
         </SheetHeader>
 
         <div className="space-y-5 px-6 py-6">
-          {error && (
+          {applyError && (
             <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-              {error}
+              {applyError}
             </div>
           )}
 
@@ -138,13 +138,16 @@ export function CopyFromTemplateDialog({
             {loadingList && (
               <p className="text-xs text-zinc-500">Loading templates…</p>
             )}
-            {!loadingList && templates.length === 0 && (
+            {!loadingList && listError && (
+              <p className="text-sm text-rose-600">{listError}</p>
+            )}
+            {!loadingList && !listError && templates.length === 0 && (
               <p className="text-sm text-zinc-500">
                 No templates available yet.
               </p>
             )}
             <div className="space-y-2">
-              {templates.map((t) => {
+              {!loadingList && templates.map((t) => {
                 const active = selectedId === t.id;
                 return (
                   <button

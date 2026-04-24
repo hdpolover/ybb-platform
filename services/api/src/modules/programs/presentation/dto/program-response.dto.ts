@@ -47,6 +47,15 @@ export class ProgramResponseDto {
   registrationFee?: number | null;
 
   @ApiProperty({ example: true })
+  allowRegistration: boolean;
+
+  @ApiProperty({ example: true })
+  requireEmailVerification: boolean;
+
+  @ApiProperty({ example: 16000, required: false, nullable: true })
+  usdInIdr?: number | null;
+
+  @ApiProperty({ example: true })
   isPublished: boolean;
 
   @ApiProperty({ example: true })

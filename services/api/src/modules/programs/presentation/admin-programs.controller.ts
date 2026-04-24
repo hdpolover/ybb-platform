@@ -88,6 +88,7 @@ export class AdminProgramsController {
         isActive: program.isActive,
         isVisibleToUsers: program.isVisibleToUsers,
         allowRegistration: program.allowRegistration,
+        requireEmailVerification: program.requireEmailVerification,
         requirePayment: program.requirePayment,
         currency: program.currency ?? null,
         registrationFee: program.registrationFee ?? null,
