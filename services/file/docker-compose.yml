@@ -42,6 +42,7 @@ services:
       - "host.docker.internal:host-gateway"
     networks:
       - default
+      - ybb-network
 
   # =========================================
   # Dedicated Postgres for File Service
@@ -95,3 +96,8 @@ services:
 volumes:
   postgres_file_data:
   minio_data:
+
+networks:
+  ybb-network:
+    name: ybb-network
+    external: true

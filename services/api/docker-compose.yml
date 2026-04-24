@@ -66,6 +66,7 @@ services:
       - "host.docker.internal:host-gateway"
     networks:
       - default
+      - ybb-network
 
   # =========================================
   # Dedicated Postgres for API
@@ -109,3 +110,8 @@ services:
 volumes:
   postgres_api_data:
   redis_api_data:
+
+networks:
+  ybb-network:
+    name: ybb-network
+    external: true
