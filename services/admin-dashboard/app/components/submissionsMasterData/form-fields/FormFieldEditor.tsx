@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { PhotoIcon } from "@heroicons/react/24/outline";
+import { useEffect, useRef, useState } from "react";
+import { CloudArrowUpIcon, PhotoIcon } from "@heroicons/react/24/outline";
 import {
   Sheet,
   SheetContent,
@@ -15,7 +15,7 @@ import {
   getAccessToken,
   readErrorMessage,
 } from "@/app/components/submissionsMasterData/api";
-import type { MediaFile } from "@/src/shared/api-client";
+import { uploadFileViaPresignedUrl, type MediaFile } from "@/src/shared/api-client";
 import { OptionsRepeater, type OptionRow } from "./OptionsRepeater";
 import { ValidationRulesEditor, type ValidationRules } from "./ValidationRulesEditor";
 import { MediaLibraryPicker } from "./MediaLibraryPicker";
@@ -188,14 +188,16 @@ export function FormFieldEditor({
   onClose,
   onSaved,
 }: FormFieldEditorProps) {
-  const { accessiblePrograms } = useAuth();
+  const { accessiblePrograms, adminProfile } = useAuth();
   const brandId =
     accessiblePrograms.find((p) => p.programId === programId)?.brandId ?? "";
+  const mediaUploadInputRef = useRef<HTMLInputElement | null>(null);
 
   const [state, setState] = useState<EditorState>(() => toEditorState(initialField));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
 
   // Reset state when the drawer opens against a different field
   useEffect(() => {
@@ -210,6 +212,50 @@ export function FormFieldEditor({
 
   function patch<K extends keyof EditorState>(key: K, value: EditorState[K]) {
     setState((prev) => ({ ...prev, [key]: value }));
+  }
+
+  async function handleUploadMediaFromComputer(file: File | null) {
+    if (!file) {
+      return;
+    }
+
+    if (!adminProfile?.userId) {
+      setError("You must be signed in to upload media files.");
+      return;
+    }
+
+    if (!brandId) {
+      setError("Unable to resolve brand context for upload.");
+      return;
+    }
+
+    setIsUploadingMedia(true);
+    setError(null);
+
+    try {
+      const upload = await uploadFileViaPresignedUrl(file, {
+        userId: adminProfile.userId,
+        brandId,
+        programId,
+        bucket: "gallery",
+        assetType: "image",
+        title: file.name,
+        altText: state.mediaAlt.trim() || state.label.trim() || file.name,
+      });
+
+      if (!upload.publicUrl) {
+        throw new Error("Upload succeeded but no public URL was returned.");
+      }
+
+      patch("mediaUrl", upload.publicUrl);
+      if (!state.mediaAlt.trim()) {
+        patch("mediaAlt", file.name);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to upload media file.");
+    } finally {
+      setIsUploadingMedia(false);
+    }
   }
 
   async function handleSave() {
@@ -495,6 +541,15 @@ export function FormFieldEditor({
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
+                onClick={() => mediaUploadInputRef.current?.click()}
+                disabled={saving || isUploadingMedia}
+                className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <CloudArrowUpIcon className="h-4 w-4" />
+                {isUploadingMedia ? "Uploading..." : "Upload from Computer"}
+              </button>
+              <button
+                type="button"
                 onClick={() => setPickerOpen(true)}
                 className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 bg-white px-3 py-1.5 text-xs font-semibold text-blue-600 transition hover:bg-blue-50"
               >
@@ -508,6 +563,16 @@ export function FormFieldEditor({
                 onChange={(e) => patch("mediaUrl", e.target.value)}
                 placeholder="Paste an image URL"
                 className="flex-1 min-w-[200px] rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+              <input
+                ref={mediaUploadInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(event) => {
+                  void handleUploadMediaFromComputer(event.target.files?.[0] ?? null);
+                  event.target.value = "";
+                }}
               />
             </div>
 

@@ -387,16 +387,25 @@ export class ProgramDetailResponseDto {
   status: string;
 
   @ApiProperty()
+  isActive: boolean;
+
+  @ApiProperty()
   isVisibleToUsers: boolean;
 
   @ApiProperty()
   allowRegistration: boolean;
 
   @ApiProperty()
+  requireEmailVerification: boolean;
+
+  @ApiProperty()
   requirePayment: boolean;
 
   @ApiProperty()
   currency?: string;
+
+  @ApiProperty({ required: false, nullable: true })
+  usdInIdr?: number | null;
 
   @ApiProperty()
   requirementsDescription?: string;

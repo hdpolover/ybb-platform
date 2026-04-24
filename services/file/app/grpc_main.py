@@ -246,17 +246,6 @@ class FileService(file_service_pb2_grpc.FileServiceServicer):
         METADATA_TIMEOUT = 30   # seconds to receive first metadata packet
         UPLOAD_TIMEOUT   = 300  # seconds for the full upload to DO Spaces
 
-        read_fd, write_fd = os.pipe()
-        file_reader = None
-        upload_task = None
-
-        def _close_pipes():
-            try:
-                if file_reader and not file_reader.closed:
-                    file_reader.close()
-            except Exception:
-                pass
-
         try:
             # ── 1. Receive metadata (first packet) ───────────────────────────
             try:
@@ -264,27 +253,33 @@ class FileService(file_service_pb2_grpc.FileServiceServicer):
                     request_iterator.__anext__(), timeout=METADATA_TIMEOUT
                 )
             except asyncio.TimeoutError:
-                os.close(read_fd)
-                os.close(write_fd)
                 await context.abort(grpc.StatusCode.DEADLINE_EXCEEDED, "Timed out waiting for upload metadata")
                 return
             except StopAsyncIteration:
-                os.close(read_fd)
-                os.close(write_fd)
                 await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "Empty request")
                 return
 
             if not first_request.HasField('metadata'):
-                os.close(read_fd)
-                os.close(write_fd)
                 await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "First message must be metadata")
                 return
 
             metadata = first_request.metadata
-            file_reader = os.fdopen(read_fd, 'rb')
+
+            # ── 2. Buffer all chunks in memory ────────────────────────────────
+            # Avoids blocking the asyncio event loop with synchronous pipe writes.
+            # The caller (API) already buffers the full file, so this is acceptable.
+            chunk_buffers = []
+            async for request in request_iterator:
+                if context.cancelled():
+                    await context.abort(grpc.StatusCode.CANCELLED, "RPC cancelled by client")
+                    return
+                if request.HasField('chunk_data'):
+                    chunk_buffers.append(bytes(request.chunk_data))
+
+            file_data = BytesIO(b''.join(chunk_buffers))
 
             command = UploadFileCommand(
-                file_data=file_reader,
+                file_data=file_data,
                 filename=metadata.filename,
                 content_type=metadata.content_type,
                 size=metadata.size,
@@ -296,35 +291,14 @@ class FileService(file_service_pb2_grpc.FileServiceServicer):
                 metadata={}
             )
 
-            # Cancel upload task if the RPC is terminated externally
-            def _on_rpc_done(_ctx):
-                if upload_task and not upload_task.done():
-                    upload_task.cancel()
-
-            context.add_done_callback(_on_rpc_done)
-
-            # ── 2. Start upload consumer task ─────────────────────────────────
-            upload_task = asyncio.create_task(self.upload_handler.execute(command))
-
-            # ── 3. Stream chunks → pipe (producer) ───────────────────────────
-            with os.fdopen(write_fd, 'wb') as writer:
-                async for request in request_iterator:
-                    if context.cancelled():
-                        upload_task.cancel()
-                        await context.abort(grpc.StatusCode.CANCELLED, "RPC cancelled by client")
-                        return
-                    if request.HasField('chunk_data'):
-                        writer.write(request.chunk_data)
-            # write_fd closed here by the context manager → signals EOF to reader
-
-            # ── 4. Await upload with hard timeout ─────────────────────────────
+            # ── 3. Run upload with hard timeout ───────────────────────────────
             try:
-                result = await asyncio.wait_for(upload_task, timeout=UPLOAD_TIMEOUT)
+                result = await asyncio.wait_for(
+                    self.upload_handler.execute(command),
+                    timeout=UPLOAD_TIMEOUT
+                )
             except asyncio.TimeoutError:
-                upload_task.cancel()
                 raise Exception(f"Upload to storage timed out after {UPLOAD_TIMEOUT}s")
-
-            _close_pipes()
 
             await self.messaging.publish_event("file.uploaded", {
                 "file_id": result.id,
@@ -347,9 +321,6 @@ class FileService(file_service_pb2_grpc.FileServiceServicer):
 
         except Exception as e:
             logging.error(f"Streaming upload failed: {e}")
-            _close_pipes()
-            if upload_task and not upload_task.done():
-                upload_task.cancel()
             if not context.cancelled():
                 await context.abort(grpc.StatusCode.INTERNAL, str(e))
 

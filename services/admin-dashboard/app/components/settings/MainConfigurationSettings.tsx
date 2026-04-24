@@ -31,9 +31,9 @@ export function MainConfigurationSettings({
     setLoading(true);
     try {
       const config = await getProgramConfig(programId);
-      setRegistrationOpen(config.allowRegistration);
-      setEmailVerification(config.requireEmailVerification ? "Required" : "Optional");
-      setProgramActive(config.isActive);
+      setRegistrationOpen(config.allowRegistration ?? true);
+      setEmailVerification(config.requireEmailVerification === false ? "Optional" : "Required");
+      setProgramActive(config.isActive ?? true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load settings");
     } finally {

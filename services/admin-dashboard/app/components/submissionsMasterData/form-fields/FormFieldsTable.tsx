@@ -17,7 +17,6 @@ import {
 import { FormFieldEditor } from "./FormFieldEditor";
 import { AddFieldDialog } from "./AddFieldDialog";
 import { CopyFromTemplateDialog } from "./CopyFromTemplateDialog";
-import { FLAGS } from "@/app/flags";
 
 export interface ApplicationFormFieldRow {
   id: string;
@@ -67,7 +66,6 @@ export function FormFieldsTable({ programId }: { programId: string }) {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const [legacyCreateOpen, setLegacyCreateOpen] = useState(false);
   const [copyTemplateOpen, setCopyTemplateOpen] = useState(false);
   const [editingField, setEditingField] = useState<ApplicationFormFieldRow | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -98,13 +96,7 @@ export function FormFieldsTable({ programId }: { programId: string }) {
   }, [programId]);
 
   const openCreate = () => {
-    if (FLAGS.FORM_FIELD_CATALOG_V2) {
-      setAddDialogOpen(true);
-    } else {
-      // Fallback: open FormFieldEditor directly with no initial field (create mode).
-      setEditingField(null);
-      setLegacyCreateOpen(true);
-    }
+    setAddDialogOpen(true);
   };
 
   const openEdit = (field: ApplicationFormFieldRow) => {
@@ -153,15 +145,13 @@ export function FormFieldsTable({ programId }: { programId: string }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {FLAGS.FORM_FIELD_CATALOG_V2 && (
-            <button
-              type="button"
-              onClick={() => setCopyTemplateOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
-            >
-              <span>Copy from template</span>
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setCopyTemplateOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+          >
+            <span>Copy from template</span>
+          </button>
           <button
             type="button"
             onClick={openCreate}
@@ -281,40 +271,32 @@ export function FormFieldsTable({ programId }: { programId: string }) {
         </div>
       </div>
 
-      {FLAGS.FORM_FIELD_CATALOG_V2 && (
-        <>
-          <AddFieldDialog
-            open={addDialogOpen}
-            programId={programId}
-            onClose={() => setAddDialogOpen(false)}
-            onSaved={() => {
-              setAddDialogOpen(false);
-              void loadFields();
-            }}
-          />
-          <CopyFromTemplateDialog
-            open={copyTemplateOpen}
-            programId={programId}
-            onClose={() => setCopyTemplateOpen(false)}
-            onApplied={() => {
-              setCopyTemplateOpen(false);
-              void loadFields();
-            }}
-          />
-        </>
-      )}
+      <AddFieldDialog
+        open={addDialogOpen}
+        programId={programId}
+        onClose={() => setAddDialogOpen(false)}
+        onSaved={() => {
+          setAddDialogOpen(false);
+          void loadFields();
+        }}
+      />
+      <CopyFromTemplateDialog
+        open={copyTemplateOpen}
+        programId={programId}
+        onClose={() => setCopyTemplateOpen(false)}
+        onApplied={() => {
+          setCopyTemplateOpen(false);
+          void loadFields();
+        }}
+      />
 
       <FormFieldEditor
-        open={editingField !== null || legacyCreateOpen}
+        open={editingField !== null}
         programId={programId}
         initialField={editingField}
-        onClose={() => {
-          setEditingField(null);
-          setLegacyCreateOpen(false);
-        }}
+        onClose={() => setEditingField(null)}
         onSaved={() => {
           setEditingField(null);
-          setLegacyCreateOpen(false);
           void loadFields();
         }}
       />

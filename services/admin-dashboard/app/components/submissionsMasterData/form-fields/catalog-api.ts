@@ -2,6 +2,7 @@ import {
   buildApiUrl,
   getAccessToken,
   readErrorMessage,
+  readJsonData,
 } from "@/app/components/submissionsMasterData/api";
 
 // -------- Types (mirror API DTOs) --------
@@ -70,7 +71,7 @@ async function jsonOrThrow<T>(response: Response): Promise<T> {
   if (!response.ok) {
     throw new Error(await readErrorMessage(response));
   }
-  return (await response.json()) as T;
+  return readJsonData<T>(response);
 }
 
 // -------- Endpoints --------

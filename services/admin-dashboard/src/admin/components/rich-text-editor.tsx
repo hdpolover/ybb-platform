@@ -37,6 +37,7 @@ interface RichTextEditorProps {
   content?: string;
   placeholder?: string;
   onChange?: (html: string) => void;
+  className?: string;
 }
 
 function ToolbarButton({
@@ -78,7 +79,7 @@ function Divider() {
   return <div className="mx-0.5 h-5 w-px bg-zinc-200" />;
 }
 
-export function RichTextEditor({ content = "", placeholder, onChange }: RichTextEditorProps) {
+export function RichTextEditor({ content = "", placeholder, onChange, className }: RichTextEditorProps) {
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
@@ -137,7 +138,7 @@ export function RichTextEditor({ content = "", placeholder, onChange }: RichText
   if (!editor) return null;
 
   return (
-    <div className="flex flex-col rounded-lg border border-zinc-200 bg-white">
+    <div className={["flex flex-col rounded-lg border border-zinc-200 bg-white", className ?? ""].join(" ").trim()}>
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-0.5 border-b border-zinc-200 px-2 py-1.5">
         {/* Undo/Redo */}

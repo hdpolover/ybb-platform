@@ -225,9 +225,9 @@ export type ProgramSpeaker = {
   organization: string | null;
   bio: string | null;
   photoUrl: string | null;
-  isKeynote: boolean;
+  email: string | null;
+  linkedinUrl: string | null;
   order: number;
-  external_url: string | null;
 };
 
 export type ProgramTestimonial = {
@@ -536,7 +536,7 @@ export type ProgramConfig = {
 };
 
 export function getProgramConfig(programId: string): Promise<ProgramConfig> {
-  return request<ProgramConfig>(`/programs/${programId}`);
+  return request<ProgramConfig>(`/programs/${programId}?include=basic`);
 }
 
 export function updateProgramConfig(
@@ -629,7 +629,8 @@ export function createProgramSpeaker(
     title?: string;
     organization?: string;
     bio?: string;
-    isKeynote?: boolean;
+    email?: string;
+    linkedinUrl?: string;
     order?: number;
     photo?: File;
   },
@@ -640,7 +641,8 @@ export function createProgramSpeaker(
   if (input.title) fd.set("title", input.title);
   if (input.organization) fd.set("organization", input.organization);
   if (input.bio) fd.set("bio", input.bio);
-  if (input.isKeynote !== undefined) fd.set("isKeynote", String(input.isKeynote));
+  if (input.email) fd.set("email", input.email);
+  if (input.linkedinUrl) fd.set("linkedinUrl", input.linkedinUrl);
   if (input.order !== undefined) fd.set("order", String(input.order));
   if (input.photo) fd.set("photo", input.photo);
   return request<ProgramSpeaker>(`/programs/${programId}/speakers`, {
@@ -651,12 +653,25 @@ export function createProgramSpeaker(
 
 export function updateProgramSpeaker(
   id: string,
-  input: Partial<Omit<ProgramSpeaker, "id" | "programId" | "photoUrl">> & { photo?: File },
+  input: {
+    name?: string;
+    title?: string;
+    organization?: string;
+    bio?: string;
+    email?: string;
+    linkedinUrl?: string;
+    order?: number;
+    photo?: File;
+  },
 ): Promise<ProgramSpeaker> {
   const fd = new FormData();
-  for (const [k, v] of Object.entries(input)) {
-    if (v !== undefined && k !== "photo") fd.set(k, String(v));
-  }
+  if (input.name) fd.set("name", input.name);
+  if (input.title !== undefined) fd.set("title", input.title);
+  if (input.organization !== undefined) fd.set("organization", input.organization);
+  if (input.bio !== undefined) fd.set("bio", input.bio);
+  if (input.email !== undefined) fd.set("email", input.email);
+  if (input.linkedinUrl !== undefined) fd.set("linkedinUrl", input.linkedinUrl);
+  if (input.order !== undefined) fd.set("order", String(input.order));
   if (input.photo) fd.set("photo", input.photo);
   return request<ProgramSpeaker>(`/programs/speakers/${id}`, {
     method: "PUT",

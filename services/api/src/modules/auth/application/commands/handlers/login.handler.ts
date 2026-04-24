@@ -167,8 +167,43 @@ export class LoginHandler {
       throw new UnauthorizedException('Account is not active');
     }
 
-    // Check if email is verified (if required by program category)
-    if (user.brand.requireEmailVerification && !user.emailVerified) {
+    // Enforce email verification from brand policy, and allow program policy to tighten it.
+    let requiresEmailVerification = user.brand.requireEmailVerification;
+
+    if (!requiresEmailVerification) {
+      if (command.programId) {
+        const selectedProgram = await this.prisma.program.findUnique({
+          where: { id: command.programId },
+          select: {
+            brandId: true,
+            requireEmailVerification: true,
+          },
+        });
+
+        if (selectedProgram && selectedProgram.brandId === brandId) {
+          requiresEmailVerification = selectedProgram.requireEmailVerification;
+        }
+      } else if (command.programSlug) {
+        const selectedProgram = await this.prisma.program.findUnique({
+          where: {
+            brandId_slug: {
+              brandId,
+              slug: command.programSlug,
+            },
+          },
+          select: {
+            requireEmailVerification: true,
+          },
+        });
+
+        if (selectedProgram) {
+          requiresEmailVerification = selectedProgram.requireEmailVerification;
+        }
+      }
+    }
+
+    // Check if email is verified (if required by effective policy)
+    if (requiresEmailVerification && !user.emailVerified) {
       throw new UnauthorizedException('Email not verified. Please verify your email before logging in.');
     }
 

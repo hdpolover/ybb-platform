@@ -49,6 +49,9 @@ interface ProgramLike {
   registrationOpenDate?: Date | null;
   registrationCloseDate?: Date | null;
   registrationFee?: number | null;
+  allowRegistration: boolean;
+  requireEmailVerification: boolean;
+  usdInIdr?: number | null;
   isPublished: boolean;
   isActive: boolean;
   status: string;
@@ -176,6 +179,9 @@ export class ProgramsController {
       registrationOpenDate: program.registrationOpenDate,
       registrationCloseDate: program.registrationCloseDate,
       registrationFee: program.registrationFee,
+      allowRegistration: program.allowRegistration,
+      requireEmailVerification: program.requireEmailVerification,
+      usdInIdr: program.usdInIdr ?? null,
       isPublished: program.isPublished,
       isActive: program.isActive,
       status: program.status,

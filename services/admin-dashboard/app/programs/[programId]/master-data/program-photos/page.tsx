@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
-import { PlusIcon, TrashIcon, ArrowPathIcon, PencilSquareIcon, PhotoIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { PlusIcon, TrashIcon, ArrowPathIcon, PencilSquareIcon, PhotoIcon } from "@heroicons/react/24/outline";
 import { useAuth } from "@/app/contexts/AuthContext";
 import {
   listProgramGallery,
@@ -11,6 +11,7 @@ import {
   deleteProgramGalleryItem,
   type ProgramGalleryItem,
 } from "@/src/shared/api-client";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/src/ui/sheet";
 
 export default function ProgramPhotosPage() {
   const params = useParams<{ programId: string }>();
@@ -217,22 +218,16 @@ function PhotoModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-lg overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-4 border-b border-zinc-200 px-5 py-4">
-          <div>
-            <h2 className="text-sm font-bold text-zinc-900">{isEdit ? "Edit Photo" : "Upload Photo"}</h2>
-            <p className="mt-0.5 text-[11px] text-zinc-500">
-              {isEdit ? "Update the image or metadata for this photo." : "Upload a new highlight photo for this program."}
-            </p>
-          </div>
-          <button type="button" onClick={onClose} className="flex h-7 w-7 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600">
-            <XMarkIcon className="h-4 w-4" />
-          </button>
-        </div>
+    <Sheet open onOpenChange={(open) => !open && !loading && onClose()}>
+      <SheetContent side="right" className="flex w-full max-w-lg flex-col overflow-hidden p-0 sm:max-w-lg">
+        <SheetHeader className="sticky top-0 z-10 border-b border-zinc-200 bg-white px-5 py-4 pr-12">
+          <SheetTitle className="text-sm font-bold text-zinc-900">{isEdit ? "Edit Photo" : "Upload Photo"}</SheetTitle>
+          <SheetDescription className="text-[11px] text-zinc-500">
+            {isEdit ? "Update the image or metadata for this photo." : "Upload a new highlight photo for this program."}
+          </SheetDescription>
+        </SheetHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 px-5 py-5">
+        <form id="program-photo-form" onSubmit={handleSubmit} className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
           {error && <p className="rounded-md bg-red-50 px-3 py-2 text-[11px] text-red-700">{error}</p>}
 
           {/* Image upload area */}
@@ -244,7 +239,7 @@ function PhotoModal({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="relative flex h-40 w-full flex-col items-center justify-center overflow-hidden rounded-lg border-2 border-dashed border-zinc-300 bg-zinc-50 transition hover:border-blue-400 hover:bg-blue-50/30"
+              className="group relative flex h-40 w-full flex-col items-center justify-center overflow-hidden rounded-lg border-2 border-dashed border-zinc-300 bg-zinc-50 transition hover:border-blue-400 hover:bg-blue-50/30"
             >
               {imagePreview ? (
                 <>
@@ -284,18 +279,28 @@ function PhotoModal({
           <Field label="Display Order">
             <input type="number" value={order} onChange={(e) => setOrder(e.target.value)} min="0" className={inputCls} />
           </Field>
-
-          <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} className="rounded-md border border-zinc-200 px-3 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50">
-              Cancel
-            </button>
-            <button type="submit" disabled={loading} className="rounded-md bg-blue-500 px-4 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600 disabled:opacity-60">
-              {loading ? (isEdit ? "Saving…" : "Uploading…") : (isEdit ? "Save Changes" : "Upload")}
-            </button>
-          </div>
         </form>
-      </div>
-    </div>
+
+        <div className="sticky bottom-0 z-10 flex items-center justify-end gap-2 border-t border-zinc-200 bg-white px-5 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            className="rounded-md border border-zinc-200 px-3 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="program-photo-form"
+            disabled={loading}
+            className="rounded-md bg-blue-500 px-4 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600 disabled:opacity-60"
+          >
+            {loading ? (isEdit ? "Saving…" : "Uploading…") : (isEdit ? "Save Changes" : "Upload")}
+          </button>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 

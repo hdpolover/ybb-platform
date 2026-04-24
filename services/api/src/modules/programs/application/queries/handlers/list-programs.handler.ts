@@ -41,6 +41,8 @@ export class ListProgramsHandler implements IQueryHandler<ListProgramsQuery> {
             registrationOpenDate: program.registrationOpenDate,
             registrationCloseDate: program.registrationCloseDate,
             registrationFee: program.registrationFee,
+            allowRegistration: program.allowRegistration,
+            requireEmailVerification: program.requireEmailVerification,
             isPublished: program.isPublished,
             isActive: program.isActive,
             status: program.status,

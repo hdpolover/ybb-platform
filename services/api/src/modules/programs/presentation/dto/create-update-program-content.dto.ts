@@ -1181,6 +1181,11 @@ export class CreateProgramEssayDto {
     @IsNumber()
     @IsOptional()
     order?: number;
+
+    @ApiProperty({ required: false })
+    @IsBoolean()
+    @IsOptional()
+    isActive?: boolean;
 }
 
 export class UpdateProgramEssayDto {
