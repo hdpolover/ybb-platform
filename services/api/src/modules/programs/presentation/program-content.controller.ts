@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Put, Post, Delete, Body, UseGuards, Request, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Get, Param, Put, Post, Delete, Body, UseGuards, Request, UseInterceptors, UploadedFile, Query } from '@nestjs/common';
 import { Request as ExpressRequest } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
@@ -17,6 +17,7 @@ import {
   ListProgramTestimonialsQuery,
   ListProgramFaqsQuery,
   ListProgramResourcesQuery,
+  ListDocumentTemplatesQuery,
 } from '../application/queries/list-program-content.queries';
 
 import {
@@ -24,6 +25,7 @@ import {
   ListProgramTestimonialsHandler,
   ListProgramFaqsHandler,
   ListProgramResourcesHandler,
+  ListDocumentTemplatesHandler,
 } from '../application/queries/handlers/list-program-content.handlers';
 
 import {
@@ -31,6 +33,7 @@ import {
   CreateProgramTestimonialDto, UpdateProgramTestimonialDto,
   CreateProgramFaqDto, UpdateProgramFaqDto,
   CreateProgramResourceDto, UpdateProgramResourceDto,
+  CreateDocumentTemplateDto, UpdateDocumentTemplateDto,
 } from './dto/create-update-program-content.dto';
 
 import {
@@ -38,6 +41,7 @@ import {
   CreateProgramTestimonialCommand, UpdateProgramTestimonialCommand, DeleteProgramTestimonialCommand,
   CreateProgramFaqCommand, UpdateProgramFaqCommand, DeleteProgramFaqCommand,
   CreateProgramResourceCommand, UpdateProgramResourceCommand, DeleteProgramResourceCommand,
+  CreateDocumentTemplateCommand, UpdateDocumentTemplateCommand, DeleteDocumentTemplateCommand,
 } from '../application/commands/program-content.commands';
 
 import {
@@ -45,6 +49,7 @@ import {
   CreateProgramTestimonialHandler, UpdateProgramTestimonialHandler, DeleteProgramTestimonialHandler,
   CreateProgramFaqHandler, UpdateProgramFaqHandler, DeleteProgramFaqHandler,
   CreateProgramResourceHandler, UpdateProgramResourceHandler, DeleteProgramResourceHandler,
+  CreateDocumentTemplateHandler, UpdateDocumentTemplateHandler, DeleteDocumentTemplateHandler,
 } from '../application/commands/handlers/manage-program-content.handlers';
 
 @ApiTags('Program Content')
@@ -67,6 +72,10 @@ export class ProgramContentController {
     private readonly createProgramResourceHandler: CreateProgramResourceHandler,
     private readonly updateProgramResourceHandler: UpdateProgramResourceHandler,
     private readonly deleteProgramResourceHandler: DeleteProgramResourceHandler,
+    private readonly listDocumentTemplatesHandler: ListDocumentTemplatesHandler,
+    private readonly createDocumentTemplateHandler: CreateDocumentTemplateHandler,
+    private readonly updateDocumentTemplateHandler: UpdateDocumentTemplateHandler,
+    private readonly deleteDocumentTemplateHandler: DeleteDocumentTemplateHandler,
   ) {}
 
   // --- Gallery Endpoints ---
@@ -227,5 +236,57 @@ export class ProgramContentController {
   @ApiOperation({ summary: 'Delete resource' })
   async deleteResource(@Param('itemId') itemId: string, @Request() req: ExpressRequest & { user: { id: string } }) {
     return this.deleteProgramResourceHandler.execute(new DeleteProgramResourceCommand(itemId, req.user.id));
+  }
+
+  // --- Document Template Endpoints ---
+  @Get(':id/document-templates')
+  @ApiOperation({ summary: 'List document templates for a program' })
+  async listDocumentTemplates(
+    @Param('id') programId: string,
+    @Query('type') type?: string,
+  ) {
+    return this.listDocumentTemplatesHandler.execute(new ListDocumentTemplatesQuery(programId, type));
+  }
+
+  @Post(':id/document-templates')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data', 'application/json')
+  @ApiOperation({ summary: 'Create a document template' })
+  async createDocumentTemplate(
+    @Param('id') programId: string,
+    @Body() dto: CreateDocumentTemplateDto,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Request() req: ExpressRequest & { user: { id: string } },
+  ) {
+    dto.programId = programId;
+    return this.createDocumentTemplateHandler.execute(new CreateDocumentTemplateCommand(dto, req.user.id, file));
+  }
+
+  @Put('document-templates/:itemId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data', 'application/json')
+  @ApiOperation({ summary: 'Update a document template' })
+  async updateDocumentTemplate(
+    @Param('itemId') id: string,
+    @Body() dto: UpdateDocumentTemplateDto,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Request() req: ExpressRequest & { user: { id: string } },
+  ) {
+    return this.updateDocumentTemplateHandler.execute(new UpdateDocumentTemplateCommand(id, dto, req.user.id, file));
+  }
+
+  @Delete('document-templates/:itemId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete a document template' })
+  async deleteDocumentTemplate(
+    @Param('itemId') id: string,
+    @Request() req: ExpressRequest & { user: { id: string } },
+  ) {
+    return this.deleteDocumentTemplateHandler.execute(new DeleteDocumentTemplateCommand(id, req.user.id));
   }
 }

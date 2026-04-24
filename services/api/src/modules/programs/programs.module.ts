@@ -61,6 +61,7 @@ import {
   ListProgramEssaysHandler,
   ListProgramParticipationCategoriesHandler,
   ListProgramSubthemesHandler,
+  ListDocumentTemplatesHandler,
 } from './application/queries/handlers/list-program-content.handlers';
 import {
   CreateProgramTimelineHandler, UpdateProgramTimelineHandler, DeleteProgramTimelineHandler,
@@ -143,6 +144,7 @@ import { FormFieldKeyValidator } from './application/validators/form-field-key.v
     ListProgramEssaysHandler,
     ListProgramParticipationCategoriesHandler,
     ListProgramSubthemesHandler,
+    ListDocumentTemplatesHandler,
     // Content Management Handlers
     CreateProgramTimelineHandler, UpdateProgramTimelineHandler, DeleteProgramTimelineHandler,
     CreateProgramScheduleHandler, UpdateProgramScheduleHandler, DeleteProgramScheduleHandler,

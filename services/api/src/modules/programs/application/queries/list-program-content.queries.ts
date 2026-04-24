@@ -66,3 +66,10 @@ export class ListProgramParticipationCategoriesQuery {
         public readonly includeInactive = false,
     ) { }
 }
+
+export class ListDocumentTemplatesQuery {
+    constructor(
+        public readonly programId: string,
+        public readonly type?: string,
+    ) {}
+}
