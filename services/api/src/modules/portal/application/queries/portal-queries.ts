@@ -88,3 +88,11 @@ export class DownloadCertificateCommand {
     public readonly certificateId: string,
   ) { }
 }
+
+export class UploadSignedCopyCommand {
+  constructor(
+    public readonly templateId: string,
+    public readonly userId: string,
+    public readonly file: Express.Multer.File,
+  ) { }
+}
