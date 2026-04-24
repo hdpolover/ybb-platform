@@ -1,5 +1,6 @@
 import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { ApplicationCategory } from '@prisma/client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
@@ -47,8 +48,24 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                         currency: true,
                         status: true,
                         paidAt: true,
+                        createdAt: true,
                         paymentMethod: true,
-                        pricingTierId: true
+                        pricingTierId: true,
+                        pricingTier: {
+                            select: {
+                                id: true,
+                                name: true,
+                                feeType: true,
+                                order: true,
+                                validityPeriods: {
+                                    select: {
+                                        startDate: true,
+                                    },
+                                    orderBy: { startDate: 'asc' },
+                                    take: 1,
+                                },
+                            }
+                        }
                     }
                 },
                 program: {
@@ -64,7 +81,15 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                                 price: true,
                                 currency: true,
                                 feeType: true,
-                                allowedCategories: true
+                                allowedCategories: true,
+                                order: true,
+                                validityPeriods: {
+                                    select: {
+                                        startDate: true,
+                                    },
+                                    orderBy: { startDate: 'asc' },
+                                    take: 1,
+                                },
                             },
                             orderBy: { order: 'asc' }
                         }
@@ -82,46 +107,106 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
 
         if (application) {
             currency = application.program.currency;
+            const now = new Date();
+            const currentCategory = application.applicationCategory as ApplicationCategory | null;
 
-            // 1. Process Invoices
+            // Keep only the newest invoice per tier so a tier appears once with the latest state.
+            const latestInvoiceByTier = new Map<string, (typeof application.invoices)[number]>();
             for (const inv of application.invoices) {
-                const item: PaymentItemDto = {
-                    id: inv.id,
-                    title: 'Registration Fee', // Should fetch from Tier relationship if possible
-                    amount: Number(inv.amount),
-                    currency: inv.currency,
-                    status: inv.status,
-                    dueDate: undefined, // Not available in schema
-                    paidAt: inv.paidAt || undefined,
-                    paymentMethod: inv.paymentMethod || undefined,
-                    actionUrl: undefined  // Removed as not in schema
-                };
-
-                if (inv.status === 'paid') {
-                    history.push(item);
-                    totalPaid += Number(inv.amount);
-                } else {
-                    outstanding.push(item);
-                    totalDue += Number(inv.amount);
+                const existing = latestInvoiceByTier.get(inv.pricingTierId);
+                if (!existing || inv.createdAt > existing.createdAt) {
+                    latestInvoiceByTier.set(inv.pricingTierId, inv);
                 }
             }
 
-            // 2. Available Payments (Pricing Tiers that haven't been paid)
-            // Filter tiers based on application category
-            const applicableTiers = application.program.pricingTiers.filter(t => 
-                !application.invoices.some(inv => inv.pricingTierId === t.id && inv.status === 'paid') &&
-                (t.allowedCategories.includes(application.applicationCategory as import('@prisma/client').ApplicationCategory) || t.allowedCategories.length === 0)
-            );
+            const applicableTiers = application.program.pricingTiers
+                .filter((tier) => {
+                    if (!currentCategory || tier.allowedCategories.length === 0) {
+                        return true;
+                    }
+
+                    return tier.allowedCategories.includes(currentCategory);
+                })
+                .sort((a, b) => {
+                    const aStart = a.validityPeriods[0]?.startDate?.getTime() ?? Number.MAX_SAFE_INTEGER;
+                    const bStart = b.validityPeriods[0]?.startDate?.getTime() ?? Number.MAX_SAFE_INTEGER;
+                    if (aStart !== bStart) {
+                        return aStart - bStart;
+                    }
+
+                    return a.order - b.order;
+                });
+
+            // Visibility rule:
+            // - tiers are shown in chronological order
+            // - stop at the first tier that is unpaid/processing/failed/cancelled
+            // - do not show future tiers before their start date
+            const visibleTierIds = new Set<string>();
+            for (const tier of applicableTiers) {
+                const invoice = latestInvoiceByTier.get(tier.id);
+                const startDate = tier.validityPeriods[0]?.startDate;
+                const hasStarted = !startDate || startDate <= now;
+
+                if (!invoice && !hasStarted) {
+                    break;
+                }
+
+                visibleTierIds.add(tier.id);
+
+                const normalizedStatus = String(invoice?.status ?? 'unpaid').toLowerCase();
+                if (normalizedStatus !== 'paid') {
+                    break;
+                }
+            }
 
             for (const tier of applicableTiers) {
+                if (!visibleTierIds.has(tier.id)) {
+                    continue;
+                }
+
+                const invoice = latestInvoiceByTier.get(tier.id);
+                const startDate = tier.validityPeriods[0]?.startDate;
+
+                if (invoice) {
+                    const item: PaymentItemDto = {
+                        id: invoice.id,
+                        title: tier.name,
+                        amount: Number(invoice.amount),
+                        currency: invoice.currency,
+                        status: invoice.status,
+                        dueDate: undefined,
+                        paidAt: invoice.paidAt || undefined,
+                        paymentMethod: invoice.paymentMethod || undefined,
+                        actionUrl: undefined,
+                        type: tier.feeType,
+                        pricingTierId: tier.id,
+                        startDate: startDate || undefined,
+                        sequenceOrder: tier.order,
+                    };
+
+                    const normalizedStatus = String(invoice.status).toLowerCase();
+                    if (normalizedStatus === 'paid') {
+                        history.push(item);
+                        totalPaid += Number(invoice.amount);
+                    } else {
+                        outstanding.push(item);
+                        totalDue += Number(invoice.amount);
+                    }
+
+                    continue;
+                }
+
                 availableMethods.push({
                     id: tier.id,
                     title: tier.name,
                     description: tier.description || '',
                     amount: Number(tier.price),
                     currency: tier.currency,
-                    type: tier.feeType
+                    type: tier.feeType,
+                    startDate: startDate || undefined,
+                    sequenceOrder: tier.order,
                 });
+                totalDue += Number(tier.price);
             }
         }
 

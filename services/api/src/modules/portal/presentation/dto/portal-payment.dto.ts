@@ -27,7 +27,7 @@ export class PaymentItemDto {
     @ApiProperty()
     currency: string;
 
-    @ApiProperty({ enum: ['pending', 'paid', 'failed', 'due', 'cancelled'] })
+    @ApiProperty({ enum: ['unpaid', 'processing', 'paid', 'failed', 'due', 'cancelled', 'pending'] })
     status: string;
 
     @ApiProperty()
@@ -41,6 +41,18 @@ export class PaymentItemDto {
 
     @ApiProperty({ description: 'URL for payment or invoice' })
     actionUrl?: string;
+
+    @ApiPropertyOptional({ description: 'Pricing fee type, e.g. registration_fee or full_fee' })
+    type?: string;
+
+    @ApiPropertyOptional()
+    pricingTierId?: string;
+
+    @ApiPropertyOptional({ description: 'Tier visibility start date' })
+    startDate?: Date;
+
+    @ApiPropertyOptional({ description: 'Ordering hint from pricing tier' })
+    sequenceOrder?: number;
 }
 
 export class AvailablePaymentDto {
@@ -61,6 +73,12 @@ export class AvailablePaymentDto {
 
     @ApiProperty()
     type: string;
+
+    @ApiPropertyOptional({ description: 'Tier visibility start date' })
+    startDate?: Date;
+
+    @ApiPropertyOptional({ description: 'Ordering hint from pricing tier' })
+    sequenceOrder?: number;
 }
 
 export class PortalPaymentResponseDto {
