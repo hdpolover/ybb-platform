@@ -30,12 +30,25 @@ export async function readErrorMessage(response: Response): Promise<string> {
   }
 
   try {
-    const payload = (await response.json()) as { message?: string | string[] };
+    const payload = (await response.json()) as {
+      message?: string | string[] | { message?: string; code?: string };
+      error?: string;
+    };
     if (Array.isArray(payload.message)) {
       return payload.message.join(", ");
     }
     if (typeof payload.message === "string") {
       return payload.message;
+    }
+    if (
+      payload.message &&
+      typeof payload.message === "object" &&
+      typeof payload.message.message === "string"
+    ) {
+      return payload.message.message;
+    }
+    if (typeof payload.error === "string" && payload.error.trim()) {
+      return payload.error;
     }
   } catch {
     // Fall through to generic message.

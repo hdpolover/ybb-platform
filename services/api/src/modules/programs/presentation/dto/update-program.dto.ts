@@ -1,5 +1,8 @@
-import { IsString, IsOptional, IsNumber, IsDateString, IsBoolean, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsDateString, IsBoolean, IsUUID, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { ProgramFormat } from '../../../../core/entities/program.entity';
+
+const PROGRAM_FORMAT_VALUES: ProgramFormat[] = ['in_person', 'hybrid', 'online'];
 
 export class UpdateProgramDto {
     @ApiProperty({ description: 'Brand ID', required: false })
@@ -41,6 +44,11 @@ export class UpdateProgramDto {
     @IsString()
     @IsOptional()
     programType?: string;
+
+    @ApiProperty({ description: 'Program format (delivery mode)', required: false, enum: PROGRAM_FORMAT_VALUES })
+    @IsEnum(PROGRAM_FORMAT_VALUES)
+    @IsOptional()
+    programFormat?: ProgramFormat;
 
     @ApiProperty({ description: 'Start date', required: false })
     @IsDateString()

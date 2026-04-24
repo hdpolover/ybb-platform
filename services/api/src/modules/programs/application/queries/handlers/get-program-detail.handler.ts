@@ -223,6 +223,7 @@ export class GetProgramDetailHandler {
       description: program.description,
       shortDescription: program.shortDescription,
       programType: program.programType,
+      programFormat: program.programFormat,
       startDate: program.startDate,
       endDate: program.endDate,
       isActive: program.isActive,

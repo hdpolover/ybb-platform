@@ -32,6 +32,7 @@ type ProgramDetail = {
   description?: string | null;
   shortDescription?: string | null;
   programType?: string | null;
+  programFormat?: 'in_person' | 'hybrid' | 'online' | null;
   startDate?: string | null;
   endDate?: string | null;
   applicationDeadline?: string | null;
@@ -129,10 +130,17 @@ function getRegistrationStatus(detail: ProgramDetail): string {
   return "Open";
 }
 
+const PROGRAM_FORMAT_LABELS: Record<'in_person' | 'hybrid' | 'online', string> = {
+  in_person: 'In-Person',
+  hybrid: 'Hybrid',
+  online: 'Online',
+};
+
 function toGeneralInformationData(detail: ProgramDetail): GeneralInformationData {
   return {
     brandName: detail.brand.name,
     programType: formatDisplayValue(detail.programType),
+    programFormat: detail.programFormat ? PROGRAM_FORMAT_LABELS[detail.programFormat] : 'Not configured',
     tagline: formatDisplayValue(detail.shortDescription),
     media: {
       logo: detail.logoUrl ?? null,
@@ -180,6 +188,7 @@ function toGeneralFormValues(detail: ProgramDetail): GeneralInformationFormValue
   return {
     name: detail.name ?? "",
     programType: detail.programType ?? "",
+    programFormat: detail.programFormat ?? "",
     shortDescription: detail.shortDescription ?? "",
     description: detail.description ?? "",
     videoUrl: detail.videoUrl ?? "",
@@ -373,6 +382,7 @@ export default function ProgramDetailsPage({
       const payload = {
         name: values.name.trim() || undefined,
         programType: values.programType.trim() || undefined,
+        programFormat: values.programFormat || undefined,
         shortDescription: values.shortDescription.trim() || undefined,
         description: values.description.trim() || undefined,
         videoUrl: values.videoUrl.trim() || undefined,

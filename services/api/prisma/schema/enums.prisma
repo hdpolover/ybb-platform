@@ -203,3 +203,9 @@ enum PaymentStatus {
   failed
   refunded
 }
+
+enum ProgramFormat {
+  in_person
+  hybrid
+  online
+}

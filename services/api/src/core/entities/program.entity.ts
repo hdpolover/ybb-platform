@@ -1,3 +1,5 @@
+export type ProgramFormat = 'in_person' | 'hybrid' | 'online';
+
 export class Program {
     constructor(
         public readonly id: string,
@@ -7,6 +9,7 @@ export class Program {
         public readonly description: string | null,
         public readonly shortDescription: string | null,
         public readonly programType: string | null,
+        public readonly programFormat: ProgramFormat | null,
         public readonly year: number,
         public readonly startDate: Date,
         public readonly endDate: Date,

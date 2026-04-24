@@ -11,18 +11,27 @@ import Placeholder from "@tiptap/extension-placeholder";
 import {
   Bold, Italic, Underline as UnderlineIcon, AlignLeft, AlignCenter,
   AlignRight, List, ListOrdered, Undo, Redo, RemoveFormatting,
-  Heading1, Heading2, Loader2, CheckCircle2, Zap,
+  Heading1, Heading2, Loader2, CheckCircle2, Zap, Upload, ImageIcon, X, Eye, EyeOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/src/ui/dialog";
 import {
   listDocumentTemplates,
   createDocumentTemplate,
   updateDocumentTemplate,
   generateLoa,
+  listProgramMedia,
+  uploadFileViaPresignedUrl,
   type DocumentTemplate,
   type DocumentTemplatePlaceholder,
   type DocumentTemplateLayoutConfig,
+  type MediaFile,
 } from "@/src/shared/api-client";
 
 const PLACEHOLDER_TOKENS: DocumentTemplatePlaceholder[] = [
@@ -74,6 +83,204 @@ const inputCls =
 
 const labelCls = "block text-[11px] font-medium text-zinc-500 mb-1";
 
+// ─── Image Upload Field ───────────────────────────────────────────────────────
+
+function ImageUploadField({
+  label,
+  value,
+  onChange,
+  programId,
+  brandId,
+  userId,
+}: {
+  label: string;
+  value: string;
+  onChange: (url: string) => void;
+  programId: string;
+  brandId: string;
+  userId: string;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [mediaOpen, setMediaOpen] = useState(false);
+  const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
+  const [mediaLoading, setMediaLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const result = await uploadFileViaPresignedUrl(file, {
+        userId,
+        brandId,
+        programId,
+        bucket: "documents",
+        assetType: "image",
+      });
+      if (result.publicUrl) onChange(result.publicUrl);
+      else toast.error("Upload succeeded but no URL returned");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  async function openMediaLibrary() {
+    setMediaOpen(true);
+    setMediaLoading(true);
+    try {
+      const result = await listProgramMedia({ programId, brandId, limit: 50 });
+      setMediaFiles(result.files.filter((f) => f.content_type.startsWith("image/")));
+    } catch {
+      toast.error("Failed to load media library");
+    } finally {
+      setMediaLoading(false);
+    }
+  }
+
+  return (
+    <>
+      <div>
+        <label className={labelCls}>{label}</label>
+        {value ? (
+          <div className="relative mb-2 flex h-16 items-center justify-center overflow-hidden rounded-md border border-zinc-200 bg-zinc-50">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={value} alt="" className="h-full w-auto max-w-full object-contain p-1" />
+            <button
+              type="button"
+              title="Remove"
+              onClick={() => onChange("")}
+              className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white text-zinc-400 shadow ring-1 ring-zinc-200 hover:text-red-500"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        ) : null}
+        <div className="flex gap-1.5">
+          <button
+            type="button"
+            disabled={uploading}
+            onClick={() => fileInputRef.current?.click()}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+          >
+            {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+            Upload
+          </button>
+          <button
+            type="button"
+            onClick={openMediaLibrary}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50"
+          >
+            <ImageIcon className="h-3 w-3" />
+            Media Library
+          </button>
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+      </div>
+
+      <Dialog open={mediaOpen} onOpenChange={setMediaOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Media Library</DialogTitle>
+          </DialogHeader>
+          {mediaLoading ? (
+            <div className="flex h-40 items-center justify-center">
+              <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />
+            </div>
+          ) : mediaFiles.length === 0 ? (
+            <p className="py-10 text-center text-xs text-zinc-400">No images found in media library.</p>
+          ) : (
+            <div className="grid max-h-96 grid-cols-4 gap-2 overflow-y-auto">
+              {mediaFiles.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => { onChange(f.url ?? f.download_url ?? ""); setMediaOpen(false); }}
+                  className="group relative aspect-square overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50 hover:border-blue-400"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={f.url ?? f.download_url ?? ""}
+                    alt={f.alt_text ?? f.original_filename}
+                    className="h-full w-full object-contain p-1"
+                  />
+                  <div className="absolute inset-x-0 bottom-0 truncate bg-black/50 px-1 py-0.5 text-[9px] text-white opacity-0 group-hover:opacity-100">
+                    {f.original_filename}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+// ─── Mini Section Editor (header / footer) ────────────────────────────────────
+
+function MiniEditor({
+  editor,
+  tokenLabel,
+  tokenKey,
+  placeholder,
+}: {
+  editor: ReturnType<typeof useEditor>;
+  tokenLabel: string;
+  tokenKey: string;
+  placeholder?: string;
+}) {
+  void placeholder;
+  return (
+    <div className="rounded-lg border border-zinc-200 bg-white">
+      <div className="flex flex-wrap items-center gap-0.5 border-b border-zinc-200 px-2 py-1">
+        <ToolbarBtn title="Bold" active={editor?.isActive("bold")} onClick={() => editor?.chain().focus().toggleBold().run()}>
+          <Bold className="h-3 w-3" />
+        </ToolbarBtn>
+        <ToolbarBtn title="Italic" active={editor?.isActive("italic")} onClick={() => editor?.chain().focus().toggleItalic().run()}>
+          <Italic className="h-3 w-3" />
+        </ToolbarBtn>
+        <ToolbarBtn title="Underline" active={editor?.isActive("underline")} onClick={() => editor?.chain().focus().toggleUnderline().run()}>
+          <UnderlineIcon className="h-3 w-3" />
+        </ToolbarBtn>
+        <Sep />
+        <ToolbarBtn title="Align Left" active={editor?.isActive({ textAlign: "left" })} onClick={() => editor?.chain().focus().setTextAlign("left").run()}>
+          <AlignLeft className="h-3 w-3" />
+        </ToolbarBtn>
+        <ToolbarBtn title="Align Center" active={editor?.isActive({ textAlign: "center" })} onClick={() => editor?.chain().focus().setTextAlign("center").run()}>
+          <AlignCenter className="h-3 w-3" />
+        </ToolbarBtn>
+        <ToolbarBtn title="Align Right" active={editor?.isActive({ textAlign: "right" })} onClick={() => editor?.chain().focus().setTextAlign("right").run()}>
+          <AlignRight className="h-3 w-3" />
+        </ToolbarBtn>
+        <Sep />
+        <button
+          type="button"
+          title={`Insert ${tokenLabel}`}
+          onMouseDown={(e) => { e.preventDefault(); editor?.chain().focus().insertContent(tokenKey).run(); }}
+          className="rounded bg-blue-50 px-2 py-0.5 font-mono text-[10px] text-blue-700 hover:bg-blue-100"
+        >
+          {tokenKey}
+        </button>
+      </div>
+      <div className="min-h-[72px] px-4 py-3">
+        {editor && <EditorContent editor={editor} />}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
 export function LoaTemplateEditor({ programId }: { programId: string }) {
   const { accessiblePrograms, adminProfile } = useAuth();
   const program = accessiblePrograms.find((p) => p.programId === programId);
@@ -86,18 +293,41 @@ export function LoaTemplateEditor({ programId }: { programId: string }) {
   const [generating, setGenerating] = useState(false);
   const [layout, setLayout] = useState<DocumentTemplateLayoutConfig>(DEFAULT_LAYOUT);
   const [templateName, setTemplateName] = useState("Letter of Acceptance");
+  const [previewMode, setPreviewMode] = useState(false);
+
+  const editorExtensions = [
+    StarterKit,
+    Underline,
+    TextStyle,
+    TextAlign.configure({ types: ["heading", "paragraph"] }),
+    Link.configure({ openOnClick: false }),
+  ];
+
+  const headerEditor = useEditor({
+    immediatelyRender: false,
+    extensions: [
+      ...editorExtensions,
+      Placeholder.configure({ placeholder: "Header content — use {{logo}} to insert the logo…" }),
+    ],
+    editorProps: { attributes: { class: "focus:outline-none text-sm leading-relaxed" } },
+  });
 
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
-      StarterKit,
-      Underline,
-      TextStyle,
-      TextAlign.configure({ types: ["heading", "paragraph"] }),
-      Link.configure({ openOnClick: false }),
+      ...editorExtensions,
       Placeholder.configure({ placeholder: "Write your LOA body here. Click placeholders on the right to insert them…" }),
     ],
     editorProps: { attributes: { class: "focus:outline-none min-h-[400px] text-sm leading-relaxed" } },
+  });
+
+  const footerEditor = useEditor({
+    immediatelyRender: false,
+    extensions: [
+      ...editorExtensions,
+      Placeholder.configure({ placeholder: "Footer content — use {{signature}} to insert the signature image…" }),
+    ],
+    editorProps: { attributes: { class: "focus:outline-none text-sm leading-relaxed" } },
   });
 
   // Load existing template
@@ -110,10 +340,8 @@ export function LoaTemplateEditor({ programId }: { programId: string }) {
         setTemplate(t);
         if (t) {
           setTemplateName(t.name);
-          setLayout({ ...DEFAULT_LAYOUT, ...(t.layoutConfig ?? {}) });
-          if (editor && t.htmlContent) {
-            editor.commands.setContent(t.htmlContent, { emitUpdate: false });
-          }
+          const lc = { ...DEFAULT_LAYOUT, ...(t.layoutConfig ?? {}) };
+          setLayout(lc);
         }
       })
       .catch(() => toast.error("Failed to load LOA template"))
@@ -121,13 +349,23 @@ export function LoaTemplateEditor({ programId }: { programId: string }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [programId]);
 
-  // Set content once editor is ready and template is loaded
+  // Set editor content once editors + template are ready
   const contentSetRef = useRef(false);
   useEffect(() => {
-    if (!editor || !template?.htmlContent || contentSetRef.current) return;
-    editor.commands.setContent(template.htmlContent, { emitUpdate: false });
-    contentSetRef.current = true;
-  }, [editor, template]);
+    if (contentSetRef.current || !template) return;
+    if (editor && template.htmlContent) {
+      editor.commands.setContent(template.htmlContent, { emitUpdate: false });
+    }
+    if (headerEditor && template.layoutConfig?.headerHtml) {
+      headerEditor.commands.setContent(template.layoutConfig.headerHtml, { emitUpdate: false });
+    }
+    if (footerEditor && template.layoutConfig?.footerHtml) {
+      footerEditor.commands.setContent(template.layoutConfig.footerHtml, { emitUpdate: false });
+    }
+    if (editor && headerEditor && footerEditor) {
+      contentSetRef.current = true;
+    }
+  }, [editor, headerEditor, footerEditor, template]);
 
   const insertPlaceholder = useCallback((key: string) => {
     if (!editor) return;
@@ -138,12 +376,14 @@ export function LoaTemplateEditor({ programId }: { programId: string }) {
     if (!editor) return;
     setSaving(true);
     const htmlContent = editor.getHTML();
+    const headerHtml = headerEditor?.getHTML() ?? layout.headerHtml ?? "";
+    const footerHtml = footerEditor?.getHTML() ?? layout.footerHtml ?? "";
     const body = {
       name: templateName,
       type: "letter_of_acceptance" as const,
       htmlContent,
       placeholders: PLACEHOLDER_TOKENS,
-      layoutConfig: layout,
+      layoutConfig: { ...layout, headerHtml, footerHtml },
       audienceType: "all_registered",
       isActive: publish,
     };
@@ -177,6 +417,55 @@ export function LoaTemplateEditor({ programId }: { programId: string }) {
     }
   }
 
+  function buildPreviewDoc(): string {
+    const SAMPLE: Record<string, string> = {
+      "{{participant_name}}": "Jane Doe",
+      "{{program_name}}": program?.programName ?? "Your Program",
+      "{{acceptance_date}}": new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+      "{{batch}}": "Batch 1",
+      "{{document_number}}": "DOC-2026-001",
+      "{{participation_category}}": "International Delegate",
+      "{{logo}}": layout.logoUrl
+        ? `<img src="${layout.logoUrl}" style="height:60px;display:block;margin:0 auto 6px" />`
+        : `<div style="display:inline-block;height:60px;width:120px;background:#e5e7eb;border-radius:6px;line-height:60px;text-align:center;font-size:11px;color:#6b7280">[LOGO]</div>`,
+      "{{signature}}": layout.signatureUrl
+        ? `<img src="${layout.signatureUrl}" style="height:48px;display:block;margin-bottom:4px" />`
+        : `<div style="display:inline-block;height:48px;width:120px;background:#e5e7eb;border-radius:4px;line-height:48px;text-align:center;font-size:11px;color:#6b7280">[SIGNATURE]</div>`,
+    };
+
+    const m = layout.margins ?? { top: 40, right: 40, bottom: 40, left: 40 };
+    let combined = [
+      headerEditor?.getHTML() ?? "",
+      editor?.getHTML() ?? "",
+      footerEditor?.getHTML() ?? "",
+    ].join("\n");
+
+    for (const [key, val] of Object.entries(SAMPLE)) {
+      combined = combined.split(key).join(val);
+    }
+
+    return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"/>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Georgia,serif;font-size:12pt;line-height:1.7;color:#111;
+       padding:${m.top}pt ${m.right}pt ${m.bottom}pt ${m.left}pt;background:#fff}
+  h1{font-size:20pt;margin-bottom:10pt;font-weight:700}
+  h2{font-size:15pt;margin-bottom:8pt;font-weight:600}
+  h3{font-size:13pt;margin-bottom:6pt;font-weight:600}
+  p{margin-bottom:9pt}
+  ul,ol{margin:0 0 9pt 18pt}
+  li{margin-bottom:3pt}
+  strong{font-weight:700}
+  em{font-style:italic}
+  u{text-decoration:underline}
+  img{max-width:100%}
+  [style*="text-align:center"],[style*="text-align: center"]{text-align:center}
+  [style*="text-align:right"],[style*="text-align: right"]{text-align:right}
+</style>
+</head><body>${combined}</body></html>`;
+  }
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -197,6 +486,14 @@ export function LoaTemplateEditor({ programId }: { programId: string }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setPreviewMode((p) => !p)}
+            className="flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+          >
+            {previewMode ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            {previewMode ? "Edit" : "Preview"}
+          </button>
           <button
             type="button"
             disabled={saving}
@@ -240,84 +537,100 @@ export function LoaTemplateEditor({ programId }: { programId: string }) {
 
       {/* Two-column editor */}
       <div className="flex flex-1 gap-4 overflow-hidden">
-        {/* Left: body editor (60%) */}
-        <div className="flex w-[60%] flex-col gap-3">
-          {/* Header HTML */}
-          <div>
-            <label className={labelCls}>Header HTML</label>
-            <textarea
-              rows={3}
-              className={inputCls + " resize-none font-mono text-[11px]"}
-              value={layout.headerHtml ?? ""}
-              onChange={(e) => setLayout((l) => ({ ...l, headerHtml: e.target.value }))}
-              placeholder="<div style='text-align:center'><img src='{{logo}}' style='height:60px'/><h2>YBB Foundation</h2></div>"
-            />
-          </div>
-
-          {/* Body editor */}
-          <div className="flex flex-1 flex-col rounded-lg border border-zinc-200 bg-white">
-            <div className="flex flex-wrap items-center gap-0.5 border-b border-zinc-200 px-2 py-1.5">
-              <ToolbarBtn title="Undo" disabled={!editor?.can().undo()} onClick={() => editor?.chain().focus().undo().run()}>
-                <Undo className="h-3.5 w-3.5" />
-              </ToolbarBtn>
-              <ToolbarBtn title="Redo" disabled={!editor?.can().redo()} onClick={() => editor?.chain().focus().redo().run()}>
-                <Redo className="h-3.5 w-3.5" />
-              </ToolbarBtn>
-              <Sep />
-              <ToolbarBtn title="H1" active={editor?.isActive("heading", { level: 1 })} onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}>
-                <Heading1 className="h-3.5 w-3.5" />
-              </ToolbarBtn>
-              <ToolbarBtn title="H2" active={editor?.isActive("heading", { level: 2 })} onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}>
-                <Heading2 className="h-3.5 w-3.5" />
-              </ToolbarBtn>
-              <Sep />
-              <ToolbarBtn title="Bold" active={editor?.isActive("bold")} onClick={() => editor?.chain().focus().toggleBold().run()}>
-                <Bold className="h-3.5 w-3.5" />
-              </ToolbarBtn>
-              <ToolbarBtn title="Italic" active={editor?.isActive("italic")} onClick={() => editor?.chain().focus().toggleItalic().run()}>
-                <Italic className="h-3.5 w-3.5" />
-              </ToolbarBtn>
-              <ToolbarBtn title="Underline" active={editor?.isActive("underline")} onClick={() => editor?.chain().focus().toggleUnderline().run()}>
-                <UnderlineIcon className="h-3.5 w-3.5" />
-              </ToolbarBtn>
-              <Sep />
-              <ToolbarBtn title="Align Left" active={editor?.isActive({ textAlign: "left" })} onClick={() => editor?.chain().focus().setTextAlign("left").run()}>
-                <AlignLeft className="h-3.5 w-3.5" />
-              </ToolbarBtn>
-              <ToolbarBtn title="Align Center" active={editor?.isActive({ textAlign: "center" })} onClick={() => editor?.chain().focus().setTextAlign("center").run()}>
-                <AlignCenter className="h-3.5 w-3.5" />
-              </ToolbarBtn>
-              <ToolbarBtn title="Align Right" active={editor?.isActive({ textAlign: "right" })} onClick={() => editor?.chain().focus().setTextAlign("right").run()}>
-                <AlignRight className="h-3.5 w-3.5" />
-              </ToolbarBtn>
-              <Sep />
-              <ToolbarBtn title="Bullet List" active={editor?.isActive("bulletList")} onClick={() => editor?.chain().focus().toggleBulletList().run()}>
-                <List className="h-3.5 w-3.5" />
-              </ToolbarBtn>
-              <ToolbarBtn title="Numbered List" active={editor?.isActive("orderedList")} onClick={() => editor?.chain().focus().toggleOrderedList().run()}>
-                <ListOrdered className="h-3.5 w-3.5" />
-              </ToolbarBtn>
-              <Sep />
-              <ToolbarBtn title="Clear Formatting" onClick={() => editor?.chain().focus().unsetAllMarks().clearNodes().run()}>
-                <RemoveFormatting className="h-3.5 w-3.5" />
-              </ToolbarBtn>
+        {/* Left: editors or preview (60%) */}
+        <div className="flex w-[60%] flex-col gap-3 overflow-y-auto">
+          {previewMode ? (
+            <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-inner" style={{ minHeight: 600 }}>
+              <div className="flex items-center gap-2 border-b border-zinc-100 bg-zinc-50 px-4 py-2 text-[11px] text-zinc-500">
+                <Eye className="h-3 w-3" />
+                Preview — sample data substituted
+              </div>
+              <iframe
+                srcDoc={buildPreviewDoc()}
+                sandbox="allow-same-origin"
+                className="h-full w-full flex-1"
+                title="LOA Preview"
+                style={{ minHeight: 560 }}
+              />
             </div>
-            <div className="flex-1 overflow-y-auto px-5 py-4">
-              {editor && <EditorContent editor={editor} />}
-            </div>
-          </div>
+          ) : (
+            <>
+              {/* Header editor */}
+              <div>
+                <label className={labelCls}>Header</label>
+                <MiniEditor
+                  editor={headerEditor}
+                  tokenLabel="Logo"
+                  tokenKey="{{logo}}"
+                  placeholder="Header content — use {{logo}} to insert the logo…"
+                />
+              </div>
 
-          {/* Footer HTML */}
-          <div>
-            <label className={labelCls}>Footer HTML</label>
-            <textarea
-              rows={3}
-              className={inputCls + " resize-none font-mono text-[11px]"}
-              value={layout.footerHtml ?? ""}
-              onChange={(e) => setLayout((l) => ({ ...l, footerHtml: e.target.value }))}
-              placeholder="<div style='margin-top:32px'><img src='{{signature}}' style='height:48px'/><p><strong>Program Director</strong></p></div>"
-            />
-          </div>
+              {/* Body editor */}
+              <div className="flex flex-1 flex-col rounded-lg border border-zinc-200 bg-white">
+                <div className="flex flex-wrap items-center gap-0.5 border-b border-zinc-200 px-2 py-1.5">
+                  <ToolbarBtn title="Undo" disabled={!editor?.can().undo()} onClick={() => editor?.chain().focus().undo().run()}>
+                    <Undo className="h-3.5 w-3.5" />
+                  </ToolbarBtn>
+                  <ToolbarBtn title="Redo" disabled={!editor?.can().redo()} onClick={() => editor?.chain().focus().redo().run()}>
+                    <Redo className="h-3.5 w-3.5" />
+                  </ToolbarBtn>
+                  <Sep />
+                  <ToolbarBtn title="H1" active={editor?.isActive("heading", { level: 1 })} onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}>
+                    <Heading1 className="h-3.5 w-3.5" />
+                  </ToolbarBtn>
+                  <ToolbarBtn title="H2" active={editor?.isActive("heading", { level: 2 })} onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}>
+                    <Heading2 className="h-3.5 w-3.5" />
+                  </ToolbarBtn>
+                  <Sep />
+                  <ToolbarBtn title="Bold" active={editor?.isActive("bold")} onClick={() => editor?.chain().focus().toggleBold().run()}>
+                    <Bold className="h-3.5 w-3.5" />
+                  </ToolbarBtn>
+                  <ToolbarBtn title="Italic" active={editor?.isActive("italic")} onClick={() => editor?.chain().focus().toggleItalic().run()}>
+                    <Italic className="h-3.5 w-3.5" />
+                  </ToolbarBtn>
+                  <ToolbarBtn title="Underline" active={editor?.isActive("underline")} onClick={() => editor?.chain().focus().toggleUnderline().run()}>
+                    <UnderlineIcon className="h-3.5 w-3.5" />
+                  </ToolbarBtn>
+                  <Sep />
+                  <ToolbarBtn title="Align Left" active={editor?.isActive({ textAlign: "left" })} onClick={() => editor?.chain().focus().setTextAlign("left").run()}>
+                    <AlignLeft className="h-3.5 w-3.5" />
+                  </ToolbarBtn>
+                  <ToolbarBtn title="Align Center" active={editor?.isActive({ textAlign: "center" })} onClick={() => editor?.chain().focus().setTextAlign("center").run()}>
+                    <AlignCenter className="h-3.5 w-3.5" />
+                  </ToolbarBtn>
+                  <ToolbarBtn title="Align Right" active={editor?.isActive({ textAlign: "right" })} onClick={() => editor?.chain().focus().setTextAlign("right").run()}>
+                    <AlignRight className="h-3.5 w-3.5" />
+                  </ToolbarBtn>
+                  <Sep />
+                  <ToolbarBtn title="Bullet List" active={editor?.isActive("bulletList")} onClick={() => editor?.chain().focus().toggleBulletList().run()}>
+                    <List className="h-3.5 w-3.5" />
+                  </ToolbarBtn>
+                  <ToolbarBtn title="Numbered List" active={editor?.isActive("orderedList")} onClick={() => editor?.chain().focus().toggleOrderedList().run()}>
+                    <ListOrdered className="h-3.5 w-3.5" />
+                  </ToolbarBtn>
+                  <Sep />
+                  <ToolbarBtn title="Clear Formatting" onClick={() => editor?.chain().focus().unsetAllMarks().clearNodes().run()}>
+                    <RemoveFormatting className="h-3.5 w-3.5" />
+                  </ToolbarBtn>
+                </div>
+                <div className="flex-1 overflow-y-auto px-5 py-4">
+                  {editor && <EditorContent editor={editor} />}
+                </div>
+              </div>
+
+              {/* Footer editor */}
+              <div>
+                <label className={labelCls}>Footer</label>
+                <MiniEditor
+                  editor={footerEditor}
+                  tokenLabel="Signature"
+                  tokenKey="{{signature}}"
+                  placeholder="Footer content — use {{signature}} to insert the signature image…"
+                />
+              </div>
+            </>
+          )}
         </div>
 
         {/* Right: sidebar (40%) */}
@@ -359,7 +672,7 @@ export function LoaTemplateEditor({ programId }: { programId: string }) {
               </select>
             </div>
 
-            <div className="mb-3">
+            <div className="mb-4">
               <label className={labelCls}>Margins (pt)</label>
               <div className="grid grid-cols-4 gap-1.5">
                 {(["top", "right", "bottom", "left"] as const).map((side) => (
@@ -382,23 +695,25 @@ export function LoaTemplateEditor({ programId }: { programId: string }) {
               </div>
             </div>
 
-            <div className="mb-3">
-              <label className={labelCls}>Logo URL</label>
-              <input
-                className={inputCls}
+            <div className="mb-4">
+              <ImageUploadField
+                label="Logo"
                 value={layout.logoUrl ?? ""}
-                onChange={(e) => setLayout((l) => ({ ...l, logoUrl: e.target.value }))}
-                placeholder="https://..."
+                onChange={(url) => setLayout((l) => ({ ...l, logoUrl: url }))}
+                programId={programId}
+                brandId={brandId}
+                userId={userId}
               />
             </div>
 
             <div>
-              <label className={labelCls}>Signature Image URL</label>
-              <input
-                className={inputCls}
+              <ImageUploadField
+                label="Signature Image"
                 value={layout.signatureUrl ?? ""}
-                onChange={(e) => setLayout((l) => ({ ...l, signatureUrl: e.target.value }))}
-                placeholder="https://..."
+                onChange={(url) => setLayout((l) => ({ ...l, signatureUrl: url }))}
+                programId={programId}
+                brandId={brandId}
+                userId={userId}
               />
             </div>
           </div>

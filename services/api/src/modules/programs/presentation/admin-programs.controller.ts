@@ -83,6 +83,7 @@ export class AdminProgramsController {
         year: program.year,
         theme: program.theme ?? null,
         programType: program.programType ?? null,
+        programFormat: program.programFormat ?? null,
         status: program.status,
         isPublished: program.isPublished,
         isActive: program.isActive,

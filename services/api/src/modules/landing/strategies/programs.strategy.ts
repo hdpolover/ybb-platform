@@ -202,6 +202,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
 
                     // Side Panel Data
                     location: currentProgram.location,
+                    program_format: currentProgram.programFormat,
                     start_date: currentProgram.startDate,
                     end_date: currentProgram.endDate,
                     duration: `${Math.ceil((currentProgram.endDate.getTime() - currentProgram.startDate.getTime()) / (1000 * 60 * 60 * 24))} Days`,
