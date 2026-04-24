@@ -63,6 +63,28 @@ export class PortalApplicationSummaryDto {
     daysUntilDeadline?: number;
 }
 
+export class PortalDashboardMoneyDto {
+    @ApiProperty()
+    amount: number;
+
+    @ApiProperty()
+    currency: string;
+}
+
+export class PortalDashboardStatsDto {
+    @ApiProperty()
+    applicationsCount: number;
+
+    @ApiProperty()
+    completedProgramsCount: number;
+
+    @ApiProperty()
+    certificatesCount: number;
+
+    @ApiProperty({ type: PortalDashboardMoneyDto })
+    totalRequired: PortalDashboardMoneyDto;
+}
+
 export class PortalDashboardResponseDto {
     @ApiProperty()
     greeting: string;
@@ -76,10 +98,6 @@ export class PortalDashboardResponseDto {
     @ApiProperty({ type: [PortalAnnouncementDto] })
     recentAnnouncements: PortalAnnouncementDto[];
     
-    @ApiProperty({ required: false, description: 'Quick stats for the user' })
-    stats?: {
-        applicationsCount: number;
-        completedProgramsCount: number;
-        certificatesCount: number;
-    };
+    @ApiProperty({ required: false, description: 'Quick stats for the user', type: PortalDashboardStatsDto })
+    stats?: PortalDashboardStatsDto;
 }
