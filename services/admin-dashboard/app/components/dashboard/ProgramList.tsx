@@ -18,7 +18,7 @@ type ProgramViewMode = "grid" | "list";
 function formatDateRange(startDate: string, endDate: string): string {
   const start = new Date(startDate);
   const end = new Date(endDate);
-
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) return "—";
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",

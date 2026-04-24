@@ -29,6 +29,8 @@ export class ApplicationResponseDto {
   paymentAmount?: number;
   paymentId?: string;
   paymentStatus?: string;
+  registrationPaymentStatus?: string;
+  programPaymentStatus?: string;
   scoreTotal?: number;
   scoreBreakdown?: Record<string, number>;
   scoreStatus?: ScoreStatus;

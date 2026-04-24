@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { useAuth } from "@/app/contexts/AuthContext";
 import { ProfileHeader, type ProfileHeaderData } from "@/app/components/participants/ProfileHeader";
 import { ParticipantProfileTabs } from "@/app/components/participants/ParticipantProfileTabs";
 import { GenerateLoaButton } from "@/app/components/participants/GenerateLoaButton";
@@ -103,7 +104,15 @@ function mapToParticipantData(app: Application): ParticipantData {
 
 export default function ParticipantDetailPage() {
   const params = useParams<{ programId: string; accountId: string }>();
-  const { programId, accountId } = params;
+  const { programId: programIdParam, accountId } = params;
+  const { accessiblePrograms } = useAuth();
+
+  const programId = useMemo(() => {
+    const p = accessiblePrograms.find(
+      (p) => p.programId === programIdParam || p.programSlug === programIdParam,
+    );
+    return p?.programId ?? programIdParam;
+  }, [accessiblePrograms, programIdParam]);
 
   const [participant, setParticipant] = useState<ParticipantData | null>(null);
   const [loading, setLoading] = useState(true);

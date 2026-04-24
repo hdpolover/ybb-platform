@@ -137,7 +137,7 @@ export const programNavSections: NavSection[] = [
         id: "participants",
         label: "Participants",
         href: "participants",
-        icon: Users,
+        icon: UserCheck,
       },
       {
         id: "ambassadors",

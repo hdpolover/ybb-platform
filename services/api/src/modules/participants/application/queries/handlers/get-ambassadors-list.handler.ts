@@ -12,9 +12,16 @@ export class GetAmbassadorsListHandler implements IQueryHandler<GetAmbassadorsLi
         const skip = (page - 1) * limit;
 
         const where: Prisma.AmbassadorWhereInput = {};
-        
+
         if (programId) {
-            where.programId = programId;
+            const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(programId);
+            if (isUuid) {
+                where.programId = programId;
+            } else {
+                const program = await this.prisma.program.findFirst({ where: { slug: programId }, select: { id: true } });
+                if (!program) return { data: [], meta: { total: 0, page, limit, lastPage: 0 } };
+                where.programId = program.id;
+            }
         }
 
         if (search) {

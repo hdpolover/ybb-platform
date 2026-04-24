@@ -9,10 +9,14 @@ import {
   Patch,
   Delete,
   Req,
+  ConflictException,
+  NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import {
   GetAmbassadorsListQuery,
   UpdateAmbassadorStatusCommand,
@@ -30,6 +34,7 @@ export class AmbassadorAdminController {
   constructor(
     private readonly queryBus: QueryBus,
     private readonly commandBus: CommandBus,
+    private readonly prisma: PrismaService,
   ) { }
 
   @Get()
@@ -37,12 +42,114 @@ export class AmbassadorAdminController {
   @ApiQuery({ name: 'programId', required: false })
   @ApiQuery({ name: 'search', required: false })
   @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
   async findAll(
     @Query('programId') programId?: string,
     @Query('search') search?: string,
     @Query('page') page: number = 1,
+    @Query('limit') limit: number = 20,
   ) {
-    return this.queryBus.execute(new GetAmbassadorsListQuery(programId, search, page));
+    return this.queryBus.execute(new GetAmbassadorsListQuery(programId, search, Number(page), Number(limit)));
+  }
+
+  @Post()
+  @AuditTrail({ entityType: 'Ambassador', action: ChangeType.create })
+  @ApiOperation({ summary: 'Create a new ambassador (Admin)' })
+  async create(
+    @Body() body: {
+      email: string;
+      fullName: string;
+      programId: string;
+      phoneNumber?: string;
+      institution?: string;
+      gender?: string;
+      notes?: string;
+    },
+  ) {
+    const { email, fullName, programId, phoneNumber, institution, gender, notes } = body;
+
+    if (!email || !fullName || !programId) {
+      throw new BadRequestException('email, fullName, and programId are required');
+    }
+
+    // Resolve program to get brandId
+    const program = await this.prisma.program.findUnique({ where: { id: programId }, select: { id: true, brandId: true } });
+    if (!program) throw new NotFoundException('Program not found');
+
+    // Find or create user
+    let user = await this.prisma.user.findFirst({ where: { email, brandId: program.brandId } });
+    if (!user) {
+      user = await this.prisma.user.create({
+        data: {
+          email,
+          brandId: program.brandId,
+          emailVerified: true,
+        },
+      });
+    }
+
+    // Check already ambassador
+    const existing = await this.prisma.ambassador.findUnique({ where: { userId: user.id } });
+    if (existing && !existing.deletedAt) {
+      throw new ConflictException('This user is already an ambassador');
+    }
+
+    // Generate referral code: up to 3 letters from name + 5 random digits
+    const namePrefix = fullName.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 3).padEnd(3, 'X');
+    const digits = Math.floor(10000 + Math.random() * 90000).toString();
+    let referralCode = namePrefix + digits;
+    // Ensure uniqueness — retry once on collision
+    const collision = await this.prisma.ambassador.findFirst({ where: { referralCode } });
+    if (collision) {
+      referralCode = namePrefix + Math.floor(10000 + Math.random() * 90000).toString();
+    }
+
+    const ambassador = await this.prisma.ambassador.create({
+      data: {
+        userId: user.id,
+        programId,
+        fullName,
+        phoneNumber: phoneNumber ?? null,
+        institution: institution ?? null,
+        gender: (gender as any) ?? null,
+        notes: notes ?? null,
+        referralCode,
+        isActive: true,
+        activatedAt: new Date(),
+      },
+      include: { user: { select: { email: true } } },
+    });
+
+    return ambassador;
+  }
+
+  @Patch(':id')
+  @AuditTrail({ entityType: 'Ambassador', action: ChangeType.update })
+  @ApiOperation({ summary: 'Update ambassador details (Admin)' })
+  async update(
+    @Param('id') id: string,
+    @Body() body: {
+      fullName?: string;
+      phoneNumber?: string;
+      institution?: string;
+      gender?: string;
+      notes?: string;
+    },
+  ) {
+    const ambassador = await this.prisma.ambassador.findUnique({ where: { id } });
+    if (!ambassador || ambassador.deletedAt) throw new NotFoundException('Ambassador not found');
+
+    return this.prisma.ambassador.update({
+      where: { id },
+      data: {
+        fullName: body.fullName ?? undefined,
+        phoneNumber: body.phoneNumber ?? undefined,
+        institution: body.institution ?? undefined,
+        gender: (body.gender as any) ?? undefined,
+        notes: body.notes ?? undefined,
+      },
+      include: { user: { select: { email: true } } },
+    });
   }
 
   @Patch(':id/activate')
