@@ -58,6 +58,7 @@ describe('GetPortalDashboardHandler', () => {
         
         expect(result.greeting).toBe('Welcome!');
         expect(result.alerts[0].id).toBe('onboarding-req');
+        expect(result.stats?.totalRequired).toEqual({ amount: 0, currency: 'USD' });
     });
 
     it('should return full dashboard with application info', async () => {
@@ -90,6 +91,7 @@ describe('GetPortalDashboardHandler', () => {
             program: {
                 id: 'prog-1',
                 name: 'YBB 2024',
+                currency: 'USD',
                 applicationDeadline: new Date(Date.now() + 86400000), // Tomorrow
                 formFields: [
                     { section: 'personal_details', name: 'full_name', isRequired: true },
@@ -101,6 +103,7 @@ describe('GetPortalDashboardHandler', () => {
                 requirements: [
                     { id: 'doc-1', isRequired: true },
                 ],
+                pricingTiers: [],
                 announcements: [],
                 programAnnouncements: []
             },
@@ -114,9 +117,57 @@ describe('GetPortalDashboardHandler', () => {
         expect(result.greeting).toContain('Test');
         expect(result.activeApplication).toBeDefined();
         expect(result.activeApplication?.status).toBe('draft');
-        expect(result.activeApplication?.progress).toBe(60);
+        expect(result.activeApplication?.progress).toBe(50);
         expect(result.activeApplication?.currentStep).toBe('Application Drafting');
         expect(result.stats?.applicationsCount).toBe(1);
         expect(result.stats?.certificatesCount).toBe(2);
+        expect(result.stats?.totalRequired).toEqual({ amount: 0, currency: 'USD' });
+    });
+
+    it('should sum only unpaid and failed invoices for totalRequired', async () => {
+        mockCacheService.get.mockResolvedValue(null);
+        mockPortalCacheService.getParticipantProfile.mockResolvedValue({
+            id: 'p-1',
+            userId: 'u-1',
+            fullName: 'Test User'
+        });
+        mockPortalCacheService.getParticipantStats.mockResolvedValue({
+            applicationsCount: 2,
+            completedProgramsCount: 1,
+            certificatesCount: 2,
+        });
+
+        mockPrisma.participantApplication.findFirst.mockResolvedValue({
+            id: 'app-2',
+            status: 'submitted',
+            updatedAt: new Date(),
+            applicationCategory: 'self_funded',
+            personalData: {},
+            essayAnswers: {},
+            uploadedFiles: {},
+            program: {
+                id: 'prog-2',
+                name: 'YBB 2025',
+                currency: 'IDR',
+                applicationDeadline: new Date(Date.now() + 86400000),
+                formFields: [],
+                essays: [],
+                requirements: [],
+                pricingTiers: [],
+                announcements: [],
+                programAnnouncements: [],
+            },
+            registrationPaymentStatus: 'unpaid',
+            invoices: [
+                { id: 'inv-1', status: 'paid', amount: 100 },
+                { id: 'inv-2', status: 'unpaid', amount: 200 },
+                { id: 'inv-3', status: 'failed', amount: 50.5 },
+                { id: 'inv-4', status: 'processing', amount: 300 },
+            ],
+        });
+
+        const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+        expect(result.stats?.totalRequired).toEqual({ amount: 250.5, currency: 'IDR' });
     });
 });

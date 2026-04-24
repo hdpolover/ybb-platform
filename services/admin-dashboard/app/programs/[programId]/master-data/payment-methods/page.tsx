@@ -25,6 +25,11 @@ import {
   SheetFooter,
 } from "@/src/ui/sheet";
 
+function normalizePaymentMethodType(type: string | undefined): PaymentMethodType {
+  const normalized = String(type ?? "").trim().toLowerCase();
+  return normalized === "automatic" ? "AUTOMATIC" : "MANUAL";
+}
+
 export default function PaymentMethodsPage() {
   const params = useParams<{ programId: string }>();
   const { accessiblePrograms, adminProfile } = useAuth();
@@ -44,7 +49,15 @@ export default function PaymentMethodsPage() {
   const fetch = useCallback(async () => {
     if (!params.programId) return;
     setLoading(true); setError(null);
-    try { setMethods(await listPaymentMethods()); }
+    try {
+      const data = await listPaymentMethods();
+      setMethods(
+        data.map((method) => ({
+          ...method,
+          type: normalizePaymentMethodType(method.type),
+        })),
+      );
+    }
     catch (err) { setError(err instanceof Error ? err.message : "Failed to load"); }
     finally { setLoading(false); }
   }, [params.programId]);
@@ -93,6 +106,7 @@ export default function PaymentMethodsPage() {
               {!loading && methods.length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-zinc-400">No payment methods yet.</td></tr>}
               {!loading && methods.map((m, idx) => {
                 const label = m.display_name || m.name || "";
+                const isManual = normalizePaymentMethodType(m.type) === "MANUAL";
                 return (
                 <tr key={m.id} className={idx % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}>
                   <td className="px-3 py-2">
@@ -109,20 +123,20 @@ export default function PaymentMethodsPage() {
                     {m.display_name && m.name && m.display_name !== m.name && <div className="text-[10px] text-zinc-400">{m.name}</div>}
                   </td>
                   <td className="px-3 py-2 text-zinc-500">
-                    {m.type === "MANUAL" && m.bank_name ? (
+                    {isManual && m.bank_name ? (
                       <div>
                         <div className="font-medium text-zinc-700">{m.bank_name}</div>
                         {m.account_number && <div className="text-[10px] text-zinc-400">{m.account_number}{m.account_name ? ` · ${m.account_name}` : ""}</div>}
                       </div>
-                    ) : m.type === "AUTOMATIC" && m.gateway_name ? (
+                    ) : !isManual && m.gateway_name ? (
                       <div className="font-medium text-zinc-700">{m.gateway_name}{m.gateway_type ? ` / ${m.gateway_type}` : ""}</div>
                     ) : (
                       <span className="text-zinc-400">—</span>
                     )}
                   </td>
                   <td className="px-3 py-2">
-                    <span className={`rounded px-2 py-0.5 text-[10px] font-semibold ${m.type === "MANUAL" ? "bg-blue-50 text-blue-700" : "bg-purple-50 text-purple-700"}`}>
-                      {m.type === "MANUAL" ? "Manual" : "Automatic"}
+                    <span className={`rounded px-2 py-0.5 text-[10px] font-semibold ${isManual ? "bg-blue-50 text-blue-700" : "bg-purple-50 text-purple-700"}`}>
+                      {isManual ? "Manual" : "Automatic"}
                     </span>
                   </td>
                   <td className="px-3 py-2">{m.is_active ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Active</span> : <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-600">Inactive</span>}</td>
@@ -161,7 +175,7 @@ function PaymentMethodModal({
   onSaved: () => void;
 }) {
   const [name, setName] = useState(method?.name ?? "");
-  const [type, setType] = useState<PaymentMethodType>(method?.type ?? "MANUAL");
+  const [type, setType] = useState<PaymentMethodType>(normalizePaymentMethodType(method?.type));
   const [displayName, setDisplayName] = useState(method?.display_name ?? "");
   const [description, setDescription] = useState(method?.description ?? "");
   const [isActive, setIsActive] = useState(method?.is_active ?? true);

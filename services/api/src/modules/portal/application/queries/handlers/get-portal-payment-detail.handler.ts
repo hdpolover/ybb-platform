@@ -36,7 +36,17 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
                     select: { participantId: true },
                 },
                 pricingTier: {
-                    select: { name: true, feeType: true },
+                    select: {
+                        name: true,
+                        feeType: true,
+                        validityPeriods: {
+                            select: {
+                                startDate: true,
+                                endDate: true,
+                            },
+                            orderBy: { startDate: 'asc' },
+                        },
+                    },
                 },
             },
         });
@@ -97,13 +107,22 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
             invoice.status === 'processing' ? 'processing' :
             invoice.status === 'failed' ? 'failed' : 'unpaid';
 
+        const now = new Date();
+        const periodByInvoiceDate = invoice.pricingTier.validityPeriods.find((period) => (
+            period.startDate <= invoice.createdAt && period.endDate >= invoice.createdAt
+        ));
+        const nearestActiveOrUpcomingPeriod = invoice.pricingTier.validityPeriods.find((period) => period.endDate >= now);
+        const periods = invoice.pricingTier.validityPeriods;
+        const fallbackLatestPeriod = periods.length > 0 ? periods[periods.length - 1] : undefined;
+        const dueDate = periodByInvoiceDate?.endDate ?? nearestActiveOrUpcomingPeriod?.endDate ?? fallbackLatestPeriod?.endDate;
+
         const result: PortalPaymentDetailResponseDto = {
             invoice: {
                 id: invoice.id,
                 label: invoice.pricingTier.name,
                 category: invoice.pricingTier.feeType,
                 amount: Number(invoice.amount),
-                dueDate: undefined,
+                dueDate: dueDate?.toISOString(),
                 status: invoiceStatus,
                 currency: invoice.currency,
             },

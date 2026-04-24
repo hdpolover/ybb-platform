@@ -141,21 +141,33 @@ export class PortalCacheService {
             return cached;
         }
 
-        const [appCount, certCount] = await Promise.all([
+        const [appCount, completedProgramsCount, certCount] = await Promise.all([
             this.prisma.participantApplication.count({ 
                 where: { participantId } 
+            }),
+            this.prisma.participantApplication.count({
+                where: {
+                    participantId,
+                    documents: {
+                        some: {
+                            type: 'certificate',
+                            deletedAt: null,
+                        },
+                    },
+                },
             }),
             this.prisma.participantDocument.count({
                 where: { 
                     application: { participantId },
-                    type: 'certificate' 
+                    type: 'certificate',
+                    deletedAt: null,
                 }
             })
         ]);
 
         const stats = {
             applicationsCount: appCount,
-            completedProgramsCount: 0, // Placeholder for now
+            completedProgramsCount,
             certificatesCount: certCount
         };
 

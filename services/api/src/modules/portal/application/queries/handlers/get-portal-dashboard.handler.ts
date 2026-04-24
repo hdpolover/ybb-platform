@@ -57,6 +57,7 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                     select: {
                         id: true,
                         name: true,
+                        currency: true,
                         applicationDeadline: true,
                         formFields: {
                             where: { isActive: true },
@@ -133,11 +134,16 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
         });
 
         // 2. Stats (using cached lookup)
-        const stats = await this.portalCacheService.getParticipantStats(participant.id) || {
+        const baseStats = await this.portalCacheService.getParticipantStats(participant.id) || {
             applicationsCount: 0,
             completedProgramsCount: 0,
-            certificatesCount: 0
+            certificatesCount: 0,
         };
+
+        const totalRequired = this.calculateTotalRequired(
+            latestApplication?.invoices ?? [],
+            latestApplication?.program?.currency,
+        );
 
         // 3. Application Summary & Alerts
         let activeAppSummary: PortalApplicationSummaryDto | null = null;
@@ -147,9 +153,13 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
         if (latestApplication) {
             alerts = this.generateAlerts(latestApplication);
             
-            const tiers = latestApplication.program.pricingTiers as unknown as { allowedCategories: string[] }[];
-            const hasSelfFundedTier = tiers.some(t => t.allowedCategories.includes('self_funded'));
-            const hasFullyFundedTier = tiers.some(t => t.allowedCategories.includes('fully_funded'));
+            const tiers = (latestApplication.program.pricingTiers ?? []) as unknown as { allowedCategories: string[] }[];
+            const hasSelfFundedTier = tiers.some(
+                (tier) => Array.isArray(tier.allowedCategories) && tier.allowedCategories.includes('self_funded'),
+            );
+            const hasFullyFundedTier = tiers.some(
+                (tier) => Array.isArray(tier.allowedCategories) && tier.allowedCategories.includes('fully_funded'),
+            );
             const bothTiersActive = hasSelfFundedTier && hasFullyFundedTier;
 
             const hasSuccessfulPayment =
@@ -208,7 +218,12 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
             activeApplication: activeAppSummary,
             alerts,
             recentAnnouncements: announcements as unknown as import('../../../presentation/dto/portal-dashboard.dto').PortalAnnouncementDto[],
-            stats
+            stats: {
+                applicationsCount: baseStats.applicationsCount,
+                completedProgramsCount: baseStats.completedProgramsCount,
+                certificatesCount: baseStats.certificatesCount,
+                totalRequired,
+            }
         };
 
         // Cache the result for 5 minutes
@@ -230,8 +245,34 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                 actionUrl: '/onboarding'
             }],
             recentAnnouncements: [],
-            stats: { applicationsCount: 0, completedProgramsCount: 0, certificatesCount: 0 }
+            stats: {
+                applicationsCount: 0,
+                completedProgramsCount: 0,
+                certificatesCount: 0,
+                totalRequired: {
+                    amount: 0,
+                    currency: 'USD',
+                },
+            }
          };
+    }
+
+    private calculateTotalRequired(
+        invoices: Array<{ status: string; amount: unknown }>,
+        currency?: string | null,
+    ): { amount: number; currency: string } {
+        const requiredStatuses = new Set(['unpaid', 'failed']);
+        const totalRequiredAmount = invoices
+            .filter((invoice) => requiredStatuses.has(String(invoice.status).toLowerCase()))
+            .reduce((sum, invoice) => {
+                const parsedAmount = Number(invoice.amount ?? 0);
+                return Number.isFinite(parsedAmount) ? sum + parsedAmount : sum;
+            }, 0);
+
+        return {
+            amount: Math.round(totalRequiredAmount * 100) / 100,
+            currency: String(currency || 'USD').toUpperCase(),
+        };
     }
 
     private generateAlerts(application: { invoices: { status: string }[] }): PortalDashboardAlertDto[] {
