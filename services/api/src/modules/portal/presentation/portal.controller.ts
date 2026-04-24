@@ -1,6 +1,7 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards, UnauthorizedException } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
-import { QueryBus } from '@nestjs/cqrs';
+import { Controller, Get, Post, Body, Param, Query, UseGuards, UnauthorizedException, BadRequestException, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
+import { QueryBus, CommandBus } from '@nestjs/cqrs';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
@@ -12,6 +13,7 @@ import {
     GetPortalDocumentsQuery,
     ConfirmPortalPaymentCommand,
     EnsurePortalPaymentInvoiceCommand,
+    UploadSignedCopyCommand,
 } from '../application/queries/portal-queries';
 import { PortalDashboardResponseDto } from './dto/portal-dashboard.dto';
 import { PortalSubmissionResponseDto } from './dto/portal-submission.dto';
@@ -37,6 +39,7 @@ import type { AdminPaymentMethod } from '../../payments/common/proto/payment.int
 export class PortalController {
     constructor(
         private readonly queryBus: QueryBus,
+        private readonly commandBus: CommandBus,
         private readonly confirmPortalPaymentHandler: ConfirmPortalPaymentHandler,
         private readonly ensurePortalPaymentInvoiceHandler: EnsurePortalPaymentInvoiceHandler,
         private readonly paymentServiceClient: PaymentServiceHttpClient,
@@ -169,5 +172,21 @@ export class PortalController {
         const userId = user.userId;
         if (!userId) throw new UnauthorizedException();
         return this.queryBus.execute(new GetPortalDocumentsQuery(userId));
+    }
+
+    @Post('documents/:templateId/signed-copy')
+    @UseInterceptors(FileInterceptor('file'))
+    @ApiConsumes('multipart/form-data')
+    @ApiOperation({ summary: 'Upload signed copy of an agreement letter' })
+    async uploadSignedCopy(
+        @Param('templateId') templateId: string,
+        @UploadedFile() file: Express.Multer.File,
+        @CurrentUser() user: CurrentUserData,
+    ) {
+        if (!user.userId) throw new UnauthorizedException();
+        if (!file) throw new BadRequestException('File is required');
+        return this.commandBus.execute(
+            new UploadSignedCopyCommand(templateId, user.userId, file),
+        );
     }
 }

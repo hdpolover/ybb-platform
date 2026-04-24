@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
 import { AuthModule } from '../auth/auth.module';
 import { PaymentsModule } from '../payments/payments.module';
+import { FilesModule } from '../files/files.module';
 
 // Existing
 import { PortalController } from './presentation/portal.controller';
@@ -25,8 +26,11 @@ import { PortalCertificatesController } from './presentation/portal-certificates
 import { GetPortalCertificatesHandler } from './application/queries/handlers/get-portal-certificates.handler';
 import { DownloadCertificateHandler } from './application/commands/handlers/download-certificate.handler';
 
+// New — Documents
+import { UploadSignedCopyHandler } from './application/commands/handlers/upload-signed-copy.handler';
+
 @Module({
-    imports: [CqrsModule, AuthModule, PaymentsModule],
+    imports: [CqrsModule, AuthModule, PaymentsModule, FilesModule],
     controllers: [
         PortalController,
         PortalSubmissionsController,
@@ -49,6 +53,7 @@ import { DownloadCertificateHandler } from './application/commands/handlers/down
         DownloadCertificateHandler,
         ConfirmPortalPaymentHandler,
         EnsurePortalPaymentInvoiceHandler,
+        UploadSignedCopyHandler,
     ],
 })
 export class PortalModule { }

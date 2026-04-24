@@ -18,10 +18,13 @@ export class DocumentItemDto {
 
     @ApiProperty({ enum: ['pending_upload', 'under_review', 'verified', 'rejected', 'optional', 'available'] })
     status: string;
-    
+
     @ApiProperty({ required: false })
     rejectionReason?: string;
 
+    @ApiProperty({ required: false }) signedCopyUrl?: string;
+    @ApiProperty({ required: false }) submissionStatus?: string;
+    @ApiProperty() documentType: string; // 'agreement_letter' | 'complementary_document' | 'program_resource'
     @ApiProperty()
     updatedAt: Date;
 }
