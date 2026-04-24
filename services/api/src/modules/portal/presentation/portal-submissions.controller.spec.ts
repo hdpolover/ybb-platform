@@ -48,7 +48,7 @@ describe('PortalSubmissionsController', () => {
 
     describe('getSubmissionDetail', () => {
         it('should call handler with userId from JWT', async () => {
-            const mockResult = {
+            const mockResult: import('./dto/portal-submission-detail.dto').PortalSubmissionDetailResponseDto = {
                 applicationId: 'app-1',
                 programId: 'prog-1',
                 programName: 'Test Program',
@@ -57,6 +57,23 @@ describe('PortalSubmissionsController', () => {
                 sections: [],
                 essays: [],
                 requirements: [],
+                preview: {
+                    title: 'Preview & Confirmation',
+                    description: 'Review your submission details before finalizing your application.',
+                    checklists: [],
+                    primaryAction: {
+                        type: 'submit_application',
+                        label: 'Submit Application',
+                        enabled: true,
+                    },
+                    payment: {
+                        required: false,
+                        paid: true,
+                        status: 'paid',
+                    },
+                    canSubmit: true,
+                    pendingItems: [],
+                },
             };
             getDetailHandler.execute.mockResolvedValue(mockResult);
 

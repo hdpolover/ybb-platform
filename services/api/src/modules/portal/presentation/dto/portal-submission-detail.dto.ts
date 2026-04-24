@@ -145,6 +145,83 @@ export class SubmissionRequirementDto {
 }
 
 /**
+ * Preview checklist item for final confirmation step
+ */
+export class SubmissionPreviewChecklistItemDto {
+    @ApiProperty({ example: 'ready_to_join' })
+    key: string;
+
+    @ApiProperty({ example: 'I am ready to join this program.' })
+    label: string;
+
+    @ApiProperty({ example: true })
+    required: boolean;
+
+    @ApiProperty({ example: false })
+    checked: boolean;
+}
+
+/**
+ * Primary CTA for preview step
+ */
+export class SubmissionPreviewPrimaryActionDto {
+    @ApiProperty({ enum: ['submit_application', 'complete_payment'], example: 'submit_application' })
+    type: 'submit_application' | 'complete_payment';
+
+    @ApiProperty({ example: 'Submit Application' })
+    label: string;
+
+    @ApiProperty({ example: true })
+    enabled: boolean;
+
+    @ApiPropertyOptional({ example: 'Complete all required sections before submitting.' })
+    reason?: string;
+}
+
+/**
+ * Payment summary for preview step decision
+ */
+export class SubmissionPreviewPaymentDto {
+    @ApiProperty({ example: true })
+    required: boolean;
+
+    @ApiProperty({ example: false })
+    paid: boolean;
+
+    @ApiProperty({ example: 'unpaid', enum: ['unpaid', 'paid', 'processing', 'failed', 'refunded'] })
+    status: string;
+}
+
+/**
+ * Final preview step configuration and state
+ */
+export class SubmissionPreviewDto {
+    @ApiProperty({ example: 'Preview & Confirmation' })
+    title: string;
+
+    @ApiPropertyOptional({ example: 'Review your data before final submission.' })
+    description?: string;
+
+    @ApiPropertyOptional({ example: '<p>Terms and conditions...</p>' })
+    termsAndConditionsHtml?: string;
+
+    @ApiProperty({ type: [SubmissionPreviewChecklistItemDto] })
+    checklists: SubmissionPreviewChecklistItemDto[];
+
+    @ApiProperty({ type: SubmissionPreviewPrimaryActionDto })
+    primaryAction: SubmissionPreviewPrimaryActionDto;
+
+    @ApiProperty({ type: SubmissionPreviewPaymentDto })
+    payment: SubmissionPreviewPaymentDto;
+
+    @ApiProperty({ example: false })
+    canSubmit: boolean;
+
+    @ApiProperty({ type: [String], example: ['Complete required essays'] })
+    pendingItems: string[];
+}
+
+/**
  * Full submission detail response — contains all data needed to render the submission form
  */
 export class PortalSubmissionDetailResponseDto {
@@ -171,6 +248,9 @@ export class PortalSubmissionDetailResponseDto {
 
     @ApiProperty({ description: 'Document requirements with upload status', type: [SubmissionRequirementDto] })
     requirements: SubmissionRequirementDto[];
+
+    @ApiProperty({ description: 'Final preview step data and action state', type: SubmissionPreviewDto })
+    preview: SubmissionPreviewDto;
 
     @ApiPropertyOptional({ example: 'Jane Doe' })
     participantName?: string;

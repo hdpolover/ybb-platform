@@ -34,6 +34,13 @@ export class PortalSubmitApplicationHandler {
                 id: true,
                 status: true,
                 applicationCategory: true,
+                registrationPaymentStatus: true,
+                personalData: true,
+                participationCategory: {
+                    select: {
+                        name: true,
+                    },
+                },
                 participantId: true,
             },
         });
@@ -45,6 +52,10 @@ export class PortalSubmitApplicationHandler {
                 `Cannot submit application in "${application.status}" status. Only drafts can be submitted.`,
             );
         }
+
+        this.validatePreviewAcknowledgements(
+            (application.personalData as Record<string, unknown>) || {},
+        );
 
         // Check payment for non-fully-funded applicants
         await this.validatePaymentStatus(application);
@@ -67,9 +78,18 @@ export class PortalSubmitApplicationHandler {
         };
     }
 
-    private async validatePaymentStatus(application: { id: string; applicationCategory: string | null }): Promise<void> {
-        const isFullyFunded = application.applicationCategory === 'fully_funded';
+    private async validatePaymentStatus(application: {
+        id: string;
+        applicationCategory: string | null;
+        registrationPaymentStatus: string;
+        participationCategory: { name: string } | null;
+    }): Promise<void> {
+        const isFullyFunded = this.isFullyFundedApplication(application);
         if (isFullyFunded) return;
+
+        if (application.registrationPaymentStatus === 'paid') {
+            return;
+        }
 
         try {
             const payments = await this.paymentClient.getIntentsByReference({
@@ -93,6 +113,99 @@ export class PortalSubmitApplicationHandler {
             // If payment service is unavailable, allow submission with warning
             // This prevents blocking users due to infra issues
         }
+    }
+
+    private validatePreviewAcknowledgements(personalData: Record<string, unknown>): void {
+        const readyToJoinKeys = [
+            'preview_ready_to_join',
+            'previewReadyToJoin',
+            'ready_to_join',
+            'readyToJoin',
+        ];
+        const termsAcknowledgedKeys = [
+            'preview_understand_terms_and_conditions',
+            'previewUnderstandTermsAndConditions',
+            'understand_terms_and_conditions',
+            'understandTermsAndConditions',
+        ];
+
+        const hasPreviewFlag = [...readyToJoinKeys, ...termsAcknowledgedKeys].some(
+            (key) => personalData[key] !== undefined,
+        );
+
+        // Backward compatibility: older clients may still submit without preview payload.
+        if (!hasPreviewFlag) return;
+
+        const isReadyToJoin = this.readBoolean(personalData, readyToJoinKeys);
+        const hasAcceptedTerms = this.readBoolean(personalData, termsAcknowledgedKeys);
+
+        if (!isReadyToJoin || !hasAcceptedTerms) {
+            throw new BadRequestException(
+                'Please complete all preview confirmations before submitting.',
+            );
+        }
+    }
+
+    private readBoolean(data: Record<string, unknown>, keys: string[]): boolean {
+        for (const key of keys) {
+            const value = data[key];
+            if (typeof value === 'boolean') return value;
+            if (typeof value === 'number') {
+                if (value === 1) return true;
+                if (value === 0) return false;
+            }
+            if (typeof value === 'string') {
+                const normalized = value.trim().toLowerCase();
+                if (normalized === 'true' || normalized === '1' || normalized === 'yes') {
+                    return true;
+                }
+                if (normalized === 'false' || normalized === '0' || normalized === 'no') {
+                    return false;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private isFullyFundedApplication(application: {
+        applicationCategory: string | null;
+        participationCategory: { name: string } | null;
+    }): boolean {
+        if (application.applicationCategory === 'fully_funded') {
+            return true;
+        }
+
+        const fromCategoryName = this.mapCategoryNameToApplicationCategory(
+            application.participationCategory?.name,
+        );
+
+        return fromCategoryName === 'fully_funded';
+    }
+
+    private mapCategoryNameToApplicationCategory(name: string | null | undefined): 'fully_funded' | 'self_funded' | null {
+        if (!name) return null;
+
+        const normalized = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+        if (
+            normalized === 'fullyfunded'
+            || normalized === 'fullyfund'
+            || normalized === 'fullfunded'
+            || normalized === 'fullscholarship'
+        ) {
+            return 'fully_funded';
+        }
+
+        if (
+            normalized === 'selffunded'
+            || normalized === 'selffund'
+            || normalized === 'selfsponsored'
+        ) {
+            return 'self_funded';
+        }
+
+        return null;
     }
 
     private async invalidateCaches(userId: string, participantId: string): Promise<void> {

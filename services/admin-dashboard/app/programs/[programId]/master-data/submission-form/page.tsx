@@ -9,6 +9,7 @@ import { FormFieldsTable } from "@/app/components/submissionsMasterData/form-fie
 import { ParticipationCategoriesTable } from "@/app/components/submissionsMasterData/categories/ParticipationCategoriesTable";
 import { SubThemesTable } from "@/app/components/submissionsMasterData/subthemes/SubThemesTable";
 import { SubmissionEssaysTable } from "@/app/components/submissionsMasterData/essays/SubmissionEssaysTable";
+import { PreviewSettingsTab } from "@/app/components/submissionsMasterData/preview/PreviewSettingsTab";
 
 export default function SubmissionFormPage({
   params,
@@ -38,6 +39,7 @@ export default function SubmissionFormPage({
           {activeTab === "categories" && <ParticipationCategoriesTable programId={programId} />}
           {activeTab === "subthemes" && <SubThemesTable programId={programId} />}
           {activeTab === "essays" && <SubmissionEssaysTable programId={programId} />}
+          {activeTab === "preview" && <PreviewSettingsTab programId={programId} />}
         </div>
       </section>
     </main>

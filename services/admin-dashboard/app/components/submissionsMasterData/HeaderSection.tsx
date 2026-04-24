@@ -8,7 +8,7 @@ export function HeaderSection({ programName }: { programName: string }) {
           </div>
           <h1 className="mt-1 text-lg font-bold text-zinc-900">{programName} Submission Form</h1>
           <p className="text-sm text-zinc-500">
-            Configure application form fields, participation categories, sub themes, and essay questions for this program.
+            Configure application form fields, participation categories, sub themes, essays, and preview settings for this program.
           </p>
         </div>
       </div>
