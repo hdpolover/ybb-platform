@@ -510,6 +510,86 @@ export function deleteBrandSponsor(brandId: string, sponsorId: string): Promise<
   return request<void>(`/brands/${brandId}/sponsors/${sponsorId}`, { method: "DELETE" });
 }
 
+export type BrandSocialFeed = {
+  id: string;
+  platform: string;
+  postId: string;
+  permalink: string;
+  imageUrl: string;
+  caption?: string | null;
+  postedAt: string;
+  isActive: boolean;
+};
+
+function normalizeBrandSocialFeed(input: unknown): BrandSocialFeed {
+  const value = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
+  const postedAt =
+    typeof value.postedAt === "string"
+      ? value.postedAt
+      : value.postedAt instanceof Date
+        ? value.postedAt.toISOString()
+        : "";
+
+  return {
+    id: typeof value.id === "string" ? value.id : "",
+    platform: typeof value.platform === "string" ? value.platform : "instagram",
+    postId: typeof value.postId === "string" ? value.postId : "",
+    permalink: typeof value.permalink === "string" ? value.permalink : "",
+    imageUrl: typeof value.imageUrl === "string" ? value.imageUrl : "",
+    caption: typeof value.caption === "string" ? value.caption : null,
+    postedAt,
+    isActive: value.isActive === true,
+  };
+}
+
+export function listBrandSocialFeeds(brandId: string): Promise<BrandSocialFeed[]> {
+  return request<unknown[]>(`/brands/${brandId}/social-feeds`, { cache: "no-store" }).then((items) =>
+    Array.isArray(items) ? items.map(normalizeBrandSocialFeed) : [],
+  );
+}
+
+export function createBrandSocialFeed(
+  brandId: string,
+  input: {
+    postId?: string;
+    permalink: string;
+    imageUrl?: string;
+    caption?: string | null;
+    postedAt?: string;
+    isActive?: boolean;
+  },
+): Promise<BrandSocialFeed> {
+  return request<unknown>(`/brands/${brandId}/social-feeds`, {
+    method: "POST",
+    body: JSON.stringify({
+      platform: "instagram",
+      ...input,
+    }),
+  }).then(normalizeBrandSocialFeed);
+}
+
+export function updateBrandSocialFeed(
+  brandId: string,
+  socialFeedId: string,
+  input: {
+    postId?: string;
+    permalink?: string;
+    imageUrl?: string;
+    caption?: string | null;
+    postedAt?: string;
+    isActive?: boolean;
+  },
+): Promise<BrandSocialFeed> {
+  return request<unknown>(`/brands/${brandId}/social-feeds/${socialFeedId}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  }).then(normalizeBrandSocialFeed);
+}
+
+export function deleteBrandSocialFeed(brandId: string, socialFeedId: string): Promise<void> {
+  return request<void>(`/brands/${brandId}/social-feeds/${socialFeedId}`, { method: "DELETE" });
+}
+
 // ─── Brand Admins ─────────────────────────────────────────────────────────────
 
 export type BrandAdmin = {
