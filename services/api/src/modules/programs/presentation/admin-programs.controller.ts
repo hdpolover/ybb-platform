@@ -49,7 +49,7 @@ export class AdminProgramsController {
     const program = await this.prisma.program.findFirst({
       where: {
         id,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         deletedAt: undefined as any,
       },
       include: {

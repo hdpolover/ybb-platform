@@ -32,7 +32,7 @@ export class CacheService {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   private getRedisClient(): any | null {
     // cache-manager v7 path: cacheManager.stores[0].store.client (Keyv → KeyvRedis → ioredis)
     const stores = (this.cacheManager as unknown as { stores?: unknown[] }).stores;
@@ -46,7 +46,7 @@ export class CacheService {
     return null;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   private async scanKeys(client: any, pattern: string): Promise<string[]> {
     const keys: string[] = [];
     let cursor = '0';
@@ -59,7 +59,7 @@ export class CacheService {
     return keys;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   private normalizeScanResult(result: any): { cursor: string; keys: string[] } {
     if (Array.isArray(result)) {
       const [cursor, keys] = result;
