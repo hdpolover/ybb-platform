@@ -77,7 +77,8 @@ export class HomeStrategy implements ILandingPageStrategy {
       this.prisma.brandSocialFeed.findMany({
         where: {
           brandId: brand.id,
-          isActive: true
+          isActive: true,
+          platform: 'instagram',
         },
         orderBy: { postedAt: 'desc' },
         take: 6
