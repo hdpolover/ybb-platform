@@ -47,9 +47,13 @@ import {
   getPlatformBrand,
   listPlatformPrograms,
   listBrandSponsors,
+  listBrandSocialFeeds,
   createBrandSponsor,
+  createBrandSocialFeed,
   updateBrandSponsor,
+  updateBrandSocialFeed,
   deleteBrandSponsor,
+  deleteBrandSocialFeed,
   listBrandAdmins,
   listAllAdmins,
   assignBrandAdmin,
@@ -69,6 +73,7 @@ import {
   updatePlatformBrandMetadata,
   type AdminOption,
   type BrandAdmin,
+  type BrandSocialFeed,
   type BrandSponsor,
   type EmailTemplate,
   type LegalDocument,
@@ -1912,6 +1917,45 @@ type SponsorForm = {
   logoPreview: string | null;
 };
 
+type SocialFeedForm = {
+  permalink: string;
+  isActive: boolean;
+};
+
+function toDatetimeLocal(value?: string | null): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 16);
+}
+
+function formatFeedTimestamp(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function getFeedText(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
+}
+
+function buildInitialSocialFeedForm(feed?: BrandSocialFeed): SocialFeedForm {
+  return {
+    permalink: feed?.permalink ?? "",
+    isActive: feed?.isActive ?? true,
+  };
+}
+
 function SponsorSheet({
   brandId,
   sponsor,
@@ -2484,6 +2528,267 @@ function SponsorsTab({ brandId }: { brandId: string }) {
           </table>
           <div className="border-t border-zinc-200 px-4 py-2.5">
             <p className="text-xs text-zinc-400">{sponsors.length} sponsor{sponsors.length !== 1 ? "s" : ""}</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SocialFeedSheet({
+  brandId,
+  socialFeed,
+  onSaved,
+  trigger,
+}: {
+  brandId: string;
+  socialFeed?: BrandSocialFeed;
+  onSaved: () => void;
+  trigger: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState<SocialFeedForm>(buildInitialSocialFeedForm(socialFeed));
+
+  function handleOpenChange(next: boolean) {
+    if (next) {
+      setForm(buildInitialSocialFeedForm(socialFeed));
+      setError(null);
+    }
+    setOpen(next);
+  }
+
+  function setField<K extends keyof SocialFeedForm>(key: K, value: SocialFeedForm[K]) {
+    setForm((current) => ({ ...current, [key]: value }));
+    setError(null);
+  }
+
+  async function handleSave() {
+    if (!form.permalink.trim()) {
+      setError("Instagram post URL is required.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      const payload = {
+        permalink: form.permalink.trim(),
+        isActive: form.isActive,
+      };
+
+      if (socialFeed) {
+        await updateBrandSocialFeed(brandId, socialFeed.id, payload);
+      } else {
+        await createBrandSocialFeed(brandId, payload);
+      }
+
+      setOpen(false);
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <span onClick={() => handleOpenChange(true)}>{trigger}</span>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
+        <SheetContent className="w-full overflow-y-auto sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>{socialFeed ? "Edit Social Feed" : "Add Social Feed"}</SheetTitle>
+          </SheetHeader>
+          <div className="mt-6 space-y-4">
+            <SheetMsg message={error} variant="error" />
+            <FieldInput
+              label="Instagram Post URL"
+              id="feed-permalink"
+              value={form.permalink}
+              onChange={(value) => setField("permalink", value)}
+              placeholder="https://instagram.com/p/..."
+              hint="Paste the Instagram post link. The system will auto-fill the preview image, caption, post date, and post ID."
+            />
+            <FieldCheckbox
+              label="Active on landing page"
+              id="feed-active"
+              checked={form.isActive}
+              onChange={(value) => setField("isActive", value)}
+              hint="Only active Instagram feed items are eligible for the landing page."
+            />
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+              <p className="font-medium text-zinc-800">What happens after save</p>
+              <p className="mt-1">
+                We automatically derive the Instagram post ID and try to fetch the post image, caption, and publish
+                date from the pasted link. If Instagram blocks metadata retrieval, the system falls back to your brand
+                assets so admins do not need to fill technical fields manually.
+              </p>
+            </div>
+          </div>
+          <SheetFooter className="mt-6">
+            <Button variant="outline" onClick={() => setOpen(false)} disabled={saving}>Cancel</Button>
+            <Button onClick={handleSave} disabled={saving}>
+              <Save className="mr-1.5 h-4 w-4" />{saving ? "Saving…" : "Save"}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+    </>
+  );
+}
+
+function SocialFeedsTab({ brandId }: { brandId: string }) {
+  const [feeds, setFeeds] = useState<BrandSocialFeed[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    listBrandSocialFeeds(brandId)
+      .then(setFeeds)
+      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load social feeds."))
+      .finally(() => setLoading(false));
+  }, [brandId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    listBrandSocialFeeds(brandId)
+      .then((items) => {
+        if (!cancelled) {
+          setFeeds(items);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load social feeds.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [brandId]);
+
+  async function handleDelete(id: string) {
+    if (!confirm("Delete this social feed item? This cannot be undone.")) return;
+    setDeletingId(id);
+    try {
+      await deleteBrandSocialFeed(brandId, id);
+      load();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  if (loading) {
+    return <div className="rounded-lg border border-zinc-200 bg-white p-10 text-center text-sm text-zinc-500">Loading social feeds…</div>;
+  }
+
+  if (error) {
+    return <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>;
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-zinc-500">
+          Manage the Instagram posts shown in the registration overview on the main landing page. The latest active post appears first, and up to 6 posts are loaded.
+        </p>
+        <SocialFeedSheet
+          brandId={brandId}
+          onSaved={load}
+          trigger={<Button size="sm"><Plus className="mr-1.5 h-4 w-4" />Add Feed Item</Button>}
+        />
+      </div>
+      {feeds.length === 0 ? (
+        <EmptyState title="No social feeds yet" description="Instagram feed items added here will be available to the landing page." />
+      ) : (
+        <div className="rounded-lg border border-zinc-200 bg-white">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-zinc-100">
+                <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Post</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Posted</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Link</th>
+                <th className="px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody>
+              {feeds.map((feed) => (
+                <tr key={feed.id} className="border-b border-zinc-50 last:border-0 hover:bg-zinc-50">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md border border-zinc-200 bg-zinc-100">
+                        {feed.imageUrl ? (
+                          <>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={feed.imageUrl} alt={feed.caption ?? "Instagram feed image"} className="h-full w-full object-cover" />
+                          </>
+                        ) : (
+                          <ImageIcon className="h-4 w-4 text-zinc-400" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-zinc-900">{getFeedText(feed.postId, "Untitled post")}</p>
+                        <p className="line-clamp-2 text-xs text-zinc-500">
+                          {getFeedText(feed.caption, "No caption")}
+                        </p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-zinc-600">{formatFeedTimestamp(feed.postedAt)}</td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status={feed.isActive ? "active" : "inactive"} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <a
+                      href={feed.permalink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                    >
+                      Open post <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-1">
+                      <SocialFeedSheet
+                        brandId={brandId}
+                        socialFeed={feed}
+                        onSaved={load}
+                        trigger={<Button size="icon" variant="ghost" className="h-7 w-7"><Pencil className="h-3.5 w-3.5" /></Button>}
+                      />
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-red-500 hover:text-red-700"
+                        onClick={() => handleDelete(feed.id)}
+                        disabled={deletingId === feed.id}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="border-t border-zinc-200 px-4 py-2.5">
+            <p className="text-xs text-zinc-400">{feeds.length} feed item{feeds.length !== 1 ? "s" : ""}</p>
           </div>
         </div>
       )}
@@ -3169,6 +3474,7 @@ export default function BrandDetailPage({ brandId }: { brandId: string }) {
             <Layers className="mr-1.5 h-3.5 w-3.5" />
             Programs
           </TabsTrigger>
+          <TabsTrigger value="social-feeds">Social Feeds</TabsTrigger>
           <TabsTrigger value="sponsors">Sponsors</TabsTrigger>
           <TabsTrigger value="admins">Admins</TabsTrigger>
           <TabsTrigger value="email-templates">Email Templates</TabsTrigger>
@@ -3190,6 +3496,9 @@ export default function BrandDetailPage({ brandId }: { brandId: string }) {
         </TabsContent>
         <TabsContent value="programs" className="mt-4">
           <ProgramsTab brandId={brandId} />
+        </TabsContent>
+        <TabsContent value="social-feeds" className="mt-4">
+          <SocialFeedsTab brandId={brandId} />
         </TabsContent>
         <TabsContent value="sponsors" className="mt-4">
           <SponsorsTab brandId={brandId} />
