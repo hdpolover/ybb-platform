@@ -5,7 +5,6 @@ import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from '../auth/auth.module';
 import { FilesModule } from '../files/files.module';
 import { UsersModule } from '../users/users.module';
-import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { ProgramsModule } from '../programs/programs.module';
 import { LandingRevalidationService } from './application/services/landing-revalidation.service';
 import { BrandsController } from './presentation/brands.controller';
@@ -14,6 +13,7 @@ import { SponsorRepository } from './infrastructure/persistence/sponsor.reposito
 import { ListBrandsHandler } from './application/queries/handlers/list-brands.handler';
 import { GetBrandDetailHandler } from './application/queries/handlers/get-brand-detail.handler';
 import { ListBrandSponsorsHandler } from './application/queries/handlers/list-brand-sponsors.handler';
+import { ListBrandSocialFeedsHandler } from './application/queries/handlers/list-brand-social-feeds.handler';
 import { ListBrandAdminsHandler } from './application/queries/handlers/list-brand-admins.handler';
 import { GetBrandMetadataHandler } from './application/queries/handlers/get-brand-metadata.handler';
 import { CreateBrandHandler } from './application/commands/handlers/create-brand.handler';
@@ -27,6 +27,9 @@ import { RemoveBrandAdminHandler } from './application/commands/handlers/remove-
 import { CreateSponsorHandler } from './application/commands/handlers/create-sponsor.handler';
 import { UpdateSponsorHandler } from './application/commands/handlers/update-sponsor.handler';
 import { DeleteSponsorHandler } from './application/commands/handlers/delete-sponsor.handler';
+import { CreateSocialFeedHandler } from './application/commands/handlers/create-social-feed.handler';
+import { UpdateSocialFeedHandler } from './application/commands/handlers/update-social-feed.handler';
+import { DeleteSocialFeedHandler } from './application/commands/handlers/delete-social-feed.handler';
 
 @Module({
     imports: [CqrsModule, HttpModule, ConfigModule, AuthModule, FilesModule, UsersModule, ProgramsModule],
@@ -45,6 +48,7 @@ import { DeleteSponsorHandler } from './application/commands/handlers/delete-spo
         ListBrandsHandler,
         GetBrandDetailHandler,
         ListBrandSponsorsHandler,
+        ListBrandSocialFeedsHandler,
         ListBrandAdminsHandler,
         GetBrandMetadataHandler,
         // Command Handlers
@@ -59,6 +63,9 @@ import { DeleteSponsorHandler } from './application/commands/handlers/delete-spo
         CreateSponsorHandler,
         UpdateSponsorHandler,
         DeleteSponsorHandler,
+        CreateSocialFeedHandler,
+        UpdateSocialFeedHandler,
+        DeleteSocialFeedHandler,
     ],
 })
 export class BrandsModule { }
