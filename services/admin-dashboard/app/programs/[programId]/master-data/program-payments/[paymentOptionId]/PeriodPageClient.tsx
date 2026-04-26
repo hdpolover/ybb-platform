@@ -78,8 +78,10 @@ export function PeriodPageClient({
     setLoading(true);
     try {
       const tier = await getPricingTierById(tierId);
-      setTierDetail(tierToDetail(tier));
-      setPeriods(tier.validityPeriods.map((vp, i) => periodToRow(vp, i)));
+      if (tier) {
+        setTierDetail(tierToDetail(tier));
+        setPeriods(tier.validityPeriods.map((vp, i) => periodToRow(vp, i)));
+      }
     } catch {
       setPeriods([]);
     } finally {

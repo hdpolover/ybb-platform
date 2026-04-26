@@ -9,7 +9,7 @@ export function DownloadCvButton({ fileName }: { fileName: string }) {
   };
 
   return (
-    <Button variant="blue" size="sm" onClick={handleDownload}>
+    <Button variant="default" size="sm" onClick={handleDownload}>
       Download
     </Button>
   );

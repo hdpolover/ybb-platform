@@ -118,7 +118,7 @@ function FieldView({ label, value }: { label: string; value?: React.ReactNode })
     };
   }
 
-  function normalizeBenefitGroups(groups: BrandMetadata["benefits"] extends { groups: infer G } ? G : never): BenefitGroup[] {
+  function normalizeBenefitGroups(groups: BenefitGroup[] | undefined): BenefitGroup[] {
     return (groups ?? []).map((group, index) => normalizeBenefitGroup(group, index));
   }
 
@@ -1901,7 +1901,95 @@ function LandingPageTab({ brandId }: { brandId: string }) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Partners Page — Canva Embed */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Partners Page — Canva Embed</CardTitle>
+            <PartnersCanvaSheet brandId={brandId} initial={meta.partners_canva_url ?? null} onSaved={setMeta} />
+          </div>
+        </CardHeader>
+        <CardContent>
+          {meta.partners_canva_url ? (
+            <FieldView label="Canva Embed URL" value={
+              <a href={meta.partners_canva_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-blue-600 hover:underline break-all">
+                {meta.partners_canva_url}
+                <ExternalLink className="h-3 w-3 shrink-0" />
+              </a>
+            } />
+          ) : (
+            <p className="text-sm text-zinc-400">No Canva embed URL set. Add one to show a Canva presentation on the Partners &amp; Sponsors page.</p>
+          )}
+        </CardContent>
+      </Card>
     </div>
+  );
+}
+
+// ─── Sheet: Partners Canva URL ─────────────────────────────────────────────
+
+function PartnersCanvaSheet({
+  brandId,
+  initial,
+  onSaved,
+}: {
+  brandId: string;
+  initial: string | null;
+  onSaved: (updated: BrandMetadata) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [url, setUrl] = useState(initial ?? "");
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await updatePlatformBrandMetadata(brandId, {
+        partners_canva_url: url.trim() || null,
+      });
+      onSaved(updated);
+      setOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <Button size="sm" variant="outline" onClick={() => { setUrl(initial ?? ""); setError(null); setOpen(true); }}>
+        <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
+      </Button>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent side="right" className="sm:max-w-md overflow-y-auto">
+          <SheetHeader><SheetTitle>Edit Partners Page Canva Embed</SheetTitle></SheetHeader>
+          <div className="mt-6 space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="partners-canva-url">Canva Embed URL</Label>
+              <Input
+                id="partners-canva-url"
+                value={url}
+                onChange={(e) => { setUrl(e.target.value); setError(null); }}
+                placeholder="https://www.canva.com/design/.../view?embed"
+              />
+              <p className="text-xs text-zinc-400">
+                In Canva: <strong>Share → ··· → Embed → copy the URL inside <code>src="…"</code></strong>. It must end with <code>?embed</code>. The design must be set to <em>Anyone with the link can view</em>. Leave blank to hide the section.
+              </p>
+            </div>
+            {error && <p className="text-sm text-red-500">{error}</p>}
+          </div>
+          <SheetFooter className="mt-6">
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? "Saving…" : "Save"}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }
 

@@ -234,7 +234,7 @@ function MiniEditor({
   tokenKey,
   placeholder,
 }: {
-  editor: ReturnType<typeof useEditor>;
+  editor: ReturnType<typeof useEditor> | null;
   tokenLabel: string;
   tokenKey: string;
   placeholder?: string;

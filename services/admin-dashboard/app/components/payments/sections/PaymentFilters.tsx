@@ -75,19 +75,19 @@ export function PaymentFilters() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button 
-            variant="primary" 
+            variant="default" 
             size="sm" 
             onClick={() => setShowMakePaymentModal(true)}
-            startIcon={<ArrowUpRightIcon className="h-3.5 w-3.5" />}
           >
+            <ArrowUpRightIcon className="h-3.5 w-3.5" />
             Make Payment
           </Button>
 
           <Button 
             variant="secondary" 
             size="sm"
-            startIcon={<BanknotesIcon className="h-3.5 w-3.5 text-emerald-500" />}
           >
+            <BanknotesIcon className="h-3.5 w-3.5 text-emerald-500" />
             Export Data (Excel)
           </Button>
 
@@ -95,8 +95,8 @@ export function PaymentFilters() {
           <Button
             size="sm"
             className="bg-blue-50 text-blue-700 border-blue-500 hover:bg-blue-100 shadow-sm border"
-            startIcon={<FunnelIcon className="h-3.5 w-3.5" />}
           >
+            <FunnelIcon className="h-3.5 w-3.5" />
             Filters Active
           </Button>
 
@@ -104,8 +104,8 @@ export function PaymentFilters() {
             variant="secondary" 
             size="sm"
             onClick={handleReset}
-            startIcon={<ArrowPathIcon className="h-3.5 w-3.5" />}
           >
+            <ArrowPathIcon className="h-3.5 w-3.5" />
             Reset
           </Button>
         </div>
@@ -125,11 +125,11 @@ export function PaymentFilters() {
             className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           />
           <Button 
-            variant="blue" 
+            variant="default" 
             className="px-4 py-2"
             onClick={handleSearch}
-            startIcon={<MagnifyingGlassIcon className="h-3.5 w-3.5" />}
           >
+            <MagnifyingGlassIcon className="h-3.5 w-3.5" />
             Search
           </Button>
         </div>
