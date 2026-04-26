@@ -42,4 +42,53 @@ export class AmbassadorDashboardDto {
 
     @ApiPropertyOptional({ description: 'The unique share link for this ambassador for this program' })
     shareLink?: string;
+
+    @ApiProperty({ type: () => [AmbassadorReferralDto] })
+    referrals: AmbassadorReferralDto[];
+}
+
+export class AmbassadorReferralDto {
+    @ApiProperty()
+    id: string;
+
+    @ApiProperty()
+    participantId: string;
+
+    @ApiProperty()
+    participantName: string;
+
+    @ApiProperty({ enum: ['referred', 'registered', 'applied', 'accepted', 'completed'] })
+    status: string;
+
+    @ApiProperty()
+    referredAt: Date;
+
+    @ApiPropertyOptional()
+    registeredAt?: Date | null;
+
+    @ApiPropertyOptional()
+    appliedAt?: Date | null;
+
+    @ApiPropertyOptional()
+    acceptedAt?: Date | null;
+
+    @ApiPropertyOptional()
+    completedAt?: Date | null;
+
+    @ApiPropertyOptional()
+    daysToRegister?: number | null;
+
+    @ApiPropertyOptional()
+    daysToApply?: number | null;
+
+    @ApiPropertyOptional()
+    daysToAccept?: number | null;
+
+    @ApiPropertyOptional()
+    totalConversionDays?: number | null;
+}
+
+export class AmbassadorShareTokenResolutionDto {
+    @ApiProperty()
+    referralCode: string;
 }

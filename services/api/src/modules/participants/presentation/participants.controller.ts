@@ -7,6 +7,7 @@ import {
     UseGuards,
     UnauthorizedException,
     Query,
+    BadRequestException,
 } from '@nestjs/common';
 import {
     ApiTags,
@@ -23,10 +24,12 @@ import { CompleteOnboardingCommand } from '../application/commands/complete-onbo
 import { OnboardingDto } from './dto/onboarding.dto';
 import { UpdateParticipantProfileDto, ParticipantResponseDto } from './dto/participant.dto';
 import { ParticipantDashboardResponseDto } from './dto/participant-dashboard.dto';
-import { ApplyAmbassadorDto, AmbassadorDashboardDto } from './dto/ambassador.dto';
+import { ApplyAmbassadorDto, AmbassadorDashboardDto, AmbassadorShareTokenResolutionDto } from './dto/ambassador.dto';
 import { ApplyAmbassadorCommand } from '../application/commands/apply-ambassador.command';
 import { GetAmbassadorDashboardQuery } from '../application/queries/get-ambassador-dashboard.query';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
+import { Public } from '@shared/decorators/public.decorator';
+import { ResolveAmbassadorShareTokenQuery } from '../application/queries/resolve-ambassador-share-token.query';
 
 @ApiTags('Participants')
 @Controller('participants')
@@ -128,5 +131,18 @@ export class ParticipantsController {
         const userId = user.userId;
         if (!userId) throw new UnauthorizedException();
         return this.queryBus.execute(new GetAmbassadorDashboardQuery(userId));
+    }
+
+    @Public()
+    @Get('ambassador/share-token/resolve')
+    @ApiOperation({ summary: 'Resolve ambassador share token into an internal referral code' })
+    @ApiResponse({ status: 200, type: AmbassadorShareTokenResolutionDto })
+    async resolveAmbassadorShareToken(
+        @Query('token') token?: string,
+    ): Promise<AmbassadorShareTokenResolutionDto> {
+        if (!token?.trim()) {
+            throw new BadRequestException('token is required');
+        }
+        return this.queryBus.execute(new ResolveAmbassadorShareTokenQuery(token));
     }
 }

@@ -3,7 +3,6 @@ import {
   LayoutDashboard,
   Layers,
   FolderOpen,
-  Users,
   UserCheck,
   UserPlus,
   BarChart3,
@@ -66,7 +65,6 @@ export const platformNavSections: NavSection[] = [
     items: [
       { id: "brands", label: "Brands", href: "/platform/brands", icon: FolderOpen },
       { id: "programs", label: "Programs", href: "/platform/programs", icon: Layers },
-      { id: "users", label: "Users", href: "/platform/users", icon: Users },
       { id: "admins", label: "Admins", href: "/platform/admins", icon: UserCheck },
     ],
   },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   MoreHorizontal,
@@ -30,6 +30,7 @@ import {
 import { Badge } from "@/src/ui/badge";
 import { StatusBadge } from "@/src/admin/status-badge";
 import { EmptyState } from "@/src/admin/empty-state";
+import { formatDate } from "@/lib/utils";
 
 export type Brand = {
   id: string;
@@ -58,12 +59,12 @@ export function BrandsTable({ brands, onEdit }: BrandsTableProps) {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [page, setPage] = useState(1);
 
-  // Reset to page 1 when the data set changes (e.g. search filter)
-  useEffect(() => {
-    setPage(1);
-  }, [brands]);
-
   const sorted = useMemo(() => {
+    const getTimestamp = (value: string) => {
+      const timestamp = new Date(value).getTime();
+      return Number.isFinite(timestamp) ? timestamp : 0;
+    };
+
     return [...brands].sort((a, b) => {
       const dir = sortDir === "asc" ? 1 : -1;
       switch (sortKey) {
@@ -72,7 +73,7 @@ export function BrandsTable({ brands, onEdit }: BrandsTableProps) {
         case "programCount":
           return (a.programCount - b.programCount) * dir;
         case "updatedAt":
-          return (new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime()) * dir;
+          return (getTimestamp(a.updatedAt) - getTimestamp(b.updatedAt)) * dir;
         default:
           return 0;
       }
@@ -103,15 +104,6 @@ export function BrandsTable({ brands, onEdit }: BrandsTableProps) {
     setPage(1);
   }
 
-  function SortIcon({ column }: { column: SortKey }) {
-    if (sortKey !== column) return <ArrowUpDown className="ml-1 h-3 w-3 text-zinc-400" />;
-    return sortDir === "asc" ? (
-      <ArrowUp className="ml-1 h-3 w-3" />
-    ) : (
-      <ArrowDown className="ml-1 h-3 w-3" />
-    );
-  }
-
   return (
     <div className="rounded-lg border border-zinc-200 bg-white">
       <Table>
@@ -124,7 +116,7 @@ export function BrandsTable({ brands, onEdit }: BrandsTableProps) {
                 onClick={() => toggleSort("name")}
               >
                 Brand
-                <SortIcon column="name" />
+                {renderSortIcon(sortKey, sortDir, "name")}
               </button>
             </TableHead>
             <TableHead>Status</TableHead>
@@ -135,7 +127,7 @@ export function BrandsTable({ brands, onEdit }: BrandsTableProps) {
                 onClick={() => toggleSort("programCount")}
               >
                 Programs
-                <SortIcon column="programCount" />
+                {renderSortIcon(sortKey, sortDir, "programCount")}
               </button>
             </TableHead>
             <TableHead>
@@ -145,7 +137,7 @@ export function BrandsTable({ brands, onEdit }: BrandsTableProps) {
                 onClick={() => toggleSort("updatedAt")}
               >
                 Updated
-                <SortIcon column="updatedAt" />
+                {renderSortIcon(sortKey, sortDir, "updatedAt")}
               </button>
             </TableHead>
             <TableHead className="w-10" />
@@ -171,7 +163,7 @@ export function BrandsTable({ brands, onEdit }: BrandsTableProps) {
                 <Badge variant="info">{brand.programCount}</Badge>
               </TableCell>
               <TableCell className="text-sm text-zinc-500">
-                {new Date(brand.updatedAt).toLocaleDateString()}
+                {formatDate(brand.updatedAt)}
               </TableCell>
               <TableCell>
                 <DropdownMenu>
@@ -237,5 +229,14 @@ export function BrandsTable({ brands, onEdit }: BrandsTableProps) {
         )}
       </div>
     </div>
+  );
+}
+
+function renderSortIcon(activeKey: SortKey, sortDir: SortDir, column: SortKey) {
+  if (activeKey !== column) return <ArrowUpDown className="ml-1 h-3 w-3 text-zinc-400" />;
+  return sortDir === "asc" ? (
+    <ArrowUp className="ml-1 h-3 w-3" />
+  ) : (
+    <ArrowDown className="ml-1 h-3 w-3" />
   );
 }

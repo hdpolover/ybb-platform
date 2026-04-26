@@ -79,6 +79,7 @@ export class UpdateParticipantProfileHandler implements ICommandHandler<UpdatePa
             occupation: participant.occupation ?? undefined,
             instagramUsername: participant.instagramUsername ?? undefined,
             linkedinUrl: participant.linkedinUrl ?? undefined,
+            profilePictureUrl: participant.profilePictureUrl ?? undefined,
             tshirtSize: participant.tshirtSize ?? undefined,
             dietaryRestrictions: participant.dietaryRestrictions ?? undefined,
             emergencyContactName: participant.emergencyContactName ?? undefined,

@@ -25,12 +25,14 @@ export function formatDate(
   options?: Intl.DateTimeFormatOptions,
 ): string {
   if (!date) return "—";
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return "—";
   return new Intl.DateTimeFormat("en-GB", {
     day: "2-digit",
     month: "short",
     year: "numeric",
     ...options,
-  }).format(new Date(date));
+  }).format(parsed);
 }
 
 /** Truncate a string to a max length, appending "…" if needed. */

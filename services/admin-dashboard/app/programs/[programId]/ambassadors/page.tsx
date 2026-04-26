@@ -1,36 +1,37 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowPathIcon, MagnifyingGlassIcon, UserPlusIcon } from "@heroicons/react/24/outline";
-import { PencilSquareIcon, TrashIcon } from "@heroicons/react/24/solid";
+import { Eye, Pencil, RefreshCw, Search, Trash2, UserPlus } from "lucide-react";
+import { useAuth } from "@/app/contexts/AuthContext";
 import {
-  listAmbassadors,
-  createAmbassador,
-  updateAmbassador,
   activateAmbassador,
+  createAmbassador,
   deactivateAmbassador,
   deleteAmbassador,
+  listAmbassadors,
+  updateAmbassador,
   type Ambassador,
 } from "@/src/shared/api-client";
-import { useAuth } from "@/app/contexts/AuthContext";
+import { PageHeader } from "@/src/admin/page-header";
+import { StatusBadge } from "@/src/admin/status-badge";
 import { ConfirmDialog } from "@/src/admin/confirm-dialog";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/src/ui/sheet";
+import { Button } from "@/src/ui/button";
+import { Input } from "@/src/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/src/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/src/ui/table";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/src/ui/sheet";
 
 export default function AmbassadorsPage() {
   const params = useParams<{ programId: string }>();
   const { accessiblePrograms } = useAuth();
 
   const resolvedProgramId = useMemo(() => {
-    const p = accessiblePrograms.find(
-      (p) => p.programId === params.programId || p.programSlug === params.programId,
+    const match = accessiblePrograms.find(
+      (item) => item.programId === params.programId || item.programSlug === params.programId,
     );
-    return p?.programId ?? params.programId;
+    return match?.programId ?? params.programId;
   }, [accessiblePrograms, params.programId]);
 
   const [items, setItems] = useState<Ambassador[]>([]);
@@ -47,48 +48,72 @@ export default function AmbassadorsPage() {
   const [formError, setFormError] = useState<string | null>(null);
 
   const [form, setForm] = useState({
-    email: "", fullName: "", phoneNumber: "", institution: "", gender: "", notes: "",
+    email: "",
+    fullName: "",
+    phoneNumber: "",
+    institution: "",
+    gender: "",
+    notes: "",
   });
 
   const fetchData = useCallback(async () => {
     if (!resolvedProgramId) return;
-    setLoading(true); setError(null);
+    setLoading(true);
+    setError(null);
     try {
-      const res = await listAmbassadors({ programId: resolvedProgramId, search: search || undefined, page, limit: 20 });
-      setItems(res.data);
-      setMeta(res.meta);
+      const response = await listAmbassadors({
+        programId: resolvedProgramId,
+        search: search || undefined,
+        page,
+        limit: 20,
+      });
+      setItems(response.data);
+      setMeta(response.meta);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load");
+      setError(err instanceof Error ? err.message : "Failed to load ambassadors");
     } finally {
       setLoading(false);
     }
-  }, [resolvedProgramId, search, page]);
+  }, [page, resolvedProgramId, search]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    void fetchData();
+  }, [fetchData]);
+
+  const activeCount = items.filter((item) => item.isActive).length;
+  const totalConverted = items.reduce((sum, item) => sum + item.successfulReferrals, 0);
 
   function openCreate() {
     setEditTarget(null);
-    setForm({ email: "", fullName: "", phoneNumber: "", institution: "", gender: "", notes: "" });
+    setForm({
+      email: "",
+      fullName: "",
+      phoneNumber: "",
+      institution: "",
+      gender: "",
+      notes: "",
+    });
     setFormError(null);
     setSheetOpen(true);
   }
 
-  function openEdit(amb: Ambassador) {
-    setEditTarget(amb);
+  function openEdit(ambassador: Ambassador) {
+    setEditTarget(ambassador);
     setForm({
-      email: amb.user?.email ?? "",
-      fullName: amb.fullName,
-      phoneNumber: amb.phoneNumber ?? "",
-      institution: amb.institution ?? "",
-      gender: amb.gender ?? "",
-      notes: amb.notes ?? "",
+      email: ambassador.user?.email ?? "",
+      fullName: ambassador.fullName,
+      phoneNumber: ambassador.phoneNumber ?? "",
+      institution: ambassador.institution ?? "",
+      gender: ambassador.gender ?? "",
+      notes: ambassador.notes ?? "",
     });
     setFormError(null);
     setSheetOpen(true);
   }
 
   async function handleSave() {
-    setSaving(true); setFormError(null);
+    setSaving(true);
+    setFormError(null);
     try {
       if (editTarget) {
         await updateAmbassador(editTarget.id, {
@@ -110,7 +135,7 @@ export default function AmbassadorsPage() {
         });
       }
       setSheetOpen(false);
-      fetchData();
+      void fetchData();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Save failed");
     } finally {
@@ -118,12 +143,17 @@ export default function AmbassadorsPage() {
     }
   }
 
-  async function handleToggleActive(amb: Ambassador) {
+  async function handleToggleActive(ambassador: Ambassador) {
     try {
-      if (amb.isActive) await deactivateAmbassador(amb.id);
-      else await activateAmbassador(amb.id);
-      fetchData();
-    } catch {}
+      if (ambassador.isActive) {
+        await deactivateAmbassador(ambassador.id);
+      } else {
+        await activateAmbassador(ambassador.id);
+      }
+      void fetchData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update status");
+    }
   }
 
   async function handleDelete() {
@@ -131,160 +161,231 @@ export default function AmbassadorsPage() {
     try {
       await deleteAmbassador(deleteTarget.id);
       setDeleteTarget(null);
-      fetchData();
-    } catch {}
+      void fetchData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete ambassador");
+    }
   }
 
-  const activeCount = items.filter(a => a.isActive).length;
-
   return (
-    <main className="space-y-4">
-      {/* Stats + controls */}
-      <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-6">
-            <div>
-              <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">Total Ambassadors</p>
-              <p className="text-2xl font-bold text-zinc-900">{loading ? "—" : meta.total}</p>
-            </div>
-            <div className="h-10 w-px bg-zinc-100" />
-            <div>
-              <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">Active</p>
-              <p className="text-2xl font-bold text-emerald-600">{loading ? "—" : activeCount}</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
-              <input
-                type="text"
-                placeholder="Search by name, code…"
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                className="block w-52 rounded-md border border-zinc-200 py-1.5 pl-8 pr-3 text-[11px] outline-none focus:border-blue-500"
-              />
-            </div>
-            <button type="button" onClick={fetchData}
-              className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50">
-              <ArrowPathIcon className="h-3.5 w-3.5" />
-            </button>
-            <button type="button" onClick={openCreate}
-              className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-700">
-              <UserPlusIcon className="h-3.5 w-3.5" />
+    <div className="space-y-6">
+      <PageHeader
+        title="Ambassadors"
+        description="Manage ambassadors, review referrals, and open detail pages for audit."
+        actions={
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => void fetchData()} disabled={loading}>
+              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+              Refresh
+            </Button>
+            <Button size="sm" onClick={openCreate}>
+              <UserPlus className="mr-1.5 h-3.5 w-3.5" />
               Add Ambassador
-            </button>
+            </Button>
           </div>
+        }
+      />
+
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
         </div>
-      </section>
+      )}
 
-      {/* Table */}
-      <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-        {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm text-zinc-500">Total Ambassadors</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 text-3xl font-semibold text-zinc-900">
+            {loading ? "—" : meta.total}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm text-zinc-500">Active</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 text-3xl font-semibold text-emerald-600">
+            {loading ? "—" : activeCount}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm text-zinc-500">Converted Referrals</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 text-3xl font-semibold text-blue-600">
+            {loading ? "—" : totalConverted}
+          </CardContent>
+        </Card>
+      </div>
 
-        <div className="overflow-hidden rounded-md border border-zinc-200">
-          <table className="min-w-full text-left text-[11px]">
-            <thead className="bg-zinc-50 text-zinc-600">
-              <tr>
-                <th className="px-3 py-2 font-semibold">Ambassador</th>
-                <th className="px-3 py-2 font-semibold">Referral Code</th>
-                <th className="px-3 py-2 font-semibold">Referrals</th>
-                <th className="px-3 py-2 font-semibold">Institution</th>
-                <th className="px-3 py-2 font-semibold">Status</th>
-                <th className="px-3 py-2 font-semibold">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && <tr><td colSpan={6} className="px-3 py-6 text-center text-zinc-400">Loading…</td></tr>}
-              {!loading && items.length === 0 && (
-                <tr><td colSpan={6} className="px-3 py-6 text-center text-zinc-400">No ambassadors found.</td></tr>
-              )}
-              {!loading && items.map((amb, idx) => (
-                <tr key={amb.id} className={idx % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}>
-                  <td className="px-3 py-2">
-                    <p className="font-medium text-zinc-900">{amb.fullName}</p>
-                    <p className="text-zinc-400">{amb.user?.email ?? "—"}</p>
-                  </td>
-                  <td className="px-3 py-2">
-                    <span className="rounded bg-zinc-100 px-2 py-0.5 font-mono text-[10px] text-zinc-700">{amb.referralCode}</span>
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-[10px] font-bold text-blue-700">{amb.totalReferrals}</span>
-                      <span className="text-zinc-400">{amb.successfulReferrals} converted</span>
+      <div className="rounded-lg border border-zinc-200 bg-white">
+        <div className="flex flex-wrap items-center gap-3 border-b border-zinc-200 px-4 py-3">
+          <div className="relative min-w-56 flex-1">
+            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />
+            <Input
+              placeholder="Search by name, code, or email…"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              className="h-8 pl-8 text-sm"
+            />
+          </div>
+          <span className="text-xs text-zinc-400">
+            {loading ? "Loading…" : `${items.length} result${items.length === 1 ? "" : "s"}`}
+          </span>
+        </div>
+
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Ambassador</TableHead>
+              <TableHead>Referral Code</TableHead>
+              <TableHead>Referrals</TableHead>
+              <TableHead>Institution</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading && (
+              <TableRow>
+                <TableCell colSpan={6} className="py-10 text-center text-zinc-400">
+                  Loading ambassadors…
+                </TableCell>
+              </TableRow>
+            )}
+            {!loading && items.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6} className="py-10 text-center text-sm text-zinc-400">
+                  No ambassadors found.
+                </TableCell>
+              </TableRow>
+            )}
+            {!loading &&
+              items.map((ambassador) => (
+                <TableRow key={ambassador.id}>
+                  <TableCell>
+                    <div className="font-medium text-zinc-900">{ambassador.fullName}</div>
+                    <div className="text-xs text-zinc-500">{ambassador.user?.email ?? "—"}</div>
+                  </TableCell>
+                  <TableCell>
+                    <code className="rounded bg-zinc-100 px-2 py-1 font-mono text-xs">
+                      {ambassador.referralCode}
+                    </code>
+                  </TableCell>
+                  <TableCell>
+                    <div className="font-medium text-zinc-900">{ambassador.totalReferrals}</div>
+                    <div className="text-xs text-zinc-500">
+                      {ambassador.successfulReferrals} converted
                     </div>
-                  </td>
-                  <td className="px-3 py-2 text-zinc-600">{amb.institution ?? "—"}</td>
-                  <td className="px-3 py-2">
-                    <button type="button" onClick={() => handleToggleActive(amb)}
-                      className={"rounded-full px-2 py-0.5 text-[10px] font-semibold " +
-                        (amb.isActive ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200")}>
-                      {amb.isActive ? "Active" : "Inactive"}
+                  </TableCell>
+                  <TableCell className="text-sm text-zinc-600">
+                    {ambassador.institution ?? "—"}
+                  </TableCell>
+                  <TableCell>
+                    <button
+                      type="button"
+                      onClick={() => void handleToggleActive(ambassador)}
+                      className="rounded-full"
+                    >
+                      <StatusBadge
+                        status={ambassador.isActive ? "active" : "inactive"}
+                        context="generic"
+                      />
                     </button>
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-1">
-                      <button type="button" onClick={() => openEdit(amb)}
-                        className="flex h-6 w-6 items-center justify-center rounded border border-zinc-200 text-zinc-500 hover:bg-zinc-50">
-                        <PencilSquareIcon className="h-3.5 w-3.5" />
-                      </button>
-                      <button type="button" onClick={() => setDeleteTarget(amb)}
-                        className="flex h-6 w-6 items-center justify-center rounded border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100">
-                        <TrashIcon className="h-3.5 w-3.5" />
-                      </button>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <Button variant="ghost" size="sm" asChild>
+                        <Link href={`/programs/${params.programId}/ambassadors/${ambassador.id}`}>
+                          <Eye className="h-3.5 w-3.5" />
+                          View
+                        </Link>
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(ambassador)}>
+                        <Pencil className="h-3.5 w-3.5" />
+                        Edit
+                      </Button>
+                      <Button variant="ghost" size="sm" className="text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => setDeleteTarget(ambassador)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Delete
+                      </Button>
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+          </TableBody>
+        </Table>
 
         {meta.lastPage > 1 && (
-          <div className="mt-3 flex items-center justify-end gap-2">
-            <button type="button" disabled={page <= 1} onClick={() => setPage(p => p - 1)}
-              className="rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 disabled:opacity-40 hover:bg-zinc-50">Previous</button>
-            <span className="text-[11px] text-zinc-600">Page {page} of {meta.lastPage}</span>
-            <button type="button" disabled={page >= meta.lastPage} onClick={() => setPage(p => p + 1)}
-              className="rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 disabled:opacity-40 hover:bg-zinc-50">Next</button>
+          <div className="flex items-center justify-end gap-2 border-t border-zinc-200 px-4 py-3">
+            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>
+              Previous
+            </Button>
+            <span className="text-xs text-zinc-500">
+              Page {page} of {meta.lastPage}
+            </span>
+            <Button variant="outline" size="sm" disabled={page >= meta.lastPage} onClick={() => setPage((current) => current + 1)}>
+              Next
+            </Button>
           </div>
         )}
-      </section>
+      </div>
 
-      {/* Drawer sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md flex flex-col p-0">
-          <SheetHeader className="border-b border-zinc-200 px-6 py-4 shrink-0">
+        <SheetContent side="right" className="flex w-full flex-col p-0 sm:max-w-md">
+          <SheetHeader className="shrink-0 border-b border-zinc-200 px-6 py-4">
             <SheetTitle>{editTarget ? "Edit Ambassador" : "Add Ambassador"}</SheetTitle>
           </SheetHeader>
 
-          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-            {formError && <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{formError}</p>}
+          <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
+            {formError && (
+              <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{formError}</p>
+            )}
 
             {!editTarget && (
               <div>
-                <label className="mb-1 block text-[11px] font-medium text-zinc-700">Email <span className="text-red-500">*</span></label>
-                <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                  className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-blue-500" />
+                <label className="mb-1 block text-[11px] font-medium text-zinc-700">
+                  Email <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm((current) => ({ ...current, email: e.target.value }))}
+                />
               </div>
             )}
 
             <div>
-              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Full Name <span className="text-red-500">*</span></label>
-              <input type="text" value={form.fullName} onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))}
-                className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-blue-500" />
+              <label className="mb-1 block text-[11px] font-medium text-zinc-700">
+                Full Name <span className="text-red-500">*</span>
+              </label>
+              <Input
+                type="text"
+                value={form.fullName}
+                onChange={(e) => setForm((current) => ({ ...current, fullName: e.target.value }))}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="mb-1 block text-[11px] font-medium text-zinc-700">Phone</label>
-                <input type="tel" value={form.phoneNumber} onChange={e => setForm(f => ({ ...f, phoneNumber: e.target.value }))}
-                  className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-blue-500" />
+                <Input
+                  type="tel"
+                  value={form.phoneNumber}
+                  onChange={(e) => setForm((current) => ({ ...current, phoneNumber: e.target.value }))}
+                />
               </div>
               <div>
                 <label className="mb-1 block text-[11px] font-medium text-zinc-700">Gender</label>
-                <select value={form.gender} onChange={e => setForm(f => ({ ...f, gender: e.target.value }))}
-                  className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-blue-500">
+                <select
+                  value={form.gender}
+                  onChange={(e) => setForm((current) => ({ ...current, gender: e.target.value }))}
+                  className="block h-9 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                >
                   <option value="">— Select —</option>
                   <option value="male">Male</option>
                   <option value="female">Female</option>
@@ -295,38 +396,46 @@ export default function AmbassadorsPage() {
 
             <div>
               <label className="mb-1 block text-[11px] font-medium text-zinc-700">Institution</label>
-              <input type="text" value={form.institution} onChange={e => setForm(f => ({ ...f, institution: e.target.value }))}
-                className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-blue-500" />
+              <Input
+                type="text"
+                value={form.institution}
+                onChange={(e) => setForm((current) => ({ ...current, institution: e.target.value }))}
+              />
             </div>
 
             <div>
               <label className="mb-1 block text-[11px] font-medium text-zinc-700">Notes</label>
-              <textarea rows={4} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-blue-500 resize-none" />
+              <textarea
+                rows={4}
+                value={form.notes}
+                onChange={(e) => setForm((current) => ({ ...current, notes: e.target.value }))}
+                className="block w-full resize-none rounded-md border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 border-t border-zinc-200 px-6 py-4 shrink-0">
-            <button type="button" onClick={() => setSheetOpen(false)}
-              className="rounded-md border border-zinc-200 px-4 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50">Cancel</button>
-            <button type="button" onClick={handleSave} disabled={saving}
-              className="rounded-md bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
-              {saving ? "Saving…" : editTarget ? "Save Changes" : "Create Ambassador"}
-            </button>
+          <div className="flex shrink-0 justify-end gap-2 border-t border-zinc-200 px-6 py-4">
+            <Button variant="outline" onClick={() => setSheetOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleSave()} loading={saving}>
+              {editTarget ? "Save Changes" : "Create Ambassador"}
+            </Button>
           </div>
         </SheetContent>
       </Sheet>
 
-      {/* Delete confirm */}
       <ConfirmDialog
         open={!!deleteTarget}
-        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
         title="Delete Ambassador"
         description={`Remove ${deleteTarget?.fullName} as an ambassador? This cannot be undone.`}
         confirmLabel="Delete"
         variant="destructive"
         onConfirm={handleDelete}
       />
-    </main>
+    </div>
   );
 }

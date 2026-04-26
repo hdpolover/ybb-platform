@@ -19,6 +19,7 @@ import { UpdateAmbassadorStatusHandler } from './application/commands/handlers/u
 import { GetAmbassadorReferralsHandler } from './application/queries/handlers/get-ambassador-referrals.handler';
 import { DeleteAmbassadorHandler } from './application/commands/handlers/delete-ambassador.handler';
 import { ReferralFunnelService } from './application/services/referral-funnel.service';
+import { ResolveAmbassadorShareTokenHandler } from './application/queries/handlers/resolve-ambassador-share-token.handler';
 
 @Module({
     imports: [CqrsModule, AuthModule],
@@ -43,6 +44,7 @@ import { ReferralFunnelService } from './application/services/referral-funnel.se
         GetAmbassadorsListHandler,
         UpdateAmbassadorStatusHandler,
         GetAmbassadorReferralsHandler,
+        ResolveAmbassadorShareTokenHandler,
         DeleteAmbassadorHandler,
         ReferralFunnelService,
     ],
