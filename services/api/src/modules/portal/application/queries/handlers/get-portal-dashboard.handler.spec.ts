@@ -104,6 +104,10 @@ describe('GetPortalDashboardHandler', () => {
                     { id: 'doc-1', isRequired: true },
                 ],
                 pricingTiers: [],
+                resources: [
+                    { title: 'Eng', fileUrl: 'https://cdn.example.com/guide-en.pdf' },
+                    { title: 'Ind', fileUrl: 'https://cdn.example.com/guide-id.pdf' },
+                ],
                 announcements: [],
                 programAnnouncements: []
             },
@@ -119,6 +123,10 @@ describe('GetPortalDashboardHandler', () => {
         expect(result.activeApplication?.status).toBe('draft');
         expect(result.activeApplication?.progress).toBe(50);
         expect(result.activeApplication?.currentStep).toBe('Application Drafting');
+        expect(result.activeApplication?.guidebooks).toEqual([
+            { label: 'Read Guidebook (Eng)', url: 'https://cdn.example.com/guide-en.pdf' },
+            { label: 'Read Guidebook (Ind)', url: 'https://cdn.example.com/guide-id.pdf' },
+        ]);
         expect(result.stats?.applicationsCount).toBe(1);
         expect(result.stats?.certificatesCount).toBe(2);
         expect(result.stats?.totalRequired).toEqual({ amount: 0, currency: 'USD' });
@@ -154,6 +162,7 @@ describe('GetPortalDashboardHandler', () => {
                 essays: [],
                 requirements: [],
                 pricingTiers: [],
+                resources: [],
                 announcements: [],
                 programAnnouncements: [],
             },
