@@ -55,6 +55,7 @@ export class GetAmbassadorDashboardHandler implements IQueryHandler<GetAmbassado
         // Map to DTO
         return {
             id: ambassador.id,
+            fullName: ambassador.fullName,
             referralCode: ambassador.referralCode,
             totalReferrals: ambassador.totalReferrals,
             successfulReferrals: ambassador.successfulReferrals,
