@@ -1,7 +1,6 @@
 import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, UseInterceptors, UploadedFile, UploadedFiles, Query, ParseUUIDPipe, HttpCode, HttpStatus } from '@nestjs/common';
 import { FileInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
-import { ConfigService } from '@nestjs/config';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { QueryBus, CommandBus } from '@nestjs/cqrs';
 import { ChangeType } from '@prisma/client';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
@@ -23,9 +22,14 @@ import { RemoveBrandAdminCommand } from '../application/commands/remove-brand-ad
 import { CreateSponsorCommand } from '../application/commands/create-sponsor.command';
 import { UpdateSponsorCommand } from '../application/commands/update-sponsor.command';
 import { DeleteSponsorCommand } from '../application/commands/delete-sponsor.command';
+import { ListBrandSocialFeedsQuery } from '../application/queries/list-brand-social-feeds.query';
+import { CreateSocialFeedCommand } from '../application/commands/create-social-feed.command';
+import { UpdateSocialFeedCommand } from '../application/commands/update-social-feed.command';
+import { DeleteSocialFeedCommand } from '../application/commands/delete-social-feed.command';
 import { GetBrandMetadataQuery } from '../application/queries/get-brand-metadata.query';
-import { BrandResponseDto, SponsorResponseDto } from './dto/brand.dto';
+import { BrandResponseDto, SocialFeedResponseDto, SponsorResponseDto } from './dto/brand.dto';
 import { CreateSponsorDto, UpdateSponsorDto } from './dto/sponsor.dto';
+import { CreateSocialFeedDto, UpdateSocialFeedDto } from './dto/social-feed.dto';
 import { CreateBrandDto } from './dto/create-brand.dto';
 import { UpdateBrandDto } from './dto/update-brand.dto';
 import { UpdateBrandDetailsDto } from './dto/update-brand-details.dto';
@@ -42,7 +46,6 @@ export class BrandsController {
     constructor(
         private readonly queryBus: QueryBus,
         private readonly commandBus: CommandBus,
-        private readonly configService: ConfigService,
     ) { }
 
     @Get()
@@ -135,6 +138,60 @@ export class BrandsController {
         @Param('sponsorId', ParseUUIDPipe) sponsorId: string,
     ): Promise<void> {
         return this.commandBus.execute(new DeleteSponsorCommand(id, sponsorId));
+    }
+
+    @Get(':id/social-feeds')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'List brand social feeds' })
+    @ApiResponse({ status: 200, description: 'Return list of social feeds', type: [SocialFeedResponseDto] })
+    async listSocialFeeds(
+        @Param('id', ParseUUIDPipe) id: string,
+    ): Promise<SocialFeedResponseDto[]> {
+        return this.queryBus.execute(new ListBrandSocialFeedsQuery(id));
+    }
+
+    @Post(':id/social-feeds')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @AuditTrail({ entityType: 'BrandSocialFeed', action: ChangeType.create })
+    @ApiOperation({ summary: 'Create a brand social feed item' })
+    @ApiResponse({ status: 201, description: 'Social feed created', type: SocialFeedResponseDto })
+    async createSocialFeed(
+        @Param('id', ParseUUIDPipe) id: string,
+        @Body() dto: CreateSocialFeedDto,
+    ): Promise<SocialFeedResponseDto> {
+        return this.commandBus.execute(new CreateSocialFeedCommand(id, dto));
+    }
+
+    @Put(':id/social-feeds/:socialFeedId')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @AuditTrail({ entityType: 'BrandSocialFeed', action: ChangeType.update })
+    @ApiOperation({ summary: 'Update a brand social feed item' })
+    @ApiResponse({ status: 200, description: 'Social feed updated', type: SocialFeedResponseDto })
+    @ApiResponse({ status: 404, description: 'Social feed not found' })
+    async updateSocialFeed(
+        @Param('id', ParseUUIDPipe) id: string,
+        @Param('socialFeedId', ParseUUIDPipe) socialFeedId: string,
+        @Body() dto: UpdateSocialFeedDto,
+    ): Promise<SocialFeedResponseDto> {
+        return this.commandBus.execute(new UpdateSocialFeedCommand(id, socialFeedId, dto));
+    }
+
+    @Delete(':id/social-feeds/:socialFeedId')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @HttpCode(HttpStatus.NO_CONTENT)
+    @AuditTrail({ entityType: 'BrandSocialFeed', action: ChangeType.delete })
+    @ApiOperation({ summary: 'Delete a brand social feed item' })
+    @ApiResponse({ status: 204, description: 'Social feed deleted' })
+    @ApiResponse({ status: 404, description: 'Social feed not found' })
+    async deleteSocialFeed(
+        @Param('id', ParseUUIDPipe) id: string,
+        @Param('socialFeedId', ParseUUIDPipe) socialFeedId: string,
+    ): Promise<void> {
+        return this.commandBus.execute(new DeleteSocialFeedCommand(id, socialFeedId));
     }
 
     @Post()
