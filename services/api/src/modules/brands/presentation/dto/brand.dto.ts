@@ -123,3 +123,29 @@ export class SponsorResponseDto {
     @ApiProperty()
     order: number;
 }
+
+export class SocialFeedResponseDto {
+    @ApiProperty()
+    id: string;
+
+    @ApiProperty()
+    platform: string;
+
+    @ApiProperty()
+    postId: string;
+
+    @ApiProperty()
+    permalink: string;
+
+    @ApiProperty()
+    imageUrl: string;
+
+    @ApiProperty({ required: false })
+    caption?: string;
+
+    @ApiProperty()
+    postedAt: Date;
+
+    @ApiProperty()
+    isActive: boolean;
+}
