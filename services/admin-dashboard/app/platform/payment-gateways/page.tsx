@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { PlusIcon, PencilSquareIcon, TrashIcon, ArrowPathIcon, LockClosedIcon } from "@heroicons/react/24/outline";
 import { CheckCircleIcon } from "@heroicons/react/24/solid";
+import { ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import {
   listGatewayConfigs,
@@ -16,6 +17,7 @@ import {
   type GatewayMode,
   type CreateGatewayConfigInput,
 } from "@/src/shared/api-client";
+import { listPlatformBrands, type PlatformBrand } from "../api";
 import {
   Sheet,
   SheetContent,
@@ -27,6 +29,7 @@ import {
 
 export default function PaymentGatewaysPage() {
   const [configs, setConfigs] = useState<GatewayConfig[]>([]);
+  const [brands, setBrands] = useState<PlatformBrand[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -36,10 +39,26 @@ export default function PaymentGatewaysPage() {
   const [toggleLoadingId, setToggleLoadingId] = useState<string | null>(null);
 
   const fetch = useCallback(async () => {
-    setLoading(true); setError(null);
-    try { setConfigs(await listGatewayConfigs()); }
-    catch (err) { setError(err instanceof Error ? err.message : "Failed to load"); }
-    finally { setLoading(false); }
+    setLoading(true);
+    setError(null);
+    const [configsResult, brandsResult] = await Promise.allSettled([
+      listGatewayConfigs(),
+      listPlatformBrands(),
+    ]);
+
+    if (configsResult.status === "rejected") {
+      setError(configsResult.reason instanceof Error ? configsResult.reason.message : "Failed to load");
+      setLoading(false);
+      return;
+    }
+
+    setConfigs(configsResult.value);
+    if (brandsResult.status === "fulfilled") {
+      setBrands(brandsResult.value);
+    } else {
+      toast.error(brandsResult.reason instanceof Error ? brandsResult.reason.message : "Failed to load brands.");
+    }
+    setLoading(false);
   }, []);
 
   useEffect(() => { fetch(); }, [fetch]);
@@ -77,6 +96,10 @@ export default function PaymentGatewaysPage() {
     (acc[c.provider] ||= []).push(c);
     return acc;
   }, {});
+  const brandNameById = useMemo(
+    () => Object.fromEntries(brands.map((brand) => [brand.id, brand.name])),
+    [brands],
+  );
 
   return (
     <main className="space-y-4">
@@ -84,7 +107,7 @@ export default function PaymentGatewaysPage() {
         <div className="inline-flex items-center gap-1.5 rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-indigo-700">Platform</div>
         <h1 className="mt-1 text-lg font-bold text-zinc-900">Payment Gateways</h1>
         <p className="text-sm text-zinc-500">
-          Configure payment provider credentials (Midtrans, Xendit, Stripe, PayPal). Only one configuration per provider can be active at a time.
+          Configure payment provider credentials (Midtrans, Xendit, Stripe, PayPal). Each configuration can be platform-wide or tied to one brand.
         </p>
       </section>
 
@@ -133,7 +156,16 @@ export default function PaymentGatewaysPage() {
                           {cfg.mode}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-zinc-600 font-mono">{cfg.brand_id ?? <span className="text-zinc-400">Platform-wide</span>}</td>
+                      <td className="px-3 py-2 text-zinc-600">
+                        {cfg.brand_id ? (
+                          <div className="space-y-0.5">
+                            <p className="font-medium text-zinc-800">{brandNameById[cfg.brand_id] ?? "Unknown brand"}</p>
+                            <p className="font-mono text-[10px] text-zinc-500">{cfg.brand_id}</p>
+                          </div>
+                        ) : (
+                          <span className="text-zinc-400">Platform-wide</span>
+                        )}
+                      </td>
                       <td className="px-3 py-2 text-zinc-500">{new Date(cfg.updated_at).toLocaleString()}</td>
                       <td className="px-3 py-2">
                         {cfg.is_active ? (
@@ -171,8 +203,8 @@ export default function PaymentGatewaysPage() {
         </div>
       </section>
 
-      {showCreate && <GatewayConfigSheet onClose={() => setShowCreate(false)} onSaved={fetch} />}
-      {editTarget && <GatewayConfigSheet config={editTarget} onClose={() => setEditTarget(null)} onSaved={fetch} />}
+      {showCreate && <GatewayConfigSheet brands={brands} onClose={() => setShowCreate(false)} onSaved={fetch} />}
+      {editTarget && <GatewayConfigSheet brands={brands} config={editTarget} onClose={() => setEditTarget(null)} onSaved={fetch} />}
       {deleteTarget && (
         <ConfirmDelete
           label={`${deleteTarget.provider} (${deleteTarget.mode})`}
@@ -186,10 +218,12 @@ export default function PaymentGatewaysPage() {
 }
 
 function GatewayConfigSheet({
+  brands,
   config,
   onClose,
   onSaved,
 }: {
+  brands: PlatformBrand[];
   config?: GatewayConfig;
   onClose: () => void;
   onSaved: () => void;
@@ -201,13 +235,20 @@ function GatewayConfigSheet({
   const [clientKey, setClientKey] = useState(config?.client_key ?? "");
   const [webhookSecret, setWebhookSecret] = useState(config?.webhook_secret ?? "");
   const [brandId, setBrandId] = useState(config?.brand_id ?? "");
+  const [scope, setScope] = useState<"platform" | "brand">(config?.brand_id ? "brand" : "platform");
   const [isActive, setIsActive] = useState(config?.is_active ?? true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true); setError(null);
+    setLoading(true);
+    setError(null);
+    if (scope === "brand" && !brandId) {
+      setError("Select a brand scope for this gateway configuration.");
+      setLoading(false);
+      return;
+    }
     const payload: CreateGatewayConfigInput = {
       provider,
       mode,
@@ -215,7 +256,7 @@ function GatewayConfigSheet({
       client_key: clientKey,
       webhook_secret: webhookSecret || undefined,
       is_active: isActive,
-      brand_id: brandId.trim() || undefined,
+      brand_id: scope === "brand" ? brandId : undefined,
     };
     try {
       if (isEdit && config) {
@@ -237,38 +278,83 @@ function GatewayConfigSheet({
 
   return (
     <Sheet open onOpenChange={(v) => { if (!v) onClose(); }}>
-      <SheetContent side="right" className="flex w-full max-w-lg flex-col p-0 sm:max-w-lg">
+      <SheetContent side="right" className="flex w-full max-w-lg flex-col overflow-hidden p-0 sm:max-w-lg">
         <form onSubmit={handleSubmit} className="flex h-full flex-col">
           <SheetHeader className="border-b border-zinc-200 px-6 py-5">
             <SheetTitle>{isEdit ? "Edit Gateway Configuration" : "Add Gateway Configuration"}</SheetTitle>
             <SheetDescription>
-              Store provider credentials securely. Activating this config will deactivate any other active config for the same provider.
+              Store provider credentials securely. A configuration can be platform-wide or assigned to exactly one brand.
             </SheetDescription>
           </SheetHeader>
 
-          <div className="flex-1 overflow-y-auto space-y-4 px-6 py-5">
+          <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
             {error && <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Provider" required>
-                <select value={provider} onChange={(e) => setProvider(e.target.value as GatewayProvider)} className={inputCls} disabled={isEdit}>
-                  {SUPPORTED_GATEWAY_PROVIDERS.map((p) => (
-                    <option key={p} value={p}>{p}</option>
-                  ))}
-                </select>
+                {isEdit ? (
+                  <input
+                    type="text"
+                    value={provider}
+                    readOnly
+                    aria-readonly="true"
+                    className={`${inputCls} cursor-not-allowed bg-zinc-50 text-zinc-500`}
+                  />
+                ) : (
+                  <SelectControl value={provider} onChange={(e) => setProvider(e.target.value as GatewayProvider)}>
+                    {SUPPORTED_GATEWAY_PROVIDERS.map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </SelectControl>
+                )}
               </Field>
               <Field label="Mode" required>
-                <select value={mode} onChange={(e) => setMode(e.target.value as GatewayMode)} className={inputCls}>
+                <SelectControl value={mode} onChange={(e) => setMode(e.target.value as GatewayMode)}>
                   <option value="sandbox">Sandbox</option>
                   <option value="production">Production</option>
-                </select>
+                </SelectControl>
               </Field>
             </div>
             {isEdit && (
-              <p className="flex items-center gap-1 text-[10px] text-zinc-500">
-                <LockClosedIcon className="h-3 w-3" /> Provider can&apos;t be changed after creation. Delete and recreate if needed.
+                <p className="flex items-center gap-1 text-[10px] text-zinc-500">
+                  <LockClosedIcon className="h-3 w-3" /> Provider can&apos;t be changed after creation. Delete and recreate if needed.
+                </p>
+              )}
+            <div className="rounded-md border border-zinc-200 bg-zinc-50/70 p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Brand Assignment</p>
+              <p className="mt-1 text-[11px] text-zinc-600">
+                Each gateway configuration can be used for one brand or for the whole platform. Create separate entries when different brands need different credentials.
               </p>
-            )}
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label="Scope" required>
+                  <SelectControl
+                    value={scope}
+                    onChange={(e) => {
+                      const nextScope = e.target.value as "platform" | "brand";
+                      setScope(nextScope);
+                      if (nextScope === "platform") setBrandId("");
+                    }}
+                  >
+                    <option value="platform">Platform-wide</option>
+                    <option value="brand">Specific brand</option>
+                  </SelectControl>
+                </Field>
+                <Field label="Brand" required={scope === "brand"}>
+                  <SelectControl
+                    value={brandId}
+                    onChange={(e) => setBrandId(e.target.value)}
+                    disabled={scope !== "brand"}
+                  >
+                    <option value="">{brands.length === 0 ? "No brands available" : "Select a brand..."}</option>
+                    {brands.map((brand) => (
+                      <option key={brand.id} value={brand.id}>
+                        {brand.name}
+                      </option>
+                    ))}
+                  </SelectControl>
+                </Field>
+              </div>
+            </div>
 
             <Field label="Server Key" required>
               <input required type="text" value={serverKey} onChange={(e) => setServerKey(e.target.value)} placeholder={isEdit ? "(decrypted — paste new value to change)" : "Provider secret key"} className={`${inputCls} font-mono`} autoComplete="off" />
@@ -280,17 +366,13 @@ function GatewayConfigSheet({
               <input type="text" value={webhookSecret} onChange={(e) => setWebhookSecret(e.target.value)} placeholder="Used to verify webhook callbacks" className={`${inputCls} font-mono`} autoComplete="off" />
             </Field>
 
-            <Field label="Brand Scope">
-              <input type="text" value={brandId} onChange={(e) => setBrandId(e.target.value)} placeholder="Brand UUID — leave blank for platform-wide" className={inputCls} />
-            </Field>
-
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} className="h-3.5 w-3.5" />
-              <span className="text-[11px] font-medium text-zinc-700">Active (exclusive — other active configs for {provider} will be deactivated)</span>
+              <span className="text-[11px] font-medium text-zinc-700">Active</span>
             </label>
           </div>
 
-          <SheetFooter className="border-t border-zinc-200 px-6 py-4">
+          <SheetFooter className="border-t border-zinc-200 bg-white px-6 py-4">
             <button type="button" onClick={onClose} className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm hover:bg-zinc-100">Cancel</button>
             <button type="submit" disabled={loading} className="rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-600 disabled:opacity-60">
               {loading ? "Saving…" : isEdit ? "Save Changes" : "Create Configuration"}
@@ -327,3 +409,24 @@ function Field({ label, required, children }: { label: string; required?: boolea
 }
 
 const inputCls = "block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
+const selectCls = `${inputCls} appearance-none bg-white pr-10`;
+
+function SelectControl({
+  className = "",
+  children,
+  ...props
+}: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <div className="relative">
+      <select
+        {...props}
+        className={`${selectCls} ${props.disabled ? "cursor-not-allowed bg-zinc-50 text-zinc-500" : ""} ${className}`.trim()}
+      >
+        {children}
+      </select>
+      <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-zinc-400">
+        <ChevronDown className="h-4 w-4" />
+      </span>
+    </div>
+  );
+}

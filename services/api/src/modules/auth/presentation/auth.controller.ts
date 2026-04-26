@@ -38,6 +38,9 @@ import { ResetPasswordCommand } from '../application/commands/reset-password.com
 import { VerifyEmailCommand } from '../application/commands/verify-email.command';
 import { ResendVerificationEmailCommand } from '../application/commands/resend-verification-email.command';
 import { FirebaseLoginCommand } from '../application/commands/firebase-login.command';
+import { AmbassadorLoginCommand } from '../application/commands/ambassador-login.command';
+import { AmbassadorLoginDto } from './dto/ambassador-login.dto';
+import { AmbassadorLoginHandler } from '../application/commands/handlers/ambassador-login.handler';
 import { GetUserProfileQuery } from '../application/queries/get-user-profile.query';
 import { GetAuthProvidersQuery } from '../application/queries/get-auth-providers.query';
 import { Public } from '../../../shared/decorators/public.decorator';
@@ -57,6 +60,7 @@ export class AuthController {
     private readonly loginHandler: LoginHandler,
     private readonly adminLoginHandler: AdminLoginHandler, // [NEW]
     private readonly adminRefreshHandler: AdminRefreshHandler,
+    private readonly ambassadorLoginHandler: AmbassadorLoginHandler,
     private readonly registerHandler: RegisterHandler,
     private readonly registerAdminHandler: RegisterAdminHandler,
     private readonly logoutHandler: LogoutHandler,
@@ -118,6 +122,29 @@ export class AuthController {
       dto.programSlug,
     );
     return this.loginHandler.execute(command, brandDomain);
+  }
+
+  @Public()
+  @Post('ambassador-login')
+  @Throttle({ default: { limit: 5, ttl: 900000 } })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Ambassador Login (email + referral code)' })
+  @ApiResponse({ status: 200, description: 'Ambassador successfully logged in', type: AuthResponseDto })
+  async ambassadorLogin(
+    @Body() dto: AmbassadorLoginDto,
+    @BrandDomain() brandDomain?: string,
+    @Ip() ip?: string,
+    @Req() req?: Request,
+  ): Promise<AuthResponseDto> {
+    const userAgent = req?.headers['user-agent'] || 'unknown';
+    const command = new AmbassadorLoginCommand(
+      dto.email,
+      dto.referralCode,
+      ip || '0.0.0.0',
+      userAgent,
+      dto.brandId,
+    );
+    return this.ambassadorLoginHandler.execute(command, brandDomain);
   }
 
   @Public()

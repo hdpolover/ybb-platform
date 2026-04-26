@@ -2009,9 +2009,46 @@ export type Ambassador = {
   createdAt: string;
   updatedAt: string;
   user?: { email: string };
+  program?: { id: string; name: string; slug: string } | null;
 };
 
 export type AmbassadorListMeta = { total: number; page: number; limit: number; lastPage: number };
+
+export type AmbassadorDetail = Ambassador & {
+  activatedAt?: string | null;
+  deactivatedAt?: string | null;
+  shareLink?: string | null;
+  programName?: string;
+  analytics?: {
+    statusCounts: {
+      referred: number;
+      registered: number;
+      applied: number;
+      accepted: number;
+      completed: number;
+    };
+    averageConversionDays: number | null;
+  };
+};
+
+export type AmbassadorReferral = {
+  id: string;
+  status: string;
+  participantId: string;
+  participantName: string | null;
+  participantEmail?: string | null;
+  referredAt: string;
+  registeredAt?: string | null;
+  appliedAt?: string | null;
+  acceptedAt?: string | null;
+  completedAt?: string | null;
+  daysToRegister?: number | null;
+  daysToApply?: number | null;
+  daysToAccept?: number | null;
+  totalConversionDays?: number | null;
+};
+
+export type AmbassadorReferralsMeta = { total: number; page: number; limit: number; lastPage: number };
 
 export async function listAmbassadors(params: {
   programId?: string;
@@ -2073,4 +2110,44 @@ export function deactivateAmbassador(id: string): Promise<unknown> {
 
 export function deleteAmbassador(id: string): Promise<unknown> {
   return request<unknown>(`/admin/ambassadors/${id}`, { method: "DELETE" });
+}
+
+export function getAmbassador(id: string): Promise<AmbassadorDetail> {
+  return request<AmbassadorDetail>(`/admin/ambassadors/${id}`);
+}
+
+export async function getAmbassadorReferrals(id: string, page = 1): Promise<{ data: AmbassadorReferral[]; meta: AmbassadorReferralsMeta }> {
+  const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/v1";
+  const res = await fetch(`${BASE}/admin/ambassadors/${id}/referrals?page=${page}`, {
+    headers: { Authorization: `Bearer ${getAccessToken()}` },
+  });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  const payload = await res.json();
+  const data: AmbassadorReferral[] = Array.isArray(payload.data) ? payload.data : [];
+  const candidate = ((payload.meta ?? {}) as {
+    total?: number;
+    page?: number;
+    limit?: number;
+    totalPages?: number;
+    lastPage?: number;
+    meta?: {
+      total?: number;
+      page?: number;
+      limit?: number;
+      totalPages?: number;
+      lastPage?: number;
+    };
+  }).meta ?? (payload.meta ?? {});
+  const meta: AmbassadorReferralsMeta = {
+    total: typeof candidate.total === "number" ? candidate.total : 0,
+    page: typeof candidate.page === "number" ? candidate.page : page,
+    limit: typeof candidate.limit === "number" ? candidate.limit : 20,
+    lastPage:
+      typeof candidate.lastPage === "number"
+        ? candidate.lastPage
+        : typeof candidate.totalPages === "number"
+          ? candidate.totalPages
+          : 1,
+  };
+  return { data, meta };
 }

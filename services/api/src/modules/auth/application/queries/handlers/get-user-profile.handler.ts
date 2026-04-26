@@ -104,6 +104,7 @@ export class GetUserProfileHandler {
       brandId: userData.brandId,
       identities: userData.identities.map(i => ({
         provider: i.provider.name,
+        displayName: i.provider.displayName,
         lastUsedAt: i.lastUsedAt
       })),
       participantId: userData.participant?.id,

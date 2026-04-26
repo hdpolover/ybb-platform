@@ -113,6 +113,11 @@ export class UpdateParticipantProfileDto {
     @IsString()
     emergencyContactPhone?: string;
 
+    @ApiPropertyOptional({ example: 'https://cdn.ybbhub.com/participants/profile.jpg' })
+    @IsOptional()
+    @IsUrl()
+    profilePictureUrl?: string;
+
     // Add other fields as needed based on schema
 }
 

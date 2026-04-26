@@ -14,6 +14,33 @@ export type PlatformBrand = {
   updatedAt: string;
 };
 
+type RawPlatformBrand = Partial<PlatformBrandDetail> & {
+  logo_url?: string | null;
+  banner_url?: string | null;
+  website_url?: string | null;
+  landing_url?: string | null;
+  primary_color?: string | null;
+  is_active?: boolean;
+  program_count?: number;
+  created_at?: string;
+  updated_at?: string;
+  deleted_at?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  contact_whatsapp?: string | null;
+  contact_address?: string | null;
+  social_media_links?: Record<string, string> | null;
+  default_location?: string | null;
+  default_country?: string | null;
+  default_timezone?: string | null;
+  require_email_verification?: boolean;
+  default_currency?: string;
+  enable_multi_currency?: boolean;
+  meta_title?: string | null;
+  meta_description?: string | null;
+  meta_keywords?: string | null;
+};
+
 export type PlatformProgram = {
   id: string;
   brandId: string;
@@ -63,6 +90,51 @@ type ProgramListMeta = {
   limit: number;
   totalPages: number;
 };
+
+function normalizePlatformBrand(raw: RawPlatformBrand): PlatformBrand {
+  return {
+    id: raw.id ?? "",
+    name: raw.name ?? "",
+    slug: raw.slug ?? "",
+    description: raw.description ?? null,
+    logoUrl: raw.logoUrl ?? raw.logo_url ?? null,
+    bannerUrl: raw.bannerUrl ?? raw.banner_url ?? null,
+    websiteUrl: raw.websiteUrl ?? raw.website_url ?? null,
+    landingUrl: raw.landingUrl ?? raw.landing_url ?? null,
+    primaryColor: raw.primaryColor ?? raw.primary_color ?? null,
+    isActive: raw.isActive ?? raw.is_active ?? false,
+    programCount: raw.programCount ?? raw.program_count ?? 0,
+    createdAt: raw.createdAt ?? raw.created_at ?? "",
+    updatedAt: raw.updatedAt ?? raw.updated_at ?? raw.createdAt ?? raw.created_at ?? "",
+  };
+}
+
+function normalizePlatformBrandDetail(raw: RawPlatformBrand): PlatformBrandDetail {
+  return {
+    ...normalizePlatformBrand(raw),
+    about: raw.about ?? null,
+    vision: raw.vision ?? null,
+    mission: raw.mission ?? null,
+    contactEmail: raw.contactEmail ?? raw.contact_email ?? null,
+    contactPhone: raw.contactPhone ?? raw.contact_phone ?? null,
+    contactWhatsapp: raw.contactWhatsapp ?? raw.contact_whatsapp ?? null,
+    contactAddress: raw.contactAddress ?? raw.contact_address ?? null,
+    socialMediaLinks: raw.socialMediaLinks ?? raw.social_media_links ?? null,
+    defaultLocation: raw.defaultLocation ?? raw.default_location ?? null,
+    defaultCountry: raw.defaultCountry ?? raw.default_country ?? null,
+    defaultTimezone: raw.defaultTimezone ?? raw.default_timezone ?? null,
+    requireEmailVerification: raw.requireEmailVerification ?? raw.require_email_verification ?? false,
+    defaultCurrency: raw.defaultCurrency ?? raw.default_currency ?? "USD",
+    enableMultiCurrency: raw.enableMultiCurrency ?? raw.enable_multi_currency ?? false,
+    metaTitle: raw.metaTitle ?? raw.meta_title ?? null,
+    metaDescription: raw.metaDescription ?? raw.meta_description ?? null,
+    metaKeywords: raw.metaKeywords ?? raw.meta_keywords ?? null,
+    settings:
+      raw.settings && typeof raw.settings === "object" && !Array.isArray(raw.settings)
+        ? (raw.settings as PlatformBrandDetail["settings"])
+        : null,
+  };
+}
 
 function buildApiUrl(path: string): string {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL;
@@ -178,11 +250,11 @@ export type PlatformBrandDetail = PlatformBrand & {
 };
 
 export function listPlatformBrands(): Promise<PlatformBrand[]> {
-  return request<PlatformBrand[]>("/brands");
+  return request<RawPlatformBrand[]>("/brands").then((brands) => brands.map(normalizePlatformBrand));
 }
 
 export function getPlatformBrand(brandId: string): Promise<PlatformBrandDetail> {
-  return request<PlatformBrandDetail>(`/brands/${brandId}`);
+  return request<RawPlatformBrand>(`/brands/${brandId}`).then(normalizePlatformBrandDetail);
 }
 
 export async function updatePlatformBrandIdentity(
@@ -251,7 +323,7 @@ export async function updatePlatformBrandIdentity(
   if (input.isActive != null) formData.set("isActive", String(input.isActive));
   if (logoUrl) formData.set("logoUrl", logoUrl);
   if (bannerUrl) formData.set("bannerUrl", bannerUrl);
-  return request<PlatformBrandDetail>(`/brands/${brandId}`, { method: "PUT", body: formData });
+  return request<RawPlatformBrand>(`/brands/${brandId}`, { method: "PUT", body: formData }).then(normalizePlatformBrandDetail);
 }
 
 /**
@@ -268,7 +340,7 @@ export function updatePlatformBrandMedia(
   formData.set("slug", brand.slug);
   if (files.logo) formData.append("logo", files.logo);
   if (files.banner) formData.append("banner", files.banner);
-  return request<PlatformBrandDetail>(`/brands/${brandId}`, { method: "PUT", body: formData });
+  return request<RawPlatformBrand>(`/brands/${brandId}`, { method: "PUT", body: formData }).then(normalizePlatformBrandDetail);
 }
 
 export function updatePlatformBrandDetails(
@@ -304,7 +376,7 @@ export function updatePlatformBrandDetails(
   if (input.metaTitle != null) formData.set("metaTitle", input.metaTitle);
   if (input.metaDescription != null) formData.set("metaDescription", input.metaDescription);
   if (input.metaKeywords != null) formData.set("metaKeywords", input.metaKeywords);
-  return request<PlatformBrandDetail>(`/brands/${brandId}/details`, { method: "PUT", body: formData });
+  return request<RawPlatformBrand>(`/brands/${brandId}/details`, { method: "PUT", body: formData }).then(normalizePlatformBrandDetail);
 }
 
 export function updatePlatformBrandSettings(
@@ -321,10 +393,10 @@ export function updatePlatformBrandSettings(
     supportEmail?: string;
   },
 ): Promise<PlatformBrandDetail> {
-  return request<PlatformBrandDetail>(`/brands/${brandId}/settings`, {
+  return request<RawPlatformBrand>(`/brands/${brandId}/settings`, {
     method: "PUT",
     body: JSON.stringify(input),
-  });
+  }).then(normalizePlatformBrandDetail);
 }
 
 export function createPlatformBrand(input: {
@@ -339,10 +411,10 @@ export function createPlatformBrand(input: {
     formData.set("description", input.description);
   }
 
-  return request<PlatformBrand>("/brands", {
+  return request<RawPlatformBrand>("/brands", {
     method: "POST",
     body: formData,
-  });
+  }).then(normalizePlatformBrand);
 }
 
 export function updatePlatformBrand(
@@ -360,10 +432,10 @@ export function updatePlatformBrand(
     formData.set("description", input.description);
   }
 
-  return request<PlatformBrand>(`/brands/${brandId}`, {
+  return request<RawPlatformBrand>(`/brands/${brandId}`, {
     method: "PUT",
     body: formData,
-  });
+  }).then(normalizePlatformBrand);
 }
 
 export function deletePlatformBrand(brandId: string): Promise<void> {

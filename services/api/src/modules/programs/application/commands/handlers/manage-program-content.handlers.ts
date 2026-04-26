@@ -7,6 +7,7 @@ import { StorageService } from '../../../../files/application/storage.service';
 import { FileServiceClient } from '../../../../files/infrastructure/clients/file-service.client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS } from '../../../../../shared/constants/cache-keys';
 import {
     CreateProgramTimelineCommand, UpdateProgramTimelineCommand, DeleteProgramTimelineCommand,
     CreateProgramScheduleCommand, UpdateProgramScheduleCommand, DeleteProgramScheduleCommand,
@@ -61,6 +62,20 @@ async function invalidatePortalDocumentCaches(
         // PORTAL_DOCUMENTS(userId) generates `portal:documents:{userId}`.
         // Wildcard invalidation clears all participants' cached document lists.
         await cacheService.invalidateByPattern('portal:documents:*');
+    } catch { /* non-critical */ }
+}
+
+async function invalidatePortalEssayCaches(
+    programId: string,
+    cacheService: CacheService,
+): Promise<void> {
+    try {
+        await cacheService.invalidateByPatterns([
+            CACHE_KEYS.PROGRAM_ESSAYS(programId),
+            `portal:submission-detail:*:${programId}`,
+            `portal:submissions:*:${programId}`,
+            'portal:dashboard:*',
+        ]);
     } catch { /* non-critical */ }
 }
 // ─────────────────────────────────────────────────────────────────────────────
@@ -916,23 +931,44 @@ export class DeleteProgramRequirementHandler implements ICommandHandler<DeletePr
 // --- Essay Handlers ---
 @CommandHandler(CreateProgramEssayCommand)
 export class CreateProgramEssayHandler implements ICommandHandler<CreateProgramEssayCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly cacheService: CacheService,
+    ) {}
     async execute(command: CreateProgramEssayCommand) {
-        return this.repository.createEssay(command.dto);
+        const result = await this.repository.createEssay(command.dto);
+        await invalidatePortalEssayCaches(command.dto.programId, this.cacheService);
+        return result;
     }
 }
 @CommandHandler(UpdateProgramEssayCommand)
 export class UpdateProgramEssayHandler implements ICommandHandler<UpdateProgramEssayCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly cacheService: CacheService,
+    ) {}
     async execute(command: UpdateProgramEssayCommand) {
-        return this.repository.updateEssay(command.id, command.dto);
+        const existingEssay = await this.repository.findEssayById(command.id);
+        const result = await this.repository.updateEssay(command.id, command.dto);
+        const programId = existingEssay?.programId ?? result.programId;
+        if (programId) {
+            await invalidatePortalEssayCaches(programId, this.cacheService);
+        }
+        return result;
     }
 }
 @CommandHandler(DeleteProgramEssayCommand)
 export class DeleteProgramEssayHandler implements ICommandHandler<DeleteProgramEssayCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly cacheService: CacheService,
+    ) {}
     async execute(command: DeleteProgramEssayCommand) {
-        return this.repository.deleteEssay(command.id);
+        const existingEssay = await this.repository.findEssayById(command.id);
+        await this.repository.deleteEssay(command.id);
+        if (existingEssay?.programId) {
+            await invalidatePortalEssayCaches(existingEssay.programId, this.cacheService);
+        }
     }
 }
 
@@ -1260,4 +1296,3 @@ export class GenerateLOAHandler implements ICommandHandler<GenerateLOACommand> {
         return { generated, failed };
     }
 }
-

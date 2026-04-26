@@ -29,6 +29,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/src/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/src/ui/dialog";
 import { Input } from "@/src/ui/input";
 import { Label } from "@/src/ui/label";
+import { Skeleton } from "@/src/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/src/ui/tabs";
 import {
   Sheet,
@@ -86,6 +87,7 @@ import {
   type BrandPromoCta,
   type BrandMomentsShorts,
 } from "../../api";
+import { formatDate } from "@/lib/utils";
 
 // ─── Field primitives ─────────────────────────────────────────────────────────
 
@@ -976,10 +978,12 @@ function ProgramsTab({ brandId }: { brandId: string }) {
 
   useEffect(() => {
     let mounted = true;
-    setLoading(true);
     listPlatformPrograms({ brandId, limit: 100 })
       .then((res) => {
-        if (mounted) setPrograms(res.data);
+        if (mounted) {
+          setError(null);
+          setPrograms(res.data);
+        }
       })
       .catch((err) => {
         if (mounted) setError(err instanceof Error ? err.message : "Failed to load programs.");
@@ -3379,7 +3383,42 @@ function InfoStrip({ brand }: { brand: PlatformBrandDetail }) {
         </>
       )}
       <span className="text-zinc-300">·</span>
-      <span>Created {new Date(brand.createdAt).toLocaleDateString()}</span>
+      <span>Created {formatDate(brand.createdAt)}</span>
+    </div>
+  );
+}
+
+function BrandDetailSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1 space-y-3">
+          <Skeleton className="h-4 w-28" />
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-12 w-12 rounded-lg" />
+            <div className="min-w-0 flex-1 space-y-2">
+              <Skeleton className="h-7 w-64 max-w-full" />
+              <Skeleton className="h-4 w-80 max-w-full" />
+            </div>
+          </div>
+        </div>
+        <Skeleton className="h-9 w-24 rounded-md" />
+      </div>
+
+      <Skeleton className="h-10 w-full rounded-lg" />
+
+      <div className="space-y-4">
+        <div className="flex flex-wrap gap-2">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <Skeleton key={index} className="h-9 w-24 rounded-md" />
+          ))}
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Skeleton className="h-56 rounded-xl" />
+          <Skeleton className="h-56 rounded-xl" />
+        </div>
+      </div>
     </div>
   );
 }
@@ -3392,10 +3431,11 @@ export default function BrandDetailPage({ brandId }: { brandId: string }) {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback((silent = false) => {
-    if (!silent) setLoading(true);
-    setError(null);
     getPlatformBrand(brandId)
-      .then(setBrand)
+      .then((data) => {
+        setError(null);
+        setBrand(data);
+      })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load brand."))
       .finally(() => { if (!silent) setLoading(false); });
   }, [brandId]);
@@ -3403,11 +3443,7 @@ export default function BrandDetailPage({ brandId }: { brandId: string }) {
   useEffect(() => { load(); }, [load]);
 
   if (loading) {
-    return (
-      <div className="flex min-h-48 items-center justify-center text-sm text-zinc-500">
-        Loading brand…
-      </div>
-    );
+    return <BrandDetailSkeleton />;
   }
 
   if (error || !brand) {

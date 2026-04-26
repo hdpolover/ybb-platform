@@ -1,11 +1,24 @@
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
-import { CreateProgramSpeakerHandler, UpdateProgramSpeakerHandler } from './manage-program-content.handlers';
-import { CreateProgramSpeakerCommand, UpdateProgramSpeakerCommand } from '../program-content.commands';
+import {
+    CreateProgramEssayHandler,
+    CreateProgramSpeakerHandler,
+    DeleteProgramEssayHandler,
+    UpdateProgramEssayHandler,
+    UpdateProgramSpeakerHandler,
+} from './manage-program-content.handlers';
+import {
+    CreateProgramEssayCommand,
+    CreateProgramSpeakerCommand,
+    DeleteProgramEssayCommand,
+    UpdateProgramEssayCommand,
+    UpdateProgramSpeakerCommand,
+} from '../program-content.commands';
 import { IProgramContentRepository } from '@core/interfaces/repositories/program-content.repository.interface';
 import { StorageService } from '../../../../files/application/storage.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
 
 describe('ManageProgramContentHandlers', () => {
     
@@ -18,6 +31,10 @@ describe('ManageProgramContentHandlers', () => {
         createSpeaker: jest.fn(),
         findSpeakerById: jest.fn(),
         updateSpeaker: jest.fn(),
+        createEssay: jest.fn(),
+        findEssayById: jest.fn(),
+        updateEssay: jest.fn(),
+        deleteEssay: jest.fn(),
     };
 
     const mockStorageService = {
@@ -28,6 +45,10 @@ describe('ManageProgramContentHandlers', () => {
         program: {
             findUnique: jest.fn(),
         },
+    };
+
+    const mockCacheService = {
+        invalidateByPatterns: jest.fn(),
     };
 
     beforeEach(async () => {
@@ -124,6 +145,90 @@ describe('ManageProgramContentHandlers', () => {
             expect(mockRepository.updateSpeaker).toHaveBeenCalledWith('spk-1', expect.objectContaining({
                 photoUrl: 'http://cdn/new.jpg'
             }));
+        });
+    });
+
+    describe('Essay cache invalidation', () => {
+        beforeEach(() => {
+            mockCacheService.invalidateByPatterns.mockResolvedValue(undefined);
+        });
+
+        it('invalidates portal essay caches after creating an essay', async () => {
+            const handler = new CreateProgramEssayHandler(
+                mockRepository as unknown as IProgramContentRepository,
+                mockCacheService as unknown as CacheService,
+            );
+            const command = new CreateProgramEssayCommand(
+                {
+                    programId: 'program-1',
+                    question: 'Why should we pick you?',
+                },
+                'user-1',
+            );
+
+            mockRepository.createEssay.mockResolvedValue({ id: 'essay-1', ...command.dto });
+
+            await handler.execute(command);
+
+            expect(mockRepository.createEssay).toHaveBeenCalledWith(command.dto);
+            expect(mockCacheService.invalidateByPatterns).toHaveBeenCalledWith([
+                'program:essays:program-1',
+                'portal:submission-detail:*:program-1',
+                'portal:submissions:*:program-1',
+                'portal:dashboard:*',
+            ]);
+        });
+
+        it('invalidates portal essay caches after updating an essay', async () => {
+            const handler = new UpdateProgramEssayHandler(
+                mockRepository as unknown as IProgramContentRepository,
+                mockCacheService as unknown as CacheService,
+            );
+            const command = new UpdateProgramEssayCommand(
+                'essay-1',
+                { question: 'Updated question' },
+                'user-1',
+            );
+
+            mockRepository.findEssayById.mockResolvedValue({ id: 'essay-1', programId: 'program-1' });
+            mockRepository.updateEssay.mockResolvedValue({
+                id: 'essay-1',
+                programId: 'program-1',
+                question: 'Updated question',
+            });
+
+            await handler.execute(command);
+
+            expect(mockRepository.findEssayById).toHaveBeenCalledWith('essay-1');
+            expect(mockRepository.updateEssay).toHaveBeenCalledWith('essay-1', command.dto);
+            expect(mockCacheService.invalidateByPatterns).toHaveBeenCalledWith([
+                'program:essays:program-1',
+                'portal:submission-detail:*:program-1',
+                'portal:submissions:*:program-1',
+                'portal:dashboard:*',
+            ]);
+        });
+
+        it('invalidates portal essay caches after deleting an essay', async () => {
+            const handler = new DeleteProgramEssayHandler(
+                mockRepository as unknown as IProgramContentRepository,
+                mockCacheService as unknown as CacheService,
+            );
+            const command = new DeleteProgramEssayCommand('essay-1', 'user-1');
+
+            mockRepository.findEssayById.mockResolvedValue({ id: 'essay-1', programId: 'program-1' });
+            mockRepository.deleteEssay.mockResolvedValue(undefined);
+
+            await handler.execute(command);
+
+            expect(mockRepository.findEssayById).toHaveBeenCalledWith('essay-1');
+            expect(mockRepository.deleteEssay).toHaveBeenCalledWith('essay-1');
+            expect(mockCacheService.invalidateByPatterns).toHaveBeenCalledWith([
+                'program:essays:program-1',
+                'portal:submission-detail:*:program-1',
+                'portal:submissions:*:program-1',
+                'portal:dashboard:*',
+            ]);
         });
     });
 });

@@ -25,6 +25,7 @@ import {
 import { DeleteAmbassadorCommand } from '../application/commands/delete-ambassador.command';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { ChangeType } from '@prisma/client';
+import { createAmbassadorShareToken } from '../application/utils/ambassador-share-token.util';
 
 @ApiTags('Ambassadors')
 @Controller('admin/ambassadors')
@@ -50,6 +51,72 @@ export class AmbassadorAdminController {
     @Query('limit') limit: number = 20,
   ) {
     return this.queryBus.execute(new GetAmbassadorsListQuery(programId, search, Number(page), Number(limit)));
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get ambassador detail (Admin)' })
+  async findOne(@Param('id') id: string) {
+    const ambassador = await this.prisma.ambassador.findFirst({
+      where: { id, deletedAt: null },
+      include: {
+        user: { select: { email: true } },
+        program: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            brand: { select: { websiteUrl: true } },
+          },
+        },
+      },
+    });
+
+    if (!ambassador) {
+      throw new NotFoundException('Ambassador not found');
+    }
+
+    const referrals = await this.prisma.ambassadorReferral.findMany({
+      where: { ambassadorId: id },
+      select: {
+        status: true,
+        totalConversionDays: true,
+      },
+    });
+
+    const statusCounts = {
+      referred: 0,
+      registered: 0,
+      applied: 0,
+      accepted: 0,
+      completed: 0,
+    };
+    let conversionTotal = 0;
+    let conversionCount = 0;
+
+    referrals.forEach((referral) => {
+      if (referral.status in statusCounts) {
+        statusCounts[referral.status as keyof typeof statusCounts] += 1;
+      }
+      if (typeof referral.totalConversionDays === 'number') {
+        conversionTotal += referral.totalConversionDays;
+        conversionCount += 1;
+      }
+    });
+
+    const brandUrl = ambassador.program.brand.websiteUrl || 'ybb.co';
+    const cleanBrandUrl = brandUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    const shareToken = createAmbassadorShareToken(ambassador.id);
+    const shareLink = `https://${cleanBrandUrl}/programs/${ambassador.program.slug}?r=${shareToken}`;
+
+    return {
+      ...ambassador,
+      shareLink,
+      programName: ambassador.program.name,
+      analytics: {
+        statusCounts,
+        averageConversionDays: conversionCount > 0 ? Math.round(conversionTotal / conversionCount) : null,
+      },
+    };
   }
 
   @Post()

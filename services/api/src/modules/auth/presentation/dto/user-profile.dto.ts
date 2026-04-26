@@ -4,6 +4,9 @@ export class IdentityDto {
   @ApiProperty({ example: 'local' })
   provider: string;
 
+  @ApiProperty({ example: 'Email & Password' })
+  displayName: string;
+
   @ApiProperty({ example: '2024-03-20T10:00:00Z', nullable: true })
   lastUsedAt: Date | null;
 }
