@@ -4,10 +4,14 @@ import { BrandsController } from './brands.controller';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ConfigService } from '@nestjs/config';
 import { CreateBrandCommand } from '../application/commands/create-brand.command';
+import { CreateSocialFeedCommand } from '../application/commands/create-social-feed.command';
 import { CreateBrandDto } from './dto/create-brand.dto';
 import { BrandResponseDto } from './dto/brand.dto';
 import { ListBrandsQuery } from '../application/queries/list-brands.query';
 import { GetBrandDetailQuery } from '../application/queries/get-brand-detail.query';
+import { ListBrandSocialFeedsQuery } from '../application/queries/list-brand-social-feeds.query';
+import { UpdateSocialFeedCommand } from '../application/commands/update-social-feed.command';
+import { DeleteSocialFeedCommand } from '../application/commands/delete-social-feed.command';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 
 describe('BrandsController', () => {
@@ -157,6 +161,64 @@ describe('BrandsController', () => {
             expect(command.userId).toBe(user.userId);
             expect(command.files).toEqual({ logo: files.logo[0], banner: files.banner[0] });
             expect(result).toBe(expectedResult);
+        });
+    });
+
+    describe('social feed management', () => {
+        const brandId = '4fd6e8db-bf9f-4334-b424-11b137379111';
+        const socialFeedId = '7df59672-d64a-4cdb-8a7b-98a9e741aa42';
+
+        it('should execute ListBrandSocialFeedsQuery', async () => {
+            const expected = [{ id: socialFeedId, platform: 'instagram' }];
+            mockQueryBus.execute.mockResolvedValue(expected);
+
+            const result = await controller.listSocialFeeds(brandId);
+
+            expect(mockQueryBus.execute).toHaveBeenCalledWith(expect.any(ListBrandSocialFeedsQuery));
+            expect(mockQueryBus.execute.mock.calls[0][0]).toMatchObject({ brandId });
+            expect(result).toBe(expected);
+        });
+
+        it('should execute CreateSocialFeedCommand', async () => {
+            const dto = {
+                permalink: 'https://instagram.com/p/test-post/',
+                imageUrl: 'https://cdn.example.com/test-post.jpg',
+                caption: 'Test caption',
+                postedAt: '2026-04-26T11:45:00.000Z',
+                isActive: true,
+            };
+            const expected = { id: socialFeedId, ...dto, platform: 'instagram', postId: 'test-post' };
+            mockCommandBus.execute.mockResolvedValue(expected);
+
+            const result = await controller.createSocialFeed(brandId, dto);
+
+            expect(mockCommandBus.execute).toHaveBeenCalledWith(expect.any(CreateSocialFeedCommand));
+            expect(mockCommandBus.execute.mock.calls[0][0]).toMatchObject({ brandId, dto });
+            expect(result).toBe(expected);
+        });
+
+        it('should execute UpdateSocialFeedCommand', async () => {
+            const dto = {
+                caption: 'Updated caption',
+                isActive: false,
+            };
+            const expected = { id: socialFeedId, platform: 'instagram', ...dto };
+            mockCommandBus.execute.mockResolvedValue(expected);
+
+            const result = await controller.updateSocialFeed(brandId, socialFeedId, dto);
+
+            expect(mockCommandBus.execute).toHaveBeenCalledWith(expect.any(UpdateSocialFeedCommand));
+            expect(mockCommandBus.execute.mock.calls[0][0]).toMatchObject({ brandId, socialFeedId, dto });
+            expect(result).toBe(expected);
+        });
+
+        it('should execute DeleteSocialFeedCommand', async () => {
+            mockCommandBus.execute.mockResolvedValue(undefined);
+
+            await controller.deleteSocialFeed(brandId, socialFeedId);
+
+            expect(mockCommandBus.execute).toHaveBeenCalledWith(expect.any(DeleteSocialFeedCommand));
+            expect(mockCommandBus.execute.mock.calls[0][0]).toMatchObject({ brandId, socialFeedId });
         });
     });
 });
