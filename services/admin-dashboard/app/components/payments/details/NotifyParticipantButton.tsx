@@ -27,12 +27,12 @@ export function NotifyParticipantButton({ email }: NotifyParticipantButtonProps)
 
   return (
     <Button 
-      variant="blue" 
+      variant="default" 
       size="sm"
       onClick={handleNotify}
       disabled={isSending}
-      startIcon={isSending ? undefined : <EnvelopeIcon className="h-3.5 w-3.5" />}
     >
+      {!isSending && <EnvelopeIcon className="h-3.5 w-3.5" />}
       {isSending ? "Sending..." : "Notify via Email"}
     </Button>
   );

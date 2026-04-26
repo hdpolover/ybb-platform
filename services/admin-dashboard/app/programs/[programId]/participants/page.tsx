@@ -198,7 +198,7 @@ export default function ParticipantsPage() {
                   <td className="px-3 py-2">
                     <Link href={`/programs/${params.programId}/participants/${app.participantId}`} className="block">
                       <p className="font-medium text-zinc-900 hover:text-blue-600">{app.participant?.fullName ?? "—"}</p>
-                      <p className="text-zinc-400">{app.participant?.user?.email ?? app.participant?.email ?? ""}</p>
+                      <p className="text-zinc-400">{app.participant?.email ?? ""}</p>
                     </Link>
                   </td>
                   <td className="px-3 py-2 text-zinc-600">

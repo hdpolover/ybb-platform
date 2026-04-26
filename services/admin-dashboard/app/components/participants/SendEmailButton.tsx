@@ -16,7 +16,7 @@ export function SendEmailButton({ email }: { email: string }) {
   };
 
   return (
-    <Button variant="blue" size="sm" onClick={handleSendEmail} disabled={isSending}>
+    <Button variant="default" size="sm" onClick={handleSendEmail} disabled={isSending}>
       {isSending ? "Sending..." : "Send Email"}
     </Button>
   );

@@ -39,45 +39,62 @@ export class PartnersSponsorsStrategy implements ILandingPageStrategy {
       orderBy: { order: 'asc' }
     }) : [];
 
+    const metadata = (category?.metadata ?? {}) as Record<string, unknown>;
+    const partnersCanvaUrl = typeof metadata.partners_canva_url === 'string' && metadata.partners_canva_url.trim()
+      ? metadata.partners_canva_url.trim()
+      : null;
+
+    const sections: unknown[] = [
+      {
+        type: 'hero',
+        content: {
+          headline: 'Our Valued Partners',
+          subheadline: 'Collaborating to create global impact.',
+        },
+      },
+    ];
+
+    if (partnersCanvaUrl) {
+      sections.push({
+        type: 'canva_embed',
+        content: { url: partnersCanvaUrl },
+      });
+    }
+
+    sections.push(
+      {
+        type: 'sponsors_grid',
+        data: sponsors.map(s => ({
+          id: s.id,
+          name: s.name,
+          logo: s.logoUrl,
+          website: s.websiteUrl,
+          tier: s.tier
+        })),
+      },
+      {
+        type: 'partners_grid',
+        data: partners.map(p => ({
+          id: p.id,
+          name: p.name,
+          logo: p.logoUrl,
+          website: p.websiteUrl,
+          type: p.type
+        })),
+      },
+      {
+        type: 'cta_become_partner',
+        content: {
+          text: 'Interested in partnering with us?',
+          link: '/contact',
+        },
+      },
+    );
+
     const result = {
       slug: 'partners-sponsors',
       title: 'Partners & Sponsors',
-      sections: [
-        {
-          type: 'hero',
-          content: {
-            headline: 'Our Valued Partners',
-            subheadline: 'Collaborating to create global impact.',
-          },
-        },
-        {
-          type: 'sponsors_grid',
-          data: sponsors.map(s => ({
-            id: s.id,
-            name: s.name,
-            logo: s.logoUrl,
-            website: s.websiteUrl,
-            tier: s.tier
-          })),
-        },
-        {
-          type: 'partners_grid',
-          data: partners.map(p => ({
-            id: p.id,
-            name: p.name,
-            logo: p.logoUrl,
-            website: p.websiteUrl,
-            type: p.type
-          })),
-        },
-        {
-          type: 'cta_become_partner',
-          content: {
-            text: 'Interested in partnering with us?',
-            link: '/contact',
-          },
-        },
-      ],
+      sections,
     };
 
     // Cache for 1 hour

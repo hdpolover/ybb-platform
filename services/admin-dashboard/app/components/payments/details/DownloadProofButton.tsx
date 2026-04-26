@@ -51,18 +51,16 @@ export function DownloadProofButton({ transactionId, fileName }: DownloadProofBu
 
   return (
     <Button 
-      variant="blue" 
+      variant="default" 
       size="sm"
       onClick={handleDownload}
       disabled={isDownloading}
-      startIcon={
-        isDownloading ? (
-          <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
-        ) : (
-          <ArrowDownTrayIcon className="h-3.5 w-3.5" />
-        )
-      }
     >
+      {isDownloading ? (
+        <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
+      ) : (
+        <ArrowDownTrayIcon className="h-3.5 w-3.5" />
+      )}
       {isDownloading ? "Downloading..." : "Download"}
     </Button>
   );

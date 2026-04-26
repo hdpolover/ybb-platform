@@ -90,7 +90,7 @@ export default function SubmissionsPage() {
                 <tr key={app.id} className={idx % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}>
                   <td className="px-3 py-2">
                     <p className="font-medium text-zinc-900">{app.participant?.fullName ?? "—"}</p>
-                    <p className="text-zinc-400">{app.participant?.user?.email ?? ""}</p>
+                    <p className="text-zinc-400">{app.participant?.email ?? ""}</p>
                   </td>
                   <td className="px-3 py-2 text-zinc-600">{app.participant?.originCountry ?? "—"}</td>
                   <td className="px-3 py-2"><span className={"rounded-full px-2 py-0.5 text-[10px] font-semibold " + (STATUS_BADGE[app.status] ?? "bg-zinc-100 text-zinc-600")}>{app.status}</span></td>

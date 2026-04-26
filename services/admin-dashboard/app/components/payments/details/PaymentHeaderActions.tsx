@@ -19,11 +19,11 @@ export function PaymentHeaderActions({ programId, transactionId }: PaymentHeader
     <>
       <div className="flex gap-2">
         <Button 
-          variant="blue" 
+          variant="default" 
           size="sm"
-          startIcon={<ArrowPathIcon className="h-3.5 w-3.5" />}
           onClick={() => setIsUpdateModalOpen(true)}
         >
+          <ArrowPathIcon className="h-3.5 w-3.5" />
           Update Status
         </Button>
         

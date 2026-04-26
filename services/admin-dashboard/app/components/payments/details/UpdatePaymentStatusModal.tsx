@@ -75,7 +75,7 @@ export function UpdatePaymentStatusModal({ open, onClose }: UpdatePaymentStatusM
             
             <Button 
               type="submit" 
-              variant="blue" 
+              variant="default" 
               size="sm"
             >
               Update Status

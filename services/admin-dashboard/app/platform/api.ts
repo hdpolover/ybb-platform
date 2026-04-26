@@ -492,6 +492,7 @@ export type BrandMetadata = {
   impact_stats?: BrandImpactStats;
   promo_cta?: BrandPromoCta;
   moments_shorts?: BrandMomentsShorts;
+  partners_canva_url?: string | null;
   recognition?: Record<string, unknown>;
   payment_info?: Record<string, unknown>;
   participant_demographics?: Record<string, unknown>;
