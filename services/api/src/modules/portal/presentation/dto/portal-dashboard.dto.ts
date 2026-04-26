@@ -37,6 +37,14 @@ export class PortalAnnouncementDto {
     isRead: boolean;
 }
 
+export class PortalGuidebookDto {
+    @ApiProperty()
+    label: string;
+
+    @ApiProperty()
+    url: string;
+}
+
 export class PortalApplicationSummaryDto {
     @ApiProperty()
     id: string;
@@ -61,6 +69,9 @@ export class PortalApplicationSummaryDto {
 
     @ApiProperty({ required: false })
     daysUntilDeadline?: number;
+
+    @ApiProperty({ required: false, type: [PortalGuidebookDto] })
+    guidebooks?: PortalGuidebookDto[];
 }
 
 export class PortalDashboardMoneyDto {

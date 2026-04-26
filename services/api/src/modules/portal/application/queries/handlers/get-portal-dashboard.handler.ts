@@ -119,6 +119,14 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                         pricingTiers: {
                             where: { isActive: true, deletedAt: null, feeType: 'registration_fee' },
                             select: { id: true, allowedCategories: true }
+                        },
+                        resources: {
+                            where: { isActive: true, type: 'guide' },
+                            orderBy: { order: 'asc' },
+                            select: {
+                                title: true,
+                                fileUrl: true,
+                            },
                         }
                     }
                 },
@@ -181,6 +189,12 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                 progress: calculateSubmissionProgress(latestApplication),
                 currentStep: determineSubmissionCurrentStep(latestApplication),
                 daysUntilDeadline: this.calculateDaysUntilDeadline(latestApplication.program.applicationDeadline),
+                guidebooks: latestApplication.program.resources
+                    .filter((resource) => typeof resource.fileUrl === 'string' && resource.fileUrl.trim().length > 0)
+                    .map((resource) => ({
+                        label: `Read Guidebook (${resource.title})`,
+                        url: resource.fileUrl!,
+                    })),
             };
 
             const sysAnnouncements = latestApplication.program.announcements.map(a => ({
