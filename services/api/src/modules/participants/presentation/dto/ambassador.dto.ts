@@ -26,6 +26,9 @@ export class AmbassadorDashboardDto {
     id: string;
 
     @ApiProperty()
+    fullName: string;
+
+    @ApiProperty()
     referralCode: string;
 
     @ApiProperty()
