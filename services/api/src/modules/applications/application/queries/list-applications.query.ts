@@ -13,6 +13,8 @@ export class ListApplicationsQuery {
       participantId?: string;
       status?: ApplicationStatus;
       search?: string;
+      startDate?: string;
+      endDate?: string;
       limit?: number;
       offset?: number;
     },

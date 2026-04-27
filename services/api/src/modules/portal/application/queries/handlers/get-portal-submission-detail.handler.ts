@@ -85,6 +85,8 @@ type ApplicationDetail = {
             isRequired: boolean;
             wordLimit: number | null;
             order: number;
+            guidelineText: string | null;
+            guidelineUrl: string | null;
         }[];
         requirements: {
             id: string;
@@ -243,6 +245,8 @@ export class GetPortalSubmissionDetailHandler
                                 isRequired: true,
                                 wordLimit: true,
                                 order: true,
+                                guidelineText: true,
+                                guidelineUrl: true,
                             },
                             orderBy: { order: 'asc' },
                         },
@@ -750,6 +754,8 @@ export class GetPortalSubmissionDetailHandler
             isRequired: essay.isRequired,
             wordLimit: essay.wordLimit || undefined,
             order: essay.order,
+            guidelineText: essay.guidelineText || undefined,
+            guidelineUrl: essay.guidelineUrl || undefined,
             answer: (essayAnswers[essay.id] || undefined) as string | undefined,
         }));
     }

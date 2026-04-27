@@ -198,6 +198,7 @@ export class HomeStrategy implements ILandingPageStrategy {
               price: tier.price,
               currency: tier.currency,
               benefits: tier.benefits,
+              requirements: tier.requirements,
               validity_periods: tier.validityPeriods?.map((vp) => ({
                 start_date: vp.startDate,
                 end_date: vp.endDate,
@@ -274,7 +275,7 @@ export class HomeStrategy implements ILandingPageStrategy {
             })),
             cta: {
               label: 'See More',
-              url: '/gallery',
+              url: '/programs/gallery',
             },
           },
         },

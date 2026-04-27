@@ -18,6 +18,24 @@ export class ApplicationRepository implements IApplicationRepository {
     private readonly mapper: ApplicationMapper,
   ) {}
 
+  private buildCreatedAtFilter(startDate?: string, endDate?: string): Prisma.DateTimeFilter | undefined {
+    if (!startDate && !endDate) {
+      return undefined;
+    }
+
+    const createdAt: Prisma.DateTimeFilter = {};
+
+    if (startDate) {
+      createdAt.gte = new Date(`${startDate}T00:00:00.000Z`);
+    }
+
+    if (endDate) {
+      createdAt.lte = new Date(`${endDate}T23:59:59.999Z`);
+    }
+
+    return createdAt;
+  }
+
   async findById(id: string): Promise<ParticipantApplication | null> {
     const application = await this.prisma.participantApplication.findUnique({
       where: { id },
@@ -57,6 +75,8 @@ export class ApplicationRepository implements IApplicationRepository {
       status?: ApplicationStatus;
       category?: string;
       search?: string;
+      startDate?: string;
+      endDate?: string;
       limit?: number;
       offset?: number;
     },
@@ -81,6 +101,11 @@ export class ApplicationRepository implements IApplicationRepository {
       ];
     }
 
+    const createdAt = this.buildCreatedAtFilter(filters?.startDate, filters?.endDate);
+    if (createdAt) {
+      where.createdAt = createdAt;
+    }
+
     const [applications, total] = await Promise.all([
       this.prisma.participantApplication.findMany({
         where,
@@ -102,6 +127,9 @@ export class ApplicationRepository implements IApplicationRepository {
     filters?: {
       programId?: string;
       status?: ApplicationStatus;
+      search?: string;
+      startDate?: string;
+      endDate?: string;
       limit?: number;
       offset?: number;
     },
@@ -120,6 +148,21 @@ export class ApplicationRepository implements IApplicationRepository {
 
     if (filters?.status) {
       where.status = filters.status;
+    }
+
+    if (filters?.search) {
+      where.OR = [
+        { motivationLetter: { contains: filters.search, mode: 'insensitive' } },
+        { achievements: { contains: filters.search, mode: 'insensitive' } },
+        { experiences: { contains: filters.search, mode: 'insensitive' } },
+        { participant: { fullName: { contains: filters.search, mode: 'insensitive' } } },
+        { participant: { user: { email: { contains: filters.search, mode: 'insensitive' } } } },
+      ];
+    }
+
+    const createdAt = this.buildCreatedAtFilter(filters?.startDate, filters?.endDate);
+    if (createdAt) {
+      where.createdAt = createdAt;
     }
 
     const [applications, total] = await Promise.all([

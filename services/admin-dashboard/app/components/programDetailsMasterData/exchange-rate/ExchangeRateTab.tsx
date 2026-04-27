@@ -2,28 +2,13 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { CurrencyDollarIcon, ClockIcon } from "@heroicons/react/24/solid";
-import { buildApiUrl, getAccessToken, readErrorMessage, readJsonData } from "@/app/components/submissionsMasterData/api";
-
-interface ExchangeRateData {
-  programId: string;
-  usdInIdr: number;
-  source: "program" | "brand";
-  updatedAt: string;
-}
-
-interface HistoryEntry {
-  id: string;
-  oldRate: number;
-  newRate: number;
-  changedBy: string;
-  reason?: string;
-  createdAt: string;
-}
-
-interface HistoryResponse {
-  history: HistoryEntry[];
-  total: number;
-}
+import {
+  getExchangeRate,
+  getExchangeRateHistory,
+  updateExchangeRate,
+  type ExchangeRate,
+  type ExchangeRateHistoryItem,
+} from "@/src/shared/api-client";
 
 function formatRate(rate: number): string {
   return new Intl.NumberFormat("id-ID", { minimumFractionDigits: 0 }).format(rate);
@@ -42,8 +27,8 @@ function formatDateTime(value: string): string {
 }
 
 export function ExchangeRateTab({ programId }: { programId: string }) {
-  const [current, setCurrent] = useState<ExchangeRateData | null>(null);
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [current, setCurrent] = useState<ExchangeRate | null>(null);
+  const [history, setHistory] = useState<ExchangeRateHistoryItem[]>([]);
   const [historyTotal, setHistoryTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -58,25 +43,19 @@ export function ExchangeRateTab({ programId }: { programId: string }) {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const token = getAccessToken();
-      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
-
-      const [rateRes, histRes] = await Promise.all([
-        fetch(buildApiUrl(`/programs/${programId}/exchange-rate`), { cache: "no-store", headers }),
-        fetch(buildApiUrl(`/programs/${programId}/exchange-rate/history?limit=20`), { cache: "no-store", headers }),
+      const [rateData, historyData] = await Promise.all([
+        getExchangeRate(programId),
+        getExchangeRateHistory(programId, 1, 20),
       ]);
 
-      if (!rateRes.ok) throw new Error(await readErrorMessage(rateRes));
-      if (!histRes.ok) throw new Error(await readErrorMessage(histRes));
-
-      const rateEnv = await readJsonData<ExchangeRateData>(rateRes);
-      const histEnv = await readJsonData<HistoryResponse>(histRes);
-
-      setCurrent(rateEnv);
-      setHistory(histEnv.history ?? []);
-      setHistoryTotal(histEnv.total ?? 0);
+      setCurrent(rateData);
+      setHistory(Array.isArray(historyData.history) ? historyData.history : []);
+      setHistoryTotal(typeof historyData.total === "number" ? historyData.total : 0);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Failed to load exchange rate.");
+      setCurrent(null);
+      setHistory([]);
+      setHistoryTotal(0);
     } finally {
       setIsLoading(false);
     }
@@ -91,18 +70,10 @@ export function ExchangeRateTab({ programId }: { programId: string }) {
       return;
     }
 
-    const token = getAccessToken();
-    if (!token) { setSaveError("You must be signed in."); return; }
-
     setIsSaving(true);
     setSaveError(null);
     try {
-      const res = await fetch(buildApiUrl(`/programs/${programId}/exchange-rate`), {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ usdInIdr: rate, reason: reason.trim() || undefined }),
-      });
-      if (!res.ok) throw new Error(await readErrorMessage(res));
+      await updateExchangeRate(programId, rate, reason.trim() || undefined);
       setIsEditing(false);
       setNewRate("");
       setReason("");
@@ -142,7 +113,7 @@ export function ExchangeRateTab({ programId }: { programId: string }) {
             <div>
               <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">Current Rate</p>
               <p className="mt-0.5 text-2xl font-bold text-zinc-900">
-                1 USD = <span className="text-emerald-700">IDR {current ? formatRate(current.usdInIdr) : "—"}</span>
+                1 USD = <span className="text-emerald-700">IDR {current?.usdInIdr != null ? formatRate(current.usdInIdr) : "—"}</span>
               </p>
               {current && (
                 <p className="mt-1 text-xs text-zinc-500">
@@ -157,12 +128,12 @@ export function ExchangeRateTab({ programId }: { programId: string }) {
           </div>
 
           {!isEditing && (
-            <button
-              onClick={() => {
-                setNewRate(current ? String(current.usdInIdr) : "");
-                setReason("");
-                setSaveError(null);
-                setIsEditing(true);
+              <button
+                onClick={() => {
+                  setNewRate(current?.usdInIdr != null ? String(current.usdInIdr) : "");
+                  setReason("");
+                  setSaveError(null);
+                  setIsEditing(true);
               }}
               className="shrink-0 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
             >

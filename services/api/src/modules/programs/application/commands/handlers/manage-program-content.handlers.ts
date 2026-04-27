@@ -73,7 +73,9 @@ async function invalidatePortalEssayCaches(
         await cacheService.invalidateByPatterns([
             CACHE_KEYS.PROGRAM_ESSAYS(programId),
             `portal:submission-detail:*:${programId}`,
+            'portal:submission-detail:*:latest',
             `portal:submissions:*:${programId}`,
+            'portal:submissions:*:latest',
             'portal:dashboard:*',
         ]);
     } catch { /* non-critical */ }

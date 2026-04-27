@@ -3,7 +3,6 @@ import {
   Get,
   Post,
   Put,
-  Delete,
   Param,
   Body,
   Query,
@@ -11,6 +10,7 @@ import {
   HttpCode,
   HttpStatus,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
@@ -83,6 +83,22 @@ export class ApplicationsController {
     private readonly prisma: PrismaService,
   ) { }
 
+  private validateDateRange(startDate?: string, endDate?: string): void {
+    const isValidDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00.000Z`));
+
+    if (startDate && !isValidDate(startDate)) {
+      throw new BadRequestException('Invalid startDate format. Expected YYYY-MM-DD.');
+    }
+
+    if (endDate && !isValidDate(endDate)) {
+      throw new BadRequestException('Invalid endDate format. Expected YYYY-MM-DD.');
+    }
+
+    if (startDate && endDate && startDate > endDate) {
+      throw new BadRequestException('startDate cannot be after endDate.');
+    }
+  }
+
   @Post()
   @ApiOperation({ summary: 'Create a new application' })
   @ApiResponse({ status: 201, description: 'Application created successfully', type: ApplicationResponseDto })
@@ -114,14 +130,19 @@ export class ApplicationsController {
   @ApiQuery({ name: 'programId', required: false })
   @ApiQuery({ name: 'status', enum: ApplicationStatus, required: false })
   @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'startDate', required: false, description: 'Applied from date (YYYY-MM-DD)' })
+  @ApiQuery({ name: 'endDate', required: false, description: 'Applied until date (YYYY-MM-DD)' })
   @ApiResponse({ status: 200, description: 'CSV file stream' })
   async export(
     @Query('brandId') brandId: string,
     @Query('programId') programId?: string,
     @Query('status') status?: ApplicationStatus,
     @Query('search') search?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
   ): Promise<StreamableFile> {
     this.logger.log(`Exporting applications: brandId=${brandId}, programId=${programId}`);
+    this.validateDateRange(startDate, endDate);
 
     // We do NOT use query bus for StreamableFile return types usually, 
     // but we can if the handler returns StreamableFile. 
@@ -130,7 +151,7 @@ export class ApplicationsController {
     // QueryBus is cleaner for CQRS but type inference might be tricky.
     // Given the previous pattern uses handlers injected in constructor (which is NOT standard CQRS but practical),
     // I will inject the handler directly.
-    const query = new ExportApplicationsQuery(brandId, programId, status, search);
+    const query = new ExportApplicationsQuery(brandId, programId, status, search, startDate, endDate);
     return this.exportApplicationsHandler.execute(query);
   }
 
@@ -141,6 +162,8 @@ export class ApplicationsController {
   @ApiQuery({ name: 'participantId', required: false })
   @ApiQuery({ name: 'status', enum: ApplicationStatus, required: false })
   @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'startDate', required: false, description: 'Applied from date (YYYY-MM-DD)' })
+  @ApiQuery({ name: 'endDate', required: false, description: 'Applied until date (YYYY-MM-DD)' })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'offset', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'Applications retrieved successfully', type: ApplicationListResponseDto })
@@ -150,10 +173,13 @@ export class ApplicationsController {
     @Query('participantId') participantId?: string,
     @Query('status') status?: ApplicationStatus,
     @Query('search') search?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
     @Query('limit') limit?: number,
     @Query('offset') offset?: number,
   ): Promise<ApplicationListResponseDto> {
     this.logger.log(`Listing applications with filters: brandId=${brandId}, programId=${programId}`);
+    this.validateDateRange(startDate, endDate);
 
     const actualLimit = limit ? Number(limit) : 20;
     const actualOffset = offset ? Number(offset) : 0;
@@ -165,7 +191,7 @@ export class ApplicationsController {
 
     if (shouldCache) {
       // Create a deterministic cache key based on all filters
-      const filterParams = JSON.stringify({ participantId, status, search, limit: actualLimit, offset: actualOffset });
+      const filterParams = JSON.stringify({ participantId, status, search, startDate, endDate, limit: actualLimit, offset: actualOffset });
       // We hash the params to keep the key length manageable, or just use stringified if short enough. 
       // For simplicity/readability in redis, we'll use a simple string representation if it's not too long, 
       // but here we can just use the stringified JSON.
@@ -187,6 +213,8 @@ export class ApplicationsController {
       participantId,
       status,
       search,
+      startDate,
+      endDate,
       limit: actualLimit,
       offset: actualOffset,
     });

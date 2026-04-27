@@ -1,4 +1,4 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 type ApplicationExportPayload = Prisma.ParticipantApplicationGetPayload<{
@@ -30,6 +30,24 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
         private readonly prisma: PrismaService,
     ) { }
 
+    private buildCreatedAtFilter(startDate?: string, endDate?: string): Prisma.DateTimeFilter | undefined {
+        if (!startDate && !endDate) {
+            return undefined;
+        }
+
+        const createdAt: Prisma.DateTimeFilter = {};
+
+        if (startDate) {
+            createdAt.gte = new Date(`${startDate}T00:00:00.000Z`);
+        }
+
+        if (endDate) {
+            createdAt.lte = new Date(`${endDate}T23:59:59.999Z`);
+        }
+
+        return createdAt;
+    }
+
     async execute(query: ExportApplicationsQuery): Promise<StreamableFile> {
         this.logger.log(`Exporting applications for brand ${query.brandId} program ${query.programId}`);
 
@@ -55,7 +73,15 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
                 where.OR = [
                     { motivationLetter: { contains: query.search, mode: 'insensitive' } },
                     { achievements: { contains: query.search, mode: 'insensitive' } },
+                    { experiences: { contains: query.search, mode: 'insensitive' } },
+                    { participant: { fullName: { contains: query.search, mode: 'insensitive' } } },
+                    { participant: { user: { email: { contains: query.search, mode: 'insensitive' } } } },
                 ];
+            }
+
+            const createdAt = this.buildCreatedAtFilter(query.startDate, query.endDate);
+            if (createdAt) {
+                where.createdAt = createdAt;
             }
 
             while (hasMore) {
@@ -100,6 +126,7 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
                         phone: app.participant?.phoneNumber || 'N/A',
                         status: app.status,
                         category: app.applicationCategory,
+                        appliedAt: new Date(app.createdAt).toISOString(),
                         submittedAt: app.submittedAt ? new Date(app.submittedAt).toISOString() : '',
                         registrationPaymentStatus: app.registrationPaymentStatus,
                         programPaymentStatus: app.programPaymentStatus,
@@ -127,6 +154,7 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
                 { key: 'phone', header: 'Phone' },
                 { key: 'status', header: 'Status' },
                 { key: 'category', header: 'Category' },
+                { key: 'appliedAt', header: 'Applied At' },
                 { key: 'submittedAt', header: 'Submitted At' },
                 { key: 'registrationPaymentStatus', header: 'Reg. Payment' },
                 { key: 'programPaymentStatus', header: 'Prog. Payment' },

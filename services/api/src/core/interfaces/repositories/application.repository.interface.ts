@@ -34,6 +34,8 @@ export interface IApplicationRepository {
       status?: ApplicationStatus;
       category?: string;
       search?: string;
+      startDate?: string;
+      endDate?: string;
       limit?: number;
       offset?: number;
     },
@@ -47,6 +49,9 @@ export interface IApplicationRepository {
     filters?: {
       programId?: string;
       status?: ApplicationStatus;
+      search?: string;
+      startDate?: string;
+      endDate?: string;
       limit?: number;
       offset?: number;
     },

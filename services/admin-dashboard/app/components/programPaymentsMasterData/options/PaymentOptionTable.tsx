@@ -23,6 +23,8 @@ export interface PaymentOptionRow {
   lastActiveStatusBadge?: "Upcoming" | null;
   status: "Active" | "Inactive";
   description: string;
+  benefits?: string[];
+  requirements?: string[];
 }
 
 export function ProgramPaymentsTable({

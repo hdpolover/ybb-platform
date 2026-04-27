@@ -23,6 +23,8 @@ export interface SubmissionEssayRow {
   order: number;
   isActive?: boolean;
   status: "Active" | "Inactive";
+  guidelineText?: string;
+  guidelineUrl?: string;
 }
 
 interface EssayModalState {
@@ -33,6 +35,8 @@ interface EssayModalState {
   isRequired: boolean;
   order: string;
   status: "Active" | "Inactive";
+  guidelineText: string;
+  guidelineUrl: string;
 }
 
 function createEmptyEssayState(): EssayModalState {
@@ -43,6 +47,8 @@ function createEmptyEssayState(): EssayModalState {
     isRequired: false,
     order: "0",
     status: "Active",
+    guidelineText: "",
+    guidelineUrl: "",
   };
 }
 
@@ -59,6 +65,8 @@ function toEssayState(essay?: SubmissionEssayRow): EssayModalState {
     isRequired: essay.isRequired ?? false,
     order: String(essay.order ?? 0),
     status: essay.status,
+    guidelineText: essay.guidelineText ?? "",
+    guidelineUrl: essay.guidelineUrl ?? "",
   };
 }
 
@@ -125,6 +133,26 @@ function EssayModal({
           rows={3}
           value={formState.description}
           onChange={(event) => onChange({ description: event.target.value })}
+          className={INPUT_CLS}
+        />
+      </div>
+      <div>
+        <label className="mb-1.5 block text-xs font-medium text-zinc-500">Guideline Text</label>
+        <textarea
+          rows={3}
+          value={formState.guidelineText}
+          onChange={(event) => onChange({ guidelineText: event.target.value })}
+          placeholder="Optional guidance shown to participants above the essay textarea"
+          className={INPUT_CLS}
+        />
+      </div>
+      <div>
+        <label className="mb-1.5 block text-xs font-medium text-zinc-500">Guideline Link (URL)</label>
+        <input
+          type="url"
+          value={formState.guidelineUrl}
+          onChange={(event) => onChange({ guidelineUrl: event.target.value })}
+          placeholder="https://example.com/essay-guidelines"
           className={INPUT_CLS}
         />
       </div>
@@ -205,6 +233,8 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
         isRequired: boolean;
         order: number;
         isActive: boolean;
+        guidelineText?: string;
+        guidelineUrl?: string;
       }>>(response);
 
       setData(
@@ -217,6 +247,8 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
           order: item.order,
           isActive: item.isActive,
           status: item.isActive ? "Active" : "Inactive",
+          guidelineText: item.guidelineText,
+          guidelineUrl: item.guidelineUrl,
         })),
       );
     } catch (error) {
@@ -282,6 +314,8 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
       isRequired: formState.isRequired,
       order,
       isActive: formState.status === "Active",
+      guidelineText: formState.guidelineText.trim() || undefined,
+      guidelineUrl: formState.guidelineUrl.trim() || undefined,
     };
     const path = isEditing
       ? `/programs/essays/${encodeURIComponent(formState.id as string)}`

@@ -114,6 +114,12 @@ export class SubmissionEssayDto {
     @ApiProperty({ example: 0 })
     order: number;
 
+    @ApiPropertyOptional({ example: 'Please read the full essay guidelines before writing.' })
+    guidelineText?: string;
+
+    @ApiPropertyOptional({ example: 'https://example.com/essay-guidelines' })
+    guidelineUrl?: string;
+
     @ApiPropertyOptional({ example: 'I want to join because...' })
     answer?: string;
 }
