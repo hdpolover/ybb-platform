@@ -349,6 +349,7 @@ export function updatePlatformBrandDetails(
     about?: string;
     vision?: string;
     mission?: string;
+    contactEmail?: string;
     contactPhone?: string;
     contactWhatsapp?: string;
     contactAddress?: string;
@@ -365,6 +366,7 @@ export function updatePlatformBrandDetails(
   if (input.about != null) formData.set("about", input.about);
   if (input.vision != null) formData.set("vision", input.vision);
   if (input.mission != null) formData.set("mission", input.mission);
+  if (input.contactEmail != null) formData.set("contactEmail", input.contactEmail);
   if (input.contactPhone != null) formData.set("contactPhone", input.contactPhone);
   if (input.contactWhatsapp != null) formData.set("contactWhatsapp", input.contactWhatsapp);
   if (input.contactAddress != null) formData.set("contactAddress", input.contactAddress);
@@ -933,6 +935,8 @@ export type PricingTier = {
   isActive: boolean;
   order: number;
   icon?: string;
+  benefits?: string[];
+  requirements?: string[];
   validityPeriods: ValidityPeriod[];
 };
 
@@ -957,6 +961,8 @@ export function createPricingTier(
     isActive?: boolean;
     order?: number;
     icon?: string;
+    benefits?: string[];
+    requirements?: string[];
     validFrom: string;
     validUntil: string;
   },
@@ -980,6 +986,8 @@ export function updatePricingTier(
     isActive: boolean;
     order: number;
     icon: string;
+    benefits: string[];
+    requirements: string[];
     validFrom: string;
     validUntil: string;
   }>,

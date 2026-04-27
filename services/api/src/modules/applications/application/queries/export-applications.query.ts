@@ -6,5 +6,7 @@ export class ExportApplicationsQuery {
         public readonly programId?: string,
         public readonly status?: ApplicationStatus,
         public readonly search?: string,
+        public readonly startDate?: string,
+        public readonly endDate?: string,
     ) { }
 }

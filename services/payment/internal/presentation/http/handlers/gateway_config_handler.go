@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -34,7 +35,8 @@ func NewGatewayConfigHandler(
 func (h *GatewayConfigHandler) GetAll(c *gin.Context) {
 	configs, err := h.repo.FindAll(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch gateway configs"})
+		log.Printf("gateway_config_get_all error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": configs})
@@ -77,7 +79,8 @@ func (h *GatewayConfigHandler) Create(c *gin.Context) {
 	}
 
 	if err := h.repo.Create(c.Request.Context(), &req); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create gateway config"})
+		log.Printf("gateway_config_create error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -120,7 +123,8 @@ func (h *GatewayConfigHandler) Update(c *gin.Context) {
 	existing.BrandID = req.BrandID
 
 	if err := h.repo.Update(c.Request.Context(), existing); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update gateway config"})
+		log.Printf("gateway_config_update error id=%s: %v", existing.ID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -156,7 +160,8 @@ func (h *GatewayConfigHandler) SetActive(c *gin.Context) {
 
 	existing.IsActive = body.IsActive
 	if err := h.repo.Update(c.Request.Context(), existing); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update gateway config"})
+		log.Printf("gateway_config_set_active error id=%s: %v", existing.ID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -185,7 +190,8 @@ func (h *GatewayConfigHandler) Delete(c *gin.Context) {
 	// charge time with a confusing "no active config" error.
 	count, err := h.paymentMethodRepo.CountByGatewayName(ctx, existing.Provider)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check references"})
+		log.Printf("gateway_config_delete check_refs error id=%s: %v", existing.ID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	if count > 0 {
@@ -198,7 +204,8 @@ func (h *GatewayConfigHandler) Delete(c *gin.Context) {
 	}
 
 	if err := h.repo.Delete(ctx, c.Param("id")); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete gateway config"})
+		log.Printf("gateway_config_delete error id=%s: %v", c.Param("id"), err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Deleted successfully"})

@@ -89,16 +89,20 @@ function PaymentOptionDrawer({
     const isActive = fd.get("isActive") === "true";
     const validFrom = fd.get("validFrom") as string | null;
     const validUntil = fd.get("validUntil") as string | null;
+    const benefitsRaw = (fd.get("benefits") as string ?? "").trim();
+    const requirementsRaw = (fd.get("requirements") as string ?? "").trim();
     const allowedCategories = allowedCategoriesRaw
       ? allowedCategoriesRaw.split(",").map((c) => c.trim())
       : [];
+    const benefits = benefitsRaw ? benefitsRaw.split("\n").map((s) => s.trim()).filter(Boolean) : [];
+    const requirements = requirementsRaw ? requirementsRaw.split("\n").map((s) => s.trim()).filter(Boolean) : [];
 
     setSaving(true);
     setError(null);
     try {
       if (isEditMode && initialData) {
         await updatePricingTier(initialData._id, {
-          name, description, price, currency, feeType, allowedCategories, isActive,
+          name, description, price, currency, feeType, allowedCategories, isActive, benefits, requirements,
           ...(validFrom ? { validFrom } : {}),
           ...(validUntil ? { validUntil } : {}),
         });
@@ -106,7 +110,7 @@ function PaymentOptionDrawer({
         if (!programId) throw new Error("Program ID is required");
         if (!validFrom || !validUntil) throw new Error("Valid From and Valid Until are required");
         await createPricingTier(programId, {
-          name, description, price, currency, feeType, allowedCategories, validFrom, validUntil,
+          name, description, price, currency, feeType, allowedCategories, benefits, requirements, validFrom, validUntil,
         });
       }
       onClose();
@@ -189,6 +193,30 @@ function PaymentOptionDrawer({
         <div>
           <label className="mb-1.5 block text-xs font-medium text-zinc-500">Description</label>
           <textarea name="description" rows={3} defaultValue={initialData?.description} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm leading-relaxed text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-zinc-500">Requirements</label>
+          <p className="mb-2 text-xs text-zinc-400">One requirement per line. Shown on the registration page.</p>
+          <textarea
+            name="requirements"
+            rows={4}
+            defaultValue={(initialData?.requirements ?? []).join("\n")}
+            placeholder={"Complete registration form\nSubmit required documents on time"}
+            className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm leading-relaxed text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+          />
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-zinc-500">Benefits</label>
+          <p className="mb-2 text-xs text-zinc-400">One benefit per line. Shown on the registration page.</p>
+          <textarea
+            name="benefits"
+            rows={4}
+            defaultValue={(initialData?.benefits ?? []).join("\n")}
+            placeholder={"Guaranteed program participation\nFaster application processing"}
+            className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm leading-relaxed text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+          />
         </div>
 
         {isEditMode && (

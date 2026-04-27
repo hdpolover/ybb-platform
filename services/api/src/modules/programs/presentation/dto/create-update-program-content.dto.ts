@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsDateString, IsNumber, IsBoolean, IsUUID, IsArray, IsEnum, IsIn } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsDateString, IsNumber, IsBoolean, IsUUID, IsArray, IsEnum, IsIn, IsUrl } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { FaqCategory } from '@prisma/client';
@@ -906,13 +906,15 @@ export class CreateProgramPricingTierDto {
 
     @ApiProperty({ required: false })
     @IsArray()
+    @IsString({ each: true })
     @IsOptional()
-    benefits?: Record<string, unknown>[];
+    benefits?: string[];
 
     @ApiProperty({ required: false })
     @IsArray()
+    @IsString({ each: true })
     @IsOptional()
-    requirements?: Record<string, unknown>[];
+    requirements?: string[];
 
     @ApiProperty({ required: false })
     @IsString()
@@ -1013,13 +1015,15 @@ export class UpdateProgramPricingTierDto {
 
     @ApiProperty({ required: false })
     @IsArray()
+    @IsString({ each: true })
     @IsOptional()
-    benefits?: Record<string, unknown>[];
+    benefits?: string[];
 
     @ApiProperty({ required: false })
     @IsArray()
+    @IsString({ each: true })
     @IsOptional()
-    requirements?: Record<string, unknown>[];
+    requirements?: string[];
 
     @ApiProperty({ required: false })
     @IsString()
@@ -1186,6 +1190,16 @@ export class CreateProgramEssayDto {
     @IsBoolean()
     @IsOptional()
     isActive?: boolean;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    guidelineText?: string;
+
+    @ApiProperty({ required: false })
+    @IsUrl()
+    @IsOptional()
+    guidelineUrl?: string;
 }
 
 export class UpdateProgramEssayDto {
@@ -1218,6 +1232,16 @@ export class UpdateProgramEssayDto {
     @IsBoolean()
     @IsOptional()
     isActive?: boolean;
+
+    @ApiProperty({ required: false })
+    @IsString()
+    @IsOptional()
+    guidelineText?: string;
+
+    @ApiProperty({ required: false })
+    @IsUrl()
+    @IsOptional()
+    guidelineUrl?: string;
 }
 
 // Participation Category DTOs

@@ -30,6 +30,9 @@ export class ListApplicationsHandler {
         {
           programId: query.filters.programId,
           status: query.filters.status,
+          search: query.filters.search,
+          startDate: query.filters.startDate,
+          endDate: query.filters.endDate,
           limit: query.filters.limit,
           offset: query.filters.offset,
         },
@@ -46,6 +49,8 @@ export class ListApplicationsHandler {
         {
           status: query.filters.status,
           search: query.filters.search,
+          startDate: query.filters.startDate,
+          endDate: query.filters.endDate,
           limit: query.filters.limit,
           offset: query.filters.offset,
         },

@@ -10,6 +10,7 @@ import {
   SheetTitle,
 } from "@/src/ui/sheet";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
 import {
   buildApiUrl,
   getAccessToken,
@@ -270,6 +271,19 @@ function pruneRules(rules: ValidationRules): Record<string, unknown> | undefined
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
+function normalizeRichText(value: string): string | undefined {
+  const html = value.trim();
+  if (!html) return undefined;
+
+  const plain = html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, "")
+    .trim();
+
+  return plain ? html : undefined;
+}
+
 export function FormFieldEditor({
   open,
   initialField,
@@ -391,14 +405,14 @@ export function FormFieldEditor({
     const hadExistingHelpAssets = (initialField?.helpAssets?.length ?? 0) > 0;
     const shouldSendHelpAssets = normalizedHelpAssets.length > 0 || hadExistingHelpAssets;
 
-    const body: Record<string, unknown> = {
-      section: state.section || undefined,
-      label,
-      placeholder: state.placeholder.trim() || undefined,
-      helpText: state.helpText.trim() || undefined,
-      mediaUrl: state.mediaUrl.trim() || undefined,
-      mediaAlt: state.mediaAlt.trim() || undefined,
-      fieldType: state.fieldType,
+      const body: Record<string, unknown> = {
+        section: state.section || undefined,
+        label,
+        placeholder: state.placeholder.trim() || undefined,
+        helpText: normalizeRichText(state.helpText),
+        mediaUrl: state.mediaUrl.trim() || undefined,
+        mediaAlt: state.mediaAlt.trim() || undefined,
+        fieldType: state.fieldType,
       isRequired: state.isRequired,
       defaultValue: state.defaultValue.trim() || undefined,
       order: state.order,
@@ -620,11 +634,11 @@ export function FormFieldEditor({
           </div>
 
           <Field label="Help Text" hint="Shown below the input to guide applicants.">
-            <textarea
-              rows={3}
-              value={state.helpText}
-              onChange={(e) => patch("helpText", e.target.value)}
-              className={INPUT_CLS}
+            <RichTextEditor
+              content={state.helpText}
+              onChange={(html) => patch("helpText", html)}
+              placeholder="Write formatted guidance shown below the input..."
+              className="[&_.ProseMirror]:min-h-[160px]"
             />
           </Field>
 

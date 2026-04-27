@@ -48,6 +48,8 @@ function tierToRow(tier: PricingTier, index: number): PaymentOptionRow {
     lastActiveStatusBadge: upcomingPeriod ? "Upcoming" : null,
     status: tier.isActive ? "Active" : "Inactive",
     description: tier.description ?? "",
+    benefits: tier.benefits ?? [],
+    requirements: tier.requirements ?? [],
   };
 }
 

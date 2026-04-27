@@ -286,14 +286,16 @@ model ProgramWaitlist {
 }
 
 model ProgramEssay {
-  id          String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId   String  @map("program_id") @db.Uuid
-  question    String  @db.Text
-  description String? @db.Text
-  wordLimit   Int?    @map("word_limit")
-  isRequired  Boolean @default(true) @map("is_required")
-  order       Int     @default(0)
-  isActive    Boolean @default(true) @map("is_active")
+  id             String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId      String  @map("program_id") @db.Uuid
+  question       String  @db.Text
+  description    String? @db.Text
+  wordLimit      Int?    @map("word_limit")
+  isRequired     Boolean @default(true) @map("is_required")
+  order          Int     @default(0)
+  isActive       Boolean @default(true) @map("is_active")
+  guidelineText  String? @map("guideline_text") @db.Text
+  guidelineUrl   String? @map("guideline_url") @db.VarChar(500)
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)

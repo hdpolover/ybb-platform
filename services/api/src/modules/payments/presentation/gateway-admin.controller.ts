@@ -51,7 +51,7 @@ export class GatewayAdminController {
     @ApiResponse({ status: 200 })
     async list() {
         try {
-            const { data } = await this.paymentServiceClient.get('/api/v1/gateway-configs', {
+            const { data } = await this.paymentServiceClient.get<{ data: unknown[] }>('/api/v1/gateway-configs', {
                 headers: this.buildInternalHeaders(),
             });
             return data;
@@ -64,10 +64,10 @@ export class GatewayAdminController {
     @ApiOperation({ summary: 'Get a gateway configuration' })
     async getById(@Param('id') id: string) {
         try {
-            const { data } = await this.paymentServiceClient.get(`/api/v1/gateway-configs/${id}`, {
+            const { data } = await this.paymentServiceClient.get<{ data: unknown }>(`/api/v1/gateway-configs/${id}`, {
                 headers: this.buildInternalHeaders(),
             });
-            return data;
+            return data.data;
         } catch (error) {
             this.handleError(error);
         }
@@ -80,10 +80,10 @@ export class GatewayAdminController {
     @ApiResponse({ status: 201 })
     async create(@Body() body: CreateGatewayConfigDto) {
         try {
-            const { data } = await this.paymentServiceClient.post('/api/v1/gateway-configs', body, {
+            const { data } = await this.paymentServiceClient.post<{ data: unknown }>('/api/v1/gateway-configs', body, {
                 headers: this.buildInternalHeaders(),
             });
-            return data;
+            return data.data;
         } catch (error) {
             this.handleError(error);
         }
@@ -95,10 +95,10 @@ export class GatewayAdminController {
     @ApiBody({ type: UpdateGatewayConfigDto })
     async update(@Param('id') id: string, @Body() body: UpdateGatewayConfigDto) {
         try {
-            const { data } = await this.paymentServiceClient.put(`/api/v1/gateway-configs/${id}`, body, {
+            const { data } = await this.paymentServiceClient.put<{ data: unknown }>(`/api/v1/gateway-configs/${id}`, body, {
                 headers: this.buildInternalHeaders(),
             });
-            return data;
+            return data.data;
         } catch (error) {
             this.handleError(error);
         }
@@ -110,10 +110,10 @@ export class GatewayAdminController {
     @ApiBody({ type: SetGatewayActiveDto })
     async setActive(@Param('id') id: string, @Body() body: SetGatewayActiveDto) {
         try {
-            const { data } = await this.paymentServiceClient.patch(`/api/v1/gateway-configs/${id}/active`, body, {
+            const { data } = await this.paymentServiceClient.patch<{ data: unknown }>(`/api/v1/gateway-configs/${id}/active`, body, {
                 headers: this.buildInternalHeaders(),
             });
-            return data;
+            return data.data;
         } catch (error) {
             this.handleError(error);
         }
@@ -124,7 +124,7 @@ export class GatewayAdminController {
     @ApiOperation({ summary: 'Delete a gateway configuration (blocked if referenced)' })
     async delete(@Param('id') id: string) {
         try {
-            const { data } = await this.paymentServiceClient.delete(`/api/v1/gateway-configs/${id}`, {
+            const { data } = await this.paymentServiceClient.delete<Record<string, unknown>>(`/api/v1/gateway-configs/${id}`, {
                 headers: this.buildInternalHeaders(),
             });
             return data;

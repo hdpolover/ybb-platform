@@ -603,6 +603,13 @@ export function updateProgramConfig(
 
 // ─── Exchange Rate ────────────────────────────────────────────────────────────
 
+export type ExchangeRate = {
+  programId: string;
+  usdInIdr: number;
+  source: "program" | "brand";
+  updatedAt: string;
+};
+
 export type ExchangeRateHistoryItem = {
   id: string;
   oldRate: number;
@@ -617,12 +624,16 @@ export type ExchangeRateHistory = {
   total: number;
 };
 
+export function getExchangeRate(programId: string): Promise<ExchangeRate> {
+  return request<ExchangeRate>(`/programs/${programId}/exchange-rate`);
+}
+
 export function updateExchangeRate(
   programId: string,
   usdInIdr: number,
   reason?: string,
-): Promise<{ programId: string; usdInIdr: number; source: string; updatedAt: string }> {
-  return request(`/programs/${programId}/exchange-rate`, {
+): Promise<ExchangeRate> {
+  return request<ExchangeRate>(`/programs/${programId}/exchange-rate`, {
     method: "PUT",
     body: JSON.stringify({ usdInIdr, reason }),
   });
@@ -1116,6 +1127,8 @@ export async function listApplications(params?: {
   participantId?: string;
   status?: string;
   search?: string;
+  startDate?: string;
+  endDate?: string;
   limit?: number;
   offset?: number;
   brandId?: string;
@@ -1125,11 +1138,67 @@ export async function listApplications(params?: {
   if (params?.participantId) q.set("participantId", params.participantId);
   if (params?.status) q.set("status", params.status);
   if (params?.search) q.set("search", params.search);
+  if (params?.startDate) q.set("startDate", params.startDate);
+  if (params?.endDate) q.set("endDate", params.endDate);
   if (params?.limit !== undefined) q.set("limit", String(params.limit));
   if (params?.offset !== undefined) q.set("offset", String(params.offset));
   if (params?.brandId) q.set("brandId", params.brandId);
   const raw = await request<{ applications?: Application[]; data?: Application[]; total: number }>(`/applications?${q}`);
   return { data: raw.applications ?? raw.data ?? [], total: raw.total };
+}
+
+function extractDownloadFilename(contentDisposition: string | null): string | null {
+  if (!contentDisposition) return null;
+
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    return decodeURIComponent(utf8Match[1]);
+  }
+
+  const basicMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+  return basicMatch?.[1] ?? null;
+}
+
+export async function exportApplicationsCsv(params: {
+  brandId: string;
+  programId?: string;
+  status?: string;
+  search?: string;
+  startDate?: string;
+  endDate?: string;
+}): Promise<void> {
+  const q = new URLSearchParams();
+  q.set("brandId", params.brandId);
+  if (params.programId) q.set("programId", params.programId);
+  if (params.status) q.set("status", params.status);
+  if (params.search) q.set("search", params.search);
+  if (params.startDate) q.set("startDate", params.startDate);
+  if (params.endDate) q.set("endDate", params.endDate);
+
+  const response = await fetch(buildApiUrl(`/applications/export?${q}`), {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${getAccessToken()}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response));
+  }
+
+  const blob = await response.blob();
+  const fileName =
+    extractDownloadFilename(response.headers.get("content-disposition")) ??
+    `applications-${new Date().toISOString().slice(0, 10)}.csv`;
+
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(objectUrl);
 }
 
 export function getApplication(id: string): Promise<Application> {

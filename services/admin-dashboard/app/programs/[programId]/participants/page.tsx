@@ -3,9 +3,20 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowPathIcon, MagnifyingGlassIcon, UsersIcon } from "@heroicons/react/24/outline";
-import { listApplications, type Application } from "@/src/shared/api-client";
+import {
+  ArrowDownTrayIcon,
+  ArrowPathIcon,
+  MagnifyingGlassIcon,
+  UsersIcon,
+  XMarkIcon,
+} from "@heroicons/react/24/outline";
+import {
+  exportApplicationsCsv,
+  listApplications,
+  type Application,
+} from "@/src/shared/api-client";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { EmptyState } from "@/src/admin/empty-state";
 
 const regionNames = typeof Intl !== "undefined" ? new Intl.DisplayNames(["en"], { type: "region" }) : null;
 function formatCountry(raw: string | null | undefined): string {
@@ -59,28 +70,49 @@ const STATUS_FILTERS = [
   { value: "withdrawn", label: "Withdrawn" },
 ];
 
+const DEFAULT_PAGE_SIZE = 20;
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+
 export default function ParticipantsPage() {
   const params = useParams<{ programId: string }>();
   const { accessiblePrograms } = useAuth();
 
-  const resolvedProgramId = useMemo(() => {
-    const p = accessiblePrograms.find(
+  const resolvedProgram = useMemo(() => {
+    return accessiblePrograms.find(
       (p) => p.programId === params.programId || p.programSlug === params.programId,
     );
-    return p?.programId ?? params.programId;
   }, [accessiblePrograms, params.programId]);
+  const resolvedProgramId = resolvedProgram?.programId ?? params.programId;
+  const resolvedBrandId = resolvedProgram?.brandId ?? "";
 
   const [items, setItems] = useState<Application[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const limit = 20;
 
-  const fetch = useCallback(async () => {
+  const hasInvalidDateRange = Boolean(startDate && endDate && startDate > endDate);
+  const hasActiveFilters = Boolean(search || statusFilter || startDate || endDate || pageSize !== DEFAULT_PAGE_SIZE);
+  const showingFrom = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const showingTo = total === 0 ? 0 : showingFrom + items.length - 1;
+
+  const fetchParticipants = useCallback(async () => {
     if (!resolvedProgramId) return;
+
+    if (hasInvalidDateRange) {
+      setItems([]);
+      setTotal(0);
+      setLoading(false);
+      setError("Start date must be on or before end date.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
@@ -88,8 +120,10 @@ export default function ParticipantsPage() {
         programId: resolvedProgramId,
         status: statusFilter || undefined,
         search: search || undefined,
-        limit,
-        offset: (page - 1) * limit,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+        limit: pageSize,
+        offset: (page - 1) * pageSize,
       });
       setItems(res.data);
       setTotal(res.total);
@@ -98,17 +132,62 @@ export default function ParticipantsPage() {
     } finally {
       setLoading(false);
     }
-  }, [resolvedProgramId, search, statusFilter, page]);
+  }, [resolvedProgramId, hasInvalidDateRange, statusFilter, search, startDate, endDate, page, pageSize]);
 
   useEffect(() => {
-    fetch();
-  }, [fetch]);
+    void fetchParticipants();
+  }, [fetchParticipants]);
 
-  const totalPages = Math.max(1, Math.ceil(total / limit));
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, pageSize, total]);
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  const resetFilters = useCallback(() => {
+    setSearch("");
+    setStatusFilter("");
+    setStartDate("");
+    setEndDate("");
+    setPageSize(DEFAULT_PAGE_SIZE);
+    setPage(1);
+    setError(null);
+  }, []);
+
+  const handleExport = useCallback(async () => {
+    if (!resolvedBrandId) {
+      setError("Export is unavailable because this program brand could not be resolved.");
+      return;
+    }
+
+    if (hasInvalidDateRange) {
+      setError("Start date must be on or before end date.");
+      return;
+    }
+
+    setExporting(true);
+    setError(null);
+    try {
+      await exportApplicationsCsv({
+        brandId: resolvedBrandId,
+        programId: resolvedProgramId,
+        status: statusFilter || undefined,
+        search: search || undefined,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to export participants.");
+    } finally {
+      setExporting(false);
+    }
+  }, [resolvedBrandId, resolvedProgramId, hasInvalidDateRange, statusFilter, search, startDate, endDate]);
 
   return (
     <main className="space-y-4">
-      {/* Stats + Filters header */}
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
@@ -121,35 +200,116 @@ export default function ParticipantsPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
-              <input
-                type="text"
-                placeholder="Search by name/email…"
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                className="block w-52 rounded-md border border-zinc-200 py-1.5 pl-8 pr-3 text-[11px] outline-none focus:border-blue-500"
-              />
-            </div>
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
+            <span>
+              Showing {showingFrom}-{showingTo} of {total.toLocaleString()}
+            </span>
             <button
               type="button"
-              onClick={fetch}
-              className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50"
+              onClick={() => void handleExport()}
+              disabled={exporting || !resolvedBrandId}
+              className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 hover:bg-emerald-100"
             >
-              <ArrowPathIcon className="h-3.5 w-3.5" />
-              Refresh
+              <ArrowDownTrayIcon className="h-3.5 w-3.5" />
+              {exporting ? "Exporting..." : "Export CSV"}
             </button>
           </div>
         </div>
 
-        {/* Status filter tabs */}
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1.5fr)_180px_180px_120px_auto]">
+          <div className="space-y-1">
+            <label className="block text-[11px] font-medium uppercase tracking-wide text-zinc-500">Search</label>
+            <div className="relative">
+              <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+              <input
+                type="text"
+                placeholder="Search by name or email..."
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                className="block w-full rounded-md border border-zinc-200 py-2 pl-8 pr-3 text-xs text-zinc-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="block text-[11px] font-medium uppercase tracking-wide text-zinc-500">Applied from</label>
+            <input
+              type="date"
+              value={startDate}
+              max={endDate || undefined}
+              onChange={(e) => {
+                setStartDate(e.target.value);
+                setPage(1);
+              }}
+              className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs text-zinc-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="block text-[11px] font-medium uppercase tracking-wide text-zinc-500">Applied to</label>
+            <input
+              type="date"
+              value={endDate}
+              min={startDate || undefined}
+              onChange={(e) => {
+                setEndDate(e.target.value);
+                setPage(1);
+              }}
+              className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs text-zinc-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="block text-[11px] font-medium uppercase tracking-wide text-zinc-500">Page size</label>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setPage(1);
+              }}
+              className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs text-zinc-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            >
+              {PAGE_SIZE_OPTIONS.map((size) => (
+                <option key={size} value={size}>
+                  {size} / page
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-wrap items-end gap-2">
+            <button
+              type="button"
+              onClick={() => void fetchParticipants()}
+              className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-600 hover:bg-zinc-50"
+            >
+              <ArrowPathIcon className="h-3.5 w-3.5" />
+              Refresh
+            </button>
+            <button
+              type="button"
+              onClick={resetFilters}
+              disabled={!hasActiveFilters}
+              className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-600 disabled:cursor-not-allowed disabled:opacity-60 hover:bg-zinc-50"
+            >
+              <XMarkIcon className="h-3.5 w-3.5" />
+              Reset
+            </button>
+          </div>
+        </div>
+
         <div className="flex flex-wrap gap-1.5">
           {STATUS_FILTERS.map((f) => (
             <button
               key={f.value}
               type="button"
-              onClick={() => { setStatusFilter(f.value); setPage(1); }}
+              onClick={() => {
+                setStatusFilter(f.value);
+                setPage(1);
+              }}
               className={
                 "rounded-full border px-3 py-1 text-[11px] font-medium transition-colors " +
                 (statusFilter === f.value
@@ -163,7 +323,6 @@ export default function ParticipantsPage() {
         </div>
       </section>
 
-      {/* Table */}
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
         {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
 
@@ -187,7 +346,13 @@ export default function ParticipantsPage() {
               )}
               {!loading && items.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-6 text-center text-zinc-400">No participants found.</td>
+                  <td colSpan={6} className="px-3 py-2">
+                    <EmptyState
+                      title="No participants found"
+                      description="Try adjusting the search, status, or applied date range."
+                      className="py-10"
+                    />
+                  </td>
                 </tr>
               )}
               {!loading && items.map((app, idx) => (
@@ -238,8 +403,11 @@ export default function ParticipantsPage() {
           </table>
         </div>
 
-        {totalPages > 1 && (
-          <div className="mt-3 flex items-center justify-end gap-2">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+          <span className="text-[11px] text-zinc-500">
+            Page {page} of {totalPages}
+          </span>
+          <div className="flex items-center gap-2">
             <button
               type="button"
               disabled={page <= 1}
@@ -248,7 +416,6 @@ export default function ParticipantsPage() {
             >
               Previous
             </button>
-            <span className="text-[11px] text-zinc-600">Page {page} of {totalPages}</span>
             <button
               type="button"
               disabled={page >= totalPages}
@@ -258,7 +425,7 @@ export default function ParticipantsPage() {
               Next
             </button>
           </div>
-        )}
+        </div>
       </section>
     </main>
   );

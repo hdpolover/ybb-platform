@@ -496,7 +496,6 @@ function IdentitySheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved
     websiteUrl: brand.websiteUrl ?? "",
     landingUrl: brand.landingUrl ?? "",
     primaryColor: brand.primaryColor ?? "",
-    contactEmail: brand.contactEmail ?? "",
     isActive: brand.isActive ?? true,
   });
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -516,7 +515,6 @@ function IdentitySheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved
       websiteUrl: brand.websiteUrl ?? "",
       landingUrl: brand.landingUrl ?? "",
       primaryColor: brand.primaryColor ?? "",
-      contactEmail: brand.contactEmail ?? "",
       isActive: brand.isActive ?? true,
     });
     setLogoFile(null);
@@ -549,7 +547,6 @@ function IdentitySheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved
         websiteUrl: form.websiteUrl || undefined,
         landingUrl: form.landingUrl || undefined,
         primaryColor: form.primaryColor || undefined,
-        contactEmail: form.contactEmail || undefined,
         isActive: form.isActive,
         logo: logoFile ?? undefined,
         userId: adminProfile?.userId,
@@ -606,7 +603,6 @@ function IdentitySheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved
             <FieldInput label="Website URL" id="websiteUrl" value={form.websiteUrl} onChange={(v) => set("websiteUrl", v)} placeholder="https://example.com" hint="Marketing / primary website (may differ from the landing deployment)." />
             <FieldInput label="Landing URL" id="landingUrl" value={form.landingUrl} onChange={(v) => set("landingUrl", v)} placeholder="https://chinayouthsummit.com" hint="Where the Next.js landing app is deployed. Drives cache revalidation when brand data changes." />
             <ColorField label="Primary Color" id="primaryColor" value={form.primaryColor} onChange={(v) => set("primaryColor", v)} />
-            <FieldInput label="Contact Email" id="contactEmail" value={form.contactEmail} onChange={(v) => set("contactEmail", v)} type="email" placeholder="contact@brand.com" />
             <FieldCheckbox label="Active" id="isActive" checked={form.isActive} onChange={(v) => set("isActive", v)} hint="Inactive brands are hidden from public view" />
           </div>
           <SheetFooter className="mt-6">
@@ -743,6 +739,7 @@ function ContactSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved:
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [form, setForm] = useState({
+    contactEmail: brand.contactEmail ?? "",
     contactPhone: brand.contactPhone ?? "",
     contactWhatsapp: brand.contactWhatsapp ?? "",
     contactAddress: brand.contactAddress ?? "",
@@ -758,6 +755,22 @@ function ContactSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved:
     setError(null); setSuccess(null);
   }
 
+  function resetState() {
+    setForm({
+      contactEmail: brand.contactEmail ?? "",
+      contactPhone: brand.contactPhone ?? "",
+      contactWhatsapp: brand.contactWhatsapp ?? "",
+      contactAddress: brand.contactAddress ?? "",
+      socialInstagram: brand.socialMediaLinks?.instagram ?? "",
+      socialLinkedin: brand.socialMediaLinks?.linkedin ?? "",
+      socialTwitter: brand.socialMediaLinks?.twitter ?? "",
+      socialFacebook: brand.socialMediaLinks?.facebook ?? "",
+      socialYoutube: brand.socialMediaLinks?.youtube ?? "",
+    });
+    setError(null);
+    setSuccess(null);
+  }
+
   async function handleSave() {
     setSaving(true); setError(null); setSuccess(null);
     const socialMediaLinks: Record<string, string> = {};
@@ -768,6 +781,7 @@ function ContactSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved:
     if (form.socialYoutube) socialMediaLinks.youtube = form.socialYoutube;
     try {
       await updatePlatformBrandDetails(brand.id, {
+        contactEmail: form.contactEmail || undefined,
         contactPhone: form.contactPhone || undefined,
         contactWhatsapp: form.contactWhatsapp || undefined,
         contactAddress: form.contactAddress || undefined,
@@ -784,7 +798,7 @@ function ContactSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved:
 
   return (
     <>
-      <Button size="sm" variant="outline" onClick={() => { setOpen(true); setError(null); setSuccess(null); }}>
+      <Button size="sm" variant="outline" onClick={() => { resetState(); setOpen(true); }}>
         <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
       </Button>
       <Sheet open={open} onOpenChange={setOpen}>
@@ -793,6 +807,7 @@ function ContactSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved:
           <div className="mt-6 space-y-4">
             <SheetMsg message={error} variant="error" />
             <SheetMsg message={success} variant="success" />
+            <FieldInput label="Email" id="contactEmail" value={form.contactEmail} onChange={(v) => set("contactEmail", v)} type="email" placeholder="contact@brand.com" />
             <FieldInput label="Phone" id="contactPhone" value={form.contactPhone} onChange={(v) => set("contactPhone", v)} placeholder="+62 21 1234 5678" />
             <FieldInput label="WhatsApp" id="contactWhatsapp" value={form.contactWhatsapp} onChange={(v) => set("contactWhatsapp", v)} placeholder="+62811234567" />
             <FieldTextarea label="Address" id="contactAddress" value={form.contactAddress} onChange={(v) => set("contactAddress", v)} rows={3} />
