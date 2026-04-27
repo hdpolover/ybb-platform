@@ -24,10 +24,24 @@ import {
   SheetDescription,
   SheetFooter,
 } from "@/src/ui/sheet";
+import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
 
 function normalizePaymentMethodType(type: string | undefined): PaymentMethodType {
   const normalized = String(type ?? "").trim().toLowerCase();
   return normalized === "automatic" ? "AUTOMATIC" : "MANUAL";
+}
+
+function normalizeRichText(value: string): string {
+  const html = value.trim();
+  if (!html) return "";
+
+  const plain = html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, "")
+    .trim();
+
+  return plain ? html : "";
 }
 
 export default function PaymentMethodsPage() {
@@ -266,7 +280,7 @@ function PaymentMethodModal({
       bank_name: type === "MANUAL" ? bankName : "",
       account_number: type === "MANUAL" ? accountNumber : "",
       account_name: type === "MANUAL" ? accountName : "",
-      instructions: type === "MANUAL" ? instructions : "",
+      instructions: type === "MANUAL" ? normalizeRichText(instructions) : "",
       requires_proof: type === "MANUAL" ? requiresProof : false,
       admin_instructions: type === "MANUAL" ? adminInstructions : "",
       gateway_name: type === "AUTOMATIC" ? gatewayName : "",
@@ -325,7 +339,14 @@ function PaymentMethodModal({
                 <Field label="Account Number"><input type="text" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} className={inputCls} /></Field>
               </div>
               <Field label="Account Name"><input type="text" value={accountName} onChange={(e) => setAccountName(e.target.value)} className={inputCls} /></Field>
-              <Field label="Customer Instructions"><textarea rows={2} value={instructions} onChange={(e) => setInstructions(e.target.value)} placeholder="Shown to the payer" className={inputCls} /></Field>
+              <Field label="Customer Instructions">
+                <RichTextEditor
+                  content={instructions}
+                  onChange={setInstructions}
+                  placeholder="Shown to the payer"
+                  className="[&_.ProseMirror]:min-h-[140px]"
+                />
+              </Field>
               <Field label="Admin Instructions"><textarea rows={2} value={adminInstructions} onChange={(e) => setAdminInstructions(e.target.value)} placeholder="Internal — shown only to admins" className={inputCls} /></Field>
               <label className="flex items-center gap-2"><input type="checkbox" checked={requiresProof} onChange={(e) => setRequiresProof(e.target.checked)} className="h-3.5 w-3.5" /><span className="text-[11px] font-medium text-zinc-700">Requires proof of payment</span></label>
             </div>
