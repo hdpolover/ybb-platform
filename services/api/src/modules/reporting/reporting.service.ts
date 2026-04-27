@@ -136,8 +136,7 @@ export class ReportingService {
         pricingTier: { select: { name: true } },
         application: {
           include: {
-            // @ts-ignore
-            program: { select: { title: true } },
+            program: { select: { name: true } },
             participant: {
               include: {
                 user: { select: { email: true } }
@@ -151,17 +150,13 @@ export class ReportingService {
     const data = invoices.map((inv) => ({
       id: inv.id,
       status: inv.status,
-      // @ts-ignore
       amount: inv.amount ? inv.amount.toString() : '0',
       currency: inv.currency,
-      // @ts-ignore
-      program: inv.application?.program?.title ?? 'Unknown',
-      // @ts-ignore
+      program: inv.application?.program?.name ?? 'Unknown',
       payerEmail: inv.application?.participant?.user?.email ?? 'N/A',
-      // @ts-ignore
       tier: inv.pricingTier?.name ?? 'N/A',
       method: inv.paymentMethod || '-',
-      paidAt: inv.paidAt || '-',
+      paidAt: inv.paidAt ? new Date(inv.paidAt).toISOString() : '-',
       extId: inv.externalTransactionId || '-'
     }));
 
