@@ -1,8 +1,15 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { BarChart2, TrendingUp, Users, Layers } from "lucide-react";
-import { getAdminAnalytics, type AdminAnalytics } from "../../../src/shared/api-client";
+import { BarChart2, TrendingUp, Users, Layers, Download } from "lucide-react";
+import {
+  getAdminAnalytics,
+  exportUsersExcel,
+  exportParticipantsExcel,
+  exportPaymentsExcel,
+  exportAuditLogsExcel,
+  type AdminAnalytics,
+} from "../../../src/shared/api-client";
 import { useAuth } from "../../contexts/AuthContext";
 import { PageHeader } from "@/src/admin/page-header";
 import { StatCard } from "@/src/admin/stat-card";
@@ -21,6 +28,8 @@ export default function AnalyticsPage() {
   const [analytics, setAnalytics] = useState<AdminAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exportingId, setExportingId] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const brandId = adminProfile?.assignedBrands?.[0]?.brandId ?? undefined;
 
@@ -41,6 +50,18 @@ export default function AnalyticsPage() {
     fetchAnalytics();
   }, [fetchAnalytics]);
 
+  const handleExport = async (id: string, fn: () => Promise<void>) => {
+    setExportingId(id);
+    setExportError(null);
+    try {
+      await fn();
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setExportingId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -56,6 +77,36 @@ export default function AnalyticsPage() {
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       )}
+
+      {exportError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          Export failed: {exportError}
+        </div>
+      )}
+
+      <div className="rounded-lg border border-zinc-200 bg-white p-4">
+        <p className="mb-3 text-sm font-semibold text-zinc-700">Export Reports</p>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { id: "users", label: "Users", fn: exportUsersExcel },
+            { id: "participants", label: "Participants", fn: exportParticipantsExcel },
+            { id: "payments", label: "Payments", fn: exportPaymentsExcel },
+            { id: "audit-logs", label: "Audit Logs", fn: exportAuditLogsExcel },
+          ].map(({ id, label, fn }) => (
+            <Button
+              key={id}
+              variant="outline"
+              size="sm"
+              onClick={() => void handleExport(id, fn)}
+              disabled={exportingId !== null}
+              loading={exportingId === id}
+            >
+              <Download className="h-3.5 w-3.5" />
+              {exportingId === id ? "Exporting…" : `Export ${label}`}
+            </Button>
+          ))}
+        </div>
+      </div>
 
       {loading && !analytics && (
         <p className="text-sm text-zinc-400">Loading analytics…</p>

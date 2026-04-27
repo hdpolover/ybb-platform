@@ -20,7 +20,7 @@ if [ $EXIT_CODE -ne 0 ]; then
 fi
 
 echo "🌱 Seeding reference data (auth providers, form fields, templates)..."
-node dist/prisma/seeds/seed-reference.js
+npm run seed:reference
 
 if [ "$RUN_SEED" = "true" ]; then
   echo "🌱 Running full seed..."

@@ -11,7 +11,7 @@ export class GetAmbassadorsListHandler implements IQueryHandler<GetAmbassadorsLi
         const { programId, search, page, limit } = query;
         const skip = (page - 1) * limit;
 
-        const where: Prisma.AmbassadorWhereInput = {};
+        const where: Prisma.AmbassadorWhereInput = { deletedAt: null };
 
         if (programId) {
             const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(programId);
@@ -28,6 +28,7 @@ export class GetAmbassadorsListHandler implements IQueryHandler<GetAmbassadorsLi
              where.OR = [
                  { fullName: { contains: search, mode: 'insensitive' } },
                  { referralCode: { contains: search, mode: 'insensitive' } },
+                 { user: { email: { contains: search, mode: 'insensitive' } } },
              ];
         }
 

@@ -54,35 +54,28 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
         const BATCH_SIZE = 1000;
         const prisma = this.prisma;
 
+        // Build the where filter here (outside the generator) so `this` is available
+        const where: Prisma.ParticipantApplicationWhereInput = {
+            program: { brand: { id: query.brandId } },
+        };
+        if (query.programId) where.programId = query.programId;
+        if (query.status) where.status = query.status;
+        if (query.search) {
+            where.OR = [
+                { motivationLetter: { contains: query.search, mode: 'insensitive' } },
+                { achievements: { contains: query.search, mode: 'insensitive' } },
+                { experiences: { contains: query.search, mode: 'insensitive' } },
+                { participant: { fullName: { contains: query.search, mode: 'insensitive' } } },
+                { participant: { user: { email: { contains: query.search, mode: 'insensitive' } } } },
+            ];
+        }
+        const createdAt = this.buildCreatedAtFilter(query.startDate, query.endDate);
+        if (createdAt) where.createdAt = createdAt;
+
         // Create an async generator to stream data from DB
         async function* fetchData() {
             let offset = 0;
             let hasMore = true;
-
-            const where: Prisma.ParticipantApplicationWhereInput = {
-                program: {
-                    brand: {
-                        id: query.brandId,
-                    },
-                },
-            };
-
-            if (query.programId) where.programId = query.programId;
-            if (query.status) where.status = query.status;
-            if (query.search) {
-                where.OR = [
-                    { motivationLetter: { contains: query.search, mode: 'insensitive' } },
-                    { achievements: { contains: query.search, mode: 'insensitive' } },
-                    { experiences: { contains: query.search, mode: 'insensitive' } },
-                    { participant: { fullName: { contains: query.search, mode: 'insensitive' } } },
-                    { participant: { user: { email: { contains: query.search, mode: 'insensitive' } } } },
-                ];
-            }
-
-            const createdAt = this.buildCreatedAtFilter(query.startDate, query.endDate);
-            if (createdAt) {
-                where.createdAt = createdAt;
-            }
 
             while (hasMore) {
                 const applications: ApplicationExportPayload[] = await prisma.participantApplication.findMany({

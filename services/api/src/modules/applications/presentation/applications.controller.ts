@@ -125,6 +125,8 @@ export class ApplicationsController {
   }
 
   @Get('export')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Export applications to CSV' })
   @ApiQuery({ name: 'brandId', required: true })
   @ApiQuery({ name: 'programId', required: false })

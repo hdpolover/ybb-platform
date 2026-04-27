@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Users, UserCheck, Loader2 } from "lucide-react";
+import { Users, UserCheck, Loader2, Download } from "lucide-react";
 import {
   listUsers,
   activateUser,
   deactivateUser,
   resendVerificationEmail,
   getAdminAnalytics,
+  exportUsersExcel,
   type User,
   type AdminAnalytics,
 } from "@/src/shared/api-client";
@@ -48,6 +49,8 @@ export default function UsersPage() {
   const [analytics, setAnalytics] = useState<AdminAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [actionLoadingType, setActionLoadingType] = useState<"toggle" | "resend" | null>(null);
   const [actionMessage, setActionMessage] = useState<{ id: string; text: string; ok: boolean } | null>(null);
@@ -92,6 +95,18 @@ export default function UsersPage() {
     setActionMessage(null);
     setRoleFilter(value);
     setPage(1);
+  };
+
+  const handleExportUsers = async () => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      await exportUsersExcel();
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setExporting(false);
+    }
   };
 
   const handleActivateDeactivate = async (user: User) => {
@@ -155,11 +170,29 @@ export default function UsersPage() {
         title="Platform Users"
         description="Manage all users and participants across the platform"
         actions={
-          <Button variant="outline" size="sm" onClick={() => { fetchAnalytics(); fetchData(); }} loading={loading}>
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void handleExportUsers()}
+              disabled={exporting}
+              loading={exporting}
+            >
+              <Download className="h-3.5 w-3.5" />
+              {exporting ? "Exporting…" : "Export Excel"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => { void fetchAnalytics(); void fetchData(); }} loading={loading}>
+              Refresh
+            </Button>
+          </div>
         }
       />
+
+      {exportError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          Export failed: {exportError}
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-4">
         <StatCard

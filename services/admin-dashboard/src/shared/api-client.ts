@@ -2132,11 +2132,10 @@ export async function listAmbassadors(params: {
   if (params.limit) q.set("limit", String(params.limit));
   // Handler returns { data: array, meta } → TransformInterceptor Pattern-1 extracts array.
   // Must use raw fetch to preserve meta alongside data.
-  const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/v1";
-  const res = await fetch(`${BASE}/admin/ambassadors?${q}`, {
-    headers: { Authorization: `Bearer ${getAccessToken()}` },
-  });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  const headers = new Headers();
+  headers.set("Authorization", `Bearer ${getAccessToken()}`);
+  const res = await fetch(buildApiUrl(`/admin/ambassadors?${q}`), { headers });
+  if (!res.ok) throw new Error(await readErrorMessage(res));
   const payload = await res.json();
   const data: Ambassador[] = Array.isArray(payload.data) ? payload.data : [];
   const rawMeta = (payload.meta ?? {}) as { meta?: AmbassadorListMeta };
@@ -2186,11 +2185,10 @@ export function getAmbassador(id: string): Promise<AmbassadorDetail> {
 }
 
 export async function getAmbassadorReferrals(id: string, page = 1): Promise<{ data: AmbassadorReferral[]; meta: AmbassadorReferralsMeta }> {
-  const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/v1";
-  const res = await fetch(`${BASE}/admin/ambassadors/${id}/referrals?page=${page}`, {
-    headers: { Authorization: `Bearer ${getAccessToken()}` },
-  });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  const headers = new Headers();
+  headers.set("Authorization", `Bearer ${getAccessToken()}`);
+  const res = await fetch(buildApiUrl(`/admin/ambassadors/${id}/referrals?page=${page}`), { headers });
+  if (!res.ok) throw new Error(await readErrorMessage(res));
   const payload = await res.json();
   const data: AmbassadorReferral[] = Array.isArray(payload.data) ? payload.data : [];
   const candidate = ((payload.meta ?? {}) as {
@@ -2219,4 +2217,66 @@ export async function getAmbassadorReferrals(id: string, page = 1): Promise<{ da
           : 1,
   };
   return { data, meta };
+}
+
+// ─── Reporting Exports ────────────────────────────────────────────────────────
+
+async function triggerFileDownload(
+  url: string,
+  defaultFilename: string,
+): Promise<void> {
+  const response = await fetch(url, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${getAccessToken()}` },
+  });
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response));
+  }
+
+  const blob = await response.blob();
+  const filename =
+    extractDownloadFilename(response.headers.get("content-disposition")) ??
+    defaultFilename;
+
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(objectUrl);
+}
+
+export function exportUsersExcel(): Promise<void> {
+  const date = new Date().toISOString().slice(0, 10);
+  return triggerFileDownload(
+    buildApiUrl("/reporting/users/export"),
+    `users-export-${date}.xlsx`,
+  );
+}
+
+export function exportParticipantsExcel(): Promise<void> {
+  const date = new Date().toISOString().slice(0, 10);
+  return triggerFileDownload(
+    buildApiUrl("/reporting/participants/export"),
+    `participants-export-${date}.xlsx`,
+  );
+}
+
+export function exportPaymentsExcel(): Promise<void> {
+  const date = new Date().toISOString().slice(0, 10);
+  return triggerFileDownload(
+    buildApiUrl("/reporting/payments/export"),
+    `payments-export-${date}.xlsx`,
+  );
+}
+
+export function exportAuditLogsExcel(): Promise<void> {
+  const date = new Date().toISOString().slice(0, 10);
+  return triggerFileDownload(
+    buildApiUrl("/reporting/audit-logs/export"),
+    `audit-logs-${date}.xlsx`,
+  );
 }
