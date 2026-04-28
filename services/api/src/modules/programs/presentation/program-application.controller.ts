@@ -83,7 +83,7 @@ import {
 @Controller('programs')
 export class ProgramApplicationConfigController {
   constructor(
-    @Inject(IProgramRepository) private readonly programRepository: IProgramRepository,
+    @Inject('IProgramRepository') private readonly programRepository: IProgramRepository,
     private readonly listProgramPricingTiersHandler: ListProgramPricingTiersHandler,
     private readonly getPricingTierByIdHandler: GetPricingTierByIdHandler,
     private readonly listProgramRequirementsHandler: ListProgramRequirementsHandler,
