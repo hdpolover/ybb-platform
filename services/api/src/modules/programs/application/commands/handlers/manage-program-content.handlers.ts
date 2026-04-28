@@ -977,7 +977,7 @@ export class DeleteProgramEssayHandler implements ICommandHandler<DeleteProgramE
 @CommandHandler(UpdateProgramEssayGuidelinesCommand)
 export class UpdateProgramEssayGuidelinesHandler implements ICommandHandler<UpdateProgramEssayGuidelinesCommand> {
     constructor(
-        @Inject(IProgramRepository) private readonly programRepository: IProgramRepository,
+        @Inject('IProgramRepository') private readonly programRepository: IProgramRepository,
         private readonly cacheService: CacheService,
     ) {}
     async execute(command: UpdateProgramEssayGuidelinesCommand) {
