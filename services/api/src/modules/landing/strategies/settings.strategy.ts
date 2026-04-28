@@ -50,7 +50,7 @@ export class SettingsStrategy {
                 logo_url: program?.logoUrl || category.logoUrl || '',
                 logo_white_url: category.logoWhiteUrl || undefined,
                 logo_color_url: category.logoColorUrl || undefined,
-                logo_icon_url: category.logoIconUrl || undefined,
+                logo_icon_url: category.logoIconUrl || program?.logoUrl || category.logoUrl || undefined,
                 primary_color: category.primaryColor || undefined,
                 description: category.about || category.description || undefined,
                 support_email: settings?.supportEmail || category.contactEmail || undefined,
@@ -74,7 +74,7 @@ export class SettingsStrategy {
                 logo_url: program.logoUrl || undefined,
                 logo_white_url: program.logoWhiteUrl || undefined,
                 logo_color_url: program.logoColorUrl || undefined,
-                logo_icon_url: program.logoIconUrl || undefined
+                logo_icon_url: program.logoIconUrl || program.logoUrl || category.logoIconUrl || category.logoUrl || undefined
             } : undefined
         };
 
