@@ -383,23 +383,48 @@ export class DeleteProgramTestimonialHandler implements ICommandHandler<DeletePr
 // --- FAQ Handlers ---
 @CommandHandler(CreateProgramFaqCommand)
 export class CreateProgramFaqHandler implements ICommandHandler<CreateProgramFaqCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly prisma: PrismaService,
+        private readonly cacheService: CacheService,
+    ) {}
     async execute(command: CreateProgramFaqCommand) {
-        return this.repository.createFaq(command.dto);
+        const result = await this.repository.createFaq(command.dto);
+        await invalidateLandingCacheByProgramId(command.dto.programId, this.prisma, this.cacheService);
+        return result;
     }
 }
 @CommandHandler(UpdateProgramFaqCommand)
 export class UpdateProgramFaqHandler implements ICommandHandler<UpdateProgramFaqCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly prisma: PrismaService,
+        private readonly cacheService: CacheService,
+    ) {}
     async execute(command: UpdateProgramFaqCommand) {
-        return this.repository.updateFaq(command.id, command.dto);
+        const existing = await this.repository.findFaqById(command.id);
+        const result = await this.repository.updateFaq(command.id, command.dto);
+        const programId = existing?.programId ?? result.programId;
+        if (programId) {
+            await invalidateLandingCacheByProgramId(programId, this.prisma, this.cacheService);
+        }
+        return result;
     }
 }
 @CommandHandler(DeleteProgramFaqCommand)
 export class DeleteProgramFaqHandler implements ICommandHandler<DeleteProgramFaqCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly prisma: PrismaService,
+        private readonly cacheService: CacheService,
+    ) {}
     async execute(command: DeleteProgramFaqCommand) {
-        return this.repository.deleteFaq(command.id);
+        const existing = await this.repository.findFaqById(command.id);
+        const result = await this.repository.deleteFaq(command.id);
+        if (existing?.programId) {
+            await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.cacheService);
+        }
+        return result;
     }
 }
 

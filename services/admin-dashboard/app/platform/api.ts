@@ -921,6 +921,12 @@ export type ValidityPeriod = {
   description?: string;
 };
 
+type RawValidityPeriod = Partial<ValidityPeriod> & {
+  pricing_tier_id?: string;
+  start_date?: string;
+  end_date?: string;
+};
+
 export type PricingTier = {
   id: string;
   programId: string;
@@ -940,12 +946,58 @@ export type PricingTier = {
   validityPeriods: ValidityPeriod[];
 };
 
+type RawPricingTier = Partial<PricingTier> & {
+  program_id?: string;
+  fee_type?: string;
+  allowed_categories?: string[];
+  sold_count?: number;
+  is_active?: boolean;
+  validity_periods?: RawValidityPeriod[];
+};
+
+function normalizeValidityPeriod(raw: RawValidityPeriod): ValidityPeriod {
+  return {
+    id: raw.id ?? "",
+    pricingTierId: raw.pricingTierId ?? raw.pricing_tier_id ?? "",
+    startDate: raw.startDate ?? raw.start_date ?? "",
+    endDate: raw.endDate ?? raw.end_date ?? "",
+    description: raw.description ?? undefined,
+  };
+}
+
+function normalizePricingTier(raw: RawPricingTier): PricingTier {
+  const periods = (raw.validityPeriods ?? raw.validity_periods ?? []) as RawValidityPeriod[];
+
+  return {
+    id: raw.id ?? "",
+    programId: raw.programId ?? raw.program_id ?? "",
+    name: raw.name ?? "",
+    description: raw.description ?? undefined,
+    price: Number(raw.price ?? 0),
+    currency: raw.currency ?? "USD",
+    feeType: raw.feeType ?? raw.fee_type ?? undefined,
+    allowedCategories: raw.allowedCategories ?? raw.allowed_categories ?? undefined,
+    capacity: raw.capacity ?? undefined,
+    soldCount: raw.soldCount ?? raw.sold_count ?? 0,
+    isActive: raw.isActive ?? raw.is_active ?? false,
+    order: raw.order ?? 0,
+    icon: raw.icon ?? undefined,
+    benefits: raw.benefits ?? undefined,
+    requirements: raw.requirements ?? undefined,
+    validityPeriods: periods.map(normalizeValidityPeriod),
+  };
+}
+
 export function getPricingTiers(programId: string): Promise<PricingTier[]> {
-  return request<PricingTier[]>(`/programs/${programId}/pricing-tiers`);
+  return request<RawPricingTier[]>(`/programs/${programId}/pricing-tiers`).then((tiers) =>
+    tiers.map(normalizePricingTier),
+  );
 }
 
 export function getPricingTierById(tierId: string): Promise<PricingTier | null> {
-  return request<PricingTier | null>(`/programs/pricing-tiers/${tierId}`);
+  return request<RawPricingTier | null>(`/programs/pricing-tiers/${tierId}`).then((tier) =>
+    tier ? normalizePricingTier(tier) : null,
+  );
 }
 
 export function createPricingTier(
@@ -967,10 +1019,10 @@ export function createPricingTier(
     validUntil: string;
   },
 ): Promise<PricingTier> {
-  return request<PricingTier>(`/programs/${programId}/pricing-tiers`, {
+  return request<RawPricingTier>(`/programs/${programId}/pricing-tiers`, {
     method: "POST",
     body: JSON.stringify({ ...data, programId }),
-  });
+  }).then(normalizePricingTier);
 }
 
 export function updatePricingTier(
@@ -992,10 +1044,10 @@ export function updatePricingTier(
     validUntil: string;
   }>,
 ): Promise<PricingTier> {
-  return request<PricingTier>(`/programs/pricing-tiers/${tierId}`, {
+  return request<RawPricingTier>(`/programs/pricing-tiers/${tierId}`, {
     method: "PUT",
     body: JSON.stringify(data),
-  });
+  }).then(normalizePricingTier);
 }
 
 export function deletePricingTier(tierId: string): Promise<void> {
@@ -1006,20 +1058,20 @@ export function createValidityPeriod(
   tierId: string,
   data: { startDate: string; endDate: string; description?: string },
 ): Promise<ValidityPeriod> {
-  return request<ValidityPeriod>(`/programs/pricing-tiers/${tierId}/periods`, {
+  return request<RawValidityPeriod>(`/programs/pricing-tiers/${tierId}/periods`, {
     method: "POST",
     body: JSON.stringify(data),
-  });
+  }).then(normalizeValidityPeriod);
 }
 
 export function updateValidityPeriod(
   periodId: string,
   data: { startDate?: string; endDate?: string; description?: string },
 ): Promise<ValidityPeriod> {
-  return request<ValidityPeriod>(`/programs/validity-periods/${periodId}`, {
+  return request<RawValidityPeriod>(`/programs/validity-periods/${periodId}`, {
     method: "PUT",
     body: JSON.stringify(data),
-  });
+  }).then(normalizeValidityPeriod);
 }
 
 export function deleteValidityPeriod(periodId: string): Promise<void> {

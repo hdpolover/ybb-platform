@@ -10,6 +10,7 @@ import {
     PortalSubmissionDetailResponseDto,
     SubmissionSectionDetailDto,
     SubmissionFormFieldDto,
+    FieldOption,
     SubmissionEssayDto,
     SubmissionRequirementDto,
     SubmissionPreviewDto,
@@ -569,7 +570,7 @@ export class GetPortalSubmissionDetailHandler
             }));
         }
 
-        return field.options || undefined;
+        return this.normalizeConfiguredOptions(field.options);
     }
 
     private resolveCategoryOptions(
@@ -600,7 +601,8 @@ export class GetPortalSubmissionDetailHandler
             return dedupedParticipation;
         }
 
-        const fromFieldConfig = (field.options || []).map((option) => {
+        const normalizedConfigured = this.normalizeConfiguredOptions(field.options) || [];
+        const fromFieldConfig = normalizedConfigured.map((option) => {
             if (typeof option === 'string') {
                 return {
                     label: option,
@@ -622,7 +624,8 @@ export class GetPortalSubmissionDetailHandler
     }
 
     private resolveKnowledgeSourceOptions(field: SubmissionFormFieldDto): SubmissionFormFieldDto['options'] {
-        const configuredOptions = (field.options || []).map((option) => {
+        const normalizedConfigured = this.normalizeConfiguredOptions(field.options) || [];
+        const configuredOptions = normalizedConfigured.map((option) => {
             if (typeof option === 'string') {
                 return {
                     label: option,
@@ -664,6 +667,112 @@ export class GetPortalSubmissionDetailHandler
         }
 
         return deduped;
+    }
+
+    private normalizeConfiguredOptions(raw: unknown): SubmissionFormFieldDto['options'] {
+        const normalizeItem = (
+            item: unknown,
+            fallbackValue?: string,
+        ): FieldOption | undefined => {
+            if (typeof item === 'string') {
+                const value = item.trim();
+                if (!value) return undefined;
+                return { label: value, value };
+            }
+
+            if (Array.isArray(item)) {
+                const first = typeof item[0] === 'string' ? item[0].trim() : '';
+                const second = typeof item[1] === 'string' ? item[1].trim() : '';
+                const label = second || first;
+                const value = first || second || fallbackValue || '';
+                if (!label && !value) return undefined;
+                return { label: label || value, value: value || label };
+            }
+
+            if (!item || typeof item !== 'object') {
+                return undefined;
+            }
+
+            const rec = item as Record<string, unknown>;
+            const label =
+                (typeof rec.label === 'string' && rec.label.trim()) ||
+                (typeof rec.text === 'string' && rec.text.trim()) ||
+                (typeof rec.name === 'string' && rec.name.trim()) ||
+                (typeof rec.value === 'string' && rec.value.trim()) ||
+                (typeof rec.id === 'string' && rec.id.trim()) ||
+                '';
+            const value =
+                (typeof rec.value === 'string' && rec.value.trim()) ||
+                (typeof rec.id === 'string' && rec.id.trim()) ||
+                (typeof rec.label === 'string' && rec.label.trim()) ||
+                (typeof rec.text === 'string' && rec.text.trim()) ||
+                (typeof rec.name === 'string' && rec.name.trim()) ||
+                (fallbackValue ? fallbackValue.trim() : '') ||
+                '';
+
+            if (!label && !value) {
+                return undefined;
+            }
+
+            const description = typeof rec.description === 'string' && rec.description.trim().length > 0
+                ? rec.description
+                : undefined;
+
+            return {
+                label: label || value,
+                value: value || label,
+                description,
+            };
+        };
+
+        let source = raw;
+        if (typeof source === 'string') {
+            const trimmed = source.trim();
+            if (!trimmed) return undefined;
+
+            if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+                try {
+                    source = JSON.parse(trimmed);
+                } catch {
+                    const split = trimmed
+                        .split(',')
+                        .map((value) => value.trim())
+                        .filter((value) => value.length > 0);
+                    return split.length > 0
+                        ? split.map((value) => ({ label: value, value }))
+                        : undefined;
+                }
+            } else {
+                const split = trimmed
+                    .split(',')
+                    .map((value) => value.trim())
+                    .filter((value) => value.length > 0);
+                return split.length > 0
+                    ? split.map((value) => ({ label: value, value }))
+                    : undefined;
+            }
+        }
+
+        if (Array.isArray(source)) {
+            const normalized = source
+                .map((item) => normalizeItem(item))
+                .filter((item): item is FieldOption => Boolean(item));
+            return normalized.length > 0 ? normalized : undefined;
+        }
+
+        if (!source || typeof source !== 'object') {
+            return undefined;
+        }
+
+        const rec = source as Record<string, unknown>;
+        if (Array.isArray(rec.options)) {
+            return this.normalizeConfiguredOptions(rec.options);
+        }
+
+        const normalized = Object.entries(rec)
+            .map(([value, item]) => normalizeItem(item, value))
+            .filter((item): item is FieldOption => Boolean(item));
+        return normalized.length > 0 ? normalized : undefined;
     }
 
     private isCategoryFieldName(name: string): boolean {

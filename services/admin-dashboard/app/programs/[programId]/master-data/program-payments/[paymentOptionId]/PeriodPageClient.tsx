@@ -8,8 +8,29 @@ import type { PeriodRow } from "@/app/components/programPaymentsMasterData/perio
 import { getPricingTierById } from "@/app/platform/api";
 import type { ValidityPeriod, PricingTier } from "@/app/platform/api";
 
-function fmt(date: string) {
-  return new Date(date).toLocaleDateString("en-GB", {
+function parseDateLike(value: string | null | undefined): Date | null {
+  if (!value) return null;
+
+  const direct = new Date(value);
+  if (!Number.isNaN(direct.getTime())) return direct;
+
+  const trimmed = value.trim();
+  const normalized = trimmed
+    .replace(" ", "T")
+    .replace(/(\.\d{3})\d+/, "$1");
+  const withTimezone = /(?:[zZ]|[+-]\d{2}:\d{2})$/.test(normalized)
+    ? normalized
+    : `${normalized}Z`;
+  const fallback = new Date(withTimezone);
+
+  return Number.isNaN(fallback.getTime()) ? null : fallback;
+}
+
+function fmt(date: string | null | undefined) {
+  const parsed = parseDateLike(date);
+  if (!parsed) return "—";
+
+  return parsed.toLocaleDateString("en-GB", {
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -20,10 +41,10 @@ function fmt(date: string) {
 
 function periodToRow(vp: ValidityPeriod, index: number): PeriodRow {
   const now = new Date();
-  const start = new Date(vp.startDate);
-  const end = new Date(vp.endDate);
-  const isActive = start <= now && now <= end;
-  const isUpcoming = start > now;
+  const start = parseDateLike(vp.startDate);
+  const end = parseDateLike(vp.endDate);
+  const isActive = Boolean(start && end && start <= now && now <= end);
+  const isUpcoming = Boolean(start && start > now);
 
   return {
     id: vp.id,
@@ -33,8 +54,8 @@ function periodToRow(vp: ValidityPeriod, index: number): PeriodRow {
     description: vp.description ?? "",
     start: fmt(vp.startDate),
     end: fmt(vp.endDate),
-    startRaw: vp.startDate,
-    endRaw: vp.endDate,
+    startRaw: vp.startDate ?? "",
+    endRaw: vp.endDate ?? "",
     order: index + 1,
     status: isActive ? "Active" : "Inactive",
     isUpcoming,

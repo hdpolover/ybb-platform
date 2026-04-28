@@ -894,26 +894,37 @@ export async function createProgramGalleryItem(
     description?: string;
     year?: number;
     order?: number;
-    image: File;
-    userId: string;
-    brandId: string;
+    image?: File;
+    imageUrl?: string;
+    userId?: string;
+    brandId?: string;
   },
 ): Promise<ProgramGalleryItem> {
-  const upload = await uploadFileViaPresignedUrl(input.image, {
-    userId: input.userId,
-    brandId: input.brandId,
-    bucket: "gallery",
-    programId,
-    assetType: "gallery",
-  });
-  if (!upload.publicUrl) {
-    throw new Error("Upload succeeded but no public URL was returned.");
+  let imageUrl = input.imageUrl;
+  if (input.image) {
+    if (!input.userId || !input.brandId) {
+      throw new Error("userId and brandId are required when uploading a new image.");
+    }
+    const upload = await uploadFileViaPresignedUrl(input.image, {
+      userId: input.userId,
+      brandId: input.brandId,
+      bucket: "gallery",
+      programId,
+      assetType: "gallery",
+    });
+    if (!upload.publicUrl) {
+      throw new Error("Upload succeeded but no public URL was returned.");
+    }
+    imageUrl = upload.publicUrl;
+  }
+  if (!imageUrl) {
+    throw new Error("Either an image file or image URL is required.");
   }
   return request<ProgramGalleryItem>(`/programs/${programId}/gallery`, {
     method: "POST",
     body: JSON.stringify({
       programId,
-      imageUrl: upload.publicUrl,
+      imageUrl,
       title: input.title,
       description: input.description,
       year: input.year,
@@ -926,11 +937,12 @@ export async function updateProgramGalleryItem(
   id: string,
   input: Partial<Omit<ProgramGalleryItem, "id" | "programId" | "imageUrl">> & {
     image?: File;
+    imageUrl?: string;
     userId?: string;
     brandId?: string;
   },
 ): Promise<ProgramGalleryItem> {
-  let imageUrl: string | undefined;
+  let imageUrl: string | undefined = input.imageUrl;
   if (input.image) {
     if (!input.userId || !input.brandId) {
       throw new Error("userId and brandId are required when uploading a new image.");
@@ -1011,7 +1023,7 @@ export async function createPaymentMethodWithIcon(
     if (!upload.publicUrl) {
       throw new Error("Upload succeeded but no public URL was returned.");
     }
-    payload.icon = upload.publicUrl;
+    payload.icon = upload.fileId || upload.publicUrl;
   }
   return request<PaymentMethod>("/admin/payments/methods", {
     method: "POST",
@@ -1042,7 +1054,7 @@ export async function updatePaymentMethodWithIcon(
     if (!upload.publicUrl) {
       throw new Error("Upload succeeded but no public URL was returned.");
     }
-    payload.icon = upload.publicUrl;
+    payload.icon = upload.fileId || upload.publicUrl;
   }
   return request<PaymentMethod>(`/admin/payments/methods/${id}`, {
     method: "PUT",

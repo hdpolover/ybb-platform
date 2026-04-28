@@ -379,6 +379,7 @@ export class ProgramApplicationConfigController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add application form field' })
   @ApiResponse({ status: 201, type: ApplicationFormFieldResponseDto })
+  @CacheInvalidate(['portal:submission-detail:*', 'portal:submissions:*', 'portal:dashboard:*'])
   async addFormField(@Param('id') programId: string, @Body() dto: CreateApplicationFormFieldDto, @Request() req: AuthenticatedRequest) {
     return this.createApplicationFormFieldHandler.execute(new CreateApplicationFormFieldCommand(programId, dto, req.user.id));
   }
@@ -388,6 +389,7 @@ export class ProgramApplicationConfigController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update application form field' })
   @ApiResponse({ status: 200, type: ApplicationFormFieldResponseDto })
+  @CacheInvalidate(['portal:submission-detail:*', 'portal:submissions:*', 'portal:dashboard:*'])
   async updateFormField(@Param('itemId') itemId: string, @Body() dto: UpdateApplicationFormFieldDto, @Request() req: AuthenticatedRequest) {
     return this.updateApplicationFormFieldHandler.execute(new UpdateApplicationFormFieldCommand(itemId, dto, req.user.id));
   }
@@ -397,6 +399,7 @@ export class ProgramApplicationConfigController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete application form field' })
   @ApiResponse({ status: 200, description: 'Application form field deleted successfully' })
+  @CacheInvalidate(['portal:submission-detail:*', 'portal:submissions:*', 'portal:dashboard:*'])
   async deleteFormField(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
     return this.deleteApplicationFormFieldHandler.execute(new DeleteApplicationFormFieldCommand(itemId, req.user.id));
   }
