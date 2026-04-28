@@ -33,7 +33,7 @@ export class HomeStrategy implements ILandingPageStrategy {
 
     const brandMeta = (brand as Brand & { metadata?: Record<string, unknown> }).metadata || {};
 
-    const [program, brandSponsors, socialFeeds, videoPrograms, alumniTestimonials, delegateTestimonials, latestProgramWithAwards] = await Promise.all([
+    const [program, brandImageGallery, brandSponsors, socialFeeds, videoPrograms, alumniTestimonials, delegateTestimonials, latestProgramWithAwards] = await Promise.all([
       this.prisma.program.findFirst({
         where: {
           brandId: brand.id, // Scoped to brand
@@ -43,7 +43,7 @@ export class HomeStrategy implements ILandingPageStrategy {
         orderBy: { startDate: 'desc' },
         include: {
           gallery: {
-            where: { isActive: true },
+            where: { isActive: true, deletedAt: null, type: 'short' },
             take: 30,
             orderBy: { order: 'asc' },
           },
@@ -65,6 +65,26 @@ export class HomeStrategy implements ILandingPageStrategy {
             where: { isActive: true },
             orderBy: { order: 'asc' }
           }
+        },
+      }),
+      this.prisma.programGallery.findMany({
+        where: {
+          type: 'image',
+          isActive: true,
+          deletedAt: null,
+          program: {
+            brandId: brand.id,
+            isPublished: true,
+            isActive: true,
+          },
+        },
+        orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
+        take: 60,
+        select: {
+          id: true,
+          title: true,
+          imageUrl: true,
+          type: true,
         },
       }),
       this.prisma.sponsor.findMany({
@@ -95,7 +115,7 @@ export class HomeStrategy implements ILandingPageStrategy {
           name: true,
           year: true,
           gallery: {
-            where: { type: 'video', isActive: true },
+            where: { type: 'video', isActive: true, deletedAt: null },
             orderBy: { order: 'asc' },
             select: {
               id: true,
@@ -153,13 +173,11 @@ export class HomeStrategy implements ILandingPageStrategy {
     const programsWithVideos = videoPrograms.filter(p => p.gallery && p.gallery.length > 0);
 
     // Separate gallery by type
-    const allGallery = program?.gallery || [];
-    const shortsGallery = allGallery.filter(g => g.type === 'short');
+    const shortsGallery = program?.gallery || [];
 
     // Shuffle image gallery once — all sections below draw from this randomised pool.
     // Fisher-Yates shuffle ensures an unbiased random order per cache-miss (i.e. per deploy / TTL expiry).
-    const imageGallery = allGallery
-      .filter(g => g.type === 'image')
+    const imageGallery = brandImageGallery
       .map(img => ({ img, sort: Math.random() }))
       .sort((a, b) => a.sort - b.sort)
       .map(({ img }) => img);

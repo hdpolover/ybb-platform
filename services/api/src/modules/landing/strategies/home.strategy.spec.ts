@@ -13,6 +13,9 @@ describe('HomeStrategy', () => {
             findMany: jest.fn(),
             count: jest.fn(),
         },
+        programGallery: {
+            findMany: jest.fn(),
+        },
         sponsor: {
             findMany: jest.fn(),
         },
@@ -97,6 +100,10 @@ describe('HomeStrategy', () => {
                     { id: 'award-1', name: 'Best Speaker', winnerCount: 1, tags: ['TOP'] }
                 ]
             });
+
+        mockPrismaService.programGallery.findMany.mockResolvedValue([
+            { id: 'img-brand-1', type: 'image', imageUrl: 'img-brand-1.jpg', title: 'Brand Img 1' },
+        ]);
 
         // 2. Sponsors
         mockPrismaService.sponsor.findMany.mockResolvedValue([
