@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { StorageService } from '../../files/application/storage.service';
 import { CreateGalleryItemDto } from '../dto/create-gallery-item.dto';
 import { UpdateGalleryItemDto } from '../dto/update-gallery-item.dto';
@@ -9,7 +10,13 @@ export class GalleryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storageService: StorageService,
+    private readonly cacheService: CacheService,
   ) {}
+
+  private async invalidateLandingCaches(brandId: string): Promise<void> {
+    await this.cacheService.invalidateBrandLandingCaches(brandId);
+    await this.cacheService.invalidateByPattern('program:*');
+  }
 
   /**
    * Accepts two shapes:
@@ -47,7 +54,7 @@ export class GalleryService {
       imageUrl = uploadResult.url;
     }
 
-    return this.prisma.programGallery.create({
+    const created = await this.prisma.programGallery.create({
       data: {
         programId: dto.program_id,
         title: dto.title,
@@ -58,6 +65,8 @@ export class GalleryService {
         imageUrl: imageUrl!,
       },
     });
+    await this.invalidateLandingCaches(program.brandId);
+    return created;
   }
 
   async findAll(programId: string) {
@@ -76,7 +85,15 @@ export class GalleryService {
     if (!existing || existing.deletedAt) {
       throw new NotFoundException(`Gallery item ${id} not found`);
     }
-    return this.prisma.programGallery.update({
+    const program = await this.prisma.program.findUnique({
+      where: { id: existing.programId },
+      select: { brandId: true },
+    });
+    if (!program) {
+      throw new NotFoundException('Program not found');
+    }
+
+    const updated = await this.prisma.programGallery.update({
       where: { id },
       data: {
         title: dto.title,
@@ -87,6 +104,8 @@ export class GalleryService {
         isActive: dto.isActive,
       },
     });
+    await this.invalidateLandingCaches(program.brandId);
+    return updated;
   }
 
   /**
@@ -99,9 +118,18 @@ export class GalleryService {
     if (!existing || existing.deletedAt) {
       throw new NotFoundException(`Gallery item ${id} not found`);
     }
+    const program = await this.prisma.program.findUnique({
+      where: { id: existing.programId },
+      select: { brandId: true },
+    });
+    if (!program) {
+      throw new NotFoundException('Program not found');
+    }
+
     await this.prisma.programGallery.update({
       where: { id },
       data: { deletedAt: new Date(), isActive: false },
     });
+    await this.invalidateLandingCaches(program.brandId);
   }
 }
