@@ -6,17 +6,44 @@ import type { PaymentOptionRow } from "@/app/components/programPaymentsMasterDat
 import { getPricingTiers } from "@/app/platform/api";
 import type { PricingTier } from "@/app/platform/api";
 
+function parseDateLike(value: string | null | undefined): Date | null {
+  if (!value) return null;
+
+  const direct = new Date(value);
+  if (!Number.isNaN(direct.getTime())) return direct;
+
+  const trimmed = value.trim();
+  const normalized = trimmed
+    .replace(" ", "T")
+    .replace(/(\.\d{3})\d+/, "$1");
+  const withTimezone = /(?:[zZ]|[+-]\d{2}:\d{2})$/.test(normalized)
+    ? normalized
+    : `${normalized}Z`;
+  const fallback = new Date(withTimezone);
+
+  return Number.isNaN(fallback.getTime()) ? null : fallback;
+}
+
 function tierToRow(tier: PricingTier, index: number): PaymentOptionRow {
   const now = new Date();
-  const activePeriod = tier.validityPeriods.find(
-    (vp) => new Date(vp.startDate) <= now && now <= new Date(vp.endDate),
-  );
-  const upcomingPeriod = tier.validityPeriods.find(
-    (vp) => new Date(vp.startDate) > now,
-  );
+  const periodBounds = tier.validityPeriods.map((vp) => ({
+    period: vp,
+    start: parseDateLike(vp.startDate),
+    end: parseDateLike(vp.endDate),
+  }));
+  const activePeriod = periodBounds.find(
+    ({ start, end }) => Boolean(start && end && start <= now && now <= end),
+  )?.period;
+  const upcomingPeriod = periodBounds.find(
+    ({ start }) => Boolean(start && start > now),
+  )?.period;
 
-  const fmtRange = (start: string, end: string) =>
-    `${new Date(start).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })} - ${new Date(end).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
+  const fmtRange = (start: string, end: string) => {
+    const startDate = parseDateLike(start);
+    const endDate = parseDateLike(end);
+    if (!startDate || !endDate) return "—";
+    return `${startDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })} - ${endDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
+  };
 
   const category =
     tier.feeType === "registration_fee"

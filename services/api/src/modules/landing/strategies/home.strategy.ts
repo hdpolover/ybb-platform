@@ -215,6 +215,8 @@ export class HomeStrategy implements ILandingPageStrategy {
               name: tier.name,
               price: tier.price,
               currency: tier.currency,
+              fee_type: tier.feeType,
+              allowed_categories: tier.allowedCategories,
               benefits: tier.benefits,
               requirements: tier.requirements,
               validity_periods: tier.validityPeriods?.map((vp) => ({

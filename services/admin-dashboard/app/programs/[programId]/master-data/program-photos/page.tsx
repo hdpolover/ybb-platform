@@ -12,6 +12,7 @@ import {
   type ProgramGalleryItem,
 } from "@/src/shared/api-client";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/src/ui/sheet";
+import { MediaLibraryPicker } from "@/app/components/submissionsMasterData/form-fields/MediaLibraryPicker";
 
 export default function ProgramPhotosPage() {
   const params = useParams<{ programId: string }>();
@@ -171,6 +172,8 @@ function PhotoModal({
   const [order, setOrder] = useState(item?.order !== undefined ? String(item.order) : "0");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(item?.imageUrl ?? null);
+  const [selectedMediaUrl, setSelectedMediaUrl] = useState<string | null>(null);
+  const [isMediaPickerOpen, setIsMediaPickerOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -178,6 +181,7 @@ function PhotoModal({
     const file = e.target.files?.[0];
     if (!file) return;
     setImageFile(file);
+    setSelectedMediaUrl(null);
     const reader = new FileReader();
     reader.onload = (ev) => setImagePreview(ev.target?.result as string);
     reader.readAsDataURL(file);
@@ -185,8 +189,14 @@ function PhotoModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!isEdit && !imageFile) { setError("Please select an image to upload."); return; }
-    if (!userId || !brandId) { setError("You must be signed in to an accessible program."); return; }
+    if (!isEdit && !imageFile && !selectedMediaUrl) {
+      setError("Please upload an image or pick one from the media library.");
+      return;
+    }
+    if (imageFile && (!userId || !brandId)) {
+      setError("You must be signed in to an accessible program.");
+      return;
+    }
     setLoading(true); setError(null);
     try {
       if (isEdit && item) {
@@ -195,6 +205,7 @@ function PhotoModal({
           description: description || undefined,
           year: year ? Number(year) : undefined,
           order: order !== "" ? Number(order) : undefined,
+          ...(selectedMediaUrl ? { imageUrl: selectedMediaUrl } : {}),
           ...(imageFile ? { image: imageFile, userId, brandId } : {}),
         });
       } else {
@@ -203,9 +214,8 @@ function PhotoModal({
           description: description || undefined,
           year: year ? Number(year) : undefined,
           order: order !== "" ? Number(order) : undefined,
-          image: imageFile!,
-          userId,
-          brandId,
+          ...(selectedMediaUrl ? { imageUrl: selectedMediaUrl } : {}),
+          ...(imageFile ? { image: imageFile, userId, brandId } : {}),
         });
       }
       onSaved();
@@ -259,7 +269,23 @@ function PhotoModal({
             {imageFile && (
               <p className="mt-1 truncate text-[10px] text-zinc-500">{imageFile.name}</p>
             )}
+            {selectedMediaUrl && !imageFile && (
+              <p className="mt-1 truncate text-[10px] text-zinc-500">Selected from media library</p>
+            )}
             <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+            <button
+              type="button"
+              onClick={() => {
+                if (!brandId) {
+                  setError("You must be signed in to an accessible program.");
+                  return;
+                }
+                setIsMediaPickerOpen(true);
+              }}
+              className="mt-2 inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50"
+            >
+              Pick from Media Library
+            </button>
           </div>
 
           {/* Text fields */}
@@ -300,6 +326,23 @@ function PhotoModal({
           </button>
         </div>
       </SheetContent>
+      <MediaLibraryPicker
+        open={isMediaPickerOpen}
+        onClose={() => setIsMediaPickerOpen(false)}
+        programId={programId}
+        brandId={brandId}
+        defaultAssetType="gallery"
+        onPick={(file) => {
+          if (!file.url) {
+            setError("Selected media does not have a usable URL.");
+            return;
+          }
+          setError(null);
+          setImageFile(null);
+          setSelectedMediaUrl(file.url);
+          setImagePreview(file.url);
+        }}
+      />
     </Sheet>
   );
 }

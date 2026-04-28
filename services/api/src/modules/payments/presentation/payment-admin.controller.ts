@@ -325,13 +325,18 @@ export class PaymentAdminController {
 
     private async resolveIconUrl(icon: string, user: CurrentUserData): Promise<string> {
         this.logger.log(`Resolving icon UUID: ${icon}. User: ${user.userId}, Brand: ${user.brandId}`);
-        if (!this.isValidUUID(icon)) {
-            this.logger.debug(`Icon ${icon} is not a valid UUID, returning as is`);
-            return icon;
+        let candidate = icon.trim();
+        if (!this.isValidUUID(candidate)) {
+            const extracted = this.extractUuidFromString(candidate);
+            if (!extracted) {
+                this.logger.debug(`Icon ${icon} is not a valid UUID, returning as is`);
+                return icon;
+            }
+            candidate = extracted;
         }
 
         try {
-            const fileInfo = await this.fileService.getFile(icon, user.userId, user.brandId);
+            const fileInfo = await this.fileService.getFile(candidate, user.userId, user.brandId);
             this.logger.log(`Resolved file info received`);
 
             const data = (fileInfo.data || fileInfo) as Record<string, string | undefined>;
@@ -362,6 +367,11 @@ export class PaymentAdminController {
     private isValidUUID(uuid: string): boolean {
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
         return uuidRegex.test(uuid);
+    }
+
+    private extractUuidFromString(value: string): string | null {
+        const match = value.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}/i);
+        return match?.[0] ?? null;
     }
 
     private handleError(error: unknown) {
