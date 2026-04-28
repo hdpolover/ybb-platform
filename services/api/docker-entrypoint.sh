@@ -20,7 +20,7 @@ if [ $EXIT_CODE -ne 0 ]; then
 fi
 
 echo "🌱 Seeding reference data (auth providers, form fields, templates)..."
-npm run seed:reference
+npm run seed:reference:prod
 
 if [ "$RUN_SEED" = "true" ]; then
   echo "🌱 Running full seed..."
