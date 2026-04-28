@@ -178,6 +178,8 @@ model Program {
   requirementsDescription String? @map("requirements_description") @db.Text
   benefitsDescription     String? @map("benefits_description") @db.Text
   termsAndConditions      String? @map("terms_and_conditions") @db.Text
+  essayGuidelineText      String? @map("essay_guideline_text") @db.Text
+  essayGuidelineUrl       String? @map("essay_guideline_url") @db.VarChar(500)
   previewChecklistItems   String[] @map("preview_checklist_items")
 
   // SEO
@@ -294,8 +296,6 @@ model ProgramEssay {
   isRequired     Boolean @default(true) @map("is_required")
   order          Int     @default(0)
   isActive       Boolean @default(true) @map("is_active")
-  guidelineText  String? @map("guideline_text") @db.Text
-  guidelineUrl   String? @map("guideline_url") @db.VarChar(500)
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)

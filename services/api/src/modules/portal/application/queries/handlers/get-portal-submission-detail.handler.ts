@@ -55,6 +55,8 @@ type ApplicationDetail = {
         id: string;
         name: string;
         termsAndConditions: string | null;
+        essayGuidelineText: string | null;
+        essayGuidelineUrl: string | null;
         previewChecklistItems: string[];
         participationCategories: {
             id: string;
@@ -85,8 +87,6 @@ type ApplicationDetail = {
             isRequired: boolean;
             wordLimit: number | null;
             order: number;
-            guidelineText: string | null;
-            guidelineUrl: string | null;
         }[];
         requirements: {
             id: string;
@@ -159,6 +159,8 @@ export class GetPortalSubmissionDetailHandler
             essays,
             requirements,
             preview,
+            essayGuidelineText: application.program.essayGuidelineText || undefined,
+            essayGuidelineUrl: application.program.essayGuidelineUrl || undefined,
             participantName: participant.displayName || participant.fullName,
             participantId: participant.id,
             participantAccountId: participant.user.id,
@@ -196,6 +198,8 @@ export class GetPortalSubmissionDetailHandler
                         id: true,
                         name: true,
                         termsAndConditions: true,
+                        essayGuidelineText: true,
+                        essayGuidelineUrl: true,
                         previewChecklistItems: true,
                         participationCategories: {
                             where: { isActive: true },
@@ -245,8 +249,6 @@ export class GetPortalSubmissionDetailHandler
                                 isRequired: true,
                                 wordLimit: true,
                                 order: true,
-                                guidelineText: true,
-                                guidelineUrl: true,
                             },
                             orderBy: { order: 'asc' },
                         },
@@ -754,8 +756,6 @@ export class GetPortalSubmissionDetailHandler
             isRequired: essay.isRequired,
             wordLimit: essay.wordLimit || undefined,
             order: essay.order,
-            guidelineText: essay.guidelineText || undefined,
-            guidelineUrl: essay.guidelineUrl || undefined,
             answer: (essayAnswers[essay.id] || undefined) as string | undefined,
         }));
     }

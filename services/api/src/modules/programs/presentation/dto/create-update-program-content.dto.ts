@@ -1191,15 +1191,6 @@ export class CreateProgramEssayDto {
     @IsOptional()
     isActive?: boolean;
 
-    @ApiProperty({ required: false })
-    @IsString()
-    @IsOptional()
-    guidelineText?: string;
-
-    @ApiProperty({ required: false })
-    @IsUrl()
-    @IsOptional()
-    guidelineUrl?: string;
 }
 
 export class UpdateProgramEssayDto {
@@ -1233,6 +1224,9 @@ export class UpdateProgramEssayDto {
     @IsOptional()
     isActive?: boolean;
 
+}
+
+export class UpdateProgramEssayGuidelinesDto {
     @ApiProperty({ required: false })
     @IsString()
     @IsOptional()
