@@ -21,7 +21,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
         const cacheKey = CACHE_KEYS.LANDING_PROGRAMS(brand.id);
         const cached = await this.cacheService.get(cacheKey);
         if (cached) {
-            return cached;
+            return this.normalizeProgramsPayload(cached);
         }
 
         // 1. Fetch Latest Active Program for this Brand
@@ -228,14 +228,14 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                     description: 'Read Important Payment & Selection Information',
                     status: isRegistrationOpen ? 'open' : 'closed',
                     registration_dates: {
-                        open: currentProgram.registrationOpenDate,
-                        close: currentProgram.registrationCloseDate
+                        open: currentProgram.registrationOpenDate?.toISOString() ?? null,
+                        close: currentProgram.registrationCloseDate?.toISOString() ?? null
                     },
                     pricing_tiers: currentProgram.pricingTiers.map(tier => ({
                         id: tier.id,
                         name: tier.name,
                         description: tier.description,
-                        price: tier.price,
+                        price: tier.price?.toString?.() ?? '',
                         currency: tier.currency,
                         benefits: tier.benefits,
                         fee_type: tier.feeType, // fully_funded, partial, etc.
@@ -454,9 +454,74 @@ export class ProgramsStrategy implements ILandingPageStrategy {
         };
 
         // Cache the result for 1 hour
-        await this.cacheService.set(cacheKey, result, CACHE_TTL.HOUR);
+        const normalizedResult = this.normalizeProgramsPayload(result);
+        await this.cacheService.set(cacheKey, normalizedResult, CACHE_TTL.HOUR);
 
-        return result;
+        return normalizedResult;
+    }
+
+    private normalizeProgramsPayload(payload: unknown) {
+        if (!payload || typeof payload !== 'object') return payload;
+        const root = payload as { sections?: Array<Record<string, unknown>> };
+        if (!Array.isArray(root.sections)) return payload;
+
+        const sections = root.sections.map((section) => {
+            if (section?.type !== 'registration_info') return section;
+            const content = (section.content ?? {}) as Record<string, unknown>;
+            const registrationDates = (content.registration_dates ?? {}) as Record<string, unknown>;
+            const pricingTiers = Array.isArray(content.pricing_tiers)
+                ? (content.pricing_tiers as Array<Record<string, unknown>>).map((tier) => ({
+                    ...tier,
+                    price: this.normalizeValue(tier.price),
+                }))
+                : [];
+
+            return {
+                ...section,
+                content: {
+                    ...content,
+                    registration_dates: {
+                        open: this.normalizeDateValue(registrationDates.open),
+                        close: this.normalizeDateValue(registrationDates.close),
+                    },
+                    pricing_tiers: pricingTiers,
+                },
+            };
+        });
+
+        return {
+            ...(payload as Record<string, unknown>),
+            sections,
+        };
+    }
+
+    private normalizeDateValue(value: unknown): string | null {
+        const normalized = this.normalizeValue(value);
+        if (!normalized) return null;
+        const parsed = new Date(normalized);
+        return Number.isNaN(parsed.getTime()) ? normalized : parsed.toISOString();
+    }
+
+    private normalizeValue(value: unknown): string {
+        if (value === null || value === undefined) return '';
+        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'bigint') {
+            return String(value);
+        }
+        if (value instanceof Date) {
+            return value.toISOString();
+        }
+        if (typeof value === 'object') {
+            const candidate = value as Record<string, unknown>;
+            const nested = candidate.$date ?? candidate.date ?? candidate.value ?? candidate.iso;
+            if (nested !== undefined) {
+                return this.normalizeValue(nested);
+            }
+            if (typeof (value as { toString?: () => string }).toString === 'function') {
+                const text = (value as { toString: () => string }).toString();
+                return text === '[object Object]' ? '' : text;
+            }
+        }
+        return '';
     }
 
     async getProgramData(slug: string, brand: Brand | null) {
