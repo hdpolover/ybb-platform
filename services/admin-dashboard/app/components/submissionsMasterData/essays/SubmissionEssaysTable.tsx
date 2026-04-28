@@ -10,6 +10,7 @@ import {
 } from "@heroicons/react/24/solid";
 import { buildApiUrl, getAccessToken, readErrorMessage, readJsonData } from "@/app/components/submissionsMasterData/api";
 import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
+import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
 
 const INPUT_CLS =
   "block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
@@ -65,6 +66,35 @@ function toEssayState(essay?: SubmissionEssayRow): EssayModalState {
 interface GuidelineModalState {
   text: string;
   url: string;
+}
+
+function normalizeRichText(value: string): string | undefined {
+  const html = value.trim();
+  if (!html) {
+    return undefined;
+  }
+
+  const plain = html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, "")
+    .trim();
+
+  return plain ? html : undefined;
+}
+
+function toPlainPreview(value?: string): string {
+  if (!value) {
+    return "";
+  }
+
+  return value
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function EssayModal({
@@ -227,12 +257,11 @@ function EssayGuidelineModal({
     >
       <div>
         <label className="mb-1.5 block text-xs font-medium text-zinc-500">Guideline Text</label>
-        <textarea
-          rows={4}
-          value={formState.text}
-          onChange={(event) => onChange({ text: event.target.value })}
+        <RichTextEditor
+          content={formState.text}
+          onChange={(html) => onChange({ text: html })}
           placeholder="Optional guidance shown above the essay questions section"
-          className={INPUT_CLS}
+          className="[&_.ProseMirror]:min-h-[160px]"
         />
       </div>
       <div>
@@ -268,20 +297,15 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
     setErrorMessage(null);
 
     try {
-      const [essaysResponse, guidelinesResponse] = await Promise.all([
-        fetch(buildApiUrl(`/programs/${encodeURIComponent(programId)}/essays?includeInactive=true`), {
+      const essaysResponse = await fetch(
+        buildApiUrl(`/programs/${encodeURIComponent(programId)}/essays?includeInactive=true`),
+        {
           cache: "no-store",
-        }),
-        fetch(buildApiUrl(`/programs/${encodeURIComponent(programId)}/essay-guidelines`), {
-          cache: "no-store",
-        }),
-      ]);
+        },
+      );
 
       if (!essaysResponse.ok) {
         throw new Error(await readErrorMessage(essaysResponse));
-      }
-      if (!guidelinesResponse.ok) {
-        throw new Error(await readErrorMessage(guidelinesResponse));
       }
 
       const payload = await readJsonData<Array<{
@@ -292,16 +316,9 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
         isRequired: boolean;
         order: number;
         isActive: boolean;
-      }>>(essaysResponse);
-      const guidelinesPayload = await readJsonData<{
         guidelineText?: string;
         guidelineUrl?: string;
-      }>(guidelinesResponse);
-
-      setGuidelineState({
-        text: guidelinesPayload.guidelineText ?? "",
-        url: guidelinesPayload.guidelineUrl ?? "",
-      });
+      }>>(essaysResponse);
 
       setData(
         payload.map((item) => ({
@@ -315,6 +332,33 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
           status: item.isActive ? "Active" : "Inactive",
         })),
       );
+
+      const guidelinesResponse = await fetch(
+        buildApiUrl(`/programs/${encodeURIComponent(programId)}/essay-guidelines`),
+        {
+          cache: "no-store",
+        },
+      );
+
+      if (guidelinesResponse.ok) {
+        const guidelinesPayload = await readJsonData<{
+          guidelineText?: string;
+          guidelineUrl?: string;
+        }>(guidelinesResponse);
+        setGuidelineState({
+          text: guidelinesPayload.guidelineText ?? "",
+          url: guidelinesPayload.guidelineUrl ?? "",
+        });
+      } else if (guidelinesResponse.status === 404) {
+        // Backward compatibility for API deployments that still keep guidelines per essay item.
+        const legacySource = payload.find((item) => item.guidelineText || item.guidelineUrl);
+        setGuidelineState({
+          text: legacySource?.guidelineText ?? "",
+          url: legacySource?.guidelineUrl ?? "",
+        });
+      } else {
+        throw new Error(await readErrorMessage(guidelinesResponse));
+      }
     } catch (error) {
       setData([]);
       setErrorMessage(error instanceof Error ? error.message : "Failed to load essays.");
@@ -415,7 +459,7 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
       setGuidelineErrorMessage("An admin access token is required to update essay guidelines.");
       return;
     }
-    const guidelineText = guidelineState.text.trim();
+    const guidelineText = normalizeRichText(guidelineState.text);
     const guidelineUrl = guidelineState.url.trim();
     if (guidelineUrl) {
       try {
@@ -446,7 +490,40 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
         },
       );
 
-      if (!response.ok) {
+      if (!response.ok && response.status === 404) {
+        if (data.length === 0) {
+          throw new Error(
+            "This API deployment does not support section-level essay guidelines yet. Add at least one essay first, or deploy the latest API version.",
+          );
+        }
+
+        const fallbackResponses = await Promise.all(
+          data.map((essay) =>
+            fetch(buildApiUrl(`/programs/essays/${encodeURIComponent(essay.id)}`), {
+              method: "PUT",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                question: essay.question,
+                description: essay.description || undefined,
+                wordLimit: essay.wordLimit,
+                isRequired: essay.isRequired,
+                order: essay.order,
+                isActive: essay.isActive,
+                guidelineText: guidelineText,
+                guidelineUrl: guidelineUrl || undefined,
+              }),
+            }),
+          ),
+        );
+
+        const failedFallback = fallbackResponses.find((item) => !item.ok);
+        if (failedFallback) {
+          throw new Error(await readErrorMessage(failedFallback));
+        }
+      } else if (!response.ok) {
         throw new Error(await readErrorMessage(response));
       }
 
@@ -496,6 +573,9 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
     }
   };
 
+  const guidelineTextPreview = toPlainPreview(normalizeRichText(guidelineState.text));
+  const guidelineUrlPreview = guidelineState.url.trim();
+
   return (
     <section className="space-y-4">
       <div className="flex items-center justify-between gap-4">
@@ -527,18 +607,18 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
         </div>
       </div>
 
-      {(guidelineState.text.trim() || guidelineState.url.trim()) && (
+      {(guidelineTextPreview || guidelineUrlPreview) && (
         <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
           <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Shared Essay Guidelines</p>
-          {guidelineState.text.trim() && <p className="mt-1">{guidelineState.text.trim()}</p>}
-          {guidelineState.url.trim() && (
+          {guidelineTextPreview ? <p className="mt-1">{guidelineTextPreview}</p> : null}
+          {guidelineUrlPreview && (
             <a
-              href={guidelineState.url.trim()}
+              href={guidelineUrlPreview}
               target="_blank"
               rel="noopener noreferrer"
               className="mt-1 inline-flex items-center gap-1.5 font-semibold text-blue-700 underline-offset-2 hover:underline"
             >
-              {guidelineState.url.trim()}
+              {guidelineUrlPreview}
             </a>
           )}
         </div>
