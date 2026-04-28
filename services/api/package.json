@@ -28,6 +28,7 @@
     "prisma:studio": "prisma studio",
     "prisma:seed": "ts-node prisma/seeds/main.ts",
     "seed:reference": "ts-node prisma/seeds/seed-reference.ts",
+    "seed:reference:prod": "node dist/prisma/seeds/seed-reference.js",
     "prisma:migrate:remote": "ts-node prisma/seeds/internal/run-remote-migration.ts",
     "prisma:reset": "prisma migrate reset",
     "migrate:form-field-catalog": "ts-node -r tsconfig-paths/register prisma/migration-scripts/migrate-form-field-catalog.ts",
