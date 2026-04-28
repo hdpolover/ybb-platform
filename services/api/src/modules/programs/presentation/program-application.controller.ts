@@ -1,9 +1,10 @@
-import { Controller, Get, Param, Put, Post, Delete, Body, UseGuards, Request, Query } from '@nestjs/common';
+import { Controller, Get, Param, Put, Post, Delete, Body, UseGuards, Request, Query, Inject, NotFoundException } from '@nestjs/common';
 import { Request as ExpressRequest } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
 import { Public } from '../../../shared/decorators/public.decorator';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
+import { IProgramRepository } from '@core/interfaces/repositories/program.repository.interface';
 
 interface AuthenticatedRequest extends ExpressRequest {
   user: { id: string; userId: string };
@@ -13,6 +14,7 @@ import {
   ProgramPricingTierResponseDto,
   ProgramRequirementResponseDto,
   ProgramEssayResponseDto,
+  ProgramEssayGuidelinesResponseDto,
   ProgramParticipationCategoryResponseDto,
   ApplicationFormFieldResponseDto,
   ProgramSubthemeResponseDto,
@@ -42,7 +44,7 @@ import {
   CreateProgramPricingTierDto, UpdateProgramPricingTierDto,
   CreateValidityPeriodDto, UpdateValidityPeriodDto,
   CreateProgramRequirementDto, UpdateProgramRequirementDto,
-  CreateProgramEssayDto, UpdateProgramEssayDto,
+  CreateProgramEssayDto, UpdateProgramEssayDto, UpdateProgramEssayGuidelinesDto,
   CreateProgramParticipationCategoryDto, UpdateProgramParticipationCategoryDto,
   CreateProgramSubthemeDto, UpdateProgramSubthemeDto,
 } from './dto/create-update-program-content.dto';
@@ -53,7 +55,7 @@ import {
   CreateProgramPricingTierCommand, UpdateProgramPricingTierCommand, DeleteProgramPricingTierCommand,
   CreateValidityPeriodCommand, UpdateValidityPeriodCommand, DeleteValidityPeriodCommand,
   CreateProgramRequirementCommand, UpdateProgramRequirementCommand, DeleteProgramRequirementCommand,
-  CreateProgramEssayCommand, UpdateProgramEssayCommand, DeleteProgramEssayCommand,
+  CreateProgramEssayCommand, UpdateProgramEssayCommand, DeleteProgramEssayCommand, UpdateProgramEssayGuidelinesCommand,
   CreateProgramParticipationCategoryCommand, UpdateProgramParticipationCategoryCommand, DeleteProgramParticipationCategoryCommand,
   CreateProgramSubthemeCommand, UpdateProgramSubthemeCommand, DeleteProgramSubthemeCommand,
 } from '../application/commands/program-content.commands';
@@ -67,7 +69,7 @@ import {
   CreateProgramPricingTierHandler, UpdateProgramPricingTierHandler, DeleteProgramPricingTierHandler,
   CreateValidityPeriodHandler, UpdateValidityPeriodHandler, DeleteValidityPeriodHandler,
   CreateProgramRequirementHandler, UpdateProgramRequirementHandler, DeleteProgramRequirementHandler,
-  CreateProgramEssayHandler, UpdateProgramEssayHandler, DeleteProgramEssayHandler,
+  CreateProgramEssayHandler, UpdateProgramEssayHandler, DeleteProgramEssayHandler, UpdateProgramEssayGuidelinesHandler,
   CreateProgramParticipationCategoryHandler, UpdateProgramParticipationCategoryHandler, DeleteProgramParticipationCategoryHandler,
   CreateProgramSubthemeHandler, UpdateProgramSubthemeHandler, DeleteProgramSubthemeHandler,
 } from '../application/commands/handlers/manage-program-content.handlers';
@@ -81,6 +83,7 @@ import {
 @Controller('programs')
 export class ProgramApplicationConfigController {
   constructor(
+    @Inject(IProgramRepository) private readonly programRepository: IProgramRepository,
     private readonly listProgramPricingTiersHandler: ListProgramPricingTiersHandler,
     private readonly getPricingTierByIdHandler: GetPricingTierByIdHandler,
     private readonly listProgramRequirementsHandler: ListProgramRequirementsHandler,
@@ -100,6 +103,7 @@ export class ProgramApplicationConfigController {
     private readonly createProgramEssayHandler: CreateProgramEssayHandler,
     private readonly updateProgramEssayHandler: UpdateProgramEssayHandler,
     private readonly deleteProgramEssayHandler: DeleteProgramEssayHandler,
+    private readonly updateProgramEssayGuidelinesHandler: UpdateProgramEssayGuidelinesHandler,
     private readonly createProgramParticipationCategoryHandler: CreateProgramParticipationCategoryHandler,
     private readonly updateProgramParticipationCategoryHandler: UpdateProgramParticipationCategoryHandler,
     private readonly deleteProgramParticipationCategoryHandler: DeleteProgramParticipationCategoryHandler,
@@ -229,6 +233,23 @@ export class ProgramApplicationConfigController {
     );
   }
 
+  @Get(':id/essay-guidelines')
+  @Public()
+  @ApiOperation({ summary: 'Get shared essay guidelines for a program' })
+  @ApiResponse({ status: 200, type: ProgramEssayGuidelinesResponseDto })
+  async getEssayGuidelines(@Param('id') programId: string): Promise<ProgramEssayGuidelinesResponseDto> {
+    const byId = await this.programRepository.findById(programId);
+    const program = byId ?? await this.programRepository.findBySlug(programId);
+    if (!program) {
+      throw new NotFoundException(`Program with identifier ${programId} not found`);
+    }
+
+    return {
+      guidelineText: program.essayGuidelineText ?? undefined,
+      guidelineUrl: program.essayGuidelineUrl ?? undefined,
+    };
+  }
+
   @Post(':id/essays')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
@@ -251,6 +272,21 @@ export class ProgramApplicationConfigController {
   @ApiOperation({ summary: 'Delete essay' })
   async deleteEssay(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
     return this.deleteProgramEssayHandler.execute(new DeleteProgramEssayCommand(itemId, req.user.id));
+  }
+
+  @Put(':id/essay-guidelines')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update shared essay guidelines for a program' })
+  @CacheInvalidate(['program:essays:*', 'portal:submission-detail:*', 'portal:submissions:*', 'portal:dashboard:*'])
+  async updateEssayGuidelines(
+    @Param('id') programId: string,
+    @Body() dto: UpdateProgramEssayGuidelinesDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.updateProgramEssayGuidelinesHandler.execute(
+      new UpdateProgramEssayGuidelinesCommand(programId, dto, req.user.id),
+    );
   }
 
   // --- Participation Category Endpoints ---

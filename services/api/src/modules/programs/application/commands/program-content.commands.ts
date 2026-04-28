@@ -11,7 +11,7 @@ import {
     CreateProgramPricingTierDto, UpdateProgramPricingTierDto,
     CreateValidityPeriodDto, UpdateValidityPeriodDto,
     CreateProgramRequirementDto, UpdateProgramRequirementDto,
-    CreateProgramEssayDto, UpdateProgramEssayDto,
+    CreateProgramEssayDto, UpdateProgramEssayDto, UpdateProgramEssayGuidelinesDto,
     CreateProgramParticipationCategoryDto, UpdateProgramParticipationCategoryDto,
     CreateProgramSubthemeDto, UpdateProgramSubthemeDto,
     CreateDocumentTemplateDto, UpdateDocumentTemplateDto,
@@ -203,6 +203,9 @@ export class UpdateProgramEssayCommand {
 }
 export class DeleteProgramEssayCommand {
     constructor(public readonly id: string, public readonly userId: string) { }
+}
+export class UpdateProgramEssayGuidelinesCommand {
+    constructor(public readonly programId: string, public readonly dto: UpdateProgramEssayGuidelinesDto, public readonly userId: string) { }
 }
 
 // Participation Category Commands

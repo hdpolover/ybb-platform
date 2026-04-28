@@ -351,6 +351,14 @@ export class ProgramEssayResponseDto {
     isActive: boolean;
 }
 
+export class ProgramEssayGuidelinesResponseDto {
+    @ApiProperty({ required: false })
+    guidelineText?: string;
+
+    @ApiProperty({ required: false })
+    guidelineUrl?: string;
+}
+
 export class ProgramSubthemeResponseDto {
     @ApiProperty()
     id: string;

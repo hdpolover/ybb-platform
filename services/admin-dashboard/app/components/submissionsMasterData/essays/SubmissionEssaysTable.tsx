@@ -23,8 +23,6 @@ export interface SubmissionEssayRow {
   order: number;
   isActive?: boolean;
   status: "Active" | "Inactive";
-  guidelineText?: string;
-  guidelineUrl?: string;
 }
 
 interface EssayModalState {
@@ -35,8 +33,6 @@ interface EssayModalState {
   isRequired: boolean;
   order: string;
   status: "Active" | "Inactive";
-  guidelineText: string;
-  guidelineUrl: string;
 }
 
 function createEmptyEssayState(): EssayModalState {
@@ -47,8 +43,6 @@ function createEmptyEssayState(): EssayModalState {
     isRequired: false,
     order: "0",
     status: "Active",
-    guidelineText: "",
-    guidelineUrl: "",
   };
 }
 
@@ -65,9 +59,12 @@ function toEssayState(essay?: SubmissionEssayRow): EssayModalState {
     isRequired: essay.isRequired ?? false,
     order: String(essay.order ?? 0),
     status: essay.status,
-    guidelineText: essay.guidelineText ?? "",
-    guidelineUrl: essay.guidelineUrl ?? "",
   };
+}
+
+interface GuidelineModalState {
+  text: string;
+  url: string;
 }
 
 function EssayModal({
@@ -136,26 +133,6 @@ function EssayModal({
           className={INPUT_CLS}
         />
       </div>
-      <div>
-        <label className="mb-1.5 block text-xs font-medium text-zinc-500">Guideline Text</label>
-        <textarea
-          rows={3}
-          value={formState.guidelineText}
-          onChange={(event) => onChange({ guidelineText: event.target.value })}
-          placeholder="Optional guidance shown to participants above the essay textarea"
-          className={INPUT_CLS}
-        />
-      </div>
-      <div>
-        <label className="mb-1.5 block text-xs font-medium text-zinc-500">Guideline Link (URL)</label>
-        <input
-          type="url"
-          value={formState.guidelineUrl}
-          onChange={(event) => onChange({ guidelineUrl: event.target.value })}
-          placeholder="https://example.com/essay-guidelines"
-          className={INPUT_CLS}
-        />
-      </div>
       <div className="grid gap-5 md:grid-cols-2">
         <div>
           <label className="mb-1.5 block text-xs font-medium text-zinc-500">Word Limit</label>
@@ -202,6 +179,76 @@ function EssayModal({
   );
 }
 
+function EssayGuidelineModal({
+  isOpen,
+  formState,
+  onChange,
+  onClose,
+  onSubmit,
+  isSaving,
+  errorMessage,
+}: {
+  isOpen: boolean;
+  formState: GuidelineModalState;
+  onChange: (patch: Partial<GuidelineModalState>) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+  isSaving: boolean;
+  errorMessage: string | null;
+}) {
+  return (
+    <DrawerShell
+      open={isOpen}
+      onClose={onClose}
+      title="Essay Guidelines"
+      description="Set shared guideline text and link shown once in Entry Information."
+      error={errorMessage}
+      locked={isSaving}
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSaving}
+            className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-100 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={isSaving}
+            className="rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isSaving ? "Saving..." : "Save Guidelines"}
+          </button>
+        </>
+      }
+    >
+      <div>
+        <label className="mb-1.5 block text-xs font-medium text-zinc-500">Guideline Text</label>
+        <textarea
+          rows={4}
+          value={formState.text}
+          onChange={(event) => onChange({ text: event.target.value })}
+          placeholder="Optional guidance shown above the essay questions section"
+          className={INPUT_CLS}
+        />
+      </div>
+      <div>
+        <label className="mb-1.5 block text-xs font-medium text-zinc-500">Guideline Link (URL)</label>
+        <input
+          type="url"
+          value={formState.url}
+          onChange={(event) => onChange({ url: event.target.value })}
+          placeholder="https://example.com/essay-guidelines"
+          className={INPUT_CLS}
+        />
+      </div>
+    </DrawerShell>
+  );
+}
+
 export function SubmissionEssaysTable({ programId }: { programId: string }) {
   const [data, setData] = useState<SubmissionEssayRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -210,6 +257,10 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
   const [modalErrorMessage, setModalErrorMessage] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formState, setFormState] = useState<EssayModalState>(createEmptyEssayState());
+  const [isGuidelineModalOpen, setIsGuidelineModalOpen] = useState(false);
+  const [guidelineState, setGuidelineState] = useState<GuidelineModalState>({ text: "", url: "" });
+  const [guidelineErrorMessage, setGuidelineErrorMessage] = useState<string | null>(null);
+  const [isSavingGuideline, setIsSavingGuideline] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const loadEssays = async () => {
@@ -217,12 +268,20 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
     setErrorMessage(null);
 
     try {
-      const response = await fetch(buildApiUrl(`/programs/${encodeURIComponent(programId)}/essays?includeInactive=true`), {
-        cache: "no-store",
-      });
+      const [essaysResponse, guidelinesResponse] = await Promise.all([
+        fetch(buildApiUrl(`/programs/${encodeURIComponent(programId)}/essays?includeInactive=true`), {
+          cache: "no-store",
+        }),
+        fetch(buildApiUrl(`/programs/${encodeURIComponent(programId)}/essay-guidelines`), {
+          cache: "no-store",
+        }),
+      ]);
 
-      if (!response.ok) {
-        throw new Error(await readErrorMessage(response));
+      if (!essaysResponse.ok) {
+        throw new Error(await readErrorMessage(essaysResponse));
+      }
+      if (!guidelinesResponse.ok) {
+        throw new Error(await readErrorMessage(guidelinesResponse));
       }
 
       const payload = await readJsonData<Array<{
@@ -233,9 +292,16 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
         isRequired: boolean;
         order: number;
         isActive: boolean;
+      }>>(essaysResponse);
+      const guidelinesPayload = await readJsonData<{
         guidelineText?: string;
         guidelineUrl?: string;
-      }>>(response);
+      }>(guidelinesResponse);
+
+      setGuidelineState({
+        text: guidelinesPayload.guidelineText ?? "",
+        url: guidelinesPayload.guidelineUrl ?? "",
+      });
 
       setData(
         payload.map((item) => ({
@@ -247,8 +313,6 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
           order: item.order,
           isActive: item.isActive,
           status: item.isActive ? "Active" : "Inactive",
-          guidelineText: item.guidelineText,
-          guidelineUrl: item.guidelineUrl,
         })),
       );
     } catch (error) {
@@ -314,8 +378,6 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
       isRequired: formState.isRequired,
       order,
       isActive: formState.status === "Active",
-      guidelineText: formState.guidelineText.trim() || undefined,
-      guidelineUrl: formState.guidelineUrl.trim() || undefined,
     };
     const path = isEditing
       ? `/programs/essays/${encodeURIComponent(formState.id as string)}`
@@ -344,6 +406,58 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
       setModalErrorMessage(error instanceof Error ? error.message : "Failed to save essay.");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const saveGuidelines = async () => {
+    const token = getAccessToken();
+    if (!token) {
+      setGuidelineErrorMessage("An admin access token is required to update essay guidelines.");
+      return;
+    }
+    const guidelineText = guidelineState.text.trim();
+    const guidelineUrl = guidelineState.url.trim();
+    if (guidelineUrl) {
+      try {
+        new URL(guidelineUrl);
+      } catch {
+        setGuidelineErrorMessage("Guideline link must be a valid URL.");
+        return;
+      }
+    }
+
+    setIsSavingGuideline(true);
+    setGuidelineErrorMessage(null);
+    setErrorMessage(null);
+
+    try {
+      const response = await fetch(
+        buildApiUrl(`/programs/${encodeURIComponent(programId)}/essay-guidelines`),
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            guidelineText: guidelineText || undefined,
+            guidelineUrl: guidelineUrl || undefined,
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response));
+      }
+
+      await loadEssays();
+      setIsGuidelineModalOpen(false);
+    } catch (error) {
+      setGuidelineErrorMessage(
+        error instanceof Error ? error.message : "Failed to save essay guidelines.",
+      );
+    } finally {
+      setIsSavingGuideline(false);
     }
   };
 
@@ -394,11 +508,41 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
             <p className="text-sm text-zinc-500">Configure essay questions used in the submission form.</p>
           </div>
         </div>
-        <button type="button" onClick={openCreateModal} className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600">
-          <PlusIcon className="h-4 w-4" />
-          <span>Add Essay</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setGuidelineErrorMessage(null);
+              setIsGuidelineModalOpen(true);
+            }}
+            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+          >
+            <PencilSquareIcon className="h-4 w-4" />
+            <span>Essay Guidelines</span>
+          </button>
+          <button type="button" onClick={openCreateModal} className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600">
+            <PlusIcon className="h-4 w-4" />
+            <span>Add Essay</span>
+          </button>
+        </div>
       </div>
+
+      {(guidelineState.text.trim() || guidelineState.url.trim()) && (
+        <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+          <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Shared Essay Guidelines</p>
+          {guidelineState.text.trim() && <p className="mt-1">{guidelineState.text.trim()}</p>}
+          {guidelineState.url.trim() && (
+            <a
+              href={guidelineState.url.trim()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1 inline-flex items-center gap-1.5 font-semibold text-blue-700 underline-offset-2 hover:underline"
+            >
+              {guidelineState.url.trim()}
+            </a>
+          )}
+        </div>
+      )}
 
       {errorMessage ? (
         <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -482,6 +626,18 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
         onSubmit={() => void handleSave()}
         isSaving={isSaving}
         errorMessage={modalErrorMessage}
+      />
+      <EssayGuidelineModal
+        isOpen={isGuidelineModalOpen}
+        formState={guidelineState}
+        onChange={(patch) => setGuidelineState((current) => ({ ...current, ...patch }))}
+        onClose={() => {
+          setIsGuidelineModalOpen(false);
+          setGuidelineErrorMessage(null);
+        }}
+        onSubmit={() => void saveGuidelines()}
+        isSaving={isSavingGuideline}
+        errorMessage={guidelineErrorMessage}
       />
     </section>
   );

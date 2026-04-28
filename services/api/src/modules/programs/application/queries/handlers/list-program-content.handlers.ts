@@ -344,8 +344,6 @@ export class ListProgramEssaysHandler {
             ...item,
             description: item.description ?? undefined,
             wordLimit: item.wordLimit ?? undefined,
-            guidelineText: item.guidelineText ?? undefined,
-            guidelineUrl: item.guidelineUrl ?? undefined,
         }));
     }
 }

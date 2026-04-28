@@ -1,6 +1,7 @@
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { Inject, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { IProgramContentRepository } from '@core/interfaces/repositories/program-content.repository.interface';
+import { IProgramRepository } from '@core/interfaces/repositories/program.repository.interface';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
 import { Prisma, PricingFeeType, ApplicationCategory, ProgramPricingTier, ProgramRequirement, PricingTierValidityPeriod } from '@prisma/client';
 import { StorageService } from '../../../../files/application/storage.service';
@@ -21,7 +22,7 @@ import {
     CreateProgramPricingTierCommand, UpdateProgramPricingTierCommand, DeleteProgramPricingTierCommand,
     CreateValidityPeriodCommand, UpdateValidityPeriodCommand, DeleteValidityPeriodCommand,
     CreateProgramRequirementCommand, UpdateProgramRequirementCommand, DeleteProgramRequirementCommand,
-    CreateProgramEssayCommand, UpdateProgramEssayCommand, DeleteProgramEssayCommand,
+    CreateProgramEssayCommand, UpdateProgramEssayCommand, DeleteProgramEssayCommand, UpdateProgramEssayGuidelinesCommand,
     CreateProgramParticipationCategoryCommand, UpdateProgramParticipationCategoryCommand, DeleteProgramParticipationCategoryCommand,
     CreateProgramSubthemeCommand, UpdateProgramSubthemeCommand, DeleteProgramSubthemeCommand,
     CreateDocumentTemplateCommand, UpdateDocumentTemplateCommand, DeleteDocumentTemplateCommand,
@@ -971,6 +972,31 @@ export class DeleteProgramEssayHandler implements ICommandHandler<DeleteProgramE
         if (existingEssay?.programId) {
             await invalidatePortalEssayCaches(existingEssay.programId, this.cacheService);
         }
+    }
+}
+@CommandHandler(UpdateProgramEssayGuidelinesCommand)
+export class UpdateProgramEssayGuidelinesHandler implements ICommandHandler<UpdateProgramEssayGuidelinesCommand> {
+    constructor(
+        @Inject(IProgramRepository) private readonly programRepository: IProgramRepository,
+        private readonly cacheService: CacheService,
+    ) {}
+    async execute(command: UpdateProgramEssayGuidelinesCommand) {
+        const byId = await this.programRepository.findById(command.programId);
+        const program = byId ?? await this.programRepository.findBySlug(command.programId);
+        if (!program) {
+            throw new NotFoundException(`Program with identifier ${command.programId} not found`);
+        }
+
+        await this.programRepository.update(program.id, {
+            essayGuidelineText: command.dto.guidelineText?.trim() || null,
+            essayGuidelineUrl: command.dto.guidelineUrl?.trim() || null,
+        });
+        await invalidatePortalEssayCaches(program.id, this.cacheService);
+
+        return {
+            guidelineText: command.dto.guidelineText?.trim() || undefined,
+            guidelineUrl: command.dto.guidelineUrl?.trim() || undefined,
+        };
     }
 }
 
