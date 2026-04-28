@@ -59,11 +59,11 @@ type ProgramDetail = {
   termsAndConditions?: string | null;
   metaTitle?: string | null;
   metaDescription?: string | null;
-  brand: {
+  brand?: {
     id: string;
     name: string;
     slug: string;
-  };
+  } | null;
 };
 
 type ApiEnvelope<T> = {
@@ -138,7 +138,7 @@ const PROGRAM_FORMAT_LABELS: Record<'in_person' | 'hybrid' | 'online', string> =
 
 function toGeneralInformationData(detail: ProgramDetail): GeneralInformationData {
   return {
-    brandName: detail.brand.name,
+    brandName: formatDisplayValue(detail.brand?.name),
     programType: formatDisplayValue(detail.programType),
     programFormat: detail.programFormat ? PROGRAM_FORMAT_LABELS[detail.programFormat] : 'Not configured',
     tagline: formatDisplayValue(detail.shortDescription),
@@ -437,7 +437,7 @@ export default function ProgramDetailsPage({
           {activeTab === "general" && generalFormValues ? (
             <EditGeneralAction
               programId={programId}
-              brandId={programDetail?.brand.id ?? ""}
+              brandId={programDetail?.brand?.id ?? ""}
               programName={programName}
               initialValues={generalFormValues}
               currentLogoUrl={programDetail?.logoUrl}
