@@ -115,17 +115,27 @@ export class ReviewApplicationHandler {
         where: { id: participantId },
         select: { userId: true }
       });
-      
+
       if (!participant) return;
-      
+
+      const userId = participant.userId;
+      const keys = [
+        CACHE_KEYS.PORTAL_DASHBOARD(userId),
+        CACHE_KEYS.PORTAL_DOCUMENTS(userId),
+        CACHE_KEYS.PARTICIPANT_PROFILE(userId),
+        CACHE_KEYS.PARTICIPANT_STATS(participantId),
+        CACHE_KEYS.PARTICIPANT_LATEST_APP(participantId),
+      ];
       const patterns = [
-        CACHE_KEYS.PORTAL_DASHBOARD(participant.userId),
-        CACHE_KEYS.PORTAL_SUBMISSIONS(participant.userId),
-        CACHE_KEYS.PORTAL_PAYMENTS(participant.userId),
-        CACHE_KEYS.PORTAL_DOCUMENTS(participant.userId),
+        `portal:submissions:${userId}:*`,
+        `portal:submission-detail:${userId}:*`,
+        `portal:payments:${userId}:*`,
       ];
 
-      await Promise.all(patterns.map(key => this.cacheService.invalidateKey(key)));
+      await Promise.all([
+        ...keys.map((key) => this.cacheService.invalidateKey(key)),
+        ...patterns.map((p) => this.cacheService.invalidateByPattern(p)),
+      ]);
     } catch (error) {
       // Log but don't throw - cache invalidation failures shouldn't break the review
       console.error(`Failed to invalidate cache for participant ${participantId}:`, error);
