@@ -55,8 +55,11 @@ export class DownloadCertificateHandler {
             data: { downloadCount: document.downloadCount + 1 },
         });
 
-        // Invalidate certificates cache
-        await this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_CERTIFICATES(userId));
+        // Invalidate certificates list and participant stats (certificate count is in stats)
+        await Promise.all([
+            this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_CERTIFICATES(userId)),
+            this.cacheService.invalidateKey(CACHE_KEYS.PARTICIPANT_STATS(participant.id)),
+        ]);
 
         return {
             fileUrl: document.fileUrl,
