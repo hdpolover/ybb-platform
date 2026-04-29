@@ -48,7 +48,7 @@ export class HomeStrategy implements ILandingPageStrategy {
             orderBy: { order: 'asc' },
           },
           pricingTiers: {
-            where: { isActive: true },
+            where: { isActive: true, deletedAt: null },
             orderBy: { order: 'asc' },
             include: {
               validityPeriods: {

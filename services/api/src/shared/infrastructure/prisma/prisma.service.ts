@@ -76,6 +76,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
         query: {
           $allModels: {
             async findUnique({ model, operation, args, query }) {
+              applyNestedDeletedAtFilter(model, args);
               if (modelHasDeletedAt(model)) {
                 const where = args.where || {};
                 const newWhere: Record<string, unknown> = { deletedAt: null };
@@ -99,12 +100,14 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
               return query(args);
             },
             async findFirst({ model, operation, args, query }) {
+              applyNestedDeletedAtFilter(model, args);
               if (modelHasDeletedAt(model)) {
                 args.where = { deletedAt: null, ...args.where };
               }
               return query(args);
             },
             async findMany({ model, operation, args, query }) {
+              applyNestedDeletedAtFilter(model, args);
               if (modelHasDeletedAt(model)) {
                 const safeWhere = args.where as Record<string, unknown>;
                 if (safeWhere?.deletedAt === undefined) {
@@ -221,4 +224,80 @@ function toCamelCase(str: string) {
 function modelHasDeletedAt(modelName: string) {
   const model = Prisma.dmmf.datamodel.models.find((m) => m.name === modelName);
   return model?.fields.some((f) => f.name === 'deletedAt') ?? false;
+}
+
+type RelationField = { type: string; isList: boolean };
+const relationFieldCache = new Map<string, Map<string, RelationField>>();
+function getRelationFields(modelName: string): Map<string, RelationField> {
+  const cached = relationFieldCache.get(modelName);
+  if (cached) return cached;
+  const model = Prisma.dmmf.datamodel.models.find((m) => m.name === modelName);
+  const map = new Map<string, RelationField>();
+  if (model) {
+    for (const field of model.fields) {
+      if (field.kind === 'object' && typeof field.type === 'string') {
+        map.set(field.name, { type: field.type, isList: field.isList });
+      }
+    }
+  }
+  relationFieldCache.set(modelName, map);
+  return map;
+}
+
+// Recursively walk an `include` or `select` argument and inject `deletedAt: null`
+// into the `where` of any nested to-many relation that targets a soft-deletable
+// model. To-one relations are skipped because Prisma rejects `where` on singular
+// relation includes. Caller-explicit `where.deletedAt` is preserved.
+function applyDeletedAtToIncludes(parentModel: string, includeOrSelect: unknown): unknown {
+  if (!includeOrSelect || typeof includeOrSelect !== 'object' || Array.isArray(includeOrSelect)) {
+    return includeOrSelect;
+  }
+  const relationFields = getRelationFields(parentModel);
+  if (relationFields.size === 0) return includeOrSelect;
+
+  const source = includeOrSelect as Record<string, unknown>;
+  const result: Record<string, unknown> = { ...source };
+
+  for (const [key, value] of Object.entries(source)) {
+    const relation = relationFields.get(key);
+    if (!relation) continue;
+    const filterable = relation.isList && modelHasDeletedAt(relation.type);
+
+    if (value === true) {
+      if (filterable) {
+        result[key] = { where: { deletedAt: null } };
+      }
+      continue;
+    }
+
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const config = { ...(value as Record<string, unknown>) };
+      if (filterable) {
+        const where = (config.where as Record<string, unknown> | undefined) ?? {};
+        if (where.deletedAt === undefined) {
+          config.where = { deletedAt: null, ...where };
+        }
+      }
+      if (config.include) {
+        config.include = applyDeletedAtToIncludes(relation.type, config.include);
+      }
+      if (config.select) {
+        config.select = applyDeletedAtToIncludes(relation.type, config.select);
+      }
+      result[key] = config;
+    }
+  }
+  return result;
+}
+
+function applyNestedDeletedAtFilter(
+  modelName: string,
+  args: { include?: unknown; select?: unknown },
+) {
+  if (args.include) {
+    args.include = applyDeletedAtToIncludes(modelName, args.include);
+  }
+  if (args.select) {
+    args.select = applyDeletedAtToIncludes(modelName, args.select);
+  }
 }
