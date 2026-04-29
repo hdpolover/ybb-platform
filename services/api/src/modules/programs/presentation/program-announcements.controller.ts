@@ -7,6 +7,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@ne
 import { JwtAuthGuard } from '../../auth/infrastructure/guards/jwt-auth.guard';
 import { Public } from '../../../shared/decorators/public.decorator';
 import { AuditTrail } from '../../../shared/decorators/audit-trail.decorator';
+import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
 import { ChangeType } from '@prisma/client';
 
 import {
@@ -33,6 +34,17 @@ import {
 interface AuthenticatedRequest extends ExpressRequest {
   user: { id: string; userId: string };
 }
+
+const MUTABLE_CONTENT_CACHE_PATTERNS = [
+  'landing:home:*',
+  'landing:about:*',
+  'landing:programs:*',
+  'landing:program:*',
+  'landing:announcements:*',
+  'program:*',
+  'portal:dashboard:*',
+  'portal:submissions:*',
+];
 
 @ApiTags('Program Announcements')
 @Controller('programs')
@@ -73,6 +85,7 @@ export class ProgramAnnouncementsController {
   @ApiOperation({ summary: 'Create program announcement' })
   @ApiResponse({ status: 201, type: ProgramAnnouncementResponseDto })
   @AuditTrail({ entityType: 'ProgramAnnouncement', action: ChangeType.create })
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async create(
     @Param('id') programId: string,
     @Body() dto: CreateProgramAnnouncementDto,
@@ -89,6 +102,7 @@ export class ProgramAnnouncementsController {
   @ApiOperation({ summary: 'Update program announcement' })
   @ApiResponse({ status: 200, type: ProgramAnnouncementResponseDto })
   @AuditTrail({ entityType: 'ProgramAnnouncement', action: ChangeType.update })
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async update(
     @Param('itemId') itemId: string,
     @Body() dto: UpdateProgramAnnouncementDto,
@@ -104,6 +118,7 @@ export class ProgramAnnouncementsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete program announcement' })
   @AuditTrail({ entityType: 'ProgramAnnouncement', action: ChangeType.delete })
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async delete(
     @Param('itemId') itemId: string,
     @Request() req: AuthenticatedRequest,

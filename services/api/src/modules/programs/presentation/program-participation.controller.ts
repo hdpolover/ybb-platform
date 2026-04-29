@@ -7,6 +7,19 @@ import { CreateParticipationInfoDto, ParticipationInfoResponseDto } from './dto/
 import { UpsertParticipationInfoCommand, DeleteParticipationInfoCommand } from '../application/commands/participation-info.commands';
 import { GetParticipationInfoQuery, ListParticipationInfoQuery } from '../application/queries/participation-info.queries';
 import { Public } from '@shared/decorators/public.decorator';
+import { CacheInvalidate } from '@shared/decorators/cache-invalidate.decorator';
+
+const MUTABLE_CONTENT_CACHE_PATTERNS = [
+  'landing:home:*',
+  'landing:about:*',
+  'landing:programs:*',
+  'landing:program:*',
+  'landing:settings:*',
+  'program:*',
+  'portal:submission-detail:*',
+  'portal:submissions:*',
+  'portal:dashboard:*',
+];
 
 @ApiTags('Programs')
 @Controller('programs/:programId/participation-info')
@@ -21,6 +34,7 @@ export class ProgramParticipationController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Upsert participation info for a category' })
   @ApiResponse({ status: 201, type: ParticipationInfoResponseDto })
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async upsert(
     @Param('programId') programId: string,
     @Body() dto: CreateParticipationInfoDto,
@@ -54,6 +68,7 @@ export class ProgramParticipationController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete participation info' })
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async delete(
     @Param('programId') programId: string,
     @Param('id') id: string,
