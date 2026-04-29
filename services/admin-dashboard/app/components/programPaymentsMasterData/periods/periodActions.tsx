@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PencilSquareIcon, TrashIcon, CalendarDaysIcon } from "@heroicons/react/24/solid";
 import { toast } from "sonner";
 import type { PeriodRow } from "./PaymentPeriodsTable";
 import { createValidityPeriod, updateValidityPeriod, deleteValidityPeriod } from "@/app/platform/api";
-import { toLocalDatetimeInputValue, toUtcIsoFromLocalInput } from "@/lib/utils";
+import { parseApiDate, toLocalDatetimeInputValue, toUtcIsoFromLocalInput } from "@/lib/utils";
 import {
   Sheet,
   SheetContent,
@@ -22,16 +22,71 @@ function PeriodSheet({
   onSaved,
   initialData,
   tierId,
+  periods,
 }: {
   isOpen: boolean;
   onClose: () => void;
   onSaved?: () => void;
   initialData?: PeriodRow;
   tierId?: string;
+  periods?: PeriodRow[];
 }) {
   const isEditing = !!initialData;
+  const selectablePeriods = useMemo(() => {
+    const pool = (periods ?? []).filter((item) => item.id !== initialData?.id);
+    return [...pool].sort((a, b) => {
+      const da = parseApiDate(a.startRaw);
+      const db = parseApiDate(b.startRaw);
+      const ta = Number.isNaN(da.getTime()) ? Number.MAX_SAFE_INTEGER : da.getTime();
+      const tb = Number.isNaN(db.getTime()) ? Number.MAX_SAFE_INTEGER : db.getTime();
+      if (ta !== tb) return ta - tb;
+      return a.order - b.order;
+    });
+  }, [periods, initialData?.id]);
+  const initialParentPeriodId = useMemo(() => {
+    if (!isEditing || !initialData) return "none";
+    const fullOrdered = [...(periods ?? [])].sort((a, b) => a.order - b.order);
+    const currentIndex = fullOrdered.findIndex((item) => item.id === initialData.id);
+    if (currentIndex <= 0) return "none";
+    return fullOrdered[currentIndex - 1]?.id ?? "none";
+  }, [isEditing, initialData, periods]);
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [startDateInput, setStartDateInput] = useState(
+    initialData?.startRaw ? toLocalDatetimeInputValue(initialData.startRaw) : "",
+  );
+  const [endDateInput, setEndDateInput] = useState(
+    initialData?.endRaw ? toLocalDatetimeInputValue(initialData.endRaw) : "",
+  );
+  const [parentPeriodId, setParentPeriodId] = useState(initialParentPeriodId);
+  const [extensionType, setExtensionType] = useState<"continuation" | "custom">("continuation");
+  const selectedParentPeriod = useMemo(
+    () => selectablePeriods.find((item) => item.id === parentPeriodId) ?? null,
+    [selectablePeriods, parentPeriodId],
+  );
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setStartDateInput(initialData?.startRaw ? toLocalDatetimeInputValue(initialData.startRaw) : "");
+    setEndDateInput(initialData?.endRaw ? toLocalDatetimeInputValue(initialData.endRaw) : "");
+    setParentPeriodId(initialParentPeriodId);
+    setExtensionType("continuation");
+  }, [isOpen, initialData?.startRaw, initialData?.endRaw, initialParentPeriodId]);
+
+  useEffect(() => {
+    if (!isOpen || parentPeriodId === "none" || extensionType !== "continuation") return;
+    if (isEditing && parentPeriodId === initialParentPeriodId && startDateInput) {
+      return;
+    }
+
+    const parent = selectablePeriods.find((item) => item.id === parentPeriodId);
+    if (!parent?.endRaw) return;
+    const parentEndLocal = toLocalDatetimeInputValue(parent.endRaw);
+    if (parentEndLocal) {
+      setStartDateInput(parentEndLocal);
+    }
+  }, [isOpen, parentPeriodId, extensionType, selectablePeriods, isEditing, initialParentPeriodId, startDateInput]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -39,8 +94,6 @@ function PeriodSheet({
     const periodName = (fd.get("name") as string).trim();
     const descriptionField = (fd.get("description") as string | null)?.trim() ?? "";
     const description = descriptionField || periodName;
-    const startDateInput = fd.get("startDate") as string;
-    const endDateInput = fd.get("endDate") as string;
 
     setSaving(true);
     setError(null);
@@ -98,15 +151,47 @@ function PeriodSheet({
                 <label className="mb-1.5 block text-xs font-medium text-zinc-500">
                   Extends From Period
                 </label>
-                <select defaultValue={initialData?.base === false ? "registration-period" : "none"} className={inputCls}>
+                <select
+                  value={parentPeriodId}
+                  onChange={(event) => setParentPeriodId(event.target.value)}
+                  className={selectCls}
+                >
                   <option value="none">None (Create Base Period)</option>
-                  <option value="registration-period">Registration Period</option>
+                  {selectablePeriods.map((period) => (
+                    <option key={period.id} value={period.id}>
+                      {period.name}
+                    </option>
+                  ))}
                 </select>
                 <p className="mt-1.5 text-xs text-zinc-500">
                   Leave as <b className="text-zinc-700">None</b> to create a standalone base period.
                 </p>
+                {selectedParentPeriod && (
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Selected range:{" "}
+                    <span className="font-medium text-zinc-700">
+                      {selectedParentPeriod.start} - {selectedParentPeriod.end}
+                    </span>
+                  </p>
+                )}
               </div>
             </div>
+
+            {parentPeriodId !== "none" && (
+              <div className="sm:max-w-xs">
+                <label className="mb-1.5 block text-xs font-medium text-zinc-500">
+                  Extension Type
+                </label>
+                <select
+                  value={extensionType}
+                  onChange={(event) => setExtensionType(event.target.value as "continuation" | "custom")}
+                  className={selectCls}
+                >
+                  <option value="continuation">Continuation (After parent)</option>
+                  <option value="custom">Custom Date Range</option>
+                </select>
+              </div>
+            )}
 
             <div>
               <label className="mb-1.5 block text-xs font-medium text-zinc-500">Description</label>
@@ -118,13 +203,27 @@ function PeriodSheet({
                 <label className="mb-1.5 block text-xs font-medium text-zinc-500">
                   Start Date & Time <span className="text-rose-500">*</span>
                 </label>
-                <input name="startDate" type="datetime-local" defaultValue={initialData?.startRaw ? toLocalDatetimeInputValue(initialData.startRaw) : undefined} className={inputCls} required />
+                <input
+                  name="startDate"
+                  type="datetime-local"
+                  value={startDateInput}
+                  onChange={(event) => setStartDateInput(event.target.value)}
+                  className={inputCls}
+                  required
+                />
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-zinc-500">
                   End Date & Time <span className="text-rose-500">*</span>
                 </label>
-                <input name="endDate" type="datetime-local" defaultValue={initialData?.endRaw ? toLocalDatetimeInputValue(initialData.endRaw) : undefined} className={inputCls} required />
+                <input
+                  name="endDate"
+                  type="datetime-local"
+                  value={endDateInput}
+                  onChange={(event) => setEndDateInput(event.target.value)}
+                  className={inputCls}
+                  required
+                />
               </div>
             </div>
 
@@ -151,14 +250,17 @@ function PeriodSheet({
 }
 
 const inputCls = "block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
+const selectCls = `${inputCls} truncate pr-10`;
 
 // EXPORTED ACTION BUTTONS
 export function AddPeriodAction({
   tierId,
   onSaved,
+  periods,
 }: {
   tierId?: string;
   onSaved?: () => void;
+  periods?: PeriodRow[];
 }) {
   const [isOpen, setIsOpen] = useState(false);
   return (
@@ -167,7 +269,7 @@ export function AddPeriodAction({
         <CalendarDaysIcon className="h-4 w-4" />
         <span>Add Period</span>
       </button>
-      <PeriodSheet isOpen={isOpen} onClose={() => setIsOpen(false)} onSaved={onSaved} tierId={tierId} />
+      <PeriodSheet isOpen={isOpen} onClose={() => setIsOpen(false)} onSaved={onSaved} tierId={tierId} periods={periods} />
     </>
   );
 }
@@ -175,9 +277,11 @@ export function AddPeriodAction({
 export function EditPeriodAction({
   period,
   onSaved,
+  periods,
 }: {
   period: PeriodRow;
   onSaved?: () => void;
+  periods?: PeriodRow[];
 }) {
   const [isOpen, setIsOpen] = useState(false);
   return (
@@ -190,7 +294,7 @@ export function EditPeriodAction({
       >
         <PencilSquareIcon className="h-4 w-4" />
       </button>
-      <PeriodSheet isOpen={isOpen} onClose={() => setIsOpen(false)} onSaved={onSaved} initialData={period} />
+      <PeriodSheet isOpen={isOpen} onClose={() => setIsOpen(false)} onSaved={onSaved} initialData={period} periods={periods} />
     </>
   );
 }
