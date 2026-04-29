@@ -280,6 +280,9 @@ func (r *stubPaymentMethodRepository) FindByID(ctx context.Context, id string) (
 func (r *stubPaymentMethodRepository) FindByCodeOrID(ctx context.Context, value string) (*entities.PaymentMethodEntity, error) {
 	return r.method, nil
 }
+func (r *stubPaymentMethodRepository) CountByGatewayName(ctx context.Context, gatewayName string) (int64, error) {
+	return 0, nil
+}
 func (r *stubPaymentMethodRepository) Create(ctx context.Context, pm *entities.PaymentMethodEntity) error {
 	return nil
 }
