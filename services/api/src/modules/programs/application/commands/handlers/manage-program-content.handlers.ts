@@ -135,6 +135,59 @@ async function invalidatePortalEssayCaches(
         ]);
     } catch { /* non-critical */ }
 }
+
+/**
+ * Cache invalidation for program requirement mutations.
+ * Clears landing pages, the specific PROGRAM_REQUIREMENTS HOUR-cached key,
+ * and portal submission-detail pages where requirements are shown.
+ */
+async function invalidateRequirementCaches(
+    programId: string,
+    prisma: PrismaService,
+    cacheService: CacheService,
+): Promise<void> {
+    try {
+        const program = await prisma.program.findUnique({
+            where: { id: programId },
+            select: { brandId: true },
+        });
+        if (program?.brandId) {
+            await Promise.all([
+                cacheService.invalidateBrandLandingCaches(program.brandId),
+                cacheService.invalidateByPattern('program:*'),
+                cacheService.invalidateKey(CACHE_KEYS.PROGRAM_REQUIREMENTS(programId)),
+                cacheService.invalidateByPattern('portal:submission-detail:*'),
+            ]);
+        }
+    } catch { /* non-critical — cache failure must not break the mutation */ }
+}
+
+/**
+ * Cache invalidation for program resource mutations.
+ * Clears landing pages, the specific PROGRAM_RESOURCES HOUR-cached key,
+ * portal submission-detail pages, and the portal documents page.
+ */
+async function invalidateResourceCaches(
+    programId: string,
+    prisma: PrismaService,
+    cacheService: CacheService,
+): Promise<void> {
+    try {
+        const program = await prisma.program.findUnique({
+            where: { id: programId },
+            select: { brandId: true },
+        });
+        if (program?.brandId) {
+            await Promise.all([
+                cacheService.invalidateBrandLandingCaches(program.brandId),
+                cacheService.invalidateByPattern('program:*'),
+                cacheService.invalidateKey(CACHE_KEYS.PROGRAM_RESOURCES(programId)),
+                cacheService.invalidateByPattern('portal:submission-detail:*'),
+                cacheService.invalidateByPattern('portal:documents:*'),
+            ]);
+        }
+    } catch { /* non-critical — cache failure must not break the mutation */ }
+}
 // ─────────────────────────────────────────────────────────────────────────────
 
 // --- Timeline Handlers ---
@@ -703,7 +756,7 @@ export class CreateProgramResourceHandler implements ICommandHandler<CreateProgr
             fileType: fileType
         };
         const result = await this.repository.createResource(dto);
-        await invalidateLandingCacheByProgramId(command.dto.programId, this.prisma, this.cacheService);
+        await invalidateResourceCaches(command.dto.programId, this.prisma, this.cacheService);
         return result;
     }
 }
@@ -755,7 +808,7 @@ export class UpdateProgramResourceHandler implements ICommandHandler<UpdateProgr
             fileSize: fileSize ? BigInt(fileSize) : undefined
         };
         const result = await this.repository.updateResource(command.id, dto);
-        await invalidateLandingCacheByProgramId(resource.programId, this.prisma, this.cacheService);
+        await invalidateResourceCaches(resource.programId, this.prisma, this.cacheService);
         return result;
     }
 }
@@ -770,7 +823,7 @@ export class DeleteProgramResourceHandler implements ICommandHandler<DeleteProgr
         const existing = await this.repository.findResourceById(command.id);
         const result = await this.repository.deleteResource(command.id);
         if (existing?.programId) {
-            await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.cacheService);
+            await invalidateResourceCaches(existing.programId, this.prisma, this.cacheService);
         }
         return result;
     }
@@ -954,23 +1007,47 @@ export class DeleteValidityPeriodHandler implements ICommandHandler<DeleteValidi
 }
 @CommandHandler(CreateProgramRequirementCommand)
 export class CreateProgramRequirementHandler implements ICommandHandler<CreateProgramRequirementCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly prisma: PrismaService,
+        private readonly cacheService: CacheService,
+    ) {}
     async execute(command: CreateProgramRequirementCommand) {
-        return this.repository.createRequirement(command.dto as Partial<ProgramRequirement>);
+        const result = await this.repository.createRequirement(command.dto as Partial<ProgramRequirement>);
+        await invalidateRequirementCaches(command.dto.programId, this.prisma, this.cacheService);
+        return result;
     }
 }
 @CommandHandler(UpdateProgramRequirementCommand)
 export class UpdateProgramRequirementHandler implements ICommandHandler<UpdateProgramRequirementCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly prisma: PrismaService,
+        private readonly cacheService: CacheService,
+    ) {}
     async execute(command: UpdateProgramRequirementCommand) {
-        return this.repository.updateRequirement(command.id, command.dto as Partial<ProgramRequirement>);
+        const existing = await this.repository.findRequirementById(command.id);
+        const result = await this.repository.updateRequirement(command.id, command.dto as Partial<ProgramRequirement>);
+        const programId = existing?.programId ?? result.programId;
+        if (programId) {
+            await invalidateRequirementCaches(programId, this.prisma, this.cacheService);
+        }
+        return result;
     }
 }
 @CommandHandler(DeleteProgramRequirementCommand)
 export class DeleteProgramRequirementHandler implements ICommandHandler<DeleteProgramRequirementCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly prisma: PrismaService,
+        private readonly cacheService: CacheService,
+    ) {}
     async execute(command: DeleteProgramRequirementCommand) {
-        return this.repository.deleteRequirement(command.id);
+        const existing = await this.repository.findRequirementById(command.id);
+        await this.repository.deleteRequirement(command.id);
+        if (existing?.programId) {
+            await invalidateRequirementCaches(existing.programId, this.prisma, this.cacheService);
+        }
     }
 }
 
