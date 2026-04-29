@@ -53,6 +53,9 @@ export class PaymentItemDto {
 
     @ApiPropertyOptional({ description: 'Ordering hint from pricing tier' })
     sequenceOrder?: number;
+
+    @ApiPropertyOptional({ description: 'Whether participant can initiate payment for this item' })
+    canPay?: boolean;
 }
 
 export class AvailablePaymentDto {

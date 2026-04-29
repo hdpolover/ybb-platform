@@ -76,6 +76,8 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                                 name: true,
                                 feeType: true,
                                 order: true,
+                                isActive: true,
+                                deletedAt: true,
                                 validityPeriods: {
                                     select: {
                                         startDate: true,
@@ -92,7 +94,10 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                         id: true,
                         currency: true,
                         pricingTiers: {
-                            where: { isActive: true },
+                            where: {
+                                isActive: true,
+                                deletedAt: null,
+                            },
                             select: {
                                 id: true,
                                 name: true,
@@ -166,6 +171,7 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
 
                     return a.name.localeCompare(b.name);
                 });
+            const applicableTierIds = new Set(applicableTiers.map((tier) => tier.id));
 
             // Visibility rule:
             // - tiers are shown in fee-stage order
@@ -202,6 +208,7 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                 const sequenceOrder = getFeeTypePriority(tier.feeType) * 1000 + tier.order;
 
                 if (invoice) {
+                    const normalizedStatus = String(invoice.status).toLowerCase();
                     const item: PaymentItemDto = {
                         id: invoice.id,
                         title: tier.name,
@@ -216,9 +223,11 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                         pricingTierId: tier.id,
                         startDate: startDate || undefined,
                         sequenceOrder,
+                        canPay:
+                            (normalizedStatus === 'unpaid' || normalizedStatus === 'failed')
+                            && Number(invoice.amount) > 0,
                     };
 
-                    const normalizedStatus = String(invoice.status).toLowerCase();
                     if (normalizedStatus === 'paid') {
                         history.push(item);
                         totalPaid += Number(invoice.amount);
@@ -242,6 +251,48 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                     sequenceOrder,
                 });
                 totalDue += Number(tier.price);
+            }
+
+            // Preserve past invoice records tied to inactive/deleted/out-of-scope tiers.
+            // These records should remain visible in participant history, but no new
+            // payment should be initiated from them.
+            for (const [tierId, invoice] of latestInvoiceByTier.entries()) {
+                if (applicableTierIds.has(tierId)) {
+                    continue;
+                }
+
+                const archivedTier = invoice.pricingTier;
+                const archivedPeriods = archivedTier?.validityPeriods ?? [];
+                const period = resolveTierPeriod(archivedPeriods, invoice.createdAt, now);
+                const normalizedStatus = String(invoice.status).toLowerCase();
+                const feeType = archivedTier?.feeType ?? undefined;
+                const tierOrder = typeof archivedTier?.order === 'number' ? archivedTier.order : 999;
+                const sequenceOrder = getFeeTypePriority(feeType) * 1000 + tierOrder;
+
+                const item: PaymentItemDto = {
+                    id: invoice.id,
+                    title: archivedTier?.name ?? 'Archived Payment Option',
+                    amount: Number(invoice.amount),
+                    currency: invoice.currency,
+                    status: invoice.status,
+                    dueDate: period?.endDate || undefined,
+                    paidAt: invoice.paidAt || undefined,
+                    paymentMethod: invoice.paymentMethod || undefined,
+                    actionUrl: undefined,
+                    type: feeType,
+                    pricingTierId: archivedTier?.id ?? invoice.pricingTierId,
+                    startDate: period?.startDate || undefined,
+                    sequenceOrder,
+                    canPay: false,
+                };
+
+                if (normalizedStatus === 'paid') {
+                    history.push(item);
+                    totalPaid += Number(invoice.amount);
+                } else {
+                    outstanding.push(item);
+                    totalDue += Number(invoice.amount);
+                }
             }
         }
 
