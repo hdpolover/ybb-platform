@@ -167,7 +167,14 @@ export class PaymentAdminController {
     ) {
         const invoice = await this.prisma.applicationInvoice.findUnique({
             where: { id },
-            select: { externalTransactionId: true },
+            select: {
+                externalTransactionId: true,
+                application: {
+                    select: {
+                        participant: { select: { userId: true } },
+                    },
+                },
+            },
         });
 
         if (!invoice) throw new HttpException('Invoice not found', 404);
@@ -181,9 +188,27 @@ export class PaymentAdminController {
                 { action: body.action, reason: body.reason ?? '', admin_id: user.userId },
                 { headers: this.buildInternalHeaders() },
             );
+
+            const participantUserId = invoice.application?.participant?.userId;
+            if (participantUserId) {
+                await this.invalidateInvoicePortalCaches(id, participantUserId);
+            }
+
             return data;
         } catch (error) {
             this.handleError(error);
+        }
+    }
+
+    private async invalidateInvoicePortalCaches(invoiceId: string, userId: string): Promise<void> {
+        try {
+            await Promise.all([
+                this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_PAYMENT_DETAIL(invoiceId)),
+                this.cacheService.invalidateByPattern(`portal:payments:${userId}:*`),
+                this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_DASHBOARD(userId)),
+            ]);
+        } catch (err) {
+            this.logger.warn(`Failed to invalidate invoice ${invoiceId} caches: ${err}`);
         }
     }
 

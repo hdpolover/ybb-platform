@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Query, Param, UseGuards, Req, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Body, Get, Query, Param, UseGuards, Req, BadRequestException, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { PaymentGrpcClient } from '../services/payment-grpc.client';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
@@ -7,6 +7,9 @@ import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { UserRole } from '@core/entities/user.entity';
 import { CreateIntentDto, SubmitManualPaymentDto, VerifyManualPaymentDto, AdminListPaymentsDto } from './dto/payment.dto';
 import { Request } from 'express';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS } from '@shared/constants/cache-keys';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 
 interface JwtPayload { sub: string; email?: string; }
 
@@ -14,7 +17,13 @@ interface JwtPayload { sub: string; email?: string; }
 @Controller('infra/payments') // Renamed to avoid conflict with CQRS controller
 @ApiBearerAuth()
 export class PaymentController {
-  constructor(private readonly paymentClient: PaymentGrpcClient) {}
+  private readonly logger = new Logger(PaymentController.name);
+
+  constructor(
+    private readonly paymentClient: PaymentGrpcClient,
+    private readonly cacheService: CacheService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Post('intents')
   @UseGuards(JwtAuthGuard)
@@ -53,12 +62,43 @@ export class PaymentController {
   async verifyManualPayment(@Param('id') transactionId: string, @Body() dto: VerifyManualPaymentDto, @Req() req: Request) {
       const adminId = (req.user as JwtPayload).sub;
 
-      return this.paymentClient.verifyManualPayment({
+      const result = await this.paymentClient.verifyManualPayment({
           transaction_id: transactionId,
           status: dto.status,
           admin_id: adminId,
           reason: dto.reason
       });
+
+      // Invalidate participant portal caches — look up invoice by externalTransactionId
+      const invoice = await this.prisma.applicationInvoice.findFirst({
+          where: { externalTransactionId: transactionId },
+          select: {
+              id: true,
+              application: {
+                  select: {
+                      participant: { select: { userId: true } },
+                  },
+              },
+          },
+      });
+      const participantUserId = invoice?.application?.participant?.userId;
+      if (invoice && participantUserId) {
+          await this.invalidateInvoicePortalCaches(invoice.id, participantUserId);
+      }
+
+      return result;
+  }
+
+  private async invalidateInvoicePortalCaches(invoiceId: string, userId: string): Promise<void> {
+      try {
+          await Promise.all([
+              this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_PAYMENT_DETAIL(invoiceId)),
+              this.cacheService.invalidateByPattern(`portal:payments:${userId}:*`),
+              this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_DASHBOARD(userId)),
+          ]);
+      } catch (err) {
+          this.logger.warn(`Failed to invalidate invoice ${invoiceId} caches: ${err}`);
+      }
   }
 
   @Get('admin/list')

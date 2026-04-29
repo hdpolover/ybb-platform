@@ -69,7 +69,7 @@ export class PaymentEventsController {
 
                 // Invalidate portal cache for this user to reflect payment immediately
                 if (result) {
-                    await this.invalidateUserPortalCache(result.userId, 'payment succeeded');
+                    await this.invalidateUserPortalCache(result.userId, 'payment succeeded', result.invoiceId ?? undefined);
 
                     // Advance referral funnel: → completed (only when all payments are done)
                     if (this.referralFunnel) {
@@ -103,7 +103,7 @@ export class PaymentEventsController {
         transactionId: string,
         intentId: string,
         method: string,
-    ): Promise<{ userId: string; participantId: string; programId: string } | null> {
+    ): Promise<{ userId: string; participantId: string; programId: string; invoiceId: string | null } | null> {
         const application = await this.prisma.participantApplication.findUnique({
             where: { id: applicationId },
             include: {
@@ -137,6 +137,7 @@ export class PaymentEventsController {
         // We will try to create invoice if tier exists.
         
         // Unit of Work: Application Payment Status Update + Invoice Creation
+        let createdInvoiceId: string | null = null;
         await this.unitOfWork.execute(
             async (repos) => {
                 // Update application payment status
@@ -155,7 +156,7 @@ export class PaymentEventsController {
                               ? Number(application.program.brand.settings.usdInIdr)
                               : null;
 
-                    await repos.tx.applicationInvoice.create({
+                    const createdInvoice = await repos.tx.applicationInvoice.create({
                         data: {
                             applicationId: applicationId,
                             pricingTierId: application.pricingTierId,
@@ -169,6 +170,7 @@ export class PaymentEventsController {
                             paymentMethod: method,
                         },
                     });
+                    createdInvoiceId = createdInvoice.id;
                 } else {
                     this.logger.warn(`Skipping invoice creation for app ${applicationId} - no pricingTierId`);
                 }
@@ -182,6 +184,7 @@ export class PaymentEventsController {
             userId: application.participant.userId,
             participantId: application.participant.id,
             programId: application.programId,
+            invoiceId: createdInvoiceId,
         };
     }
 
@@ -237,7 +240,7 @@ export class PaymentEventsController {
      * For multi-instance deployments, uses Redis Pub/Sub to broadcast
      * invalidation to all API instances
      */
-    private async invalidateUserPortalCache(userId: string, reason: string): Promise<void> {
+    private async invalidateUserPortalCache(userId: string, reason: string, invoiceId?: string): Promise<void> {
         try {
             const patterns = [
                 CACHE_KEYS.PORTAL_DASHBOARD(userId),
@@ -253,6 +256,12 @@ export class PaymentEventsController {
             } else {
                 await Promise.all(patterns.map(key => this.cacheService.invalidateKey(key)));
                 this.logger.debug(`Invalidated local cache for user ${userId} (reason: ${reason})`);
+            }
+
+            // Invalidate the specific invoice detail cache when the invoiceId is known
+            if (invoiceId) {
+                await this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_PAYMENT_DETAIL(invoiceId));
+                this.logger.debug(`Invalidated payment-detail cache for invoice ${invoiceId}`);
             }
         } catch (error) {
             const err = error instanceof Error ? error : new Error(String(error));
