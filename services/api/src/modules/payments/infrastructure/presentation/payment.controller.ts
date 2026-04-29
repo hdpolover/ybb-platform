@@ -7,9 +7,8 @@ import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { UserRole } from '@core/entities/user.entity';
 import { CreateIntentDto, SubmitManualPaymentDto, VerifyManualPaymentDto, AdminListPaymentsDto } from './dto/payment.dto';
 import { Request } from 'express';
-import { CacheService } from '@shared/infrastructure/cache/cache.service';
-import { CACHE_KEYS } from '@shared/constants/cache-keys';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { PortalCacheService } from '@modules/portal/application/services/portal-cache.service';
 
 interface JwtPayload { sub: string; email?: string; }
 
@@ -21,8 +20,8 @@ export class PaymentController {
 
   constructor(
     private readonly paymentClient: PaymentGrpcClient,
-    private readonly cacheService: CacheService,
     private readonly prisma: PrismaService,
+    private readonly portalCacheService: PortalCacheService,
   ) {}
 
   @Post('intents')
@@ -83,22 +82,10 @@ export class PaymentController {
       });
       const participantUserId = invoice?.application?.participant?.userId;
       if (invoice && participantUserId) {
-          await this.invalidateInvoicePortalCaches(invoice.id, participantUserId);
+          await this.portalCacheService.invalidateInvoiceCache(invoice.id, participantUserId);
       }
 
       return result;
-  }
-
-  private async invalidateInvoicePortalCaches(invoiceId: string, userId: string): Promise<void> {
-      try {
-          await Promise.all([
-              this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_PAYMENT_DETAIL(invoiceId)),
-              this.cacheService.invalidateByPattern(`portal:payments:${userId}:*`),
-              this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_DASHBOARD(userId)),
-          ]);
-      } catch (err) {
-          this.logger.warn(`Failed to invalidate invoice ${invoiceId} caches: ${err}`);
-      }
   }
 
   @Get('admin/list')
