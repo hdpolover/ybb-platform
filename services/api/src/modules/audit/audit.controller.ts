@@ -3,56 +3,70 @@ import { Ctx, EventPattern, Payload, RmqContext } from '@nestjs/microservices';
 import { AuditService } from './audit.service';
 import { RmqEventPayload } from '@common/types/events';
 
+// NestJS @EventPattern does literal string match on the deserialized `pattern`
+// field — it does NOT expand AMQP wildcards. A previous version of this file
+// registered `user.*`, `payment.*`, etc. and matched nothing, causing every
+// event in audit_log_queue (bound `#`) to NACK with "An unsupported event was
+// received". Enumerate the concrete event names instead.
+//
+// Keep this list aligned with rabbitmq-producer.service.ts emit() callsites.
+// If you add a new event, add a handler here too or audit_log_queue will NACK it.
+const AUDITED_EVENTS = [
+  // user.* — emitted from auth/register, auth/forgot-password, auth/verify-email
+  'user.registered',
+  'user.verify-email',
+  'user.email-verified',
+  'user.forgot-password',
+  // payment.* — emitted from Go payment service to ybb.events via the bridge
+  'payment.succeeded',
+  'payment.created',
+  'payment.failed',
+  'payment.refunded',
+] as const;
+
 @Controller()
 export class AuditController {
   private readonly logger = new Logger(AuditController.name);
 
   constructor(private readonly auditService: AuditService) {}
 
-  // Listen to ALL events (wildcard is handled by the Queue Binding in RabbitMQ)
-  // NestJS EventPattern matching acts on the client-side filtering, 
-  // but if we want to catch *everything* that lands in the queue, 
-  // we usually need a catch-all or specific patterns.
-  // Since we bound the queue to '#' in init_rabbitmq.py, this queue receives EVERYTHING.
-  // However, NestJS's RMQ Server expects us to register handlers for specific patterns.
-  // There isn't a native "catch all" decorator in NestJS microservices unless we override the strategy
-  // OR we just register the patterns we know exist.
-  
-  // For now, let's register the known high-level wildcards or common events.
-  // Note: NestJS RabbitMQ 'EventPattern' usually asserts a binding. 
-  // Since we did manual binding, we just need to ensure the pattern matches what arrives.
-  
-  // Strategy: We can't easily use a "*" wildcard in the Decorator to catch multiple different routing keys 
-  // unless we use a custom strategy. 
-  // BUT, since we are using `audit_log_queue`, and that queue receives `user.verify-email`, `payment.succeeded`, etc.
-  // The NestJS deserializer will see `pattern: "user.verify-email"`.
-  // If we don't have a handler for "user.verify-email", NestJS discards it.
-  
-  // WORKAROUND: We will list the top-level wildcards we care about, OR 
-  // we rely on the fact that we can just list specific events.
-  // Adding a few common ones as a starting point.
-  
-  @EventPattern('user.*')
-  async handleUserEvents(@Payload() data: RmqEventPayload, @Ctx() context: RmqContext) {
-    const pattern = context.getPattern(); 
-    await this.auditService.logEvent(pattern, data);
-  }
+  @EventPattern('user.registered')
+  userRegistered(@Payload() d: RmqEventPayload, @Ctx() c: RmqContext) { return this.log(d, c); }
 
-  @EventPattern('payment.*')
-  async handlePaymentEvents(@Payload() data: RmqEventPayload, @Ctx() context: RmqContext) {
-    const pattern = context.getPattern();
-    await this.auditService.logEvent(pattern, data);
-  }
+  @EventPattern('user.verify-email')
+  userVerifyEmail(@Payload() d: RmqEventPayload, @Ctx() c: RmqContext) { return this.log(d, c); }
 
-  @EventPattern('system.*')
-  async handleSystemEvents(@Payload() data: RmqEventPayload, @Ctx() context: RmqContext) {
+  @EventPattern('user.email-verified')
+  userEmailVerified(@Payload() d: RmqEventPayload, @Ctx() c: RmqContext) { return this.log(d, c); }
+
+  @EventPattern('user.forgot-password')
+  userForgotPassword(@Payload() d: RmqEventPayload, @Ctx() c: RmqContext) { return this.log(d, c); }
+
+  @EventPattern('payment.succeeded')
+  paymentSucceeded(@Payload() d: RmqEventPayload, @Ctx() c: RmqContext) { return this.log(d, c); }
+
+  @EventPattern('payment.created')
+  paymentCreated(@Payload() d: RmqEventPayload, @Ctx() c: RmqContext) { return this.log(d, c); }
+
+  @EventPattern('payment.failed')
+  paymentFailed(@Payload() d: RmqEventPayload, @Ctx() c: RmqContext) { return this.log(d, c); }
+
+  @EventPattern('payment.refunded')
+  paymentRefunded(@Payload() d: RmqEventPayload, @Ctx() c: RmqContext) { return this.log(d, c); }
+
+  private async log(data: RmqEventPayload, context: RmqContext) {
     const pattern = context.getPattern();
-    await this.auditService.logEvent(pattern, data);
-  }
-  
-  @EventPattern('program.*')
-  async handleProgramEvents(@Payload() data: RmqEventPayload, @Ctx() context: RmqContext) {
-    const pattern = context.getPattern();
-    await this.auditService.logEvent(pattern, data);
+    try {
+      await this.auditService.logEvent(pattern, data);
+    } catch (error) {
+      // Never NACK an audit event — losing the audit row is preferable to
+      // requeuing forever when the audit table is offline.
+      this.logger.error(
+        `Failed to persist audit event ${pattern}: ${(error as Error).message}`,
+        (error as Error).stack,
+      );
+    }
   }
 }
+
+export const _auditedEventsForTests = AUDITED_EVENTS;
