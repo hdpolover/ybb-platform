@@ -28,6 +28,14 @@ func (f *GatewayFactory) Register(gateway domainGateways.PaymentGateway) {
 	f.gateways[gateway.GetName()] = gateway
 }
 
+// Reset clears all registered gateways. Used by periodic refresh so that
+// providers that have been deactivated in the DB stop being served.
+func (f *GatewayFactory) Reset() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.gateways = make(map[string]domainGateways.PaymentGateway)
+}
+
 // GetGateway returns a payment gateway by name
 func (f *GatewayFactory) GetGateway(name string) (domainGateways.PaymentGateway, error) {
 	f.mu.RLock()

@@ -161,6 +161,25 @@ func main() {
 	// Load gateways: DB-stored configs take priority over env vars.
 	// Providers found in DB will override their env-var counterparts.
 	registerGateways(context.Background(), cfg, gatewayFactory, gatewayConfigRepo, logger)
+
+	// Keep the in-memory gateway factory in sync with payment_gateway_configs.
+	// Without this, admin edits in the DB don't take effect until a restart, which
+	// surfaces to participants as a generic 500 on payment confirmation.
+	refreshCtx, cancelRefresh := context.WithCancel(context.Background())
+	defer cancelRefresh()
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-refreshCtx.Done():
+				return
+			case <-ticker.C:
+				registerGateways(refreshCtx, cfg, gatewayFactory, gatewayConfigRepo, logger)
+			}
+		}
+	}()
+
 	intentRepo := persistence.NewGormPaymentIntentRepository(db)
 	txRepo := persistence.NewGormPaymentTransactionRepository(db)
 	idempotencyRepo := persistence.NewGormPaymentIdempotencyRepository(db)
@@ -239,12 +258,13 @@ func main() {
 
 // registerGateways loads payment gateways with DB-stored configs taking priority over env vars.
 // Strategy:
-//  1. Start with env-var fallbacks (existing behaviour, unchanged).
-//  2. For each active DB config, build and register the matching gateway, overwriting the
+//  1. Reset the factory so deactivated providers are dropped on each call.
+//  2. Start with env-var fallbacks.
+//  3. For each active DB config, build and register the matching gateway, overwriting the
 //     env-var version if the same provider was already registered.
 //
-// This means: adding a Xendit row in payment_gateway_configs with is_active=true will
-// override XENDIT_SECRET_KEY without any restart config change.
+// Safe to call repeatedly: a periodic refresh keeps the in-memory factory in sync
+// with payment_gateway_configs without requiring a service restart.
 func registerGateways(
 	ctx context.Context,
 	cfg *config.Config,
@@ -252,6 +272,8 @@ func registerGateways(
 	gatewayConfigRepo *persistence.GatewayConfigRepository,
 	logger *zap.SugaredLogger,
 ) {
+	gatewayFactory.Reset()
+
 	registered := []string{}
 
 	// Manual gateway is always registered — it has no API keys.
