@@ -5,6 +5,7 @@ import { ApplicationCategory } from '@prisma/client';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
 import { UnitOfWork } from '../../../../../shared/infrastructure/database/unit-of-work.service';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { RabbitMQProducerService } from '../../../../../shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { AuthLoggingService } from '../../services/auth-logging.service';
 import { MetricsService } from '../../../../../shared/infrastructure/monitoring/metrics.service';
@@ -110,6 +111,10 @@ describe('RegisterHandler', () => {
     }),
   };
 
+  const mockConfigService = {
+    get: jest.fn((key: string, fallback?: string) => fallback),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -121,6 +126,7 @@ describe('RegisterHandler', () => {
         { provide: AuthLoggingService, useValue: mockAuthLoggingService },
         { provide: MetricsService, useValue: mockMetricsService },
         { provide: GeoIpService, useValue: mockGeoIpService },
+        { provide: ConfigService, useValue: mockConfigService },
       ],
     }).compile();
 

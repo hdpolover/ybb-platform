@@ -4,6 +4,7 @@ import { AuthController } from './auth.controller';
 import { LoginHandler } from '../application/commands/handlers/login.handler';
 import { AdminLoginHandler } from '../application/commands/handlers/admin-login.handler';
 import { AdminRefreshHandler } from '../application/commands/handlers/admin-refresh.handler';
+import { AmbassadorLoginHandler } from '../application/commands/handlers/ambassador-login.handler';
 import { RegisterHandler } from '../application/commands/handlers/register.handler';
 import { RegisterAdminHandler } from '../application/commands/handlers/register-admin.handler';
 import { LogoutHandler } from '../application/commands/handlers/logout.handler';
@@ -14,6 +15,7 @@ import { ResendVerificationEmailHandler } from '../application/commands/handlers
 import { FirebaseLoginHandler } from '../application/commands/handlers/firebase-login.handler';
 import { GetUserProfileHandler } from '../application/queries/handlers/get-user-profile.handler';
 import { GetAuthProvidersHandler } from '../application/queries/handlers/get-auth-providers.handler';
+import { GetAuthContextHandler } from '../application/queries/handlers/get-auth-context.handler';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { LoginCommand } from '../application/commands/login.command';
@@ -29,6 +31,7 @@ describe('AuthController', () => {
     const mockLoginHandler = { execute: jest.fn() };
     const mockAdminLoginHandler = { execute: jest.fn() };
     const mockAdminRefreshHandler = { execute: jest.fn() };
+    const mockAmbassadorLoginHandler = { execute: jest.fn() };
     const mockRegisterHandler = { execute: jest.fn() };
     const mockRegisterAdminHandler = { execute: jest.fn() };
     const mockLogoutHandler = { execute: jest.fn() };
@@ -39,6 +42,7 @@ describe('AuthController', () => {
     const mockFirebaseLoginHandler = { execute: jest.fn() };
     const mockGetUserProfileHandler = { execute: jest.fn() };
     const mockGetAuthProvidersHandler = { execute: jest.fn() };
+    const mockGetAuthContextHandler = { execute: jest.fn() };
 
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
@@ -47,6 +51,7 @@ describe('AuthController', () => {
                 { provide: LoginHandler, useValue: mockLoginHandler },
                 { provide: AdminLoginHandler, useValue: mockAdminLoginHandler },
                 { provide: AdminRefreshHandler, useValue: mockAdminRefreshHandler },
+                { provide: AmbassadorLoginHandler, useValue: mockAmbassadorLoginHandler },
                 { provide: RegisterHandler, useValue: mockRegisterHandler },
                 { provide: RegisterAdminHandler, useValue: mockRegisterAdminHandler },
                 { provide: LogoutHandler, useValue: mockLogoutHandler },
@@ -57,6 +62,7 @@ describe('AuthController', () => {
                 { provide: FirebaseLoginHandler, useValue: mockFirebaseLoginHandler },
                 { provide: GetUserProfileHandler, useValue: mockGetUserProfileHandler },
                 { provide: GetAuthProvidersHandler, useValue: mockGetAuthProvidersHandler },
+                { provide: GetAuthContextHandler, useValue: mockGetAuthContextHandler },
             ],
         })
         .overrideGuard(JwtAuthGuard)

@@ -167,40 +167,46 @@ export class LoginHandler {
       throw new UnauthorizedException('Account is not active');
     }
 
-    // Enforce email verification from brand policy, and allow program policy to tighten it.
-    let requiresEmailVerification = user.brand.requireEmailVerification;
+    // Email verification policy: program-level is authoritative when a program
+    // is in scope (programId or programSlug resolved to a brand-matched program);
+    // brand-level is the fallback for brand-wide auth flows with no program.
+    // NOTE: this field is read uncached from Prisma. If a cache layer is added
+    // later, invalidate on PUT /v1/brands/:id/settings and PUT /v1/programs/:id.
+    let programInScope: { requireEmailVerification: boolean } | null = null;
 
-    if (!requiresEmailVerification) {
-      if (command.programId) {
-        const selectedProgram = await this.prisma.program.findUnique({
-          where: { id: command.programId },
-          select: {
-            brandId: true,
-            requireEmailVerification: true,
-          },
-        });
+    if (command.programId) {
+      const selectedProgram = await this.prisma.program.findUnique({
+        where: { id: command.programId },
+        select: {
+          brandId: true,
+          requireEmailVerification: true,
+        },
+      });
 
-        if (selectedProgram && selectedProgram.brandId === brandId) {
-          requiresEmailVerification = selectedProgram.requireEmailVerification;
-        }
-      } else if (command.programSlug) {
-        const selectedProgram = await this.prisma.program.findUnique({
-          where: {
-            brandId_slug: {
-              brandId,
-              slug: command.programSlug,
-            },
+      if (selectedProgram && selectedProgram.brandId === brandId) {
+        programInScope = { requireEmailVerification: selectedProgram.requireEmailVerification };
+      }
+    } else if (command.programSlug) {
+      const selectedProgram = await this.prisma.program.findUnique({
+        where: {
+          brandId_slug: {
+            brandId,
+            slug: command.programSlug,
           },
-          select: {
-            requireEmailVerification: true,
-          },
-        });
+        },
+        select: {
+          requireEmailVerification: true,
+        },
+      });
 
-        if (selectedProgram) {
-          requiresEmailVerification = selectedProgram.requireEmailVerification;
-        }
+      if (selectedProgram) {
+        programInScope = { requireEmailVerification: selectedProgram.requireEmailVerification };
       }
     }
+
+    const requiresEmailVerification = programInScope
+      ? programInScope.requireEmailVerification
+      : user.brand.requireEmailVerification;
 
     // Check if email is verified (if required by effective policy)
     if (requiresEmailVerification && !user.emailVerified) {

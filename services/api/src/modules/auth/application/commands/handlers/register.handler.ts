@@ -364,13 +364,18 @@ export class RegisterHandler {
     let emailVerified = authProvider.isOAuth; 
 
     if (authProvider.name === 'local') {
-      if (brand.requireEmailVerification) {
-        // Verification Required
+      // Program-level setting wins when a program is in scope; brand-level is
+      // the fallback. Read uncached — if a cache is added later, invalidate on
+      // PUT /v1/brands/:id/settings and PUT /v1/programs/:id.
+      const requiresEmailVerification = targetProgram
+        ? targetProgram.requireEmailVerification
+        : brand.requireEmailVerification;
+
+      if (requiresEmailVerification) {
         emailVerified = false;
         emailVerificationToken = crypto.randomBytes(32).toString('hex');
         emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
       } else {
-        // No Verification Required
         emailVerified = true;
       }
     }
