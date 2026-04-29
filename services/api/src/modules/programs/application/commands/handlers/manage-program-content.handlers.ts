@@ -143,6 +143,28 @@ async function invalidatePortalEssayCaches(
     } catch { /* non-critical */ }
 }
 
+function normalizeEssayQuestion(value: string): string {
+    return value.trim().replace(/\s+/g, ' ');
+}
+
+function isValidEssayQuestion(value: string): boolean {
+    const normalized = normalizeEssayQuestion(value);
+    if (!normalized) return false;
+
+    const invalidPlaceholders = new Set(['-', '--', 'n/a', 'na', 'tbd', 'coming soon']);
+    return !invalidPlaceholders.has(normalized.toLowerCase());
+}
+
+function assertValidEssayQuestion(value: string): string {
+    if (!isValidEssayQuestion(value)) {
+        throw new BadRequestException(
+            'Essay question is invalid. Use a meaningful prompt instead of placeholders.',
+        );
+    }
+
+    return normalizeEssayQuestion(value);
+}
+
 /**
  * Cache invalidation for program requirement mutations.
  * Clears landing pages, the specific PROGRAM_REQUIREMENTS HOUR-cached key,
@@ -1078,7 +1100,10 @@ export class CreateProgramEssayHandler implements ICommandHandler<CreateProgramE
         private readonly cacheService: CacheService,
     ) {}
     async execute(command: CreateProgramEssayCommand) {
-        const result = await this.repository.createEssay(command.dto);
+        const result = await this.repository.createEssay({
+            ...command.dto,
+            question: assertValidEssayQuestion(command.dto.question),
+        });
         await invalidatePortalEssayCaches(command.dto.programId, this.cacheService);
         return result;
     }
@@ -1091,7 +1116,12 @@ export class UpdateProgramEssayHandler implements ICommandHandler<UpdateProgramE
     ) {}
     async execute(command: UpdateProgramEssayCommand) {
         const existingEssay = await this.repository.findEssayById(command.id);
-        const result = await this.repository.updateEssay(command.id, command.dto);
+        const result = await this.repository.updateEssay(command.id, {
+            ...command.dto,
+            ...(typeof command.dto.question === 'string'
+                ? { question: assertValidEssayQuestion(command.dto.question) }
+                : {}),
+        });
         const programId = existingEssay?.programId ?? result.programId;
         if (programId) {
             await invalidatePortalEssayCaches(programId, this.cacheService);

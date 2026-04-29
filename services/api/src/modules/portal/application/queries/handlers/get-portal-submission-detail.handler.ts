@@ -20,6 +20,7 @@ import {
 } from '../../../presentation/dto/portal-submission-detail.dto';
 
 const HELP_ASSET_KINDS = new Set(['link', 'video', 'file']);
+const INVALID_ESSAY_QUESTION_VALUES = new Set(['-', '--', 'n/a', 'na', 'tbd', 'coming soon']);
 
 function normalizeHelpAssets(raw: unknown): HelpAsset[] | undefined {
     if (!Array.isArray(raw)) return undefined;
@@ -859,14 +860,22 @@ export class GetPortalSubmissionDetailHandler
         const essayAnswers = (application.essayAnswers as Record<string, unknown>) || {};
         const programEssays = application.program.essays || [];
 
-        return programEssays.map((essay) => ({
-            id: essay.id,
-            question: essay.question,
-            isRequired: essay.isRequired,
-            wordLimit: essay.wordLimit || undefined,
-            order: essay.order,
-            answer: (essayAnswers[essay.id] || undefined) as string | undefined,
-        }));
+        return programEssays
+            .filter((essay) => this.isRenderableEssayQuestion(essay.question))
+            .map((essay) => ({
+                id: essay.id,
+                question: essay.question.trim().replace(/\s+/g, ' '),
+                isRequired: essay.isRequired,
+                wordLimit: essay.wordLimit || undefined,
+                order: essay.order,
+                answer: (essayAnswers[essay.id] || undefined) as string | undefined,
+            }));
+    }
+
+    private isRenderableEssayQuestion(question: string): boolean {
+        const normalized = question.trim().replace(/\s+/g, ' ');
+        if (!normalized) return false;
+        return !INVALID_ESSAY_QUESTION_VALUES.has(normalized.toLowerCase());
     }
 
     private buildRequirements(application: ApplicationDetail): SubmissionRequirementDto[] {

@@ -1,6 +1,6 @@
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import {
     CreateProgramEssayHandler,
     CreateProgramSpeakerHandler,
@@ -174,9 +174,28 @@ describe('ManageProgramContentHandlers', () => {
             expect(mockCacheService.invalidateByPatterns).toHaveBeenCalledWith([
                 'program:essays:program-1',
                 'portal:submission-detail:*:program-1',
+                'portal:submission-detail:*:latest',
                 'portal:submissions:*:program-1',
+                'portal:submissions:*:latest',
                 'portal:dashboard:*',
             ]);
+        });
+
+        it('rejects creating essay with placeholder question', async () => {
+            const handler = new CreateProgramEssayHandler(
+                mockRepository as unknown as IProgramContentRepository,
+                mockCacheService as unknown as CacheService,
+            );
+            const command = new CreateProgramEssayCommand(
+                {
+                    programId: 'program-1',
+                    question: '-',
+                },
+                'user-1',
+            );
+
+            await expect(handler.execute(command)).rejects.toThrow(BadRequestException);
+            expect(mockRepository.createEssay).not.toHaveBeenCalled();
         });
 
         it('invalidates portal essay caches after updating an essay', async () => {
@@ -204,9 +223,28 @@ describe('ManageProgramContentHandlers', () => {
             expect(mockCacheService.invalidateByPatterns).toHaveBeenCalledWith([
                 'program:essays:program-1',
                 'portal:submission-detail:*:program-1',
+                'portal:submission-detail:*:latest',
                 'portal:submissions:*:program-1',
+                'portal:submissions:*:latest',
                 'portal:dashboard:*',
             ]);
+        });
+
+        it('rejects updating essay with placeholder question', async () => {
+            const handler = new UpdateProgramEssayHandler(
+                mockRepository as unknown as IProgramContentRepository,
+                mockCacheService as unknown as CacheService,
+            );
+            const command = new UpdateProgramEssayCommand(
+                'essay-1',
+                { question: '  n/a  ' },
+                'user-1',
+            );
+
+            mockRepository.findEssayById.mockResolvedValue({ id: 'essay-1', programId: 'program-1' });
+
+            await expect(handler.execute(command)).rejects.toThrow(BadRequestException);
+            expect(mockRepository.updateEssay).not.toHaveBeenCalled();
         });
 
         it('invalidates portal essay caches after deleting an essay', async () => {
@@ -226,7 +264,9 @@ describe('ManageProgramContentHandlers', () => {
             expect(mockCacheService.invalidateByPatterns).toHaveBeenCalledWith([
                 'program:essays:program-1',
                 'portal:submission-detail:*:program-1',
+                'portal:submission-detail:*:latest',
                 'portal:submissions:*:program-1',
+                'portal:submissions:*:latest',
                 'portal:dashboard:*',
             ]);
         });
