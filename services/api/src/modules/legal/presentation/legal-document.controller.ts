@@ -7,6 +7,8 @@ import { LegalDocumentResponseDto } from './dto/legal-document-response.dto';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { LegalDocument, ChangeType } from '@prisma/client';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { CacheInvalidate } from '@shared/decorators/cache-invalidate.decorator';
+import { LANDING_BRAND_PATTERNS } from '@shared/constants/cache-patterns';
 
 @ApiTags('Legal')
 @Controller('brands/:brandSlug/legal-documents')
@@ -68,6 +70,7 @@ export class LegalDocumentController {
     }
 
     @Post()
+    @CacheInvalidate(LANDING_BRAND_PATTERNS)
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'LegalDocument', action: ChangeType.create })
@@ -85,6 +88,7 @@ export class LegalDocumentController {
     }
 
     @Put(':id')
+    @CacheInvalidate(LANDING_BRAND_PATTERNS)
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'LegalDocument', action: ChangeType.update })
@@ -103,6 +107,7 @@ export class LegalDocumentController {
     }
 
     @Delete(':id')
+    @CacheInvalidate(LANDING_BRAND_PATTERNS)
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'LegalDocument', action: ChangeType.delete })
