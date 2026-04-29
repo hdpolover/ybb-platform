@@ -28,6 +28,7 @@ import { ResendVerificationEmailHandler } from '../application/commands/handlers
 import { FirebaseLoginHandler } from '../application/commands/handlers/firebase-login.handler';
 import { GetUserProfileHandler } from '../application/queries/handlers/get-user-profile.handler';
 import { GetAuthProvidersHandler } from '../application/queries/handlers/get-auth-providers.handler';
+import { GetAuthContextHandler } from '../application/queries/handlers/get-auth-context.handler';
 import { LoginCommand } from '../application/commands/login.command';
 import { AdminLoginCommand } from '../application/commands/admin-login.command'; // [NEW]
 import { RegisterCommand } from '../application/commands/register.command';
@@ -43,6 +44,8 @@ import { AmbassadorLoginDto } from './dto/ambassador-login.dto';
 import { AmbassadorLoginHandler } from '../application/commands/handlers/ambassador-login.handler';
 import { GetUserProfileQuery } from '../application/queries/get-user-profile.query';
 import { GetAuthProvidersQuery } from '../application/queries/get-auth-providers.query';
+import { GetAuthContextQuery } from '../application/queries/get-auth-context.query';
+import { AuthContextResponseDto } from './dto/auth-context.dto';
 import { Public } from '../../../shared/decorators/public.decorator';
 import { CurrentUser, CurrentUserData } from '../../../shared/decorators/current-user.decorator';
 import { BrandDomain } from '../../../shared/decorators/brand-domain.decorator';
@@ -71,6 +74,7 @@ export class AuthController {
     private readonly firebaseLoginHandler: FirebaseLoginHandler,
     private readonly getUserProfileHandler: GetUserProfileHandler,
     private readonly getAuthProvidersHandler: GetAuthProvidersHandler,
+    private readonly getAuthContextHandler: GetAuthContextHandler,
   ) { }
 
   @Public()
@@ -354,5 +358,19 @@ export class AuthController {
   async getProviders() {
     const query = new GetAuthProvidersQuery();
     return this.getAuthProvidersHandler.execute(query);
+  }
+
+  @Public()
+  @Get('context')
+  @SkipThrottle()
+  @ApiOperation({
+    summary: 'Resolve auth context (brand + active program + local provider) by domain',
+    description:
+      'Used by participant frontends to bootstrap registration/login. Resolves the brand from the x-brand-domain header (or ?url query) and returns the active program for that brand. Replaces brittle client-side filtering of /v1/brands + /v1/programs.',
+  })
+  @ApiQuery({ name: 'url', required: false, description: 'Brand website domain (alternative to x-brand-domain header)' })
+  @ApiResponse({ status: 200, type: AuthContextResponseDto })
+  async getContext(@BrandDomain() brandDomain?: string): Promise<AuthContextResponseDto> {
+    return this.getAuthContextHandler.execute(new GetAuthContextQuery(brandDomain));
   }
 }
