@@ -76,5 +76,28 @@ export class ReportingController {
     // Future: this.reportingService.recordSignups(data);
   }
 
-  // Add other events as needed
+  // ── No-op acks ─────────────────────────────────────────────────────────────
+  // reporting_queue is bound to `#` so it receives every event on ybb.events.
+  // NestJS NACKs anything without an exact-match @EventPattern handler, which
+  // floods logs with "An unsupported event was received". These handlers are
+  // intentional no-ops — they just ACK the message so RabbitMQ drops it cleanly.
+  // Remove an entry once reporting actually needs to consume that event.
+
+  @EventPattern('user.verify-email')
+  ackUserVerifyEmail() { /* no-op */ }
+
+  @EventPattern('user.email-verified')
+  ackUserEmailVerified() { /* no-op */ }
+
+  @EventPattern('user.forgot-password')
+  ackUserForgotPassword() { /* no-op */ }
+
+  @EventPattern('payment.created')
+  ackPaymentCreated() { /* no-op */ }
+
+  @EventPattern('payment.failed')
+  ackPaymentFailed() { /* no-op */ }
+
+  @EventPattern('payment.refunded')
+  ackPaymentRefunded() { /* no-op */ }
 }
