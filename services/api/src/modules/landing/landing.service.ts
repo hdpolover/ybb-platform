@@ -12,6 +12,8 @@ import { Brand } from '@prisma/client';
 import { LandingPageResponseDto } from './dto/landing-page.dto';
 import { LandingSettingsResponseDto } from './dto/landing-settings.dto';
 
+const DEFAULT_FAQ_LIMIT = 200;
+
 @Injectable()
 export class LandingService {
   private strategies: Record<string, ILandingPageStrategy> = {};
@@ -102,7 +104,7 @@ export class LandingService {
     return this.announcementsStrategy.getData(brand) as Promise<LandingPageResponseDto>;
   }
 
-  async getFaqs(url?: string, page: number = 1, limit: number = 10, search?: string): Promise<LandingPageResponseDto> {
+  async getFaqs(url?: string, page: number = 1, limit: number = DEFAULT_FAQ_LIMIT, search?: string): Promise<LandingPageResponseDto> {
     const brand = await this.resolveBrand(url);
     // FaqsStrategy has a specific getFaqs method with pagination
     return this.faqsStrategy.getFaqs(brand, page, limit, search) as Promise<LandingPageResponseDto>;

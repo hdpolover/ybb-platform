@@ -5,6 +5,9 @@ import { CacheService } from '../../../shared/infrastructure/cache/cache.service
 import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
 import { Brand, Prisma } from '@prisma/client';
 
+const DEFAULT_FAQ_LIMIT = 200;
+const MAX_FAQ_LIMIT = 500;
+
 @Injectable()
 export class FaqsStrategy implements ILandingPageStrategy {
     constructor(
@@ -15,13 +18,13 @@ export class FaqsStrategy implements ILandingPageStrategy {
     // ILandingPageStrategy interface requirement
     async getData(category: Brand | null) {
         // Default behavior if called via standard interface: Return first page
-        return this.getFaqs(category, 1, 10);
+        return this.getFaqs(category, 1, DEFAULT_FAQ_LIMIT);
     }
 
     async getFaqs(
         category: Brand | null,
         page: number = 1,
-        limit: number = 10,
+        limit: number = DEFAULT_FAQ_LIMIT,
         search?: string
     ) {
         // Check cache first
@@ -33,7 +36,10 @@ export class FaqsStrategy implements ILandingPageStrategy {
 
         // Ensure page and limit are valid numbers
         const pageNum = Number(page) > 0 ? Number(page) : 1;
-        const limitNum = Number(limit) > 0 ? Number(limit) : 10;
+        const rawLimit = Number(limit);
+        const limitNum = Number.isFinite(rawLimit) && rawLimit > 0
+            ? Math.min(Math.floor(rawLimit), MAX_FAQ_LIMIT)
+            : DEFAULT_FAQ_LIMIT;
         const skip = (pageNum - 1) * limitNum;
 
         // 1. Resolve Category context and Target Program
