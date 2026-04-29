@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import { useParams } from "next/navigation";
-import { PlusIcon, PencilSquareIcon, TrashIcon, ArrowPathIcon, CloudArrowUpIcon } from "@heroicons/react/24/outline";
+import { PlusIcon, PencilSquareIcon, TrashIcon, ArrowPathIcon, CloudArrowUpIcon, ExclamationTriangleIcon, CheckCircleIcon } from "@heroicons/react/24/outline";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
 import {
@@ -51,6 +51,7 @@ export default function PaymentMethodsPage() {
   const brandId = program?.brandId ?? "";
   const userId = adminProfile?.userId ?? "";
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
+  const [activeGatewayNames, setActiveGatewayNames] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -64,12 +65,21 @@ export default function PaymentMethodsPage() {
     if (!params.programId) return;
     setLoading(true); setError(null);
     try {
-      const data = await listPaymentMethods();
+      // Load methods + active gateway configs in parallel so the table can flag
+      // automatic methods whose gateway provider isn't configured (which would
+      // hide them from participants and fail at confirm-time).
+      const [methodsData, gatewayConfigs] = await Promise.all([
+        listPaymentMethods(),
+        listGatewayConfigs().catch(() => []),
+      ]);
       setMethods(
-        data.map((method) => ({
+        methodsData.map((method) => ({
           ...method,
           type: normalizePaymentMethodType(method.type),
         })),
+      );
+      setActiveGatewayNames(
+        new Set(gatewayConfigs.filter((c) => c.is_active).map((c) => c.provider)),
       );
     }
     catch (err) { setError(err instanceof Error ? err.message : "Failed to load"); }
@@ -103,6 +113,25 @@ export default function PaymentMethodsPage() {
           </div>
         </div>
         {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+        {!loading && (() => {
+          const orphaned = methods.filter((m) => {
+            if (normalizePaymentMethodType(m.type) !== "AUTOMATIC") return false;
+            if (!m.is_active) return false;
+            return !m.gateway_name || !activeGatewayNames.has(m.gateway_name);
+          });
+          if (orphaned.length === 0) return null;
+          return (
+            <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+              <ExclamationTriangleIcon className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <p className="font-semibold">{orphaned.length} method{orphaned.length === 1 ? "" : "s"} hidden from participants</p>
+                <p className="mt-0.5 text-amber-700">
+                  Automatic methods without an active gateway config aren&apos;t shown on the participant dashboard. Configure the provider in <a href="/platform/payment-gateways" className="underline">Platform → Payment Gateways</a> or switch the method to Manual.
+                </p>
+              </div>
+            </div>
+          );
+        })()}
         <div className="overflow-hidden rounded-md border border-zinc-200">
           <table className="min-w-full text-left text-[11px]">
             <thead className="bg-zinc-50 text-zinc-600">
@@ -112,15 +141,18 @@ export default function PaymentMethodsPage() {
                 <th className="px-3 py-2 font-semibold">Details</th>
                 <th className="px-3 py-2 font-semibold">Type</th>
                 <th className="px-3 py-2 font-semibold">Status</th>
+                <th className="px-3 py-2 font-semibold">Visibility</th>
                 <th className="px-3 py-2 text-right font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={6} className="px-3 py-6 text-center text-zinc-400">Loading…</td></tr>}
-              {!loading && methods.length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-zinc-400">No payment methods yet.</td></tr>}
+              {loading && <tr><td colSpan={7} className="px-3 py-6 text-center text-zinc-400">Loading…</td></tr>}
+              {!loading && methods.length === 0 && <tr><td colSpan={7} className="px-3 py-6 text-center text-zinc-400">No payment methods yet.</td></tr>}
               {!loading && methods.map((m, idx) => {
                 const label = m.display_name || m.name || "";
                 const isManual = normalizePaymentMethodType(m.type) === "MANUAL";
+                const gatewayActive = isManual || (m.gateway_name && activeGatewayNames.has(m.gateway_name));
+                const visibleToParticipants = m.is_active && gatewayActive;
                 return (
                 <tr key={m.id} className={idx % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}>
                   <td className="px-3 py-2">
@@ -143,7 +175,14 @@ export default function PaymentMethodsPage() {
                         {m.account_number && <div className="text-[10px] text-zinc-400">{m.account_number}{m.account_name ? ` · ${m.account_name}` : ""}</div>}
                       </div>
                     ) : !isManual && m.gateway_name ? (
-                      <div className="font-medium text-zinc-700">{m.gateway_name}{m.gateway_type ? ` / ${m.gateway_type}` : ""}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium text-zinc-700">{m.gateway_name}{m.gateway_type ? ` / ${m.gateway_type}` : ""}</span>
+                        {!gatewayActive && (
+                          <span title="No active gateway configuration for this provider" className="inline-flex items-center gap-1 rounded-sm bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-700">
+                            <ExclamationTriangleIcon className="h-3 w-3" />Not configured
+                          </span>
+                        )}
+                      </div>
                     ) : (
                       <span className="text-zinc-400">—</span>
                     )}
@@ -154,6 +193,17 @@ export default function PaymentMethodsPage() {
                     </span>
                   </td>
                   <td className="px-3 py-2">{m.is_active ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Active</span> : <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-600">Inactive</span>}</td>
+                  <td className="px-3 py-2">
+                    {visibleToParticipants ? (
+                      <span title="Shown on the participant dashboard" className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                        <CheckCircleIcon className="h-3 w-3" />Visible
+                      </span>
+                    ) : (
+                      <span title={!m.is_active ? "Method is inactive" : "Gateway provider has no active configuration"} className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-600">
+                        <ExclamationTriangleIcon className="h-3 w-3" />Hidden
+                      </span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex items-center justify-end gap-1">
                       <button type="button" onClick={() => setEditTarget(m)} className="rounded-md border border-zinc-200 p-1 text-zinc-500 hover:bg-zinc-50"><PencilSquareIcon className="h-3.5 w-3.5" /></button>
@@ -257,11 +307,20 @@ function PaymentMethodModal({
     if (!code) { setError("Internal name is required to generate a code."); setLoading(false); return; }
     // AUTOMATIC methods must point at a real active gateway — otherwise the
     // payment service would fail at charge time with "no active config".
-    if (type === "AUTOMATIC" && !gatewayName) {
-      const msg = gateways.length === 0
-        ? "No active payment gateways configured. Add one in Platform → Payment Gateways first."
-        : "Select a payment gateway for automatic methods.";
-      setError(msg); toast.error(msg); setLoading(false); return;
+    // Hard-block this on save (and especially on activation) so admins are
+    // forced to configure the provider before participants ever see the option.
+    if (type === "AUTOMATIC") {
+      if (!gatewayName) {
+        const msg = gateways.length === 0
+          ? "No active payment gateways configured. Add one in Platform → Payment Gateways first."
+          : "Select a payment gateway for automatic methods.";
+        setError(msg); toast.error(msg); setLoading(false); return;
+      }
+      const providerActive = gateways.some((g) => g.provider === gatewayName);
+      if (isActive && !providerActive) {
+        const msg = `Cannot activate this method — the gateway provider "${gatewayName}" has no active configuration. Configure it in Platform → Payment Gateways first.`;
+        setError(msg); toast.error(msg); setLoading(false); return;
+      }
     }
     // Build payload matching the Go entity. Empty strings are sent rather than
     // omitted so that clearing a field on edit actually removes the old value.
@@ -359,31 +418,51 @@ function PaymentMethodModal({
                 <p className="text-[11px] text-zinc-500">Loading gateways…</p>
               ) : gateways.length === 0 ? (
                 <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
-                  No active payment gateways configured. Add one in{" "}
-                  <a href="/platform/payment-gateways" className="font-semibold underline">Platform → Payment Gateways</a>{" "}
-                  before creating automatic methods.
+                  <p className="font-semibold">No active payment gateway configurations</p>
+                  <p className="mt-0.5">
+                    Automatic methods need a working provider. Add or activate one in{" "}
+                    <a href="/platform/payment-gateways" className="font-semibold underline">Platform → Payment Gateways</a>{" "}
+                    before saving this method as Active.
+                  </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Gateway Provider" required>
-                    <select
-                      required
-                      value={gatewayName}
-                      onChange={(e) => setGatewayName(e.target.value)}
-                      className={inputCls}
-                    >
-                      <option value="">Select provider…</option>
-                      {gateways.map((g) => (
-                        <option key={g.id} value={g.provider}>
-                          {g.provider} ({g.mode})
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field label="Channel / Type">
-                    <input type="text" value={gatewayType} onChange={(e) => setGatewayType(e.target.value)} placeholder="e.g. snap, credit_card, qris" className={inputCls} />
-                  </Field>
-                </div>
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Gateway Provider" required>
+                      <select
+                        required
+                        value={gatewayName}
+                        onChange={(e) => setGatewayName(e.target.value)}
+                        className={inputCls}
+                      >
+                        <option value="">Select provider…</option>
+                        {gateways.map((g) => (
+                          <option key={g.id} value={g.provider}>
+                            {g.provider} ({g.mode})
+                          </option>
+                        ))}
+                        {gatewayName && !gateways.some((g) => g.provider === gatewayName) && (
+                          <option value={gatewayName} disabled>
+                            {gatewayName} (no active config)
+                          </option>
+                        )}
+                      </select>
+                    </Field>
+                    <Field label="Channel / Type">
+                      <input type="text" value={gatewayType} onChange={(e) => setGatewayType(e.target.value)} placeholder="e.g. snap, credit_card, qris" className={inputCls} />
+                    </Field>
+                  </div>
+                  {gatewayName && !gateways.some((g) => g.provider === gatewayName) && (
+                    <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                      <p className="font-semibold">Provider &quot;{gatewayName}&quot; has no active configuration</p>
+                      <p className="mt-0.5">
+                        This method will be hidden from participants until the provider is activated. Configure it in{" "}
+                        <a href="/platform/payment-gateways" className="font-semibold underline">Platform → Payment Gateways</a>{" "}
+                        or pick a different provider above.
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}

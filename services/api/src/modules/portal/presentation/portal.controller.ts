@@ -208,7 +208,10 @@ export class PortalController {
             const headers = internalKey ? { 'X-Internal-Service-Key': internalKey } : {};
             const { data } = await this.paymentServiceClient.get<AdminPaymentMethod[] | { data: AdminPaymentMethod[] }>(
                 '/api/v1/payment-methods',
-                { params: { is_active: true }, headers },
+                // `available_only=true` makes the Go service drop automatic methods whose
+                // gateway provider isn't registered, so participants don't see options that
+                // would fail at confirm-time.
+                { params: { is_active: true, available_only: true }, headers },
             );
             const methods: AdminPaymentMethod[] = Array.isArray(data) ? data : ((data as { data?: AdminPaymentMethod[] })?.data ?? []);
             return methods

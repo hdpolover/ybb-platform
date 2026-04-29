@@ -83,6 +83,7 @@ export class GatewayAdminController {
             const { data } = await this.paymentServiceClient.post<{ data: unknown }>('/api/v1/gateway-configs', body, {
                 headers: this.buildInternalHeaders(),
             });
+            this.notifyGatewayRefresh();
             return data.data;
         } catch (error) {
             this.handleError(error);
@@ -98,6 +99,7 @@ export class GatewayAdminController {
             const { data } = await this.paymentServiceClient.put<{ data: unknown }>(`/api/v1/gateway-configs/${id}`, body, {
                 headers: this.buildInternalHeaders(),
             });
+            this.notifyGatewayRefresh();
             return data.data;
         } catch (error) {
             this.handleError(error);
@@ -113,6 +115,7 @@ export class GatewayAdminController {
             const { data } = await this.paymentServiceClient.patch<{ data: unknown }>(`/api/v1/gateway-configs/${id}/active`, body, {
                 headers: this.buildInternalHeaders(),
             });
+            this.notifyGatewayRefresh();
             return data.data;
         } catch (error) {
             this.handleError(error);
@@ -127,10 +130,23 @@ export class GatewayAdminController {
             const { data } = await this.paymentServiceClient.delete<Record<string, unknown>>(`/api/v1/gateway-configs/${id}`, {
                 headers: this.buildInternalHeaders(),
             });
+            this.notifyGatewayRefresh();
             return data;
         } catch (error) {
             this.handleError(error);
         }
+    }
+
+    // Fire-and-forget refresh signal to the Go payment service so its in-memory
+    // gateway factory picks up CRUD changes immediately. The 30s periodic refresh
+    // on the Go side is the safety net if this call fails.
+    private notifyGatewayRefresh(): void {
+        this.paymentServiceClient
+            .post('/api/v1/gateways/refresh', {}, { headers: this.buildInternalHeaders() })
+            .catch((err) => {
+                const message = err instanceof Error ? err.message : String(err);
+                this.logger.warn(`Gateway refresh signal failed (will recover via periodic tick): ${message}`);
+            });
     }
 
     private handleError(error: unknown): never {
