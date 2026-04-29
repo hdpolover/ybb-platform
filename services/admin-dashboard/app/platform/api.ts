@@ -180,15 +180,17 @@ async function request<T>(
   init?: RequestInit,
   options?: { unwrapData?: boolean },
 ): Promise<T> {
+  const method = (init?.method ?? "GET").toUpperCase();
   const headers = new Headers(init?.headers);
   headers.set("Authorization", `Bearer ${getAccessToken()}`);
 
-  if (!(init?.body instanceof FormData) && init?.method && init.method !== "GET" && !headers.has("Content-Type")) {
+  if (!(init?.body instanceof FormData) && method !== "GET" && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
 
   const response = await fetch(buildApiUrl(path), {
     ...init,
+    cache: init?.cache ?? (method === "GET" ? "no-store" : undefined),
     headers,
   });
 
