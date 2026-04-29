@@ -10,7 +10,7 @@ import { AuditTrail } from '../../../shared/decorators/audit-trail.decorator';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
 import { ChangeType } from '@prisma/client';
 // imports unified PROGRAM_CONTENT_PATTERNS — broader than the previous local list, which was a subset
-import { PROGRAM_CONTENT_PATTERNS as MUTABLE_CONTENT_CACHE_PATTERNS } from '../../../shared/constants/cache-patterns';
+import { PROGRAM_CONTENT_PATTERNS as MUTABLE_CONTENT_CACHE_PATTERNS } from '@shared/constants/cache-patterns';
 
 import {
   CreateProgramAnnouncementDto,
