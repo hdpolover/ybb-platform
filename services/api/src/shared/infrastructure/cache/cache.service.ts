@@ -1,9 +1,12 @@
-import { Injectable, Inject, Optional } from '@nestjs/common';
+import { Injectable, Inject, Optional, Logger } from '@nestjs/common';
 import { CACHE_MANAGER, Cache } from '@nestjs/cache-manager';
 import { CacheMetricsService } from './cache-metrics.service';
+import { CACHE_KEYS } from '@shared/constants/cache-keys';
 
 @Injectable()
 export class CacheService {
+  private readonly logger = new Logger(CacheService.name);
+
   constructor(
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     @Optional() private readonly metricsService?: CacheMetricsService,
@@ -107,6 +110,31 @@ export class CacheService {
       `landing:program:${brandId}:*`,
       `landing:faqs:${brandId}:*`,
     ]);
+  }
+
+  /**
+   * Invalidate caches affected by an invoice status change.
+   *
+   * Busts:
+   * - portal:payment-detail:${invoiceId} (when invoiceId provided)
+   * - portal:payments:${userId}:* (every program's cached payments list for this user)
+   * - portal:dashboard:${userId}
+   *
+   * Pass invoiceId=undefined when no specific invoice is known (e.g. payment-failed events
+   * may not have an invoiceId yet).
+   */
+  async invalidateInvoiceCache(invoiceId: string | undefined, userId: string): Promise<void> {
+    try {
+      const keys: string[] = [CACHE_KEYS.PORTAL_DASHBOARD(userId)];
+      if (invoiceId) keys.push(CACHE_KEYS.PORTAL_PAYMENT_DETAIL(invoiceId));
+      await Promise.all([
+        this.invalidateKeys(keys),
+        this.invalidateByPattern(`portal:payments:${userId}:*`),
+      ]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Failed to invalidate invoice ${invoiceId ?? '(no invoice)'} cache for user ${userId}: ${msg}`);
+    }
   }
 
   /**

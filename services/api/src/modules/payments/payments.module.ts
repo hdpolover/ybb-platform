@@ -1,11 +1,10 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
 import { HttpModule } from '@nestjs/axios';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from '../auth/auth.module';
 import { ParticipantsModule } from '../participants/participants.module';
 import { FilesModule } from '../files/files.module';
-import { PortalModule } from '../portal/portal.module';
 import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.module';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { PaymentsController } from './presentation/payments.controller';
@@ -29,7 +28,6 @@ import { CacheModule } from '@shared/infrastructure/cache/cache.module';
         AuthModule,
         ParticipantsModule,
         FilesModule,
-        forwardRef(() => PortalModule),
         MonitoringModule,
         HttpModule,
         ConfigModule,

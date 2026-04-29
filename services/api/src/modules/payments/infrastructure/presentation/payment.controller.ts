@@ -8,7 +8,7 @@ import { UserRole } from '@core/entities/user.entity';
 import { CreateIntentDto, SubmitManualPaymentDto, VerifyManualPaymentDto, AdminListPaymentsDto } from './dto/payment.dto';
 import { Request } from 'express';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
-import { PortalCacheService } from '@modules/portal/application/services/portal-cache.service';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
 
 interface JwtPayload { sub: string; email?: string; }
 
@@ -21,7 +21,7 @@ export class PaymentController {
   constructor(
     private readonly paymentClient: PaymentGrpcClient,
     private readonly prisma: PrismaService,
-    private readonly portalCacheService: PortalCacheService,
+    private readonly cacheService: CacheService,
   ) {}
 
   @Post('intents')
@@ -82,7 +82,7 @@ export class PaymentController {
       });
       const participantUserId = invoice?.application?.participant?.userId;
       if (invoice && participantUserId) {
-          await this.portalCacheService.invalidateInvoiceCache(invoice.id, participantUserId);
+          await this.cacheService.invalidateInvoiceCache(invoice.id, participantUserId);
       }
 
       return result;
