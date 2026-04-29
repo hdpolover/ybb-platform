@@ -71,7 +71,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                     orderBy: { order: 'asc' }
                 },
                 pricingTiers: {
-                    where: { isActive: true },
+                    where: { isActive: true, deletedAt: null },
                     orderBy: { order: 'asc' }
                 }
             }
@@ -92,7 +92,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                     faqs: { where: { isActive: true }, take: 5, orderBy: { order: 'asc' } },
                     timeline: { where: { isActive: true }, orderBy: { order: 'asc' } },
                     schedules: { where: { isActive: true }, orderBy: { order: 'asc' } },
-                    pricingTiers: { where: { isActive: true }, orderBy: { order: 'asc' } }
+                    pricingTiers: { where: { isActive: true, deletedAt: null }, orderBy: { order: 'asc' } }
                 }
             });
         }
@@ -555,7 +555,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
             include: {
                 brand: true,
                 pricingTiers: {
-                    where: { isActive: true },
+                    where: { isActive: true, deletedAt: null },
                     orderBy: { order: 'asc' },
                     include: {
                         validityPeriods: true
