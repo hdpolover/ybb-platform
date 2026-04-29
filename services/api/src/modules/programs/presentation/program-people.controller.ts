@@ -4,10 +4,21 @@ import { Request as ExpressRequest } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
 import { Public } from '../../../shared/decorators/public.decorator';
+import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
 
 interface AuthenticatedRequest extends ExpressRequest {
   user: { id: string; userId: string };
 }
+
+const MUTABLE_CONTENT_CACHE_PATTERNS = [
+  'landing:home:*',
+  'landing:about:*',
+  'landing:programs:*',
+  'landing:program:*',
+  'landing:partners:*',
+  'landing:settings:*',
+  'program:*',
+];
 
 import {
   ProgramSpeakerResponseDto,
@@ -78,6 +89,7 @@ export class ProgramPeopleController {
   @ApiOperation({ summary: 'Add speaker' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('photo'))
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async addSpeaker(
     @Param('id') programId: string, 
     @Body() dto: CreateProgramSpeakerDto, 
@@ -93,6 +105,7 @@ export class ProgramPeopleController {
   @ApiOperation({ summary: 'Update speaker' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('photo'))
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async updateSpeaker(
     @Param('itemId') itemId: string, 
     @Body() dto: UpdateProgramSpeakerDto, 
@@ -106,6 +119,7 @@ export class ProgramPeopleController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete speaker' })
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async deleteSpeaker(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
     return this.deleteProgramSpeakerHandler.execute(new DeleteProgramSpeakerCommand(itemId, req.user.id));
   }
@@ -125,6 +139,7 @@ export class ProgramPeopleController {
   @ApiOperation({ summary: 'Add team member' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('photo'))
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async addTeam(
     @Param('id') programId: string, 
     @Body() dto: CreateProgramTeamDto, 
@@ -140,6 +155,7 @@ export class ProgramPeopleController {
   @ApiOperation({ summary: 'Update team member' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('photo'))
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async updateTeam(
     @Param('itemId') itemId: string, 
     @Body() dto: UpdateProgramTeamDto, 
@@ -153,6 +169,7 @@ export class ProgramPeopleController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete team member' })
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async deleteTeam(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
     return this.deleteProgramTeamHandler.execute(new DeleteProgramTeamCommand(itemId, req.user.id));
   }
@@ -172,6 +189,7 @@ export class ProgramPeopleController {
   @ApiOperation({ summary: 'Add partner' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('logo'))
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async addPartner(
     @Param('id') programId: string, 
     @Body() dto: CreateProgramPartnerDto, 
@@ -187,6 +205,7 @@ export class ProgramPeopleController {
   @ApiOperation({ summary: 'Update partner' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('logo'))
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async updatePartner(
     @Param('itemId') itemId: string, 
     @Body() dto: UpdateProgramPartnerDto, 
@@ -200,6 +219,7 @@ export class ProgramPeopleController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete partner' })
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async deletePartner(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
     return this.deleteProgramPartnerHandler.execute(new DeleteProgramPartnerCommand(itemId, req.user.id));
   }

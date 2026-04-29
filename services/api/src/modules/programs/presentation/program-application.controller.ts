@@ -10,6 +10,23 @@ interface AuthenticatedRequest extends ExpressRequest {
   user: { id: string; userId: string };
 }
 
+const MUTABLE_CONTENT_CACHE_PATTERNS = [
+  'landing:home:*',
+  'landing:about:*',
+  'landing:programs:*',
+  'landing:program:*',
+  'landing:partners:*',
+  'landing:announcements:*',
+  'landing:faqs:*',
+  'landing:settings:*',
+  'program:*',
+  'portal:submission-detail:*',
+  'portal:submissions:*',
+  'portal:dashboard:*',
+  'portal:payments:*',
+  'portal:documents:*',
+];
+
 import {
   ProgramPricingTierResponseDto,
   ProgramRequirementResponseDto,
@@ -135,7 +152,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add pricing tier' })
-  @CacheInvalidate(['landing:home:*', 'landing:programs:*', 'landing:program:*', 'program:detail:*'])
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async addPricingTier(@Param('id') programId: string, @Body() dto: CreateProgramPricingTierDto, @Request() req: AuthenticatedRequest) {
     return this.createProgramPricingTierHandler.execute(new CreateProgramPricingTierCommand(dto, req.user.id));
   }
@@ -144,7 +161,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update pricing tier' })
-  @CacheInvalidate(['landing:home:*', 'landing:programs:*', 'landing:program:*', 'program:detail:*'])
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async updatePricingTier(@Param('itemId') itemId: string, @Body() dto: UpdateProgramPricingTierDto, @Request() req: AuthenticatedRequest) {
     return this.updateProgramPricingTierHandler.execute(new UpdateProgramPricingTierCommand(itemId, dto, req.user.id));
   }
@@ -153,7 +170,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete pricing tier' })
-  @CacheInvalidate(['landing:home:*', 'landing:programs:*', 'landing:program:*', 'program:detail:*'])
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async deletePricingTier(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
     return this.deleteProgramPricingTierHandler.execute(new DeleteProgramPricingTierCommand(itemId, req.user.id));
   }
@@ -163,7 +180,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add validity period to a pricing tier' })
-  @CacheInvalidate(['landing:home:*', 'landing:programs:*', 'landing:program:*', 'program:detail:*'])
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async addValidityPeriod(@Param('tierId') tierId: string, @Body() dto: CreateValidityPeriodDto, @Request() req: AuthenticatedRequest) {
     return this.createValidityPeriodHandler.execute(new CreateValidityPeriodCommand({ ...dto, pricingTierId: tierId }, req.user.id));
   }
@@ -172,7 +189,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a validity period' })
-  @CacheInvalidate(['landing:home:*', 'landing:programs:*', 'landing:program:*', 'program:detail:*'])
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async updateValidityPeriod(@Param('periodId') periodId: string, @Body() dto: UpdateValidityPeriodDto, @Request() req: AuthenticatedRequest) {
     return this.updateValidityPeriodHandler.execute(new UpdateValidityPeriodCommand(periodId, dto, req.user.id));
   }
@@ -181,7 +198,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a validity period' })
-  @CacheInvalidate(['landing:home:*', 'landing:programs:*', 'landing:program:*', 'program:detail:*'])
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async deleteValidityPeriod(@Param('periodId') periodId: string, @Request() req: AuthenticatedRequest) {
     return this.deleteValidityPeriodHandler.execute(new DeleteValidityPeriodCommand(periodId, req.user.id));
   }
@@ -199,6 +216,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add requirement' })
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async addRequirement(@Param('id') programId: string, @Body() dto: CreateProgramRequirementDto, @Request() req: AuthenticatedRequest) {
     return this.createProgramRequirementHandler.execute(new CreateProgramRequirementCommand(dto, req.user.id));
   }
@@ -207,6 +225,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update requirement' })
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async updateRequirement(@Param('itemId') itemId: string, @Body() dto: UpdateProgramRequirementDto, @Request() req: AuthenticatedRequest) {
     return this.updateProgramRequirementHandler.execute(new UpdateProgramRequirementCommand(itemId, dto, req.user.id));
   }
@@ -215,6 +234,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete requirement' })
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async deleteRequirement(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
     return this.deleteProgramRequirementHandler.execute(new DeleteProgramRequirementCommand(itemId, req.user.id));
   }
@@ -254,6 +274,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add essay' })
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async addEssay(@Param('id') programId: string, @Body() dto: CreateProgramEssayDto, @Request() req: AuthenticatedRequest) {
     return this.createProgramEssayHandler.execute(new CreateProgramEssayCommand(dto, req.user.id));
   }
@@ -262,6 +283,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update essay' })
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async updateEssay(@Param('itemId') itemId: string, @Body() dto: UpdateProgramEssayDto, @Request() req: AuthenticatedRequest) {
     return this.updateProgramEssayHandler.execute(new UpdateProgramEssayCommand(itemId, dto, req.user.id));
   }
@@ -270,6 +292,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete essay' })
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async deleteEssay(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
     return this.deleteProgramEssayHandler.execute(new DeleteProgramEssayCommand(itemId, req.user.id));
   }
@@ -278,7 +301,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update shared essay guidelines for a program' })
-  @CacheInvalidate(['program:essays:*', 'portal:submission-detail:*', 'portal:submissions:*', 'portal:dashboard:*'])
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async updateEssayGuidelines(
     @Param('id') programId: string,
     @Body() dto: UpdateProgramEssayGuidelinesDto,
@@ -307,6 +330,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add participation category' })
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async addParticipationCategory(@Param('id') programId: string, @Body() dto: CreateProgramParticipationCategoryDto, @Request() req: AuthenticatedRequest) {
     return this.createProgramParticipationCategoryHandler.execute(new CreateProgramParticipationCategoryCommand(dto, req.user.id));
   }
@@ -315,6 +339,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update participation category' })
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async updateParticipationCategory(@Param('itemId') itemId: string, @Body() dto: UpdateProgramParticipationCategoryDto, @Request() req: AuthenticatedRequest) {
     return this.updateProgramParticipationCategoryHandler.execute(new UpdateProgramParticipationCategoryCommand(itemId, dto, req.user.id));
   }
@@ -323,6 +348,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete participation category' })
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async deleteParticipationCategory(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
     return this.deleteProgramParticipationCategoryHandler.execute(new DeleteProgramParticipationCategoryCommand(itemId, req.user.id));
   }
@@ -345,6 +371,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add subtheme' })
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async addSubtheme(@Param('id') programId: string, @Body() dto: CreateProgramSubthemeDto, @Request() req: AuthenticatedRequest) {
     return this.createProgramSubthemeHandler.execute(new CreateProgramSubthemeCommand(dto, req.user.id));
   }
@@ -353,6 +380,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update subtheme' })
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async updateSubtheme(@Param('itemId') itemId: string, @Body() dto: UpdateProgramSubthemeDto, @Request() req: AuthenticatedRequest) {
     return this.updateProgramSubthemeHandler.execute(new UpdateProgramSubthemeCommand(itemId, dto, req.user.id));
   }
@@ -361,6 +389,7 @@ export class ProgramApplicationConfigController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete subtheme (soft)' })
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async deleteSubtheme(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
     return this.deleteProgramSubthemeHandler.execute(new DeleteProgramSubthemeCommand(itemId, req.user.id));
   }
@@ -379,7 +408,7 @@ export class ProgramApplicationConfigController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add application form field' })
   @ApiResponse({ status: 201, type: ApplicationFormFieldResponseDto })
-  @CacheInvalidate(['portal:submission-detail:*', 'portal:submissions:*', 'portal:dashboard:*'])
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async addFormField(@Param('id') programId: string, @Body() dto: CreateApplicationFormFieldDto, @Request() req: AuthenticatedRequest) {
     return this.createApplicationFormFieldHandler.execute(new CreateApplicationFormFieldCommand(programId, dto, req.user.id));
   }
@@ -389,7 +418,7 @@ export class ProgramApplicationConfigController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update application form field' })
   @ApiResponse({ status: 200, type: ApplicationFormFieldResponseDto })
-  @CacheInvalidate(['portal:submission-detail:*', 'portal:submissions:*', 'portal:dashboard:*'])
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async updateFormField(@Param('itemId') itemId: string, @Body() dto: UpdateApplicationFormFieldDto, @Request() req: AuthenticatedRequest) {
     return this.updateApplicationFormFieldHandler.execute(new UpdateApplicationFormFieldCommand(itemId, dto, req.user.id));
   }
@@ -399,7 +428,7 @@ export class ProgramApplicationConfigController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete application form field' })
   @ApiResponse({ status: 200, description: 'Application form field deleted successfully' })
-  @CacheInvalidate(['portal:submission-detail:*', 'portal:submissions:*', 'portal:dashboard:*'])
+  @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async deleteFormField(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
     return this.deleteApplicationFormFieldHandler.execute(new DeleteApplicationFormFieldCommand(itemId, req.user.id));
   }
