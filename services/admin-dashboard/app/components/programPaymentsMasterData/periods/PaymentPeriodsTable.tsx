@@ -41,7 +41,7 @@ export function PaymentPeriodsTable({
             <p className="text-sm text-zinc-500">List of active schedules for this payment.</p>
           </div>
         </div>
-        <AddPeriodAction tierId={tierId} onSaved={onRefresh} />
+        <AddPeriodAction tierId={tierId} onSaved={onRefresh} periods={data} />
       </div>
 
       <div className="mt-4 overflow-x-auto rounded-xl border border-zinc-200 bg-white">
@@ -99,7 +99,7 @@ export function PaymentPeriodsTable({
                       </td>
                       <td className="px-6 py-4 align-top text-right">
                         <div className="inline-flex items-center justify-end gap-2">
-                          <EditPeriodAction period={baseRow} onSaved={onRefresh} />
+                          <EditPeriodAction period={baseRow} onSaved={onRefresh} periods={data} />
                           <DeletePeriodAction id={baseRow.id} onDeleted={onRefresh} />
                         </div>
                       </td>
@@ -143,7 +143,7 @@ export function PaymentPeriodsTable({
                         </td>
                         <td className="px-6 py-4 align-top text-right">
                           <div className="inline-flex items-center justify-end gap-2">
-                            <EditPeriodAction period={child} onSaved={onRefresh} />
+                            <EditPeriodAction period={child} onSaved={onRefresh} periods={data} />
                             <DeletePeriodAction id={child.id} onDeleted={onRefresh} />
                           </div>
                         </td>
