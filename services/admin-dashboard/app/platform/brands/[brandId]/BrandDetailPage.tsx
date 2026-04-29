@@ -1938,6 +1938,26 @@ function LandingPageTab({ brandId }: { brandId: string }) {
           )}
         </CardContent>
       </Card>
+
+      {/* Partners Page — Affiliate Commission */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Partners Page — Affiliate Commission</CardTitle>
+            <AffiliateCommissionSheet brandId={brandId} initial={meta.affiliateCommission ?? null} onSaved={setMeta} />
+          </div>
+        </CardHeader>
+        <CardContent>
+          {meta.affiliateCommission ? (
+            <div className="grid grid-cols-2 gap-4">
+              <FieldView label="Fully-funded %" value={`${meta.affiliateCommission.fullyFundedPct}%`} />
+              <FieldView label="Self-funded %" value={`${meta.affiliateCommission.selfFundedPct}%`} />
+            </div>
+          ) : (
+            <p className="text-sm text-zinc-400">Using defaults (5% fully-funded, 20% self-funded). Set custom percentages to override.</p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -1998,6 +2018,134 @@ function PartnersCanvaSheet({
             {error && <p className="text-sm text-red-500">{error}</p>}
           </div>
           <SheetFooter className="mt-6">
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? "Saving…" : "Save"}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+    </>
+  );
+}
+
+// ─── Sheet: Affiliate Commission ───────────────────────────────────────────
+
+function AffiliateCommissionSheet({
+  brandId,
+  initial,
+  onSaved,
+}: {
+  brandId: string;
+  initial: { fullyFundedPct: number; selfFundedPct: number } | null;
+  onSaved: (updated: BrandMetadata) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [fullyFunded, setFullyFunded] = useState(String(initial?.fullyFundedPct ?? ""));
+  const [selfFunded, setSelfFunded] = useState(String(initial?.selfFundedPct ?? ""));
+
+  function reset() {
+    setFullyFunded(String(initial?.fullyFundedPct ?? ""));
+    setSelfFunded(String(initial?.selfFundedPct ?? ""));
+    setError(null);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    try {
+      const fullyTrim = fullyFunded.trim();
+      const selfTrim = selfFunded.trim();
+
+      // Both blank → clear the override (revert to defaults)
+      if (!fullyTrim && !selfTrim) {
+        const updated = await updatePlatformBrandMetadata(brandId, { affiliateCommission: null });
+        onSaved(updated);
+        setOpen(false);
+        return;
+      }
+
+      const fullyNum = Number(fullyTrim);
+      const selfNum = Number(selfTrim);
+      const valid = (n: number) => Number.isFinite(n) && n >= 0 && n <= 100;
+      if (!valid(fullyNum) || !valid(selfNum)) {
+        setError("Both percentages must be numbers between 0 and 100, or both blank to use defaults.");
+        return;
+      }
+
+      const updated = await updatePlatformBrandMetadata(brandId, {
+        affiliateCommission: { fullyFundedPct: fullyNum, selfFundedPct: selfNum },
+      });
+      onSaved(updated);
+      setOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleClear() {
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await updatePlatformBrandMetadata(brandId, { affiliateCommission: null });
+      onSaved(updated);
+      setOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to clear.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <Button size="sm" variant="outline" onClick={() => { reset(); setOpen(true); }}>
+        <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
+      </Button>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent side="right" className="sm:max-w-md overflow-y-auto">
+          <SheetHeader><SheetTitle>Edit Affiliate Commission</SheetTitle></SheetHeader>
+          <div className="mt-6 space-y-4">
+            <p className="text-xs text-zinc-400">
+              Percentages shown on the Partners page for the Affiliate Program tier. Leave both blank to use the platform defaults (5% fully-funded, 20% self-funded).
+            </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="affiliate-fully-funded">Fully-funded %</Label>
+              <Input
+                id="affiliate-fully-funded"
+                type="number"
+                min={0}
+                max={100}
+                step={0.1}
+                value={fullyFunded}
+                onChange={(e) => { setFullyFunded(e.target.value); setError(null); }}
+                placeholder="5"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="affiliate-self-funded">Self-funded %</Label>
+              <Input
+                id="affiliate-self-funded"
+                type="number"
+                min={0}
+                max={100}
+                step={0.1}
+                value={selfFunded}
+                onChange={(e) => { setSelfFunded(e.target.value); setError(null); }}
+                placeholder="20"
+              />
+            </div>
+            {error && <p className="text-sm text-red-500">{error}</p>}
+          </div>
+          <SheetFooter className="mt-6 flex gap-2">
+            {initial && (
+              <Button variant="outline" onClick={handleClear} disabled={saving}>
+                Reset to defaults
+              </Button>
+            )}
             <Button onClick={handleSave} disabled={saving}>
               {saving ? "Saving…" : "Save"}
             </Button>

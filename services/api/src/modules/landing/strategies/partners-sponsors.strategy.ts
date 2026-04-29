@@ -44,6 +44,22 @@ export class PartnersSponsorsStrategy implements ILandingPageStrategy {
       ? metadata.partners_canva_url.trim()
       : null;
 
+    // Brand-level affiliate commission overrides. Stored under
+    // metadata.affiliateCommission as { fullyFundedPct, selfFundedPct } via the
+    // brand metadata admin endpoint. The frontend expects snake_case keys here,
+    // so we translate at the boundary.
+    const affiliateRaw = (metadata.affiliateCommission ?? null) as
+      | { fullyFundedPct?: unknown; selfFundedPct?: unknown }
+      | null;
+    const fullyFundedPct =
+      typeof affiliateRaw?.fullyFundedPct === 'number' ? affiliateRaw.fullyFundedPct : null;
+    const selfFundedPct =
+      typeof affiliateRaw?.selfFundedPct === 'number' ? affiliateRaw.selfFundedPct : null;
+    const affiliateCommission =
+      fullyFundedPct !== null && selfFundedPct !== null
+        ? { fully_funded_pct: fullyFundedPct, self_funded_pct: selfFundedPct }
+        : null;
+
     const sections: unknown[] = [
       {
         type: 'hero',
@@ -87,6 +103,7 @@ export class PartnersSponsorsStrategy implements ILandingPageStrategy {
         content: {
           text: 'Interested in partnering with us?',
           link: '/contact',
+          ...(affiliateCommission ? { affiliate_commission: affiliateCommission } : {}),
         },
       },
     );

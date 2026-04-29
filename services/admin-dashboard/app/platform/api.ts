@@ -490,6 +490,11 @@ export type BrandMomentsShorts = {
   description?: string;
 };
 
+export type AffiliateCommissionMetadata = {
+  fullyFundedPct: number;
+  selfFundedPct: number;
+};
+
 export type BrandMetadata = {
   benefits?: { eyebrow: string; title: string; groups: BenefitGroup[] };
   features?: BrandFeature[];
@@ -497,6 +502,7 @@ export type BrandMetadata = {
   promo_cta?: BrandPromoCta;
   moments_shorts?: BrandMomentsShorts;
   partners_canva_url?: string | null;
+  affiliateCommission?: AffiliateCommissionMetadata | null;
   recognition?: Record<string, unknown>;
   payment_info?: Record<string, unknown>;
   participant_demographics?: Record<string, unknown>;
