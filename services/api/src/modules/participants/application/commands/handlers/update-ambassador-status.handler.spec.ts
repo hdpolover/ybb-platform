@@ -2,6 +2,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UpdateAmbassadorStatusHandler } from './update-ambassador-status.handler';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
+import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
 import { UpdateAmbassadorStatusCommand } from '../ambassador-admin.commands';
 import { NotFoundException } from '@nestjs/common';
 
@@ -14,6 +15,14 @@ describe('UpdateAmbassadorStatusHandler', () => {
             findUnique: jest.fn(),
             update: jest.fn(),
         },
+        participant: {
+            findFirst: jest.fn().mockResolvedValue(null),
+        },
+    };
+
+    const mockCacheService = {
+        invalidateKey: jest.fn().mockResolvedValue(undefined),
+        invalidateByPattern: jest.fn().mockResolvedValue(undefined),
     };
 
     beforeEach(async () => {
@@ -21,13 +30,16 @@ describe('UpdateAmbassadorStatusHandler', () => {
             providers: [
                 UpdateAmbassadorStatusHandler,
                 { provide: PrismaService, useValue: mockPrismaService },
+                { provide: CacheService, useValue: mockCacheService },
             ],
         }).compile();
 
         handler = module.get<UpdateAmbassadorStatusHandler>(UpdateAmbassadorStatusHandler);
         prismaService = module.get<PrismaService>(PrismaService);
-        
+
         jest.clearAllMocks();
+        // Restore default no-op for participant lookup used in cache invalidation
+        mockPrismaService.participant.findFirst.mockResolvedValue(null);
     });
 
     it('should be defined', () => {

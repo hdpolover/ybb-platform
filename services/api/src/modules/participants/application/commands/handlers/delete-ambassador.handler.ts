@@ -1,18 +1,26 @@
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
-import { NotFoundException } from '@nestjs/common';
+import { Logger, NotFoundException } from '@nestjs/common';
 import { DeleteAmbassadorCommand } from '../delete-ambassador.command';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS } from '@shared/constants/cache-keys';
 
 @CommandHandler(DeleteAmbassadorCommand)
 export class DeleteAmbassadorHandler implements ICommandHandler<DeleteAmbassadorCommand> {
-    constructor(private readonly prisma: PrismaService) {}
+    private readonly logger = new Logger(DeleteAmbassadorHandler.name);
+
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly cacheService: CacheService,
+    ) {}
 
     async execute(command: DeleteAmbassadorCommand): Promise<{ success: boolean }> {
         const { ambassadorId, deletedBy } = command;
 
+        // Fetch userId before mutation so we can invalidate caches afterwards
         const ambassador = await this.prisma.ambassador.findUnique({
             where: { id: ambassadorId },
-            select: { id: true, deletedAt: true },
+            select: { id: true, userId: true, deletedAt: true },
         });
 
         if (!ambassador) {
@@ -32,6 +40,37 @@ export class DeleteAmbassadorHandler implements ICommandHandler<DeleteAmbassador
             },
         });
 
+        // Invalidate participant-related portal caches
+        await this.invalidateParticipantCaches(ambassador.userId);
+
         return { success: true };
+    }
+
+    private async invalidateParticipantCaches(userId: string): Promise<void> {
+        try {
+            const participant = await this.prisma.participant.findFirst({ where: { userId }, select: { id: true } });
+            const participantId = participant?.id;
+
+            const keys = [
+                CACHE_KEYS.PORTAL_DASHBOARD(userId),
+                CACHE_KEYS.PORTAL_DOCUMENTS(userId),
+                CACHE_KEYS.PARTICIPANT_PROFILE(userId),
+                ...(participantId ? [
+                    CACHE_KEYS.PARTICIPANT_STATS(participantId),
+                    CACHE_KEYS.PARTICIPANT_LATEST_APP(participantId),
+                ] : []),
+            ];
+            const patterns = [
+                `portal:submissions:${userId}:*`,
+                `portal:submission-detail:${userId}:*`,
+                `portal:payments:${userId}:*`,
+            ];
+            await Promise.all([
+                ...keys.map(k => this.cacheService.invalidateKey(k)),
+                ...patterns.map(p => this.cacheService.invalidateByPattern(p)),
+            ]);
+        } catch (error) {
+            this.logger.warn(`Failed to invalidate caches for user ${userId}: ${error instanceof Error ? error.message : String(error)}`);
+        }
     }
 }

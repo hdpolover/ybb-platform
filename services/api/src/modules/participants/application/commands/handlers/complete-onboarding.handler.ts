@@ -6,6 +6,8 @@ import { Gender } from '@prisma/client';
 import { Country } from 'country-state-city';
 import { Logger, BadRequestException } from '@nestjs/common';
 import { ReferralFunnelService } from '../../services/referral-funnel.service';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS } from '@shared/constants/cache-keys';
 
 @CommandHandler(CompleteOnboardingCommand)
 export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboardingCommand> {
@@ -15,6 +17,7 @@ export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboar
         private readonly prisma: PrismaService,
         private readonly unitOfWork: UnitOfWork,
         private readonly referralFunnel: ReferralFunnelService,
+        private readonly cacheService: CacheService,
     ) {}
 
     async execute(command: CompleteOnboardingCommand) {
@@ -125,6 +128,32 @@ export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboar
         // Advance referral funnel: referred → registered
         await this.referralFunnel.advanceToRegistered(result.id);
 
+        // Invalidate participant-related portal caches
+        await this.invalidateParticipantCaches(userId, result.id);
+
         return result;
+    }
+
+    private async invalidateParticipantCaches(userId: string, participantId: string): Promise<void> {
+        try {
+            const keys = [
+                CACHE_KEYS.PORTAL_DASHBOARD(userId),
+                CACHE_KEYS.PORTAL_DOCUMENTS(userId),
+                CACHE_KEYS.PARTICIPANT_PROFILE(userId),
+                CACHE_KEYS.PARTICIPANT_STATS(participantId),
+                CACHE_KEYS.PARTICIPANT_LATEST_APP(participantId),
+            ];
+            const patterns = [
+                `portal:submissions:${userId}:*`,
+                `portal:submission-detail:${userId}:*`,
+                `portal:payments:${userId}:*`,
+            ];
+            await Promise.all([
+                ...keys.map(k => this.cacheService.invalidateKey(k)),
+                ...patterns.map(p => this.cacheService.invalidateByPattern(p)),
+            ]);
+        } catch (error) {
+            this.logger.warn(`Failed to invalidate caches for participant ${participantId}: ${error instanceof Error ? error.message : String(error)}`);
+        }
     }
 }
