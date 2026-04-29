@@ -31,6 +31,13 @@ async function resolveProgramId(
     return program ? program.id : null;
 }
 
+function toIsoOrNull(value: unknown): string | null {
+    if (!value) return null;
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value === 'string') return value;
+    return null;
+}
+
 @Injectable()
 export class ListProgramTimelineHandler {
     constructor(
@@ -253,6 +260,9 @@ export class ListProgramPricingTiersHandler {
         const items = await this.repository.findPricingTiersByProgramId(programId);
         return items.map(item => ({
             ...item,
+            createdAt: toIsoOrNull(item.createdAt),
+            updatedAt: toIsoOrNull(item.updatedAt),
+            deletedAt: toIsoOrNull((item as { deletedAt?: unknown }).deletedAt),
             description: item.description ?? undefined,
             price: Number(item.price),
             capacity: item.capacity ?? undefined,
@@ -262,8 +272,13 @@ export class ListProgramPricingTiersHandler {
             icon: item.icon ?? undefined,
             requirements: item.requirements ?? undefined,
             validityPeriods: item.validityPeriods.map(vp => ({
-                startDate: vp.startDate,
-                endDate: vp.endDate
+                id: vp.id,
+                pricingTierId: vp.pricingTierId,
+                startDate: toIsoOrNull(vp.startDate),
+                endDate: toIsoOrNull(vp.endDate),
+                description: vp.description ?? undefined,
+                createdAt: toIsoOrNull((vp as { createdAt?: unknown }).createdAt),
+                updatedAt: toIsoOrNull((vp as { updatedAt?: unknown }).updatedAt),
             })),
             // Explicitly remove old fields if they still exist in the spread but not in type
             validFrom: undefined,
@@ -284,6 +299,9 @@ export class GetPricingTierByIdHandler {
         if (!tier) return null;
         return {
             ...tier,
+            createdAt: toIsoOrNull(tier.createdAt),
+            updatedAt: toIsoOrNull(tier.updatedAt),
+            deletedAt: toIsoOrNull((tier as { deletedAt?: unknown }).deletedAt),
             price: Number(tier.price),
             description: tier.description ?? undefined,
             capacity: tier.capacity ?? undefined,
@@ -295,9 +313,11 @@ export class GetPricingTierByIdHandler {
             validityPeriods: tier.validityPeriods.map(vp => ({
                 id: vp.id,
                 pricingTierId: vp.pricingTierId,
-                startDate: vp.startDate,
-                endDate: vp.endDate,
+                startDate: toIsoOrNull(vp.startDate),
+                endDate: toIsoOrNull(vp.endDate),
                 description: vp.description ?? undefined,
+                createdAt: toIsoOrNull((vp as { createdAt?: unknown }).createdAt),
+                updatedAt: toIsoOrNull((vp as { updatedAt?: unknown }).updatedAt),
             })),
         };
     }

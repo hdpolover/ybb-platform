@@ -357,10 +357,19 @@ export class ProgramDetailResponseDto {
   shortDescription?: string;
 
   @ApiProperty()
+  year: number;
+
+  @ApiProperty({ required: false, nullable: true })
+  theme?: string | null;
+
+  @ApiProperty()
   startDate?: Date;
 
   @ApiProperty()
   endDate?: Date;
+
+  @ApiProperty()
+  applicationDeadline?: Date;
 
   @ApiProperty()
   registrationOpenDate?: Date;
@@ -388,6 +397,9 @@ export class ProgramDetailResponseDto {
 
   @ApiProperty()
   isActive: boolean;
+
+  @ApiProperty()
+  isPublished: boolean;
 
   @ApiProperty()
   isVisibleToUsers: boolean;

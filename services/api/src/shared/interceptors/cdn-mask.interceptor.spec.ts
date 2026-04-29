@@ -47,4 +47,28 @@ describe('CdnMaskInterceptor', () => {
       'https://api.ybbhub.com/v1/files/123e4567-e89b-12d3-a456-426614174000/download',
     );
   });
+
+  it('does not rewrite presigned upload URLs', async () => {
+    const presignedUrl =
+      'https://sgp1.digitaloceanspaces.com/resources/123e4567-e89b-12d3-a456-426614174000.pdf?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=test';
+    const handler: CallHandler = {
+      handle: () =>
+        of({
+          upload_url: presignedUrl,
+          nested: {
+            uploadUrl: presignedUrl,
+          },
+        }),
+    };
+
+    const result = (await lastValueFrom(
+      interceptor.intercept(makeContext(), handler),
+    )) as {
+      upload_url: string;
+      nested: { uploadUrl: string };
+    };
+
+    expect(result.upload_url).toBe(presignedUrl);
+    expect(result.nested.uploadUrl).toBe(presignedUrl);
+  });
 });

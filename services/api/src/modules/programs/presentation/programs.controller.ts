@@ -41,6 +41,7 @@ interface ProgramLike {
   name: string;
   slug: string;
   description?: string | null;
+  theme?: string | null;
   year: number;
   startDate: Date;
   endDate: Date;
@@ -172,6 +173,7 @@ export class ProgramsController {
       name: program.name,
       slug: program.slug,
       description: program.description ?? null,
+      theme: program.theme ?? null,
       year: program.year,
       startDate: program.startDate,
       endDate: program.endDate,

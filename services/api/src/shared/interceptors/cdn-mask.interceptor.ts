@@ -38,8 +38,26 @@ const DIRECT_MEDIA_EXTENSIONS = new Set([
   'opus',
 ]);
 
-function maskUrls(value: unknown, apiBase: string): unknown {
+const PRESIGNED_UPLOAD_FIELDS = new Set([
+  'upload_url',
+  'uploadUrl',
+  'presigned_upload_url',
+  'presignedUploadUrl',
+]);
+
+function isPresignedStorageUrl(url: string): boolean {
+  return /[?&]X-Amz-Algorithm=/i.test(url) || /[?&]X-Amz-Signature=/i.test(url);
+}
+
+function maskUrls(value: unknown, apiBase: string, parentKey?: string): unknown {
   if (typeof value === 'string') {
+    // Never rewrite signed storage URLs used for direct-to-storage uploads.
+    if (
+      (parentKey && PRESIGNED_UPLOAD_FIELDS.has(parentKey)) ||
+      isPresignedStorageUrl(value)
+    ) {
+      return value;
+    }
     return value.replace(UUID_FILE_RE, (match, fileId: string, ext: string) => {
       if (DIRECT_MEDIA_EXTENSIONS.has(ext.toLowerCase())) {
         return match;
@@ -48,7 +66,7 @@ function maskUrls(value: unknown, apiBase: string): unknown {
     });
   }
   if (Array.isArray(value)) {
-    return value.map((item) => maskUrls(item, apiBase));
+    return value.map((item) => maskUrls(item, apiBase, parentKey));
   }
   // Don't traverse Buffers, streams, or StreamableFile-shaped objects — recursing
   // through them via Object.entries breaks binary downloads (collapses streams to
@@ -73,7 +91,7 @@ function maskUrls(value: unknown, apiBase: string): unknown {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>).map(([k, v]) => [
         k,
-        maskUrls(v, apiBase),
+        maskUrls(v, apiBase, k),
       ]),
     );
   }

@@ -114,6 +114,7 @@ export class ProgramRepository implements IProgramRepository {
                 slug: data.slug!,
                 description: data.description,
                 shortDescription: data.shortDescription,
+                theme: data.theme,
                 year: data.year!,
                 startDate: data.startDate!,
                 endDate: data.endDate!,
@@ -169,6 +170,7 @@ export class ProgramRepository implements IProgramRepository {
                 programType: data.programType,
                 programFormat: data.programFormat,
                 year: data.year,
+                theme: data.theme,
                 startDate: data.startDate,
                 endDate: data.endDate,
                 applicationDeadline: data.applicationDeadline,
@@ -266,6 +268,7 @@ export class ProgramRepository implements IProgramRepository {
             prismaEntity.updatedAt,
             prismaEntity.deletedAt,
             (prismaEntity as Record<string, unknown> & { brand?: { name?: string } }).brand?.name ?? null,
+            prismaEntity.theme,
         );
     }
 }

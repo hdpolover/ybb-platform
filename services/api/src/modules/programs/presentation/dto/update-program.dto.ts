@@ -146,11 +146,6 @@ export class UpdateProgramDto {
     @IsOptional()
     isActive?: boolean;
 
-    @ApiProperty({ description: 'Is fully funded', required: false })
-    @IsBoolean()
-    @IsOptional()
-    isFullyFunded?: boolean;
-
     @ApiProperty({ description: 'Exchange rate (1 USD = ? IDR) for this program', required: false, example: 16000 })
     @IsNumber()
     @IsOptional()
