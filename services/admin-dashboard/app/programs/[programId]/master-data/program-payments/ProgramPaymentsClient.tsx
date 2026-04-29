@@ -6,8 +6,21 @@ import type { PaymentOptionRow } from "@/app/components/programPaymentsMasterDat
 import { getPricingTiers } from "@/app/platform/api";
 import type { PricingTier } from "@/app/platform/api";
 
-function parseDateLike(value: string | null | undefined): Date | null {
+function parseDateLike(value: unknown): Date | null {
   if (!value) return null;
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  if (typeof value === "number") {
+    const dateFromNumber = new Date(value);
+    return Number.isNaN(dateFromNumber.getTime()) ? null : dateFromNumber;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
 
   const direct = new Date(value);
   if (!Number.isNaN(direct.getTime())) return direct;
@@ -26,7 +39,7 @@ function parseDateLike(value: string | null | undefined): Date | null {
 
 function tierToRow(tier: PricingTier, index: number): PaymentOptionRow {
   const now = new Date();
-  const periodBounds = tier.validityPeriods.map((vp) => ({
+  const periodBounds = (tier.validityPeriods ?? []).map((vp) => ({
     period: vp,
     start: parseDateLike(vp.startDate),
     end: parseDateLike(vp.endDate),
@@ -38,7 +51,7 @@ function tierToRow(tier: PricingTier, index: number): PaymentOptionRow {
     ({ start }) => Boolean(start && start > now),
   )?.period;
 
-  const fmtRange = (start: string, end: string) => {
+  const fmtRange = (start: unknown, end: unknown) => {
     const startDate = parseDateLike(start);
     const endDate = parseDateLike(end);
     if (!startDate || !endDate) return "—";
@@ -89,15 +102,22 @@ export function ProgramPaymentsClient({
 }) {
   const [rows, setRows] = useState<PaymentOptionRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+  const [search] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const tiers = await getPricingTiers(programId);
       setRows(tiers.map((t, i) => tierToRow(t, i)));
-    } catch {
+    } catch (err) {
       setRows([]);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to load payment options. Please try again.",
+      );
     } finally {
       setLoading(false);
     }
@@ -136,6 +156,11 @@ export function ProgramPaymentsClient({
       </section>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+        {error ? (
+          <div className="mb-4 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            {error}
+          </div>
+        ) : null}
         {loading ? (
           <div className="py-12 text-center text-sm text-zinc-400">Loading payment options…</div>
         ) : (
