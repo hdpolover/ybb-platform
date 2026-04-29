@@ -15,6 +15,7 @@ const AUTH_TARGET_PROGRAM_SELECT = {
   registrationCloseDate: true,
   startDate: true,
   createdAt: true,
+  requireEmailVerification: true,
 } satisfies Prisma.ProgramSelect;
 
 type AuthTargetProgram = Prisma.ProgramGetPayload<{

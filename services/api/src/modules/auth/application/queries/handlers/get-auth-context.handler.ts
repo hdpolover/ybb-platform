@@ -54,13 +54,20 @@ export class GetAuthContextHandler {
         const program = await this.prisma.program.findFirst({
             where: { brandId: brand.id, isPublished: true, isActive: true },
             orderBy: [{ year: 'desc' }, { createdAt: 'desc' }],
-            select: { id: true, slug: true },
+            select: { id: true, slug: true, requireEmailVerification: true },
         });
+
+        // Program-level setting is authoritative when a program is found;
+        // brand-level is the fallback. Read uncached — if a cache is added
+        // later, invalidate on PUT /v1/brands/:id/settings and PUT /v1/programs/:id.
+        const requireEmailVerification = program
+            ? program.requireEmailVerification
+            : (brand.requireEmailVerification ?? true);
 
         return {
             brandDomain,
             brandId: brand.id,
-            requireEmailVerification: brand.requireEmailVerification ?? true,
+            requireEmailVerification,
             programId: program?.id ?? null,
             programSlug: program?.slug ?? null,
             localProviderId,

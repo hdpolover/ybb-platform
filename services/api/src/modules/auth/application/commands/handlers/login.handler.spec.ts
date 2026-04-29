@@ -235,7 +235,7 @@ describe('LoginHandler', () => {
   it('resolves the brand from domain and logs into the matching same-email account', async () => {
     mockPrismaService.brand.findFirst
       .mockResolvedValueOnce({ id: 'brand-2' });
-    mockPrismaService.program.findUnique.mockResolvedValueOnce({
+    mockPrismaService.program.findUnique.mockResolvedValue({
       id: 'program-2',
       brandId: 'brand-2',
       name: 'Brand Two Program',
@@ -248,6 +248,7 @@ describe('LoginHandler', () => {
       registrationCloseDate: null,
       startDate: new Date('2026-06-01T00:00:00.000Z'),
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      requireEmailVerification: false,
     });
 
     const command = new LoginCommand(
@@ -374,5 +375,34 @@ describe('LoginHandler', () => {
         requireEmailVerification: true,
       },
     });
+  });
+
+  it('allows unverified user when selected program does not require verification even if brand does', async () => {
+    mockPrismaService.user.findUnique.mockImplementationOnce(async () => ({
+      ...brandOneUser,
+      emailVerified: false,
+      brand: {
+        ...brandOneUser.brand,
+        requireEmailVerification: true,
+      },
+    }));
+
+    mockPrismaService.program.findUnique.mockResolvedValueOnce({
+      id: 'program-1',
+      brandId: 'brand-1',
+      requireEmailVerification: false,
+    });
+
+    const command = new LoginCommand(
+      'same@example.com',
+      'password123',
+      '127.0.0.1',
+      'Mozilla/5.0',
+      'brand-1',
+      'program-1',
+    );
+
+    const result = await handler.execute(command);
+    expect(result.user.id).toBe('user-brand-1');
   });
 });
