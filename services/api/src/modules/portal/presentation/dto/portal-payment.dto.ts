@@ -77,6 +77,9 @@ export class AvailablePaymentDto {
     @ApiPropertyOptional({ description: 'Tier visibility start date' })
     startDate?: Date;
 
+    @ApiPropertyOptional({ description: 'Tier deadline end date' })
+    dueDate?: Date;
+
     @ApiPropertyOptional({ description: 'Ordering hint from pricing tier' })
     sequenceOrder?: number;
 }
