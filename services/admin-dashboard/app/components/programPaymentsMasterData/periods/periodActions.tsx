@@ -36,7 +36,9 @@ function PeriodSheet({
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const description = (fd.get("name") as string).trim();
+    const periodName = (fd.get("name") as string).trim();
+    const descriptionField = (fd.get("description") as string | null)?.trim() ?? "";
+    const description = descriptionField || periodName;
     const startDateInput = fd.get("startDate") as string;
     const endDateInput = fd.get("endDate") as string;
 

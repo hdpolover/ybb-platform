@@ -5,6 +5,16 @@ import { CacheService } from '../../../shared/infrastructure/cache/cache.service
 import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
 import { Brand } from '@prisma/client';
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function toUtcDayStartMs(value: Date): number {
+    return Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate());
+}
+
+function getInclusiveUtcDaySpan(start: Date, end: Date): number {
+    return Math.floor((toUtcDayStartMs(end) - toUtcDayStartMs(start)) / DAY_MS) + 1;
+}
+
 @Injectable()
 export class ProgramsStrategy implements ILandingPageStrategy {
     constructor(
@@ -205,7 +215,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                     program_format: currentProgram.programFormat,
                     start_date: currentProgram.startDate,
                     end_date: currentProgram.endDate,
-                    duration: `${Math.ceil((currentProgram.endDate.getTime() - currentProgram.startDate.getTime()) / (1000 * 60 * 60 * 24))} Days`,
+                    duration: `${getInclusiveUtcDaySpan(currentProgram.startDate, currentProgram.endDate)} Days`,
                     guidebooks: currentProgram.resources.map(r => ({
                         label: `Read Guidebook (${r.title})`,
                         url: r.fileUrl
