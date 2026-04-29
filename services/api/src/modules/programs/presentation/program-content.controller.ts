@@ -4,6 +4,8 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
 import { Public } from '../../../shared/decorators/public.decorator';
+import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
+import { PROGRAM_CONTENT_PATTERNS } from '../../../shared/constants/cache-patterns';
 
 import {
   ProgramGalleryResponseDto,
@@ -96,6 +98,7 @@ export class ProgramContentController {
   @ApiOperation({ summary: 'Add gallery item' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('image'))
+  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
   async addGallery(
     @Param('id') programId: string, 
     @Body() dto: CreateProgramGalleryDto, 
@@ -111,6 +114,7 @@ export class ProgramContentController {
   @ApiOperation({ summary: 'Update gallery item' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('image'))
+  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
   async updateGallery(
     @Param('itemId') itemId: string, 
     @Body() dto: UpdateProgramGalleryDto, 
@@ -124,6 +128,7 @@ export class ProgramContentController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete gallery item' })
+  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
   async deleteGallery(@Param('itemId') itemId: string, @Request() req: ExpressRequest & { user: { id: string } }) {
     return this.deleteProgramGalleryHandler.execute(new DeleteProgramGalleryCommand(itemId, req.user.id));
   }
@@ -141,6 +146,7 @@ export class ProgramContentController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add testimonial' })
+  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
   async addTestimonial(@Param('id') programId: string, @Body() dto: CreateProgramTestimonialDto, @Request() req: ExpressRequest & { user: { id: string } }) {
     return this.createProgramTestimonialHandler.execute(new CreateProgramTestimonialCommand(dto, req.user.id));
   }
@@ -149,6 +155,7 @@ export class ProgramContentController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update testimonial' })
+  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
   async updateTestimonial(@Param('itemId') itemId: string, @Body() dto: UpdateProgramTestimonialDto, @Request() req: ExpressRequest & { user: { id: string } }) {
     return this.updateProgramTestimonialHandler.execute(new UpdateProgramTestimonialCommand(itemId, dto, req.user.id));
   }
@@ -157,6 +164,7 @@ export class ProgramContentController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete testimonial' })
+  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
   async deleteTestimonial(@Param('itemId') itemId: string, @Request() req: ExpressRequest & { user: { id: string } }) {
     return this.deleteProgramTestimonialHandler.execute(new DeleteProgramTestimonialCommand(itemId, req.user.id));
   }
@@ -174,6 +182,7 @@ export class ProgramContentController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add FAQ' })
+  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
   async addFaq(@Param('id') programId: string, @Body() dto: CreateProgramFaqDto, @Request() req: ExpressRequest & { user: { id: string } }) {
     return this.createProgramFaqHandler.execute(new CreateProgramFaqCommand(dto, req.user.id));
   }
@@ -182,6 +191,7 @@ export class ProgramContentController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update FAQ' })
+  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
   async updateFaq(@Param('itemId') itemId: string, @Body() dto: UpdateProgramFaqDto, @Request() req: ExpressRequest & { user: { id: string } }) {
     return this.updateProgramFaqHandler.execute(new UpdateProgramFaqCommand(itemId, dto, req.user.id));
   }
@@ -190,6 +200,7 @@ export class ProgramContentController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete FAQ' })
+  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
   async deleteFaq(@Param('itemId') itemId: string, @Request() req: ExpressRequest & { user: { id: string } }) {
     return this.deleteProgramFaqHandler.execute(new DeleteProgramFaqCommand(itemId, req.user.id));
   }
@@ -209,6 +220,7 @@ export class ProgramContentController {
   @ApiOperation({ summary: 'Add resource' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('file'))
+  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
   async addResource(
     @Param('id') programId: string, 
     @Body() dto: CreateProgramResourceDto, 
@@ -224,6 +236,7 @@ export class ProgramContentController {
   @ApiOperation({ summary: 'Update resource' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('file'))
+  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
   async updateResource(
     @Param('itemId') itemId: string, 
     @Body() dto: UpdateProgramResourceDto, 
@@ -237,6 +250,7 @@ export class ProgramContentController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete resource' })
+  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
   async deleteResource(@Param('itemId') itemId: string, @Request() req: ExpressRequest & { user: { id: string } }) {
     return this.deleteProgramResourceHandler.execute(new DeleteProgramResourceCommand(itemId, req.user.id));
   }
@@ -258,6 +272,7 @@ export class ProgramContentController {
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data', 'application/json')
   @ApiOperation({ summary: 'Create a document template' })
+  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
   async createDocumentTemplate(
     @Param('id') programId: string,
     @Body() dto: CreateDocumentTemplateDto,
@@ -274,6 +289,7 @@ export class ProgramContentController {
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data', 'application/json')
   @ApiOperation({ summary: 'Update a document template' })
+  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
   async updateDocumentTemplate(
     @Param('itemId') id: string,
     @Body() dto: UpdateDocumentTemplateDto,
@@ -287,6 +303,7 @@ export class ProgramContentController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a document template' })
+  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
   async deleteDocumentTemplate(
     @Param('itemId') id: string,
     @Request() req: ExpressRequest & { user: { id: string } },
