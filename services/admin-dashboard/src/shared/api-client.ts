@@ -261,6 +261,46 @@ export type ProgramTimeline = {
   isActive: boolean;
 };
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function asString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function asNumber(value: unknown, fallback = 0): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function asBoolean(value: unknown, fallback = false): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function pickTimelineDate(source: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return "";
+}
+
+function normalizeProgramTimeline(raw: unknown): ProgramTimeline {
+  const source = asRecord(raw);
+  return {
+    id: asString(source.id),
+    programId: asString(source.programId ?? source.program_id),
+    title: asString(source.title),
+    description:
+      typeof source.description === "string" ? source.description : null,
+    date: pickTimelineDate(source, ["date", "startDate", "start_date"]),
+    endDate: pickTimelineDate(source, ["endDate", "end_date"]) || null,
+    order: asNumber(source.order),
+    type: asString(source.type, "custom"),
+    isActive: asBoolean(source.isActive ?? source.is_active, true),
+  };
+}
+
 export type ProgramSchedule = {
   id: string;
   programId: string;
@@ -802,27 +842,29 @@ export function deleteProgramTestimonial(id: string): Promise<void> {
 // ─── Program Content — Timeline ───────────────────────────────────────────────
 
 export function listProgramTimeline(programId: string): Promise<ProgramTimeline[]> {
-  return request<ProgramTimeline[]>(`/programs/${programId}/timeline`);
+  return request<unknown[]>(`/programs/${programId}/timeline`).then((items) =>
+    Array.isArray(items) ? items.map((item) => normalizeProgramTimeline(item)) : [],
+  );
 }
 
 export function createProgramTimelineItem(
   programId: string,
   input: { title: string; description?: string; date: string; endDate?: string; order?: number; type?: string },
 ): Promise<ProgramTimeline> {
-  return request<ProgramTimeline>(`/programs/${programId}/timeline`, {
+  return request<unknown>(`/programs/${programId}/timeline`, {
     method: "POST",
     body: JSON.stringify({ ...input, programId }),
-  });
+  }).then((item) => normalizeProgramTimeline(item));
 }
 
 export function updateProgramTimelineItem(
   id: string,
   input: Partial<ProgramTimeline>,
 ): Promise<ProgramTimeline> {
-  return request<ProgramTimeline>(`/programs/timeline/${id}`, {
+  return request<unknown>(`/programs/timeline/${id}`, {
     method: "PUT",
     body: JSON.stringify(input),
-  });
+  }).then((item) => normalizeProgramTimeline(item));
 }
 
 export function deleteProgramTimelineItem(id: string): Promise<void> {

@@ -11,6 +11,7 @@ import {
   type SystemAnnouncement,
 } from "@/src/shared/api-client";
 import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
+import { formatDateTime } from "@/lib/utils";
 
 type Status = "draft" | "published";
 
@@ -320,9 +321,9 @@ export default function EditAnnouncementPage() {
             <>
               <div className="my-4 border-t border-zinc-100" />
               <section className="space-y-1 text-[10px] text-zinc-400">
-                <p>Created: {new Date(originalData.createdAt).toLocaleString()}</p>
+                <p>Created: {formatDateTime(originalData.createdAt)}</p>
                 {originalData.publishedAt && (
-                  <p>Published: {new Date(originalData.publishedAt).toLocaleString()}</p>
+                  <p>Published: {formatDateTime(originalData.publishedAt)}</p>
                 )}
               </section>
             </>

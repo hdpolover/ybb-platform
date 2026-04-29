@@ -1,5 +1,7 @@
-import { Injectable, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS } from '@shared/constants/cache-keys';
 import { SwitchApplicationCategoryCommand } from '../switch-application-category.command';
 import { ApplicationResponseDto } from '../../dto/application-response.dto';
 import { ApplicationMapper } from '@modules/applications/infrastructure/mappers/application.mapper';
@@ -9,6 +11,7 @@ import { ApplicationStatus } from '@core/entities/participant-application.entity
 export class SwitchApplicationCategoryHandler {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly cacheService: CacheService,
     private readonly applicationMapper: ApplicationMapper,
   ) {}
 
@@ -33,9 +36,7 @@ export class SwitchApplicationCategoryHandler {
     }
 
     // 2. Validate Status
-    // "Participants also cant switch categories if they've already submitted their applications."
-    // Assuming 'DRAFT' is the only safe status locally in the enum import.
-    // We check against the string or enum. Prisma returns strings often but let's be safe.
+    // Category switch is only allowed while application is still in draft/editing stage.
     if (application.status !== ApplicationStatus.DRAFT) {
        throw new BadRequestException('Cannot switch category after application has been submitted.');
     }
@@ -47,11 +48,9 @@ export class SwitchApplicationCategoryHandler {
     const hasSuccessfulInvoice = application.invoices.some(inv => inv.status === successfulPaymentStatus);
     const hasSuccessfulRegistrationPayment = application.registrationPaymentStatus === successfulPaymentStatus;
 
-    // Fully-funded → self-funded is allowed even with a prior payment (reimburse flow).
-    // Self-funded → fully-funded is blocked once a successful payment exists.
-    const isSelfFundedSwitchingUp = application.applicationCategory === 'self_funded' && targetCategory === 'fully_funded';
-    if (isSelfFundedSwitchingUp && (hasSuccessfulInvoice || hasSuccessfulRegistrationPayment)) {
-      throw new BadRequestException('Cannot switch to Fully Funded after a successful payment exists.');
+    // Any successful registration payment locks category switching in both directions.
+    if (hasSuccessfulInvoice || hasSuccessfulRegistrationPayment) {
+      throw new BadRequestException('Cannot switch category after a successful registration payment exists.');
     }
 
     // 4. Validate Target Category Eligibility
@@ -88,7 +87,41 @@ export class SwitchApplicationCategoryHandler {
       }
     });
 
+    await this.invalidateParticipantCache(application.participantId, command.userId);
+
     // 6. Return Response
     return this.applicationMapper.toDto(this.applicationMapper.toDomain(updatedApplication));
+  }
+
+  private async invalidateParticipantCache(participantId: string, fallbackUserId?: string): Promise<void> {
+    try {
+      let userId = fallbackUserId;
+      if (!userId) {
+        const participant = await this.prisma.participant.findUnique({
+          where: { id: participantId },
+          select: { userId: true },
+        });
+        userId = participant?.userId;
+      }
+
+      if (!userId) return;
+
+      await Promise.all([
+        this.cacheService.invalidateKeys([
+          CACHE_KEYS.PORTAL_DASHBOARD(userId),
+          CACHE_KEYS.PORTAL_SUBMISSIONS(userId),
+          CACHE_KEYS.PORTAL_SUBMISSION_DETAIL(userId),
+          CACHE_KEYS.PORTAL_PAYMENTS(userId),
+          CACHE_KEYS.PARTICIPANT_LATEST_APP(participantId),
+        ]),
+        this.cacheService.invalidateByPatterns([
+          `portal:submissions:${userId}:*`,
+          `portal:submission-detail:${userId}:*`,
+          `portal:payments:${userId}:*`,
+        ]),
+      ]);
+    } catch {
+      // Cache invalidation must never block category switch completion.
+    }
   }
 }

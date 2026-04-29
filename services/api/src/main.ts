@@ -44,6 +44,32 @@ async function bootstrap() {
     },
   });
 
+  // Connect Microservice for Payment Events (from Go payment service).
+  // The Go service publishes to the `payment-events` topic exchange. We declare
+  // a dedicated durable queue and bind it via topic routing so payment-events
+  // controller's @EventPattern handlers actually receive the events. Without
+  // this binding, payment.succeeded / payment.failed events are dropped.
+  // Custom deserializer maps the AMQP routing key to the NestJS pattern,
+  // because the Go publisher emits raw payloads (no { pattern, data } envelope).
+  const { RoutingKeyDeserializer } = await import('./shared/infrastructure/rabbitmq/routing-key-deserializer');
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.RMQ,
+    options: {
+      urls: [process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672/'],
+      queue: 'api-service-payment-events',
+      exchange: 'payment-events',
+      exchangeType: 'topic',
+      routingKey: 'payment.#',
+      wildcards: true,
+      queueOptions: {
+        durable: true,
+      },
+      noAck: false,
+      prefetchCount: 1,
+      deserializer: new RoutingKeyDeserializer(),
+    },
+  });
+
   // Use Winston Logger
   app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));
 

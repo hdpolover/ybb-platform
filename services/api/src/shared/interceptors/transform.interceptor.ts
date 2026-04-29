@@ -1,4 +1,4 @@
-import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nestjs/common';
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler, StreamableFile } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
@@ -17,6 +17,16 @@ export class TransformInterceptor<T> implements NestInterceptor<T, Response<T>> 
         const ctx = context.switchToHttp();
         const response = ctx.getResponse();
         const val = data as T & Record<string, unknown>;
+
+        // Pass file streams through untouched — wrapping them in JSON corrupts
+        // binary downloads (PDF receipts, exports, etc.). instanceof can fail across
+        // module realms; duck-type on getStream() instead.
+        if (
+            data instanceof StreamableFile
+            || (data && typeof (data as { getStream?: unknown }).getStream === 'function')
+        ) {
+            return data as unknown as Response<T>;
+        }
 
         // Skip if it's already a formatted response
         if (val && val.statusCode && val.data) {

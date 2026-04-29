@@ -12,6 +12,7 @@ import type { ProfessionalProfile } from "@/app/components/participants/tabs/Pro
 import type { EntryInformation } from "@/app/components/participants/tabs/EntryInformationTab";
 import type { Miscellaneous } from "@/app/components/participants/tabs/MiscellaneousTab";
 import { listApplications, getApplication, type Application } from "@/src/shared/api-client";
+import { formatDate } from "@/lib/utils";
 
 interface ParticipantData extends ProfileHeaderData {
   id: string;
@@ -63,7 +64,7 @@ function mapToParticipantData(app: Application): ParticipantData {
       fullName: p?.fullName ?? "—",
       nickname: p?.nickName ?? "—",
       gender: p?.gender ?? "—",
-      birthDate: p?.birthdate ? new Date(p.birthdate).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "—",
+      birthDate: p?.birthdate ? formatDate(p.birthdate, { day: "numeric", month: "long", year: "numeric" }) : "—",
       nationality: p?.nationality ?? "—",
       originAddress: p?.originAddress ?? "—",
       currentAddress: p?.currentAddress ?? "—",

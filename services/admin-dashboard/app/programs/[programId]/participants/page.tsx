@@ -17,6 +17,7 @@ import {
 } from "@/src/shared/api-client";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { EmptyState } from "@/src/admin/empty-state";
+import { formatDate } from "@/lib/utils";
 
 const regionNames = typeof Intl !== "undefined" ? new Intl.DisplayNames(["en"], { type: "region" }) : null;
 function formatCountry(raw: string | null | undefined): string {
@@ -394,7 +395,7 @@ export default function ParticipantsPage() {
                   </td>
                   <td className="px-3 py-2 text-zinc-500">
                     <Link href={`/programs/${params.programId}/participants/${app.participantId}`} className="block">
-                      {new Date(app.createdAt).toLocaleDateString()}
+                      {formatDate(app.createdAt)}
                     </Link>
                   </td>
                 </tr>

@@ -35,6 +35,24 @@ export function formatDate(
   }).format(parsed);
 }
 
+/** Format a date-time string safely; returns em dash when invalid/missing. */
+export function formatDateTime(
+  date: string | Date | null | undefined,
+  options?: Intl.DateTimeFormatOptions,
+): string {
+  if (!date) return "—";
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return "—";
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    ...options,
+  }).format(parsed);
+}
+
 /** Truncate a string to a max length, appending "…" if needed. */
 export function truncate(str: string, max: number): string {
   return str.length > max ? str.slice(0, max) + "…" : str;

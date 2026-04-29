@@ -50,6 +50,16 @@ function maskUrls(value: unknown, apiBase: string): unknown {
   if (Array.isArray(value)) {
     return value.map((item) => maskUrls(item, apiBase));
   }
+  // Don't traverse Buffers, streams, or StreamableFile-shaped objects — recursing
+  // through them via Object.entries breaks binary downloads (collapses streams to
+  // plain objects which then get JSON-serialized).
+  if (Buffer.isBuffer(value)) return value;
+  if (value && typeof (value as { getStream?: unknown }).getStream === 'function') {
+    return value;
+  }
+  if (value && typeof (value as { pipe?: unknown }).pipe === 'function') {
+    return value;
+  }
   if (value !== null && typeof value === 'object') {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>).map(([k, v]) => [

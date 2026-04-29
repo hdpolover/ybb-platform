@@ -188,6 +188,18 @@ export class HomeStrategy implements ILandingPageStrategy {
       caption: img.title,
     }));
 
+    const highlightGallery = imageGallery.map((img) => ({
+      url: img.imageUrl,
+      caption: img.title,
+      type: img.type,
+    }));
+
+    const programGallery = imageGallery.slice(0, 6).map((img) => ({
+      id: img.id,
+      url: img.imageUrl,
+      caption: img.title,
+    }));
+
     const result = {
       slug: 'home',
       title: brand.name,
@@ -251,17 +263,17 @@ export class HomeStrategy implements ILandingPageStrategy {
               description: obj.description,
               order: obj.order
             })) || [],
-            images: objectiveImages
+            // `gallery` is canonical; keep `images` for backwards compatibility.
+            gallery: objectiveImages,
+            images: objectiveImages,
           }
         },
         {
           type: 'program_highlights',
           content: {
-            image_gallery: imageGallery.map((img) => ({
-              url: img.imageUrl,
-              caption: img.title,
-              type: img.type,
-            })),
+            // `gallery` is canonical; keep `image_gallery` for backwards compatibility.
+            gallery: highlightGallery,
+            image_gallery: highlightGallery,
             content: {
               title: 'Program Highlights',
               items: [
@@ -288,11 +300,9 @@ export class HomeStrategy implements ILandingPageStrategy {
           content: {
             title: 'Our Gallery',
             description: 'See the excitement and best moments from our previous programs.',
-            images: imageGallery.slice(0, 6).map((img) => ({
-              id: img.id,
-              url: img.imageUrl,
-              caption: img.title,
-            })),
+            // `gallery` is canonical; keep `images` for backwards compatibility.
+            gallery: programGallery,
+            images: programGallery,
             cta: {
               label: 'See More',
               url: '/programs/gallery',

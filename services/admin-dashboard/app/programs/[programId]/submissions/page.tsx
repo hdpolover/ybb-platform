@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { ArrowPathIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { listApplications, reviewApplication, type Application } from "@/src/shared/api-client";
+import { formatDate } from "@/lib/utils";
 
 const STATUS_BADGE: Record<string, string> = {
   PENDING: "bg-amber-50 text-amber-700",
@@ -95,7 +96,7 @@ export default function SubmissionsPage() {
                   <td className="px-3 py-2 text-zinc-600">{app.participant?.originCountry ?? "—"}</td>
                   <td className="px-3 py-2"><span className={"rounded-full px-2 py-0.5 text-[10px] font-semibold " + (STATUS_BADGE[app.status] ?? "bg-zinc-100 text-zinc-600")}>{app.status}</span></td>
                   <td className="px-3 py-2 text-zinc-600">{app.registrationPaymentStatus}</td>
-                  <td className="px-3 py-2 text-zinc-500">{new Date(app.createdAt).toLocaleDateString()}</td>
+                  <td className="px-3 py-2 text-zinc-500">{formatDate(app.createdAt)}</td>
                   <td className="px-3 py-2 text-right">
                     <button type="button" onClick={() => setReviewTarget(app)} className="rounded-md border border-zinc-200 px-2 py-1 text-[10px] font-medium text-zinc-600 hover:bg-zinc-50">Review</button>
                   </td>

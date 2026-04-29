@@ -11,6 +11,7 @@ import {
   deleteProgramAnnouncement,
   type ProgramAnnouncement,
 } from "@/src/shared/api-client";
+import { formatDate } from "@/lib/utils";
 
 const PRIORITY_BADGE: Record<string, string> = {
   LOW: "bg-zinc-100 text-zinc-600",
@@ -94,7 +95,7 @@ export default function AnnouncementsPage() {
                   <td className="px-3 py-2 text-zinc-600">{a.type}</td>
                   <td className="px-3 py-2"><span className={"rounded-full px-2 py-0.5 text-[10px] font-semibold " + (PRIORITY_BADGE[a.priority] ?? "bg-zinc-100 text-zinc-600")}>{a.priority}</span></td>
                   <td className="px-3 py-2">{a.isActive ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Active</span> : <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-600">Inactive</span>}</td>
-                  <td className="px-3 py-2 text-zinc-500">{new Date(a.createdAt).toLocaleDateString()}</td>
+                  <td className="px-3 py-2 text-zinc-500">{formatDate(a.createdAt)}</td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex items-center justify-end gap-1">
                       <button type="button" onClick={() => setEditTarget(a)} className="rounded-md border border-zinc-200 p-1 text-zinc-500 hover:bg-zinc-50"><PencilSquareIcon className="h-3.5 w-3.5" /></button>

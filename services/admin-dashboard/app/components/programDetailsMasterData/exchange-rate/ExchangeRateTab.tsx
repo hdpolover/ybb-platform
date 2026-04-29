@@ -10,13 +10,39 @@ import {
   type ExchangeRateHistoryItem,
 } from "@/src/shared/api-client";
 
-function formatRate(rate: number): string {
-  return new Intl.NumberFormat("id-ID", { minimumFractionDigits: 0 }).format(rate);
+function normalizeDisplayValue(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "bigint") {
+    return String(value);
+  }
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "object") {
+    const candidate = value as Record<string, unknown>;
+    const nested = candidate.$date ?? candidate.date ?? candidate.value ?? candidate.iso;
+    if (nested !== undefined) return normalizeDisplayValue(nested);
+  }
+  return "";
 }
 
-function formatDateTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
+function toNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const normalized = normalizeDisplayValue(value);
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatRate(rate: unknown): string {
+  const parsed = toNumber(rate);
+  if (parsed === null) return "—";
+  return new Intl.NumberFormat("id-ID", { minimumFractionDigits: 0 }).format(parsed);
+}
+
+function formatDateTime(value: unknown): string {
+  const normalized = normalizeDisplayValue(value);
+  if (!normalized) return "—";
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) return "—";
   return new Intl.DateTimeFormat("en-GB", {
     day: "2-digit",
     month: "short",
@@ -220,12 +246,12 @@ export function ExchangeRateTab({ programId }: { programId: string }) {
                     <span className="text-emerald-700">IDR {formatRate(entry.newRate)}</span>
                   </p>
                   {entry.reason && (
-                    <p className="mt-0.5 text-xs text-zinc-500">{entry.reason}</p>
-                  )}
-                  <p className="mt-0.5 text-xs text-zinc-400">
-                    by {entry.changedBy} · {formatDateTime(entry.createdAt)}
-                  </p>
-                </div>
+                     <p className="mt-0.5 text-xs text-zinc-500">{normalizeDisplayValue(entry.reason) || "—"}</p>
+                   )}
+                   <p className="mt-0.5 text-xs text-zinc-400">
+                     by {normalizeDisplayValue(entry.changedBy) || "System"} · {formatDateTime(entry.createdAt)}
+                   </p>
+                 </div>
                 <div className="shrink-0 text-right">
                   {entry.newRate > entry.oldRate ? (
                     <span className="text-xs font-semibold text-rose-600">

@@ -173,12 +173,11 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
             const hasSuccessfulPayment =
                 latestApplication.invoices.some(inv => inv.status === 'paid') ||
                 latestApplication.registrationPaymentStatus === 'paid';
-            const isSelfFunded = latestApplication.applicationCategory === 'self_funded';
-            // Self-funded with a successful payment cannot switch up to fully-funded
+            // Switch is available only during draft and only if no successful registration payment exists.
             const canSwitchCategory =
                 bothTiersActive &&
-                ['draft', 'submitted'].includes(latestApplication.status) &&
-                !(isSelfFunded && hasSuccessfulPayment);
+                latestApplication.status === 'draft' &&
+                !hasSuccessfulPayment;
 
             activeAppSummary = {
                 id: latestApplication.id,

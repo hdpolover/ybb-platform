@@ -39,6 +39,7 @@ import {
   SheetTitle,
 } from "@/src/ui/sheet";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { formatDate } from "@/lib/utils";
 import {
   listProgramMedia,
   uploadFileViaPresignedUrl,
@@ -87,7 +88,6 @@ import {
   type BrandPromoCta,
   type BrandMomentsShorts,
 } from "../../api";
-import { formatDate } from "@/lib/utils";
 
 // ─── Field primitives ─────────────────────────────────────────────────────────
 
@@ -1069,7 +1069,7 @@ function ProgramsTab({ brandId }: { brandId: string }) {
                 </Badge>
               </td>
               <td className="px-4 py-3 text-zinc-500">
-                {new Date(p.applicationDeadline).toLocaleDateString()}
+                {formatDate(p.applicationDeadline)}
               </td>
               <td className="px-4 py-3">
                 <div className="flex flex-wrap gap-1">
@@ -3080,7 +3080,7 @@ function AdminsTab({ brandId }: { brandId: string }) {
                   <td className="px-4 py-3">
                     {a.roleInBrand ? <Badge variant="secondary" className="capitalize">{a.roleInBrand}</Badge> : <span className="text-zinc-400">—</span>}
                   </td>
-                  <td className="px-4 py-3 text-xs text-zinc-500">{new Date(a.assignedAt).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-xs text-zinc-500">{formatDate(a.assignedAt)}</td>
                   <td className="px-4 py-3 text-right">
                     <Button
                       size="sm"

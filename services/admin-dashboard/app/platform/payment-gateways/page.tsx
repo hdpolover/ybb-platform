@@ -26,6 +26,7 @@ import {
   SheetDescription,
   SheetFooter,
 } from "@/src/ui/sheet";
+import { formatDateTime } from "@/lib/utils";
 
 export default function PaymentGatewaysPage() {
   const [configs, setConfigs] = useState<GatewayConfig[]>([]);
@@ -166,7 +167,7 @@ export default function PaymentGatewaysPage() {
                           <span className="text-zinc-400">Platform-wide</span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-zinc-500">{new Date(cfg.updated_at).toLocaleString()}</td>
+                      <td className="px-3 py-2 text-zinc-500">{formatDateTime(cfg.updated_at)}</td>
                       <td className="px-3 py-2">
                         {cfg.is_active ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">

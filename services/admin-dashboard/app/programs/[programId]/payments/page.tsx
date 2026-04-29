@@ -22,6 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/src/ui/table";
+import { formatDate } from "@/lib/utils";
 
 const STATUS_OPTIONS = [
   { value: "", label: "All Statuses" },
@@ -223,7 +224,7 @@ export default function PaymentsPage({
             {!loading && invoices.map((inv) => (
               <TableRow key={inv.id}>
                 <TableCell className="text-sm text-zinc-500 whitespace-nowrap">
-                  {new Date(inv.createdAt).toLocaleDateString()}
+                  {formatDate(inv.createdAt)}
                 </TableCell>
                 <TableCell>
                   <div className="font-medium text-sm">{inv.participant.fullName}</div>

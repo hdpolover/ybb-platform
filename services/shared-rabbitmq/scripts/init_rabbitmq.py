@@ -11,18 +11,42 @@ RABBITMQ_USER = os.getenv('RABBITMQ_USER', 'guest')
 RABBITMQ_PASS = os.getenv('RABBITMQ_PASS', 'guest')
 
 EXCHANGE_NAME = 'ybb.events'
+
+# Secondary topic exchange owned by the Go payment service. Configured via
+# RABBITMQ_EXCHANGE in services/payment/internal/infrastructure/config/config.go
+# (default: 'payment-events'). Declared here so the API's consumer queue can
+# bind on first start and not silently drop payment.* events.
+PAYMENT_EXCHANGE_NAME = 'payment-events'
+
 QUEUES = [
     {
         'name': 'notification_queue',
+        'exchange': EXCHANGE_NAME,
         'bindings': ['user.#', 'payment.#', 'system.announcement']
+    },
+    # Same notification consumer also needs to receive payment events emitted by
+    # the Go payment service, which publishes to its own `payment-events` exchange.
+    # Without this second binding, payment.succeeded / payment.failed never trigger
+    # receipts or status emails.
+    {
+        'name': 'notification_queue',
+        'exchange': PAYMENT_EXCHANGE_NAME,
+        'bindings': ['payment.#']
     },
     {
         'name': 'reporting_queue',
+        'exchange': EXCHANGE_NAME,
         'bindings': ['#']
     },
     {
         'name': 'audit_log_queue',
+        'exchange': EXCHANGE_NAME,
         'bindings': ['#']
+    },
+    {
+        'name': 'api-service-payment-events',
+        'exchange': PAYMENT_EXCHANGE_NAME,
+        'bindings': ['payment.#']
     }
 ]
 
@@ -58,17 +82,19 @@ def main():
     connection = wait_for_rabbitmq()
     channel = connection.channel()
 
-    log(f"Declaring Topic Exchange: {EXCHANGE_NAME}")
-    channel.exchange_declare(exchange=EXCHANGE_NAME, exchange_type='topic', durable=True)
+    for ex in {EXCHANGE_NAME, PAYMENT_EXCHANGE_NAME}:
+        log(f"Declaring Topic Exchange: {ex}")
+        channel.exchange_declare(exchange=ex, exchange_type='topic', durable=True)
 
     for q in QUEUES:
         q_name = q['name']
+        ex_name = q.get('exchange', EXCHANGE_NAME)
         log(f"Declaring Queue: {q_name}")
         channel.queue_declare(queue=q_name, durable=True)
-        
+
         for binding_key in q['bindings']:
-            log(f"  -> Binding {q_name} to {EXCHANGE_NAME} with key: {binding_key}")
-            channel.queue_bind(exchange=EXCHANGE_NAME, queue=q_name, routing_key=binding_key)
+            log(f"  -> Binding {q_name} to {ex_name} with key: {binding_key}")
+            channel.queue_bind(exchange=ex_name, queue=q_name, routing_key=binding_key)
 
     log("✅ RabbitMQ Topology Initialized Successfully!")
     connection.close()

@@ -15,6 +15,7 @@ import {
   publishSystemAnnouncement,
   type SystemAnnouncement,
 } from "@/src/shared/api-client";
+import { formatDate, formatDateTime } from "@/lib/utils";
 
 const TYPE_BADGE: Record<string, string> = {
   general: "bg-zinc-100 text-zinc-700",
@@ -210,15 +211,15 @@ export default function AnnouncementDetailPage() {
 
           {ann.publishedAt && (
             <Field label="Published At">
-              {new Date(ann.publishedAt).toLocaleString()}
+              {formatDateTime(ann.publishedAt)}
             </Field>
           )}
 
           {(ann.startDate || ann.endDate) && (
             <Field label="Display Window">
-              {ann.startDate ? new Date(ann.startDate).toLocaleDateString() : "∞"}
+              {ann.startDate ? formatDate(ann.startDate) : "∞"}
               {" → "}
-              {ann.endDate ? new Date(ann.endDate).toLocaleDateString() : "∞"}
+              {ann.endDate ? formatDate(ann.endDate) : "∞"}
             </Field>
           )}
 
@@ -235,11 +236,11 @@ export default function AnnouncementDetailPage() {
           <div className="border-t border-zinc-200" />
 
           <Field label="Created">
-            {new Date(ann.createdAt).toLocaleString()}
+            {formatDateTime(ann.createdAt)}
           </Field>
 
           <Field label="Last Updated">
-            {new Date(ann.updatedAt).toLocaleString()}
+            {formatDateTime(ann.updatedAt)}
           </Field>
         </aside>
       </div>

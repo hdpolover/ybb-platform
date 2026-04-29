@@ -67,6 +67,9 @@ export class LandingPageSectionContentDto {
 
   @ApiProperty({ description: 'List of items (e.g., testimonials, awards)', required: false, isArray: true })
   items?: Record<string, unknown>[];
+
+  @ApiProperty({ description: 'Canonical gallery list for image-driven sections', required: false, isArray: true })
+  gallery?: Record<string, unknown>[];
 }
 
 export class LandingPageSectionDto {

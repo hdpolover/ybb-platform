@@ -19,7 +19,11 @@ export default function SubmissionFormPage({
 }) {
   const { programId } = use(params);
   const searchParams = useSearchParams();
-  const activeTab = searchParams.get("tab") ?? "categories";
+  const requestedTab = searchParams.get("tab");
+  const activeTab =
+    requestedTab && ["fields", "categories", "subthemes", "essays", "preview"].includes(requestedTab)
+      ? requestedTab
+      : "fields";
 
   const { accessiblePrograms } = useAuth();
   const programName =

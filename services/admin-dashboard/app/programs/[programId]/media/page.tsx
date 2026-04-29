@@ -32,6 +32,7 @@ import {
   SheetDescription,
   SheetFooter,
 } from "@/src/ui/sheet";
+import { formatDate, formatDateTime } from "@/lib/utils";
 
 const ASSET_TYPE_LABELS: Record<string, string> = {
   all: "All",
@@ -181,7 +182,7 @@ function MediaDetailPanel({
             { label: "Asset Type", value: file.asset_type ?? "—" },
             { label: "Bucket", value: file.bucket },
             { label: "Status", value: file.status },
-            { label: "Uploaded", value: new Date(file.uploaded_at).toLocaleString() },
+            { label: "Uploaded", value: formatDateTime(file.uploaded_at) },
           ].map(({ label, value }) => (
             <div key={label} className="flex justify-between gap-2">
               <dt className="font-medium text-zinc-500">{label}</dt>
@@ -755,7 +756,7 @@ export default function MediaLibraryPage() {
                           {file.asset_type ?? file.bucket}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-zinc-400">{new Date(file.uploaded_at).toLocaleDateString()}</td>
+                      <td className="px-3 py-2 text-zinc-400">{formatDate(file.uploaded_at)}</td>
                       <td className="px-3 py-2 text-right">
                         <button
                           type="button"

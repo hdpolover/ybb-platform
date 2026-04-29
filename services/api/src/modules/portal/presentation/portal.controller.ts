@@ -1,4 +1,7 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards, UnauthorizedException, BadRequestException, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, UseGuards, UnauthorizedException, BadRequestException, NotFoundException, UseInterceptors, UploadedFile, StreamableFile, Header } from '@nestjs/common';
+import { Readable } from 'stream';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { PortalReceiptService } from '../application/services/portal-receipt.service';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { QueryBus, CommandBus } from '@nestjs/cqrs';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -44,6 +47,8 @@ export class PortalController {
         private readonly ensurePortalPaymentInvoiceHandler: EnsurePortalPaymentInvoiceHandler,
         private readonly paymentServiceClient: PaymentServiceHttpClient,
         private readonly configService: ConfigService,
+        private readonly prisma: PrismaService,
+        private readonly receiptService: PortalReceiptService,
     ) {}
 
     @Get('dashboard')
@@ -89,6 +94,66 @@ export class PortalController {
         const userId = user.userId;
         if (!userId) throw new UnauthorizedException();
         return this.queryBus.execute(new GetPortalPaymentDetailQuery(userId, id));
+    }
+
+    @Get('payments/:id/receipt')
+    @ApiOperation({ summary: 'Download a PDF receipt for a paid invoice' })
+    @ApiResponse({ status: 200, description: 'PDF receipt' })
+    @Header('Content-Type', 'application/pdf')
+    async downloadReceipt(
+        @Param('id') id: string,
+        @CurrentUser() user: CurrentUserData,
+    ): Promise<StreamableFile> {
+        const userId = user.userId;
+        if (!userId) throw new UnauthorizedException();
+
+        const invoice = await this.prisma.applicationInvoice.findUnique({
+            where: { id },
+            include: {
+                application: {
+                    select: {
+                        program: { select: { name: true, brand: { select: { name: true } } } },
+                        participant: {
+                            select: {
+                                fullName: true,
+                                userId: true,
+                                user: { select: { email: true } },
+                            },
+                        },
+                    },
+                },
+                pricingTier: { select: { name: true } },
+            },
+        });
+
+        if (!invoice) throw new NotFoundException('Invoice not found');
+        // Ownership check — receipt is not a public document
+        if (invoice.application.participant.userId !== userId) {
+            throw new UnauthorizedException();
+        }
+        if (invoice.status !== 'paid' || !invoice.paidAt) {
+            throw new BadRequestException('Receipt is only available for paid invoices');
+        }
+
+        const pdf = await this.receiptService.generate({
+            receiptNumber: `R-${invoice.id.slice(0, 8).toUpperCase()}`,
+            invoiceId: invoice.id,
+            transactionId: invoice.externalTransactionId ?? undefined,
+            amount: Number(invoice.amount),
+            currency: invoice.currency,
+            paidAt: invoice.paidAt,
+            customerName: invoice.application.participant.fullName,
+            customerEmail: invoice.application.participant.user.email,
+            description: invoice.pricingTier.name,
+            programName: invoice.application.program.name,
+            paymentMethod: invoice.paymentMethod ?? undefined,
+            brandName: invoice.application.program.brand?.name,
+        });
+
+        return new StreamableFile(Readable.from(pdf), {
+            type: 'application/pdf',
+            disposition: `attachment; filename="receipt-${invoice.id}.pdf"`,
+        });
     }
 
     @Post('payments/:id/confirm')

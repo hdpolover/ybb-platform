@@ -32,6 +32,14 @@ export class ConfirmPortalPaymentHandler {
                         program: {
                             select: { name: true, currency: true },
                         },
+                        participant: {
+                            select: {
+                                fullName: true,
+                                user: {
+                                    select: { email: true },
+                                },
+                            },
+                        },
                     },
                 },
                 pricingTier: {
@@ -48,6 +56,13 @@ export class ConfirmPortalPaymentHandler {
             throw new BadRequestException('Invoice is already paid');
         }
 
+        // Build customer identity for downstream events (notification service uses
+        // these to address receipts and status emails). Without `email` in metadata,
+        // payment.succeeded / payment.failed events get dropped silently by the
+        // notification consumer because it short-circuits when `data.email` is empty.
+        const customerEmail = invoice.application.participant?.user?.email ?? '';
+        const customerName = invoice.application.participant?.fullName ?? customerEmail;
+
         // Create a payment intent via the Payment Service
         const intentResponse = await this.paymentClient.createIntent({
             user_id: userId,
@@ -59,8 +74,13 @@ export class ConfirmPortalPaymentHandler {
             description: `${invoice.pricingTier.name} - ${invoice.application.program.name}`,
             metadata: {
                 invoice_id: invoice.id,
+                application_id: invoice.applicationId,
                 program_id: invoice.application.programId,
                 payment_method: paymentMethodId,
+                email: customerEmail,
+                customer_email: customerEmail,
+                customer_name: customerName,
+                payment_category: 'registration',
             },
         });
 

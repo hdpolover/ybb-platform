@@ -546,9 +546,12 @@ func (s *PaymentGrpcServer) SubmitManualPayment(ctx context.Context, req *pb.Sub
 		return nil, status.Errorf(codes.NotFound, "intent not found")
 	}
 
-	// 2. Create Transaction (Pending)
+	// 2. Create Transaction. Manual submissions go straight to NEEDS_REVIEW so the
+	// admin dashboard's Verify-Payment UI surfaces them. Default status from
+	// NewPaymentTransaction is PENDING, which would hide the row from review.
 	// We treat "manual_transfer" as the method ID
 	tx := entities.NewPaymentTransaction(intent.ID, "manual_transfer", intent.Amount)
+	tx.Status = entities.TransactionStatusNeedsReview
 
 	// 3. Store Proof details in GatewayResponse
 	proofData := map[string]interface{}{
