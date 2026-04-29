@@ -30,7 +30,7 @@ import {
 import { Badge } from "@/src/ui/badge";
 import { StatusBadge } from "@/src/admin/status-badge";
 import { EmptyState } from "@/src/admin/empty-state";
-import { formatDate } from "@/lib/utils";
+import { formatDate, parseApiDate } from "@/lib/utils";
 
 export type Brand = {
   id: string;
@@ -61,7 +61,7 @@ export function BrandsTable({ brands, onEdit }: BrandsTableProps) {
 
   const sorted = useMemo(() => {
     const getTimestamp = (value: string) => {
-      const timestamp = new Date(value).getTime();
+      const timestamp = parseApiDate(value).getTime();
       return Number.isFinite(timestamp) ? timestamp : 0;
     };
 

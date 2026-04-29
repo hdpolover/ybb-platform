@@ -5,6 +5,7 @@ import { PencilSquareIcon, TrashIcon, CalendarDaysIcon } from "@heroicons/react/
 import { toast } from "sonner";
 import type { PeriodRow } from "./PaymentPeriodsTable";
 import { createValidityPeriod, updateValidityPeriod, deleteValidityPeriod } from "@/app/platform/api";
+import { toLocalDatetimeInputValue, toUtcIsoFromLocalInput } from "@/lib/utils";
 import {
   Sheet,
   SheetContent,
@@ -13,13 +14,6 @@ import {
   SheetDescription,
   SheetFooter,
 } from "@/src/ui/sheet";
-
-function toDatetimeLocal(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 // FORM SHEET COMPONENT
 function PeriodSheet({
@@ -43,12 +37,17 @@ function PeriodSheet({
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const description = (fd.get("name") as string).trim();
-    const startDate = fd.get("startDate") as string;
-    const endDate = fd.get("endDate") as string;
+    const startDateInput = fd.get("startDate") as string;
+    const endDateInput = fd.get("endDate") as string;
 
     setSaving(true);
     setError(null);
     try {
+      const startDate = toUtcIsoFromLocalInput(startDateInput);
+      const endDate = toUtcIsoFromLocalInput(endDateInput);
+      if (!startDate || !endDate) {
+        throw new Error("Invalid date/time value.");
+      }
       if (isEditing && initialData) {
         await updateValidityPeriod(initialData.id, { startDate, endDate, description });
         toast.success("Period updated.");
@@ -117,13 +116,13 @@ function PeriodSheet({
                 <label className="mb-1.5 block text-xs font-medium text-zinc-500">
                   Start Date & Time <span className="text-rose-500">*</span>
                 </label>
-                <input name="startDate" type="datetime-local" defaultValue={initialData?.startRaw ? toDatetimeLocal(initialData.startRaw) : undefined} className={inputCls} required />
+                <input name="startDate" type="datetime-local" defaultValue={initialData?.startRaw ? toLocalDatetimeInputValue(initialData.startRaw) : undefined} className={inputCls} required />
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-zinc-500">
                   End Date & Time <span className="text-rose-500">*</span>
                 </label>
-                <input name="endDate" type="datetime-local" defaultValue={initialData?.endRaw ? toDatetimeLocal(initialData.endRaw) : undefined} className={inputCls} required />
+                <input name="endDate" type="datetime-local" defaultValue={initialData?.endRaw ? toLocalDatetimeInputValue(initialData.endRaw) : undefined} className={inputCls} required />
               </div>
             </div>
 

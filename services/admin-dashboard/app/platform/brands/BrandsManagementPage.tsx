@@ -10,7 +10,7 @@ import { FilterBar } from "@/src/admin/filter-bar";
 import { Button } from "@/src/ui/button";
 import { Select } from "@/src/ui/select";
 import { Skeleton } from "@/src/ui/skeleton";
-import { formatDate } from "@/lib/utils";
+import { formatDate, parseApiDate } from "@/lib/utils";
 import {
   createPlatformBrand,
   listPlatformBrands,
@@ -67,7 +67,7 @@ export default function BrandsManagementPage() {
     }
 
     const timestamps = brands
-      .map((brand) => new Date(brand.updatedAt || brand.createdAt).getTime())
+      .map((brand) => parseApiDate(brand.updatedAt || brand.createdAt).getTime())
       .filter((timestamp) => Number.isFinite(timestamp));
 
     if (timestamps.length === 0) {

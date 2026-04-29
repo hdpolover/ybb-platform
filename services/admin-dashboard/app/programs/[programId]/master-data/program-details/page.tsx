@@ -22,6 +22,7 @@ import {
 } from "@/app/components/programDetailsMasterData/general-information/EditGeneralInformationModal";
 import { buildApiUrl, getAccessToken, readErrorMessage } from "@/app/components/submissionsMasterData/api";
 import { ExchangeRateTab } from "@/app/components/programDetailsMasterData/exchange-rate/ExchangeRateTab";
+import { parseApiDate } from "@/lib/utils";
 
 type ProgramDetail = {
   id: string;
@@ -85,7 +86,7 @@ function formatDate(value?: string | null): string {
     return "Not configured";
   }
 
-  const date = new Date(value);
+  const date = parseApiDate(value);
   if (Number.isNaN(date.getTime())) {
     return "Not configured";
   }
@@ -102,12 +103,15 @@ function toDateInputValue(value?: string | null): string {
     return "";
   }
 
-  const date = new Date(value);
+  const date = parseApiDate(value);
   if (Number.isNaN(date.getTime())) {
     return "";
   }
 
-  return date.toISOString().slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function getRegistrationStatus(detail: ProgramDetail): string {
@@ -116,8 +120,8 @@ function getRegistrationStatus(detail: ProgramDetail): string {
   }
 
   const now = Date.now();
-  const openDate = detail.registrationOpenDate ? new Date(detail.registrationOpenDate).getTime() : null;
-  const closeDate = detail.registrationCloseDate ? new Date(detail.registrationCloseDate).getTime() : null;
+  const openDate = detail.registrationOpenDate ? parseApiDate(detail.registrationOpenDate).getTime() : null;
+  const closeDate = detail.registrationCloseDate ? parseApiDate(detail.registrationCloseDate).getTime() : null;
 
   if (openDate && now < openDate) {
     return "Scheduled";

@@ -24,8 +24,7 @@ export function formatDate(
   date: string | Date | null | undefined,
   options?: Intl.DateTimeFormatOptions,
 ): string {
-  if (!date) return "—";
-  const parsed = new Date(date);
+  const parsed = parseApiDate(date);
   if (Number.isNaN(parsed.getTime())) return "—";
   return new Intl.DateTimeFormat("en-GB", {
     day: "2-digit",
@@ -40,8 +39,7 @@ export function formatDateTime(
   date: string | Date | null | undefined,
   options?: Intl.DateTimeFormatOptions,
 ): string {
-  if (!date) return "—";
-  const parsed = new Date(date);
+  const parsed = parseApiDate(date);
   if (Number.isNaN(parsed.getTime())) return "—";
   return new Intl.DateTimeFormat("en-GB", {
     day: "2-digit",
@@ -51,6 +49,41 @@ export function formatDateTime(
     minute: "2-digit",
     ...options,
   }).format(parsed);
+}
+
+/** Parse backend date values consistently before local rendering. */
+export function parseApiDate(date: string | Date | null | undefined): Date {
+  if (!date) return new Date("");
+  if (date instanceof Date) return date;
+
+  const raw = date.trim();
+  if (!raw) return new Date("");
+
+  // Date-only values should remain date-only in user locale.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return new Date(`${raw}T00:00:00`);
+  }
+
+  // If timezone info is missing, interpret as UTC to avoid server/local drift.
+  const normalized = /(?:[zZ]|[+-]\d{2}:\d{2})$/.test(raw) ? raw : `${raw}Z`;
+  return new Date(normalized);
+}
+
+/** Convert local datetime-local input value to UTC ISO string for API writes. */
+export function toUtcIsoFromLocalInput(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString();
+}
+
+/** Convert UTC/ISO backend value to datetime-local input value in user locale. */
+export function toLocalDatetimeInputValue(value: string | Date | null | undefined): string {
+  const parsed = parseApiDate(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
 }
 
 /** Truncate a string to a max length, appending "…" if needed. */
