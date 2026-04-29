@@ -8,18 +8,7 @@ import { UpsertParticipationInfoCommand, DeleteParticipationInfoCommand } from '
 import { GetParticipationInfoQuery, ListParticipationInfoQuery } from '../application/queries/participation-info.queries';
 import { Public } from '@shared/decorators/public.decorator';
 import { CacheInvalidate } from '@shared/decorators/cache-invalidate.decorator';
-
-const MUTABLE_CONTENT_CACHE_PATTERNS = [
-  'landing:home:*',
-  'landing:about:*',
-  'landing:programs:*',
-  'landing:program:*',
-  'landing:settings:*',
-  'program:*',
-  'portal:submission-detail:*',
-  'portal:submissions:*',
-  'portal:dashboard:*',
-];
+import { PROGRAM_CONTENT_PATTERNS as MUTABLE_CONTENT_CACHE_PATTERNS } from '@shared/constants/cache-patterns';
 
 @ApiTags('Programs')
 @Controller('programs/:programId/participation-info')
