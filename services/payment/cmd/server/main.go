@@ -215,8 +215,14 @@ func main() {
 		gatewayFactory,
 	)
 
-	paymentMethodHandler := handlers.NewPaymentMethodHandler(paymentMethodRepo)
+	paymentMethodHandler := handlers.NewPaymentMethodHandler(paymentMethodRepo, gatewayFactory)
 	gatewayConfigHandler := handlers.NewGatewayConfigHandler(gatewayConfigRepo, paymentMethodRepo)
+
+	// Allow the router (and the API server, via the internal endpoint) to trigger
+	// an immediate gateway refresh so admin edits don't have to wait for the 30s tick.
+	refreshGatewaysNow := func() {
+		registerGateways(context.Background(), cfg, gatewayFactory, gatewayConfigRepo, logger)
+	}
 
 	// Initialize Intent Handlers
 	createIntentHandler := commandHandlers.NewCreateIntentHandler(intentRepo)
@@ -224,7 +230,7 @@ func main() {
 	intentHandler := handlers.NewIntentHandler(createIntentHandler, confirmIntentHandler)
 
 	// Setup router
-	r := setupRouter(paymentHandler, paymentMethodHandler, gatewayConfigHandler, intentHandler, cfg.InternalServiceKey)
+	r := setupRouter(paymentHandler, paymentMethodHandler, gatewayConfigHandler, intentHandler, cfg.InternalServiceKey, refreshGatewaysNow)
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -359,6 +365,7 @@ func setupRouter(
 	gatewayConfigHandler *handlers.GatewayConfigHandler,
 	intentHandler *handlers.IntentHandler,
 	internalServiceKey string,
+	refreshGateways func(),
 ) *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Logger(), gin.Recovery(), otelgin.Middleware("ybb-payment"))
@@ -425,6 +432,16 @@ func setupRouter(
 			gwConfigs.PATCH("/:id/active", gatewayConfigHandler.SetActive)
 			gwConfigs.DELETE("/:id", gatewayConfigHandler.Delete)
 		}
+
+		// Internal — invoked by the API server right after a gateway-config CRUD
+		// so the in-memory factory picks up the change without waiting for the
+		// 30s periodic refresh.
+		protected.POST("/gateways/refresh", func(c *gin.Context) {
+			if refreshGateways != nil {
+				refreshGateways()
+			}
+			c.JSON(http.StatusOK, gin.H{"status": "refreshed"})
+		})
 	}
 
 	return router

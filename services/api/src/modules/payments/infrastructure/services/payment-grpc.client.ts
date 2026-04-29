@@ -1,7 +1,7 @@
-import { Injectable, Inject, OnModuleInit, Logger } from '@nestjs/common';
+import { Injectable, Inject, OnModuleInit, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import { ClientGrpc } from '@nestjs/microservices';
 import { ConfigService } from '@nestjs/config';
-import { Metadata } from '@grpc/grpc-js';
+import { Metadata, status as GrpcStatus } from '@grpc/grpc-js';
 import { lastValueFrom } from 'rxjs';
 import {
   PaymentService,
@@ -50,14 +50,24 @@ export class PaymentGrpcClient implements OnModuleInit {
     return md;
   }
 
+  // Maps gRPC errors from the Go payment service to NestJS HttpException so the
+  // controller surfaces a meaningful HTTP status and message instead of a generic
+  // 500 "Internal server error" that hides the actual failure (e.g. invalid
+  // payment method, gateway not configured, idempotency conflict).
+  private rethrowAsHttp(error: unknown, action: string): never {
+    const grpcError = error as { code?: number; details?: string; message?: string; stack?: string };
+    const detail = grpcError.details || grpcError.message || `Payment service ${action} failed`;
+    this.logger.error(`Failed to ${action}: ${detail}`, grpcError.stack);
+
+    const httpStatus = mapGrpcCodeToHttpStatus(grpcError.code);
+    throw new HttpException({ message: detail, action, grpcCode: grpcError.code }, httpStatus);
+  }
+
   async getIntentsByReference(req: GetIntentsByReferenceRequest): Promise<GetIntentsByReferenceResponse> {
     try {
       return await lastValueFrom(this.paymentService.GetIntentsByReference(req, this.metadata()));
     } catch (error) {
-      this.logger.error(`Failed to get intents by reference: ${error.message}`, error.stack);
-      // Fallback: return empty list instead of crashing, or rethrow?
-      // Rethrow is safer for critical checks
-      throw error; 
+      this.rethrowAsHttp(error, 'get intents by reference');
     }
   }
 
@@ -65,8 +75,7 @@ export class PaymentGrpcClient implements OnModuleInit {
     try {
         return await lastValueFrom(this.paymentService.SubmitManualPayment(req, this.metadata()));
     } catch (error) {
-        this.logger.error(`Failed to submit manual payment: ${error.message}`, error.stack);
-        throw error;
+        this.rethrowAsHttp(error, 'submit manual payment');
     }
   }
 
@@ -74,8 +83,7 @@ export class PaymentGrpcClient implements OnModuleInit {
       try {
           return await lastValueFrom(this.paymentService.VerifyManualPayment(req, this.metadata()));
       } catch (error) {
-          this.logger.error(`Failed to verify manual payment: ${error.message}`, error.stack);
-          throw error;
+          this.rethrowAsHttp(error, 'verify manual payment');
       }
   }
 
@@ -83,8 +91,7 @@ export class PaymentGrpcClient implements OnModuleInit {
       try {
           return await lastValueFrom(this.paymentService.CreateIntent(req, this.metadata()));
       } catch (error) {
-          this.logger.error(`Failed to create intent: ${error.message}`, error.stack);
-          throw error;
+          this.rethrowAsHttp(error, 'create payment intent');
       }
   }
 
@@ -92,8 +99,7 @@ export class PaymentGrpcClient implements OnModuleInit {
     try {
         return await lastValueFrom(this.paymentService.GetPaymentMethods(req, this.metadata()));
     } catch (error) {
-        this.logger.error(`Failed to get payment methods: ${error.message}`, error.stack);
-        throw error;
+        this.rethrowAsHttp(error, 'get payment methods');
     }
   }
 
@@ -103,8 +109,7 @@ export class PaymentGrpcClient implements OnModuleInit {
           this.logger.log(`ProcessPayment response: ${JSON.stringify(resp)}`);
           return resp;
       } catch (error) {
-          this.logger.error(`Failed to process payment: ${error.message}`, error.stack);
-          throw error;
+          this.rethrowAsHttp(error, 'process payment');
       }
   }
 
@@ -113,8 +118,7 @@ export class PaymentGrpcClient implements OnModuleInit {
     try {
         return await lastValueFrom(this.paymentService.AdminCreatePaymentMethod(req, this.metadata()));
     } catch (error) {
-        this.logger.error(`Failed to create payment method: ${error.message}`, error.stack);
-        throw error;
+        this.rethrowAsHttp(error, 'create payment method');
     }
   }
 
@@ -122,8 +126,7 @@ export class PaymentGrpcClient implements OnModuleInit {
     try {
         return await lastValueFrom(this.paymentService.AdminUpdatePaymentMethod(req, this.metadata()));
     } catch (error) {
-        this.logger.error(`Failed to update payment method: ${error.message}`, error.stack);
-        throw error;
+        this.rethrowAsHttp(error, 'update payment method');
     }
   }
 
@@ -131,8 +134,7 @@ export class PaymentGrpcClient implements OnModuleInit {
     try {
         return await lastValueFrom(this.paymentService.AdminDeletePaymentMethod(req, this.metadata()));
     } catch (error) {
-        this.logger.error(`Failed to delete payment method: ${error.message}`, error.stack);
-        throw error;
+        this.rethrowAsHttp(error, 'delete payment method');
     }
   }
 
@@ -140,8 +142,7 @@ export class PaymentGrpcClient implements OnModuleInit {
     try {
         return await lastValueFrom(this.paymentService.AdminGetPaymentMethod(req, this.metadata()));
     } catch (error) {
-        this.logger.error(`Failed to get payment method: ${error.message}`, error.stack);
-        throw error;
+        this.rethrowAsHttp(error, 'get payment method');
     }
   }
 
@@ -149,8 +150,7 @@ export class PaymentGrpcClient implements OnModuleInit {
     try {
         return await lastValueFrom(this.paymentService.AdminListPaymentMethods(req, this.metadata()));
     } catch (error) {
-        this.logger.error(`Failed to list payment methods: ${error.message}`, error.stack);
-        throw error;
+        this.rethrowAsHttp(error, 'list payment methods');
     }
   }
 
@@ -158,8 +158,23 @@ export class PaymentGrpcClient implements OnModuleInit {
     try {
         return await lastValueFrom(this.paymentService.AdminListPayments(req, this.metadata()));
     } catch (error) {
-        this.logger.error(`Failed to list payments: ${error.message}`, error.stack);
-        throw error;
+        this.rethrowAsHttp(error, 'list payments');
     }
+  }
+}
+
+function mapGrpcCodeToHttpStatus(code: number | undefined): number {
+  switch (code) {
+    case GrpcStatus.INVALID_ARGUMENT: return HttpStatus.BAD_REQUEST;            // 400
+    case GrpcStatus.NOT_FOUND: return HttpStatus.NOT_FOUND;                      // 404
+    case GrpcStatus.ALREADY_EXISTS: return HttpStatus.CONFLICT;                  // 409
+    case GrpcStatus.PERMISSION_DENIED: return HttpStatus.FORBIDDEN;              // 403
+    case GrpcStatus.UNAUTHENTICATED: return HttpStatus.UNAUTHORIZED;             // 401
+    case GrpcStatus.RESOURCE_EXHAUSTED: return HttpStatus.TOO_MANY_REQUESTS;     // 429
+    case GrpcStatus.FAILED_PRECONDITION: return HttpStatus.PRECONDITION_FAILED;  // 412
+    case GrpcStatus.UNAVAILABLE: return HttpStatus.SERVICE_UNAVAILABLE;          // 503
+    case GrpcStatus.DEADLINE_EXCEEDED: return HttpStatus.GATEWAY_TIMEOUT;        // 504
+    case GrpcStatus.INTERNAL: return HttpStatus.INTERNAL_SERVER_ERROR;           // 500
+    default: return HttpStatus.BAD_GATEWAY;                                       // 502 — downstream service issue
   }
 }

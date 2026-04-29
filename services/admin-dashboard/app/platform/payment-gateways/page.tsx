@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { PlusIcon, PencilSquareIcon, TrashIcon, ArrowPathIcon, LockClosedIcon } from "@heroicons/react/24/outline";
+import { PlusIcon, PencilSquareIcon, TrashIcon, ArrowPathIcon, LockClosedIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
 import { CheckCircleIcon } from "@heroicons/react/24/solid";
 import { ChevronDown } from "lucide-react";
 import { toast } from "sonner";
@@ -11,11 +11,13 @@ import {
   updateGatewayConfig,
   setGatewayActive,
   deleteGatewayConfig,
+  listPaymentMethods,
   SUPPORTED_GATEWAY_PROVIDERS,
   type GatewayConfig,
   type GatewayProvider,
   type GatewayMode,
   type CreateGatewayConfigInput,
+  type PaymentMethod,
 } from "@/src/shared/api-client";
 import { listPlatformBrands, type PlatformBrand } from "../api";
 import {
@@ -31,6 +33,7 @@ import { formatDateTime } from "@/lib/utils";
 export default function PaymentGatewaysPage() {
   const [configs, setConfigs] = useState<GatewayConfig[]>([]);
   const [brands, setBrands] = useState<PlatformBrand[]>([]);
+  const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -42,9 +45,10 @@ export default function PaymentGatewaysPage() {
   const fetch = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const [configsResult, brandsResult] = await Promise.allSettled([
+    const [configsResult, brandsResult, methodsResult] = await Promise.allSettled([
       listGatewayConfigs(),
       listPlatformBrands(),
+      listPaymentMethods(),
     ]);
 
     if (configsResult.status === "rejected") {
@@ -58,6 +62,9 @@ export default function PaymentGatewaysPage() {
       setBrands(brandsResult.value);
     } else {
       toast.error(brandsResult.reason instanceof Error ? brandsResult.reason.message : "Failed to load brands.");
+    }
+    if (methodsResult.status === "fulfilled") {
+      setMethods(methodsResult.value);
     }
     setLoading(false);
   }, []);
@@ -102,6 +109,33 @@ export default function PaymentGatewaysPage() {
     [brands],
   );
 
+  // For each provider, count the active automatic methods that depend on it.
+  // Drives the "used by N methods" hint per provider and the orphan-warning banner.
+  const methodCountByProvider = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const m of methods) {
+      const isAutomatic = String(m.type ?? "").toLowerCase() === "automatic";
+      if (!isAutomatic || !m.is_active || !m.gateway_name) continue;
+      map.set(m.gateway_name, (map.get(m.gateway_name) ?? 0) + 1);
+    }
+    return map;
+  }, [methods]);
+
+  const activeProviders = useMemo<Set<string>>(
+    () => new Set(configs.filter((c) => c.is_active).map((c) => c.provider as string)),
+    [configs],
+  );
+
+  const orphanedMethodCount = useMemo(() => {
+    let count = 0;
+    for (const m of methods) {
+      const isAutomatic = String(m.type ?? "").toLowerCase() === "automatic";
+      if (!isAutomatic || !m.is_active) continue;
+      if (!m.gateway_name || !activeProviders.has(m.gateway_name)) count += 1;
+    }
+    return count;
+  }, [methods, activeProviders]);
+
   return (
     <main className="space-y-4">
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
@@ -126,17 +160,39 @@ export default function PaymentGatewaysPage() {
         </div>
         {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
 
+        {!loading && orphanedMethodCount > 0 && (
+          <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+            <ExclamationTriangleIcon className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <p className="font-semibold">{orphanedMethodCount} active automatic method{orphanedMethodCount === 1 ? "" : "s"} won&apos;t reach participants</p>
+              <p className="mt-0.5 text-amber-700">
+                Their providers have no active gateway config. Add or activate the matching provider below, or switch the method to Manual.
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="space-y-3">
           {loading && <p className="py-6 text-center text-xs text-zinc-400">Loading…</p>}
           {!loading && configs.length === 0 && (
             <p className="py-6 text-center text-xs text-zinc-400">No gateway configurations yet. Add one to enable automatic payment methods.</p>
           )}
-          {!loading && Object.entries(grouped).map(([provider, items]) => (
+          {!loading && Object.entries(grouped).map(([provider, items]) => {
+            const dependentMethodCount = methodCountByProvider.get(provider) ?? 0;
+            const hasActiveConfig = items.some((c) => c.is_active);
+            const isOrphaning = dependentMethodCount > 0 && !hasActiveConfig;
+            return (
             <div key={provider} className="overflow-hidden rounded-md border border-zinc-200">
               <div className="flex items-center justify-between border-b border-zinc-200 bg-zinc-50 px-3 py-2">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold uppercase tracking-wide text-zinc-700">{provider}</span>
                   <span className="text-[10px] text-zinc-500">{items.length} config(s)</span>
+                  {dependentMethodCount > 0 && (
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${isOrphaning ? "bg-amber-50 text-amber-700" : "bg-zinc-100 text-zinc-600"}`}>
+                      {isOrphaning && <ExclamationTriangleIcon className="h-3 w-3" />}
+                      Used by {dependentMethodCount} method{dependentMethodCount === 1 ? "" : "s"}
+                    </span>
+                  )}
                 </div>
               </div>
               <table className="min-w-full text-left text-[11px]">
@@ -200,7 +256,8 @@ export default function PaymentGatewaysPage() {
                 </tbody>
               </table>
             </div>
-          ))}
+            );
+          })}
         </div>
       </section>
 

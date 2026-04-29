@@ -6,15 +6,20 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ybb-platform/payment/internal/domain/entities"
+	"github.com/ybb-platform/payment/internal/infrastructure/gateways"
 	"github.com/ybb-platform/payment/internal/infrastructure/persistence"
 )
 
 type PaymentMethodHandler struct {
-	repo *persistence.PaymentMethodRepository
+	repo           *persistence.PaymentMethodRepository
+	gatewayFactory *gateways.GatewayFactory
 }
 
-func NewPaymentMethodHandler(repo *persistence.PaymentMethodRepository) *PaymentMethodHandler {
-	return &PaymentMethodHandler{repo: repo}
+func NewPaymentMethodHandler(
+	repo *persistence.PaymentMethodRepository,
+	gatewayFactory *gateways.GatewayFactory,
+) *PaymentMethodHandler {
+	return &PaymentMethodHandler{repo: repo, gatewayFactory: gatewayFactory}
 }
 
 // Create godoc
@@ -55,6 +60,24 @@ func (h *PaymentMethodHandler) GetAll(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch methods"})
 		return
 	}
+
+	// `available_only=true` hides automatic methods whose gateway provider isn't
+	// registered in the factory. The portal sends this so participants don't see
+	// payment options that would fail at confirm-time. Admin endpoints omit the
+	// flag because they need to see (and manage) every configured method.
+	if c.Query("available_only") == "true" && h.gatewayFactory != nil {
+		filtered := make([]entities.PaymentMethodEntity, 0, len(methods))
+		for _, m := range methods {
+			if !m.Type.IsManual() && m.GatewayName != "" {
+				if _, err := h.gatewayFactory.GetGateway(m.GatewayName); err != nil {
+					continue
+				}
+			}
+			filtered = append(filtered, m)
+		}
+		methods = filtered
+	}
+
 	c.JSON(http.StatusOK, gin.H{"data": methods})
 }
 
