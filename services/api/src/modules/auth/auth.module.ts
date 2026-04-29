@@ -18,6 +18,7 @@ import { AdminRefreshHandler } from './application/commands/handlers/admin-refre
 import { AmbassadorLoginHandler } from './application/commands/handlers/ambassador-login.handler';
 import { GetUserProfileHandler } from './application/queries/handlers/get-user-profile.handler';
 import { GetAuthProvidersHandler } from './application/queries/handlers/get-auth-providers.handler';
+import { GetAuthContextHandler } from './application/queries/handlers/get-auth-context.handler';
 import { CreateAuthProviderHandler } from './application/commands/handlers/create-auth-provider.handler';
 import { UpdateAuthProviderHandler } from './application/commands/handlers/update-auth-provider.handler';
 import { DeleteAuthProviderHandler } from './application/commands/handlers/delete-auth-provider.handler';
@@ -63,6 +64,7 @@ import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.m
     AmbassadorLoginHandler,
     GetUserProfileHandler,
     GetAuthProvidersHandler,
+    GetAuthContextHandler,
     CreateAuthProviderHandler,
     UpdateAuthProviderHandler,
     DeleteAuthProviderHandler,
