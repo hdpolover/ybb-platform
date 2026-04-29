@@ -7,6 +7,7 @@ import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { CacheInvalidate } from '@shared/decorators/cache-invalidate.decorator';
+import { LANDING_BRAND_PATTERNS } from '@shared/constants/cache-patterns';
 import { ListBrandsQuery } from '../application/queries/list-brands.query';
 import { GetBrandDetailQuery } from '../application/queries/get-brand-detail.query';
 import { ListBrandSponsorsQuery } from '../application/queries/list-brand-sponsors.query';
@@ -93,6 +94,7 @@ export class BrandsController {
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'Sponsor', action: ChangeType.create })
+    @CacheInvalidate(LANDING_BRAND_PATTERNS)
     @ApiOperation({ summary: 'Create a brand sponsor' })
     @ApiConsumes('multipart/form-data')
     @UseInterceptors(FileInterceptor('logo'))
@@ -110,6 +112,7 @@ export class BrandsController {
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'Sponsor', action: ChangeType.update })
+    @CacheInvalidate(LANDING_BRAND_PATTERNS)
     @ApiOperation({ summary: 'Update a brand sponsor' })
     @ApiConsumes('multipart/form-data')
     @UseInterceptors(FileInterceptor('logo'))
@@ -130,6 +133,7 @@ export class BrandsController {
     @ApiBearerAuth()
     @HttpCode(HttpStatus.NO_CONTENT)
     @AuditTrail({ entityType: 'Sponsor', action: ChangeType.delete })
+    @CacheInvalidate(LANDING_BRAND_PATTERNS)
     @ApiOperation({ summary: 'Delete a brand sponsor' })
     @ApiResponse({ status: 204, description: 'Sponsor deleted' })
     @ApiResponse({ status: 404, description: 'Sponsor not found' })
@@ -155,6 +159,7 @@ export class BrandsController {
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'BrandSocialFeed', action: ChangeType.create })
+    @CacheInvalidate(LANDING_BRAND_PATTERNS)
     @ApiOperation({ summary: 'Create a brand social feed item' })
     @ApiResponse({ status: 201, description: 'Social feed created', type: SocialFeedResponseDto })
     async createSocialFeed(
@@ -168,6 +173,7 @@ export class BrandsController {
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'BrandSocialFeed', action: ChangeType.update })
+    @CacheInvalidate(LANDING_BRAND_PATTERNS)
     @ApiOperation({ summary: 'Update a brand social feed item' })
     @ApiResponse({ status: 200, description: 'Social feed updated', type: SocialFeedResponseDto })
     @ApiResponse({ status: 404, description: 'Social feed not found' })
@@ -184,6 +190,7 @@ export class BrandsController {
     @ApiBearerAuth()
     @HttpCode(HttpStatus.NO_CONTENT)
     @AuditTrail({ entityType: 'BrandSocialFeed', action: ChangeType.delete })
+    @CacheInvalidate(LANDING_BRAND_PATTERNS)
     @ApiOperation({ summary: 'Delete a brand social feed item' })
     @ApiResponse({ status: 204, description: 'Social feed deleted' })
     @ApiResponse({ status: 404, description: 'Social feed not found' })
@@ -194,6 +201,7 @@ export class BrandsController {
         return this.commandBus.execute(new DeleteSocialFeedCommand(id, socialFeedId));
     }
 
+    // no cache bust: a new brand isn't yet linked to landing routes
     @Post()
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
@@ -273,6 +281,7 @@ export class BrandsController {
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'Brand', action: ChangeType.update })
+    @CacheInvalidate(LANDING_BRAND_PATTERNS)
     @ApiOperation({ summary: 'Update brand settings' })
     @ApiResponse({ status: 200, description: 'Brand settings updated successfully', type: BrandResponseDto })
     @ApiResponse({ status: 404, description: 'Brand not found' })
@@ -299,6 +308,7 @@ export class BrandsController {
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'Brand', action: ChangeType.update })
+    @CacheInvalidate(LANDING_BRAND_PATTERNS)
     @ApiOperation({ summary: 'Update brand landing page metadata (partial merge)' })
     @ApiResponse({ status: 200, description: 'Updated metadata object' })
     async updateBrandMetadata(
@@ -313,6 +323,7 @@ export class BrandsController {
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'Brand', action: ChangeType.delete })
+    @CacheInvalidate(LANDING_BRAND_PATTERNS)
     @ApiOperation({ summary: 'Delete a brand' })
     @ApiResponse({ status: 200, description: 'Brand deleted successfully' })
     @ApiResponse({ status: 404, description: 'Brand not found' })
@@ -336,6 +347,7 @@ export class BrandsController {
         return this.queryBus.execute(new ListBrandAdminsQuery(id));
     }
 
+    // no cache bust: admin assignment isn't surfaced on landing pages
     @Post(':id/admins')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
@@ -354,6 +366,7 @@ export class BrandsController {
         );
     }
 
+    // no cache bust: admin assignment isn't surfaced on landing pages
     @Delete(':id/admins/:adminId')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
