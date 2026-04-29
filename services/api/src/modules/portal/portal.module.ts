@@ -1,4 +1,4 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
 import { AuthModule } from '../auth/auth.module';
 import { PaymentsModule } from '../payments/payments.module';
@@ -30,7 +30,7 @@ import { DownloadCertificateHandler } from './application/commands/handlers/down
 import { UploadSignedCopyHandler } from './application/commands/handlers/upload-signed-copy.handler';
 
 @Module({
-    imports: [CqrsModule, AuthModule, forwardRef(() => PaymentsModule), FilesModule],
+    imports: [CqrsModule, AuthModule, PaymentsModule, FilesModule],
     controllers: [
         PortalController,
         PortalSubmissionsController,
@@ -55,7 +55,6 @@ import { UploadSignedCopyHandler } from './application/commands/handlers/upload-
         EnsurePortalPaymentInvoiceHandler,
         UploadSignedCopyHandler,
     ],
-    exports: [PortalCacheService],
 })
 export class PortalModule { }
 

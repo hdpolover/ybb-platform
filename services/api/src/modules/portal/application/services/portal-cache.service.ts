@@ -301,35 +301,6 @@ export class PortalCacheService {
     }
 
     /**
-     * Invalidate caches affected by an invoice status change.
-     * Call this when an invoice is created, paid, verified, or otherwise mutated.
-     *
-     * Busts:
-     * - PORTAL_PAYMENT_DETAIL(invoiceId) — the specific invoice page
-     * - portal:payments:${userId}:* — every program's cached payments list
-     * - PORTAL_DASHBOARD(userId) — totals and payment alerts on the dashboard
-     *
-     * @param invoiceId optional — when omitted, only the user-scoped portal keys are busted
-     * @param userId required
-     */
-    async invalidateInvoiceCache(invoiceId: string | undefined, userId: string): Promise<void> {
-        try {
-            const ops: Promise<void>[] = [
-                this.cacheService.invalidateByPattern(`portal:payments:${userId}:*`),
-                this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_DASHBOARD(userId)),
-            ];
-            if (invoiceId) {
-                ops.push(this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_PAYMENT_DETAIL(invoiceId)));
-            }
-            await Promise.all(ops);
-        } catch (err) {
-            this.logger.warn(
-                `Failed to invalidate invoice ${invoiceId ?? '(no invoice)'} caches for user ${userId}: ${err instanceof Error ? err.message : String(err)}`,
-            );
-        }
-    }
-
-    /**
      * Invalidate all participant-related caches
      * Call this when participant profile is updated
      */

@@ -1,10 +1,9 @@
-import { Module, Global, forwardRef } from '@nestjs/common';
+import { Module, Global } from '@nestjs/common';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import { AuthModule } from '../auth/auth.module';
-import { PortalModule } from '../portal/portal.module';
 import { PaymentGrpcClient } from './infrastructure/services/payment-grpc.client';
 import { PaymentController } from './infrastructure/presentation/payment.controller';
 
@@ -12,7 +11,6 @@ import { PaymentController } from './infrastructure/presentation/payment.control
 @Module({
   imports: [
     AuthModule,
-    forwardRef(() => PortalModule),
     ClientsModule.registerAsync([
       {
         name: 'PAYMENT_PACKAGE',

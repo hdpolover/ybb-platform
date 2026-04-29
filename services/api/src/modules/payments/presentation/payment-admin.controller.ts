@@ -27,7 +27,6 @@ import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { PaymentServiceHttpClient } from '../infrastructure/services/payment-service-http.client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
-import { PortalCacheService } from '@modules/portal/application/services/portal-cache.service';
 
 @ApiTags('Admin Payments')
 @Controller('admin/payments')
@@ -44,7 +43,6 @@ export class PaymentAdminController {
         private readonly fileService: FileServiceClient,
         private readonly cacheService: CacheService,
         private readonly prisma: PrismaService,
-        private readonly portalCacheService: PortalCacheService,
     ) {
         this.logger.log("Using HTTP Payment Admin Controller");
         this.paymentServiceInternalKey = this.configService.get<string>('PAYMENT_SERVICE_INTERNAL_KEY', '');
@@ -193,7 +191,7 @@ export class PaymentAdminController {
 
             const participantUserId = invoice.application?.participant?.userId;
             if (participantUserId) {
-                await this.portalCacheService.invalidateInvoiceCache(id, participantUserId);
+                await this.cacheService.invalidateInvoiceCache(id, participantUserId);
             }
 
             return data;
