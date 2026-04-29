@@ -3,6 +3,7 @@ package handlers
 import (
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ybb-platform/payment/internal/domain/entities"
@@ -77,6 +78,10 @@ func (h *GatewayConfigHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if err := validateGatewayConfigRequest(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	if err := h.repo.Create(c.Request.Context(), &req); err != nil {
 		log.Printf("gateway_config_create error: %v", err)
@@ -121,6 +126,10 @@ func (h *GatewayConfigHandler) Update(c *gin.Context) {
 	existing.WebhookSecret = req.WebhookSecret
 	existing.IsActive = req.IsActive
 	existing.BrandID = req.BrandID
+	if err := validateGatewayConfigRequest(existing); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	if err := h.repo.Update(c.Request.Context(), existing); err != nil {
 		log.Printf("gateway_config_update error id=%s: %v", existing.ID, err)
@@ -159,6 +168,10 @@ func (h *GatewayConfigHandler) SetActive(c *gin.Context) {
 	}
 
 	existing.IsActive = body.IsActive
+	if err := validateGatewayConfigRequest(existing); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 	if err := h.repo.Update(c.Request.Context(), existing); err != nil {
 		log.Printf("gateway_config_set_active error id=%s: %v", existing.ID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -196,9 +209,9 @@ func (h *GatewayConfigHandler) Delete(c *gin.Context) {
 	}
 	if count > 0 {
 		c.JSON(http.StatusConflict, gin.H{
-			"error":           "Cannot delete: gateway is still referenced by payment methods",
-			"provider":        existing.Provider,
-			"referenced_by":   count,
+			"error":         "Cannot delete: gateway is still referenced by payment methods",
+			"provider":      existing.Provider,
+			"referenced_by": count,
 		})
 		return
 	}
@@ -209,4 +222,88 @@ func (h *GatewayConfigHandler) Delete(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Deleted successfully"})
+}
+
+func validateGatewayConfigRequest(cfg *entities.GatewayConfig) error {
+	provider := strings.ToLower(strings.TrimSpace(cfg.Provider))
+	mode := strings.ToLower(strings.TrimSpace(cfg.Mode))
+	serverKey := strings.TrimSpace(cfg.ServerKey)
+	clientKey := strings.TrimSpace(cfg.ClientKey)
+	webhookSecret := strings.TrimSpace(cfg.WebhookSecret)
+
+	if provider == "" {
+		return badRequestError("provider is required")
+	}
+	if mode != "sandbox" && mode != "production" {
+		return badRequestError("mode must be sandbox or production")
+	}
+	if serverKey == "" {
+		return badRequestError("server_key is required")
+	}
+	if clientKey == "" {
+		return badRequestError("client_key is required")
+	}
+
+	// Strict credential-shape checks are enforced only when activating the config.
+	// Inactive configs can be staged first and completed later.
+	if !cfg.IsActive {
+		return nil
+	}
+
+	switch provider {
+	case "midtrans":
+		if mode == "sandbox" {
+			if !strings.HasPrefix(serverKey, "SB-Mid-server-") {
+				return badRequestError("invalid Midtrans sandbox server_key format")
+			}
+			if !strings.HasPrefix(clientKey, "SB-Mid-client-") {
+				return badRequestError("invalid Midtrans sandbox client_key format")
+			}
+		} else {
+			if !strings.HasPrefix(serverKey, "Mid-server-") {
+				return badRequestError("invalid Midtrans production server_key format")
+			}
+			if !strings.HasPrefix(clientKey, "Mid-client-") {
+				return badRequestError("invalid Midtrans production client_key format")
+			}
+		}
+	case "xendit":
+		if mode == "sandbox" {
+			if !strings.HasPrefix(serverKey, "xnd_development_") {
+				return badRequestError("invalid Xendit sandbox server_key format")
+			}
+		} else if !strings.HasPrefix(serverKey, "xnd_production_") {
+			return badRequestError("invalid Xendit production server_key format")
+		}
+		if webhookSecret == "" {
+			return badRequestError("webhook_secret is required for active Xendit configs")
+		}
+	case "stripe":
+		if mode == "sandbox" {
+			if !strings.HasPrefix(serverKey, "sk_test_") {
+				return badRequestError("invalid Stripe sandbox server_key format")
+			}
+		} else if !strings.HasPrefix(serverKey, "sk_live_") {
+			return badRequestError("invalid Stripe production server_key format")
+		}
+	case "paypal":
+		// PayPal keys vary by account and don't have stable prefixes; enforce
+		// non-empty credentials only.
+	default:
+		return badRequestError("unsupported provider")
+	}
+
+	return nil
+}
+
+func badRequestError(message string) error {
+	return &gatewayConfigValidationError{message: message}
+}
+
+type gatewayConfigValidationError struct {
+	message string
+}
+
+func (e *gatewayConfigValidationError) Error() string {
+	return e.message
 }
