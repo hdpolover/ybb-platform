@@ -61,6 +61,15 @@ function maskUrls(value: unknown, apiBase: string): unknown {
     return value;
   }
   if (value !== null && typeof value === 'object') {
+    // Preserve Date and other non-plain objects to avoid collapsing values
+    // like Date -> {} when traversed via Object.entries.
+    if (value instanceof Date) {
+      return value;
+    }
+    if (!isPlainObject(value)) {
+      return value;
+    }
+
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>).map(([k, v]) => [
         k,
@@ -69,6 +78,12 @@ function maskUrls(value: unknown, apiBase: string): unknown {
     );
   }
   return value;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object') return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
 }
 
 @Injectable()
