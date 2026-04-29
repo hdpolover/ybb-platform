@@ -12,6 +12,8 @@ services:
       - .env.staging
     environment:
       PAYMENT_SECRETS_KEY: ${PAYMENT_SECRETS_KEY}
+      GIN_MODE: ${GIN_MODE:-release}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       # PAYMENT_AUTO_MIGRATE intentionally unset — SQL migrations are authoritative
     ports:
       - "8002:8002"

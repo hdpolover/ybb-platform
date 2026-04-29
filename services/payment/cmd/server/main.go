@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -87,13 +88,19 @@ func main() {
 	// Initialize Telemetry
 	tp, err := telemetry.InitTracer(context.Background())
 	if err != nil {
-		logger.Fatalf("Failed to initialize OTel: %v", err)
+		logger.Warnf("Failed to initialize OTel exporter, falling back to local/no-op tracing: %v", err)
+		tp, err = telemetry.InitNoopTracer(context.Background())
+		if err != nil {
+			logger.Fatalf("Failed to initialize fallback tracer: %v", err)
+		}
 	}
 	defer func() {
 		if err := tp.Shutdown(context.Background()); err != nil {
 			logger.Errorf("Error shutting down OTel: %v", err)
 		}
 	}()
+
+	configureGinMode(cfg.Environment, logger)
 
 	logger.Infof("Starting Payment Service on port %s", cfg.Port)
 	logger.Infof("Environment: %s", cfg.Environment)
@@ -331,8 +338,8 @@ func setupRouter(
 	intentHandler *handlers.IntentHandler,
 	internalServiceKey string,
 ) *gin.Engine {
-	router := gin.Default()
-	router.Use(otelgin.Middleware("ybb-payment"))
+	router := gin.New()
+	router.Use(gin.Logger(), gin.Recovery(), otelgin.Middleware("ybb-payment"))
 
 	// Access via browser: http://localhost:8002/swagger/index.html
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
@@ -399,6 +406,26 @@ func setupRouter(
 	}
 
 	return router
+}
+
+func configureGinMode(environment string, logger *zap.SugaredLogger) {
+	if explicitMode := strings.TrimSpace(os.Getenv("GIN_MODE")); explicitMode != "" {
+		switch explicitMode {
+		case gin.DebugMode, gin.ReleaseMode, gin.TestMode:
+			gin.SetMode(explicitMode)
+			return
+		default:
+			logger.Warnf("Invalid GIN_MODE=%q, defaulting from ENVIRONMENT", explicitMode)
+		}
+	}
+
+	if strings.EqualFold(environment, "production") {
+		gin.SetMode(gin.ReleaseMode)
+		logger.Info("GIN_MODE not set; defaulting to release mode because ENVIRONMENT=production")
+		return
+	}
+
+	gin.SetMode(gin.DebugMode)
 }
 
 func connectDatabase(databaseURL string) (*gorm.DB, error) {
