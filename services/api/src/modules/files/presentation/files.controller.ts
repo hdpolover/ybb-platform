@@ -53,6 +53,11 @@ export class FilesController {
     private readonly prisma: PrismaService,
   ) {}
 
+  private isSelfDownloadProxyUrl(url: string, fileId: string): boolean {
+    const escapedId = fileId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`/v1/files/${escapedId}/download(?:\\?|#|$)`, 'i').test(url);
+  }
+
   private async resolvePublicDownloadUrl(fileId: string): Promise<string | null> {
     const normalizedFileId = fileId.trim().toLowerCase();
     if (!FilesController.UUID_PATTERN.test(normalizedFileId)) {
@@ -68,33 +73,65 @@ export class FilesController {
     }
 
     const suffix = `${normalizedFileId}.`;
-
-    const resource = await this.prisma.programResource.findFirst({
+    const resourceCandidates = await this.prisma.programResource.findMany({
       where: {
         isActive: true,
-        fileUrl: {
-          contains: suffix,
-          mode: 'insensitive',
-        },
+        OR: [
+          {
+            fileUrl: {
+              contains: suffix,
+              mode: 'insensitive',
+            },
+          },
+          {
+            fileUrl: {
+              contains: normalizedFileId,
+              mode: 'insensitive',
+            },
+          },
+        ],
       },
       select: { fileUrl: true },
+      take: 10,
     });
-    if (resource?.fileUrl) {
-      return resource.fileUrl;
+    const resourceUrl =
+      resourceCandidates
+        .map((candidate) => candidate.fileUrl)
+        .find((url) => !this.isSelfDownloadProxyUrl(url, normalizedFileId)) ?? null;
+    if (resourceUrl) {
+      return resourceUrl;
     }
 
-    const template = await this.prisma.documentTemplate.findFirst({
+    const templateCandidates = await this.prisma.documentTemplate.findMany({
       where: {
         isActive: true,
-        templateUrl: {
-          contains: suffix,
-          mode: 'insensitive',
-        },
+        OR: [
+          {
+            templateUrl: {
+              contains: suffix,
+              mode: 'insensitive',
+            },
+          },
+          {
+            templateUrl: {
+              contains: normalizedFileId,
+              mode: 'insensitive',
+            },
+          },
+        ],
       },
       select: { templateUrl: true },
+      take: 10,
     });
+    const templateUrl =
+      templateCandidates
+        .map((candidate) => candidate.templateUrl)
+        .find(
+          (url): url is string =>
+            typeof url === 'string' && url.length > 0 && !this.isSelfDownloadProxyUrl(url, normalizedFileId),
+        ) ?? null;
 
-    return template?.templateUrl ?? null;
+    return templateUrl;
   }
 
   @Post('upload')
