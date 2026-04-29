@@ -43,7 +43,11 @@ export class ConfirmPortalPaymentHandler {
                     },
                 },
                 pricingTier: {
-                    select: { name: true },
+                    select: {
+                        name: true,
+                        isActive: true,
+                        deletedAt: true,
+                    },
                 },
             },
         });
@@ -54,6 +58,9 @@ export class ConfirmPortalPaymentHandler {
         }
         if (invoice.status === 'paid') {
             throw new BadRequestException('Invoice is already paid');
+        }
+        if (!invoice.pricingTier.isActive || invoice.pricingTier.deletedAt) {
+            throw new BadRequestException('This payment option is no longer available for new payments.');
         }
 
         // Build customer identity for downstream events (notification service uses
