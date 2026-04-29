@@ -10,6 +10,7 @@ import {
   TrashIcon,
 } from "@heroicons/react/24/solid";
 import type { TimelineRow } from "./TimelinesTable";
+import { toLocalDatetimeInputValue } from "@/lib/utils";
 
 // SEARCH COMPONENT (State via URL)
 export function TimelineSearch({ initialSearch }: { initialSearch: string }) {
@@ -95,11 +96,11 @@ function TimelineFormModal({
           <div className="grid gap-5 md:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-xs font-medium text-zinc-500">Start Date <span className="text-rose-500">*</span></label>
-              <input type="datetime-local" defaultValue={initialData?.startDateIso} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100" required />
+              <input type="datetime-local" defaultValue={initialData?.startDateIso ? toLocalDatetimeInputValue(initialData.startDateIso) : undefined} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100" required />
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-medium text-zinc-500">End Date <span className="text-rose-500">*</span></label>
-              <input type="datetime-local" defaultValue={initialData?.endDateIso} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100" required />
+              <input type="datetime-local" defaultValue={initialData?.endDateIso ? toLocalDatetimeInputValue(initialData.endDateIso) : undefined} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100" required />
             </div>
           </div>
 

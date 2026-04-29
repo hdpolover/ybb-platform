@@ -39,7 +39,7 @@ import {
   SheetTitle,
 } from "@/src/ui/sheet";
 import { useAuth } from "@/app/contexts/AuthContext";
-import { formatDate } from "@/lib/utils";
+import { formatDate, parseApiDate, toLocalDatetimeInputValue } from "@/lib/utils";
 import {
   listProgramMedia,
   uploadFileViaPresignedUrl,
@@ -2030,15 +2030,11 @@ type SocialFeedForm = {
 };
 
 function toDatetimeLocal(value?: string | null): string {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
-  return date.toISOString().slice(0, 16);
+  return value ? toLocalDatetimeInputValue(value) : "";
 }
 
 function formatFeedTimestamp(value: string): string {
-  const date = new Date(value);
+  const date = parseApiDate(value);
   if (Number.isNaN(date.getTime())) {
     return value;
   }

@@ -12,6 +12,7 @@ import {
 import type { PaymentOptionRow } from "./PaymentOptionTable";
 import { createPricingTier, updatePricingTier, deletePricingTier } from "@/app/platform/api";
 import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
+import { toUtcIsoFromLocalInput } from "@/lib/utils";
 
 // SEARCH COMPONENT
 export function PaymentOptionSearch({ initialSearch }: { initialSearch: string }) {
@@ -100,17 +101,20 @@ function PaymentOptionDrawer({
     setSaving(true);
     setError(null);
     try {
+      const validFromUtc = toUtcIsoFromLocalInput(validFrom);
+      const validUntilUtc = toUtcIsoFromLocalInput(validUntil);
+
       if (isEditMode && initialData) {
         await updatePricingTier(initialData._id, {
           name, description, price, currency, feeType, allowedCategories, isActive, benefits, requirements,
-          ...(validFrom ? { validFrom } : {}),
-          ...(validUntil ? { validUntil } : {}),
+          ...(validFromUtc ? { validFrom: validFromUtc } : {}),
+          ...(validUntilUtc ? { validUntil: validUntilUtc } : {}),
         });
       } else {
         if (!programId) throw new Error("Program ID is required");
-        if (!validFrom || !validUntil) throw new Error("Valid From and Valid Until are required");
+        if (!validFromUtc || !validUntilUtc) throw new Error("Valid From and Valid Until are required");
         await createPricingTier(programId, {
-          name, description, price, currency, feeType, allowedCategories, benefits, requirements, validFrom, validUntil,
+          name, description, price, currency, feeType, allowedCategories, benefits, requirements, validFrom: validFromUtc, validUntil: validUntilUtc,
         });
       }
       onClose();

@@ -8,6 +8,7 @@ import {
   Squares2X2Icon,
 } from "@heroicons/react/24/outline";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { parseApiDate } from "@/lib/utils";
 
 type ProgramListProps = {
   onSelectProgram: (programId: string) => void;
@@ -16,8 +17,8 @@ type ProgramListProps = {
 type ProgramViewMode = "grid" | "list";
 
 function formatDateRange(startDate: string, endDate: string): string {
-  const start = new Date(startDate);
-  const end = new Date(endDate);
+  const start = parseApiDate(startDate);
+  const end = parseApiDate(endDate);
   if (isNaN(start.getTime()) || isNaN(end.getTime())) return "—";
   return new Intl.DateTimeFormat("en-US", {
     month: "short",

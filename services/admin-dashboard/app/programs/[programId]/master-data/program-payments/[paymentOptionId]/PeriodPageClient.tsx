@@ -7,23 +7,11 @@ import { PaymentPeriodsTable } from "@/app/components/programPaymentsMasterData/
 import type { PeriodRow } from "@/app/components/programPaymentsMasterData/periods/PaymentPeriodsTable";
 import { getPricingTierById } from "@/app/platform/api";
 import type { ValidityPeriod, PricingTier } from "@/app/platform/api";
+import { parseApiDate } from "@/lib/utils";
 
 function parseDateLike(value: string | null | undefined): Date | null {
-  if (!value) return null;
-
-  const direct = new Date(value);
-  if (!Number.isNaN(direct.getTime())) return direct;
-
-  const trimmed = value.trim();
-  const normalized = trimmed
-    .replace(" ", "T")
-    .replace(/(\.\d{3})\d+/, "$1");
-  const withTimezone = /(?:[zZ]|[+-]\d{2}:\d{2})$/.test(normalized)
-    ? normalized
-    : `${normalized}Z`;
-  const fallback = new Date(withTimezone);
-
-  return Number.isNaN(fallback.getTime()) ? null : fallback;
+  const parsed = parseApiDate(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 function fmt(date: string | null | undefined) {

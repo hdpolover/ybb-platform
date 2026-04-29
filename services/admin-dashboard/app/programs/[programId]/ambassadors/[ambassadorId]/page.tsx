@@ -10,6 +10,7 @@ import { Button } from "@/src/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/src/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/src/ui/table";
 import { getAmbassador, getAmbassadorReferrals, type AmbassadorDetail, type AmbassadorReferral } from "@/src/shared/api-client";
+import { parseApiDate } from "@/lib/utils";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -22,7 +23,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function formatDate(value?: string | null) {
   if (!value) return "—";
-  const date = new Date(value);
+  const date = parseApiDate(value);
   if (Number.isNaN(date.getTime())) return "—";
   return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }

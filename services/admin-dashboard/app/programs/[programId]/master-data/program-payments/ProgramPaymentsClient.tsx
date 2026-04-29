@@ -5,36 +5,15 @@ import { ProgramPaymentsTable } from "@/app/components/programPaymentsMasterData
 import type { PaymentOptionRow } from "@/app/components/programPaymentsMasterData/options/PaymentOptionTable";
 import { getPricingTiers } from "@/app/platform/api";
 import type { PricingTier } from "@/app/platform/api";
+import { parseApiDate } from "@/lib/utils";
 
 function parseDateLike(value: unknown): Date | null {
-  if (!value) return null;
-
-  if (value instanceof Date) {
-    return Number.isNaN(value.getTime()) ? null : value;
-  }
-
   if (typeof value === "number") {
     const dateFromNumber = new Date(value);
     return Number.isNaN(dateFromNumber.getTime()) ? null : dateFromNumber;
   }
-
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const direct = new Date(value);
-  if (!Number.isNaN(direct.getTime())) return direct;
-
-  const trimmed = value.trim();
-  const normalized = trimmed
-    .replace(" ", "T")
-    .replace(/(\.\d{3})\d+/, "$1");
-  const withTimezone = /(?:[zZ]|[+-]\d{2}:\d{2})$/.test(normalized)
-    ? normalized
-    : `${normalized}Z`;
-  const fallback = new Date(withTimezone);
-
-  return Number.isNaN(fallback.getTime()) ? null : fallback;
+  const parsed = parseApiDate((value as string | Date | null | undefined) ?? null);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 function tierToRow(tier: PricingTier, index: number): PaymentOptionRow {
