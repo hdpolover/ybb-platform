@@ -4,10 +4,14 @@ import {
     ExchangeRateResponseDto,
     ExchangeRateHistoryResponseDto,
 } from '../../../presentation/dto/exchange-rate.dto';
+import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
 
 @Injectable()
 export class UpdateExchangeRateHandler {
-    constructor(private readonly prisma: PrismaService) {}
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly cacheService: CacheService,
+    ) {}
 
     async getExchangeRate(programId: string): Promise<ExchangeRateResponseDto> {
         const program = await this.prisma.program.findUnique({
@@ -80,12 +84,32 @@ export class UpdateExchangeRateHandler {
             }),
         ]);
 
+        // Invalidate caches so pricing changes are reflected immediately
+        await this.invalidateExchangeRateCaches(programId, program.brandId);
+
         return {
             programId: updatedProgram.id,
             usdInIdr: Number(updatedProgram.usdInIdr),
             source: 'program',
             updatedAt: updatedProgram.updatedAt,
         };
+    }
+
+    /**
+     * Invalidate caches when exchange rate is updated
+     */
+    private async invalidateExchangeRateCaches(programId: string, brandId: string): Promise<void> {
+        try {
+            await Promise.all([
+                this.cacheService.invalidateBrandLandingCaches(brandId),
+                this.cacheService.invalidateByPattern(`program:detail:${programId}*`),
+                this.cacheService.invalidateByPattern('portal:payments:*'),
+                this.cacheService.invalidateByPattern('portal:dashboard:*'),
+            ]);
+        } catch (error) {
+            // Log but don't throw - cache invalidation failures shouldn't break exchange rate updates
+            console.error('Failed to invalidate exchange rate caches:', error);
+        }
     }
 
     async getExchangeRateHistory(

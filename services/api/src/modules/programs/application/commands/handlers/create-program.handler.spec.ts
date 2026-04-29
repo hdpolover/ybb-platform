@@ -4,6 +4,7 @@ import { CreateProgramHandler } from './create-program.handler';
 import { CreateProgramCommand } from '../create-program.command';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
 import { CreateProgramDto } from '../../../presentation/dto/create-program.dto';
+import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
 
 describe('CreateProgramHandler', () => {
     let handler: CreateProgramHandler;
@@ -18,12 +19,18 @@ describe('CreateProgramHandler', () => {
         create: jest.fn(),
     };
 
+    const mockCacheService = {
+        invalidateBrandLandingCaches: jest.fn().mockResolvedValue(undefined),
+        invalidateByPattern: jest.fn().mockResolvedValue(undefined),
+    };
+
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
             providers: [
                 CreateProgramHandler,
                 { provide: 'IProgramRepository', useValue: mockProgramRepository },
                 { provide: IUserActivityLogRepository, useValue: mockActivityLogRepository },
+                { provide: CacheService, useValue: mockCacheService },
             ],
         }).compile();
 

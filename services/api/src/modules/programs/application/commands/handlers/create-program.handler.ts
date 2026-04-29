@@ -5,6 +5,7 @@ import { IProgramRepository } from '@core/interfaces/repositories/program.reposi
 import { Program } from '@core/entities/program.entity';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
 import { UserActivityLog } from '@core/entities/user-activity-log.entity';
+import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
 
 @CommandHandler(CreateProgramCommand)
 export class CreateProgramHandler implements ICommandHandler<CreateProgramCommand> {
@@ -13,6 +14,7 @@ export class CreateProgramHandler implements ICommandHandler<CreateProgramComman
         private readonly programRepository: IProgramRepository,
         @Inject(IUserActivityLogRepository)
         private readonly activityLogRepository: IUserActivityLogRepository,
+        private readonly cacheService: CacheService,
     ) {}
 
     async execute(command: CreateProgramCommand): Promise<any> {
@@ -51,11 +53,29 @@ export class CreateProgramHandler implements ICommandHandler<CreateProgramComman
             new Date(),
         ));
 
+        // Invalidate caches so landing pages and program lists reflect the new program
+        await this.invalidateProgramCaches(program.brandId as string);
+
         const { brandId, ...rest } = program as unknown as Record<string, unknown>;
         return {
             ...rest,
             brandId: brandId,
         };
+    }
+
+    /**
+     * Invalidate caches when a new program is created
+     */
+    private async invalidateProgramCaches(brandId: string): Promise<void> {
+        try {
+            await Promise.all([
+                this.cacheService.invalidateBrandLandingCaches(brandId),
+                this.cacheService.invalidateByPattern('program:list:*'),
+            ]);
+        } catch (error) {
+            // Log but don't throw - cache invalidation failures shouldn't break program creation
+            console.error('Failed to invalidate program caches after create:', error);
+        }
     }
 
     private generateSlug(text: string): string {
