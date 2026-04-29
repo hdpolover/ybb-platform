@@ -1,4 +1,5 @@
 import { Module, Global } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { CacheModule as NestCacheModule } from '@nestjs/cache-manager';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import Keyv from 'keyv';
@@ -9,6 +10,7 @@ import { CacheMetricsService } from './cache-metrics.service';
 import { CacheWarmingService } from './cache-warming.service';
 import { RedisPubSubService } from '../redis/redis-pubsub.service';
 import { PrismaModule } from '../prisma/prisma.module';
+import { CacheInvalidationInterceptor } from '../../interceptors/cache-invalidation.interceptor';
 
 @Global()
 @Module({
@@ -39,7 +41,16 @@ import { PrismaModule } from '../prisma/prisma.module';
       isGlobal: true,
     }),
   ],
-  providers: [CacheService, CacheMetricsService, CacheWarmingService, RedisPubSubService],
+  providers: [
+    CacheService,
+    CacheMetricsService,
+    CacheWarmingService,
+    RedisPubSubService,
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: CacheInvalidationInterceptor,
+    },
+  ],
   exports: [NestCacheModule, CacheService, CacheMetricsService, CacheWarmingService, RedisPubSubService],
 })
 export class CacheModule { }
