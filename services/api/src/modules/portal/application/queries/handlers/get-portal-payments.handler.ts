@@ -20,6 +20,17 @@ function getFeeTypePriority(feeType?: string | null): number {
     return 99;
 }
 
+function resolveTierPeriod(
+    periods: Array<{ startDate: Date; endDate: Date }>,
+    referenceDate: Date,
+    now: Date,
+): { startDate: Date; endDate: Date } | undefined {
+    const byReference = periods.find((period) => period.startDate <= referenceDate && period.endDate >= referenceDate);
+    const activeOrUpcoming = periods.find((period) => period.endDate >= now);
+    const fallbackLatest = periods.length > 0 ? periods[periods.length - 1] : undefined;
+    return byReference ?? activeOrUpcoming ?? fallbackLatest;
+}
+
 @Injectable()
 @QueryHandler(GetPortalPaymentsQuery)
 export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPaymentsQuery> {
@@ -68,9 +79,9 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                                 validityPeriods: {
                                     select: {
                                         startDate: true,
+                                        endDate: true,
                                     },
                                     orderBy: { startDate: 'asc' },
-                                    take: 1,
                                 },
                             }
                         }
@@ -94,9 +105,9 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                                 validityPeriods: {
                                     select: {
                                         startDate: true,
+                                        endDate: true,
                                     },
                                     orderBy: { startDate: 'asc' },
-                                    take: 1,
                                 },
                             },
                             orderBy: { order: 'asc' }
@@ -163,10 +174,11 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
             const visibleTierIds = new Set<string>();
             for (const tier of applicableTiers) {
                 const invoice = latestInvoiceByTier.get(tier.id);
-                const startDate = tier.validityPeriods[0]?.startDate;
+                const period = resolveTierPeriod(tier.validityPeriods, invoice?.createdAt ?? now, now);
+                const startDate = period?.startDate;
                 const hasStarted = !startDate || startDate <= now;
 
-                if (!invoice && !hasStarted) {
+                if (!hasStarted) {
                     break;
                 }
 
@@ -184,7 +196,9 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                 }
 
                 const invoice = latestInvoiceByTier.get(tier.id);
-                const startDate = tier.validityPeriods[0]?.startDate;
+                const period = resolveTierPeriod(tier.validityPeriods, invoice?.createdAt ?? now, now);
+                const startDate = period?.startDate;
+                const dueDate = period?.endDate;
                 const sequenceOrder = getFeeTypePriority(tier.feeType) * 1000 + tier.order;
 
                 if (invoice) {
@@ -194,7 +208,7 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                         amount: Number(invoice.amount),
                         currency: invoice.currency,
                         status: invoice.status,
-                        dueDate: undefined,
+                        dueDate: dueDate || undefined,
                         paidAt: invoice.paidAt || undefined,
                         paymentMethod: invoice.paymentMethod || undefined,
                         actionUrl: undefined,
@@ -224,6 +238,7 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                     currency: tier.currency,
                     type: tier.feeType,
                     startDate: startDate || undefined,
+                    dueDate: dueDate || undefined,
                     sequenceOrder,
                 });
                 totalDue += Number(tier.price);
