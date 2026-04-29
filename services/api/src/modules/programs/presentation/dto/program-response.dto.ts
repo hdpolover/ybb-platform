@@ -22,6 +22,9 @@ export class ProgramResponseDto {
   @ApiProperty({ example: 2025 })
   year: number;
 
+  @ApiProperty({ example: 'Sustainability & Innovation', required: false, nullable: true })
+  theme?: string | null;
+
   @ApiProperty({ example: '2025-03-01T00:00:00.000Z' })
   startDate: Date;
 

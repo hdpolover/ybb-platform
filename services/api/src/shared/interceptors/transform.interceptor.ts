@@ -9,6 +9,30 @@ export interface Response<T> {
   meta?: Record<string, unknown>;
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object') return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+function normalizeDates<T>(value: T): T {
+  if (value instanceof Date) {
+    return value.toISOString() as T;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeDates(item)) as T;
+  }
+
+  if (isPlainObject(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, normalizeDates(item)]),
+    ) as T;
+  }
+
+  return value;
+}
+
 @Injectable()
 export class TransformInterceptor<T> implements NestInterceptor<T, Response<T>> {
   intercept(context: ExecutionContext, next: CallHandler): Observable<Response<T>> {
@@ -16,7 +40,7 @@ export class TransformInterceptor<T> implements NestInterceptor<T, Response<T>> 
       map((data): Response<T> => {
         const ctx = context.switchToHttp();
         const response = ctx.getResponse();
-        const val = data as T & Record<string, unknown>;
+        const val = normalizeDates(data as T & Record<string, unknown>);
 
         // Pass file streams through untouched — wrapping them in JSON corrupts
         // binary downloads (PDF receipts, exports, etc.). instanceof can fail across

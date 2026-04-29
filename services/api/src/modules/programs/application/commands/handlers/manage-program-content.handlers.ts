@@ -120,6 +120,13 @@ async function invalidatePortalDocumentCaches(
     } catch { /* non-critical */ }
 }
 
+function toIsoOrNull(value: unknown): string | null {
+    if (!value) return null;
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value === 'string') return value;
+    return null;
+}
+
 async function invalidatePortalEssayCaches(
     programId: string,
     cacheService: CacheService,
@@ -966,7 +973,13 @@ export class CreateValidityPeriodHandler implements ICommandHandler<CreateValidi
         };
         const result = await this.repository.createValidityPeriod(dto as Partial<PricingTierValidityPeriod>);
         await invalidatePricingTierCachesByPricingTierId(command.dto.pricingTierId!, this.prisma, this.cacheService);
-        return result;
+        return {
+            ...result,
+            startDate: toIsoOrNull(result.startDate),
+            endDate: toIsoOrNull(result.endDate),
+            createdAt: toIsoOrNull((result as { createdAt?: unknown }).createdAt),
+            updatedAt: toIsoOrNull((result as { updatedAt?: unknown }).updatedAt),
+        };
     }
 }
 @CommandHandler(UpdateValidityPeriodCommand)
@@ -986,7 +999,13 @@ export class UpdateValidityPeriodHandler implements ICommandHandler<UpdateValidi
         };
         const result = await this.repository.updateValidityPeriod(command.id, dto as Partial<PricingTierValidityPeriod>);
         await invalidatePricingTierCachesByPricingTierId(existing.pricingTierId, this.prisma, this.cacheService);
-        return result;
+        return {
+            ...result,
+            startDate: toIsoOrNull(result.startDate),
+            endDate: toIsoOrNull(result.endDate),
+            createdAt: toIsoOrNull((result as { createdAt?: unknown }).createdAt),
+            updatedAt: toIsoOrNull((result as { updatedAt?: unknown }).updatedAt),
+        };
     }
 }
 @CommandHandler(DeleteValidityPeriodCommand)
