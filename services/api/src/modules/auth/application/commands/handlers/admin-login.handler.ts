@@ -166,6 +166,11 @@ export class AdminLoginHandler {
         const roles: string[] = ['admin'];
         if (user.admin.role) {
             roles.push(user.admin.role.name);
+            // Also push a normalized slug so RolesGuard can match UserRole enum values
+            // (e.g. "Super Admin" → "super_admin"). Without this, @Roles(UserRole.SUPER_ADMIN)
+            // never matches because the token only carries the human-readable display name.
+            const slug = user.admin.role.name.toLowerCase().replace(/\s+/g, '_');
+            if (slug !== user.admin.role.name) roles.push(slug);
         }
         // Add brand roles
         user.admin.adminBrands.forEach(ab => {

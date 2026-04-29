@@ -51,10 +51,21 @@ export class PaymentEventsController {
 
             // Business Logic: Update Application & Create Invoice
             const metadata = (data.metadata as Record<string, unknown>) || {};
-            const applicationId = (metadata.application_id as string) || (data.application_id as string);
+            let applicationId = (metadata.application_id as string) || (data.application_id as string);
+            const invoiceId = (metadata.invoice_id as string) || undefined;
             const paymentCategory = (metadata.payment_category as string) || 'registration';
             const intentId = (data.intent_id as string) || '';
             const transactionId = (data.transaction_id as string) || gatewayOrderId || '';
+
+            // Portal-driven manual payments only carry invoice_id in metadata. Resolve
+            // application_id from the invoice so we can run the same downstream logic.
+            if (!applicationId && invoiceId) {
+                const inv = await this.prisma.applicationInvoice.findUnique({
+                    where: { id: invoiceId },
+                    select: { applicationId: true },
+                });
+                if (inv) applicationId = inv.applicationId;
+            }
 
             if (applicationId) {
                 const result = await this.processApplicationPayment(
@@ -65,6 +76,7 @@ export class PaymentEventsController {
                     transactionId,
                     intentId,
                     method,
+                    invoiceId,
                 );
 
                 // Invalidate portal cache for this user to reflect payment immediately
@@ -103,6 +115,7 @@ export class PaymentEventsController {
         transactionId: string,
         intentId: string,
         method: string,
+        existingInvoiceId?: string,
     ): Promise<{ userId: string; participantId: string; programId: string; invoiceId: string | null } | null> {
         const application = await this.prisma.participantApplication.findUnique({
             where: { id: applicationId },
@@ -146,8 +159,22 @@ export class PaymentEventsController {
                     data: updateData
                 });
 
-                // Create invoice if pricing tier exists
-                if (application.pricingTierId) {
+                // If the portal flow already created an invoice, update it in-place rather
+                // than creating a duplicate. The portal handler emits invoice_id in event metadata.
+                if (existingInvoiceId) {
+                    const updated = await repos.tx.applicationInvoice.update({
+                        where: { id: existingInvoiceId },
+                        data: {
+                            status: PaymentStatus.paid,
+                            paidAt: new Date(),
+                            externalTransactionId: transactionId,
+                            externalIntentId: intentId || undefined,
+                            paymentMethod: method,
+                        },
+                        select: { id: true },
+                    });
+                    createdInvoiceId = updated.id;
+                } else if (application.pricingTierId) {
                     // Snapshot rate: program-level > brand fallback > hardcoded default
                     const exchangeRateSnapshot =
                         application.program?.usdInIdr != null

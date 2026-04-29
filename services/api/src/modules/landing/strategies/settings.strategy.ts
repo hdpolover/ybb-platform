@@ -20,12 +20,33 @@ export class SettingsStrategy {
             return cached;
         }
 
+        const availableBrands = await this.prisma.brand.findMany({
+            where: { isActive: true, deletedAt: null },
+            select: {
+                id: true,
+                slug: true,
+                name: true,
+                websiteUrl: true,
+                landingUrl: true,
+                logoIconUrl: true,
+            },
+            orderBy: { name: 'asc' },
+        });
+
         if (!category) {
             return {
                 maintenance: { is_maintenance_mode: false },
                 brand: { name: 'Youth Break the Boundaries', logo_url: '', description: undefined, logo_white_url: undefined, logo_color_url: undefined, logo_icon_url: undefined },
                 footer_navigation: [],
-                currency: { code: 'USD', rate_to_idr: 16000 }
+                currency: { code: 'USD', rate_to_idr: 16000 },
+                available_brands: availableBrands.map((brand) => ({
+                    id: brand.id,
+                    slug: brand.slug,
+                    name: brand.name,
+                    website_url: brand.websiteUrl || undefined,
+                    landing_url: brand.landingUrl || undefined,
+                    logo_icon_url: brand.logoIconUrl || undefined,
+                })),
             };
         }
 
@@ -75,7 +96,15 @@ export class SettingsStrategy {
                 logo_white_url: program.logoWhiteUrl || undefined,
                 logo_color_url: program.logoColorUrl || undefined,
                 logo_icon_url: program.logoIconUrl || program.logoUrl || category.logoIconUrl || category.logoUrl || undefined
-            } : undefined
+            } : undefined,
+            available_brands: availableBrands.map((brand) => ({
+                id: brand.id,
+                slug: brand.slug,
+                name: brand.name,
+                website_url: brand.websiteUrl || undefined,
+                landing_url: brand.landingUrl || undefined,
+                logo_icon_url: brand.logoIconUrl || undefined,
+            })),
         };
 
         // Cache for 1 hour

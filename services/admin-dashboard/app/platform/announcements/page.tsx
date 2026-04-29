@@ -16,6 +16,7 @@ import {
   publishSystemAnnouncement,
   type SystemAnnouncement,
 } from "@/src/shared/api-client";
+import { formatDate } from "@/lib/utils";
 
 const PRIORITY_BADGE: Record<string, string> = {
   low: "bg-zinc-100 text-zinc-600",
@@ -203,14 +204,14 @@ export default function SystemAnnouncementsPage() {
                       )}
                     </td>
                     <td className="px-3 py-2 text-zinc-500">
-                      {a.publishedAt ? new Date(a.publishedAt).toLocaleDateString() : "—"}
+                      {formatDate(a.publishedAt)}
                     </td>
                     <td className="px-3 py-2 text-zinc-500">
                       {a.startDate || a.endDate ? (
                         <span>
-                          {a.startDate ? new Date(a.startDate).toLocaleDateString() : "∞"}
+                          {a.startDate ? formatDate(a.startDate) : "∞"}
                           {" → "}
-                          {a.endDate ? new Date(a.endDate).toLocaleDateString() : "∞"}
+                          {a.endDate ? formatDate(a.endDate) : "∞"}
                         </span>
                       ) : (
                         "—"
@@ -312,4 +313,3 @@ export default function SystemAnnouncementsPage() {
     </main>
   );
 }
-

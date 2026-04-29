@@ -13,6 +13,7 @@ import {
 import { Button } from "@/src/ui/button";
 import { EmptyState } from "@/src/admin/empty-state";
 import { StatusBadge } from "@/src/admin/status-badge";
+import { formatDate } from "@/lib/utils";
 
 export type Program = {
   id: string;
@@ -83,13 +84,13 @@ export function ProgramsTable({ programs, onEdit, onDelete }: ProgramsTableProps
             </TableCell>
             <TableCell className="text-zinc-500">
               {program.applicationDeadline
-                ? new Date(program.applicationDeadline).toLocaleDateString()
+                ? formatDate(program.applicationDeadline)
                 : "—"}
             </TableCell>
             <TableCell className="text-xs text-zinc-500">
-              {program.startDate ? new Date(program.startDate).toLocaleDateString() : "—"}
+              {program.startDate ? formatDate(program.startDate) : "—"}
               {" → "}
-              {program.endDate ? new Date(program.endDate).toLocaleDateString() : "—"}
+              {program.endDate ? formatDate(program.endDate) : "—"}
             </TableCell>
             <TableCell>
               <div className="flex flex-wrap gap-1">

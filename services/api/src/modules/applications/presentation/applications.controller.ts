@@ -46,6 +46,7 @@ import { GetApplicationQuery } from '../application/queries/get-application.quer
 import { ListApplicationsQuery } from '../application/queries/list-applications.query';
 import { ExportApplicationsQuery } from '../application/queries/export-applications.query';
 import { StreamableFile } from '@nestjs/common';
+import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 
 // DTOs
 import { CreateApplicationRequestDto } from './dto/create-application-request.dto';
@@ -316,11 +317,11 @@ export class ApplicationsController {
   async switchCategory(
     @Param('id') id: string,
     @Body() dto: SwitchApplicationCategoryRequestDto,
-    @Body('userId') userId: string,
+    @CurrentUser() user: CurrentUserData,
   ): Promise<ApplicationResponseDto> {
     this.logger.log(`Switching category for application ${id} to ${dto.targetCategory}`);
 
-    const command = new SwitchApplicationCategoryCommand(id, dto.targetCategory, userId);
+    const command = new SwitchApplicationCategoryCommand(id, dto.targetCategory, user.userId);
     return this.switchApplicationCategoryHandler.execute(command);
   }
 

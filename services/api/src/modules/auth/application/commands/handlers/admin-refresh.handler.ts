@@ -126,6 +126,8 @@ export class AdminRefreshHandler {
     const roles: string[] = ['admin'];
     if (user.admin.role) {
       roles.push(user.admin.role.name);
+      const slug = user.admin.role.name.toLowerCase().replace(/\s+/g, '_');
+      if (slug !== user.admin.role.name) roles.push(slug);
     }
     user.admin.adminBrands.forEach((assignment) => {
       if (assignment.roleInBrand) {

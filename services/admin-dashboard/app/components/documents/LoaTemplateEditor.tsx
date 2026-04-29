@@ -33,6 +33,7 @@ import {
   type DocumentTemplateLayoutConfig,
   type MediaFile,
 } from "@/src/shared/api-client";
+import { formatDate } from "@/lib/utils";
 
 const PLACEHOLDER_TOKENS: DocumentTemplatePlaceholder[] = [
   { key: "{{participant_name}}", label: "Participant Full Name", source: "participant.fullName" },
@@ -421,7 +422,7 @@ export function LoaTemplateEditor({ programId }: { programId: string }) {
     const SAMPLE: Record<string, string> = {
       "{{participant_name}}": "Jane Doe",
       "{{program_name}}": program?.programName ?? "Your Program",
-      "{{acceptance_date}}": new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+      "{{acceptance_date}}": formatDate(new Date(), { year: "numeric", month: "long", day: "numeric" }),
       "{{batch}}": "Batch 1",
       "{{document_number}}": "DOC-2026-001",
       "{{participation_category}}": "International Delegate",
@@ -482,7 +483,7 @@ export function LoaTemplateEditor({ programId }: { programId: string }) {
           <h1 className="text-lg font-semibold text-zinc-900">LOA Template Editor</h1>
           <p className="text-xs text-zinc-500">
             {template ? (template.isActive ? "Published" : "Draft") : "No template yet"}
-            {template && ` · Last updated ${new Date(template.updatedAt).toLocaleDateString()}`}
+            {template && ` · Last updated ${formatDate(template.updatedAt)}`}
           </p>
         </div>
         <div className="flex items-center gap-2">

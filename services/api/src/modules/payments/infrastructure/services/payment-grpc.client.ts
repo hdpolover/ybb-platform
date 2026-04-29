@@ -1,9 +1,11 @@
 import { Injectable, Inject, OnModuleInit, Logger } from '@nestjs/common';
 import { ClientGrpc } from '@nestjs/microservices';
+import { ConfigService } from '@nestjs/config';
+import { Metadata } from '@grpc/grpc-js';
 import { lastValueFrom } from 'rxjs';
-import { 
-  PaymentService, 
-  GetIntentsByReferenceRequest, 
+import {
+  PaymentService,
+  GetIntentsByReferenceRequest,
   GetIntentsByReferenceResponse,
   CreateIntentRequest,
   CreateIntentResponse,
@@ -27,16 +29,30 @@ import {
 export class PaymentGrpcClient implements OnModuleInit {
   private paymentService: PaymentService;
   private readonly logger = new Logger(PaymentGrpcClient.name);
+  private readonly internalKey: string;
 
-  constructor(@Inject('PAYMENT_PACKAGE') private client: ClientGrpc) {}
+  constructor(
+    @Inject('PAYMENT_PACKAGE') private client: ClientGrpc,
+    private readonly configService: ConfigService,
+  ) {
+    this.internalKey = this.configService.get<string>('PAYMENT_SERVICE_INTERNAL_KEY', '');
+  }
 
   onModuleInit() {
     this.paymentService = this.client.getService<PaymentService>('PaymentService');
   }
 
+  // Required by the Go service's InternalServiceKeyInterceptor — the gRPC server
+  // rejects every call without this metadata header.
+  private metadata(): Metadata {
+    const md = new Metadata();
+    if (this.internalKey) md.add('x-internal-service-key', this.internalKey);
+    return md;
+  }
+
   async getIntentsByReference(req: GetIntentsByReferenceRequest): Promise<GetIntentsByReferenceResponse> {
     try {
-      return await lastValueFrom(this.paymentService.GetIntentsByReference(req));
+      return await lastValueFrom(this.paymentService.GetIntentsByReference(req, this.metadata()));
     } catch (error) {
       this.logger.error(`Failed to get intents by reference: ${error.message}`, error.stack);
       // Fallback: return empty list instead of crashing, or rethrow?
@@ -47,7 +63,7 @@ export class PaymentGrpcClient implements OnModuleInit {
 
   async submitManualPayment(req: SubmitManualPaymentRequest): Promise<SubmitManualPaymentResponse> {
     try {
-        return await lastValueFrom(this.paymentService.SubmitManualPayment(req));
+        return await lastValueFrom(this.paymentService.SubmitManualPayment(req, this.metadata()));
     } catch (error) {
         this.logger.error(`Failed to submit manual payment: ${error.message}`, error.stack);
         throw error;
@@ -56,7 +72,7 @@ export class PaymentGrpcClient implements OnModuleInit {
 
   async verifyManualPayment(req: VerifyManualPaymentRequest): Promise<VerifyManualPaymentResponse> {
       try {
-          return await lastValueFrom(this.paymentService.VerifyManualPayment(req));
+          return await lastValueFrom(this.paymentService.VerifyManualPayment(req, this.metadata()));
       } catch (error) {
           this.logger.error(`Failed to verify manual payment: ${error.message}`, error.stack);
           throw error;
@@ -65,7 +81,7 @@ export class PaymentGrpcClient implements OnModuleInit {
 
   async createIntent(req: CreateIntentRequest): Promise<CreateIntentResponse> {
       try {
-          return await lastValueFrom(this.paymentService.CreateIntent(req));
+          return await lastValueFrom(this.paymentService.CreateIntent(req, this.metadata()));
       } catch (error) {
           this.logger.error(`Failed to create intent: ${error.message}`, error.stack);
           throw error;
@@ -74,7 +90,7 @@ export class PaymentGrpcClient implements OnModuleInit {
 
   async getPaymentMethods(req: GetPaymentMethodsRequest): Promise<GetPaymentMethodsResponse> {
     try {
-        return await lastValueFrom(this.paymentService.GetPaymentMethods(req));
+        return await lastValueFrom(this.paymentService.GetPaymentMethods(req, this.metadata()));
     } catch (error) {
         this.logger.error(`Failed to get payment methods: ${error.message}`, error.stack);
         throw error;
@@ -83,7 +99,7 @@ export class PaymentGrpcClient implements OnModuleInit {
 
   async processPayment(req: ProcessPaymentRequest): Promise<ProcessPaymentResponse> {
       try {
-          const resp = await lastValueFrom(this.paymentService.ProcessPayment(req));
+          const resp = await lastValueFrom(this.paymentService.ProcessPayment(req, this.metadata()));
           this.logger.log(`ProcessPayment response: ${JSON.stringify(resp)}`);
           return resp;
       } catch (error) {
@@ -95,7 +111,7 @@ export class PaymentGrpcClient implements OnModuleInit {
   // Admin Methods
   async adminCreatePaymentMethod(req: AdminCreatePaymentMethodRequest) {
     try {
-        return await lastValueFrom(this.paymentService.AdminCreatePaymentMethod(req));
+        return await lastValueFrom(this.paymentService.AdminCreatePaymentMethod(req, this.metadata()));
     } catch (error) {
         this.logger.error(`Failed to create payment method: ${error.message}`, error.stack);
         throw error;
@@ -104,7 +120,7 @@ export class PaymentGrpcClient implements OnModuleInit {
 
   async adminUpdatePaymentMethod(req: AdminUpdatePaymentMethodRequest) {
     try {
-        return await lastValueFrom(this.paymentService.AdminUpdatePaymentMethod(req));
+        return await lastValueFrom(this.paymentService.AdminUpdatePaymentMethod(req, this.metadata()));
     } catch (error) {
         this.logger.error(`Failed to update payment method: ${error.message}`, error.stack);
         throw error;
@@ -113,7 +129,7 @@ export class PaymentGrpcClient implements OnModuleInit {
 
   async adminDeletePaymentMethod(req: AdminDeletePaymentMethodRequest) {
     try {
-        return await lastValueFrom(this.paymentService.AdminDeletePaymentMethod(req));
+        return await lastValueFrom(this.paymentService.AdminDeletePaymentMethod(req, this.metadata()));
     } catch (error) {
         this.logger.error(`Failed to delete payment method: ${error.message}`, error.stack);
         throw error;
@@ -122,7 +138,7 @@ export class PaymentGrpcClient implements OnModuleInit {
 
   async adminGetPaymentMethod(req: AdminGetPaymentMethodRequest) {
     try {
-        return await lastValueFrom(this.paymentService.AdminGetPaymentMethod(req));
+        return await lastValueFrom(this.paymentService.AdminGetPaymentMethod(req, this.metadata()));
     } catch (error) {
         this.logger.error(`Failed to get payment method: ${error.message}`, error.stack);
         throw error;
@@ -131,7 +147,7 @@ export class PaymentGrpcClient implements OnModuleInit {
 
   async adminListPaymentMethods(req: AdminListPaymentMethodsRequest) {
     try {
-        return await lastValueFrom(this.paymentService.AdminListPaymentMethods(req));
+        return await lastValueFrom(this.paymentService.AdminListPaymentMethods(req, this.metadata()));
     } catch (error) {
         this.logger.error(`Failed to list payment methods: ${error.message}`, error.stack);
         throw error;
@@ -140,7 +156,7 @@ export class PaymentGrpcClient implements OnModuleInit {
 
   async adminListPayments(req: AdminListPaymentsRequest) {
     try {
-        return await lastValueFrom(this.paymentService.AdminListPayments(req));
+        return await lastValueFrom(this.paymentService.AdminListPayments(req, this.metadata()));
     } catch (error) {
         this.logger.error(`Failed to list payments: ${error.message}`, error.stack);
         throw error;

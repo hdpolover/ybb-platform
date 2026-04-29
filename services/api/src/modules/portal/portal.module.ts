@@ -12,6 +12,7 @@ import { GetPortalPaymentsHandler } from './application/queries/handlers/get-por
 import { GetPortalPaymentDetailHandler } from './application/queries/handlers/get-portal-payment-detail.handler';
 import { GetPortalDocumentsHandler } from './application/queries/handlers/get-portal-documents.handler';
 import { PortalCacheService } from './application/services/portal-cache.service';
+import { PortalReceiptService } from './application/services/portal-receipt.service';
 import { ConfirmPortalPaymentHandler } from './application/commands/handlers/confirm-portal-payment.handler';
 import { EnsurePortalPaymentInvoiceHandler } from './application/commands/handlers/ensure-portal-payment-invoice.handler';
 
@@ -38,6 +39,7 @@ import { UploadSignedCopyHandler } from './application/commands/handlers/upload-
     ],
     providers: [
         PortalCacheService,
+        PortalReceiptService,
         // Existing query handlers
         GetPortalDashboardHandler,
         GetPortalSubmissionsHandler,

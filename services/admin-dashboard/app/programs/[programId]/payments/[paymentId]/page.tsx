@@ -22,6 +22,7 @@ import { PageHeader } from "@/src/admin/page-header";
 import { Button } from "@/src/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/src/ui/card";
 import { ConfirmDialog } from "@/src/admin/confirm-dialog";
+import { formatDate, formatDateTime } from "@/lib/utils";
 
 const STATUS_CLASS: Record<InvoiceStatus, string> = {
   paid: "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -194,7 +195,7 @@ export default function PaymentDetailPage({
                 </Field>
                 <Field label="Paid At">
                   {invoice.paidAt
-                    ? new Date(invoice.paidAt).toLocaleString("en-US", {
+                    ? formatDateTime(invoice.paidAt, {
                         year: "numeric",
                         month: "long",
                         day: "numeric",
@@ -204,7 +205,7 @@ export default function PaymentDetailPage({
                     : "—"}
                 </Field>
                 <Field label="Created">
-                  {new Date(invoice.createdAt).toLocaleDateString("en-US", {
+                  {formatDate(invoice.createdAt, {
                     year: "numeric",
                     month: "long",
                     day: "numeric",

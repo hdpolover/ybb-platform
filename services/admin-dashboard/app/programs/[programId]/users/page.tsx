@@ -31,6 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/src/ui/table";
+import { formatDate } from "@/lib/utils";
 
 const ROLE_OPTIONS = [
   { value: "", label: "All Users" },
@@ -329,7 +330,7 @@ export default function UsersPage({
                     />
                   </TableCell>
                   <TableCell className="text-sm text-zinc-500">
-                    {new Date(user.createdAt).toLocaleDateString()}
+                    {formatDate(user.createdAt)}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1.5">

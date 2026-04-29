@@ -26,7 +26,7 @@ export class CacheService {
       }
       const keys = await this.scanKeys(client, pattern);
       if (keys.length > 0) {
-        await client.del(...keys);
+        await client.del(keys);
       }
       this.metricsService?.recordLatency('invalidate_pattern', Date.now() - startTime);
     } catch (error) {
@@ -52,13 +52,16 @@ export class CacheService {
    
   private async scanKeys(client: any, pattern: string): Promise<string[]> {
     const keys: string[] = [];
-    let cursor = '0';
+    let cursor: string | number = 0;
     do {
-      const scanResult = await client.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+      // node-redis v4 expects (cursor, { MATCH, COUNT }); ioredis expects (cursor, 'MATCH', p, 'COUNT', n).
+      // The wrapped client here is node-redis (RedisClient from @redis/client) — using ioredis args
+      // makes node-redis silently ignore the MATCH filter.
+      const scanResult = await client.scan(cursor, { MATCH: pattern, COUNT: 100 });
       const { cursor: newCursor, keys: batch } = this.normalizeScanResult(scanResult);
       cursor = newCursor;
       keys.push(...batch);
-    } while (cursor !== '0');
+    } while (String(cursor) !== '0');
     return keys;
   }
 
@@ -190,10 +193,11 @@ export class CacheService {
     const client = this.getRedisClient();
     if (client) {
       // Use SCAN + DEL to clear all keys — avoids flushdb which may not be available
-      // on the wrapped ioredis client exposed through Keyv/cache-manager.
+      // on the wrapped client exposed through Keyv/cache-manager. DEL takes an array;
+      // spread only deletes the first key on node-redis v4.
       const keys = await this.scanKeys(client, '*');
       if (keys.length > 0) {
-        await client.del(...keys);
+        await client.del(keys);
       }
     } else {
       const stores = (this.cacheManager as unknown as { stores?: Array<{ clear?: () => Promise<void> }> }).stores;

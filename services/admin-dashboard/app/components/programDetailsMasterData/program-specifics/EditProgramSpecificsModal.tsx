@@ -68,8 +68,8 @@ export function EditProgramSpecificsModal({
       description={
         <>
           Update settings for{" "}
-          <span className="font-semibold text-zinc-900">{programName}</span> — dates, registration,
-          fees, capacity, and participant-facing copy.
+          <span className="font-semibold text-zinc-900">{programName}</span> — landing-facing dates,
+          location, and participant-facing copy.
         </>
       }
       error={errorMessage}
@@ -140,15 +140,6 @@ export function EditProgramSpecificsModal({
               className={INPUT_CLS}
             />
           </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Application Deadline</label>
-            <input
-              type="date"
-              value={formValues.applicationDeadline}
-              onChange={(event) => updateField("applicationDeadline", event.target.value)}
-              className={INPUT_CLS}
-            />
-          </div>
           <div className="flex flex-col justify-end gap-2">
             <label className="flex items-center gap-3 rounded-md border border-zinc-200 bg-white px-3 py-2.5 text-sm font-medium text-zinc-700 shadow-sm">
               <input
@@ -166,9 +157,9 @@ export function EditProgramSpecificsModal({
       <FormSection
         icon={MapPinIcon}
         title="Operations"
-        description="Configure venue, capacity, and registration controls."
+        description="Configure landing-facing location."
       >
-        <div className="grid gap-5 md:grid-cols-2">
+        <div className="grid gap-5 md:grid-cols-1">
           <div>
             <label className="mb-1.5 block text-xs font-medium text-zinc-500">Location</label>
             <input
@@ -178,27 +169,6 @@ export function EditProgramSpecificsModal({
               className={INPUT_CLS}
             />
           </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Capacity</label>
-            <input
-              type="number"
-              min="0"
-              value={formValues.capacity}
-              onChange={(event) => updateField("capacity", event.target.value)}
-              className={INPUT_CLS}
-            />
-          </div>
-        </div>
-        <div className="mt-4 flex flex-wrap gap-3">
-          <label className="flex cursor-pointer items-center gap-3 rounded-md border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50">
-            <input
-              type="checkbox"
-              checked={formValues.requirePayment}
-              onChange={(event) => updateField("requirePayment", event.target.checked)}
-              className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
-            />
-            Require payment
-          </label>
         </div>
       </FormSection>
 

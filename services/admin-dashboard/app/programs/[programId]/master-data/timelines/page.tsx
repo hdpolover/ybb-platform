@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { PlusIcon, PencilSquareIcon, TrashIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { formatDate } from "@/lib/utils";
 import {
   listProgramTimeline,
   createProgramTimelineItem,
@@ -92,8 +93,8 @@ export default function TimelinesPage() {
               {!loading && items.map((t, idx) => (
                 <tr key={t.id} className={idx % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}>
                   <td className="px-3 py-2 font-medium text-zinc-900">{t.title}</td>
-                  <td className="px-3 py-2 text-zinc-600">{new Date(t.date).toLocaleDateString()}</td>
-                  <td className="px-3 py-2 text-zinc-600">{t.endDate ? new Date(t.endDate).toLocaleDateString() : <span className="text-zinc-300">—</span>}</td>
+                  <td className="px-3 py-2 text-zinc-600">{formatDate(t.date)}</td>
+                  <td className="px-3 py-2 text-zinc-600">{formatDate(t.endDate)}</td>
                   <td className="px-3 py-2 text-zinc-600">{t.type}</td>
                   <td className="px-3 py-2">{t.isActive ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Active</span> : <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-600">Inactive</span>}</td>
                   <td className="px-3 py-2 text-right">

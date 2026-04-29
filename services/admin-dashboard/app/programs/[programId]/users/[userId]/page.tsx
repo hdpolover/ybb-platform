@@ -26,6 +26,7 @@ import { ConfirmDialog } from "@/src/admin/confirm-dialog";
 import { Button } from "@/src/ui/button";
 import { Badge } from "@/src/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/src/ui/card";
+import { formatDate } from "@/lib/utils";
 
 const ROLE_BADGE_VARIANT: Record<string, "info" | "purple" | "secondary"> = {
   participant: "info",
@@ -220,7 +221,7 @@ export default function UserDetailPage({
                 <Field label="Joined">
                   <span className="flex items-center gap-1 text-zinc-600">
                     <Calendar className="h-3.5 w-3.5" />
-                    {new Date(user.createdAt).toLocaleDateString("en-US", {
+                    {formatDate(user.createdAt, {
                       year: "numeric",
                       month: "long",
                       day: "numeric",
@@ -228,7 +229,7 @@ export default function UserDetailPage({
                   </span>
                 </Field>
                 <Field label="Last Updated">
-                  {new Date(user.updatedAt).toLocaleDateString("en-US", {
+                  {formatDate(user.updatedAt, {
                     year: "numeric",
                     month: "long",
                     day: "numeric",

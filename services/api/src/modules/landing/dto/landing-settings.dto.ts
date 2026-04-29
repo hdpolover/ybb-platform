@@ -90,6 +90,26 @@ export class ActiveProgramDto {
   @ApiProperty({ required: false }) logo_icon_url?: string;
 }
 
+export class AvailableBrandDto {
+  @ApiProperty({ example: 'id' })
+  id: string;
+
+  @ApiProperty({ example: 'istanbul-youth-summit' })
+  slug: string;
+
+  @ApiProperty({ example: 'Istanbul Youth Summit' })
+  name: string;
+
+  @ApiProperty({ required: false, nullable: true, example: 'https://iys.example.com' })
+  website_url?: string;
+
+  @ApiProperty({ required: false, nullable: true, example: 'https://iys.ybbhub.com' })
+  landing_url?: string;
+
+  @ApiProperty({ required: false, nullable: true, example: 'https://cdn.example.com/iys-icon.png' })
+  logo_icon_url?: string;
+}
+
 export class LandingSettingsResponseDto {
   @ApiProperty({ type: MaintenanceSettingsDto, description: 'Maintenance configuration' })
   maintenance: MaintenanceSettingsDto;
@@ -101,5 +121,11 @@ export class LandingSettingsResponseDto {
   footer_navigation: FooterColumnDto[];
 
   @ApiProperty({ type: CurrencySettingsDto, description: 'Currency configuration' })
-  currency: CurrencySettingsDto; @ApiProperty({ type: ActiveProgramDto, required: false }) active_program?: ActiveProgramDto;
+  currency: CurrencySettingsDto;
+
+  @ApiProperty({ type: ActiveProgramDto, required: false })
+  active_program?: ActiveProgramDto;
+
+  @ApiProperty({ type: [AvailableBrandDto], required: false, description: 'Other active brands for cross-site navigation' })
+  available_brands?: AvailableBrandDto[];
 }

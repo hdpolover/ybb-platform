@@ -91,28 +91,31 @@ export class PortalSubmitApplicationHandler {
             return;
         }
 
-        try {
-            const payments = await this.paymentClient.getIntentsByReference({
-                reference_type: 'application',
-                reference_id: application.id,
-            });
-
-            const hasPaidRegistration = payments.intents.some(
-                (intent: { status: string; metadata?: Record<string, unknown> }) =>
-                    intent.status === 'SUCCEEDED' &&
-                    intent.metadata?.['payment_category'] === 'registration',
-            );
-
-            if (!hasPaidRegistration) {
-                throw new BadRequestException(
-                    'Registration fee must be paid before submission.',
-                );
-            }
-        } catch (error) {
-            if (error instanceof BadRequestException) throw error;
-            // If payment service is unavailable, allow submission with warning
-            // This prevents blocking users due to infra issues
+        // Fallback: look up a successful payment for an invoice on a registration_fee
+        // pricing tier directly. We get here when registrationPaymentStatus is still
+        // 'unpaid' — most often because the payment.succeeded event hasn't propagated
+        // yet (race), but the invoice + intent records have already landed.
+        const paidRegInvoice = await this.prisma.applicationInvoice.findFirst({
+            where: {
+                applicationId: application.id,
+                status: 'paid',
+                pricingTier: { feeType: 'registration_fee' },
+            },
+            select: { id: true },
+        });
+        if (paidRegInvoice) {
+            return;
         }
+
+        // No paid registration invoice found in our DB. Block.
+        // Note: previous implementation called paymentClient.getIntentsByReference and
+        // swallowed any thrown error as "infra issue, allow through". That made the gate
+        // fail open whenever the payment service hiccupped, letting unpaid participants
+        // submit. We now trust the API's own invoice records (kept in sync by the
+        // payment.succeeded event handler) and fail closed.
+        throw new BadRequestException(
+            'Registration fee must be paid before submission.',
+        );
     }
 
     private validatePreviewAcknowledgements(personalData: Record<string, unknown>): void {

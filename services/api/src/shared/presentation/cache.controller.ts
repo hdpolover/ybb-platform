@@ -2,10 +2,14 @@ import { Controller, Get, Delete, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { CacheService } from '../infrastructure/cache/cache.service';
 import { JwtAuthGuard } from '../../modules/auth/infrastructure/guards/jwt-auth.guard';
+import { RolesGuard } from '../../modules/auth/infrastructure/guards/roles.guard';
+import { Roles } from '../../modules/auth/application/decorators/roles.decorator';
+import { UserRole } from '../../core/entities/user.entity';
 
 @ApiTags('System')
 @Controller('cache')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.SUPER_ADMIN)
 @ApiBearerAuth()
 export class CacheController {
   constructor(private readonly cacheService: CacheService) {}

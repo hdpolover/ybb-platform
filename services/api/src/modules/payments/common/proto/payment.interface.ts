@@ -73,21 +73,26 @@ export interface ProcessPaymentResponse {
   metadata?: Record<string, string>;
 }
 
+// Optional gRPC metadata forwarded by @nestjs/microservices to the underlying
+// grpc-js client call. Typed loosely as `unknown` to avoid pulling @grpc/grpc-js
+// into this proto-shape file.
+type GrpcMeta = unknown;
+
 export interface PaymentService {
-  CreateIntent(req: CreateIntentRequest): Observable<CreateIntentResponse>;
-  GetPaymentMethods(req: GetPaymentMethodsRequest): Observable<GetPaymentMethodsResponse>;
-  ProcessPayment(req: ProcessPaymentRequest): Observable<ProcessPaymentResponse>;
-  GetIntentsByReference(req: GetIntentsByReferenceRequest): Observable<GetIntentsByReferenceResponse>;
-  SubmitManualPayment(req: SubmitManualPaymentRequest): Observable<SubmitManualPaymentResponse>;
-  VerifyManualPayment(req: VerifyManualPaymentRequest): Observable<VerifyManualPaymentResponse>;
+  CreateIntent(req: CreateIntentRequest, metadata?: GrpcMeta): Observable<CreateIntentResponse>;
+  GetPaymentMethods(req: GetPaymentMethodsRequest, metadata?: GrpcMeta): Observable<GetPaymentMethodsResponse>;
+  ProcessPayment(req: ProcessPaymentRequest, metadata?: GrpcMeta): Observable<ProcessPaymentResponse>;
+  GetIntentsByReference(req: GetIntentsByReferenceRequest, metadata?: GrpcMeta): Observable<GetIntentsByReferenceResponse>;
+  SubmitManualPayment(req: SubmitManualPaymentRequest, metadata?: GrpcMeta): Observable<SubmitManualPaymentResponse>;
+  VerifyManualPayment(req: VerifyManualPaymentRequest, metadata?: GrpcMeta): Observable<VerifyManualPaymentResponse>;
 
   // Admin Methods
-  AdminCreatePaymentMethod(req: AdminCreatePaymentMethodRequest): Observable<AdminCreatePaymentMethodResponse>;
-  AdminUpdatePaymentMethod(req: AdminUpdatePaymentMethodRequest): Observable<AdminUpdatePaymentMethodResponse>;
-  AdminDeletePaymentMethod(req: AdminDeletePaymentMethodRequest): Observable<AdminDeletePaymentMethodResponse>;
-  AdminGetPaymentMethod(req: AdminGetPaymentMethodRequest): Observable<AdminGetPaymentMethodResponse>;
-  AdminListPaymentMethods(req: AdminListPaymentMethodsRequest): Observable<AdminListPaymentMethodsResponse>;
-  AdminListPayments(req: AdminListPaymentsRequest): Observable<AdminListPaymentsResponse>;
+  AdminCreatePaymentMethod(req: AdminCreatePaymentMethodRequest, metadata?: GrpcMeta): Observable<AdminCreatePaymentMethodResponse>;
+  AdminUpdatePaymentMethod(req: AdminUpdatePaymentMethodRequest, metadata?: GrpcMeta): Observable<AdminUpdatePaymentMethodResponse>;
+  AdminDeletePaymentMethod(req: AdminDeletePaymentMethodRequest, metadata?: GrpcMeta): Observable<AdminDeletePaymentMethodResponse>;
+  AdminGetPaymentMethod(req: AdminGetPaymentMethodRequest, metadata?: GrpcMeta): Observable<AdminGetPaymentMethodResponse>;
+  AdminListPaymentMethods(req: AdminListPaymentMethodsRequest, metadata?: GrpcMeta): Observable<AdminListPaymentMethodsResponse>;
+  AdminListPayments(req: AdminListPaymentsRequest, metadata?: GrpcMeta): Observable<AdminListPaymentsResponse>;
 }
 
 export interface SubmitManualPaymentRequest {

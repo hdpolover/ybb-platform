@@ -11,6 +11,7 @@ import {
 } from "@/src/ui/table";
 import { Button } from "@/src/ui/button";
 import { EmptyState } from "@/src/admin/empty-state";
+import { formatDate } from "@/lib/utils";
 
 export type Category = {
   id: string;
@@ -69,7 +70,7 @@ export function CategoriesTable({ categories, onEdit, onDelete }: CategoriesTabl
               </span>
             </TableCell>
             <TableCell className="text-zinc-500">
-              {new Date(category.updatedAt).toLocaleDateString()}
+              {formatDate(category.updatedAt)}
             </TableCell>
             <TableCell className="text-right">
               <div className="flex items-center justify-end gap-1">

@@ -20,6 +20,7 @@ import {
   type CreateAdminInput,
 } from "../../../src/shared/api-client";
 import { useAuth } from "../../contexts/AuthContext";
+import { formatDate } from "@/lib/utils";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -379,7 +380,7 @@ export default function AdminsPage() {
                     <td className="px-3 py-2 text-zinc-600">{admin.user?.email ?? "—"}</td>
                     <td className="px-3 py-2 text-zinc-700">{admin.role?.name ?? "—"}</td>
                     <td className="px-3 py-2 text-zinc-500">
-                      {new Date(admin.createdAt).toLocaleDateString()}
+                      {formatDate(admin.createdAt)}
                     </td>
                     <td className="px-3 py-2 text-right">{statusBadge(admin.user?.isActive ?? false)}</td>
                     <td className="px-3 py-2 text-right">
