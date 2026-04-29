@@ -5,27 +5,11 @@ import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-au
 import { Public } from '../../../shared/decorators/public.decorator';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
 import { IProgramRepository } from '@core/interfaces/repositories/program.repository.interface';
+import { PROGRAM_CONTENT_PATTERNS as MUTABLE_CONTENT_CACHE_PATTERNS } from '@shared/constants/cache-patterns';
 
 interface AuthenticatedRequest extends ExpressRequest {
   user: { id: string; userId: string };
 }
-
-const MUTABLE_CONTENT_CACHE_PATTERNS = [
-  'landing:home:*',
-  'landing:about:*',
-  'landing:programs:*',
-  'landing:program:*',
-  'landing:partners:*',
-  'landing:announcements:*',
-  'landing:faqs:*',
-  'landing:settings:*',
-  'program:*',
-  'portal:submission-detail:*',
-  'portal:submissions:*',
-  'portal:dashboard:*',
-  'portal:payments:*',
-  'portal:documents:*',
-];
 
 import {
   ProgramPricingTierResponseDto,

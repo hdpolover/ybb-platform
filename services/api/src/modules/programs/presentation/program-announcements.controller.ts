@@ -9,6 +9,8 @@ import { Public } from '../../../shared/decorators/public.decorator';
 import { AuditTrail } from '../../../shared/decorators/audit-trail.decorator';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
 import { ChangeType } from '@prisma/client';
+// imports unified PROGRAM_CONTENT_PATTERNS — broader than the previous local list, which was a subset
+import { PROGRAM_CONTENT_PATTERNS as MUTABLE_CONTENT_CACHE_PATTERNS } from '../../../shared/constants/cache-patterns';
 
 import {
   CreateProgramAnnouncementDto,
@@ -34,17 +36,6 @@ import {
 interface AuthenticatedRequest extends ExpressRequest {
   user: { id: string; userId: string };
 }
-
-const MUTABLE_CONTENT_CACHE_PATTERNS = [
-  'landing:home:*',
-  'landing:about:*',
-  'landing:programs:*',
-  'landing:program:*',
-  'landing:announcements:*',
-  'program:*',
-  'portal:dashboard:*',
-  'portal:submissions:*',
-];
 
 @ApiTags('Program Announcements')
 @Controller('programs')
