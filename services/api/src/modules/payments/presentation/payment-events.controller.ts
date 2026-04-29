@@ -244,24 +244,33 @@ export class PaymentEventsController {
         try {
             const patterns = [
                 CACHE_KEYS.PORTAL_DASHBOARD(userId),
-                CACHE_KEYS.PORTAL_SUBMISSIONS(userId),
-                CACHE_KEYS.PORTAL_PAYMENTS(userId),
+                // Use wildcards so all program-specific variants are busted:
+                // PORTAL_SUBMISSIONS keyed by (userId, programId?) → portal:submissions:${userId}:${programId|'latest'}
+                `portal:submissions:${userId}:*`,
+                // PORTAL_PAYMENTS keyed by (userId, programId?) → portal:payments:${userId}:${programId|'latest'}
+                `portal:payments:${userId}:*`,
                 CACHE_KEYS.PORTAL_DOCUMENTS(userId),
             ];
 
-            // Use Pub/Sub if available (multi-instance), otherwise local only
+            if (invoiceId) {
+                patterns.push(CACHE_KEYS.PORTAL_PAYMENT_DETAIL(invoiceId));
+            }
+
+            // Use Pub/Sub if available (multi-instance), otherwise fall back to local invalidation.
+            // invalidateAndPublish calls invalidateByPattern for each entry, so wildcard patterns
+            // are correctly handled end-to-end.
             if (this.pubSubService) {
                 await this.pubSubService.invalidateAndPublish(patterns);
                 this.logger.debug(`Broadcast cache invalidation for user ${userId} (reason: ${reason})`);
             } else {
-                await Promise.all(patterns.map(key => this.cacheService.invalidateKey(key)));
+                await Promise.all(
+                    patterns.map((p) =>
+                        p.includes('*')
+                            ? this.cacheService.invalidateByPattern(p)
+                            : this.cacheService.invalidateKey(p),
+                    ),
+                );
                 this.logger.debug(`Invalidated local cache for user ${userId} (reason: ${reason})`);
-            }
-
-            // Invalidate the specific invoice detail cache when the invoiceId is known
-            if (invoiceId) {
-                await this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_PAYMENT_DETAIL(invoiceId));
-                this.logger.debug(`Invalidated payment-detail cache for invoice ${invoiceId}`);
             }
         } catch (error) {
             const err = error instanceof Error ? error : new Error(String(error));
