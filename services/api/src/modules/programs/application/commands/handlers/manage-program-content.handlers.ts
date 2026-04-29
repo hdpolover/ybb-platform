@@ -47,6 +47,60 @@ async function invalidateLandingCacheByProgramId(
     } catch { /* non-critical */ }
 }
 
+/**
+ * Full cache invalidation for pricing tier / validity-period mutations.
+ * Clears landing pages (brand-scoped) AND all enrolled-participant portal caches
+ * (dashboard, payments, submission-detail) via wildcard to avoid a DB lookup of
+ * all enrolled participants — accepted over-invalidation tradeoff.
+ */
+async function invalidatePricingTierCachesByProgramId(
+    programId: string,
+    prisma: PrismaService,
+    cacheService: CacheService,
+): Promise<void> {
+    try {
+        const program = await prisma.program.findUnique({
+            where: { id: programId },
+            select: { brandId: true },
+        });
+        if (program?.brandId) {
+            await Promise.all([
+                cacheService.invalidateBrandLandingCaches(program.brandId),
+                cacheService.invalidateByPattern('program:*'),
+                cacheService.invalidateByPattern('portal:dashboard:*'),
+                cacheService.invalidateByPattern('portal:payments:*'),
+                cacheService.invalidateByPattern('portal:submission-detail:*'),
+            ]);
+        }
+    } catch { /* non-critical — cache failure must not break the mutation */ }
+}
+
+/**
+ * Full cache invalidation for validity-period mutations where only a
+ * pricingTierId is available (lookup walks tier → program → brandId).
+ */
+async function invalidatePricingTierCachesByPricingTierId(
+    pricingTierId: string,
+    prisma: PrismaService,
+    cacheService: CacheService,
+): Promise<void> {
+    try {
+        const tier = await prisma.programPricingTier.findUnique({
+            where: { id: pricingTierId },
+            select: { program: { select: { brandId: true } } },
+        });
+        if (tier?.program?.brandId) {
+            await Promise.all([
+                cacheService.invalidateBrandLandingCaches(tier.program.brandId),
+                cacheService.invalidateByPattern('program:*'),
+                cacheService.invalidateByPattern('portal:dashboard:*'),
+                cacheService.invalidateByPattern('portal:payments:*'),
+                cacheService.invalidateByPattern('portal:submission-detail:*'),
+            ]);
+        }
+    } catch { /* non-critical — cache failure must not break the mutation */ }
+}
+
 async function invalidateLandingCacheByBrandId(
     brandId: string,
     cacheService: CacheService,
@@ -769,7 +823,7 @@ export class CreateProgramPricingTierHandler implements ICommandHandler<CreatePr
             });
         }
 
-        await invalidateLandingCacheByProgramId(command.dto.programId, this.prisma, this.cacheService);
+        await invalidatePricingTierCachesByProgramId(command.dto.programId, this.prisma, this.cacheService);
         return result;
     }
 }
@@ -821,7 +875,7 @@ export class UpdateProgramPricingTierHandler implements ICommandHandler<UpdatePr
                 : undefined
         };
         const result = await this.repository.updatePricingTier(command.id, dto as Partial<ProgramPricingTier>);
-        await invalidateLandingCacheByProgramId(existingTier.programId, this.prisma, this.cacheService);
+        await invalidatePricingTierCachesByProgramId(existingTier.programId, this.prisma, this.cacheService);
         return result;
     }
 }
@@ -836,7 +890,7 @@ export class DeleteProgramPricingTierHandler implements ICommandHandler<DeletePr
         const existing = await this.repository.findPricingTierById(command.id);
         const result = await this.repository.deletePricingTier(command.id);
         if (existing?.programId) {
-            await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.cacheService);
+            await invalidatePricingTierCachesByProgramId(existing.programId, this.prisma, this.cacheService);
         }
         return result;
     }
@@ -858,20 +912,8 @@ export class CreateValidityPeriodHandler implements ICommandHandler<CreateValidi
             description: command.dto.description,
         };
         const result = await this.repository.createValidityPeriod(dto as Partial<PricingTierValidityPeriod>);
-        await this.invalidateLandingCache(command.dto.pricingTierId!);
+        await invalidatePricingTierCachesByPricingTierId(command.dto.pricingTierId!, this.prisma, this.cacheService);
         return result;
-    }
-    private async invalidateLandingCache(pricingTierId: string): Promise<void> {
-        try {
-            const tier = await this.prisma.programPricingTier.findUnique({
-                where: { id: pricingTierId },
-                select: { program: { select: { brandId: true } } },
-            });
-            if (tier?.program?.brandId) {
-                await this.cacheService.invalidateBrandLandingCaches(tier.program.brandId);
-                await this.cacheService.invalidateByPattern('program:*');
-            }
-        } catch { /* non-critical */ }
     }
 }
 @CommandHandler(UpdateValidityPeriodCommand)
@@ -890,20 +932,8 @@ export class UpdateValidityPeriodHandler implements ICommandHandler<UpdateValidi
             description: command.dto.description,
         };
         const result = await this.repository.updateValidityPeriod(command.id, dto as Partial<PricingTierValidityPeriod>);
-        await this.invalidateLandingCache(existing.pricingTierId);
+        await invalidatePricingTierCachesByPricingTierId(existing.pricingTierId, this.prisma, this.cacheService);
         return result;
-    }
-    private async invalidateLandingCache(pricingTierId: string): Promise<void> {
-        try {
-            const tier = await this.prisma.programPricingTier.findUnique({
-                where: { id: pricingTierId },
-                select: { program: { select: { brandId: true } } },
-            });
-            if (tier?.program?.brandId) {
-                await this.cacheService.invalidateBrandLandingCaches(tier.program.brandId);
-                await this.cacheService.invalidateByPattern('program:*');
-            }
-        } catch { /* non-critical */ }
     }
 }
 @CommandHandler(DeleteValidityPeriodCommand)
@@ -917,21 +947,9 @@ export class DeleteValidityPeriodHandler implements ICommandHandler<DeleteValidi
         const existing = await this.repository.findValidityPeriodById(command.id);
         const result = await this.repository.deleteValidityPeriod(command.id);
         if (existing?.pricingTierId) {
-            await this.invalidateLandingCache(existing.pricingTierId);
+            await invalidatePricingTierCachesByPricingTierId(existing.pricingTierId, this.prisma, this.cacheService);
         }
         return result;
-    }
-    private async invalidateLandingCache(pricingTierId: string): Promise<void> {
-        try {
-            const tier = await this.prisma.programPricingTier.findUnique({
-                where: { id: pricingTierId },
-                select: { program: { select: { brandId: true } } },
-            });
-            if (tier?.program?.brandId) {
-                await this.cacheService.invalidateBrandLandingCaches(tier.program.brandId);
-                await this.cacheService.invalidateByPattern('program:*');
-            }
-        } catch { /* non-critical */ }
     }
 }
 @CommandHandler(CreateProgramRequirementCommand)
