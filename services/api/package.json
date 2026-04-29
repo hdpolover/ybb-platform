@@ -18,6 +18,7 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:integration": "jest --config ./test/jest-integration.json",
     "migration:run": "npx prisma migrate deploy",
     "seed:prod": "npm run build:seed && node dist/prisma/seeds/main-prod.js",
     "seed:prod:submission-config": "npm run build:seed && node dist/prisma/seeds/main-prod-submission-config.js",
