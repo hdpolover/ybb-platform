@@ -11,6 +11,7 @@ services:
     environment:
       PORT: 8002
       ENVIRONMENT: development
+      GIN_MODE: ${GIN_MODE:-debug}
       # Database
       DATABASE_URL: postgres://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres-payment:5432/${DATABASE_NAME}?sslmode=disable
       # RabbitMQ
@@ -22,7 +23,7 @@ services:
       INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY}
       # Observability
       LOKI_URL: ${LOKI_URL}
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       # Payment Service
       PAYMENT_AUTO_MIGRATE: "true"
       PAYMENT_SECRETS_KEY: ${PAYMENT_SECRETS_KEY}

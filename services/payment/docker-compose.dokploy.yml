@@ -7,6 +7,7 @@ services:
     restart: always
     environment:
       ENVIRONMENT: ${ENVIRONMENT:-production}
+      GIN_MODE: ${GIN_MODE:-release}
       PORT: 8002
       # Database
       DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@ybb-prod-postgres-payment:5432/${DATABASE_NAME}?sslmode=disable
@@ -19,7 +20,7 @@ services:
       INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY}
       # Observability
       LOKI_URL: ${LOKI_URL}
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       OTEL_LOG_LEVEL: ${OTEL_LOG_LEVEL:-info}
       # Payment Service
       PAYMENT_SECRETS_KEY: ${PAYMENT_SECRETS_KEY}

@@ -3,7 +3,9 @@ package telemetry
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
+	"strings"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
@@ -13,19 +15,29 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 )
 
+const serviceName = "ybb-payment"
+
 // InitTracer initializes an OTLP exporter, and configures the corresponding trace and metric providers.
 func InitTracer(ctx context.Context) (*sdktrace.TracerProvider, error) {
-	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-	if endpoint == "" {
-		endpoint = "localhost:4317"
+	res, err := resource.New(ctx,
+		resource.WithAttributes(
+			semconv.ServiceNameKey.String(serviceName),
+		),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create resource: %w", err)
 	}
 
-	// Remove http/https prefix if present for gRPC client
-	// (otlptracegrpc expects host:port)
-	if len(endpoint) > 7 && endpoint[:7] == "http://" {
-		endpoint = endpoint[7:]
-	} else if len(endpoint) > 8 && endpoint[:8] == "https://" {
-		endpoint = endpoint[8:]
+	endpoint := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
+	if endpoint == "" {
+		tp := sdktrace.NewTracerProvider(sdktrace.WithResource(res))
+		applyGlobalTelemetry(tp)
+		return tp, nil
+	}
+
+	endpoint = normalizeOTLPEndpoint(endpoint)
+	if err := ensureEndpointResolvable(endpoint); err != nil {
+		return nil, fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT %q is not resolvable: %w", endpoint, err)
 	}
 
 	exporter, err := otlptracegrpc.New(ctx,
@@ -36,21 +48,48 @@ func InitTracer(ctx context.Context) (*sdktrace.TracerProvider, error) {
 		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
 	}
 
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exporter),
+		sdktrace.WithResource(res),
+	)
+	applyGlobalTelemetry(tp)
+	return tp, nil
+}
+
+func InitNoopTracer(ctx context.Context) (*sdktrace.TracerProvider, error) {
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
-			semconv.ServiceNameKey.String("ybb-payment"),
+			semconv.ServiceNameKey.String(serviceName),
 		),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create resource: %w", err)
 	}
 
-	tp := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(exporter),
-		sdktrace.WithResource(res),
-	)
+	tp := sdktrace.NewTracerProvider(sdktrace.WithResource(res))
+	applyGlobalTelemetry(tp)
+	return tp, nil
+}
+
+func applyGlobalTelemetry(tp *sdktrace.TracerProvider) {
 	otel.SetTracerProvider(tp)
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
+}
 
-	return tp, nil
+func normalizeOTLPEndpoint(endpoint string) string {
+	endpoint = strings.TrimPrefix(endpoint, "http://")
+	endpoint = strings.TrimPrefix(endpoint, "https://")
+	return strings.TrimSuffix(endpoint, "/")
+}
+
+func ensureEndpointResolvable(endpoint string) error {
+	host := endpoint
+	if h, _, err := net.SplitHostPort(endpoint); err == nil {
+		host = h
+	}
+	if host == "" {
+		return fmt.Errorf("missing host")
+	}
+	_, err := net.LookupHost(host)
+	return err
 }
