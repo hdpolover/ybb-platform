@@ -3,6 +3,8 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@ne
 import { Request as ExpressRequest } from 'express';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { CacheInvalidate } from '@shared/decorators/cache-invalidate.decorator';
+import { PROGRAM_CONTENT_PATTERNS } from '@shared/constants/cache-patterns';
 import { ChangeType } from '@prisma/client';
 import { UpdateExchangeRateHandler } from '../application/commands/handlers/update-exchange-rate.handler';
 import {
@@ -39,6 +41,7 @@ export class ProgramExchangeRateController {
     @ApiOperation({ summary: 'Update exchange rate for a program (Admin only)' })
     @ApiResponse({ status: 200, type: ExchangeRateResponseDto })
     @AuditTrail({ entityType: 'Program', action: ChangeType.update })
+    @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
     async updateExchangeRate(
         @Param('programId') programId: string,
         @Body() dto: UpdateExchangeRateDto,

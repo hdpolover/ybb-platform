@@ -27,6 +27,7 @@ import { Public } from '../../../shared/decorators/public.decorator';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
 import { AuditTrail } from '../../../shared/decorators/audit-trail.decorator';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
+import { LANDING_BRAND_PATTERNS } from '../../../shared/constants/cache-patterns';
 import { ChangeType } from '@prisma/client';
 
 interface AuthenticatedRequest extends ExpressRequest {
@@ -126,6 +127,7 @@ export class ProgramsController {
   @ApiResponse({ status: 201, description: 'Program created successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @AuditTrail({ entityType: 'Program', action: ChangeType.create })
+  @CacheInvalidate(LANDING_BRAND_PATTERNS)
   async create(
     @Body() dto: CreateProgramDto,
     @Request() req: AuthenticatedRequest,
@@ -231,6 +233,7 @@ export class ProgramsController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Program not found' })
   @AuditTrail({ entityType: 'Program', action: ChangeType.delete })
+  @CacheInvalidate(LANDING_BRAND_PATTERNS)
   async delete(
     @Param('id') id: string,
     @Request() req: AuthenticatedRequest,
