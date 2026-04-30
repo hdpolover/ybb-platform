@@ -87,6 +87,8 @@ import {
   type BrandImpactStats,
   type BrandPromoCta,
   type BrandMomentsShorts,
+  type BrandPaymentInfo,
+  type BrandPaymentInfoItem,
 } from "../../api";
 
 // ─── Field primitives ─────────────────────────────────────────────────────────
@@ -120,6 +122,54 @@ function FieldView({ label, value }: { label: string; value?: React.ReactNode })
 
   function normalizeBenefitGroups(groups: BenefitGroup[] | undefined): BenefitGroup[] {
     return (groups ?? []).map((group, index) => normalizeBenefitGroup(group, index));
+  }
+
+  const DEFAULT_PAYMENT_INFO_ITEMS: BrandPaymentInfoItem[] = [
+    {
+      id: "payment-schedule",
+      icon: "payment_schedule",
+      title: "Payment Schedule",
+      body: "All participants pay program fees in scheduled batches, not as a single upfront payment.",
+    },
+    {
+      id: "selection-quota",
+      icon: "selection_quota",
+      title: "Selection Quota",
+      body: "Fully funded slots are limited and competitive based on qualifications and available funding.",
+    },
+    {
+      id: "fully-funded-process",
+      icon: "fully_funded_process",
+      title: "Fully Funded Process",
+      body: "Complete the registration fee, submit the required documents and essay, and participate in the interview process.",
+    },
+    {
+      id: "self-funded-guarantee",
+      icon: "self_funded_guarantee",
+      title: "Refund Policy",
+      body: "Self-funded participants who are declined receive a full refund in line with our refund policy.",
+    },
+  ];
+
+  function normalizePaymentInfo(value: BrandPaymentInfo | undefined): BrandPaymentInfo {
+    const items = Array.isArray(value?.items) && value.items.length > 0
+      ? value.items.map((item, index) => ({
+          id: item.id?.trim() || `payment-item-${index + 1}`,
+          icon: item.icon?.trim() || "payment_schedule",
+          title: item.title ?? "",
+          body: item.body ?? "",
+        }))
+      : DEFAULT_PAYMENT_INFO_ITEMS;
+
+    return {
+      eyebrow: value?.eyebrow ?? "Payment & Selection",
+      title: value?.title ?? "Important information before you apply",
+      introText:
+        value?.introText ??
+        "Understand how the payment schedule and fully funded selection work so you can choose the best registration type for you.",
+      items,
+      note: value?.note ?? "All payments are processed securely. For queries, contact our support team.",
+    };
   }
 
   function isImageMediaFile(file: MediaFile): boolean {
@@ -1806,6 +1856,7 @@ function LandingPageTab({ brandId }: { brandId: string }) {
   if (loading) return <p className="text-sm text-zinc-400 py-8 text-center">Loading…</p>;
   if (fetchError) return <p className="text-sm text-red-500 py-8 text-center">{fetchError}</p>;
   if (!meta) return null;
+  const paymentInfo = normalizePaymentInfo(meta.payment_info);
 
   return (
     <div className="space-y-4">
@@ -1878,6 +1929,35 @@ function LandingPageTab({ brandId }: { brandId: string }) {
             <FieldView label="Total Countries" value={meta.impact_stats?.total_countries} />
             <FieldView label="Total Alumni" value={meta.impact_stats?.total_alumni} />
             <FieldView label="Editions Held" value={meta.impact_stats?.editions_held} />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Payment & Selection */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Payment &amp; Selection Section</CardTitle>
+            <PaymentInfoSheet brandId={brandId} initial={meta.payment_info} onSaved={setMeta} />
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FieldView label="Eyebrow" value={paymentInfo.eyebrow} />
+              <FieldView label="Title" value={paymentInfo.title} />
+            </div>
+            <FieldView label="Intro Text" value={paymentInfo.introText} />
+            <div className="space-y-2">
+              {paymentInfo.items.map((item, index) => (
+                <div key={item.id || index} className="rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2">
+                  <p className="text-sm font-medium text-zinc-800">{item.title || `Item ${index + 1}`}</p>
+                  <p className="text-xs text-zinc-500">id: {item.id} · icon: {item.icon}</p>
+                  <p className="mt-1 text-sm text-zinc-700">{item.body || <span className="text-zinc-400">No body text</span>}</p>
+                </div>
+              ))}
+            </div>
+            <FieldView label="Note" value={paymentInfo.note} />
           </div>
         </CardContent>
       </Card>
@@ -1959,6 +2039,152 @@ function LandingPageTab({ brandId }: { brandId: string }) {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function PaymentInfoSheet({
+  brandId,
+  initial,
+  onSaved,
+}: {
+  brandId: string;
+  initial: BrandPaymentInfo | undefined;
+  onSaved: (updated: BrandMetadata) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState<BrandPaymentInfo>(normalizePaymentInfo(initial));
+
+  function resetState() {
+    setForm(normalizePaymentInfo(initial));
+    setError(null);
+  }
+
+  function setField<K extends keyof BrandPaymentInfo>(key: K, value: BrandPaymentInfo[K]) {
+    setForm((current) => ({ ...current, [key]: value }));
+    setError(null);
+  }
+
+  function setItemField(index: number, key: keyof BrandPaymentInfoItem, value: string) {
+    setForm((current) => ({
+      ...current,
+      items: current.items.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, [key]: value } : item,
+      ),
+    }));
+    setError(null);
+  }
+
+  function addItem() {
+    setForm((current) => ({
+      ...current,
+      items: [
+        ...current.items,
+        {
+          id: `payment-item-${Date.now()}`,
+          icon: "payment_schedule",
+          title: "",
+          body: "",
+        },
+      ],
+    }));
+    setError(null);
+  }
+
+  function removeItem(index: number) {
+    setForm((current) => ({
+      ...current,
+      items: current.items.filter((_, itemIndex) => itemIndex !== index),
+    }));
+    setError(null);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    try {
+      const sanitizedItems = form.items.map((item, index) => ({
+        id: item.id.trim() || `payment-item-${index + 1}`,
+        icon: item.icon.trim() || "payment_schedule",
+        title: item.title.trim(),
+        body: item.body.trim(),
+      }));
+
+      const updated = await updatePlatformBrandMetadata(brandId, {
+        payment_info: {
+          eyebrow: form.eyebrow.trim(),
+          title: form.title.trim(),
+          introText: form.introText.trim(),
+          items: sanitizedItems,
+          note: form.note.trim(),
+        },
+      });
+      onSaved(updated);
+      setOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <Button size="sm" variant="outline" onClick={() => { resetState(); setOpen(true); }}>
+        <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
+      </Button>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent side="right" className="sm:max-w-2xl overflow-y-auto">
+          <SheetHeader><SheetTitle>Edit Payment &amp; Selection Section</SheetTitle></SheetHeader>
+          <div className="mt-6 space-y-4">
+            <SheetMsg message={error} variant="error" />
+            <FieldInput label="Eyebrow" id="payment-info-eyebrow" value={form.eyebrow} onChange={(value) => setField("eyebrow", value)} />
+            <FieldInput label="Title" id="payment-info-title" value={form.title} onChange={(value) => setField("title", value)} />
+            <FieldTextarea label="Intro Text" id="payment-info-intro" value={form.introText} onChange={(value) => setField("introText", value)} rows={3} />
+
+            <div className="space-y-3 border-t border-zinc-100 pt-4">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Cards</p>
+                <Button size="sm" variant="outline" onClick={addItem}>
+                  <Plus className="mr-1 h-3.5 w-3.5" /> Add Card
+                </Button>
+              </div>
+
+              {form.items.length === 0 ? (
+                <p className="text-sm text-zinc-400">No cards configured.</p>
+              ) : (
+                <div className="space-y-3">
+                  {form.items.map((item, index) => (
+                    <div key={`${item.id}-${index}`} className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-medium text-zinc-500">Card {index + 1}</p>
+                        <Button size="sm" variant="ghost" onClick={() => removeItem(index)}>
+                          <X className="h-3.5 w-3.5 text-red-500" />
+                        </Button>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <FieldInput label="ID" id={`payment-item-id-${index}`} value={item.id} onChange={(value) => setItemField(index, "id", value)} />
+                        <FieldInput label="Icon key" id={`payment-item-icon-${index}`} value={item.icon} onChange={(value) => setItemField(index, "icon", value)} />
+                      </div>
+                      <FieldInput label="Card Title" id={`payment-item-title-${index}`} value={item.title} onChange={(value) => setItemField(index, "title", value)} />
+                      <FieldTextarea label="Card Body" id={`payment-item-body-${index}`} value={item.body} onChange={(value) => setItemField(index, "body", value)} rows={3} />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <FieldTextarea label="Bottom Note" id="payment-info-note" value={form.note} onChange={(value) => setField("note", value)} rows={2} />
+          </div>
+          <SheetFooter className="mt-6">
+            <Button onClick={handleSave} loading={saving} disabled={saving}>
+              <Save className="mr-1.5 h-4 w-4" /> Save
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }
 

@@ -265,7 +265,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                         {
                             title: "Fully Funded Process",
                             icon: "clipboard-check",
-                            text: "Pay each batch as scheduled, complete essays and interviews, then get full reimbursement if selected."
+                            text: "Complete the registration fee, submit the required documents and essay, and participate in the interview process."
                         },
                         {
                             title: "Self Funded Guarantee",

@@ -5,6 +5,40 @@ import { CacheService } from '../../../shared/infrastructure/cache/cache.service
 import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
 import { Brand } from '@prisma/client';
 
+const FULLY_FUNDED_PROCESS_COPY =
+  'Complete the registration fee, submit the required documents and essay, and participate in the interview process.';
+
+function normalizePaymentInfoContent(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const paymentInfo = value as Record<string, unknown>;
+  const items = Array.isArray(paymentInfo.items) ? paymentInfo.items : null;
+  if (!items) {
+    return paymentInfo;
+  }
+
+  return {
+    ...paymentInfo,
+    items: items.map((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        return item;
+      }
+
+      const paymentItem = item as Record<string, unknown>;
+      const id = typeof paymentItem.id === 'string' ? paymentItem.id.trim().toLowerCase() : '';
+      const title = typeof paymentItem.title === 'string' ? paymentItem.title.trim().toLowerCase() : '';
+
+      if (id === 'fully-funded-process' || title === 'fully funded process') {
+        return { ...paymentItem, body: FULLY_FUNDED_PROCESS_COPY };
+      }
+
+      return paymentItem;
+    }),
+  };
+}
+
 @Injectable()
 export class HomeStrategy implements ILandingPageStrategy {
   constructor(
@@ -287,7 +321,7 @@ export class HomeStrategy implements ILandingPageStrategy {
         },
         {
           type: 'payment_info',
-          content: brandMeta.payment_info || {
+          content: normalizePaymentInfoContent(brandMeta.payment_info) || {
             eyebrow: 'Payment & Selection',
             title: 'Important information before you apply',
             introText: 'Understand how the payment schedule and fully funded selection work so you can choose the best registration type for you.',
