@@ -20,7 +20,7 @@ describe('CdnMaskInterceptor', () => {
       }),
     }) as unknown as ExecutionContext;
 
-  it('preserves Date values while masking document URLs', async () => {
+  it('preserves Date values while keeping document URLs direct', async () => {
     const createdAt = new Date('2026-04-29T00:00:00.000Z');
     const handler: CallHandler = {
       handle: () =>
@@ -44,7 +44,7 @@ describe('CdnMaskInterceptor', () => {
     expect(result.createdAt.toISOString()).toBe(createdAt.toISOString());
     expect(result.validityPeriods[0].startDate).toBeInstanceOf(Date);
     expect(result.fileUrl).toBe(
-      'https://api.ybbhub.com/v1/files/123e4567-e89b-12d3-a456-426614174000/download',
+      'https://cdn.ybbhub.com/uploads/123e4567-e89b-12d3-a456-426614174000.pdf',
     );
   });
 

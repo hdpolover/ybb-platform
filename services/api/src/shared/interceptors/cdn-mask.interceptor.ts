@@ -3,8 +3,8 @@ import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
 // Matches storage/CDN URLs with UUID filenames across known public asset hosts.
-// Documents/downloadables are masked to the authenticated proxy URL, while
-// renderable media assets remain direct for frontend rendering.
+// We keep these URLs direct so modules can open documents without relying on
+// a proxy resolver that may not map filename UUIDs to file IDs.
 const UUID_FILE_RE =
   /https?:\/\/(?:cdn\.ybbhub\.com|files\.ybbhub\.com|storage\.ybbfoundation\.com|[a-z0-9.-]+\.digitaloceanspaces\.com)\/[^\s"'>]+\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([a-z0-9]+)(?:\?[^\s"'>]*)?/gi;
 
@@ -58,11 +58,11 @@ function maskUrls(value: unknown, apiBase: string, parentKey?: string): unknown 
     ) {
       return value;
     }
-    return value.replace(UUID_FILE_RE, (match, fileId: string, ext: string) => {
+    return value.replace(UUID_FILE_RE, (match, _fileId: string, ext: string) => {
       if (DIRECT_MEDIA_EXTENSIONS.has(ext.toLowerCase())) {
         return match;
       }
-      return `${apiBase}/v1/files/${fileId}/download`;
+      return match;
     });
   }
   if (Array.isArray(value)) {
