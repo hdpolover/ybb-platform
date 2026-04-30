@@ -72,6 +72,33 @@ export class FilesController {
       return file.url;
     }
 
+    // Legacy and third-party URLs may embed a UUID filename that differs from
+    // the files.id value. Resolve those by storage path before checking content
+    // tables to keep masked links backward-compatible.
+    const fileByStoragePath = await this.prisma.file.findFirst({
+      where: {
+        OR: [
+          {
+            storagePath: {
+              contains: normalizedFileId,
+              mode: 'insensitive',
+            },
+          },
+          {
+            url: {
+              contains: normalizedFileId,
+              mode: 'insensitive',
+            },
+          },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { url: true },
+    });
+    if (fileByStoragePath?.url && !this.isSelfDownloadProxyUrl(fileByStoragePath.url, normalizedFileId)) {
+      return fileByStoragePath.url;
+    }
+
     const suffix = `${normalizedFileId}.`;
     const resourceCandidates = await this.prisma.programResource.findMany({
       where: {
