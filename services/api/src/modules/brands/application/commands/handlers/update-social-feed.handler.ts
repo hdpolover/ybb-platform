@@ -5,6 +5,7 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { SocialFeedResponseDto } from '@modules/brands/presentation/dto/brand.dto';
 import { LandingRevalidationService } from '../../services/landing-revalidation.service';
 import { derivePostId, resolveSocialFeedMetadata } from './social-feed-metadata.helper';
+import { parseInstagramPermalinkInput } from './social-feed-permalink.helper';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 
 function normalizeOptionalString(value?: string | null): string | null | undefined {
@@ -50,7 +51,9 @@ export class UpdateSocialFeedHandler implements ICommandHandler<UpdateSocialFeed
             throw new NotFoundException('Social feed not found');
         }
 
-        const nextPermalink = dto.permalink !== undefined ? dto.permalink.trim() : feed.permalink;
+        const nextPermalink = dto.permalink !== undefined
+            ? parseInstagramPermalinkInput(dto.permalink)
+            : feed.permalink;
         const metadata = dto.permalink !== undefined
             ? await resolveSocialFeedMetadata(nextPermalink).catch(() => ({
                 imageUrl: null,
