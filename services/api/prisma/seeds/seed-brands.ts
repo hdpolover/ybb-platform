@@ -145,7 +145,7 @@ export async function seedBrands() {
       items: [
         { id: 'payment-schedule', icon: 'payment_schedule', title: 'Payment Schedule', body: 'All participants pay program fees in scheduled batches, not as a single upfront payment.' },
         { id: 'selection-quota', icon: 'selection_quota', title: 'Selection Quota', body: 'Fully funded slots are limited and competitive based on qualifications and available funding.' },
-        { id: 'fully-funded-process', icon: 'fully_funded_process', title: 'Fully Funded Process', body: 'If selected for fully funded, you complete the program at no personal cost — fees are covered by our sponsors.' },
+        { id: 'fully-funded-process', icon: 'fully_funded_process', title: 'Fully Funded Process', body: 'Complete the registration fee, submit the required documents and essay, and participate in the interview process.' },
         { id: 'self-funded-guarantee', icon: 'self_funded_guarantee', title: 'Refund Policy', body: 'Self-funded participants who are declined receive a full refund in line with our refund policy.' },
       ],
       note: 'All payments are processed securely. For queries, contact our support team.',
@@ -237,4 +237,3 @@ export async function seedBrands() {
 
   log('✅ Brands created');
 }
-

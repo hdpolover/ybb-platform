@@ -490,6 +490,21 @@ export type BrandMomentsShorts = {
   description?: string;
 };
 
+export type BrandPaymentInfoItem = {
+  id: string;
+  icon: string;
+  title: string;
+  body: string;
+};
+
+export type BrandPaymentInfo = {
+  eyebrow: string;
+  title: string;
+  introText: string;
+  items: BrandPaymentInfoItem[];
+  note: string;
+};
+
 export type AffiliateCommissionMetadata = {
   fullyFundedPct: number;
   selfFundedPct: number;
@@ -504,7 +519,7 @@ export type BrandMetadata = {
   partners_canva_url?: string | null;
   affiliateCommission?: AffiliateCommissionMetadata | null;
   recognition?: Record<string, unknown>;
-  payment_info?: Record<string, unknown>;
+  payment_info?: BrandPaymentInfo;
   participant_demographics?: Record<string, unknown>;
   [key: string]: unknown;
 };
