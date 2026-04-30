@@ -14,7 +14,7 @@ export class CreateSocialFeedDto {
     postId?: string;
 
     @ApiProperty({ example: 'https://instagram.com/p/DI0abcd1234/' })
-    @IsUrl()
+    @IsString()
     permalink: string;
 
     @ApiProperty({ required: false, example: 'https://cdn.example.com/social/feed-1.jpg' })
@@ -52,7 +52,7 @@ export class UpdateSocialFeedDto {
 
     @ApiProperty({ required: false, example: 'https://instagram.com/p/DI0abcd1234/' })
     @IsOptional()
-    @IsUrl()
+    @IsString()
     permalink?: string;
 
     @ApiProperty({ required: false, example: 'https://cdn.example.com/social/feed-1.jpg' })

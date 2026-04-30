@@ -2861,7 +2861,7 @@ function SocialFeedSheet({
               value={form.permalink}
               onChange={(value) => setField("permalink", value)}
               placeholder="https://instagram.com/p/..."
-              hint="Paste the Instagram post link. The system will auto-fill the preview image, caption, post date, and post ID."
+              hint="Paste the Instagram post link or the full Instagram embed code. The system will extract the permalink and auto-fill preview metadata."
             />
             <FieldCheckbox
               label="Active on landing page"
@@ -2873,9 +2873,10 @@ function SocialFeedSheet({
             <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
               <p className="font-medium text-zinc-800">What happens after save</p>
               <p className="mt-1">
-                We automatically derive the Instagram post ID and try to fetch the post image, caption, and publish
-                date from the pasted link. If Instagram blocks metadata retrieval, the system falls back to your brand
-                assets so admins do not need to fill technical fields manually.
+                We normalize the pasted Instagram URL/embed snippet to an official post permalink, then derive the post
+                ID and try to fetch preview metadata (image, caption, publish date). The landing page renders the
+                official Instagram embed from this permalink. If the embed or preview image cannot load, the landing
+                page still shows a safe fallback card linking to the post.
               </p>
             </div>
           </div>

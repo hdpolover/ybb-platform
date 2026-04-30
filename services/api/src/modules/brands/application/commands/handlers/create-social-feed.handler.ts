@@ -5,6 +5,7 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { SocialFeedResponseDto } from '@modules/brands/presentation/dto/brand.dto';
 import { LandingRevalidationService } from '../../services/landing-revalidation.service';
 import { derivePostId, resolveSocialFeedMetadata } from './social-feed-metadata.helper';
+import { parseInstagramPermalinkInput } from './social-feed-permalink.helper';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 
 function normalizeOptionalString(value?: string | null): string | null {
@@ -42,7 +43,8 @@ export class CreateSocialFeedHandler implements ICommandHandler<CreateSocialFeed
         }
 
         const platform = normalizePlatform(dto.platform);
-        const metadata = await resolveSocialFeedMetadata(dto.permalink.trim()).catch(() => ({
+        const permalink = parseInstagramPermalinkInput(dto.permalink);
+        const metadata = await resolveSocialFeedMetadata(permalink).catch(() => ({
             imageUrl: null,
             caption: null,
             postedAt: null,
@@ -58,8 +60,8 @@ export class CreateSocialFeedHandler implements ICommandHandler<CreateSocialFeed
             data: {
                 brandId,
                 platform,
-                postId: derivePostId(dto.postId, dto.permalink),
-                permalink: dto.permalink.trim(),
+                postId: derivePostId(dto.postId, permalink),
+                permalink,
                 imageUrl,
                 caption: dto.caption !== undefined ? normalizeOptionalString(dto.caption) : normalizeOptionalString(metadata.caption),
                 postedAt,
