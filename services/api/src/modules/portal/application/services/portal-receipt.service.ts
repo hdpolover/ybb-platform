@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 // pdfkit is CommonJS; without esModuleInterop in this service's tsconfig, a
 // default import resolves to undefined. Use require to get the constructor.
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+ 
 const PDFDocument = require('pdfkit') as typeof import('pdfkit');
 
 export interface ReceiptData {
