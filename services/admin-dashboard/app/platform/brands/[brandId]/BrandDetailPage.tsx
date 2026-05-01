@@ -31,6 +31,7 @@ import { Input } from "@/src/ui/input";
 import { Label } from "@/src/ui/label";
 import { Skeleton } from "@/src/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/src/ui/tabs";
+import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
 import {
   Sheet,
   SheetContent,
@@ -757,9 +758,33 @@ function DetailsSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved:
           <div className="mt-6 space-y-4">
             <SheetMsg message={error} variant="error" />
             <SheetMsg message={success} variant="success" />
-            <FieldTextarea label="About" id="about" value={form.about} onChange={(v) => set("about", v)} rows={4} />
-            <FieldTextarea label="Vision" id="vision" value={form.vision} onChange={(v) => set("vision", v)} rows={3} />
-            <FieldTextarea label="Mission" id="mission" value={form.mission} onChange={(v) => set("mission", v)} rows={3} />
+            <div className="space-y-2">
+              <Label htmlFor="about">About</Label>
+              <RichTextEditor
+                content={form.about}
+                onChange={(v) => set("about", v)}
+                placeholder="Write about your program..."
+                className="[&_.ProseMirror]:min-h-[160px]"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="vision">Vision</Label>
+              <RichTextEditor
+                content={form.vision}
+                onChange={(v) => set("vision", v)}
+                placeholder="Write your vision..."
+                className="[&_.ProseMirror]:min-h-[120px]"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="mission">Mission</Label>
+              <RichTextEditor
+                content={form.mission}
+                onChange={(v) => set("mission", v)}
+                placeholder="Write your mission..."
+                className="[&_.ProseMirror]:min-h-[120px]"
+              />
+            </div>
             <FieldInput label="Default Location" id="defaultLocation" value={form.defaultLocation} onChange={(v) => set("defaultLocation", v)} placeholder="Jakarta, Indonesia" />
             <FieldInput label="Default Country" id="defaultCountry" value={form.defaultCountry} onChange={(v) => set("defaultCountry", v)} placeholder="ID" />
             <FieldInput label="Default Timezone" id="defaultTimezone" value={form.defaultTimezone} onChange={(v) => set("defaultTimezone", v)} placeholder="Asia/Jakarta" />
