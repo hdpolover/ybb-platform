@@ -268,6 +268,7 @@ export class HomeStrategy implements ILandingPageStrategy {
             registration_types: program?.pricingTiers.map((tier) => ({
               id: tier.id,
               name: tier.name,
+              description: tier.description,
               price: tier.price,
               currency: tier.currency,
               fee_type: tier.feeType,

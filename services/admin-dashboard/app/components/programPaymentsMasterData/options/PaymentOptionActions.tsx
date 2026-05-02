@@ -12,6 +12,7 @@ import {
 import type { PaymentOptionRow } from "./PaymentOptionTable";
 import { createPricingTier, updatePricingTier, deletePricingTier } from "@/app/platform/api";
 import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
+import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
 import { toUtcIsoFromLocalInput } from "@/lib/utils";
 
 // SEARCH COMPONENT
@@ -65,6 +66,12 @@ function PaymentOptionDrawer({
   const isEditMode = !!initialData;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [description, setDescription] = useState(initialData?.description ?? "");
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setDescription(initialData?.description ?? "");
+  }, [initialData, isOpen]);
 
   const feeTypeValue =
     initialData?.category === "Registration Fee" ? "registration_fee" :
@@ -82,7 +89,6 @@ function PaymentOptionDrawer({
     const fd = new FormData(form);
 
     const name = (fd.get("name") as string).trim();
-    const description = (fd.get("description") as string).trim();
     const price = parseFloat(fd.get("price") as string);
     const currency = fd.get("currency") as string;
     const feeType = fd.get("feeType") as string;
@@ -97,6 +103,7 @@ function PaymentOptionDrawer({
       : [];
     const benefits = benefitsRaw ? benefitsRaw.split("\n").map((s) => s.trim()).filter(Boolean) : [];
     const requirements = requirementsRaw ? requirementsRaw.split("\n").map((s) => s.trim()).filter(Boolean) : [];
+    const descriptionToSave = description.trim();
 
     setSaving(true);
     setError(null);
@@ -104,9 +111,9 @@ function PaymentOptionDrawer({
       const validFromUtc = toUtcIsoFromLocalInput(validFrom);
       const validUntilUtc = toUtcIsoFromLocalInput(validUntil);
 
-      if (isEditMode && initialData) {
-        await updatePricingTier(initialData._id, {
-          name, description, price, currency, feeType, allowedCategories, isActive, benefits, requirements,
+        if (isEditMode && initialData) {
+          await updatePricingTier(initialData._id, {
+          name, description: descriptionToSave, price, currency, feeType, allowedCategories, isActive, benefits, requirements,
           ...(validFromUtc ? { validFrom: validFromUtc } : {}),
           ...(validUntilUtc ? { validUntil: validUntilUtc } : {}),
         });
@@ -114,7 +121,7 @@ function PaymentOptionDrawer({
         if (!programId) throw new Error("Program ID is required");
         if (!validFromUtc || !validUntilUtc) throw new Error("Valid From and Valid Until are required");
         await createPricingTier(programId, {
-          name, description, price, currency, feeType, allowedCategories, benefits, requirements, validFrom: validFromUtc, validUntil: validUntilUtc,
+          name, description: descriptionToSave, price, currency, feeType, allowedCategories, benefits, requirements, validFrom: validFromUtc, validUntil: validUntilUtc,
         });
       }
       onClose();
@@ -196,7 +203,12 @@ function PaymentOptionDrawer({
 
         <div>
           <label className="mb-1.5 block text-xs font-medium text-zinc-500">Description</label>
-          <textarea name="description" rows={3} defaultValue={initialData?.description} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm leading-relaxed text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+          <RichTextEditor
+            content={description}
+            onChange={setDescription}
+            placeholder="Shown on registration cards before requirements."
+            className="[&_.ProseMirror]:min-h-[120px]"
+          />
         </div>
 
         <div>
