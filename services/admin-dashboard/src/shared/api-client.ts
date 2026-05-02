@@ -207,6 +207,28 @@ export type AdminAnalytics = {
   top_programs: Array<{ id: string; name: string; applicants: number }>;
 };
 
+export type ProgramDashboardAnalytics = {
+  kpis: {
+    totalParticipants: number;
+    participantsToday: number;
+    totalAmbassadors: number;
+    activeAmbassadors: number;
+    referredParticipants: number;
+    referredParticipantsPercent: number;
+    programStatus: string;
+    programStatusDate: string | null;
+  };
+  trend: {
+    daily: Array<{ label: string; registrations: number }>;
+    weekly: Array<{ label: string; registrations: number }>;
+    monthly: Array<{ label: string; registrations: number }>;
+  };
+  gender: Array<{ name: string; value: number }>;
+  age: Array<{ range: string; count: number }>;
+  nationalities: Array<{ country: string; count: number }>;
+  topAmbassadors: Array<{ name: string; country: string; referrals: number }>;
+};
+
 export type ProgramFaq = {
   id: string;
   programId: string;
@@ -615,6 +637,10 @@ export function updateBrandSettings(
 export function getAdminAnalytics(brandId?: string): Promise<AdminAnalytics> {
   const q = brandId ? `?brandId=${brandId}` : "";
   return request<AdminAnalytics>(`/stats/admin/analytics${q}`);
+}
+
+export function getProgramDashboardAnalytics(programId: string): Promise<ProgramDashboardAnalytics> {
+  return request<ProgramDashboardAnalytics>(`/stats/admin/programs/${encodeURIComponent(programId)}/dashboard`);
 }
 
 // ─── Program Config ───────────────────────────────────────────────────────────
@@ -2044,7 +2070,19 @@ export type InvoiceListItem = {
   externalTransactionId: string | null;
   externalIntentId: string | null;
   pricingTier: { id: string; name: string; feeType: string };
-  participant: { id: string; fullName: string; userId: string; email: string | null };
+  application: {
+    status: string;
+    applicationCategory: string | null;
+    ticketStatus: string | null;
+  };
+  participant: {
+    id: string;
+    fullName: string;
+    userId: string;
+    email: string | null;
+    nationality: string | null;
+    originCountry: string | null;
+  };
   createdAt: string;
   updatedAt: string;
 };
@@ -2055,18 +2093,69 @@ export type InvoiceDetail = InvoiceListItem & {
 
 export type InvoiceSummary = Record<InvoiceStatus, { count: number; amount: number }>;
 
+export type InvoiceMetrics = {
+  totalInvoices: number;
+  totalAmount: number;
+  paidAmount: number;
+  outstandingAmount: number;
+  collectionRate: number;
+  averagePaidAmount: number;
+};
+
+export type InvoiceFilterOptions = {
+  tiers: Array<{ id: string; name: string; feeType: string }>;
+  paymentMethods: Array<{ value: string; count: number }>;
+  currencies: Array<{ value: string; count: number }>;
+  applicationStatuses: Array<{ value: string; count: number }>;
+  invoiceStatuses: Array<{ value: string; count: number }>;
+  feeTypes: Array<{ value: string; count: number }>;
+};
+
 export async function listProgramInvoices(params: {
   programId: string;
   page?: number;
   limit?: number;
   status?: string;
   search?: string;
-}): Promise<{ data: InvoiceListItem[]; meta: PaginatedMeta; summary: InvoiceSummary }> {
+  paymentMethod?: string;
+  tierId?: string;
+  feeType?: string;
+  applicationStatus?: string;
+  currency?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  paidFrom?: string;
+  paidTo?: string;
+  minAmount?: number;
+  maxAmount?: number;
+  sortBy?: "createdAt" | "paidAt" | "amount" | "updatedAt";
+  sortOrder?: "asc" | "desc";
+}): Promise<{
+  data: InvoiceListItem[];
+  meta: PaginatedMeta;
+  summary: InvoiceSummary;
+  overallSummary: InvoiceSummary;
+  metrics: InvoiceMetrics;
+  filters: InvoiceFilterOptions;
+}> {
   const q = new URLSearchParams({ programId: params.programId });
   if (params.page) q.set("page", String(params.page));
   if (params.limit) q.set("limit", String(params.limit));
   if (params.status) q.set("status", params.status);
   if (params.search) q.set("search", params.search);
+  if (params.paymentMethod) q.set("paymentMethod", params.paymentMethod);
+  if (params.tierId) q.set("tierId", params.tierId);
+  if (params.feeType) q.set("feeType", params.feeType);
+  if (params.applicationStatus) q.set("applicationStatus", params.applicationStatus);
+  if (params.currency) q.set("currency", params.currency);
+  if (params.dateFrom) q.set("dateFrom", params.dateFrom);
+  if (params.dateTo) q.set("dateTo", params.dateTo);
+  if (params.paidFrom) q.set("paidFrom", params.paidFrom);
+  if (params.paidTo) q.set("paidTo", params.paidTo);
+  if (typeof params.minAmount === "number") q.set("minAmount", String(params.minAmount));
+  if (typeof params.maxAmount === "number") q.set("maxAmount", String(params.maxAmount));
+  if (params.sortBy) q.set("sortBy", params.sortBy);
+  if (params.sortOrder) q.set("sortOrder", params.sortOrder);
 
   // The TransformInterceptor unwraps { data: [], meta: {}, summary: {} } into
   // { statusCode, data: [], meta: { meta: {...}, summary: {...} } }
@@ -2078,13 +2167,22 @@ export async function listProgramInvoices(params: {
 
   const payload = await res.json() as {
     data?: InvoiceListItem[];
-    meta?: Record<string, unknown> & { meta?: PaginatedMeta; summary?: InvoiceSummary };
+    meta?: Record<string, unknown> & {
+      meta?: PaginatedMeta;
+      summary?: InvoiceSummary;
+      overallSummary?: InvoiceSummary;
+      metrics?: InvoiceMetrics;
+      filters?: InvoiceFilterOptions;
+    };
   };
 
   const data = (payload.data ?? []) as InvoiceListItem[];
   const rawMeta = (payload.meta ?? {}) as Record<string, unknown> & {
     meta?: PaginatedMeta;
     summary?: InvoiceSummary;
+    overallSummary?: InvoiceSummary;
+    metrics?: InvoiceMetrics;
+    filters?: InvoiceFilterOptions;
   };
   const meta = (rawMeta.meta ?? rawMeta) as PaginatedMeta;
   const defaultSummary: InvoiceSummary = {
@@ -2095,8 +2193,25 @@ export async function listProgramInvoices(params: {
     refunded: { count: 0, amount: 0 },
   };
   const summary = (rawMeta.summary ?? defaultSummary) as InvoiceSummary;
+  const overallSummary = (rawMeta.overallSummary ?? defaultSummary) as InvoiceSummary;
+  const metrics = (rawMeta.metrics ?? {
+    totalInvoices: 0,
+    totalAmount: 0,
+    paidAmount: 0,
+    outstandingAmount: 0,
+    collectionRate: 0,
+    averagePaidAmount: 0,
+  }) as InvoiceMetrics;
+  const filters = (rawMeta.filters ?? {
+    tiers: [],
+    paymentMethods: [],
+    currencies: [],
+    applicationStatuses: [],
+    invoiceStatuses: [],
+    feeTypes: [],
+  }) as InvoiceFilterOptions;
 
-  return { data, meta, summary };
+  return { data, meta, summary, overallSummary, metrics, filters };
 }
 
 export function getProgramInvoice(id: string): Promise<InvoiceDetail> {

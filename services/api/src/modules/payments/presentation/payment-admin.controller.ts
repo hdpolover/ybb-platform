@@ -57,29 +57,107 @@ export class PaymentAdminController {
     @ApiQuery({ name: 'limit', required: false })
     @ApiQuery({ name: 'status', required: false })
     @ApiQuery({ name: 'search', required: false })
+    @ApiQuery({ name: 'paymentMethod', required: false })
+    @ApiQuery({ name: 'tierId', required: false })
+    @ApiQuery({ name: 'feeType', required: false })
+    @ApiQuery({ name: 'applicationStatus', required: false })
+    @ApiQuery({ name: 'currency', required: false })
+    @ApiQuery({ name: 'dateFrom', required: false, description: 'Invoice createdAt start (ISO date)' })
+    @ApiQuery({ name: 'dateTo', required: false, description: 'Invoice createdAt end (ISO date)' })
+    @ApiQuery({ name: 'paidFrom', required: false, description: 'Invoice paidAt start (ISO date)' })
+    @ApiQuery({ name: 'paidTo', required: false, description: 'Invoice paidAt end (ISO date)' })
+    @ApiQuery({ name: 'minAmount', required: false })
+    @ApiQuery({ name: 'maxAmount', required: false })
+    @ApiQuery({ name: 'sortBy', required: false, description: 'createdAt | paidAt | amount | updatedAt' })
+    @ApiQuery({ name: 'sortOrder', required: false, description: 'asc | desc' })
     async listInvoices(@Query() query: Record<string, string>) {
-        const { programId, page = '1', limit = '20', status, search } = query;
+        const {
+            programId,
+            page = '1',
+            limit = '20',
+            status,
+            search,
+            paymentMethod,
+            tierId,
+            feeType,
+            applicationStatus,
+            currency,
+            dateFrom,
+            dateTo,
+            paidFrom,
+            paidTo,
+            minAmount,
+            maxAmount,
+            sortBy = 'createdAt',
+            sortOrder = 'desc',
+        } = query;
 
         if (!programId) throw new HttpException('programId is required', 400);
 
         const pageNum = Math.max(1, parseInt(page, 10) || 1);
         const limitNum = Math.min(Math.max(1, parseInt(limit, 10) || 20), 100);
         const skip = (pageNum - 1) * limitNum;
+        const minAmountNum = typeof minAmount === 'string' && minAmount.trim() !== '' ? Number(minAmount) : undefined;
+        const maxAmountNum = typeof maxAmount === 'string' && maxAmount.trim() !== '' ? Number(maxAmount) : undefined;
 
         const applicationFilter: Prisma.ParticipantApplicationWhereInput = { programId };
+        const participantFilters: Prisma.ParticipantWhereInput[] = [];
         if (search?.trim()) {
-            applicationFilter.participant = {
+            const keyword = search.trim();
+            participantFilters.push({
                 OR: [
-                    { fullName: { contains: search.trim(), mode: 'insensitive' } },
-                    { user: { email: { contains: search.trim(), mode: 'insensitive' } } },
+                    { fullName: { contains: keyword, mode: 'insensitive' } },
+                    { user: { email: { contains: keyword, mode: 'insensitive' } } },
+                    { nationality: { contains: keyword, mode: 'insensitive' } },
+                    { originCountry: { contains: keyword, mode: 'insensitive' } },
                 ],
-            };
+            });
+        }
+        if (participantFilters.length > 0) {
+            applicationFilter.participant = { AND: participantFilters };
+        }
+        if (applicationStatus?.trim()) {
+            applicationFilter.status = applicationStatus as Prisma.EnumApplicationStatusFilter;
         }
 
         const where: Prisma.ApplicationInvoiceWhereInput = { application: applicationFilter };
         if (status) where.status = status as PaymentStatus;
+        if (paymentMethod?.trim()) where.paymentMethod = paymentMethod.trim();
+        if (tierId?.trim()) where.pricingTierId = tierId.trim();
+        if (feeType?.trim()) {
+            where.pricingTier = { feeType: feeType.trim() as Prisma.EnumPricingFeeTypeFilter };
+        }
+        if (currency?.trim()) where.currency = currency.trim();
 
-        const [invoices, total, summaryRows] = await Promise.all([
+        if (dateFrom || dateTo) {
+            where.createdAt = {
+                ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
+                ...(dateTo ? { lte: this.endOfDayUtc(dateTo) } : {}),
+            };
+        }
+        if (paidFrom || paidTo) {
+            where.paidAt = {
+                ...(paidFrom ? { gte: new Date(paidFrom) } : {}),
+                ...(paidTo ? { lte: this.endOfDayUtc(paidTo) } : {}),
+            };
+        }
+        if (minAmountNum !== undefined || maxAmountNum !== undefined) {
+            where.amount = {
+                ...(minAmountNum !== undefined && !Number.isNaN(minAmountNum) ? { gte: new Prisma.Decimal(minAmountNum) } : {}),
+                ...(maxAmountNum !== undefined && !Number.isNaN(maxAmountNum) ? { lte: new Prisma.Decimal(maxAmountNum) } : {}),
+            };
+        }
+
+        const allowedSortBy: Record<string, Prisma.ApplicationInvoiceOrderByWithRelationInput> = {
+            createdAt: { createdAt: this.parseSortOrder(sortOrder) },
+            paidAt: { paidAt: this.parseSortOrder(sortOrder) },
+            amount: { amount: this.parseSortOrder(sortOrder) },
+            updatedAt: { updatedAt: this.parseSortOrder(sortOrder) },
+        };
+        const orderBy = allowedSortBy[sortBy] ?? allowedSortBy.createdAt;
+        const summaryWhere: Prisma.ApplicationInvoiceWhereInput = { application: { programId } };
+
+        const [invoices, total, summaryRows, overallSummaryRows, paidAggregate, totalsAggregate, tiers, paymentMethodOptionsRows, currencyOptionsRows, applicationStatusRows] = await Promise.all([
             this.prisma.applicationInvoice.findMany({
                 where,
                 include: {
@@ -92,35 +170,143 @@ export class PaymentAdminController {
                     },
                     pricingTier: { select: { id: true, name: true, feeType: true } },
                 },
-                orderBy: { createdAt: 'desc' },
+                orderBy,
                 skip,
                 take: limitNum,
             }),
             this.prisma.applicationInvoice.count({ where }),
             this.prisma.applicationInvoice.groupBy({
                 by: ['status'],
-                where: { application: { programId } },
+                where,
                 _count: { id: true },
                 _sum: { amount: true },
             }),
+            this.prisma.applicationInvoice.groupBy({
+                by: ['status'],
+                where: summaryWhere,
+                _count: { id: true },
+                _sum: { amount: true },
+            }),
+            this.prisma.applicationInvoice.aggregate({
+                where: { ...where, status: PaymentStatus.paid },
+                _sum: { amount: true },
+                _avg: { amount: true },
+                _count: { id: true },
+            }),
+            this.prisma.applicationInvoice.aggregate({
+                where,
+                _sum: { amount: true },
+                _count: { id: true },
+            }),
+            this.prisma.programPricingTier.findMany({
+                where: { programId, deletedAt: null },
+                select: { id: true, name: true, feeType: true },
+                orderBy: { name: 'asc' },
+            }),
+            this.prisma.applicationInvoice.groupBy({
+                by: ['paymentMethod'],
+                where: {
+                    application: { programId },
+                    paymentMethod: { not: null },
+                },
+                _count: { id: true },
+            }),
+            this.prisma.applicationInvoice.groupBy({
+                by: ['currency'],
+                where: { application: { programId } },
+                _count: { id: true },
+            }),
+            this.prisma.participantApplication.groupBy({
+                by: ['status'],
+                where: { programId, deletedAt: null },
+                _count: { id: true },
+            }),
         ]);
 
-        const summary: Record<string, { count: number; amount: number }> = {
+        const summary = this.initInvoiceSummary();
+        const overallSummary = this.initInvoiceSummary();
+        for (const row of summaryRows) {
+            summary[row.status] = { count: row._count.id, amount: Number(row._sum.amount ?? 0) };
+        }
+        for (const row of overallSummaryRows) {
+            overallSummary[row.status] = { count: row._count.id, amount: Number(row._sum.amount ?? 0) };
+        }
+
+        const invoiceTotalAmount = Number(totalsAggregate._sum.amount ?? 0);
+        const paidAmount = Number(paidAggregate._sum.amount ?? 0);
+        const paidCount = paidAggregate._count.id;
+        const totalCount = totalsAggregate._count.id;
+        const collectionRate = totalCount > 0 ? Number(((paidCount / totalCount) * 100).toFixed(1)) : 0;
+        const avgPaidAmount = Number(paidAggregate._avg.amount ?? 0);
+
+        return {
+            data: invoices.map((inv) => this.toInvoiceDto(inv)),
+            meta: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
+            summary,
+            overallSummary,
+            metrics: {
+                totalInvoices: totalCount,
+                totalAmount: invoiceTotalAmount,
+                paidAmount,
+                outstandingAmount: Math.max(invoiceTotalAmount - paidAmount, 0),
+                collectionRate,
+                averagePaidAmount: avgPaidAmount,
+            },
+            filters: {
+                tiers: tiers.map((tier) => ({
+                    id: tier.id,
+                    name: tier.name,
+                    feeType: tier.feeType,
+                })),
+                paymentMethods: paymentMethodOptionsRows
+                    .filter((row) => row.paymentMethod)
+                    .map((row) => ({
+                        value: row.paymentMethod as string,
+                        count: row._count.id,
+                    })),
+                currencies: currencyOptionsRows.map((row) => ({
+                    value: row.currency,
+                    count: row._count.id,
+                })),
+                applicationStatuses: applicationStatusRows.map((row) => ({
+                    value: row.status,
+                    count: row._count.id,
+                })),
+                invoiceStatuses: overallSummaryRows.map((row) => ({
+                    value: row.status,
+                    count: row._count.id,
+                })),
+                feeTypes: Array.from(
+                    tiers.reduce<Map<string, number>>((acc, tier) => {
+                        const existing = acc.get(tier.feeType) ?? 0;
+                        acc.set(tier.feeType, existing + 1);
+                        return acc;
+                    }, new Map<string, number>()),
+                ).map(([value, count]) => ({ value, count })),
+            },
+        };
+    }
+
+    private initInvoiceSummary(): Record<string, { count: number; amount: number }> {
+        return {
             paid: { count: 0, amount: 0 },
             unpaid: { count: 0, amount: 0 },
             processing: { count: 0, amount: 0 },
             failed: { count: 0, amount: 0 },
             refunded: { count: 0, amount: 0 },
         };
-        for (const row of summaryRows) {
-            summary[row.status] = { count: row._count.id, amount: Number(row._sum.amount ?? 0) };
-        }
+    }
 
-        return {
-            data: invoices.map((inv) => this.toInvoiceDto(inv)),
-            meta: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
-            summary,
-        };
+    private parseSortOrder(sortOrder: string): Prisma.SortOrder {
+        return sortOrder?.toLowerCase() === 'asc' ? 'asc' : 'desc';
+    }
+
+    private endOfDayUtc(dateString: string): Date {
+        const base = new Date(dateString);
+        if (Number.isNaN(base.getTime())) {
+            return new Date(dateString);
+        }
+        return new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), 23, 59, 59, 999));
     }
 
     @Get('invoices/:id')
@@ -325,11 +511,18 @@ export class PaymentAdminController {
             externalTransactionId: invoice.externalTransactionId as string | null,
             externalIntentId: invoice.externalIntentId as string | null,
             pricingTier: invoice.pricingTier as { id: string; name: string; feeType: string },
+            application: {
+                status: invoice.application.status as string,
+                applicationCategory: invoice.application.applicationCategory as string | null,
+                ticketStatus: invoice.application.ticketStatus as string | null,
+            },
             participant: {
                 id: invoice.application.participant.id as string,
                 fullName: invoice.application.participant.fullName as string,
                 userId: invoice.application.participant.userId as string,
                 email: (invoice.application.participant.user?.email ?? null) as string | null,
+                nationality: (invoice.application.participant.nationality ?? null) as string | null,
+                originCountry: (invoice.application.participant.originCountry ?? null) as string | null,
             },
             createdAt: (invoice.createdAt as Date).toISOString(),
             updatedAt: (invoice.updatedAt as Date).toISOString(),

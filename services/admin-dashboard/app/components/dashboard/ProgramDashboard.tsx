@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { KPISection } from "./sections/KPISection";
 import { TrendSection, TrendRange } from "./sections/TrendSection";
 import { GenderSection } from "./sections/GenderSection";
@@ -11,6 +11,7 @@ import { GenderDetailsModal } from "./modals/GenderDetailsModal";
 import { AgeDetailsModal } from "./modals/AgeDetailsModal";
 import { NationalityDetailsModal } from "./modals/NationalityDetailsModal";
 import { AmbassadorsDetailsModal } from "./modals/AmbassadorsDetailsModal";
+import { getProgramDashboardAnalytics, type ProgramDashboardAnalytics } from "@/src/shared/api-client";
 
 type ProgramDashboardProps = {
   selectedProgramId: string;
@@ -22,74 +23,72 @@ export function ProgramDashboard({ selectedProgramId }: ProgramDashboardProps) {
   const [showAgeModal, setShowAgeModal] = useState(false);
   const [showNationalityModal, setShowNationalityModal] = useState(false);
   const [showAmbassadorModal, setShowAmbassadorModal] = useState(false);
+  const [dashboardData, setDashboardData] = useState<ProgramDashboardAnalytics | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const dailyData = [
-    { label: "1 Nov", registrations: 42 },
-    { label: "2 Nov", registrations: 58 },
-    { label: "3 Nov", registrations: 73 },
-    { label: "4 Nov", registrations: 61 },
-    { label: "5 Nov", registrations: 95 },
-    { label: "6 Nov", registrations: 82 },
-    { label: "7 Nov", registrations: 77 },
-  ];
+  useEffect(() => {
+    let isMounted = true;
 
-  const weeklyData = [
-    { label: "1–7 Nov", registrations: 210 },
-    { label: "8–14 Nov", registrations: 320 },
-    { label: "15–21 Nov", registrations: 280 },
-    { label: "22–30 Nov", registrations: 340 },
-  ];
+    async function fetchDashboard() {
+      setLoading(true);
+      setError(null);
 
-  const monthlyData = [
-    { label: "Jan", registrations: 420 },
-    { label: "Feb", registrations: 510 },
-    { label: "Mar", registrations: 610 },
-    { label: "Apr", registrations: 580 },
-  ];
+      try {
+        const response = await getProgramDashboardAnalytics(selectedProgramId);
+        if (!isMounted) return;
+        setDashboardData(response);
+      } catch (err) {
+        if (!isMounted) return;
+        setError(err instanceof Error ? err.message : "Failed to load dashboard data.");
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    void fetchDashboard();
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedProgramId]);
 
   const trendDataByRange: Record<TrendRange, { label: string; registrations: number }[]> = {
-    daily: dailyData,
-    weekly: weeklyData,
-    monthly: monthlyData,
+    daily: dashboardData?.trend.daily ?? [],
+    weekly: dashboardData?.trend.weekly ?? [],
+    monthly: dashboardData?.trend.monthly ?? [],
   };
 
   const trendData = trendDataByRange[trendRange];
 
-  const genderData = [
-    { name: "Male", value: 320 },
-    { name: "Female", value: 360 },
-  ];
+  const genderData = dashboardData?.gender ?? [];
 
   const genderColors = ["#2563eb", "#ec4899", "#6b7280"];
 
-  const ageDistribution = [
-    { range: "17-20", count: 180 },
-    { range: "21-24", count: 260 },
-    { range: "25-28", count: 150 },
-    { range: "29-32", count: 70 },
-  ];
+  const ageDistribution = dashboardData?.age ?? [];
 
-  const nationalityData = [
-    { country: "Indonesia", count: 420 },
-    { country: "Japan", count: 110 },
-    { country: "Malaysia", count: 60 },
-    { country: "Thailand", count: 45 },
-    { country: "Others", count: 53 },
-  ];
+  const nationalityData = dashboardData?.nationalities ?? [];
 
-  const topAmbassadors = [
-    { name: "Alya Putri", country: "Indonesia", referrals: 48 },
-    { name: "Kenji Sato", country: "Japan", referrals: 37 },
-    { name: "Nurul Huda", country: "Malaysia", referrals: 29 },
-    { name: "Thanakorn Chai", country: "Thailand", referrals: 22 },
-    { name: "Dimas Aji", country: "Indonesia", referrals: 19 },
-    { name: "Siti Aisyah", country: "Indonesia", referrals: 17 },
-    { name: "Rizky Maulana", country: "Indonesia", referrals: 15 },
-  ];
+  const topAmbassadors = dashboardData?.topAmbassadors ?? [];
+
+  const fallbackKpis: ProgramDashboardAnalytics["kpis"] = {
+    totalParticipants: 0,
+    participantsToday: 0,
+    totalAmbassadors: 0,
+    activeAmbassadors: 0,
+    referredParticipants: 0,
+    referredParticipantsPercent: 0,
+    programStatus: "unknown",
+    programStatusDate: null,
+  };
 
   return (
     <div className="space-y-4">
-      <KPISection />
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+      <KPISection kpis={dashboardData?.kpis ?? fallbackKpis} loading={loading} />
 
       <section className="grid gap-4 md:grid-cols-2">
         <TrendSection

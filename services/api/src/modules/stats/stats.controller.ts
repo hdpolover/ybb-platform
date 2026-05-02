@@ -1,5 +1,5 @@
 
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags, ApiHeader, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { StatsService } from './stats.service';
 import { GetStatsQueryDto } from './dto/get-stats.dto';
@@ -9,6 +9,7 @@ import { JwtAuthGuard } from '../auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/infrastructure/guards/roles.guard';
 import { Roles } from '../auth/application/decorators/roles.decorator';
 import { UserRole } from '../../core/entities/user.entity';
+import { ProgramDashboardResponseDto } from './dto/program-dashboard-response.dto';
 
 @ApiTags('Stats')
 @Controller('stats')
@@ -44,5 +45,17 @@ export class StatsController {
     @Query('brandId') brandId?: string,
   ) {
     return this.statsService.getAdminAnalytics(brandId);
+  }
+
+  @Get('admin/programs/:programId/dashboard')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get admin program dashboard analytics' })
+  @ApiResponse({ status: 200, type: ProgramDashboardResponseDto })
+  async getAdminProgramDashboard(
+    @Param('programId') programId: string,
+  ): Promise<ProgramDashboardResponseDto> {
+    return this.statsService.getAdminProgramDashboard(programId);
   }
 }
