@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Zap, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { listDocumentTemplates, generateLoa } from "@/src/shared/api-client";
+import { Button } from "@/src/ui/button";
 
 export function GenerateLoaButton({
   programId,
@@ -37,11 +38,12 @@ export function GenerateLoaButton({
   }
 
   return (
-    <button
+    <Button
       type="button"
       disabled={loading}
       onClick={handleClick}
-      className="flex items-center gap-1.5 rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+      size="sm"
+      className="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
     >
       {loading ? (
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -49,6 +51,6 @@ export function GenerateLoaButton({
         <Zap className="h-3.5 w-3.5" />
       )}
       Generate LOA
-    </button>
+    </Button>
   );
 }
