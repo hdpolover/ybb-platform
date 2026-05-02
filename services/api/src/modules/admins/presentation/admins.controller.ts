@@ -1,6 +1,7 @@
 
-import { Controller, Post, Body, Get, Patch, Delete, Param, Query, UseGuards, UnauthorizedException } from '@nestjs/common';
+import { Controller, Post, Body, Get, Patch, Delete, Param, Query, UseGuards, UnauthorizedException, Put, Ip, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { Request } from 'express';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { CreateAdminCommand } from '../application/commands/create-admin.command';
 import { UpdateAdminCommand } from '../application/commands/update-admin.command';
@@ -20,6 +21,11 @@ import { CurrentUser, CurrentUserData } from '../../../shared/decorators/current
 import { UpdateAdminDto } from './dto/update-admin.dto';
 import { AuditTrail } from '../../../shared/decorators/audit-trail.decorator';
 import { ChangeType } from '@prisma/client';
+import { SupportAccessService } from '../application/services/support-access.service';
+import {
+    CreateSupportImpersonationDto,
+    UpdateSupportAccessConfigDto,
+} from './dto/support-access.dto';
 
 @ApiTags('admins')
 @Controller('admins')
@@ -33,6 +39,7 @@ export class AdminsController {
         private readonly getAdminHandler: GetAdminHandler,
         private readonly updateAdminHandler: UpdateAdminHandler,
         private readonly deleteAdminHandler: DeleteAdminHandler,
+        private readonly supportAccessService: SupportAccessService,
     ) { }
 
     @Post()
@@ -106,5 +113,39 @@ export class AdminsController {
         if (!currentUser.adminId) throw new UnauthorizedException('Admin access required');
         const command = new DeleteAdminCommand(id, currentUser.adminId);
         return this.deleteAdminHandler.execute(command);
+    }
+
+    @Get('support-access/config')
+    @ApiOperation({ summary: 'Get support access configuration (Super Admin only)' })
+    @ApiResponse({ status: 200, description: 'Support access configuration loaded' })
+    async getSupportAccessConfig(@CurrentUser() currentUser: CurrentUserData) {
+        return this.supportAccessService.getConfig(currentUser);
+    }
+
+    @Put('support-access/config')
+    @ApiOperation({ summary: 'Update support access configuration (Super Admin only)' })
+    @ApiResponse({ status: 200, description: 'Support access configuration updated' })
+    async updateSupportAccessConfig(
+        @CurrentUser() currentUser: CurrentUserData,
+        @Body() dto: UpdateSupportAccessConfigDto,
+    ) {
+        return this.supportAccessService.updateConfig(currentUser, dto);
+    }
+
+    @Post('support-access/impersonations')
+    @ApiOperation({ summary: 'Create one-time participant impersonation login URL (Super Admin only)' })
+    @ApiResponse({ status: 201, description: 'Impersonation URL created' })
+    async createSupportImpersonation(
+        @CurrentUser() currentUser: CurrentUserData,
+        @Body() dto: CreateSupportImpersonationDto,
+        @Ip() ipAddress: string,
+        @Req() req: Request,
+    ) {
+        return this.supportAccessService.createImpersonation(
+            currentUser,
+            dto,
+            ipAddress || '0.0.0.0',
+            req.headers['user-agent'] || 'unknown',
+        );
     }
 }

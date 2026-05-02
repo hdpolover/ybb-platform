@@ -173,6 +173,8 @@ export async function seedBrands() {
       subtitle: 'Be part of a transformative experience connecting young leaders from 60+ countries. Apply now and shape the future.',
       primary_cta_label: 'Apply Now',
       primary_cta_href: '/apply',
+      background_image_url: '/img/ctabekground.png',
+      background_image_mobile_url: '/img/ctabackgroundformobile.png',
       video_url: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
       video_title: 'CYS 2026 Registration Guideline',
       video_description: 'Watch this short walkthrough to understand the registration flow, required documents, and key deadlines.',

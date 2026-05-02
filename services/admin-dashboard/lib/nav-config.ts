@@ -89,6 +89,14 @@ export const platformNavSections: NavSection[] = [
       { id: "analytics", label: "Analytics", href: "/platform/analytics", icon: BarChart3 },
     ],
   },
+  {
+    id: "settings",
+    title: "Settings",
+    items: [
+      { id: "platform-settings", label: "Platform Settings", href: "/platform/settings", icon: Settings },
+      { id: "support-access", label: "Support Access", href: "/platform/support-access", icon: ShieldCheck },
+    ],
+  },
 ];
 
 // ─── Program Nav ──────────────────────────────────────────────────────────────

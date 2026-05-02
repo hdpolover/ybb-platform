@@ -283,6 +283,9 @@ export class GetPortalSubmissionDetailHandler
         const sectionMap = new Map<string, SubmissionFormFieldDto[]>();
         for (const field of formFields) {
             const section = field.section || 'personal_info';
+            if (section === 'entry_information' && this.isLegacyEssayFormField(field)) {
+                continue;
+            }
             if (!sectionMap.has(section)) {
                 sectionMap.set(section, []);
             }
@@ -801,6 +804,41 @@ export class GetPortalSubmissionDetailHandler
     private isProgramSubthemeFieldName(name: string): boolean {
         const normalized = this.normalizeFieldName(name);
         return normalized === 'programsubthemeid' || normalized === 'subthemeid';
+    }
+
+    private isLegacyEssayFormField(field: {
+        name: string;
+        label: string;
+        type: string;
+        placeholder: string | null;
+        validationRules: unknown;
+    }): boolean {
+        const normalizedName = this.normalizeFieldName(field.name);
+        if (
+            normalizedName.includes('essay')
+            || normalizedName.includes('keyword')
+            || normalizedName.includes('reference')
+        ) {
+            return true;
+        }
+
+        if (field.type !== 'textarea') return false;
+
+        const normalizedLabel = field.label.trim().toLowerCase().replace(/\s+/g, ' ');
+        const normalizedPlaceholder = (field.placeholder || '').trim().toLowerCase();
+        const rules = field.validationRules;
+        const hasWordLimitRule = Boolean(
+            rules
+            && typeof rules === 'object'
+            && ['wordLimit', 'maxWords', 'minWords'].some((key) =>
+                Object.prototype.hasOwnProperty.call(rules, key),
+            ),
+        );
+        const looksLikeEssayPrompt = normalizedLabel.endsWith('?')
+            || normalizedLabel.includes('word limit')
+            || normalizedPlaceholder.includes('word limit');
+
+        return hasWordLimitRule || looksLikeEssayPrompt;
     }
 
     private readCategoryValueFromPersonalData(

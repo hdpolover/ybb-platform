@@ -1,31 +1,61 @@
 "use client";
 
 import Link from "next/link";
-import { Settings } from "lucide-react";
+import { Settings, ShieldCheck, Building2 } from "lucide-react";
 import { PageHeader } from "@/src/admin/page-header";
 
 export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Settings"
-        description="Brand-level settings are managed within each brand’s admin workspace."
+        title="Platform Settings"
+        description="Centralized settings for platform-level administration and secure support operations."
       />
-      <div className="flex flex-col items-center justify-center rounded-lg border border-zinc-200 bg-white py-16 text-center">
-        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-zinc-100">
-          <Settings className="h-7 w-7 text-zinc-500" />
-        </div>
-        <h2 className="mb-2 text-base font-semibold text-zinc-900">Brand Settings Not Available Here</h2>
-        <p className="mb-6 max-w-sm text-sm text-zinc-500">
-          Brand-specific settings such as general info, contact details, and finance configuration
-          are managed by brand admins within each brand’s workspace.
-        </p>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Link
+          href="/platform/support-access"
+          className="group rounded-lg border border-zinc-200 bg-white p-5 shadow-sm transition hover:border-blue-300 hover:shadow-md"
+        >
+          <div className="flex items-start gap-3">
+            <div className="rounded-lg bg-blue-50 p-2.5 text-blue-600">
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-zinc-900">Support Access</h2>
+              <p className="mt-1 text-sm text-zinc-600">
+                Configure support secret and impersonation guardrails for participant verification.
+              </p>
+            </div>
+          </div>
+        </Link>
+
         <Link
           href="/platform/brands"
-          className="inline-flex items-center gap-2 rounded-md bg-zinc-800 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-900"
+          className="group rounded-lg border border-zinc-200 bg-white p-5 shadow-sm transition hover:border-blue-300 hover:shadow-md"
         >
-          Go to Brands
+          <div className="flex items-start gap-3">
+            <div className="rounded-lg bg-zinc-100 p-2.5 text-zinc-700">
+              <Building2 className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-zinc-900">Brand Settings</h2>
+              <p className="mt-1 text-sm text-zinc-600">
+                Manage brand-level profiles, finance settings, and identity content.
+              </p>
+            </div>
+          </div>
         </Link>
+      </div>
+
+      <div className="rounded-lg border border-zinc-200 bg-white p-5">
+        <div className="mb-2 flex items-center gap-2 text-zinc-700">
+          <Settings className="h-4 w-4" />
+          <p className="text-sm font-semibold">Navigation</p>
+        </div>
+        <p className="text-sm text-zinc-600">
+          You can open support access directly from the sidebar under <span className="font-medium">Settings → Support Access</span>.
+        </p>
       </div>
     </div>
   );

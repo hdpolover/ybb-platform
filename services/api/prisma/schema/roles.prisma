@@ -311,3 +311,53 @@ model AmbassadorReferral {
   @@index([referredAt, acceptedAt])
   @@map("ambassador_referrals")
 }
+
+model SupportAccessConfig {
+  id String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+
+  key String @unique @default("global") @db.VarChar(32)
+
+  isEnabled     Boolean   @default(false) @map("is_enabled")
+  secretHash    String?   @map("secret_hash") @db.VarChar(255)
+  lastRotatedAt DateTime? @map("last_rotated_at") @db.Timestamptz(6)
+
+  updatedByAdminId String? @map("updated_by_admin_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("support_access_configs")
+}
+
+model SupportAccessImpersonationTicket {
+  id String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+
+  adminId String @map("admin_id") @db.Uuid
+
+  targetUserId        String  @map("target_user_id") @db.Uuid
+  targetParticipantId String? @map("target_participant_id") @db.Uuid
+  targetProgramId     String? @map("target_program_id") @db.Uuid
+  targetBrandId       String  @map("target_brand_id") @db.Uuid
+
+  reason   String @db.Text
+  tokenHash String @unique @map("token_hash") @db.Char(64)
+
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(6)
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(6)
+  status     String    @default("pending") @db.VarChar(32)
+
+  createdIpAddress  String? @map("created_ip_address") @db.Inet
+  createdUserAgent  String? @map("created_user_agent") @db.Text
+  consumedIpAddress String? @map("consumed_ip_address") @db.Inet
+  consumedUserAgent String? @map("consumed_user_agent") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([adminId])
+  @@index([targetUserId])
+  @@index([targetBrandId])
+  @@index([status, expiresAt])
+  @@map("support_access_impersonation_tickets")
+}

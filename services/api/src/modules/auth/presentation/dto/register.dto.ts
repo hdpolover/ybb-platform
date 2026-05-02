@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsOptional, IsString, IsUUID, MinLength, IsIn, IsEnum } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, IsUUID, MinLength, IsIn, IsEnum, Matches } from 'class-validator';
 import { ApplicationCategory } from '@prisma/client';
 
 export class RegisterDto {
@@ -20,6 +20,9 @@ export class RegisterDto {
   @IsString()
   @IsOptional()
   @MinLength(8)
+  @Matches(/((?=.*\d)|(?=.*\W+))(?![.\n])(?=.*[A-Z])(?=.*[a-z]).*$/, {
+    message: 'Password must contain uppercase, lowercase, number/special character',
+  })
   password?: string;
 
   @ApiProperty({

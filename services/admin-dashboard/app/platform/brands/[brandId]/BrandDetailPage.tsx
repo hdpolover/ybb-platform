@@ -1777,6 +1777,13 @@ function PromoCtaSheet({
               <FieldInput label="Button URL" id="cta-href" value={form.primary_cta_href ?? ""} onChange={(v) => set("primary_cta_href", v)} placeholder="/apply" />
             </div>
             <div className="border-t border-zinc-100 pt-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">Background</p>
+              <div className="space-y-3">
+                <FieldInput label="Desktop Background Image URL" id="cta-bg-desktop" value={form.background_image_url ?? ""} onChange={(v) => set("background_image_url", v)} placeholder="https://... or /img/ctabekground.png" />
+                <FieldInput label="Mobile Background Image URL" id="cta-bg-mobile" value={form.background_image_mobile_url ?? ""} onChange={(v) => set("background_image_mobile_url", v)} placeholder="https://... or /img/ctabackgroundformobile.png" />
+              </div>
+            </div>
+            <div className="border-t border-zinc-100 pt-4">
               <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">Video</p>
               <div className="space-y-3">
                 <FieldInput label="Embed URL" id="cta-video" value={form.video_url ?? ""} onChange={(v) => set("video_url", v)} placeholder="https://youtube.com/embed/..." />
@@ -2001,6 +2008,8 @@ function LandingPageTab({ brandId }: { brandId: string }) {
             <FieldView label="Button Label" value={meta.promo_cta?.primary_cta_label} />
             <FieldView label="Title" value={meta.promo_cta?.title} />
             <FieldView label="Button URL" value={meta.promo_cta?.primary_cta_href} />
+            <FieldView label="Desktop Background URL" value={meta.promo_cta?.background_image_url} />
+            <FieldView label="Mobile Background URL" value={meta.promo_cta?.background_image_mobile_url} />
           </div>
         </CardContent>
       </Card>
