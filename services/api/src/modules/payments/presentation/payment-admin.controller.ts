@@ -2,6 +2,7 @@ import {
     Controller,
     Get,
     Post,
+    Patch,
     Put,
     Delete,
     Body,
@@ -348,6 +349,8 @@ export class PaymentAdminController {
         if (!invoice) throw new HttpException('Invoice not found', 404);
 
         let transaction: unknown = null;
+        const paymentMethodCatalog = await this.getPaymentMethodCatalog();
+        let resolvedMethod = this.normalizePaymentMethod(invoice.paymentMethod, paymentMethodCatalog);
         if (invoice.externalTransactionId) {
             try {
                 const { data } = await this.paymentServiceClient.get(
@@ -355,12 +358,22 @@ export class PaymentAdminController {
                     { headers: this.buildInternalHeaders() },
                 );
                 transaction = data;
-            } catch (e) {
-                this.logger.warn(`Failed to fetch transaction ${invoice.externalTransactionId}: ${e.message}`);
+                if (!resolvedMethod && data && typeof data === 'object') {
+                    const extractedFromTxn = this.extractPaymentMethodFromTransaction(data as Record<string, unknown>);
+                    resolvedMethod = this.normalizePaymentMethod(extractedFromTxn, paymentMethodCatalog);
+                }
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.logger.warn(`Failed to fetch transaction ${invoice.externalTransactionId}: ${message}`);
             }
         }
 
-        return { ...this.toInvoiceDto(invoice), transaction };
+        const enrichedInvoice = {
+            ...invoice,
+            paymentMethod: resolvedMethod?.label ?? null,
+        };
+
+        return { ...this.toInvoiceDto(enrichedInvoice), transaction };
     }
 
     @Post('invoices/:id/verify')
@@ -403,6 +416,88 @@ export class PaymentAdminController {
         } catch (error) {
             this.handleError(error);
         }
+    }
+
+    @Patch('invoices/:id/status')
+    @ApiOperation({ summary: 'Update invoice status (manual transfer/admin override)' })
+    async updateInvoiceStatus(
+        @Param('id') id: string,
+        @Body() body: { status: PaymentStatus; reason?: string },
+    ) {
+        if (!Object.values(PaymentStatus).includes(body.status)) {
+            throw new HttpException('Invalid payment status', 400);
+        }
+
+        const invoice = await this.prisma.applicationInvoice.findUnique({
+            where: { id },
+            include: {
+                pricingTier: { select: { feeType: true } },
+                application: {
+                    select: {
+                        id: true,
+                        participant: { select: { userId: true } },
+                    },
+                },
+            },
+        });
+
+        if (!invoice) {
+            throw new HttpException('Invoice not found', 404);
+        }
+
+        const updatePayload: Prisma.ApplicationInvoiceUpdateInput = {
+            status: body.status,
+            paidAt: body.status === PaymentStatus.paid ? (invoice.paidAt ?? new Date()) : null,
+        };
+
+        const isRegistrationFee = invoice.pricingTier.feeType === 'registration_fee';
+        const appPaymentPatch: Prisma.ParticipantApplicationUpdateInput = isRegistrationFee
+            ? { registrationPaymentStatus: body.status }
+            : { programPaymentStatus: body.status };
+
+        const [updatedInvoice] = await this.prisma.$transaction([
+            this.prisma.applicationInvoice.update({
+                where: { id },
+                data: updatePayload,
+                include: {
+                    application: {
+                        include: {
+                            participant: {
+                                include: { user: { select: { id: true, email: true } } },
+                            },
+                        },
+                    },
+                    pricingTier: { select: { id: true, name: true, feeType: true } },
+                },
+            }),
+            this.prisma.participantApplication.update({
+                where: { id: invoice.application.id },
+                data: appPaymentPatch,
+            }),
+        ]);
+
+        const participantUserId = invoice.application?.participant?.userId;
+        if (participantUserId) {
+            await this.cacheService.invalidateInvoiceCache(id, participantUserId);
+        }
+
+        // Keep payment service in sync for manual verification flows where possible.
+        if (invoice.externalTransactionId && (body.status === PaymentStatus.paid || body.status === PaymentStatus.failed)) {
+            try {
+                await this.paymentServiceClient.post(
+                    `/api/v1/payments/${invoice.externalTransactionId}/verify`,
+                    {
+                        action: body.status === PaymentStatus.paid ? 'approve' : 'reject',
+                        reason: body.reason ?? '',
+                    },
+                    { headers: this.buildInternalHeaders() },
+                );
+            } catch (error) {
+                this.logger.warn(`Could not sync payment status to payment service for invoice ${id}: ${(error as Error).message}`);
+            }
+        }
+
+        return this.toInvoiceDto(updatedInvoice);
     }
 
     // ─── Payment Method Endpoints ─────────────────────────────────────────────────
@@ -454,7 +549,9 @@ export class PaymentAdminController {
 
             return data;
         } catch (error) {
-            this.logger.error(`Create method failed: ${error.message}`, error.stack);
+            const message = error instanceof Error ? error.message : String(error);
+            const stack = error instanceof Error ? error.stack : undefined;
+            this.logger.error(`Create method failed: ${message}`, stack);
             this.handleError(error);
         }
     }
@@ -588,33 +685,50 @@ export class PaymentAdminController {
 
     private extractPaymentMethodFromTransaction(transaction: Record<string, unknown>): string | null {
         const source = this.unwrapPayloadObject(transaction);
+        return this.findPaymentMethodDeep(source, 0);
+    }
+
+    private findPaymentMethodDeep(value: unknown, depth: number): string | null {
+        if (depth > 5 || value === null || value === undefined) {
+            return null;
+        }
+
+        if (typeof value === 'string') {
+            return this.isUnknownMethod(value) ? null : value;
+        }
+
+        if (Array.isArray(value)) {
+            for (const item of value) {
+                const found = this.findPaymentMethodDeep(item, depth + 1);
+                if (found) return found;
+            }
+            return null;
+        }
+
+        if (typeof value !== 'object') {
+            return null;
+        }
+
+        const record = value as Record<string, unknown>;
         const direct = this.pickString(
-            source.payment_method,
-            source.paymentMethod,
-            source.payment_method_id,
-            source.paymentMethodId,
-            source.payment_method_name,
-            source.paymentMethodName,
-            source.method_name,
-            source.method,
+            record.payment_method,
+            record.paymentMethod,
+            record.payment_method_id,
+            record.paymentMethodId,
+            record.payment_method_name,
+            record.paymentMethodName,
+            record.method_name,
+            record.method,
         );
-        if (direct) return direct;
+        if (direct && !this.isUnknownMethod(direct)) {
+            return direct;
+        }
 
-        const nested = source.transaction && typeof source.transaction === 'object'
-            ? (source.transaction as Record<string, unknown>)
-            : null;
-        if (!nested) return null;
-
-        return this.pickString(
-            nested.payment_method,
-            nested.paymentMethod,
-            nested.payment_method_id,
-            nested.paymentMethodId,
-            nested.payment_method_name,
-            nested.paymentMethodName,
-            nested.method_name,
-            nested.method,
-        );
+        for (const nested of Object.values(record)) {
+            const found = this.findPaymentMethodDeep(nested, depth + 1);
+            if (found) return found;
+        }
+        return null;
     }
 
     private unwrapPayloadObject(payload: Record<string, unknown>): Record<string, unknown> {
@@ -730,10 +844,12 @@ export class PaymentAdminController {
             this.logger.warn(`File info found but no URL property. Keys: ${Object.keys(data)}`);
             return icon;
 
-        } catch (e) {
-            this.logger.warn(`Failed to resolve icon UUID: ${icon}. Error: ${e.message}`);
-            if (e.response) {
-                this.logger.warn(`Error details: ${e.response.status} ${JSON.stringify(e.response.data)}`);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.warn(`Failed to resolve icon UUID: ${icon}. Error: ${message}`);
+            const response = (error as { response?: { status?: number; data?: unknown } })?.response;
+            if (response) {
+                this.logger.warn(`Error details: ${response.status ?? 'unknown'} ${JSON.stringify(response.data)}`);
             }
             return icon;
         }

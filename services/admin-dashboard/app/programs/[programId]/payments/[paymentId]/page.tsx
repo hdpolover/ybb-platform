@@ -9,19 +9,17 @@ import {
   UserCircle,
   CreditCard,
   ShieldCheck,
-  ShieldX,
   ExternalLink,
 } from "lucide-react";
 import {
   getProgramInvoice,
-  verifyInvoice,
+  updateProgramInvoiceStatus,
   type InvoiceDetail,
   type InvoiceStatus,
 } from "@/src/shared/api-client";
 import { PageHeader } from "@/src/admin/page-header";
 import { Button } from "@/src/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/src/ui/card";
-import { ConfirmDialog } from "@/src/admin/confirm-dialog";
 import { formatDate, formatDateTime } from "@/lib/utils";
 
 const STATUS_CLASS: Record<InvoiceStatus, string> = {
@@ -41,21 +39,18 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-start gap-4 py-3 border-b border-zinc-100 last:border-0">
-      <span className="w-44 shrink-0 text-sm text-zinc-500">{label}</span>
-      <span className="text-sm text-zinc-900 flex-1">{children}</span>
-    </div>
-  );
-}
-
 function formatCurrency(amount: number, currency: string) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency,
     maximumFractionDigits: 0,
   }).format(amount);
+}
+
+function formatKeyLabel(value: string) {
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 export default function PaymentDetailPage({
@@ -69,10 +64,10 @@ export default function PaymentDetailPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ text: string; ok: boolean } | null>(null);
-  const [verifyAction, setVerifyAction] = useState<"approve" | "reject" | null>(null);
-  const [verifyReason, setVerifyReason] = useState("");
-  const [verifyLoading, setVerifyLoading] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [detailModal, setDetailModal] = useState<{ key: string; value: unknown } | null>(null);
+  const [manualStatus, setManualStatus] = useState<InvoiceStatus>("processing");
+  const [manualReason, setManualReason] = useState("");
+  const [manualSaving, setManualSaving] = useState(false);
 
   async function fetchInvoice() {
     setLoading(true);
@@ -92,30 +87,18 @@ export default function PaymentDetailPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paymentId]);
 
-  async function handleVerify() {
-    if (!verifyAction) return;
-    setVerifyLoading(true);
-    setToast(null);
-    try {
-      await verifyInvoice(paymentId, verifyAction, verifyReason || undefined);
-      setToast({
-        text: verifyAction === "approve" ? "Payment approved" : "Payment rejected",
-        ok: true,
-      });
-      setVerifyAction(null);
-      setVerifyReason("");
-      setConfirmOpen(false);
-      await fetchInvoice();
-    } catch (err) {
-      setToast({ text: err instanceof Error ? err.message : "Action failed", ok: false });
-    } finally {
-      setVerifyLoading(false);
-    }
-  }
-
   const txn = invoice?.transaction as Record<string, unknown> | null | undefined;
   const txnStatus = txn?.status as string | undefined;
   const needsReview = txnStatus === "NEEDS_REVIEW";
+  const paymentMethodValue = formatPaymentMethod(invoice?.paymentMethod ?? null);
+  const proofUrl = extractProofUrl(txn);
+  const isManualTransfer = isManualTransferPayment(invoice?.paymentMethod ?? null, txn);
+
+  useEffect(() => {
+    if (invoice?.status) {
+      setManualStatus(invoice.status);
+    }
+  }, [invoice?.status]);
 
   return (
     <div className="space-y-6">
@@ -164,134 +147,243 @@ export default function PaymentDetailPage({
       )}
 
       {!loading && invoice && (
-        <div className="grid gap-6 lg:grid-cols-3">
-          {/* Main info */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Invoice card */}
+        <div className="space-y-6">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <CreditCard className="h-4 w-4 text-zinc-400" />
-                  Invoice Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Field label="Invoice ID">
-                  <span className="font-mono text-xs text-zinc-400">{invoice.id}</span>
-                </Field>
-                <Field label="Status">
+              <CardContent className="pt-5">
+                <p className="text-xs uppercase tracking-wide text-zinc-500">Status</p>
+                <div className="mt-2">
                   <StatusPill status={invoice.status} />
-                </Field>
-                <Field label="Amount">
-                  <span className="font-semibold">{formatCurrency(invoice.amount, invoice.currency)}</span>
-                  <span className="ml-1 text-xs text-zinc-400">{invoice.currency}</span>
-                </Field>
-                <Field label="Pricing Tier">{invoice.pricingTier.name}</Field>
-                <Field label="Fee Type">
-                  <span className="capitalize">{invoice.pricingTier.feeType.replace(/_/g, " ")}</span>
-                </Field>
-                <Field label="Payment Method">
-                  <span className="capitalize">{invoice.paymentMethod ?? "—"}</span>
-                </Field>
-                <Field label="Paid At">
-                  {invoice.paidAt
-                    ? formatDateTime(invoice.paidAt, {
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })
-                    : "—"}
-                </Field>
-                <Field label="Created">
-                  {formatDate(invoice.createdAt, {
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })}
-                </Field>
-                {invoice.externalTransactionId && (
-                  <Field label="Transaction ID">
-                    <span className="font-mono text-xs text-zinc-400">{invoice.externalTransactionId}</span>
-                  </Field>
-                )}
-                {invoice.externalIntentId && (
-                  <Field label="Intent ID">
-                    <span className="font-mono text-xs text-zinc-400">{invoice.externalIntentId}</span>
-                  </Field>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Participant card */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <UserCircle className="h-4 w-4 text-zinc-400" />
-                  Participant
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Field label="Full Name">{invoice.participant.fullName}</Field>
-                <Field label="Email">
-                  <span className="font-mono text-sm">{invoice.participant.email ?? "—"}</span>
-                </Field>
-                <Field label="Participant ID">
-                  <span className="font-mono text-xs text-zinc-400">{invoice.participant.id}</span>
-                </Field>
-                <div className="pt-2">
-                  <Link
-                    href={`/programs/${programId}/users/${invoice.participant.userId}`}
-                    className="inline-flex h-8 items-center gap-1.5 rounded border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 shadow-sm hover:bg-zinc-50 hover:text-zinc-900 transition-colors"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    View User Account
-                  </Link>
                 </div>
               </CardContent>
             </Card>
-
-            {/* Go service transaction card */}
-            {txn && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <CreditCard className="h-4 w-4 text-zinc-400" />
-                    Payment Transaction
-                    {txnStatus && (
-                      <span className="ml-auto">
-                        <StatusPill status={txnStatus} />
-                      </span>
-                    )}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {Object.entries(txn)
-                    .filter(([k]) => !["id"].includes(k))
-                    .map(([key, val]) => (
-                      <Field key={key} label={key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}>
-                        {val === null || val === undefined || val === ""
-                          ? "—"
-                          : String(val)}
-                      </Field>
-                    ))}
-                </CardContent>
-              </Card>
-            )}
+            <Card>
+              <CardContent className="pt-5">
+                <p className="text-xs uppercase tracking-wide text-zinc-500">Amount</p>
+                <p className="mt-2 text-2xl font-semibold text-zinc-900">
+                  {formatCurrency(invoice.amount, invoice.currency)}
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-5">
+                <p className="text-xs uppercase tracking-wide text-zinc-500">Payment Method</p>
+                <p className="mt-2 text-base font-medium text-zinc-900">{paymentMethodValue}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-5">
+                <p className="text-xs uppercase tracking-wide text-zinc-500">Pricing Tier</p>
+                <p className="mt-2 text-base font-medium text-zinc-900">{invoice.pricingTier.name}</p>
+                <p className="text-xs text-zinc-500 capitalize">{invoice.pricingTier.feeType.replace(/_/g, " ")}</p>
+              </CardContent>
+            </Card>
           </div>
 
-          {/* Actions sidebar */}
-          <div className="space-y-4">
-            {needsReview && (
+          <div className="grid gap-6 xl:grid-cols-12">
+            <div className="space-y-6 xl:col-span-8">
+              <div className="grid gap-6 lg:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <CreditCard className="h-4 w-4 text-zinc-400" />
+                      Invoice Information
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <dl className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm md:grid-cols-2">
+                      <div>
+                        <dt className="text-zinc-500">Invoice ID</dt>
+                        <dd className="font-mono text-xs text-zinc-700 break-all">{invoice.id}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-zinc-500">Created</dt>
+                        <dd className="text-zinc-900">
+                          {formatDate(invoice.createdAt, {
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                          })}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-zinc-500">Paid At</dt>
+                        <dd className="text-zinc-900">
+                          {invoice.paidAt
+                            ? formatDateTime(invoice.paidAt, {
+                                year: "numeric",
+                                month: "long",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "—"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-zinc-500">Currency</dt>
+                        <dd className="text-zinc-900">{invoice.currency}</dd>
+                      </div>
+                      {invoice.externalTransactionId && (
+                        <div>
+                          <dt className="text-zinc-500">Transaction ID</dt>
+                          <dd className="font-mono text-xs text-zinc-700 break-all">{invoice.externalTransactionId}</dd>
+                        </div>
+                      )}
+                      {invoice.externalIntentId && (
+                        <div>
+                          <dt className="text-zinc-500">Intent ID</dt>
+                          <dd className="font-mono text-xs text-zinc-700 break-all">{invoice.externalIntentId}</dd>
+                        </div>
+                      )}
+                    </dl>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <UserCircle className="h-4 w-4 text-zinc-400" />
+                      Participant
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <dl className="grid grid-cols-1 gap-y-4 text-sm">
+                      <div>
+                        <dt className="text-zinc-500">Full Name</dt>
+                        <dd className="text-zinc-900">{invoice.participant.fullName}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-zinc-500">Email</dt>
+                        <dd className="font-mono text-zinc-900 break-all">{invoice.participant.email ?? "—"}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-zinc-500">Participant ID</dt>
+                        <dd className="font-mono text-xs text-zinc-700 break-all">{invoice.participant.id}</dd>
+                      </div>
+                    </dl>
+                    <div className="pt-4">
+                      <Link
+                        href={`/programs/${programId}/users/${invoice.participant.userId}`}
+                        className="inline-flex h-8 items-center gap-1.5 rounded border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 shadow-sm hover:bg-zinc-50 hover:text-zinc-900 transition-colors"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        View User Account
+                      </Link>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {txn && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <CreditCard className="h-4 w-4 text-zinc-400" />
+                      Payment Transaction
+                      {txnStatus && (
+                        <span className="ml-auto">
+                          <StatusPill status={txnStatus} />
+                        </span>
+                      )}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <dl className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm md:grid-cols-2 xl:grid-cols-3">
+                      {Object.entries(txn)
+                        .filter(([k]) => !["id"].includes(k))
+                        .map(([key, val]) => (
+                          <div key={key}>
+                            <dt className="text-zinc-500">{formatKeyLabel(key)}</dt>
+                            <dd className="text-zinc-900 break-words">
+                              {val === null || val === undefined || val === ""
+                                ? "—"
+                                : typeof val === "object"
+                                  ? (
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 text-xs"
+                                      onClick={() => setDetailModal({ key, value: val })}
+                                    >
+                                      See details
+                                    </Button>
+                                  )
+                                  : String(val)}
+                            </dd>
+                          </div>
+                        ))}
+                    </dl>
+                  </CardContent>
+                </Card>
+              )}
+
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Verify Payment</CardTitle>
+                  <CardTitle className="text-base">Payment Proof</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {proofUrl ? (
+                    <>
+                      {isImageUrl(proofUrl) ? (
+                        <a href={proofUrl} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-md border border-zinc-200">
+                          <img src={proofUrl} alt="Payment proof" className="max-h-96 w-full object-contain bg-zinc-50" />
+                        </a>
+                      ) : (
+                        <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+                          Payment proof file is available.
+                        </div>
+                      )}
+                      <div className="flex flex-wrap gap-2">
+                        <Button type="button" variant="outline" size="sm" onClick={() => window.open(proofUrl, "_blank", "noopener,noreferrer")}>
+                          Open proof
+                        </Button>
+                        <a
+                          href={proofUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex h-8 items-center rounded border border-zinc-200 px-3 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+                        >
+                          Download
+                        </a>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-500">
+                      No payment proof found in gateway transaction payload.
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="space-y-4 xl:col-span-4">
+            {isManualTransfer && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Manual Transfer Review</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <p className="text-xs text-zinc-500">
-                    This payment has been submitted for manual verification. Review the proof and approve or reject.
+                    Update invoice status after checking transfer proof.
                   </p>
+                  <div>
+                    <label className="text-xs font-medium text-zinc-600 mb-1 block">
+                      Status
+                    </label>
+                    <select
+                      value={manualStatus}
+                      onChange={(e) => setManualStatus(e.target.value as InvoiceStatus)}
+                      className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="processing">Processing</option>
+                      <option value="paid">Paid</option>
+                      <option value="failed">Failed</option>
+                      <option value="unpaid">Unpaid</option>
+                      <option value="refunded">Refunded</option>
+                    </select>
+                  </div>
                   <div>
                     <label className="text-xs font-medium text-zinc-600 mb-1 block">
                       Reason (optional)
@@ -299,39 +391,43 @@ export default function PaymentDetailPage({
                     <textarea
                       className="w-full rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                       rows={3}
-                      placeholder="Add a note…"
-                      value={verifyReason}
-                      onChange={(e) => setVerifyReason(e.target.value)}
+                      placeholder="Why this status change?"
+                      value={manualReason}
+                      onChange={(e) => setManualReason(e.target.value)}
                     />
                   </div>
                   <Button
                     variant="default"
                     size="sm"
                     className="w-full"
-                    disabled={verifyLoading}
-                    onClick={() => { setVerifyAction("approve"); setConfirmOpen(true); }}
+                    disabled={manualSaving || !invoice}
+                    onClick={async () => {
+                      if (!invoice) return;
+                      setManualSaving(true);
+                      setToast(null);
+                      try {
+                        await updateProgramInvoiceStatus(invoice.id, manualStatus, manualReason || undefined);
+                        setToast({ text: "Invoice status updated.", ok: true });
+                        await fetchInvoice();
+                      } catch (err) {
+                        setToast({ text: err instanceof Error ? err.message : "Failed to update status", ok: false });
+                      } finally {
+                        setManualSaving(false);
+                      }
+                    }}
                   >
-                    {verifyLoading && verifyAction === "approve" ? (
+                    {manualSaving ? (
                       <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
                     ) : (
                       <ShieldCheck className="mr-2 h-3.5 w-3.5" />
                     )}
-                    Approve Payment
+                    Apply Status
                   </Button>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    className="w-full"
-                    disabled={verifyLoading}
-                    onClick={() => { setVerifyAction("reject"); setConfirmOpen(true); }}
-                  >
-                    {verifyLoading && verifyAction === "reject" ? (
-                      <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <ShieldX className="mr-2 h-3.5 w-3.5" />
-                    )}
-                    Reject Payment
-                  </Button>
+                  {needsReview && (
+                    <p className="text-[11px] text-zinc-500">
+                      Transaction is awaiting review in gateway flow.
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             )}
@@ -361,23 +457,152 @@ export default function PaymentDetailPage({
                 )}
               </CardContent>
             </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">References</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div className="space-y-1">
+                  <p className="text-xs uppercase tracking-wide text-zinc-500">Invoice ID</p>
+                  <p className="font-mono text-xs text-zinc-800 break-all">{invoice.id}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs uppercase tracking-wide text-zinc-500">Created</p>
+                  <p className="text-zinc-800">{formatDateTime(invoice.createdAt)}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs uppercase tracking-wide text-zinc-500">Paid At</p>
+                  <p className="text-zinc-800">{invoice.paidAt ? formatDateTime(invoice.paidAt) : "—"}</p>
+                </div>
+                {invoice.externalTransactionId && (
+                  <div className="space-y-1">
+                    <p className="text-xs uppercase tracking-wide text-zinc-500">Transaction ID</p>
+                    <p className="font-mono text-xs text-zinc-800 break-all">{invoice.externalTransactionId}</p>
+                  </div>
+                )}
+                {invoice.externalIntentId && (
+                  <div className="space-y-1">
+                    <p className="text-xs uppercase tracking-wide text-zinc-500">Intent ID</p>
+                    <p className="font-mono text-xs text-zinc-800 break-all">{invoice.externalIntentId}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
+        </div>
         </div>
       )}
 
-      <ConfirmDialog
-        open={confirmOpen}
-        onOpenChange={setConfirmOpen}
-        title={verifyAction === "approve" ? "Approve Payment" : "Reject Payment"}
-        description={
-          verifyAction === "approve"
-            ? "Confirm approval of this manual payment? This will mark it as paid."
-            : "Confirm rejection of this payment? The participant will be notified."
-        }
-        confirmLabel={verifyAction === "approve" ? "Approve" : "Reject"}
-        variant={verifyAction === "approve" ? "default" : "destructive"}
-        onConfirm={handleVerify}
-      />
+      {detailModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setDetailModal(null)}
+        >
+          <div
+            className="w-full max-w-3xl rounded-lg border border-zinc-200 bg-white shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
+              <div>
+                <h3 className="text-sm font-semibold text-zinc-900">{formatKeyLabel(detailModal.key)}</h3>
+                <p className="text-xs text-zinc-500">Gateway response details</p>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={() => setDetailModal(null)}>
+                Close
+              </Button>
+            </div>
+            <div className="max-h-[70vh] overflow-auto p-4">
+              <pre className="whitespace-pre-wrap break-words rounded-md bg-zinc-50 p-3 text-xs text-zinc-800">
+                {safeStringify(detailModal.value)}
+              </pre>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+function formatPaymentMethod(value: string | null): string {
+  if (!value) return "Not recorded";
+  const normalized = value.trim().toLowerCase();
+  if (["unknown", "-", "n/a", "na", "null", "undefined"].includes(normalized)) {
+    return "Not recorded";
+  }
+  return value
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function extractProofUrl(transaction: Record<string, unknown> | null | undefined): string | null {
+  if (!transaction) return null;
+  return findStringByKeysDeep(transaction, [
+    "proof_file_url",
+    "proofFileUrl",
+    "proof_url",
+    "proofUrl",
+    "payment_proof_url",
+    "paymentProofUrl",
+    "receipt_url",
+    "receiptUrl",
+  ]);
+}
+
+function isManualTransferPayment(
+  paymentMethod: string | null,
+  transaction: Record<string, unknown> | null | undefined,
+): boolean {
+  const methodFromField = paymentMethod ?? "";
+  const methodFromTransaction = findStringByKeysDeep(transaction ?? {}, [
+    "payment_method_id",
+    "paymentMethodId",
+    "payment_method",
+    "paymentMethod",
+    "method",
+    "method_name",
+    "methodName",
+  ]) ?? "";
+  const token = `${methodFromField} ${methodFromTransaction}`.toLowerCase();
+  return token.includes("manual") || token.includes("bank_transfer") || token.includes("manual_transfer");
+}
+
+function isImageUrl(value: string): boolean {
+  return /\.(png|jpe?g|gif|webp|bmp|svg)(\?.*)?$/i.test(value);
+}
+
+function findStringByKeysDeep(source: unknown, keys: string[], depth = 0): string | null {
+  if (depth > 6 || source === null || source === undefined) return null;
+  if (typeof source === "string") {
+    const value = source.trim();
+    return value ? value : null;
+  }
+  if (Array.isArray(source)) {
+    for (const item of source) {
+      const found = findStringByKeysDeep(item, keys, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (typeof source !== "object") return null;
+
+  const record = source as Record<string, unknown>;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  for (const value of Object.values(record)) {
+    const found = findStringByKeysDeep(value, keys, depth + 1);
+    if (found) return found;
+  }
+  return null;
 }

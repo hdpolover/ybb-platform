@@ -2229,6 +2229,17 @@ export function verifyInvoice(
   });
 }
 
+export function updateProgramInvoiceStatus(
+  id: string,
+  status: "unpaid" | "paid" | "processing" | "failed" | "refunded",
+  reason?: string,
+): Promise<InvoiceListItem> {
+  return request<InvoiceListItem>(`/admin/payments/invoices/${id}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ status, reason }),
+  });
+}
+
 // ─── Ambassadors ──────────────────────────────────────────────────────────────
 
 export type Ambassador = {
