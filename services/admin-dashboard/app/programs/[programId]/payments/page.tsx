@@ -2,13 +2,27 @@
 
 import { use, useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { Search, Eye, Loader2, RefreshCw, DollarSign, Clock, XCircle, CheckCircle2 } from "lucide-react";
+import {
+  Search,
+  Eye,
+  Copy,
+  Loader2,
+  RefreshCw,
+  DollarSign,
+  Clock,
+  XCircle,
+  CheckCircle2,
+  FilterX,
+  CircleDollarSign,
+} from "lucide-react";
 import {
   listProgramInvoices,
   type InvoiceListItem,
   type InvoiceStatus,
   type InvoiceSummary,
   type PaginatedMeta,
+  type InvoiceMetrics,
+  type InvoiceFilterOptions,
 } from "@/src/shared/api-client";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { PageHeader } from "@/src/admin/page-header";
@@ -22,15 +36,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/src/ui/table";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatDateTime } from "@/lib/utils";
 
-const STATUS_OPTIONS = [
-  { value: "", label: "All Statuses" },
-  { value: "paid", label: "Paid" },
-  { value: "unpaid", label: "Unpaid" },
-  { value: "processing", label: "Processing" },
-  { value: "failed", label: "Failed" },
-  { value: "refunded", label: "Refunded" },
+const SORT_OPTIONS: Array<{ value: "createdAt" | "paidAt" | "amount" | "updatedAt"; label: string }> = [
+  { value: "createdAt", label: "Newest Invoice" },
+  { value: "paidAt", label: "Newest Payment" },
+  { value: "amount", label: "Highest Amount" },
+  { value: "updatedAt", label: "Recently Updated" },
 ];
 
 const STATUS_CLASS: Record<InvoiceStatus, string> = {
@@ -41,12 +53,22 @@ const STATUS_CLASS: Record<InvoiceStatus, string> = {
   refunded: "bg-purple-50 text-purple-700 border-purple-200",
 };
 
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+const FILTER_SELECT_CLASS = "h-10 w-full rounded-md border border-zinc-200 bg-white px-3 pr-8 text-sm text-zinc-700 focus:outline-none focus:ring-2 focus:ring-blue-500";
+
 function formatCurrency(amount: number, currency: string) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency,
     maximumFractionDigits: 0,
   }).format(amount);
+}
+
+function formatLabel(value: string | null | undefined) {
+  if (!value) return "—";
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function StatusPill({ status }: { status: string }) {
@@ -58,15 +80,13 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
-const PAGE_SIZE = 20;
-
 export default function PaymentsPage({
   params,
 }: {
   params: Promise<{ programId: string }>;
 }) {
   const { programId } = use(params);
-  const { accessiblePrograms, adminProfile } = useAuth();
+  const { accessiblePrograms } = useAuth();
 
   const program = useMemo(
     () => accessiblePrograms.find((p) => p.programId === programId || p.programSlug === programId),
@@ -77,11 +97,57 @@ export default function PaymentsPage({
   const [invoices, setInvoices] = useState<InvoiceListItem[]>([]);
   const [meta, setMeta] = useState<PaginatedMeta | null>(null);
   const [summary, setSummary] = useState<InvoiceSummary | null>(null);
+  const [overallSummary, setOverallSummary] = useState<InvoiceSummary | null>(null);
+  const [metrics, setMetrics] = useState<InvoiceMetrics | null>(null);
+  const [filterOptions, setFilterOptions] = useState<InvoiceFilterOptions>({
+    tiers: [],
+    paymentMethods: [],
+    currencies: [],
+    applicationStatuses: [],
+    invoiceStatuses: [],
+    feeTypes: [],
+  });
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [statusFilter, setStatusFilter] = useState("");
   const [search, setSearch] = useState("");
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState("");
+  const [tierFilter, setTierFilter] = useState("");
+  const [feeTypeFilter, setFeeTypeFilter] = useState("");
+  const [applicationStatusFilter, setApplicationStatusFilter] = useState("");
+  const [currencyFilter, setCurrencyFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [paidFrom, setPaidFrom] = useState("");
+  const [paidTo, setPaidTo] = useState("");
+  const [minAmount, setMinAmount] = useState("");
+  const [maxAmount, setMaxAmount] = useState("");
+  const [sortBy, setSortBy] = useState<"createdAt" | "paidAt" | "amount" | "updatedAt">("createdAt");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const hasActiveFilters = Boolean(
+    search.trim() ||
+    statusFilter ||
+    paymentMethodFilter ||
+    tierFilter ||
+    feeTypeFilter ||
+    applicationStatusFilter ||
+    currencyFilter ||
+    dateFrom ||
+    dateTo ||
+    paidFrom ||
+    paidTo ||
+    minAmount ||
+    maxAmount ||
+    sortBy !== "createdAt" ||
+    sortOrder !== "desc" ||
+    pageSize !== 20,
+  );
 
   const fetchInvoices = useCallback(async () => {
     if (!resolvedProgramId) return;
@@ -91,31 +157,120 @@ export default function PaymentsPage({
       const res = await listProgramInvoices({
         programId: resolvedProgramId,
         page,
-        limit: PAGE_SIZE,
+        limit: pageSize,
         status: statusFilter || undefined,
         search: search.trim() || undefined,
+        paymentMethod: paymentMethodFilter || undefined,
+        tierId: tierFilter || undefined,
+        feeType: feeTypeFilter || undefined,
+        applicationStatus: applicationStatusFilter || undefined,
+        currency: currencyFilter || undefined,
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
+        paidFrom: paidFrom || undefined,
+        paidTo: paidTo || undefined,
+        minAmount: minAmount ? Number(minAmount) : undefined,
+        maxAmount: maxAmount ? Number(maxAmount) : undefined,
+        sortBy,
+        sortOrder,
       });
       setInvoices(res.data);
       setMeta(res.meta);
       setSummary(res.summary);
+      setOverallSummary(res.overallSummary);
+      setMetrics(res.metrics);
+      setFilterOptions(res.filters);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load invoices");
     } finally {
       setLoading(false);
     }
-  }, [resolvedProgramId, page, statusFilter, search]);
+  }, [
+    resolvedProgramId,
+    page,
+    pageSize,
+    statusFilter,
+    search,
+    paymentMethodFilter,
+    tierFilter,
+    feeTypeFilter,
+    applicationStatusFilter,
+    currencyFilter,
+    dateFrom,
+    dateTo,
+    paidFrom,
+    paidTo,
+    minAmount,
+    maxAmount,
+    sortBy,
+    sortOrder,
+  ]);
 
   useEffect(() => {
-    fetchInvoices();
+    void fetchInvoices();
   }, [fetchInvoices]);
 
-  const paidAmount = summary?.paid?.amount ?? 0;
+  function clearFilters() {
+    setSearch("");
+    setStatusFilter("");
+    setPaymentMethodFilter("");
+    setTierFilter("");
+    setFeeTypeFilter("");
+    setApplicationStatusFilter("");
+    setCurrencyFilter("");
+    setDateFrom("");
+    setDateTo("");
+    setPaidFrom("");
+    setPaidTo("");
+    setMinAmount("");
+    setMaxAmount("");
+    setSortBy("createdAt");
+    setSortOrder("desc");
+    setPageSize(20);
+    setPage(1);
+  }
+
+  const currency = invoices[0]?.currency ?? filterOptions.currencies[0]?.value ?? "USD";
+  const statusOptions = useMemo(
+    () => [
+      { value: "", label: "All Statuses" },
+      ...filterOptions.invoiceStatuses.map((option) => ({
+        value: option.value,
+        label: `${formatLabel(option.value)} (${option.count})`,
+      })),
+    ],
+    [filterOptions.invoiceStatuses],
+  );
+  const feeTypeOptions = useMemo(
+    () => [
+      { value: "", label: "All Fee Types" },
+      ...filterOptions.feeTypes.map((option) => ({
+        value: option.value,
+        label: `${formatLabel(option.value)} (${option.count})`,
+      })),
+    ],
+    [filterOptions.feeTypes],
+  );
   const paidCount = summary?.paid?.count ?? 0;
   const pendingCount = (summary?.unpaid?.count ?? 0) + (summary?.processing?.count ?? 0);
   const failedCount = summary?.failed?.count ?? 0;
+  const collectionRate = metrics?.collectionRate ?? 0;
+  const totalInvoices = metrics?.totalInvoices ?? 0;
+  const totalAmount = metrics?.totalAmount ?? 0;
+  const paidAmount = metrics?.paidAmount ?? 0;
+  const outstandingAmount = metrics?.outstandingAmount ?? 0;
+  const averagePaidAmount = metrics?.averagePaidAmount ?? 0;
 
-  // Assume first invoice currency for display (most will be same currency)
-  const currency = invoices[0]?.currency ?? "IDR";
+  async function handleCopy(key: string, value: string | null | undefined) {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedKey(key);
+      window.setTimeout(() => setCopiedKey(null), 1500);
+    } catch {
+      // no-op
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -123,7 +278,7 @@ export default function PaymentsPage({
         title="Payments"
         description={`Invoice records${program ? ` for ${program.programName}` : ""}`}
         actions={
-          <Button variant="outline" size="sm" onClick={fetchInvoices} disabled={loading}>
+          <Button variant="outline" size="sm" onClick={() => void fetchInvoices()} disabled={loading}>
             <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
             Refresh
           </Button>
@@ -136,8 +291,7 @@ export default function PaymentsPage({
         </div>
       )}
 
-      {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
           icon={<DollarSign className="h-4 w-4 text-emerald-600" />}
           label="Total Collected"
@@ -146,62 +300,220 @@ export default function PaymentsPage({
           color="emerald"
         />
         <StatCard
-          icon={<CheckCircle2 className="h-4 w-4 text-blue-600" />}
-          label="Paid"
-          value={String(paidCount)}
-          sub="invoices"
+          icon={<CircleDollarSign className="h-4 w-4 text-blue-600" />}
+          label="Total Invoiced"
+          value={formatCurrency(totalAmount, currency)}
+          sub={`${totalInvoices} invoices`}
           color="blue"
         />
         <StatCard
           icon={<Clock className="h-4 w-4 text-amber-600" />}
-          label="Pending"
-          value={String(pendingCount)}
-          sub="unpaid / processing"
+          label="Outstanding"
+          value={formatCurrency(outstandingAmount, currency)}
+          sub={`${pendingCount} pending`}
           color="amber"
+        />
+        <StatCard
+          icon={<CheckCircle2 className="h-4 w-4 text-indigo-600" />}
+          label="Collection Rate"
+          value={`${collectionRate.toFixed(1)}%`}
+          sub={`Avg paid ${formatCurrency(averagePaidAmount, currency)}`}
+          color="indigo"
         />
         <StatCard
           icon={<XCircle className="h-4 w-4 text-red-600" />}
           label="Failed"
           value={String(failedCount)}
-          sub="failed invoices"
+          sub={`${overallSummary?.failed?.count ?? failedCount} total in program`}
           color="red"
         />
       </div>
 
-      {/* Table */}
       <div className="rounded-lg border border-zinc-200 bg-white">
-        <div className="flex flex-wrap items-center gap-3 border-b border-zinc-200 px-4 py-3">
-          <div className="relative flex-1 min-w-48">
-            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />
+        <div className="space-y-3 border-b border-zinc-200 px-4 py-3">
+          <div className="grid gap-3 lg:grid-cols-4">
+            <div className="relative lg:col-span-2">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />
+              <Input
+                placeholder="Search name, email, country, nationality…"
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                className="pl-8 h-10 text-sm"
+              />
+            </div>
+            <select
+              value={statusFilter}
+              onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+              className={FILTER_SELECT_CLASS}
+            >
+              {statusOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <select
+              value={paymentMethodFilter}
+              onChange={(e) => { setPaymentMethodFilter(e.target.value); setPage(1); }}
+              className={FILTER_SELECT_CLASS}
+            >
+              <option value="">All Methods</option>
+              {filterOptions.paymentMethods.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.value} ({option.count})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+            <select
+              value={tierFilter}
+              onChange={(e) => { setTierFilter(e.target.value); setPage(1); }}
+              className={FILTER_SELECT_CLASS}
+            >
+              <option value="">All Tiers</option>
+              {filterOptions.tiers.map((tier) => (
+                <option key={tier.id} value={tier.id}>
+                  {tier.name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={feeTypeFilter}
+              onChange={(e) => { setFeeTypeFilter(e.target.value); setPage(1); }}
+              className={FILTER_SELECT_CLASS}
+            >
+              {feeTypeOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <select
+              value={applicationStatusFilter}
+              onChange={(e) => { setApplicationStatusFilter(e.target.value); setPage(1); }}
+              className={FILTER_SELECT_CLASS}
+            >
+              <option value="">All Application Statuses</option>
+              {filterOptions.applicationStatuses.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {formatLabel(option.value)} ({option.count})
+                </option>
+              ))}
+            </select>
+            <select
+              value={currencyFilter}
+              onChange={(e) => { setCurrencyFilter(e.target.value); setPage(1); }}
+              className={FILTER_SELECT_CLASS}
+            >
+              <option value="">All Currencies</option>
+              {filterOptions.currencies.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.value} ({option.count})
+                </option>
+              ))}
+            </select>
             <Input
-              placeholder="Search by name or email…"
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className="pl-8 h-8 text-sm"
+              type="number"
+              min="0"
+              step="1"
+              value={minAmount}
+              onChange={(e) => { setMinAmount(e.target.value); setPage(1); }}
+              className="h-10 text-sm"
+              placeholder="Min amount"
+            />
+            <Input
+              type="number"
+              min="0"
+              step="1"
+              value={maxAmount}
+              onChange={(e) => { setMaxAmount(e.target.value); setPage(1); }}
+              className="h-10 text-sm"
+              placeholder="Max amount"
             />
           </div>
-          <select
-            value={statusFilter}
-            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-            className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-700 focus:outline-none focus:ring-2 focus:ring-blue-500 h-8"
-          >
-            {STATUS_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-          <span className="text-xs text-zinc-400">
-            {meta ? `${meta.total} result${meta.total !== 1 ? "s" : ""}` : ""}
-          </span>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
+            <Input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
+              className="h-10 text-sm"
+              aria-label="Invoice date from"
+            />
+            <Input
+              type="date"
+              value={dateTo}
+              onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
+              className="h-10 text-sm"
+              aria-label="Invoice date to"
+            />
+            <Input
+              type="date"
+              value={paidFrom}
+              onChange={(e) => { setPaidFrom(e.target.value); setPage(1); }}
+              className="h-10 text-sm"
+              aria-label="Paid date from"
+            />
+            <Input
+              type="date"
+              value={paidTo}
+              onChange={(e) => { setPaidTo(e.target.value); setPage(1); }}
+              className="h-10 text-sm"
+              aria-label="Paid date to"
+            />
+            <select
+              value={sortBy}
+              onChange={(e) => { setSortBy(e.target.value as "createdAt" | "paidAt" | "amount" | "updatedAt"); setPage(1); }}
+              className={FILTER_SELECT_CLASS}
+            >
+              {SORT_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <select
+              value={sortOrder}
+              onChange={(e) => { setSortOrder(e.target.value as "asc" | "desc"); setPage(1); }}
+              className={FILTER_SELECT_CLASS}
+            >
+              <option value="desc">Descending</option>
+              <option value="asc">Ascending</option>
+            </select>
+            <select
+              value={pageSize}
+              onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+              className={FILTER_SELECT_CLASS}
+            >
+              {PAGE_SIZE_OPTIONS.map((size) => (
+                <option key={size} value={size}>{size}/page</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-zinc-400">
+              {meta ? `${meta.total} result${meta.total !== 1 ? "s" : ""}` : ""}
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={clearFilters}
+              disabled={!hasActiveFilters}
+              className="h-8 text-xs"
+            >
+              <FilterX className="mr-1.5 h-3.5 w-3.5" />
+              Clear filters
+            </Button>
+          </div>
         </div>
 
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Date</TableHead>
+              <TableHead>Invoice</TableHead>
               <TableHead>Participant</TableHead>
-              <TableHead>Tier</TableHead>
+              <TableHead>Tier / Fee Type</TableHead>
               <TableHead>Amount</TableHead>
               <TableHead>Method</TableHead>
+              <TableHead>Application</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -209,35 +521,72 @@ export default function PaymentsPage({
           <TableBody>
             {loading && (
               <TableRow>
-                <TableCell colSpan={7} className="py-10 text-center text-zinc-400">
+                <TableCell colSpan={8} className="py-10 text-center text-zinc-400">
                   <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                 </TableCell>
               </TableRow>
             )}
             {!loading && invoices.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="py-10 text-center text-sm text-zinc-400">
+                <TableCell colSpan={8} className="py-10 text-center text-sm text-zinc-400">
                   No invoices found.
                 </TableCell>
               </TableRow>
             )}
             {!loading && invoices.map((inv) => (
               <TableRow key={inv.id}>
-                <TableCell className="text-sm text-zinc-500 whitespace-nowrap">
-                  {formatDate(inv.createdAt)}
+                <TableCell className="min-w-[170px]">
+                  <div className="flex items-center gap-1.5 text-xs font-mono text-zinc-500">
+                    <span>{inv.id.slice(0, 8)}…{inv.id.slice(-4)}</span>
+                    <CopyCellButton
+                      copied={copiedKey === `invoice-${inv.id}`}
+                      onClick={() => void handleCopy(`invoice-${inv.id}`, inv.id)}
+                    />
+                  </div>
+                  <div className="text-xs text-zinc-400">
+                    Issued: {formatDate(inv.createdAt)}
+                  </div>
+                  <div className="text-xs text-zinc-400">
+                    Paid: {inv.paidAt ? formatDateTime(inv.paidAt) : "—"}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <div className="font-medium text-sm">{inv.participant.fullName}</div>
-                  <div className="text-xs text-zinc-400">{inv.participant.email ?? "—"}</div>
+                  <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                    <span>{inv.participant.email ?? "—"}</span>
+                    {inv.participant.email && (
+                      <CopyCellButton
+                        copied={copiedKey === `email-${inv.id}`}
+                        onClick={() => void handleCopy(`email-${inv.id}`, inv.participant.email)}
+                      />
+                    )}
+                  </div>
+                  <div className="text-xs text-zinc-500">
+                    Country: {inv.participant.originCountry ?? inv.participant.nationality ?? "—"}
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                    <span>ID: {inv.participant.id.slice(0, 8)}…{inv.participant.id.slice(-4)}</span>
+                    <CopyCellButton
+                      copied={copiedKey === `participant-${inv.id}`}
+                      onClick={() => void handleCopy(`participant-${inv.id}`, inv.participant.id)}
+                    />
+                  </div>
                 </TableCell>
-                <TableCell className="text-sm text-zinc-600">
-                  {inv.pricingTier.name}
+                <TableCell className="text-sm">
+                  <div className="font-medium text-zinc-700">{inv.pricingTier.name}</div>
+                  <div className="text-xs text-zinc-400">{formatLabel(inv.pricingTier.feeType)}</div>
                 </TableCell>
                 <TableCell className="text-sm font-medium">
                   {formatCurrency(inv.amount, inv.currency)}
                 </TableCell>
                 <TableCell className="text-sm text-zinc-500 capitalize">
                   {inv.paymentMethod ?? "—"}
+                </TableCell>
+                <TableCell className="text-sm text-zinc-600">
+                  <div>{formatLabel(inv.application.status)}</div>
+                  <div className="text-xs text-zinc-400">
+                    {formatLabel(inv.application.applicationCategory)}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <StatusPill status={inv.status} />
@@ -295,13 +644,14 @@ function StatCard({
   label: string;
   value: string;
   sub: string;
-  color: "emerald" | "blue" | "amber" | "red";
+  color: "emerald" | "blue" | "amber" | "red" | "indigo";
 }) {
   const border: Record<string, string> = {
     emerald: "border-emerald-100",
     blue: "border-blue-100",
     amber: "border-amber-100",
     red: "border-red-100",
+    indigo: "border-indigo-100",
   };
   return (
     <div className={`rounded-lg border ${border[color]} bg-white p-4 shadow-sm`}>
@@ -312,5 +662,25 @@ function StatCard({
       <div className="text-2xl font-semibold text-zinc-900">{value}</div>
       <div className="text-xs text-zinc-400 mt-0.5">{sub}</div>
     </div>
+  );
+}
+
+function CopyCellButton({
+  copied,
+  onClick,
+}: {
+  copied: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex h-5 w-5 items-center justify-center rounded border border-zinc-200 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
+      title={copied ? "Copied" : "Copy"}
+      aria-label={copied ? "Copied" : "Copy"}
+    >
+      <Copy className="h-3 w-3" />
+    </button>
   );
 }

@@ -3,7 +3,47 @@
 import React from "react";
 import { UserGroupIcon, UsersIcon, ArrowTrendingUpIcon, ClockIcon } from "@heroicons/react/24/solid";
 
-export function KPISection() {
+type KPIData = {
+  totalParticipants: number;
+  participantsToday: number;
+  totalAmbassadors: number;
+  activeAmbassadors: number;
+  referredParticipants: number;
+  referredParticipantsPercent: number;
+  programStatus: string;
+  programStatusDate: string | null;
+};
+
+interface KPISectionProps {
+  kpis: KPIData;
+  loading?: boolean;
+}
+
+function formatProgramStatus(status: string): string {
+  if (!status) return "Unknown";
+  return status
+    .split(/[_\s-]+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function formatProgramStatusDate(value: string | null): string {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "—";
+  return parsed.toLocaleString("sv-SE", { hour12: false }).replace("T", " ");
+}
+
+export function KPISection({ kpis, loading = false }: KPISectionProps) {
+  const participantsValue = loading ? "—" : kpis.totalParticipants.toLocaleString();
+  const participantsTodayValue = loading ? "—" : `${kpis.participantsToday.toLocaleString()} today`;
+  const ambassadorsValue = loading ? "—" : kpis.totalAmbassadors.toLocaleString();
+  const ambassadorSubtitle = loading ? "—" : `${kpis.activeAmbassadors.toLocaleString()} active ambassadors`;
+  const referredParticipantsValue = loading ? "—" : kpis.referredParticipants.toLocaleString();
+  const referredPercentageValue = loading ? "—" : `${kpis.referredParticipantsPercent.toFixed(1)}% of total`;
+  const programStatusValue = loading ? "—" : formatProgramStatus(kpis.programStatus);
+  const programStatusDateValue = loading ? "—" : formatProgramStatusDate(kpis.programStatusDate);
+
   return (
     <section className="grid gap-3 md:grid-cols-4">
       <div className="flex items-start gap-3 rounded-md border border-zinc-200 bg-white px-4 py-3 text-sm shadow-sm">
@@ -14,8 +54,8 @@ export function KPISection() {
           <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">
             Total Participants
           </div>
-          <div className="mt-2 text-2xl font-semibold text-zinc-900">688</div>
-          <div className="mt-1 text-xs text-emerald-600">166 today</div>
+          <div className="mt-2 text-2xl font-semibold text-zinc-900">{participantsValue}</div>
+          <div className="mt-1 text-xs text-emerald-600">{participantsTodayValue}</div>
         </div>
       </div>
 
@@ -27,8 +67,8 @@ export function KPISection() {
           <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">
             Ambassadors
           </div>
-          <div className="mt-2 text-2xl font-semibold text-zinc-900">59</div>
-          <div className="mt-1 text-xs text-zinc-500">Active ambassadors</div>
+          <div className="mt-2 text-2xl font-semibold text-zinc-900">{ambassadorsValue}</div>
+          <div className="mt-1 text-xs text-zinc-500">{ambassadorSubtitle}</div>
         </div>
       </div>
 
@@ -40,8 +80,8 @@ export function KPISection() {
           <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">
             Referred Participants
           </div>
-          <div className="mt-2 text-2xl font-semibold text-zinc-900">0</div>
-          <div className="mt-1 text-xs text-zinc-500">0% of total</div>
+          <div className="mt-2 text-2xl font-semibold text-zinc-900">{referredParticipantsValue}</div>
+          <div className="mt-1 text-xs text-zinc-500">{referredPercentageValue}</div>
         </div>
       </div>
 
@@ -53,8 +93,8 @@ export function KPISection() {
           <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">
             Program Status
           </div>
-          <div className="mt-2 text-2xl font-semibold text-zinc-900">Active</div>
-          <div className="mt-1 text-xs text-zinc-500">2026-05-11 00:00:00</div>
+          <div className="mt-2 text-2xl font-semibold text-zinc-900">{programStatusValue}</div>
+          <div className="mt-1 text-xs text-zinc-500">{programStatusDateValue}</div>
         </div>
       </div>
     </section>
