@@ -2,9 +2,15 @@ import { CallHandler, ExecutionContext } from '@nestjs/common';
 import { of } from 'rxjs';
 import { lastValueFrom } from 'rxjs';
 import { CdnMaskInterceptor } from './cdn-mask.interceptor';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 
 describe('CdnMaskInterceptor', () => {
-  const interceptor = new CdnMaskInterceptor();
+  const prismaMock = {
+    file: {
+      findMany: jest.fn(),
+    },
+  } as unknown as PrismaService;
+  const interceptor = new CdnMaskInterceptor(prismaMock);
 
   const makeContext = (): ExecutionContext =>
     ({
@@ -20,8 +26,19 @@ describe('CdnMaskInterceptor', () => {
       }),
     }) as unknown as ExecutionContext;
 
-  it('preserves Date values while keeping document URLs direct', async () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('preserves Date values while masking file URLs', async () => {
     const createdAt = new Date('2026-04-29T00:00:00.000Z');
+    (prismaMock.file.findMany as jest.Mock).mockResolvedValueOnce([
+      {
+        id: '123e4567-e89b-12d3-a456-426614174000',
+        url: 'https://cdn.ybbhub.com/uploads/123e4567-e89b-12d3-a456-426614174000.pdf',
+      },
+    ]);
+
     const handler: CallHandler = {
       handle: () =>
         of({
@@ -44,11 +61,13 @@ describe('CdnMaskInterceptor', () => {
     expect(result.createdAt.toISOString()).toBe(createdAt.toISOString());
     expect(result.validityPeriods[0].startDate).toBeInstanceOf(Date);
     expect(result.fileUrl).toBe(
-      'https://cdn.ybbhub.com/uploads/123e4567-e89b-12d3-a456-426614174000.pdf',
+      '/v1/files/123e4567-e89b-12d3-a456-426614174000/download',
     );
   });
 
   it('does not rewrite presigned upload URLs', async () => {
+    (prismaMock.file.findMany as jest.Mock).mockResolvedValueOnce([]);
+
     const presignedUrl =
       'https://sgp1.digitaloceanspaces.com/resources/123e4567-e89b-12d3-a456-426614174000.pdf?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=test';
     const handler: CallHandler = {

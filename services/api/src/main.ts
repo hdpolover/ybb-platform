@@ -12,6 +12,7 @@ import { setupSwagger } from './config/swagger.config';
 import { TransformInterceptor } from './shared/interceptors/transform.interceptor';
 import { CdnMaskInterceptor } from './shared/interceptors/cdn-mask.interceptor';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
+import { PrismaService } from './shared/infrastructure/prisma/prisma.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -87,8 +88,8 @@ async function bootstrap() {
 
   // Global Interceptor for standard response format
   app.useGlobalInterceptors(new TransformInterceptor());
-  // Rewrite CDN UUID-file URLs to proxy paths so raw CDN paths never reach clients
-  app.useGlobalInterceptors(new CdnMaskInterceptor());
+  // Rewrite file URLs to proxy paths so raw storage URLs are never exposed.
+  app.useGlobalInterceptors(new CdnMaskInterceptor(app.get(PrismaService)));
 
   // API Versioning
   app.enableVersioning({
