@@ -297,7 +297,7 @@ export class GetPortalSubmissionDetailHandler
                     ? 'select'
                     : field.type,
                 placeholder: field.placeholder || undefined,
-                helpText: field.helpText || undefined,
+                helpText: this.resolveFieldHelpText(field, application),
                 mediaUrl: field.mediaUrl || undefined,
                 mediaAlt: field.mediaAlt || undefined,
                 helpAssets: normalizeHelpAssets(field.helpAssets),
@@ -575,6 +575,34 @@ export class GetPortalSubmissionDetailHandler
         }
 
         return this.normalizeConfiguredOptions(field.options);
+    }
+
+    private resolveFieldHelpText(
+        field: {
+            name: string;
+            helpText: string | null;
+        },
+        application: ApplicationDetail,
+    ): string | undefined {
+        const helpText = field.helpText?.trim();
+        if (!helpText) return undefined;
+        if (!this.isCategoryFieldName(field.name)) return helpText;
+
+        const normalizedHelpText = helpText.toLowerCase().replace(/\s+/g, ' ');
+        const hasLegacyFundingHint = normalizedHelpText.includes('fully funded')
+            || normalizedHelpText.includes('self-funded')
+            || normalizedHelpText.includes('self funded');
+        if (!hasLegacyFundingHint) return helpText;
+
+        const participationCategories = application.program.participationCategories || [];
+        if (participationCategories.length === 0) return helpText;
+
+        const hasCustomCategory = participationCategories.some(
+            (category) => this.mapCategoryNameToApplicationCategory(category.name) === null,
+        );
+        if (!hasCustomCategory) return helpText;
+
+        return undefined;
     }
 
     private resolveCategoryOptions(
