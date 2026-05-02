@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { Button } from "@/app/components/ui/Button";
+import { Mail } from "lucide-react";
+import { Button } from "@/src/ui/button";
 
 export function SendEmailButton({ email }: { email: string }) {
   const [isSending, setIsSending] = useState(false);
@@ -16,7 +17,8 @@ export function SendEmailButton({ email }: { email: string }) {
   };
 
   return (
-    <Button variant="default" size="sm" onClick={handleSendEmail} disabled={isSending}>
+    <Button variant="outline" size="sm" onClick={handleSendEmail} disabled={isSending}>
+      <Mail className="h-3.5 w-3.5" />
       {isSending ? "Sending..." : "Send Email"}
     </Button>
   );

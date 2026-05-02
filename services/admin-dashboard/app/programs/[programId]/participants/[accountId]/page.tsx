@@ -231,17 +231,18 @@ export default function ParticipantDetailPage() {
         </DialogContent>
       </Dialog>
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-sm font-medium text-zinc-500">
           <Link href={`/programs/${programId}/dashboard`} className="hover:text-zinc-800 transition-colors">Dashboard</Link>
           <span>&gt;</span>
           <span className="font-semibold text-blue-600">Detail Participant</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           {participant && <GenerateLoaButton programId={programId} participantId={accountId} />}
           {accessConfig.isSuperAdmin ? (
             <Button
               variant="outline"
+              size="sm"
               onClick={() => setImpersonationOpen(true)}
               className="inline-flex items-center gap-2"
               disabled={!participant}
@@ -253,9 +254,11 @@ export default function ParticipantDetailPage() {
         </div>
       </div>
 
-      <div className="w-full min-h-[600px] rounded-xl border border-zinc-200 bg-white p-8 shadow-sm">
+      <div className="w-full min-h-[600px]">
         {loading && (
-          <div className="flex items-center justify-center py-24 text-sm text-zinc-400">Loading participant…</div>
+          <div className="rounded-xl border border-zinc-200 bg-white p-8 shadow-sm">
+            <div className="flex items-center justify-center py-24 text-sm text-zinc-400">Loading participant…</div>
+          </div>
         )}
         {error && (
           <div className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>

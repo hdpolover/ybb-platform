@@ -30,10 +30,9 @@ export function ParticipantProfileTabs({ data }: ParticipantProfileTabsProps) {
   const [activeTab, setActiveTab] = useState<TabId>("personal");
 
   return (
-    <div className="mt-8">
-      {/* Navigasi Tab */}
+    <div className="mt-6 rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
       <div className="border-b border-zinc-200">
-        <nav className="-mb-px flex gap-6 overflow-x-auto no-scrollbar">
+        <nav className="-mb-px flex gap-4 overflow-x-auto no-scrollbar">
           {TABS.map((tab) => {
             const isActive = activeTab === tab.id;
             return (
@@ -41,7 +40,7 @@ export function ParticipantProfileTabs({ data }: ParticipantProfileTabsProps) {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`whitespace-nowrap border-b-2 py-3 px-1 text-sm font-medium transition-colors ${
+                className={`whitespace-nowrap border-b-2 px-2 py-2.5 text-sm font-medium transition-colors ${
                   isActive
                     ? "border-blue-600 text-blue-600"
                     : "border-transparent text-zinc-500 hover:border-zinc-300 hover:text-zinc-700"
@@ -54,8 +53,7 @@ export function ParticipantProfileTabs({ data }: ParticipantProfileTabsProps) {
         </nav>
       </div>
 
-      {/* Konten Tab Aktif */}
-      <div className="mt-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+      <div className="mt-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
         {activeTab === "personal" && <PersonalDetailsTab data={data.personal} />}
         {activeTab === "professional" && <ProfessionalProfileTab data={data.professional} />}
         {activeTab === "entry" && <EntryInformationTab data={data.entry} />}

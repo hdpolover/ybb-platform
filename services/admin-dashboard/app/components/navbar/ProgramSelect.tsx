@@ -65,10 +65,10 @@ export function ProgramSelect({
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className="flex w-full items-center justify-between rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-left text-xs font-medium text-zinc-700 shadow-sm hover:bg-zinc-100"
+        className="flex h-11 w-full items-center justify-between rounded-md border border-zinc-200 bg-zinc-50 px-3.5 text-left text-sm font-medium text-zinc-700 shadow-sm hover:bg-zinc-100"
       >
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 flex-none items-center justify-center overflow-hidden rounded-md border border-zinc-100 bg-white p-0.5">
+          <div className="flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-md border border-zinc-100 bg-white p-0.5">
             {currentProgram ? (
               <LogoImg src={currentProgram.logoPath} alt={currentProgram.shortName} />
             ) : (
@@ -79,19 +79,19 @@ export function ProgramSelect({
             <span className="text-[13px] font-semibold text-zinc-800">
               {currentProgram ? currentProgram.name : "Select Program"}
             </span>
-            <span className="text-[12px] font-normal text-zinc-500">
+            <span className="text-[11px] font-normal text-zinc-500">
               {currentProgram
                 ? currentProgram.shortName
                 : "Click to select a program"}
             </span>
           </div>
         </div>
-        <span className="text-xs text-zinc-500">▾</span>
+        <span className="text-sm text-zinc-500">▾</span>
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-[110%] z-20 w-72 rounded-md border border-zinc-200 bg-white py-2 text-xs shadow-lg origin-top transform transition-all duration-200 ease-out animate-[fadeIn_0.18s_ease-out]">
-          <div className="px-3 pb-2">
+        <div className="absolute right-0 top-[110%] z-20 w-80 rounded-md border border-zinc-200 bg-white py-2 text-sm shadow-lg origin-top transform transition-all duration-200 ease-out animate-[fadeIn_0.18s_ease-out]">
+          <div className="px-4 pb-2">
             <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500">
               Select Program
             </div>
@@ -101,10 +101,10 @@ export function ProgramSelect({
           </div>
 
           <div className="border-t border-zinc-100 pt-2">
-            <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500">
+            <div className="px-4 pb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500">
               Active Programs
             </div>
-            <div className="max-h-52 space-y-1 overflow-auto px-1 pb-2">
+            <div className="max-h-56 space-y-1 overflow-auto px-2 pb-2">
               {activePrograms.length > 0 ? activePrograms.map((program) => (
                 <button
                   key={program.id}
@@ -113,22 +113,22 @@ export function ProgramSelect({
                     onChangeSelectedProgram(program.id);
                     setIsOpen(false);
                   }}
-                  className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-[11px] hover:bg-zinc-50"
+                  className="flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-[12px] hover:bg-zinc-50"
                 >
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-7 w-7 flex-none items-center justify-center overflow-hidden rounded border border-zinc-100 bg-white p-0.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-8 w-8 flex-none items-center justify-center overflow-hidden rounded border border-zinc-100 bg-white p-0.5">
                       <LogoImg src={program.logoPath} alt={program.shortName} />
                     </div>
                     <div className="flex flex-col leading-tight">
-                      <span className="text-[11px] font-semibold text-zinc-800">
+                      <span className="text-[12px] font-semibold text-zinc-800">
                         {program.name}
                       </span>
-                      <span className="text-[10px] text-zinc-500">
+                      <span className="text-[11px] text-zinc-500">
                         {program.shortName.replace(" ", " ")}
                       </span>
                     </div>
                   </div>
-                  <span className="text-[9px] font-medium text-emerald-600">
+                  <span className="text-[10px] font-semibold text-emerald-600">
                     ACTIVE
                   </span>
                 </button>
@@ -144,14 +144,14 @@ export function ProgramSelect({
             <button
               type="button"
               onClick={() => setShowInactive((prev) => !prev)}
-              className="flex w-full items-center justify-between px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 hover:text-zinc-700"
+              className="flex w-full items-center justify-between px-4 pb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 hover:text-zinc-700"
             >
               <span>Inactive Programs</span>
               <span className="text-[10px]">{showInactive ? "▴" : "▾"}</span>
             </button>
 
             {showInactive && (
-              <div className="max-h-40 space-y-1 overflow-auto px-1 pb-1">
+              <div className="max-h-44 space-y-1 overflow-auto px-2 pb-1">
                 {inactivePrograms.map((program) => (
                   <button
                     key={program.id}
@@ -160,22 +160,22 @@ export function ProgramSelect({
                       onChangeSelectedProgram(program.id);
                       setIsOpen(false);
                     }}
-                    className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-[11px] hover:bg-zinc-50"
+                    className="flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-[12px] hover:bg-zinc-50"
                   >
-                    <div className="flex items-center gap-2">
-                      <div className="flex h-7 w-7 flex-none items-center justify-center overflow-hidden rounded border border-zinc-100 bg-white p-0.5">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-8 w-8 flex-none items-center justify-center overflow-hidden rounded border border-zinc-100 bg-white p-0.5">
                         <LogoImg src={program.logoPath} alt={program.shortName} className="h-full w-full object-contain grayscale" />
                       </div>
                       <div className="flex flex-col leading-tight">
-                        <span className="text-[11px] font-semibold text-zinc-800">
+                        <span className="text-[12px] font-semibold text-zinc-800">
                           {program.name}
                         </span>
-                        <span className="text-[10px] text-zinc-500">
+                        <span className="text-[11px] text-zinc-500">
                           {program.shortName.replace(" ", " ")}
                         </span>
                       </div>
                     </div>
-                    <span className="text-[9px] font-medium text-zinc-400">
+                    <span className="text-[10px] font-semibold text-zinc-400">
                       INACTIVE
                     </span>
                   </button>
