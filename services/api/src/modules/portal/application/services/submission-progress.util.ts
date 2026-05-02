@@ -197,10 +197,6 @@ export function buildSubmissionProgressSections(application: ApplicationForProgr
 }
 
 export function calculateSubmissionProgress(application: ApplicationForProgress): number {
-    if (application.status && application.status !== 'draft') {
-        return 100;
-    }
-
     const sections = buildSubmissionProgressSections(application);
     if (sections.length === 0) return 0;
 
