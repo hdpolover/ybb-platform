@@ -453,6 +453,34 @@ export type ProgramAnnouncement = {
 
 // ─── Admins ───────────────────────────────────────────────────────────────────
 
+export type SupportAccessConfig = {
+  isEnabled: boolean;
+  hasSecret: boolean;
+  updatedAt: string | null;
+  lastRotatedAt: string | null;
+  updatedByAdminId: string | null;
+  participantPortalOrigin: string | null;
+};
+
+export type UpdateSupportAccessConfigInput = {
+  isEnabled?: boolean;
+  newSecret?: string;
+};
+
+export type CreateSupportImpersonationInput = {
+  participantId?: string;
+  participantEmail?: string;
+  programId?: string;
+  supportSecret: string;
+  reason: string;
+};
+
+export type CreateSupportImpersonationResponse = {
+  loginUrl: string;
+  expiresAt: string;
+  participantEmail: string;
+};
+
 export function listAdmins(params?: {
   page?: number;
   limit?: number;
@@ -493,6 +521,28 @@ export function deleteAdmin(id: string): Promise<void> {
 
 export function listAdminRoles(): Promise<AdminRole[]> {
   return request<AdminRole[]>("/admin-roles");
+}
+
+export function getSupportAccessConfig(): Promise<SupportAccessConfig> {
+  return request<SupportAccessConfig>("/admins/support-access/config");
+}
+
+export function updateSupportAccessConfig(
+  input: UpdateSupportAccessConfigInput,
+): Promise<SupportAccessConfig> {
+  return request<SupportAccessConfig>("/admins/support-access/config", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export function createSupportImpersonation(
+  input: CreateSupportImpersonationInput,
+): Promise<CreateSupportImpersonationResponse> {
+  return request<CreateSupportImpersonationResponse>("/admins/support-access/impersonations", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
 // ─── Maintenance ──────────────────────────────────────────────────────────────

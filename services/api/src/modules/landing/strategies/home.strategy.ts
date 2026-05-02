@@ -511,6 +511,8 @@ export class HomeStrategy implements ILandingPageStrategy {
             subtitle: 'Be part of a global community of young leaders and innovators who are creating real impact through international programs.',
             primary_cta_label: 'Apply Now',
             primary_cta_href: '/apply',
+            background_image_url: '/img/ctabekground.png',
+            background_image_mobile_url: '/img/ctabackgroundformobile.png',
             video_url: program?.videoUrl || null,
             video_title: program ? `${program.name} Registration Guideline` : null,
             video_description: null,

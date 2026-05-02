@@ -37,6 +37,12 @@ const quickActions = [
     description: "Cross-program reports and insights",
     href: "/platform/analytics",
   },
+  {
+    id: "support-access",
+    title: "Support Access",
+    description: "Manage admin impersonation controls",
+    href: "/platform/support-access",
+  },
 ];
 
 type StatCard = {

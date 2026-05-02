@@ -4,6 +4,7 @@ export interface CurrentUserData {
   userId: string;
   email: string;
   brandId: string;
+  role?: string[] | string;
   jti?: string; // JWT unique token ID for blacklisting
   exp?: number; // Token expiration timestamp
   adminId?: string; // Admin ID for admin users

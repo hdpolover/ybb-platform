@@ -479,6 +479,8 @@ export type BrandPromoCta = {
   subtitle?: string;
   primary_cta_label?: string;
   primary_cta_href?: string;
+  background_image_url?: string;
+  background_image_mobile_url?: string;
   video_url?: string;
   video_title?: string;
   video_description?: string;
