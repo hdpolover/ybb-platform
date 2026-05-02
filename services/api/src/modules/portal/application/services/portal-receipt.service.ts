@@ -1,8 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-// pdfkit is CommonJS; without esModuleInterop in this service's tsconfig, a
-// default import resolves to undefined. Use require to get the constructor.
- 
-const PDFDocument = require('pdfkit') as typeof import('pdfkit');
+type PdfDocumentInstance = any;
 
 export interface ReceiptData {
     receiptNumber: string;
@@ -31,6 +28,7 @@ export class PortalReceiptService {
     generate(data: ReceiptData): Promise<Buffer> {
         return new Promise((resolve, reject) => {
             try {
+                const PDFDocument = this.getPdfDocumentConstructor();
                 const doc = new PDFDocument({ size: 'A4', margin: 50 });
                 const buffers: Buffer[] = [];
 
@@ -53,7 +51,15 @@ export class PortalReceiptService {
         });
     }
 
-    private renderHeader(doc: PDFKit.PDFDocument, brandName: string): void {
+    private getPdfDocumentConstructor(): new (...args: any[]) => PdfDocumentInstance {
+        try {
+            return require('pdfkit');
+        } catch {
+            throw new Error('Missing runtime dependency "pdfkit". Rebuild API image after installing dependencies.');
+        }
+    }
+
+    private renderHeader(doc: PdfDocumentInstance, brandName: string): void {
         doc.fontSize(20).text('PAYMENT RECEIPT', { align: 'center' });
         doc.moveDown(0.5);
         doc.fontSize(11).fillColor('#555').text(brandName, { align: 'center' });
@@ -61,7 +67,7 @@ export class PortalReceiptService {
         doc.moveDown();
     }
 
-    private renderMeta(doc: PDFKit.PDFDocument, data: ReceiptData): void {
+    private renderMeta(doc: PdfDocumentInstance, data: ReceiptData): void {
         const dateStr = data.paidAt.toISOString().slice(0, 10);
         doc.fontSize(11);
         doc.text(`Receipt No.: ${data.receiptNumber}`, { align: 'right' });
@@ -72,14 +78,14 @@ export class PortalReceiptService {
         doc.moveDown();
     }
 
-    private renderBilledTo(doc: PDFKit.PDFDocument, data: ReceiptData): void {
+    private renderBilledTo(doc: PdfDocumentInstance, data: ReceiptData): void {
         doc.fontSize(11).text('Billed To:', { underline: true });
         doc.text(data.customerName);
         if (data.customerEmail) doc.text(data.customerEmail);
         doc.moveDown();
     }
 
-    private renderLineItem(doc: PDFKit.PDFDocument, data: ReceiptData): void {
+    private renderLineItem(doc: PdfDocumentInstance, data: ReceiptData): void {
         const startX = 50;
         const headerY = doc.y;
         doc.fontSize(11);
@@ -94,7 +100,7 @@ export class PortalReceiptService {
         doc.moveDown(2);
     }
 
-    private renderTotal(doc: PDFKit.PDFDocument, data: ReceiptData): void {
+    private renderTotal(doc: PdfDocumentInstance, data: ReceiptData): void {
         doc.fontSize(13).text(`Total: ${data.currency} ${data.amount.toFixed(2)}`, { align: 'right' });
         if (data.paymentMethod) {
             doc.moveDown(0.5);
@@ -103,7 +109,7 @@ export class PortalReceiptService {
         }
     }
 
-    private renderFooter(doc: PDFKit.PDFDocument): void {
+    private renderFooter(doc: PdfDocumentInstance): void {
         doc.moveDown(2);
         doc.fontSize(9).fillColor('#777')
             .text('This receipt was generated automatically. Keep it for your records.', { align: 'center' });
