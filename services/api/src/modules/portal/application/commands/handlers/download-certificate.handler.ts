@@ -4,6 +4,7 @@ import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
 import { PortalCacheService } from '../../services/portal-cache.service';
 import { DownloadCertificateCommand } from '../../queries/portal-queries';
+import { resolveMaskedFileUrl } from '@shared/utils/masked-file-url';
 
 /**
  * Download Certificate Handler
@@ -62,7 +63,7 @@ export class DownloadCertificateHandler {
         ]);
 
         return {
-            fileUrl: document.fileUrl,
+            fileUrl: await resolveMaskedFileUrl(this.prisma, document.fileUrl),
             fileName: `${document.name}.${document.fileType}`,
         };
     }

@@ -9,6 +9,7 @@ import {
     PortalCertificatesResponseDto,
     PortalCertificateItemDto,
 } from '../../../presentation/dto/portal-certificate.dto';
+import { resolveMaskedFileUrl } from '@shared/utils/masked-file-url';
 
 /**
  * Get Portal Certificates Handler
@@ -65,17 +66,22 @@ export class GetPortalCertificatesHandler
             orderBy: { generatedAt: 'desc' },
         });
 
-        const certificates: PortalCertificateItemDto[] = documents.map((doc) => ({
-            id: doc.id,
-            documentNumber: doc.documentNumber || undefined,
-            name: doc.name,
-            type: doc.type,
-            fileUrl: doc.fileUrl,
-            fileType: doc.fileType,
-            programName: doc.application.program.name,
-            generatedAt: doc.generatedAt,
-            downloadCount: doc.downloadCount,
-        }));
+        const certificates: PortalCertificateItemDto[] = await Promise.all(
+            documents.map(async (doc) => ({
+                id: doc.id,
+                documentNumber: doc.documentNumber || undefined,
+                name: doc.name,
+                type: doc.type,
+                fileUrl:
+                    typeof doc.fileUrl === 'string' && doc.fileUrl.trim().length > 0
+                        ? await resolveMaskedFileUrl(this.prisma, doc.fileUrl)
+                        : doc.fileUrl,
+                fileType: doc.fileType,
+                programName: doc.application.program.name,
+                generatedAt: doc.generatedAt,
+                downloadCount: doc.downloadCount,
+            })),
+        );
 
         const result: PortalCertificatesResponseDto = {
             certificates,

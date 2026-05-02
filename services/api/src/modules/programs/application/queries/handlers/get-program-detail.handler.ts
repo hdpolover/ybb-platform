@@ -3,6 +3,7 @@ import { CACHE_MANAGER, Cache } from '@nestjs/cache-manager';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
 import { GetProgramDetailQuery } from '../get-program-detail.query';
 import { CACHE_KEYS, CACHE_TTL } from '../../../../../shared/constants/cache-keys';
+import { buildFileUrlMaskMap, extractFileIdFromDownloadUrl } from '@shared/utils/masked-file-url';
 
 @Injectable()
 export class GetProgramDetailHandler {
@@ -78,7 +79,7 @@ export class GetProgramDetailHandler {
     }
 
     // Transform response
-    const result = this.transformResponse(program, include);
+    const result = await this.transformResponse(program, include);
 
     // Cache the result for 5 minutes
     await this.cacheManager.set(cacheKey, result, CACHE_TTL.MEDIUM);
@@ -213,7 +214,7 @@ export class GetProgramDetailHandler {
     return includes;
   }
 
-  private transformResponse(program: Record<string, unknown>, include: string) {
+  private async transformResponse(program: Record<string, unknown>, include: string) {
     const now = new Date();
 
     const response: Record<string, unknown> = {
@@ -347,10 +348,26 @@ export class GetProgramDetailHandler {
     }
 
     if (program.resources) {
-      response.resources = (program.resources as { fileSize: unknown }[]).map((r) => ({
-        ...r,
-        fileSize: r.fileSize ? Number(r.fileSize) : null,
-      }));
+      const resources = program.resources as Array<{ fileSize: unknown; fileUrl?: string | null }>;
+      const fileUrlMap = await buildFileUrlMaskMap(
+        this.prisma,
+        resources
+          .map((resource) => resource.fileUrl)
+          .filter((fileUrl): fileUrl is string => typeof fileUrl === 'string' && fileUrl.trim().length > 0),
+      );
+
+      response.resources = resources.map((r) => {
+        const rawUrl = typeof r.fileUrl === 'string' ? r.fileUrl : null;
+        const maskedByRaw = rawUrl ? fileUrlMap.get(rawUrl) : null;
+        const idFromMaskedUrl = rawUrl ? extractFileIdFromDownloadUrl(rawUrl) : null;
+        const maskedById = idFromMaskedUrl ? fileUrlMap.get(idFromMaskedUrl) : null;
+
+        return {
+          ...r,
+          fileUrl: maskedByRaw ?? maskedById ?? rawUrl,
+          fileSize: r.fileSize ? Number(r.fileSize) : null,
+        };
+      });
     }
 
     if (program.tags) {

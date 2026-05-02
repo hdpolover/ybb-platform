@@ -9,6 +9,7 @@ import {
     PortalDocumentResponseDto, 
     DocumentItemDto 
 } from '../../../presentation/dto/portal-document.dto';
+import { resolveMaskedFileUrl } from '@shared/utils/masked-file-url';
 
 @Injectable()
 @QueryHandler(GetPortalDocumentsQuery)
@@ -158,7 +159,35 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
             }
         }
 
-        const result = { programResources, myDocuments };
+        const maskedProgramResources = await Promise.all(
+            programResources.map(async (item) => ({
+                ...item,
+                fileUrl:
+                    typeof item.fileUrl === 'string' && item.fileUrl.trim().length > 0
+                        ? await resolveMaskedFileUrl(this.prisma, item.fileUrl)
+                        : item.fileUrl,
+                signedCopyUrl:
+                    typeof item.signedCopyUrl === 'string' && item.signedCopyUrl.trim().length > 0
+                        ? await resolveMaskedFileUrl(this.prisma, item.signedCopyUrl)
+                        : item.signedCopyUrl,
+            })),
+        );
+
+        const maskedMyDocuments = await Promise.all(
+            myDocuments.map(async (item) => ({
+                ...item,
+                fileUrl:
+                    typeof item.fileUrl === 'string' && item.fileUrl.trim().length > 0
+                        ? await resolveMaskedFileUrl(this.prisma, item.fileUrl)
+                        : item.fileUrl,
+                signedCopyUrl:
+                    typeof item.signedCopyUrl === 'string' && item.signedCopyUrl.trim().length > 0
+                        ? await resolveMaskedFileUrl(this.prisma, item.signedCopyUrl)
+                        : item.signedCopyUrl,
+            })),
+        );
+
+        const result = { programResources: maskedProgramResources, myDocuments: maskedMyDocuments };
         await this.cacheService.set(cacheKey, result, CACHE_TTL.MEDIUM);
         return result;
     }

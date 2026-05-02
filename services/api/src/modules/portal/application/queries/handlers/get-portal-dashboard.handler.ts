@@ -9,11 +9,12 @@ import {
     calculateSubmissionProgress,
     determineSubmissionCurrentStep,
 } from '../../services/submission-progress.util';
-import { 
+import {
     PortalDashboardResponseDto, 
     PortalDashboardAlertDto,
     PortalApplicationSummaryDto
 } from '../../../presentation/dto/portal-dashboard.dto';
+import { resolveMaskedFileUrl } from '@shared/utils/masked-file-url';
 
 @Injectable()
 @QueryHandler(GetPortalDashboardQuery)
@@ -179,6 +180,15 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                 latestApplication.status === 'draft' &&
                 !hasSuccessfulPayment;
 
+            const guidebooks = await Promise.all(
+                latestApplication.program.resources
+                    .filter((resource) => typeof resource.fileUrl === 'string' && resource.fileUrl.trim().length > 0)
+                    .map(async (resource) => ({
+                        label: `Read Guidebook (${resource.title})`,
+                        url: await resolveMaskedFileUrl(this.prisma, resource.fileUrl!),
+                    })),
+            );
+
             activeAppSummary = {
                 id: latestApplication.id,
                 programName: latestApplication.program.name,
@@ -188,12 +198,7 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                 progress: calculateSubmissionProgress(latestApplication),
                 currentStep: determineSubmissionCurrentStep(latestApplication),
                 daysUntilDeadline: this.calculateDaysUntilDeadline(latestApplication.program.applicationDeadline),
-                guidebooks: latestApplication.program.resources
-                    .filter((resource) => typeof resource.fileUrl === 'string' && resource.fileUrl.trim().length > 0)
-                    .map((resource) => ({
-                        label: `Read Guidebook (${resource.title})`,
-                        url: resource.fileUrl!,
-                    })),
+                guidebooks,
             };
 
             const sysAnnouncements = latestApplication.program.announcements.map(a => ({

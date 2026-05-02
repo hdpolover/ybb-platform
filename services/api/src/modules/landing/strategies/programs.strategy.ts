@@ -4,6 +4,7 @@ import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.serv
 import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
 import { Brand } from '@prisma/client';
+import { resolveMaskedFileUrl } from '@shared/utils/masked-file-url';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -196,6 +197,14 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                 }
             });
 
+            const guidebookResources = await Promise.all(
+                currentProgram.resources.map(async (resource) => ({
+                    id: resource.id,
+                    resolvedUrl: await resolveMaskedFileUrl(this.prisma, resource.fileUrl),
+                })),
+            );
+            const guidebookUrlById = new Map(guidebookResources.map((resource) => [resource.id, resource.resolvedUrl]));
+
             // Section 2: Program Details (Description, Theme, Subthemes, Summary)
             sections.push({
                 type: 'program_overview',
@@ -218,7 +227,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                     duration: `${getInclusiveUtcDaySpan(currentProgram.startDate, currentProgram.endDate)} Days`,
                     guidebooks: currentProgram.resources.map(r => ({
                         label: `Read Guidebook (${r.title})`,
-                        url: r.fileUrl
+                        url: guidebookUrlById.get(r.id) ?? r.fileUrl
                     }))
                 }
             });

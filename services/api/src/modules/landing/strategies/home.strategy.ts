@@ -4,11 +4,10 @@ import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.serv
 import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
 import { Brand } from '@prisma/client';
+import { resolveMaskedFileUrl } from '@shared/utils/masked-file-url';
 
 const FULLY_FUNDED_PROCESS_COPY =
   'Complete the registration fee, submit the required documents and essay, and participate in the interview process.';
-const FILE_DOWNLOAD_URL_PATTERN =
-  /\/v1\/files\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/download(?:[?#].*)?$/i;
 
 function normalizePaymentInfoContent(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -47,34 +46,6 @@ export class HomeStrategy implements ILandingPageStrategy {
     private readonly prisma: PrismaService,
     private readonly cacheService: CacheService,
   ) { }
-
-  private extractFileIdFromDownloadUrl(url: string): string | null {
-    const match = FILE_DOWNLOAD_URL_PATTERN.exec(url);
-    return match?.[1]?.toLowerCase() ?? null;
-  }
-
-  private isSelfDownloadProxyUrl(url: string, fileId: string): boolean {
-    const escapedId = fileId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp(`/v1/files/${escapedId}/download(?:\\?|#|$)`, 'i').test(url);
-  }
-
-  private async resolveGuidebookUrl(url: string): Promise<string> {
-    const fileId = this.extractFileIdFromDownloadUrl(url);
-    if (!fileId) {
-      return url;
-    }
-
-    const file = await this.prisma.file.findUnique({
-      where: { id: fileId },
-      select: { url: true },
-    });
-
-    if (file?.url && !this.isSelfDownloadProxyUrl(file.url, fileId)) {
-      return file.url;
-    }
-
-    return url;
-  }
 
   async getData(brand: Brand | null) {
     if (!brand) {
@@ -236,7 +207,7 @@ export class HomeStrategy implements ILandingPageStrategy {
     const guidebookResources = await Promise.all(
       (program?.resources ?? []).map(async (resource) => ({
         ...resource,
-        resolvedUrl: await this.resolveGuidebookUrl(resource.fileUrl),
+        resolvedUrl: await resolveMaskedFileUrl(this.prisma, resource.fileUrl),
       })),
     );
     const guidebookUrlById = new Map(guidebookResources.map((resource) => [resource.id, resource.resolvedUrl]));
