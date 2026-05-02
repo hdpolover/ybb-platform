@@ -2104,7 +2104,7 @@ export type InvoiceMetrics = {
 
 export type InvoiceFilterOptions = {
   tiers: Array<{ id: string; name: string; feeType: string }>;
-  paymentMethods: Array<{ value: string; count: number }>;
+  paymentMethods: Array<{ value: string; label?: string; count: number }>;
   currencies: Array<{ value: string; count: number }>;
   applicationStatuses: Array<{ value: string; count: number }>;
   invoiceStatuses: Array<{ value: string; count: number }>;

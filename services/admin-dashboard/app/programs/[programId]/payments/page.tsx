@@ -55,6 +55,7 @@ const STATUS_CLASS: Record<InvoiceStatus, string> = {
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 const FILTER_SELECT_CLASS = "h-10 w-full rounded-md border border-zinc-200 bg-white px-3 pr-8 text-sm text-zinc-700 focus:outline-none focus:ring-2 focus:ring-blue-500";
+const REGION_NAMES = typeof Intl !== "undefined" ? new Intl.DisplayNames(["en"], { type: "region" }) : null;
 
 function formatCurrency(amount: number, currency: string) {
   return new Intl.NumberFormat("en-US", {
@@ -69,6 +70,21 @@ function formatLabel(value: string | null | undefined) {
   return value
     .replace(/_/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatCountryName(value: string | null | undefined) {
+  if (!value) return "—";
+  const raw = value.trim();
+  if (!raw) return "—";
+  if (REGION_NAMES && /^[A-Za-z]{2}$/.test(raw)) {
+    const code = raw.toUpperCase();
+    try {
+      return REGION_NAMES.of(code) ?? code;
+    } catch {
+      return code;
+    }
+  }
+  return formatLabel(raw);
 }
 
 function StatusPill({ status }: { status: string }) {
@@ -358,7 +374,7 @@ export default function PaymentsPage({
               <option value="">All Methods</option>
               {filterOptions.paymentMethods.map((option) => (
                 <option key={option.value} value={option.value}>
-                  {option.value} ({option.count})
+                  {option.label ?? option.value} ({option.count})
                 </option>
               ))}
             </select>
@@ -431,60 +447,81 @@ export default function PaymentsPage({
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
-            <Input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
-              className="h-10 text-sm"
-              aria-label="Invoice date from"
-            />
-            <Input
-              type="date"
-              value={dateTo}
-              onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
-              className="h-10 text-sm"
-              aria-label="Invoice date to"
-            />
-            <Input
-              type="date"
-              value={paidFrom}
-              onChange={(e) => { setPaidFrom(e.target.value); setPage(1); }}
-              className="h-10 text-sm"
-              aria-label="Paid date from"
-            />
-            <Input
-              type="date"
-              value={paidTo}
-              onChange={(e) => { setPaidTo(e.target.value); setPage(1); }}
-              className="h-10 text-sm"
-              aria-label="Paid date to"
-            />
-            <select
-              value={sortBy}
-              onChange={(e) => { setSortBy(e.target.value as "createdAt" | "paidAt" | "amount" | "updatedAt"); setPage(1); }}
-              className={FILTER_SELECT_CLASS}
-            >
-              {SORT_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-            <select
-              value={sortOrder}
-              onChange={(e) => { setSortOrder(e.target.value as "asc" | "desc"); setPage(1); }}
-              className={FILTER_SELECT_CLASS}
-            >
-              <option value="desc">Descending</option>
-              <option value="asc">Ascending</option>
-            </select>
-            <select
-              value={pageSize}
-              onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
-              className={FILTER_SELECT_CLASS}
-            >
-              {PAGE_SIZE_OPTIONS.map((size) => (
-                <option key={size} value={size}>{size}/page</option>
-              ))}
-            </select>
+            <div className="space-y-1">
+              <label className="block text-[11px] font-medium text-zinc-500">Invoice date from</label>
+              <Input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
+                className="h-10 text-sm"
+                aria-label="Invoice date from"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="block text-[11px] font-medium text-zinc-500">Invoice date to</label>
+              <Input
+                type="date"
+                value={dateTo}
+                onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
+                className="h-10 text-sm"
+                aria-label="Invoice date to"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="block text-[11px] font-medium text-zinc-500">Paid date from</label>
+              <Input
+                type="date"
+                value={paidFrom}
+                onChange={(e) => { setPaidFrom(e.target.value); setPage(1); }}
+                className="h-10 text-sm"
+                aria-label="Paid date from"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="block text-[11px] font-medium text-zinc-500">Paid date to</label>
+              <Input
+                type="date"
+                value={paidTo}
+                onChange={(e) => { setPaidTo(e.target.value); setPage(1); }}
+                className="h-10 text-sm"
+                aria-label="Paid date to"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="block text-[11px] font-medium text-zinc-500">Sort by</label>
+              <select
+                value={sortBy}
+                onChange={(e) => { setSortBy(e.target.value as "createdAt" | "paidAt" | "amount" | "updatedAt"); setPage(1); }}
+                className={FILTER_SELECT_CLASS}
+              >
+                {SORT_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="block text-[11px] font-medium text-zinc-500">Order</label>
+              <select
+                value={sortOrder}
+                onChange={(e) => { setSortOrder(e.target.value as "asc" | "desc"); setPage(1); }}
+                className={FILTER_SELECT_CLASS}
+              >
+                <option value="desc">Descending</option>
+                <option value="asc">Ascending</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="block text-[11px] font-medium text-zinc-500">Page size</label>
+              <select
+                value={pageSize}
+                onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                className={FILTER_SELECT_CLASS}
+              >
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>{size}/page</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="flex items-center justify-between gap-2">
@@ -561,9 +598,7 @@ export default function PaymentsPage({
                       />
                     )}
                   </div>
-                  <div className="text-xs text-zinc-500">
-                    Country: {inv.participant.originCountry ?? inv.participant.nationality ?? "—"}
-                  </div>
+                  <div className="text-xs text-zinc-500">{formatCountryName(inv.participant.originCountry ?? inv.participant.nationality)}</div>
                   <div className="flex items-center gap-1.5 text-xs text-zinc-400">
                     <span>ID: {inv.participant.id.slice(0, 8)}…{inv.participant.id.slice(-4)}</span>
                     <CopyCellButton
@@ -579,8 +614,8 @@ export default function PaymentsPage({
                 <TableCell className="text-sm font-medium">
                   {formatCurrency(inv.amount, inv.currency)}
                 </TableCell>
-                <TableCell className="text-sm text-zinc-500 capitalize">
-                  {inv.paymentMethod ?? "—"}
+                <TableCell className="text-sm text-zinc-500">
+                  {inv.paymentMethod ?? "Not recorded"}
                 </TableCell>
                 <TableCell className="text-sm text-zinc-600">
                   <div>{formatLabel(inv.application.status)}</div>

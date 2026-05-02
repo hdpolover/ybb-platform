@@ -222,6 +222,8 @@ export class PaymentAdminController {
                 _count: { id: true },
             }),
         ]);
+        const paymentMethodCatalog = await this.getPaymentMethodCatalog();
+        await this.enrichInvoicePaymentMethods(invoices, paymentMethodCatalog);
 
         const summary = this.initInvoiceSummary();
         const overallSummary = this.initInvoiceSummary();
@@ -238,6 +240,28 @@ export class PaymentAdminController {
         const totalCount = totalsAggregate._count.id;
         const collectionRate = totalCount > 0 ? Number(((paidCount / totalCount) * 100).toFixed(1)) : 0;
         const avgPaidAmount = Number(paidAggregate._avg.amount ?? 0);
+
+        const paymentMethodCounts = paymentMethodOptionsRows.reduce<Map<string, number>>((acc, row) => {
+            const normalized = this.normalizePaymentMethod(row.paymentMethod as string | null, paymentMethodCatalog);
+            if (!normalized) return acc;
+            const existing = acc.get(normalized.value) ?? 0;
+            acc.set(normalized.value, existing + row._count.id);
+            return acc;
+        }, new Map<string, number>());
+
+        const paymentMethodsFilterOptions = paymentMethodCatalog.length > 0
+            ? paymentMethodCatalog
+                .map((item) => ({
+                    value: item.value,
+                    label: item.label,
+                    count: paymentMethodCounts.get(item.value) ?? 0,
+                }))
+                .filter((item) => item.count > 0)
+            : Array.from(paymentMethodCounts.entries()).map(([value, count]) => ({
+                value,
+                label: this.humanizeToken(value),
+                count,
+            }));
 
         return {
             data: invoices.map((inv) => this.toInvoiceDto(inv)),
@@ -258,12 +282,7 @@ export class PaymentAdminController {
                     name: tier.name,
                     feeType: tier.feeType,
                 })),
-                paymentMethods: paymentMethodOptionsRows
-                    .filter((row) => row.paymentMethod)
-                    .map((row) => ({
-                        value: row.paymentMethod as string,
-                        count: row._count.id,
-                    })),
+                paymentMethods: paymentMethodsFilterOptions,
                 currencies: currencyOptionsRows.map((row) => ({
                     value: row.currency,
                     count: row._count.id,
@@ -498,6 +517,156 @@ export class PaymentAdminController {
     }
 
     // ─── Private Helpers ──────────────────────────────────────────────────────────
+
+    private async getPaymentMethodCatalog(): Promise<Array<{ value: string; label: string }>> {
+        try {
+            const { data } = await this.paymentServiceClient.get('/api/v1/payment-methods', {
+                headers: this.buildInternalHeaders(),
+            });
+            const payload = data as {
+                data?: Array<Record<string, unknown>>;
+            } | Array<Record<string, unknown>>;
+            const methods = Array.isArray(payload)
+                ? payload
+                : Array.isArray(payload?.data)
+                    ? payload.data
+                    : [];
+
+            const dedup = new Map<string, { value: string; label: string }>();
+            for (const method of methods) {
+                const rawValue = this.pickString(method.code, method.id, method.name, method.display_name);
+                if (!rawValue) continue;
+                const value = rawValue.trim();
+                if (!value) continue;
+                const normalizedValue = value.toLowerCase();
+                if (this.isUnknownMethod(normalizedValue)) continue;
+
+                const label = this.pickString(method.display_name, method.name) ?? this.humanizeToken(value);
+                if (!dedup.has(normalizedValue)) {
+                    dedup.set(normalizedValue, { value, label });
+                }
+            }
+
+            return Array.from(dedup.values()).sort((a, b) => a.label.localeCompare(b.label));
+        } catch (error) {
+            this.logger.warn(`Failed to load payment method catalog: ${(error as Error).message}`);
+            return [];
+        }
+    }
+
+    private async enrichInvoicePaymentMethods(
+        invoices: Array<{ paymentMethod: string | null; externalTransactionId?: string | null }>,
+        catalog: Array<{ value: string; label: string }>,
+    ): Promise<void> {
+        await Promise.all(invoices.map(async (invoice) => {
+            const normalizedExisting = this.normalizePaymentMethod(invoice.paymentMethod, catalog);
+            if (normalizedExisting) {
+                invoice.paymentMethod = normalizedExisting.label;
+                return;
+            }
+
+            if (!invoice.externalTransactionId) {
+                invoice.paymentMethod = null;
+                return;
+            }
+
+            try {
+                const { data } = await this.paymentServiceClient.get(
+                    `/api/v1/payments/${invoice.externalTransactionId}`,
+                    { headers: this.buildInternalHeaders() },
+                );
+                const transaction = data as Record<string, unknown>;
+                const extracted = this.extractPaymentMethodFromTransaction(transaction);
+                const normalizedFromTransaction = this.normalizePaymentMethod(extracted, catalog);
+                invoice.paymentMethod = normalizedFromTransaction?.label ?? null;
+            } catch (error) {
+                this.logger.debug(`Could not resolve payment method for tx ${invoice.externalTransactionId}: ${(error as Error).message}`);
+                invoice.paymentMethod = null;
+            }
+        }));
+    }
+
+    private extractPaymentMethodFromTransaction(transaction: Record<string, unknown>): string | null {
+        const source = this.unwrapPayloadObject(transaction);
+        const direct = this.pickString(
+            source.payment_method,
+            source.paymentMethod,
+            source.payment_method_id,
+            source.paymentMethodId,
+            source.payment_method_name,
+            source.paymentMethodName,
+            source.method_name,
+            source.method,
+        );
+        if (direct) return direct;
+
+        const nested = source.transaction && typeof source.transaction === 'object'
+            ? (source.transaction as Record<string, unknown>)
+            : null;
+        if (!nested) return null;
+
+        return this.pickString(
+            nested.payment_method,
+            nested.paymentMethod,
+            nested.payment_method_id,
+            nested.paymentMethodId,
+            nested.payment_method_name,
+            nested.paymentMethodName,
+            nested.method_name,
+            nested.method,
+        );
+    }
+
+    private unwrapPayloadObject(payload: Record<string, unknown>): Record<string, unknown> {
+        if (payload.data && typeof payload.data === 'object' && !Array.isArray(payload.data)) {
+            return payload.data as Record<string, unknown>;
+        }
+        return payload;
+    }
+
+    private normalizePaymentMethod(
+        rawMethod: string | null,
+        catalog: Array<{ value: string; label: string }>,
+    ): { value: string; label: string } | null {
+        if (!rawMethod) return null;
+        const token = rawMethod.trim();
+        if (!token) return null;
+        const normalizedToken = token.toLowerCase();
+        if (this.isUnknownMethod(normalizedToken)) return null;
+
+        const matched = catalog.find((item) => {
+            const value = item.value.toLowerCase();
+            const label = item.label.toLowerCase();
+            return value === normalizedToken || label === normalizedToken;
+        });
+        if (matched) {
+            return matched;
+        }
+
+        return { value: token, label: this.humanizeToken(token) };
+    }
+
+    private isUnknownMethod(value: string): boolean {
+        return ['unknown', '-', 'n/a', 'na', 'null', 'undefined'].includes(value.trim().toLowerCase());
+    }
+
+    private pickString(...values: unknown[]): string | null {
+        for (const value of values) {
+            if (typeof value === 'string' && value.trim()) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private humanizeToken(value: string): string {
+        const token = value.trim();
+        if (!token) return '';
+        return token
+            .replace(/[_-]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .replace(/\b\w/g, (char) => char.toUpperCase());
+    }
 
     private toInvoiceDto(invoice: any) {
         return {
