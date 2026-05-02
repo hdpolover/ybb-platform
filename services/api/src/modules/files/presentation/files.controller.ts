@@ -58,6 +58,69 @@ export class FilesController {
     return new RegExp(`/v1/files/${escapedId}/download(?:\\?|#|$)`, 'i').test(url);
   }
 
+  private extractCandidateUrl(payload: unknown): string | null {
+    if (!payload || typeof payload !== 'object') {
+      return null;
+    }
+
+    const record = payload as Record<string, unknown>;
+    const directUrl = record.url;
+    if (typeof directUrl === 'string' && directUrl.length > 0) {
+      return directUrl;
+    }
+
+    const publicUrl = record.public_url;
+    if (typeof publicUrl === 'string' && publicUrl.length > 0) {
+      return publicUrl;
+    }
+
+    const data = record.data;
+    if (data && typeof data === 'object') {
+      const nestedUrl = (data as Record<string, unknown>).url;
+      if (typeof nestedUrl === 'string' && nestedUrl.length > 0) {
+        return nestedUrl;
+      }
+      const nestedPublicUrl = (data as Record<string, unknown>).public_url;
+      if (typeof nestedPublicUrl === 'string' && nestedPublicUrl.length > 0) {
+        return nestedPublicUrl;
+      }
+    }
+
+    return null;
+  }
+
+  private async resolveDownloadUrlViaFileService(fileId: string, brandId: string): Promise<string | null> {
+    try {
+      const grpcResult = await this.fileGrpcClient.getFile(fileId, brandId, brandId);
+      const grpcUrl = this.extractCandidateUrl(grpcResult);
+      if (grpcUrl && !this.isSelfDownloadProxyUrl(grpcUrl, fileId)) {
+        return grpcUrl;
+      }
+    } catch (error: unknown) {
+      this.logger.warn(
+        `gRPC public-url fallback failed for file ${fileId} / brand ${brandId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+
+    try {
+      const restResult = await this.fileServiceClient.getFile(fileId, brandId, brandId);
+      const restUrl = this.extractCandidateUrl(restResult);
+      if (restUrl && !this.isSelfDownloadProxyUrl(restUrl, fileId)) {
+        return restUrl;
+      }
+    } catch (error: unknown) {
+      this.logger.warn(
+        `REST public-url fallback failed for file ${fileId} / brand ${brandId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+
+    return null;
+  }
+
   private async resolvePublicDownloadUrl(fileId: string): Promise<string | null> {
     const normalizedFileId = fileId.trim().toLowerCase();
     if (!FilesController.UUID_PATTERN.test(normalizedFileId)) {
@@ -118,7 +181,14 @@ export class FilesController {
           },
         ],
       },
-      select: { fileUrl: true },
+      select: {
+        fileUrl: true,
+        program: {
+          select: {
+            brandId: true,
+          },
+        },
+      },
       take: 10,
     });
     const resourceUrl =
@@ -127,6 +197,18 @@ export class FilesController {
         .find((url) => !this.isSelfDownloadProxyUrl(url, normalizedFileId)) ?? null;
     if (resourceUrl) {
       return resourceUrl;
+    }
+
+    for (const candidate of resourceCandidates) {
+      const candidateBrandId = candidate.program?.brandId;
+      if (!candidateBrandId) {
+        continue;
+      }
+
+      const resolved = await this.resolveDownloadUrlViaFileService(normalizedFileId, candidateBrandId);
+      if (resolved) {
+        return resolved;
+      }
     }
 
     const templateCandidates = await this.prisma.documentTemplate.findMany({
