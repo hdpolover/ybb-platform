@@ -45,6 +45,7 @@ This section is updated during execution so progress can be tracked without chec
 | 2026-05-04 | PR #15 - Application search trigram indexes (`ybb-platform/services/api`) | Merged | Added `pg_trgm` and partial GIN trigram indexes for `participants.full_name` and `users.email` to speed case-insensitive application search filters. PR: https://github.com/hdpolover/ybb-platform/pull/12 |
 | 2026-05-04 | PR #16 - Prisma pool tuning + slow-query observability (`ybb-platform/services/api`) | Merged | Added env-driven Prisma/pg pool tuning, expanded pool pressure metrics (open/idle/waiting), and added slow-query counters/warnings for dashboard alerting. PR: https://github.com/hdpolover/ybb-platform/pull/13 |
 | 2026-05-04 | PR #17 - Admin dashboard platform metrics visibility (`ybb-platform/services/admin-dashboard`) | In review | Added `/platform/metrics` with normalized KPI cards, pool-pressure visualizations, sanitized slow-query breakdown (percentage-of-total bars + cumulative explanation), and a trimmed diagnostics tab; wired sidebar nav and metrics fetch helper. PR: https://github.com/hdpolover/ybb-platform/pull/15 |
+| 2026-05-04 | PR #18 - Slow query mitigation for audit + application reads (`ybb-platform/services/api`) | In review | Optimized audit trail snapshots for `ParticipantApplication`/`ApplicationInvoice`, reduced payload size with sanitization/redaction/truncation before `DataChangeLog.create`, and made audit logging non-blocking in interceptor path. PR: https://github.com/hdpolover/ybb-platform/pull/16 |
 
 ## Priority Summary
 

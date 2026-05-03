@@ -27,7 +27,10 @@ export interface AuditTrailMetadata {
 
     /**
      * Optional list of fields to include in the before/after snapshot.
-     * If not provided, the full entity will be snapshotted.
+     * If not provided, high-volume entity types (e.g. ParticipantApplication,
+     * ApplicationInvoice) use a built-in default field selection defined in
+     * AuditTrailInterceptor.DEFAULT_ENTITY_SELECTS to limit snapshot cost.
+     * All other entity types will snapshot the full entity row.
      */
     selectFields?: Record<string, boolean>;
 }

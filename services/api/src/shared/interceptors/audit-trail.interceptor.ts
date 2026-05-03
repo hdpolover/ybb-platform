@@ -25,6 +25,37 @@ import { AUDIT_TRAIL_KEY, AuditTrailMetadata } from '../decorators/audit-trail.d
 @Injectable()
 export class AuditTrailInterceptor implements NestInterceptor {
     private readonly logger = new Logger(AuditTrailInterceptor.name);
+    private static readonly DEFAULT_ENTITY_SELECTS: Record<string, Record<string, boolean>> = {
+        ParticipantApplication: {
+            id: true,
+            participantId: true,
+            programId: true,
+            status: true,
+            registrationPaymentStatus: true,
+            programPaymentStatus: true,
+            applicationCategory: true,
+            pricingTierId: true,
+            participationCategoryId: true,
+            submittedAt: true,
+            reviewedAt: true,
+            reviewedBy: true,
+            updatedAt: true,
+            deletedAt: true,
+        },
+        ApplicationInvoice: {
+            id: true,
+            applicationId: true,
+            pricingTierId: true,
+            amount: true,
+            currency: true,
+            status: true,
+            paidAt: true,
+            externalIntentId: true,
+            externalTransactionId: true,
+            paymentMethod: true,
+            updatedAt: true,
+        },
+    };
 
     constructor(
         private readonly reflector: Reflector,
@@ -45,6 +76,7 @@ export class AuditTrailInterceptor implements NestInterceptor {
 
         const request = context.switchToHttp().getRequest();
         const { entityType, action, riskLevel, idParam, selectFields } = metadata;
+        const effectiveSelectFields = this.getEffectiveSelectFields(entityType, selectFields);
 
         // Extract entity ID from route params
         const paramKey = idParam || 'id';
@@ -69,7 +101,7 @@ export class AuditTrailInterceptor implements NestInterceptor {
         let beforeState: Record<string, unknown> | null = null;
         const actionsNeedingBeforeState: ChangeType[] = [ChangeType.update, ChangeType.delete, ChangeType.status_change];
         if (entityId && actionsNeedingBeforeState.includes(action)) {
-            beforeState = await this.fetchEntityState(entityType, entityId, selectFields);
+            beforeState = await this.fetchEntityState(entityType, entityId, effectiveSelectFields);
         }
 
         // --- Execute the handler ---
@@ -90,10 +122,14 @@ export class AuditTrailInterceptor implements NestInterceptor {
                         if (typeof afterState !== 'object' || Array.isArray(afterState)) {
                             afterState = { value: afterState };
                         }
+
+                        if (afterState && effectiveSelectFields) {
+                            afterState = this.pickSelectedFields(afterState, effectiveSelectFields);
+                        }
                     }
 
                     // Write the log entry asynchronously
-                    await this.dataChangeLogService.logWithDiff({
+                    void this.dataChangeLogService.logWithDiff({
                         entityType,
                         entityId,
                         action,
@@ -107,6 +143,11 @@ export class AuditTrailInterceptor implements NestInterceptor {
                         ipAddress,
                         userAgent,
                         ...(riskLevel ? { riskLevel } : {}),
+                    }).catch((error) => {
+                        this.logger.error(
+                            `AuditTrailInterceptor failed to persist log for ${entityType}/${entityId}: ${error.message}`,
+                            error.stack,
+                        );
                     });
                 } catch (error) {
                     this.logger.error(
@@ -150,5 +191,27 @@ export class AuditTrailInterceptor implements NestInterceptor {
             );
             return null;
         }
+    }
+
+    private getEffectiveSelectFields(
+        entityType: string,
+        selectFields?: Record<string, boolean>,
+    ): Record<string, boolean> | undefined {
+        if (selectFields && Object.keys(selectFields).length > 0) return selectFields;
+        return AuditTrailInterceptor.DEFAULT_ENTITY_SELECTS[entityType];
+    }
+
+    private pickSelectedFields(
+        source: Record<string, unknown>,
+        selectFields: Record<string, boolean>,
+    ): Record<string, unknown> {
+        const picked: Record<string, unknown> = {};
+        for (const [field, enabled] of Object.entries(selectFields)) {
+            if (!enabled) continue;
+            if (Object.prototype.hasOwnProperty.call(source, field)) {
+                picked[field] = source[field];
+            }
+        }
+        return picked;
     }
 }
