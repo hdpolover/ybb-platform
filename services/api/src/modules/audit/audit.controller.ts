@@ -22,6 +22,10 @@ const AUDITED_EVENTS = [
   'payment.created',
   'payment.failed',
   'payment.refunded',
+  // support.* — emitted from support ticket workflows
+  'support.ticket.created',
+  'support.ticket.replied',
+  'support.ticket.status-updated',
 ] as const;
 
 @Controller()
@@ -53,6 +57,15 @@ export class AuditController {
 
   @EventPattern('payment.refunded')
   paymentRefunded(@Payload() d: RmqEventPayload, @Ctx() c: RmqContext) { return this.log(d, c); }
+
+  @EventPattern('support.ticket.created')
+  supportTicketCreated(@Payload() d: RmqEventPayload, @Ctx() c: RmqContext) { return this.log(d, c); }
+
+  @EventPattern('support.ticket.replied')
+  supportTicketReplied(@Payload() d: RmqEventPayload, @Ctx() c: RmqContext) { return this.log(d, c); }
+
+  @EventPattern('support.ticket.status-updated')
+  supportTicketStatusUpdated(@Payload() d: RmqEventPayload, @Ctx() c: RmqContext) { return this.log(d, c); }
 
   private async log(data: RmqEventPayload, context: RmqContext) {
     const pattern = context.getPattern();

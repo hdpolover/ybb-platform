@@ -33,11 +33,11 @@ import { StorageService } from './application/storage.service';
               keepCase: true,
             },
             channelOptions: {
-              // Detect dead connections within 30s (send ping every 30s, wait 5s for reply)
-              'grpc.keepalive_time_ms': 30000,
+              // Be conservative with pings to avoid server ENHANCE_YOUR_CALM rejections.
+              'grpc.keepalive_time_ms': 60000,
               'grpc.keepalive_timeout_ms': 5000,
-              'grpc.keepalive_permit_without_calls': 1,
-              'grpc.http2.max_pings_without_data': 0,
+              'grpc.keepalive_permit_without_calls': 0,
+              'grpc.http2.max_pings_without_data': 2,
               // Reconnect fast: start at 1s, cap at 5s (default max is 120s)
               'grpc.initial_reconnect_backoff_ms': 1000,
               'grpc.min_reconnect_backoff_ms': 1000,

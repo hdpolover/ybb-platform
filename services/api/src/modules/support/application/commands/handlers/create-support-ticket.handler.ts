@@ -6,6 +6,9 @@ import { ISupportTicketRepository } from '@core/interfaces/repositories/support-
 import { IParticipantRepository } from '@core/interfaces/repositories/participant.repository.interface';
 import { SupportTicket } from '@core/entities/support-ticket.entity';
 import { UnitOfWork } from '@shared/infrastructure/database/unit-of-work.service';
+import { SupportTicketPriorityClassifierService } from '@modules/support/application/services/support-ticket-priority-classifier.service';
+import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 
 @CommandHandler(CreateSupportTicketCommand)
 export class CreateSupportTicketHandler implements ICommandHandler<CreateSupportTicketCommand> {
@@ -15,6 +18,9 @@ export class CreateSupportTicketHandler implements ICommandHandler<CreateSupport
         @Inject('IParticipantRepository')
         private readonly participantRepository: IParticipantRepository,
         private readonly unitOfWork: UnitOfWork,
+        private readonly priorityClassifier: SupportTicketPriorityClassifierService,
+        private readonly rabbitmqProducer: RabbitMQProducerService,
+        private readonly prisma: PrismaService,
     ) { }
 
     async execute(command: CreateSupportTicketCommand): Promise<string> {
@@ -26,6 +32,13 @@ export class CreateSupportTicketHandler implements ICommandHandler<CreateSupport
             throw new NotFoundException('Participant profile not found. Please complete profile first.');
         }
 
+        const classification = await this.priorityClassifier.classify({
+            category: dto.category,
+            subCategory: dto.subCategory ?? undefined,
+            subject: dto.subject,
+            description: dto.description,
+        });
+
         const ticketNumber = await this.repository.generateTicketNumber();
 
         const ticket = new SupportTicket(
@@ -36,7 +49,7 @@ export class CreateSupportTicketHandler implements ICommandHandler<CreateSupport
             dto.subject,
             dto.description,
             'open', // status
-            dto.priority || 'normal',
+            classification.priority,
             new Date(),
             new Date(),
             dto.subCategory,
@@ -76,6 +89,40 @@ export class CreateSupportTicketHandler implements ICommandHandler<CreateSupport
             },
             { name: 'support-ticket-create', timeout: 3000 },
         );
+
+        const ticketOwner = await this.prisma.user.findUnique({
+            where: { id: participant.userId },
+            include: { brand: true },
+        });
+
+        if (ticketOwner?.email) {
+            await this.rabbitmqProducer.emit('support.ticket.created', {
+                ticketId: ticket.id,
+                ticketNumber: ticket.ticketNumber,
+                category: ticket.category,
+                subCategory: ticket.subCategory,
+                subject: ticket.subject,
+                status: ticket.status,
+                priority: ticket.priority,
+                createdAt: ticket.createdAt.toISOString(),
+                email: ticketOwner.email,
+                name: participant.fullName,
+                brand: ticketOwner.brand
+                    ? {
+                        name: ticketOwner.brand.name,
+                        websiteUrl: ticketOwner.brand.websiteUrl,
+                        logoUrl: ticketOwner.brand.logoUrl,
+                        contactEmail: ticketOwner.brand.contactEmail,
+                    }
+                    : undefined,
+                aiClassification: {
+                    source: classification.source,
+                    model: classification.model,
+                    confidence: classification.confidence,
+                    reason: classification.reason,
+                },
+            });
+        }
 
         return ticket.id;
     }
