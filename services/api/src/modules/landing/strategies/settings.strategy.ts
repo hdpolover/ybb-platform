@@ -4,21 +4,40 @@ import { CacheService } from '../../../shared/infrastructure/cache/cache.service
 import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
 import { Brand } from '@prisma/client';
 import { LandingSettingsResponseDto } from '../dto/landing-settings.dto';
+import { LandingSnapshotService } from '../services/landing-snapshot.service';
 
 @Injectable()
 export class SettingsStrategy {
     constructor(
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
+        private readonly landingSnapshotService: LandingSnapshotService,
     ) { }
 
     async getData(category: Brand | null): Promise<LandingSettingsResponseDto> {
+        if (category) {
+            return this.landingSnapshotService.getOrBuildSettingsSnapshot(
+                category,
+                () => this.buildSettingsPayload(category),
+            );
+        }
+
         // Check cache first
-        const cacheKey = CACHE_KEYS.LANDING_SETTINGS(category?.id || 'default');
+        const cacheKey = CACHE_KEYS.LANDING_SETTINGS('default');
         const cached = await this.cacheService.get<LandingSettingsResponseDto>(cacheKey);
         if (cached) {
             return cached;
         }
+
+        const result = await this.buildSettingsPayload(category);
+
+        // Cache for 1 hour
+        await this.cacheService.set(cacheKey, result, CACHE_TTL.HOUR);
+
+        return result;
+    }
+
+    private async buildSettingsPayload(category: Brand | null): Promise<LandingSettingsResponseDto> {
 
         const availableBrands = await this.prisma.brand.findMany({
             where: { isActive: true, deletedAt: null },
@@ -106,9 +125,6 @@ export class SettingsStrategy {
                 logo_icon_url: brand.logoIconUrl || undefined,
             })),
         };
-
-        // Cache for 1 hour
-        await this.cacheService.set(cacheKey, result, CACHE_TTL.HOUR);
 
         return result;
     }
