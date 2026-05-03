@@ -1,0 +1,27 @@
+services:
+  landing-content:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: ybb-prod-landing-content
+    restart: always
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-4003}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@ybb-prod-postgres-api:5432/${DATABASE_NAME}}
+      LOKI_URL: ${LOKI_URL}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_LOG_LEVEL: ${OTEL_LOG_LEVEL:-info}
+    networks:
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=dokploy-network"
+      - "traefik.http.routers.ybb-prod-landing-content.rule=${APP_DOMAINS_RULE:-Host(`landing-content.ybbhub.com`)}"
+      - "traefik.http.routers.ybb-prod-landing-content.entrypoints=websecure"
+      - "traefik.http.routers.ybb-prod-landing-content.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ybb-prod-landing-content.loadbalancer.server.port=4003"
+
+networks:
+  dokploy-network:
+    external: true
