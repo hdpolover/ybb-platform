@@ -33,7 +33,8 @@ This section is updated during execution so progress can be tracked without chec
 | 2026-05-03 | PR #3 - Script/image quick wins (`ybb-program-next`) | Merged | Added route-aware chat script gating and reduced home gallery initial render size. PR: https://github.com/hdpolover/ybb-program-next/pull/16 |
 | 2026-05-03 | PR #4 - Production safety (`ybb-program-next`) | Merged | Removed BFF debug payloads and hardcoded staging API fallbacks for auth-critical routes; added production env fail-closed checks for API URLs. PR: https://github.com/hdpolover/ybb-program-next/pull/17 |
 | 2026-05-03 | PR #5 - Revalidation security (`ybb-program-next`) | Merged | Hardened settings/home revalidation endpoint auth with production-required secrets and constant-time bearer comparison. PR: https://github.com/hdpolover/ybb-program-next/pull/18 |
-| 2026-05-03 | PR #6 - BFF CSRF/origin guard (`ybb-program-next`) | In progress | Added shared same-origin guard for mutating BFF routes in log-only rollout mode behind `ENABLE_CSRF_GUARD`. PR: https://github.com/hdpolover/ybb-program-next/pull/19 |
+| 2026-05-03 | PR #6 - BFF CSRF/origin guard (`ybb-program-next`) | Merged | Added shared same-origin guard for mutating BFF routes in log-only rollout mode behind `ENABLE_CSRF_GUARD`. PR: https://github.com/hdpolover/ybb-program-next/pull/19 |
+| 2026-05-03 | PR #7 - Brand-scoped cache and revalidation (`ybb-program-next`) | In review | Added brand-scoped cache tags/localStorage keys and brand-targeted revalidation (`?brandDomain=`) while keeping global revalidation fallback. PR: https://github.com/hdpolover/ybb-program-next/pull/20 |
 
 ## Priority Summary
 
