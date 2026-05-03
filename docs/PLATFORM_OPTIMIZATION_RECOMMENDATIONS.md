@@ -35,7 +35,7 @@ This section is updated during execution so progress can be tracked without chec
 | 2026-05-03 | PR #5 - Revalidation security (`ybb-program-next`) | Merged | Hardened settings/home revalidation endpoint auth with production-required secrets and constant-time bearer comparison. PR: https://github.com/hdpolover/ybb-program-next/pull/18 |
 | 2026-05-03 | PR #6 - BFF CSRF/origin guard (`ybb-program-next`) | Merged | Added shared same-origin guard for mutating BFF routes in log-only rollout mode behind `ENABLE_CSRF_GUARD`. PR: https://github.com/hdpolover/ybb-program-next/pull/19 |
 | 2026-05-03 | PR #7 - Brand-scoped cache and revalidation (`ybb-program-next`) | Merged | Added brand-scoped cache tags/localStorage keys and brand-targeted revalidation (`?brandDomain=`) while keeping global revalidation fallback. PR: https://github.com/hdpolover/ybb-program-next/pull/20 |
-| 2026-05-03 | PR #8 - Database index batch 1 (`ybb-platform/services/api`) | In progress | Added highest-impact composite indexes for applications, programs, users, and invoices via Prisma migration. |
+| 2026-05-03 | PR #8 - Database index batch 1 (`ybb-platform/services/api`) | In review | Added highest-impact composite indexes for applications, programs, users, and invoices via Prisma migration. PR: https://github.com/hdpolover/ybb-platform/pull/6 |
 
 ## Priority Summary
 
