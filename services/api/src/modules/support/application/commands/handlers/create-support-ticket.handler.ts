@@ -5,6 +5,7 @@ import { CreateSupportTicketCommand } from '../create-support-ticket.command';
 import { ISupportTicketRepository } from '@core/interfaces/repositories/support-ticket.repository.interface';
 import { IParticipantRepository } from '@core/interfaces/repositories/participant.repository.interface';
 import { SupportTicket } from '@core/entities/support-ticket.entity';
+import { UnitOfWork } from '@shared/infrastructure/database/unit-of-work.service';
 
 @CommandHandler(CreateSupportTicketCommand)
 export class CreateSupportTicketHandler implements ICommandHandler<CreateSupportTicketCommand> {
@@ -13,6 +14,7 @@ export class CreateSupportTicketHandler implements ICommandHandler<CreateSupport
         private readonly repository: ISupportTicketRepository,
         @Inject('IParticipantRepository')
         private readonly participantRepository: IParticipantRepository,
+        private readonly unitOfWork: UnitOfWork,
     ) { }
 
     async execute(command: CreateSupportTicketCommand): Promise<string> {
@@ -38,9 +40,43 @@ export class CreateSupportTicketHandler implements ICommandHandler<CreateSupport
             new Date(),
             new Date(),
             dto.subCategory,
+            undefined,
+            dto.programId,
         );
 
-        const created = await this.repository.create(ticket);
-        return created.id;
+        await this.unitOfWork.execute(
+            async (repos) => {
+                await repos.tx.supportTicket.create({
+                    data: {
+                        id: ticket.id,
+                        participantId: ticket.participantId,
+                        ticketNumber: ticket.ticketNumber,
+                        category: ticket.category,
+                        subCategory: ticket.subCategory,
+                        subject: ticket.subject,
+                        description: ticket.description,
+                        status: ticket.status as import('@prisma/client').SupportTicketStatus,
+                        priority: ticket.priority as import('@prisma/client').SupportTicketPriority,
+                        programId: ticket.programId,
+                    },
+                });
+
+                await repos.tx.supportTicketMessage.create({
+                    data: {
+                        id: uuidv4(),
+                        ticketId: ticket.id,
+                        message: ticket.description,
+                        isFromAdmin: false,
+                        senderId: participant.id,
+                        senderName: participant.fullName,
+                        attachments: (dto.attachments ?? []) as unknown as import('@prisma/client').Prisma.InputJsonValue,
+                        isRead: false,
+                    },
+                });
+            },
+            { name: 'support-ticket-create', timeout: 3000 },
+        );
+
+        return ticket.id;
     }
 }

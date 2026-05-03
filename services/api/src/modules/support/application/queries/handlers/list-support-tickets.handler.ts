@@ -26,6 +26,7 @@ export class ListSupportTicketsHandler implements IQueryHandler<ListSupportTicke
             id: t.id,
             ticketNumber: t.ticketNumber,
             category: t.category,
+            subCategory: t.subCategory,
             subject: t.subject,
             status: t.status,
             priority: t.priority,
