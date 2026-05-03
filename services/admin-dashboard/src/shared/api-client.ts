@@ -68,6 +68,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return payload as T;
 }
 
+async function requestText(path: string, init?: RequestInit): Promise<string> {
+  const headers = new Headers(init?.headers);
+  headers.set("Authorization", `Bearer ${getAccessToken()}`);
+
+  const res = await fetch(buildApiUrl(path), { ...init, headers });
+
+  if (res.status === 401) {
+    redirectToLogin("session_expired");
+    throw new Error("Session expired. Redirecting to login...");
+  }
+
+  if (!res.ok) throw new Error(await readErrorMessage(res));
+  return res.text();
+}
+
 // ─── Pagination helper ────────────────────────────────────────────────────────
 
 export type PaginatedMeta = {
@@ -241,6 +256,10 @@ export type ProgramDashboardAnalytics = {
   age: Array<{ range: string; count: number }>;
   nationalities: Array<{ country: string; count: number }>;
   topAmbassadors: Array<{ name: string; country: string; referrals: number }>;
+};
+
+export type PlatformMetricsSnapshot = {
+  raw: string;
 };
 
 export type ProgramFaq = {
@@ -718,6 +737,11 @@ export function updateBrandSettings(
 export function getAdminAnalytics(brandId?: string): Promise<AdminAnalytics> {
   const q = brandId ? `?brandId=${brandId}` : "";
   return request<AdminAnalytics>(`/stats/admin/analytics${q}`);
+}
+
+export async function getPlatformMetricsSnapshot(): Promise<PlatformMetricsSnapshot> {
+  const raw = await requestText("/metrics");
+  return { raw };
 }
 
 export function getProgramDashboardAnalytics(programId: string): Promise<ProgramDashboardAnalytics> {
