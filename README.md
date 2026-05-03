@@ -1,62 +1,45 @@
-# YBB Platform (Microservices Architecture)
+# YBB Platform
 
-This repository contains the YBB Platform services managed as strictly isolated microservices.
+YBB Platform is a microservices workspace containing the API gateway, payment, file, notification, admin dashboard, and landing content services.
 
-## Architecture
+## Services
 
-Each service is self-contained with its own:
-- `docker-compose.yml`
-- Environment Variables (`.env`)
-- Database (if applicable)
-- Codebase
+| Service | Directory | App Port |
+| --- | --- | ---: |
+| API Gateway | `services/api` | 4000 |
+| Payment Service | `services/payment` | 8002 |
+| File Service | `services/file` | 8001 |
+| Notification Service | `services/notification` | 4002 |
+| Admin Dashboard | `services/admin-dashboard` | 4001 |
+| Landing Content Service | `services/landing-content` | 4003 |
 
-### Service Registry
-
-| Service | Directory | Port (App) | Port (DB) | Port (RabbitMQ) |
-|---------|-----------|------------|-----------|-----------------|
-| **API Gateway** | `services/api` | 4000 | 5432 | N/A |
-| **Payment Service** | `services/payment-service` | 8002 | 5433 | 5673 |
-| **File Service** | `services/file-service` | 8001 | 5434 | N/A |
-| **Notification** | `services/notification-service` | 4002 | N/A | 5674 |
-| **Admin Dashboard** | `services/admin-dashboard` | 4001 | N/A | N/A |
-| **Minimal Admin** | `services/minimal-admin` | 4003 | N/A | N/A |
-
-### Networking
-
-Services communicate using `http://host.docker.internal:<PORT>` to ensure strict isolation while allowing local interoperability without a shared Docker network.
-
-## Getting Started
+## Quick start
 
 ### Prerequisites
+- Docker + Docker Compose
+- Make
 
-- Docker & Docker Compose
-- Make (optional, for convenience scripts)
-
-### Management
-
-A root `Makefile` is provided to orchestrate the services simultaneously.
-
+### Run all services
 ```bash
-# Start all services
 make start
-
-# Stop all services
-make stop
-
-# Check status
 make status
+make stop
 ```
 
-### Individual Service Management
-
-You can also manage services individually:
-
+### Run one service
 ```bash
-cd services/payment-service
-docker compose up -d
-docker compose logs -f
+make start-api
+make logs-api
+make restart-api
 ```
 
-## Legacy Files
+## Documentation
 
-Old configuration files, scripts, and documentation from the monorepo era have been moved to `legacy_archive/`.
+- Main docs index: [`docs/README.md`](./docs/README.md)
+- Optimization roadmap and execution log: [`docs/PLATFORM_OPTIMIZATION_RECOMMENDATIONS.md`](./docs/PLATFORM_OPTIMIZATION_RECOMMENDATIONS.md)
+- Potential future service split notes: [`docs/POTENTIAL_NEW_SERVICES.md`](./docs/POTENTIAL_NEW_SERVICES.md)
+
+## Notes
+
+- Service-specific envs and compose files live in each `services/<name>/` directory.
+- Root orchestration behavior is defined in [`Makefile`](./Makefile).
