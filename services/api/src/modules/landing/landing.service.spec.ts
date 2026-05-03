@@ -9,6 +9,7 @@ import { PartnersSponsorsStrategy } from './strategies/partners-sponsors.strateg
 import { AnnouncementsStrategy } from './strategies/announcements.strategy';
 import { SettingsStrategy } from './strategies/settings.strategy';
 import { FaqsStrategy } from './strategies/faqs.strategy';
+import { LandingSnapshotService } from './services/landing-snapshot.service';
 import { NotFoundException } from '@nestjs/common';
 
 describe('LandingService', () => {
@@ -27,6 +28,11 @@ describe('LandingService', () => {
     getProgramData: jest.fn(),
   };
 
+  const mockLandingSnapshotService = {
+    getOrBuildHomeSnapshot: jest.fn(async (_brand: unknown, build: () => Promise<unknown>) => build()),
+    getOrBuildProgramsSnapshot: jest.fn(async (_brand: unknown, build: () => Promise<unknown>) => build()),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -39,6 +45,7 @@ describe('LandingService', () => {
         { provide: AnnouncementsStrategy, useValue: mockStrategy },
         { provide: SettingsStrategy, useValue: mockStrategy },
         { provide: FaqsStrategy, useValue: mockStrategy },
+        { provide: LandingSnapshotService, useValue: mockLandingSnapshotService },
       ],
     }).compile();
 
