@@ -43,7 +43,7 @@ This section is updated during execution so progress can be tracked without chec
 | 2026-05-04 | PR #13 - Sensitive log redaction (`ybb-platform/services/api` + `services/notification`) | Merged | Removed raw JWT/payment response logs and replaced notification auth/payment event payload logging with redacted summaries that avoid token/full-payload leakage. PR: https://github.com/hdpolover/ybb-platform/pull/11 |
 | 2026-05-04 | PR #14 - Phase 3 cache correctness batch (`ybb-program-next`) | In review | Added brand-domain resolution memoization, in-flight stampede protection for settings/home cache keys, and short-TTL brand-scoped payment-methods caching. PR: https://github.com/hdpolover/ybb-program-next/pull/22 |
 | 2026-05-04 | PR #15 - Application search trigram indexes (`ybb-platform/services/api`) | Merged | Added `pg_trgm` and partial GIN trigram indexes for `participants.full_name` and `users.email` to speed case-insensitive application search filters. PR: https://github.com/hdpolover/ybb-platform/pull/12 |
-| 2026-05-04 | PR #16 - Prisma pool tuning + slow-query observability (`ybb-platform/services/api`) | In review | Added env-driven Prisma/pg pool tuning, expanded pool pressure metrics (open/idle/waiting), and added slow-query counters/warnings for dashboard alerting. PR: pending |
+| 2026-05-04 | PR #16 - Prisma pool tuning + slow-query observability (`ybb-platform/services/api`) | In review | Added env-driven Prisma/pg pool tuning, expanded pool pressure metrics (open/idle/waiting), and added slow-query counters/warnings for dashboard alerting. PR: https://github.com/hdpolover/ybb-platform/pull/13 |
 
 ## Priority Summary
 
