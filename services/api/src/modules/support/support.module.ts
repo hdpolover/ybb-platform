@@ -9,6 +9,7 @@ import { CreateSupportTicketHandler } from './application/commands/handlers/crea
 import { ListSupportTicketsHandler } from './application/queries/handlers/list-support-tickets.handler';
 import { GetSupportTicketHandler } from './application/queries/handlers/get-support-ticket.handler';
 import { ReplySupportTicketHandler } from './application/commands/handlers/reply-support-ticket.handler';
+import { SupportTicketPriorityClassifierService } from './application/services/support-ticket-priority-classifier.service';
 
 @Module({
     imports: [CqrsModule, AuthModule],
@@ -26,6 +27,7 @@ import { ReplySupportTicketHandler } from './application/commands/handlers/reply
         ListSupportTicketsHandler,
         GetSupportTicketHandler,
         ReplySupportTicketHandler,
+        SupportTicketPriorityClassifierService,
     ],
 })
 export class SupportModule { }

@@ -38,14 +38,34 @@ This section is updated during execution so progress can be tracked without chec
 | 2026-05-03 | PR #8 - Database index batch 1 (`ybb-platform/services/api`) | Merged | Added highest-impact composite indexes for applications, programs, users, and invoices via Prisma migration. PR: https://github.com/hdpolover/ybb-platform/pull/6 |
 | 2026-05-03 | PR #9 - Stats query optimization (`ybb-platform/services/api`) | Merged | Replaced row-loading distinct-country counts with SQL `COUNT(DISTINCT ...)` in stats impact/geography flows and added focused unit coverage. PR: https://github.com/hdpolover/ybb-platform/pull/7 |
 | 2026-05-04 | PR #10 - File service security hardening (`ybb-platform/services/file` + `services/api`) | Merged | Added internal service-key guard for private file endpoints, enforced user+brand ownership on file-ready flow, and wired API gateway to derive identity from JWT instead of client-supplied IDs. PR: https://github.com/hdpolover/ybb-platform/pull/9 |
-| 2026-05-04 | PR #11 - BFF CSRF/origin guard enforcement (`ybb-program-next`) | In review | Enforced same-origin guard in production for mutating BFF routes (kept log-only rollout behavior for non-production via flag), with referer fallback when origin is absent. PR: https://github.com/hdpolover/ybb-program-next/pull/21 |
+| 2026-05-04 | PR #11 - BFF CSRF/origin guard enforcement (`ybb-program-next`) | Merged | Enforced same-origin guard in production for mutating BFF routes (kept log-only rollout behavior for non-production via flag), with referer fallback when origin is absent. PR: https://github.com/hdpolover/ybb-program-next/pull/21 |
 | 2026-05-04 | PR #12 - Payment internal auth fail-closed (`ybb-platform/services/payment`) | Merged | Payment service now requires `INTERNAL_SERVICE_KEY` in non-local environments so private HTTP/gRPC routes cannot run with empty internal auth config. PR: https://github.com/hdpolover/ybb-platform/pull/10 |
 | 2026-05-04 | PR #13 - Sensitive log redaction (`ybb-platform/services/api` + `services/notification`) | Merged | Removed raw JWT/payment response logs and replaced notification auth/payment event payload logging with redacted summaries that avoid token/full-payload leakage. PR: https://github.com/hdpolover/ybb-platform/pull/11 |
-| 2026-05-04 | PR #14 - Phase 3 cache correctness batch (`ybb-program-next`) | In review | Added brand-domain resolution memoization, in-flight stampede protection for settings/home cache keys, and short-TTL brand-scoped payment-methods caching. PR: https://github.com/hdpolover/ybb-program-next/pull/22 |
+| 2026-05-04 | PR #14 - Phase 3 cache correctness batch (`ybb-program-next`) | Merged | Added brand-domain resolution memoization, in-flight stampede protection for settings/home cache keys, and short-TTL brand-scoped payment-methods caching. PR: https://github.com/hdpolover/ybb-program-next/pull/22 |
 | 2026-05-04 | PR #15 - Application search trigram indexes (`ybb-platform/services/api`) | Merged | Added `pg_trgm` and partial GIN trigram indexes for `participants.full_name` and `users.email` to speed case-insensitive application search filters. PR: https://github.com/hdpolover/ybb-platform/pull/12 |
 | 2026-05-04 | PR #16 - Prisma pool tuning + slow-query observability (`ybb-platform/services/api`) | Merged | Added env-driven Prisma/pg pool tuning, expanded pool pressure metrics (open/idle/waiting), and added slow-query counters/warnings for dashboard alerting. PR: https://github.com/hdpolover/ybb-platform/pull/13 |
-| 2026-05-04 | PR #17 - Admin dashboard platform metrics visibility (`ybb-platform/services/admin-dashboard`) | In review | Added `/platform/metrics` with normalized KPI cards, pool-pressure visualizations, sanitized slow-query breakdown (percentage-of-total bars + cumulative explanation), and a trimmed diagnostics tab; wired sidebar nav and metrics fetch helper. PR: https://github.com/hdpolover/ybb-platform/pull/15 |
-| 2026-05-04 | PR #18 - Slow query mitigation for audit + application reads (`ybb-platform/services/api`) | In review | Optimized audit trail snapshots for `ParticipantApplication`/`ApplicationInvoice`, reduced payload size with sanitization/redaction/truncation before `DataChangeLog.create`, and made audit logging non-blocking in interceptor path. PR: https://github.com/hdpolover/ybb-platform/pull/16 |
+| 2026-05-04 | PR #17 - Admin dashboard platform metrics visibility (`ybb-platform/services/admin-dashboard`) | Merged | Added `/platform/metrics` with normalized KPI cards, pool-pressure visualizations, sanitized slow-query breakdown (percentage-of-total bars + cumulative explanation), and a trimmed diagnostics tab; wired sidebar nav and metrics fetch helper. PR: https://github.com/hdpolover/ybb-platform/pull/15 |
+| 2026-05-04 | PR #18 - Slow query mitigation for audit + application reads (`ybb-platform/services/api`) | Merged | Optimized audit trail snapshots for `ParticipantApplication`/`ApplicationInvoice`, reduced payload size with sanitization/redaction/truncation before `DataChangeLog.create`, and made audit logging non-blocking in interceptor path. PR: https://github.com/hdpolover/ybb-platform/pull/16 |
+
+## Next Implementation Queue (Current)
+
+Use this queue for **what to do next** from the current state (not from scratch).
+
+### Gate status: completed
+
+PR #11, #14, #17, and #18 are merged.  
+Next implementation starts directly from **PR #19** in the sequence below.
+
+### Next PR sequence after the gate
+
+| Order | Scope | Why now | Done when |
+| --- | --- | --- | --- |
+| 19 | Notification idempotency (`services/notification`) | Prevent duplicate sends on broker redelivery. | Duplicate event keys are ignored and covered by tests. |
+| 20 | RabbitMQ retry + DLQ (`services/notification` + `services/api`) | Improve failure handling and observability for async flows. | Failed messages retry with bounded backoff and land in DLQ after max attempts. |
+| 21 | Payment outbox (`services/api`) behind `ENABLE_PAYMENT_OUTBOX` | Remove payment state/event mismatch risk. | State update + outbox row commit atomically; worker publish path is idempotent. |
+| 22 | Cursor pagination + streaming exports (`services/api` admin listings/exports) | Reduce memory/latency on large datasets. | High-volume list/export endpoints avoid deep offset scans and full-memory exports. |
+
+Execution rule: update the **Implementation Progress (Live)** table immediately when each PR is opened/merged.
 
 ## Priority Summary
 
@@ -1272,7 +1292,6 @@ Use flags for changes that alter runtime behavior, especially:
 Recommended flag pattern:
 
 ```text
-ENABLE_BRAND_SCOPED_CACHE=true
 ENABLE_CSRF_GUARD=false
 ENABLE_FILE_SERVICE_AUTH_REQUIRED=false
 ENABLE_PAYMENT_OUTBOX=false
@@ -1570,7 +1589,7 @@ Do this first before changing behavior.
 | --- | --- | --- | --- |
 | 0.1 | Capture current API/frontend performance baseline: p95/p99 latency, Web Vitals, top slow Prisma queries, cache hit ratio, payment success rate. | Needed to prove improvements and catch regressions. | Baseline metrics are saved and comparable. |
 | 0.2 | Run existing test/build matrix for touched services. | Separates existing failures from new regressions. | Current baseline is known for API, file, payment, notification, frontend. |
-| 0.3 | Add feature flags for behavior-changing work. | Enables gradual rollout and rollback. | Flags exist for cache migration, CSRF guard, file auth, payment outbox, strict revalidation, third-party script gating. |
+| 0.3 | Add feature flags for behavior-changing work. | Enables gradual rollout and rollback. | Flags exist for CSRF guard, file auth, payment outbox, strict revalidation, and third-party script gating. |
 | 0.4 | Add missing smoke tests for critical happy paths. | Gives confidence before refactors. | Basic auth, landing, dashboard, payment, file upload, and settings routes are covered. |
 
 Recommended first PRs:

@@ -499,4 +499,54 @@ export class EmailService {
     });
     return this.sendRawEmail(to, 'Payment Refunded', html);
   }
+
+  async sendSupportTicketCreatedEmail(to: string, payload: any) {
+    const html = await this.compileTemplate('support-ticket-created', {
+      name: payload.name || 'Participant',
+      ticketNumber: payload.ticketNumber,
+      subject: payload.subject,
+      category: payload.category,
+      subCategory: payload.subCategory,
+      priority: payload.priority,
+      status: payload.status || 'open',
+      supportUrl: this.resolveSupportUrl(payload.brand),
+      brand: payload.brand,
+    });
+    return this.sendRawEmail(to, `Support Ticket Received (${payload.ticketNumber})`, html);
+  }
+
+  async sendSupportTicketReplyEmail(to: string, payload: any) {
+    const html = await this.compileTemplate('support-ticket-replied', {
+      name: payload.name || 'Participant',
+      ticketNumber: payload.ticketNumber,
+      subject: payload.subject,
+      status: payload.status,
+      responderName: payload.responderName || 'Support Team',
+      messagePreview: payload.messagePreview || 'You have a new update from support.',
+      supportUrl: this.resolveSupportUrl(payload.brand),
+      brand: payload.brand,
+    });
+    return this.sendRawEmail(to, `New Support Reply (${payload.ticketNumber})`, html);
+  }
+
+  async sendSupportTicketStatusUpdatedEmail(to: string, payload: any) {
+    const html = await this.compileTemplate('support-ticket-status-updated', {
+      name: payload.name || 'Participant',
+      ticketNumber: payload.ticketNumber,
+      subject: payload.subject,
+      previousStatus: payload.previousStatus,
+      status: payload.status,
+      supportUrl: this.resolveSupportUrl(payload.brand),
+      brand: payload.brand,
+    });
+    return this.sendRawEmail(to, `Support Ticket Status Updated (${payload.ticketNumber})`, html);
+  }
+
+  private resolveSupportUrl(brand?: any): string {
+    const baseUrl =
+      brand?.websiteUrl?.replace(/\/$/, '') ||
+      this.configService.get('FRONTEND_URL') ||
+      'http://localhost:3001';
+    return `${baseUrl}/dashboard/support-tickets`;
+  }
 }

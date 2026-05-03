@@ -191,4 +191,37 @@ export class EventsController {
       );
     }
   }
+
+  @EventPattern('support.ticket.created')
+  async handleSupportTicketCreated(@Payload() data: any) {
+    this.logger.log(
+      `Received support.ticket.created event: ${JSON.stringify(summarizeEventPayload(data))}`,
+    );
+
+    if (data.email) {
+      await this.emailService.sendSupportTicketCreatedEmail(data.email, data);
+    }
+  }
+
+  @EventPattern('support.ticket.replied')
+  async handleSupportTicketReplied(@Payload() data: any) {
+    this.logger.log(
+      `Received support.ticket.replied event: ${JSON.stringify(summarizeEventPayload(data))}`,
+    );
+
+    if (data.actorRole === 'admin' && data.email) {
+      await this.emailService.sendSupportTicketReplyEmail(data.email, data);
+    }
+  }
+
+  @EventPattern('support.ticket.status-updated')
+  async handleSupportTicketStatusUpdated(@Payload() data: any) {
+    this.logger.log(
+      `Received support.ticket.status-updated event: ${JSON.stringify(summarizeEventPayload(data))}`,
+    );
+
+    if (data.email) {
+      await this.emailService.sendSupportTicketStatusUpdatedEmail(data.email, data);
+    }
+  }
 }

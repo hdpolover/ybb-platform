@@ -48,7 +48,7 @@ export class SupportTicketRepository implements ISupportTicketRepository {
                 }
             }
         });
-        return tickets.map(this.mapToEntity);
+        return tickets.map((ticket) => this.mapToEntity(ticket));
     }
 
     async addMessage(message: SupportTicketMessage): Promise<SupportTicketMessage> {
@@ -86,7 +86,7 @@ export class SupportTicketRepository implements ISupportTicketRepository {
     }
 
     private mapToEntity(prisma: PrismaSupportTicket & { messages?: (PrismaSupportTicketMessage & Record<string, unknown>)[] }): SupportTicket {
-        const messages = prisma.messages?.map(this.mapMessageToEntity) || [];
+        const messages = prisma.messages?.map((message) => this.mapMessageToEntity(message)) || [];
         return new SupportTicket(
             prisma.id,
             prisma.participantId,

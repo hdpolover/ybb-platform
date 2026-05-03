@@ -100,4 +100,13 @@ export class ReportingController {
 
   @EventPattern('payment.refunded')
   ackPaymentRefunded() { /* no-op */ }
+
+  @EventPattern('support.ticket.created')
+  ackSupportTicketCreated() { /* no-op */ }
+
+  @EventPattern('support.ticket.replied')
+  ackSupportTicketReplied() { /* no-op */ }
+
+  @EventPattern('support.ticket.status-updated')
+  ackSupportTicketStatusUpdated() { /* no-op */ }
 }

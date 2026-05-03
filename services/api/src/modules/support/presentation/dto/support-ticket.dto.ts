@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsEnum, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
+import { IsArray, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
 
 export class SupportTicketAttachmentDto {
     @ApiProperty()
@@ -56,10 +56,6 @@ export class CreateSupportTicketDto {
     @Type(() => SupportTicketAttachmentDto)
     attachments?: SupportTicketAttachmentDto[];
 
-    @ApiProperty({ required: false, enum: ['low', 'normal', 'high'] })
-    @IsOptional()
-    @IsEnum(['low', 'normal', 'high'])
-    priority?: string = 'normal';
 }
 
 export class ReplySupportTicketDto {
