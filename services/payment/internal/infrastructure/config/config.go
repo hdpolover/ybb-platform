@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -40,6 +41,10 @@ func LoadConfig() (*Config, error) {
 	// Load .env file if exists (for local development)
 	_ = godotenv.Load()
 
+	// Read the raw ENVIRONMENT value before applying any default so that
+	// validateInternalServiceKey can fail-closed when the variable is absent.
+	rawEnvironment := os.Getenv("ENVIRONMENT")
+
 	cfg := &Config{
 		Port:               getEnv("PORT", "8002"),
 		Environment:        getEnv("ENVIRONMENT", "development"),
@@ -68,6 +73,12 @@ func LoadConfig() (*Config, error) {
 	if err := validatePaymentSecretsKey(cfg.PaymentSecretsKey); err != nil {
 		return nil, err
 	}
+	// Validate against rawEnvironment (not the defaulted cfg.Environment) so
+	// that a deployment that omits ENVIRONMENT fails closed instead of
+	// silently skipping internal-auth enforcement.
+	if err := validateInternalServiceKey(rawEnvironment, cfg.InternalServiceKey); err != nil {
+		return nil, err
+	}
 
 	return cfg, nil
 }
@@ -92,4 +103,30 @@ func validatePaymentSecretsKey(b64Key string) error {
 		return fmt.Errorf("PAYMENT_SECRETS_KEY must decode to exactly 32 bytes (got %d)", len(key))
 	}
 	return nil
+}
+
+func validateInternalServiceKey(environment, internalServiceKey string) error {
+	if !requiresInternalServiceKey(environment) {
+		return nil
+	}
+
+	if strings.TrimSpace(internalServiceKey) == "" {
+		env := strings.TrimSpace(environment)
+		if env == "" {
+			return fmt.Errorf("INTERNAL_SERVICE_KEY is required when ENVIRONMENT is not explicitly set to a local/dev/test value")
+		}
+		return fmt.Errorf("INTERNAL_SERVICE_KEY is required when ENVIRONMENT=%s", env)
+	}
+
+	return nil
+}
+
+func requiresInternalServiceKey(environment string) bool {
+	switch strings.ToLower(strings.TrimSpace(environment)) {
+	case "local", "development", "dev", "test":
+		return false
+	default:
+		// Includes "" (missing/unset) – fail closed.
+		return true
+	}
 }
