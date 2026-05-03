@@ -37,14 +37,10 @@ describe('DataChangeLogService', () => {
     });
 
     it('should classify risk correctly', () => {
-        // @ts-expect-error - accessing private methods for testing
-        expect(service.classifyRisk('User', ChangeType.delete, 10)).toBe(RiskLevel.critical);
-        // @ts-expect-error - test intentionally passes extra arg for legacy behavior assertion
-        expect(service.classifyRisk('ParticipantApplication', ChangeType.status_change, 1)).toBe(RiskLevel.high);
-        // @ts-expect-error - test intentionally passes extra arg for legacy behavior assertion
-        expect(service.classifyRisk('Program', ChangeType.update, 1)).toBe(RiskLevel.medium);
-        // @ts-expect-error - test intentionally passes extra arg for legacy behavior assertion
-        expect(service.classifyRisk('SomethingElse', ChangeType.create, 1)).toBe(RiskLevel.low);
+        expect(service.classifyRisk('User', ChangeType.delete)).toBe(RiskLevel.critical);
+        expect(service.classifyRisk('ParticipantApplication', ChangeType.status_change)).toBe(RiskLevel.high);
+        expect(service.classifyRisk('Program', ChangeType.update)).toBe(RiskLevel.medium);
+        expect(service.classifyRisk('SomethingElse', ChangeType.create)).toBe(RiskLevel.low);
     });
 
     it('should log with diff and compute states correctly', async () => {
@@ -96,5 +92,38 @@ describe('DataChangeLogService', () => {
         expect(beforeState.password).toBe('[Redacted]');
         expect((beforeState.nested as Record<string, unknown>).apiKey).toBe('[Redacted]');
         expect(afterState.token).toBe('[Redacted]');
+    });
+
+    it('should serialize Date values as ISO strings instead of empty objects', async () => {
+        const now = new Date('2024-01-15T10:30:00.000Z');
+
+        await service.log({
+            entityType: 'ParticipantApplication',
+            action: ChangeType.update,
+            beforeState: { id: '1', updatedAt: now },
+            afterState: { id: '1', updatedAt: new Date('2024-01-16T10:30:00.000Z') },
+        });
+
+        const call = mockPrismaService.dataChangeLog.create.mock.calls.at(-1)?.[0];
+        expect(call).toBeDefined();
+        const beforeState = call.data.beforeState as Record<string, unknown>;
+        expect(beforeState.updatedAt).toBe('2024-01-15T10:30:00.000Z');
+    });
+
+    it('should serialize objects with toJSON (e.g. Prisma.Decimal) to their scalar form', async () => {
+        // Simulate a Prisma.Decimal-like object that has a toJSON method
+        const decimalLike = { toJSON: () => '99.50', toString: () => '99.50' };
+
+        await service.log({
+            entityType: 'ApplicationInvoice',
+            action: ChangeType.update,
+            beforeState: { id: '1', amount: decimalLike as unknown as Record<string, unknown> },
+            afterState: { id: '1', amount: decimalLike as unknown as Record<string, unknown> },
+        });
+
+        const call = mockPrismaService.dataChangeLog.create.mock.calls.at(-1)?.[0];
+        expect(call).toBeDefined();
+        const beforeState = call.data.beforeState as Record<string, unknown>;
+        expect(beforeState.amount).toBe('99.50');
     });
 });
