@@ -2,15 +2,18 @@
 
 import React, { useEffect, useState } from "react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "../contexts/AuthContext";
+import { getLoginRedirectMessage } from "@/src/shared/login-redirect";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { adminProfile, isLoading, login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const redirectMessage = getLoginRedirectMessage(searchParams.get("reason"));
 
   useEffect(() => {
     if (!isLoading && adminProfile) {
@@ -78,6 +81,12 @@ export default function LoginPage() {
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4 text-sm">
+                  {redirectMessage ? (
+                    <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      {redirectMessage}
+                    </div>
+                  ) : null}
+
                   <div className="space-y-1.5">
                     <label className="block text-xs font-medium text-zinc-700">Email</label>
                     <input

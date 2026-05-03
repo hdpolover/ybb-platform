@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { redirectToLogin } from "@/src/shared/login-redirect";
 
 export type AdminAccessLevel = "super_admin" | "platform_admin" | "program_admin" | "no_access";
 
@@ -486,6 +487,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setAdminProfile(null);
           setIsAuthenticated(false);
         }
+        redirectToLogin("session_expired");
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -524,6 +526,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           clearStoredSession();
           setAdminProfile(null);
           setIsAuthenticated(false);
+          redirectToLogin("session_expired");
         }
       })();
     }, Math.max(refreshDelay, 0));
