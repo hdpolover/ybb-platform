@@ -465,6 +465,23 @@ export type ProgramAnnouncement = {
   updatedAt: string;
 };
 
+export type PartnershipEnquiry = {
+  id: string;
+  brandId: string | null;
+  programId: string | null;
+  partnershipType: string;
+  subCategory: string | null;
+  fullName: string;
+  email: string;
+  whatsappNumber: string | null;
+  company: string | null;
+  subject: string | null;
+  description: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 // ─── Admins ───────────────────────────────────────────────────────────────────
 
 export type SupportAccessConfig = {
@@ -1405,6 +1422,36 @@ export function updateProgramAnnouncement(
 
 export function deleteProgramAnnouncement(id: string): Promise<void> {
   return request<void>(`/programs/announcements/${id}`, { method: "DELETE" });
+}
+
+// ─── Program Partnership Enquiries ─────────────────────────────────────────────
+
+export function listProgramPartnershipEnquiries(
+  programId: string,
+  params?: { page?: number; limit?: number; status?: string; search?: string },
+): Promise<Paginated<PartnershipEnquiry>> {
+  const q = new URLSearchParams();
+  if (params?.page) q.set("page", String(params.page));
+  if (params?.limit) q.set("limit", String(params.limit));
+  if (params?.status) q.set("status", params.status);
+  if (params?.search) q.set("search", params.search);
+  return requestPaginated<PartnershipEnquiry>(
+    `/admin/programs/${encodeURIComponent(programId)}/partnership-enquiries?${q}`,
+  );
+}
+
+export function updateProgramPartnershipEnquiryStatus(
+  programId: string,
+  enquiryId: string,
+  status: string,
+): Promise<PartnershipEnquiry> {
+  return request<PartnershipEnquiry>(
+    `/admin/programs/${encodeURIComponent(programId)}/partnership-enquiries/${encodeURIComponent(enquiryId)}/status`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    },
+  );
 }
 
 // ─── System Announcements ─────────────────────────────────────────────────────
