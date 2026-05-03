@@ -67,20 +67,6 @@ rate(db_transaction_total{status="success"}[5m]) /
 rate(db_transaction_total[5m])
 ```
 
-### 3.1 Database Query and Pool Metrics
-```promql
-# Slow query rate by model/operation
-rate(prisma_slow_query_total[5m])
-
-# Query latency (P95)
-histogram_quantile(0.95, rate(prisma_query_duration_seconds_bucket[5m]))
-
-# Pool pressure
-prisma_pool_connections_open
-prisma_pool_connections_idle
-prisma_pool_connections_waiting
-```
-
 ### 4. Business Metrics
 ```promql
 # Payment Volume
