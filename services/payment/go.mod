@@ -27,6 +27,7 @@ require (
 	google.golang.org/grpc v1.70.0-dev
 	google.golang.org/protobuf v1.36.11
 	gorm.io/driver/postgres v1.5.11
+	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.30.0
 )
 
@@ -101,5 +102,4 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251029180050-ab9386a59fda // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	gorm.io/driver/sqlite v1.6.0 // indirect
 )
