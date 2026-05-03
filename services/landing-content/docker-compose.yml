@@ -1,0 +1,28 @@
+services:
+  landing-content:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: ybb-landing-content
+    restart: unless-stopped
+    ports:
+      - '4003:4003'
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 4003
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@${DATABASE_HOST:-ybb-postgres-api}:5432/${DATABASE_NAME}?schema=public}
+    volumes:
+      - .:/app
+      - /app/node_modules
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    networks:
+      - default
+      - ybb-network
+
+networks:
+  ybb-network:
+    name: ybb-network
+    external: true
