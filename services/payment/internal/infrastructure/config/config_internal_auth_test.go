@@ -10,7 +10,7 @@ func TestRequiresInternalServiceKey(t *testing.T) {
 		environment string
 		expected    bool
 	}{
-		{name: "empty", environment: "", expected: false},
+		{name: "empty (unset) fails closed", environment: "", expected: true},
 		{name: "development", environment: "development", expected: false},
 		{name: "dev", environment: "dev", expected: false},
 		{name: "local", environment: "local", expected: false},
@@ -41,8 +41,18 @@ func TestValidateInternalServiceKey(t *testing.T) {
 		t.Fatal("expected validation error for missing key in staging")
 	}
 
+	// Empty/unset ENVIRONMENT must also fail closed.
+	if err := validateInternalServiceKey("", ""); err == nil {
+		t.Fatal("expected validation error when ENVIRONMENT is unset and key is missing")
+	}
+
 	if err := validateInternalServiceKey("production", "payment-shared-key"); err != nil {
 		t.Fatalf("expected valid key in production, got %v", err)
+	}
+
+	// Empty ENVIRONMENT with a key provided should succeed.
+	if err := validateInternalServiceKey("", "payment-shared-key"); err != nil {
+		t.Fatalf("expected valid key when ENVIRONMENT is unset but key is provided, got %v", err)
 	}
 
 	if err := validateInternalServiceKey("development", ""); err != nil {
