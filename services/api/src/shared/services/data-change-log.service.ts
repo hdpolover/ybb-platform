@@ -160,6 +160,14 @@ function sanitizeAuditValue(value: unknown, depth = 0): unknown {
     }
 
     if (typeof value === 'object') {
+        // Date instances must be serialized before Object.entries, which would return '{}'
+        if (value instanceof Date) return value.toISOString();
+
+        // Objects with toJSON (e.g., Prisma.Decimal) — use their own serialization
+        if (typeof (value as { toJSON?: unknown }).toJSON === 'function') {
+            return sanitizeAuditValue((value as { toJSON: () => unknown }).toJSON(), depth + 1);
+        }
+
         const entries = Object.entries(value as Record<string, unknown>);
         const limitedEntries = entries.slice(0, MAX_OBJECT_KEYS);
         const result: Record<string, unknown> = {};
@@ -186,13 +194,14 @@ function limitAuditJsonSize(value: unknown): unknown {
     if (value === undefined) return undefined;
 
     const asJson = JSON.stringify(value);
-    if (asJson.length <= MAX_AUDIT_JSON_BYTES) {
+    const byteLength = Buffer.byteLength(asJson, 'utf8');
+    if (byteLength <= MAX_AUDIT_JSON_BYTES) {
         return value;
     }
 
     return {
         __truncated__: true,
-        __original_size_bytes__: asJson.length,
+        __original_size_bytes__: byteLength,
         preview: asJson.slice(0, MAX_AUDIT_JSON_BYTES),
     };
 }
