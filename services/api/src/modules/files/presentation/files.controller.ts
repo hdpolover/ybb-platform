@@ -279,10 +279,10 @@ export class FilesController {
   @UseInterceptors(FileInterceptor('file'))
   async uploadFile(
     @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: CurrentUserData,
     @Body('bucket') bucket: string = 'documents',
     @Body('program_id') programId?: string,
     @Body('participant_id') participantId?: string,
-    @CurrentUser() user: CurrentUserData,
   ) {
     try {
       const userId = user.userId;
@@ -406,8 +406,8 @@ export class FilesController {
   @ApiResponse({ status: 200, description: 'File transitioned to READY (or already was)' })
   async markFileReady(
     @Param('fileId') fileId: string,
-    @Query('actual_size') actualSize?: string,
     @CurrentUser() user: CurrentUserData,
+    @Query('actual_size') actualSize?: string,
   ): Promise<FileResponse> {
     this.logger.log(`Marking file ready: ${fileId} (brand ${user.brandId}, user ${user.userId})`);
     const parsed = actualSize ? Number(actualSize) : NaN;
