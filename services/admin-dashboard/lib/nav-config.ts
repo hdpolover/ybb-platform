@@ -27,6 +27,7 @@ import {
   HelpCircle,
   BookOpen,
   Handshake,
+  LifeBuoy,
   ShieldCheck,
   Shield,
   Menu,
@@ -194,6 +195,7 @@ export const programNavSections: NavSection[] = [
       },
       { id: "announcements", label: "Announcements", href: "announcements", icon: Bell },
       { id: "partnerships", label: "Partnerships", href: "partnerships", icon: Handshake },
+      { id: "support-tickets", label: "Support Tickets", href: "support-tickets", icon: LifeBuoy },
     ],
   },
   {

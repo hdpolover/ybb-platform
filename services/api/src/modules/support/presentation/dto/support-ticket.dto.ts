@@ -1,7 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEnum } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsUUID } from 'class-validator';
 
 export class CreateSupportTicketDto {
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsUUID()
+    programId?: string;
+
     @ApiProperty()
     @IsString()
     category: string;

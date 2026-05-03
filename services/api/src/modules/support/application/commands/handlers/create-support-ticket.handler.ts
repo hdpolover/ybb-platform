@@ -38,6 +38,8 @@ export class CreateSupportTicketHandler implements ICommandHandler<CreateSupport
             new Date(),
             new Date(),
             dto.subCategory,
+            null,
+            dto.programId ?? null,
         );
 
         const created = await this.repository.create(ticket);

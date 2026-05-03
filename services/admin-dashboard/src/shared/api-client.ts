@@ -482,6 +482,51 @@ export type PartnershipEnquiry = {
   updatedAt: string;
 };
 
+export type ProgramSupportTicket = {
+  id: string;
+  ticketNumber: string;
+  category: string;
+  subCategory: string | null;
+  subject: string;
+  description: string;
+  status: "open" | "in_progress" | "waiting_response" | "resolved" | "closed";
+  priority: "low" | "normal" | "high" | "urgent";
+  assignedTo: string | null;
+  participantId: string;
+  participantName: string | null;
+  participantEmail: string | null;
+  createdAt: string;
+  updatedAt: string;
+  latestMessageAt: string | null;
+};
+
+export type ProgramSupportTicketDetail = {
+  id: string;
+  ticketNumber: string;
+  category: string;
+  subCategory: string | null;
+  subject: string;
+  description: string;
+  status: "open" | "in_progress" | "waiting_response" | "resolved" | "closed";
+  priority: "low" | "normal" | "high" | "urgent";
+  assignedTo: string | null;
+  resolution: string | null;
+  participantId: string;
+  participantName: string | null;
+  participantEmail: string | null;
+  createdAt: string;
+  updatedAt: string;
+  messages: Array<{
+    id: string;
+    message: string;
+    isFromAdmin: boolean;
+    senderId: string;
+    senderName: string;
+    attachments: unknown;
+    createdAt: string;
+  }>;
+};
+
 // ─── Admins ───────────────────────────────────────────────────────────────────
 
 export type SupportAccessConfig = {
@@ -1422,6 +1467,82 @@ export function updateProgramAnnouncement(
 
 export function deleteProgramAnnouncement(id: string): Promise<void> {
   return request<void>(`/programs/announcements/${id}`, { method: "DELETE" });
+}
+
+// ─── Program Support Tickets ───────────────────────────────────────────────────
+
+export function listProgramSupportTickets(
+  programId: string,
+  params?: {
+    page?: number;
+    limit?: number;
+    status?: ProgramSupportTicket["status"];
+    priority?: ProgramSupportTicket["priority"];
+    search?: string;
+  },
+): Promise<Paginated<ProgramSupportTicket>> {
+  const q = new URLSearchParams();
+  if (params?.page) q.set("page", String(params.page));
+  if (params?.limit) q.set("limit", String(params.limit));
+  if (params?.status) q.set("status", params.status);
+  if (params?.priority) q.set("priority", params.priority);
+  if (params?.search) q.set("search", params.search);
+  return requestPaginated<ProgramSupportTicket>(
+    `/admin/programs/${encodeURIComponent(programId)}/support-tickets?${q}`,
+  );
+}
+
+export function getProgramSupportTicket(
+  programId: string,
+  ticketId: string,
+): Promise<ProgramSupportTicketDetail> {
+  return request<ProgramSupportTicketDetail>(
+    `/admin/programs/${encodeURIComponent(programId)}/support-tickets/${encodeURIComponent(ticketId)}`,
+  );
+}
+
+export function updateProgramSupportTicket(
+  programId: string,
+  ticketId: string,
+  input: Partial<{
+    status: ProgramSupportTicket["status"];
+    priority: ProgramSupportTicket["priority"];
+    assignedTo: string | null;
+    resolution: string | null;
+  }>,
+): Promise<ProgramSupportTicketDetail> {
+  return request<ProgramSupportTicketDetail>(
+    `/admin/programs/${encodeURIComponent(programId)}/support-tickets/${encodeURIComponent(ticketId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function replyProgramSupportTicket(
+  programId: string,
+  ticketId: string,
+  input: {
+    message: string;
+    attachments?: unknown[];
+    isInternalNote?: boolean;
+  },
+): Promise<ProgramSupportTicketDetail["messages"][number]> {
+  return request<ProgramSupportTicketDetail["messages"][number]>(
+    `/admin/programs/${encodeURIComponent(programId)}/support-tickets/${encodeURIComponent(ticketId)}/messages`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function deleteProgramSupportTicket(programId: string, ticketId: string): Promise<void> {
+  return request<void>(
+    `/admin/programs/${encodeURIComponent(programId)}/support-tickets/${encodeURIComponent(ticketId)}`,
+    { method: "DELETE" },
+  );
 }
 
 // ─── Program Partnership Enquiries ─────────────────────────────────────────────
