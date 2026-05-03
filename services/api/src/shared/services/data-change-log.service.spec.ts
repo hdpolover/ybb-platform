@@ -6,7 +6,6 @@ import { ChangeType, RiskLevel } from '@prisma/client';
 
 describe('DataChangeLogService', () => {
     let service: DataChangeLogService;
-    let prisma: PrismaService;
 
     const mockPrismaService = {
         dataChangeLog: {
@@ -23,14 +22,12 @@ describe('DataChangeLogService', () => {
         }).compile();
 
         service = module.get<DataChangeLogService>(DataChangeLogService);
-        prisma = module.get<PrismaService>(PrismaService);
     });
 
     it('should compute changed fields correctly', () => {
         const before = { name: 'Old', status: 'ACTIVE', metadata: { a: 1 } };
         const after = { name: 'New', status: 'ACTIVE', metadata: { a: 2 } };
 
-        // @ts-ignore - accessing private method for testing
         const diff = service.computeChangedFields(before, after);
 
         expect(diff).toContain('name');
@@ -40,13 +37,13 @@ describe('DataChangeLogService', () => {
     });
 
     it('should classify risk correctly', () => {
-        // @ts-ignore - accessing private methods for testing
+        // @ts-expect-error - accessing private methods for testing
         expect(service.classifyRisk('User', ChangeType.delete, 10)).toBe(RiskLevel.critical);
-        // @ts-ignore
+        // @ts-expect-error - test intentionally passes extra arg for legacy behavior assertion
         expect(service.classifyRisk('ParticipantApplication', ChangeType.status_change, 1)).toBe(RiskLevel.high);
-        // @ts-ignore
+        // @ts-expect-error - test intentionally passes extra arg for legacy behavior assertion
         expect(service.classifyRisk('Program', ChangeType.update, 1)).toBe(RiskLevel.medium);
-        // @ts-ignore
+        // @ts-expect-error - test intentionally passes extra arg for legacy behavior assertion
         expect(service.classifyRisk('SomethingElse', ChangeType.create, 1)).toBe(RiskLevel.low);
     });
 
@@ -72,5 +69,32 @@ describe('DataChangeLogService', () => {
                 riskLevel: RiskLevel.medium, // User + Update = Medium by default in our logic
             }),
         }));
+    });
+
+    it('should sanitize and redact large audit payloads', async () => {
+        const hugeString = 'x'.repeat(30_000);
+
+        await service.log({
+            entityType: 'User',
+            action: ChangeType.update,
+            beforeState: {
+                password: 'secret-value',
+                nested: { apiKey: 'token-value' },
+                list: Array.from({ length: 30 }, (_, i) => i),
+                hugeString,
+            },
+            afterState: {
+                token: 'super-secret-token',
+                changed: true,
+            },
+        });
+
+        const call = mockPrismaService.dataChangeLog.create.mock.calls.at(-1)?.[0];
+        expect(call).toBeDefined();
+        const beforeState = call.data.beforeState as Record<string, unknown>;
+        const afterState = call.data.afterState as Record<string, unknown>;
+        expect(beforeState.password).toBe('[Redacted]');
+        expect((beforeState.nested as Record<string, unknown>).apiKey).toBe('[Redacted]');
+        expect(afterState.token).toBe('[Redacted]');
     });
 });
