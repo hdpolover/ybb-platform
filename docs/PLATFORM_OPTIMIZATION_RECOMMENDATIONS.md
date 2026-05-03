@@ -36,7 +36,8 @@ This section is updated during execution so progress can be tracked without chec
 | 2026-05-03 | PR #6 - BFF CSRF/origin guard (`ybb-program-next`) | Merged | Added shared same-origin guard for mutating BFF routes in log-only rollout mode behind `ENABLE_CSRF_GUARD`. PR: https://github.com/hdpolover/ybb-program-next/pull/19 |
 | 2026-05-03 | PR #7 - Brand-scoped cache and revalidation (`ybb-program-next`) | Merged | Added brand-scoped cache tags/localStorage keys and brand-targeted revalidation (`?brandDomain=`) while keeping global revalidation fallback. PR: https://github.com/hdpolover/ybb-program-next/pull/20 |
 | 2026-05-03 | PR #8 - Database index batch 1 (`ybb-platform/services/api`) | Merged | Added highest-impact composite indexes for applications, programs, users, and invoices via Prisma migration. PR: https://github.com/hdpolover/ybb-platform/pull/6 |
-| 2026-05-03 | PR #9 - Stats query optimization (`ybb-platform/services/api`) | In review | Replaced row-loading distinct-country counts with SQL `COUNT(DISTINCT ...)` in stats impact/geography flows and added focused unit coverage. PR: https://github.com/hdpolover/ybb-platform/pull/7 |
+| 2026-05-03 | PR #9 - Stats query optimization (`ybb-platform/services/api`) | Merged | Replaced row-loading distinct-country counts with SQL `COUNT(DISTINCT ...)` in stats impact/geography flows and added focused unit coverage. PR: https://github.com/hdpolover/ybb-platform/pull/7 |
+| 2026-05-04 | PR #10 - File service security hardening (`ybb-platform/services/file` + `services/api`) | In review | Added internal service-key guard for private file endpoints, enforced user+brand ownership on file-ready flow, and wired API gateway to derive identity from JWT instead of client-supplied IDs. PR: https://github.com/hdpolover/ybb-platform/pull/9 |
 
 ## Priority Summary
 

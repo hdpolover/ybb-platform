@@ -44,6 +44,7 @@ export interface CreateUploadUrlResponse {
 export class FileServiceClient {
   private readonly logger = new Logger(FileServiceClient.name);
   private readonly fileServiceUrl: string;
+  private readonly internalServiceKey: string;
 
   constructor(
     private readonly httpService: HttpService,
@@ -54,7 +55,16 @@ export class FileServiceClient {
       'FILE_SERVICE_URL',
       'http://file-service:8001',
     );
+    this.internalServiceKey = this.configService.get<string>('FILE_SERVICE_INTERNAL_KEY', '');
     this.logger.log(`File Service URL: ${this.fileServiceUrl}`);
+  }
+
+  private getInternalHeaders(extra?: Record<string, string>): Record<string, string> {
+    const headers: Record<string, string> = { ...(extra ?? {}) };
+    if (this.internalServiceKey) {
+      headers['x-internal-service-key'] = this.internalServiceKey;
+    }
+    return headers;
   }
 
   private async executeRequest<T>(operation: () => Promise<T>, service: string = 'storage'): Promise<T> {
@@ -99,7 +109,7 @@ export class FileServiceClient {
             `${this.fileServiceUrl}/api/v1/files/upload`,
             formData,
             {
-              headers: formData.getHeaders(),
+              headers: this.getInternalHeaders(formData.getHeaders() as Record<string, string>),
             },
           ),
         );
@@ -125,6 +135,7 @@ export class FileServiceClient {
           this.httpService.get(
             `${this.fileServiceUrl}/api/v1/files/${fileId}`,
             {
+              headers: this.getInternalHeaders(),
               params: { user_id: userId, brand_id: brandId },
             },
           ),
@@ -353,6 +364,7 @@ export class FileServiceClient {
           this.httpService.get(
             `${this.fileServiceUrl}/api/v1/media/program/${params.programId}`,
             {
+              headers: this.getInternalHeaders(),
               params: {
                 brand_id: params.brandId,
                 asset_type: params.assetType,
@@ -383,6 +395,9 @@ export class FileServiceClient {
           this.httpService.post(
             `${this.fileServiceUrl}/api/v1/files/upload-url`,
             request,
+            {
+              headers: this.getInternalHeaders(),
+            },
           ),
         );
         return response.data;
@@ -401,6 +416,7 @@ export class FileServiceClient {
    */
   async markFileReady(
     fileId: string,
+    userId: string,
     brandId: string,
     actualSize?: number,
   ): Promise<FileResponse> {
@@ -412,9 +428,11 @@ export class FileServiceClient {
             null,
             {
               params: {
+                user_id: userId,
                 brand_id: brandId,
                 ...(actualSize !== undefined ? { actual_size: actualSize } : {}),
               },
+              headers: this.getInternalHeaders(),
             },
           ),
         );
@@ -437,7 +455,10 @@ export class FileServiceClient {
         await firstValueFrom(
           this.httpService.delete(
             `${this.fileServiceUrl}/api/v1/media/${fileId}`,
-            { params: { brand_id: brandId } },
+            {
+              headers: this.getInternalHeaders(),
+              params: { brand_id: brandId },
+            },
           ),
         );
       } catch (error: unknown) {
