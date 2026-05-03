@@ -11,6 +11,7 @@ import { FaqsStrategy } from './strategies/faqs.strategy';
 import { Brand } from '@prisma/client';
 import { LandingPageResponseDto } from './dto/landing-page.dto';
 import { LandingSettingsResponseDto } from './dto/landing-settings.dto';
+import { LandingSnapshotService } from './services/landing-snapshot.service';
 
 const DEFAULT_FAQ_LIMIT = 200;
 
@@ -27,6 +28,7 @@ export class LandingService {
     private readonly announcementsStrategy: AnnouncementsStrategy,
     private readonly settingsStrategy: SettingsStrategy,
     private readonly faqsStrategy: FaqsStrategy,
+    private readonly landingSnapshotService: LandingSnapshotService,
   ) { }
 
   private async resolveBrand(url?: string): Promise<Brand | null> {
@@ -76,6 +78,12 @@ export class LandingService {
 
   async getHome(url?: string): Promise<LandingPageResponseDto> {
     const brand = await this.resolveBrand(url);
+    if (brand) {
+      return this.landingSnapshotService.getOrBuildHomeSnapshot(
+        brand,
+        () => this.homeStrategy.getData(brand) as Promise<LandingPageResponseDto>,
+      );
+    }
     return this.homeStrategy.getData(brand) as Promise<LandingPageResponseDto>;
   }
 
@@ -86,6 +94,12 @@ export class LandingService {
 
   async getPrograms(url?: string): Promise<LandingPageResponseDto> {
     const brand = await this.resolveBrand(url);
+    if (brand) {
+      return this.landingSnapshotService.getOrBuildProgramsSnapshot(
+        brand,
+        () => this.programsStrategy.getData(brand) as Promise<LandingPageResponseDto>,
+      );
+    }
     return this.programsStrategy.getData(brand) as Promise<LandingPageResponseDto>;
   }
 

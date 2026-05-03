@@ -7,6 +7,8 @@ import { CacheService } from '../../../shared/infrastructure/cache/cache.service
 import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
 
 const ROOT_SLUG = '';
+const HOME_PAGE = 'home';
+const PROGRAMS_PAGE = 'programs';
 const FAQS_PAGE = 'faqs';
 const PARTNERS_PAGE = 'partners-sponsors';
 const SETTINGS_PAGE = 'settings';
@@ -31,6 +33,32 @@ export class LandingSnapshotService {
       FAQS_PAGE,
       build,
       CACHE_TTL.LONG,
+      this.toLandingPagePayload.bind(this),
+    );
+  }
+
+  async getOrBuildHomeSnapshot(
+    brand: Brand,
+    build: SnapshotBuilder<LandingPageResponseDto>,
+  ): Promise<LandingPageResponseDto> {
+    return this.getOrBuildSnapshot(
+      brand,
+      HOME_PAGE,
+      build,
+      CACHE_TTL.HOUR,
+      this.toLandingPagePayload.bind(this),
+    );
+  }
+
+  async getOrBuildProgramsSnapshot(
+    brand: Brand,
+    build: SnapshotBuilder<LandingPageResponseDto>,
+  ): Promise<LandingPageResponseDto> {
+    return this.getOrBuildSnapshot(
+      brand,
+      PROGRAMS_PAGE,
+      build,
+      CACHE_TTL.HOUR,
       this.toLandingPagePayload.bind(this),
     );
   }
