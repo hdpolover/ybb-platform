@@ -82,8 +82,8 @@ export class ForgotPasswordHandler {
         });
 
         if (!user) {
-            this.logger.warn(`Forgot password requested for non-existent email: ${command.email}`);
-            throw new NotFoundException(`User with email ${command.email} not found.`);
+            this.logger.warn('Forgot password requested for non-existent account');
+            throw new NotFoundException(`User not found.`);
         }
 
         // Generate a fake reset token for simulation
@@ -123,7 +123,7 @@ export class ForgotPasswordHandler {
             } : null
         } : null;
 
-        this.logger.log(`Emitting user.forgot-password for ${command.email}`);
+        this.logger.log('Emitting user.forgot-password event');
         await this.rabbitmqProducer.emit('user.forgot-password', {
             email: user.email,
             name: user.email.split('@')[0], // Fallback name
