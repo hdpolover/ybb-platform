@@ -34,7 +34,9 @@ export class GetSupportTicketHandler implements IQueryHandler<GetSupportTicketQu
             id: ticket.id,
             ticketNumber: ticket.ticketNumber,
             category: ticket.category,
+            subCategory: ticket.subCategory,
             subject: ticket.subject,
+            description: ticket.description,
             status: ticket.status,
             priority: ticket.priority,
             createdAt: ticket.createdAt,
@@ -45,7 +47,7 @@ export class GetSupportTicketHandler implements IQueryHandler<GetSupportTicketQu
                 isFromAdmin: m.isFromAdmin,
                 senderName: m.senderName,
                 createdAt: m.createdAt,
-                attachments: m.attachments as unknown as string[],
+                attachments: m.attachments as unknown as import('@modules/support/presentation/dto/support-ticket.dto').SupportTicketAttachmentDto[],
             })),
         };
     }

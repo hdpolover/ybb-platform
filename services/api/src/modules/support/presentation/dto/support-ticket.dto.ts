@@ -1,7 +1,37 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEnum } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsArray, IsEnum, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
+
+export class SupportTicketAttachmentDto {
+    @ApiProperty()
+    @IsString()
+    fileId: string;
+
+    @ApiProperty()
+    @IsString()
+    fileName: string;
+
+    @ApiProperty()
+    @IsString()
+    fileUrl: string;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsString()
+    mimeType?: string;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsString()
+    uploadedAt?: string;
+}
 
 export class CreateSupportTicketDto {
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsUUID()
+    programId?: string;
+
     @ApiProperty()
     @IsString()
     category: string;
@@ -19,6 +49,13 @@ export class CreateSupportTicketDto {
     @IsString()
     description: string;
 
+    @ApiProperty({ type: [SupportTicketAttachmentDto], required: false })
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => SupportTicketAttachmentDto)
+    attachments?: SupportTicketAttachmentDto[];
+
     @ApiProperty({ required: false, enum: ['low', 'normal', 'high'] })
     @IsOptional()
     @IsEnum(['low', 'normal', 'high'])
@@ -30,9 +67,12 @@ export class ReplySupportTicketDto {
     @IsString()
     message: string;
 
-    @ApiProperty({ required: false })
+    @ApiProperty({ type: [SupportTicketAttachmentDto], required: false })
     @IsOptional()
-    attachments?: string[];
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => SupportTicketAttachmentDto)
+    attachments?: SupportTicketAttachmentDto[];
 }
 
 export class SupportTicketMessageResponseDto {
@@ -51,8 +91,8 @@ export class SupportTicketMessageResponseDto {
     @ApiProperty()
     createdAt: Date;
 
-    @ApiProperty()
-    attachments: string[];
+    @ApiProperty({ type: [SupportTicketAttachmentDto] })
+    attachments: SupportTicketAttachmentDto[];
 }
 
 export class SupportTicketResponseDto {
@@ -65,8 +105,14 @@ export class SupportTicketResponseDto {
     @ApiProperty()
     category: string;
 
+    @ApiProperty({ required: false })
+    subCategory?: string | null;
+
     @ApiProperty()
     subject: string;
+
+    @ApiProperty({ required: false })
+    description?: string;
 
     @ApiProperty()
     status: string;
