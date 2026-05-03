@@ -82,32 +82,22 @@ export class StatsService {
   }
 
   private async getImpactStats(categoryId: string) {
-    const totalParticipants = await this.prisma.participant.count({
-      where: { user: { brandId: categoryId } },
-    });
-
-    const alumni = await this.prisma.participantApplication.count({
-      where: {
-        program: { brandId: categoryId },
-        status: { in: ['accepted', 'interview_scheduled'] },
-      },
-    });
-
-    // Total Countries (Distinct)
-    // Note: This can be heavy if participants are millions, but fine for thousands.
-    // Optimization: Depending on DB size, could assume geography list length if page limit is high, but distinct count is better.
-    const distinctCountries = await this.prisma.participant.findMany({
-      where: {
-        user: { brandId: categoryId },
-        originCountry: { not: null },
-      },
-      distinct: ['originCountry'],
-      select: { originCountry: true },
-    });
+    const [totalParticipants, alumni, totalCountries] = await Promise.all([
+      this.prisma.participant.count({
+        where: { user: { brandId: categoryId } },
+      }),
+      this.prisma.participantApplication.count({
+        where: {
+          program: { brandId: categoryId },
+          status: { in: ['accepted', 'interview_scheduled'] },
+        },
+      }),
+      this.getDistinctCountryCount(categoryId),
+    ]);
 
     return {
       total_participants: totalParticipants,
-      total_countries: distinctCountries.length,
+      total_countries: totalCountries,
       alumni: alumni,
     };
   }
@@ -142,18 +132,7 @@ export class StatsService {
       skip: skip,
     });
 
-    // We also need total count of *groups* (countries) to calculate total pages for geography list
-    // This is essentially "total_countries" from impact, but let's re-query to be safe/isolated
-    // Usually standard SQL: SELECT COUNT(DISTINCT country) ...
-    // Prisma:
-    const distinctCountriesCount = (await this.prisma.participant.findMany({
-      where: {
-        user: { brandId: categoryId },
-        originCountry: { not: null },
-      },
-      distinct: ['originCountry'],
-      select: { id: true } // minimal select
-    })).length;
+    const distinctCountriesCount = await this.getDistinctCountryCount(categoryId);
 
 
     const items: ParticipantGeographyItemDto[] = grouped.map((g) => {
@@ -175,6 +154,18 @@ export class StatsService {
         totalPages: Math.ceil(distinctCountriesCount / limit)
       }
     }
+  }
+
+  private async getDistinctCountryCount(categoryId: string): Promise<number> {
+    const result = await this.prisma.$queryRaw<Array<{ count: bigint | number }>>`
+      SELECT COUNT(DISTINCT p.origin_country) AS count
+      FROM participants p
+      INNER JOIN users u ON u.id = p.user_id
+      WHERE u.brand_id = ${categoryId}
+        AND p.origin_country IS NOT NULL
+    `;
+    const countValue = result[0]?.count ?? 0;
+    return typeof countValue === 'bigint' ? Number(countValue) : countValue;
   }
 
   async getAdminAnalytics(brandId?: string) {
