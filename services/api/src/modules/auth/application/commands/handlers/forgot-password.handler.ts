@@ -83,7 +83,7 @@ export class ForgotPasswordHandler {
 
         if (!user) {
             this.logger.warn('Forgot password requested for non-existent account');
-            throw new NotFoundException(`User with email ${command.email} not found.`);
+            throw new NotFoundException(`User not found.`);
         }
 
         // Generate a fake reset token for simulation

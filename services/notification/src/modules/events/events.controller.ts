@@ -1,5 +1,5 @@
 import { Controller, Logger } from '@nestjs/common';
-import { EventPattern, Payload, Ctx, RmqContext } from '@nestjs/microservices';
+import { EventPattern, Payload } from '@nestjs/microservices';
 import { EmailService } from '../email/email.service';
 import { ReceiptService } from '../email/receipt.service';
 import {
@@ -17,10 +17,7 @@ export class EventsController {
   ) {}
 
   @EventPattern('payment.succeeded')
-  async handlePaymentSucceeded(
-    @Payload() data: any,
-    @Ctx() context: RmqContext,
-  ) {
+  async handlePaymentSucceeded(@Payload() data: any) {
     this.logger.log(
       `Received payment.succeeded event: ${JSON.stringify(summarizeEventPayload(data))}`,
     );
@@ -63,7 +60,7 @@ export class EventsController {
   }
 
   @EventPattern('payment.created')
-  async handlePaymentCreated(@Payload() data: any, @Ctx() context: RmqContext) {
+  async handlePaymentCreated(@Payload() data: any) {
     this.logger.log(
       `Received payment.created event: ${JSON.stringify(summarizeEventPayload(data))}`,
     );
@@ -80,7 +77,7 @@ export class EventsController {
   }
 
   @EventPattern('payment.failed')
-  async handlePaymentFailed(@Payload() data: any, @Ctx() context: RmqContext) {
+  async handlePaymentFailed(@Payload() data: any) {
     this.logger.log(
       `Received payment.failed event: ${JSON.stringify(summarizeEventPayload(data))}`,
     );
@@ -98,10 +95,7 @@ export class EventsController {
   }
 
   @EventPattern('payment.refunded')
-  async handlePaymentRefunded(
-    @Payload() data: any,
-    @Ctx() context: RmqContext,
-  ) {
+  async handlePaymentRefunded(@Payload() data: any) {
     this.logger.log(
       `Received payment.refunded event: ${JSON.stringify(summarizeEventPayload(data))}`,
     );
@@ -149,7 +143,7 @@ export class EventsController {
   }
 
   @EventPattern('user.verify-email')
-  async handleVerifyEmail(@Payload() data: any, @Ctx() context: RmqContext) {
+  async handleVerifyEmail(@Payload() data: any) {
     this.logger.log(`Received user.verify-email event START processing`);
     this.logger.log(
       `Event Data: ${JSON.stringify(summarizeEventPayload(data))}`,
