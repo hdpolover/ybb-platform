@@ -26,8 +26,8 @@ class MarkFileReadyHandler:
         if not file:
             raise FileNotFoundException(command.file_id)
 
-        # Brand-scope check — a caller can only ready files belonging to their brand
-        if file.brand_id != command.brand_id:
+        # Ownership check — caller must match both brand and user
+        if file.brand_id != command.brand_id or file.user_id != command.user_id:
             raise FileNotFoundException(command.file_id)
 
         # Idempotent: re-marking a READY file is a no-op
