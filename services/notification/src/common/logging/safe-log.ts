@@ -26,12 +26,14 @@ export function summarizeEventPayload(
       ? (data.metadata as Record<string, unknown>)
       : undefined;
 
+  const hasEmail = typeof data.email === 'string' && data.email.length > 0;
+
   return {
     paymentId: data.payment_id ?? data.order_id ?? null,
     status: data.status ?? null,
     gateway: data.gateway ?? null,
-    hasEmail: typeof data.email === 'string' && data.email.length > 0,
-    email: maskEmail(data.email),
+    hasEmail,
+    ...(hasEmail ? { email: maskEmail(data.email) } : {}),
     hasToken: typeof data.token === 'string' && data.token.length > 0,
     metadataKeys: metadata ? Object.keys(metadata).slice(0, 10) : [],
   };

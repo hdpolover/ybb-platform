@@ -444,9 +444,14 @@ export class EmailService {
       `[sendVerificationEmail] Using base URL for link: ${baseUrl}`,
     );
 
+    const normalizedBaseUrl = /^https?:\/\//i.test(baseUrl)
+      ? baseUrl
+      : `https://${baseUrl}`;
+    const verificationUrl = `${normalizedBaseUrl.replace(/\/$/, '')}/auth/verify-email?token=${encodeURIComponent(token)}`;
+
     const html = await this.compileTemplate('verify-email', {
       name,
-      verificationUrl: `${baseUrl}/auth/verify-email?token=${token}`,
+      verificationUrl,
       brand,
     });
     const subject = brand
