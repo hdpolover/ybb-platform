@@ -84,12 +84,13 @@ export class StatsService {
   private async getImpactStats(categoryId: string) {
     const [totalParticipants, alumni, totalCountries] = await Promise.all([
       this.prisma.participant.count({
-        where: { user: { brandId: categoryId } },
+        where: { user: { brandId: categoryId }, deletedAt: null },
       }),
       this.prisma.participantApplication.count({
         where: {
           program: { brandId: categoryId },
           status: { in: ['accepted', 'interview_scheduled'] },
+          deletedAt: null,
         },
       }),
       this.getDistinctCountryCount(categoryId),
@@ -107,7 +108,7 @@ export class StatsService {
 
     // 1. Get Totals first for percentage calculation
     const totalParticipants = await this.prisma.participant.count({
-      where: { user: { brandId: categoryId } },
+      where: { user: { brandId: categoryId }, deletedAt: null },
     });
 
     if (totalParticipants === 0) return { items: [], meta: { total: 0, page, limit, totalPages: 0 } };
@@ -121,6 +122,7 @@ export class StatsService {
       where: {
         user: { brandId: categoryId },
         originCountry: { not: null },
+        deletedAt: null,
       },
       _count: { id: true },
       orderBy: {
@@ -163,6 +165,8 @@ export class StatsService {
       INNER JOIN users u ON u.id = p.user_id
       WHERE u.brand_id = ${categoryId}
         AND p.origin_country IS NOT NULL
+        AND p.deleted_at IS NULL
+        AND u.deleted_at IS NULL
     `;
     const countValue = result[0]?.count ?? 0;
     return typeof countValue === 'bigint' ? Number(countValue) : countValue;
