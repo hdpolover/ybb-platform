@@ -130,6 +130,7 @@ export default function PlatformMetricsPage() {
       const data = await getPlatformMetricsSnapshot();
       setRawMetrics(data.raw);
     } catch (err) {
+      setRawMetrics("");
       setError(err instanceof Error ? err.message : "Failed to load platform metrics.");
     } finally {
       setLoading(false);
