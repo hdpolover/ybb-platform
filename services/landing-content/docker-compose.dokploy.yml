@@ -14,13 +14,6 @@ services:
       OTEL_LOG_LEVEL: ${OTEL_LOG_LEVEL:-info}
     networks:
       - dokploy-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=dokploy-network"
-      - "traefik.http.routers.ybb-prod-landing-content.rule=${APP_DOMAINS_RULE:-Host(`landing-content.ybbhub.com`)}"
-      - "traefik.http.routers.ybb-prod-landing-content.entrypoints=websecure"
-      - "traefik.http.routers.ybb-prod-landing-content.tls.certresolver=letsencrypt"
-      - "traefik.http.services.ybb-prod-landing-content.loadbalancer.server.port=4003"
 
 networks:
   dokploy-network:
