@@ -1,3 +1,5 @@
+import { redirectToLogin } from "@/src/shared/login-redirect";
+
 export type PlatformBrand = {
   id: string;
   name: string;
@@ -152,7 +154,8 @@ function getAccessToken(): string {
 
   const token = window.localStorage.getItem("access_token");
   if (!token) {
-    throw new Error("Your session has expired. Please sign in again.");
+    redirectToLogin("session_expired");
+    throw new Error("Session expired. Redirecting to login...");
   }
 
   return token;
@@ -195,10 +198,7 @@ async function request<T>(
   });
 
   if (response.status === 401) {
-    ["access_token", "refresh_token", "admin_auth_session"].forEach((key) =>
-      window.localStorage.removeItem(key),
-    );
-    window.location.href = "/login";
+    redirectToLogin("session_expired");
     throw new Error("Session expired. Redirecting to login...");
   }
 

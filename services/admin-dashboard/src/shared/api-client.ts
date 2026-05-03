@@ -6,6 +6,8 @@
  * unwrap `data` envelope automatically).
  */
 
+import { redirectToLogin } from "@/src/shared/login-redirect";
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 export function buildApiUrl(path: string): string {
@@ -18,7 +20,10 @@ export function getAccessToken(): string {
   if (typeof window === "undefined")
     throw new Error("Authentication is only available in the browser.");
   const token = window.localStorage.getItem("access_token");
-  if (!token) throw new Error("Your session has expired. Please sign in again.");
+  if (!token) {
+    redirectToLogin("session_expired");
+    throw new Error("Session expired. Redirecting to login...");
+  }
   return token;
 }
 
@@ -46,6 +51,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   const res = await fetch(buildApiUrl(path), { ...init, headers });
+
+  if (res.status === 401) {
+    redirectToLogin("session_expired");
+    throw new Error("Session expired. Redirecting to login...");
+  }
 
   if (!res.ok) throw new Error(await readErrorMessage(res));
   if (res.status === 204) return undefined as T;
@@ -88,6 +98,10 @@ async function requestPaginated<T>(path: string, init?: RequestInit): Promise<Pa
     headers.set("Content-Type", "application/json");
   }
   const res = await fetch(buildApiUrl(path), { ...init, headers });
+  if (res.status === 401) {
+    redirectToLogin("session_expired");
+    throw new Error("Session expired. Redirecting to login...");
+  }
   if (!res.ok) throw new Error(await readErrorMessage(res));
   const payload = await res.json() as {
     data?: T[];

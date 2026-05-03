@@ -1,3 +1,5 @@
+import { redirectToLogin } from "@/src/shared/login-redirect";
+
 export function buildApiUrl(path: string): string {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL;
   if (!baseUrl) {
@@ -15,10 +17,7 @@ export function getAccessToken(): string | null {
 export function redirectToLoginOn401(response: Response): boolean {
   if (response.status !== 401) return false;
   if (typeof window !== "undefined") {
-    ["access_token", "refresh_token", "admin_auth_session"].forEach((key) =>
-      window.localStorage.removeItem(key),
-    );
-    window.location.href = "/login";
+    redirectToLogin("session_expired");
   }
   return true;
 }
