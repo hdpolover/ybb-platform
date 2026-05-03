@@ -9,8 +9,11 @@ import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
 const ROOT_SLUG = '';
 const HOME_PAGE = 'home';
 const PROGRAMS_PAGE = 'programs';
+const PROGRAM_DETAIL_PAGE = 'program-detail';
+const ABOUT_PAGE = 'about';
 const FAQS_PAGE = 'faqs';
 const PARTNERS_PAGE = 'partners-sponsors';
+const ANNOUNCEMENTS_PAGE = 'announcements';
 const SETTINGS_PAGE = 'settings';
 const DEFAULT_SNAPSHOT_SCHEMA_VERSION = 1;
 
@@ -31,6 +34,7 @@ export class LandingSnapshotService {
     return this.getOrBuildSnapshot(
       brand,
       FAQS_PAGE,
+      ROOT_SLUG,
       build,
       CACHE_TTL.LONG,
       this.toLandingPagePayload.bind(this),
@@ -44,6 +48,7 @@ export class LandingSnapshotService {
     return this.getOrBuildSnapshot(
       brand,
       HOME_PAGE,
+      ROOT_SLUG,
       build,
       CACHE_TTL.HOUR,
       this.toLandingPagePayload.bind(this),
@@ -57,8 +62,52 @@ export class LandingSnapshotService {
     return this.getOrBuildSnapshot(
       brand,
       PROGRAMS_PAGE,
+      ROOT_SLUG,
       build,
       CACHE_TTL.HOUR,
+      this.toLandingPagePayload.bind(this),
+    );
+  }
+
+  async getOrBuildProgramDetailSnapshot(
+    brand: Brand,
+    slug: string,
+    build: SnapshotBuilder<LandingPageResponseDto>,
+  ): Promise<LandingPageResponseDto> {
+    return this.getOrBuildSnapshot(
+      brand,
+      PROGRAM_DETAIL_PAGE,
+      slug,
+      build,
+      CACHE_TTL.HOUR,
+      this.toLandingPagePayload.bind(this),
+    );
+  }
+
+  async getOrBuildAboutSnapshot(
+    brand: Brand,
+    build: SnapshotBuilder<LandingPageResponseDto>,
+  ): Promise<LandingPageResponseDto> {
+    return this.getOrBuildSnapshot(
+      brand,
+      ABOUT_PAGE,
+      ROOT_SLUG,
+      build,
+      CACHE_TTL.HOUR,
+      this.toLandingPagePayload.bind(this),
+    );
+  }
+
+  async getOrBuildAnnouncementsSnapshot(
+    brand: Brand,
+    build: SnapshotBuilder<LandingPageResponseDto>,
+  ): Promise<LandingPageResponseDto> {
+    return this.getOrBuildSnapshot(
+      brand,
+      ANNOUNCEMENTS_PAGE,
+      ROOT_SLUG,
+      build,
+      CACHE_TTL.LONG,
       this.toLandingPagePayload.bind(this),
     );
   }
@@ -70,6 +119,7 @@ export class LandingSnapshotService {
     return this.getOrBuildSnapshot(
       brand,
       PARTNERS_PAGE,
+      ROOT_SLUG,
       build,
       CACHE_TTL.HOUR,
       this.toLandingPagePayload.bind(this),
@@ -83,6 +133,7 @@ export class LandingSnapshotService {
     return this.getOrBuildSnapshot(
       brand,
       SETTINGS_PAGE,
+      ROOT_SLUG,
       build,
       CACHE_TTL.HOUR,
       this.toLandingSettingsPayload.bind(this),
@@ -92,11 +143,13 @@ export class LandingSnapshotService {
   private async getOrBuildSnapshot<T>(
     brand: Brand,
     page: string,
+    slug: string,
     build: SnapshotBuilder<T>,
     ttl: number,
     validate: SnapshotValidator<T>,
   ): Promise<T> {
-    const cacheKey = CACHE_KEYS.LANDING_SNAPSHOT(brand.id, page, ROOT_SLUG);
+    const normalizedSlug = slug || ROOT_SLUG;
+    const cacheKey = CACHE_KEYS.LANDING_SNAPSHOT(brand.id, page, normalizedSlug);
     const cached = await this.cacheService.get<T>(cacheKey);
     if (cached) {
       return cached;
@@ -107,12 +160,12 @@ export class LandingSnapshotService {
         brandId_page_slug: {
           brandId: brand.id,
           page,
-          slug: ROOT_SLUG,
+          slug: normalizedSlug,
         },
       },
     });
 
-    if (snapshot && this.isSnapshotFresh(snapshot.publishedAt)) {
+    if (snapshot && this.isSnapshotFresh(snapshot.publishedAt, ttl)) {
       const payload = validate(snapshot.payloadJson);
       if (payload) {
         await this.cacheService.set(cacheKey, payload, ttl);
@@ -127,13 +180,13 @@ export class LandingSnapshotService {
         brandId_page_slug: {
           brandId: brand.id,
           page,
-          slug: ROOT_SLUG,
+          slug: normalizedSlug,
         },
       },
       create: {
         brandId: brand.id,
         page,
-        slug: ROOT_SLUG,
+        slug: normalizedSlug,
         payloadJson,
         schemaVersion: DEFAULT_SNAPSHOT_SCHEMA_VERSION,
         publishedAt: new Date(),
@@ -149,8 +202,8 @@ export class LandingSnapshotService {
     return payload;
   }
 
-  private isSnapshotFresh(publishedAt: Date): boolean {
-    return Date.now() - publishedAt.getTime() <= CACHE_TTL.LONG;
+  private isSnapshotFresh(publishedAt: Date, ttl: number): boolean {
+    return Date.now() - publishedAt.getTime() <= ttl;
   }
 
   private toLandingPagePayload(payload: Prisma.JsonValue): LandingPageResponseDto | null {

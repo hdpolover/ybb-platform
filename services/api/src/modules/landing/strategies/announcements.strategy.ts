@@ -4,21 +4,40 @@ import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.serv
 import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
 import { Brand } from '@prisma/client';
+import { LandingSnapshotService } from '../services/landing-snapshot.service';
 
 @Injectable()
 export class AnnouncementsStrategy implements ILandingPageStrategy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cacheService: CacheService,
+    private readonly landingSnapshotService: LandingSnapshotService,
   ) { }
 
   async getData(category: Brand | null) {
+    if (category) {
+      return this.landingSnapshotService.getOrBuildAnnouncementsSnapshot(
+        category,
+        () => this.buildAnnouncementsPayload(category),
+      );
+    }
+
     // Check cache first
-    const cacheKey = CACHE_KEYS.LANDING_ANNOUNCEMENTS(category?.id || 'default');
+    const cacheKey = CACHE_KEYS.LANDING_ANNOUNCEMENTS('default');
     const cached = await this.cacheService.get(cacheKey);
     if (cached) {
       return cached;
     }
+
+    const result = await this.buildAnnouncementsPayload(category);
+
+    // Cache for 15 minutes (announcements change more frequently)
+    await this.cacheService.set(cacheKey, result, CACHE_TTL.LONG);
+
+    return result;
+  }
+
+  private async buildAnnouncementsPayload(category: Brand | null) {
 
     const announcements = await this.prisma.systemAnnouncement.findMany({
       where: {
@@ -61,10 +80,6 @@ export class AnnouncementsStrategy implements ILandingPageStrategy {
         },
       ],
     };
-
-    // Cache for 15 minutes (announcements change more frequently)
-    await this.cacheService.set(cacheKey, result, CACHE_TTL.LONG);
-
     return result;
   }
 }
