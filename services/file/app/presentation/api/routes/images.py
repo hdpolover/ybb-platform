@@ -13,10 +13,15 @@ from app.domain.exceptions.file_exceptions import (
     FileSizeLimitException
 )
 from app.presentation.dependencies.container import get_storage_service
+from app.presentation.dependencies.internal_auth import require_internal_service_key
 from app.utils.concurrency import run_in_threadpool
 
 
-router = APIRouter(prefix="/images", tags=["Images"])
+router = APIRouter(
+    prefix="/images",
+    tags=["Images"],
+    dependencies=[Depends(require_internal_service_key)],
+)
 
 # Environment prefix for storage paths (matches FilePathService convention)
 _ENV_PREFIX_MAP = {"development": "dev", "staging": "staging", "production": "prod"}

@@ -12,8 +12,13 @@ from app.presentation.dependencies.container import (
     get_list_files_by_program_handler,
     get_delete_file_handler,
 )
+from app.presentation.dependencies.internal_auth import require_internal_service_key
 
-router = APIRouter(prefix="/media", tags=["Media Library"])
+router = APIRouter(
+    prefix="/media",
+    tags=["Media Library"],
+    dependencies=[Depends(require_internal_service_key)],
+)
 
 
 @router.get(

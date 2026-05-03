@@ -18,6 +18,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { Public } from '@shared/decorators/public.decorator';
+import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { StorageService } from '../application/storage.service';
 import {
   CreateUploadUrlRequest,
@@ -278,13 +279,14 @@ export class FilesController {
   @UseInterceptors(FileInterceptor('file'))
   async uploadFile(
     @UploadedFile() file: Express.Multer.File,
-    @Body('user_id') userId: string,
-    @Body('brand_id') brandId: string,
     @Body('bucket') bucket: string = 'documents',
     @Body('program_id') programId?: string,
     @Body('participant_id') participantId?: string,
+    @CurrentUser() user: CurrentUserData,
   ) {
     try {
+      const userId = user.userId;
+      const brandId = user.brandId;
       this.logger.log(
         `Uploading file: ${file.originalname} for user ${userId}, brand ${brandId}`,
       );
@@ -332,10 +334,11 @@ export class FilesController {
   @ApiResponse({ status: 200, description: 'File information retrieved successfully' })
   async getFile(
     @Param('fileId') fileId: string,
-    @Query('user_id') userId: string,
-    @Query('brand_id') brandId: string,
+    @CurrentUser() user: CurrentUserData,
   ): Promise<{ success: boolean; data: FileResponse }> {
     try {
+      const userId = user.userId;
+      const brandId = user.brandId;
       this.logger.log(`Retrieving file: ${fileId} for user ${userId}, brand ${brandId}`);
       
       let result: FileResponse;
@@ -380,12 +383,18 @@ export class FilesController {
   @ApiResponse({ status: 201, description: 'Upload URL issued' })
   async requestUploadUrl(
     @Body() dto: CreateUploadUrlRequest,
+    @CurrentUser() user: CurrentUserData,
   ): Promise<CreateUploadUrlResponse> {
     // Return raw data; the global TransformInterceptor wraps it as
     // `{ statusCode, message, data }`. Wrapping here would double-envelope.
-    this.logger.log(`Requesting upload URL for ${dto.filename} (brand ${dto.brand_id})`);
-    const data = await this.fileServiceClient.createUploadUrl(dto);
-    this.metricsService.fileUploadsTotal.inc({ file_type: dto.bucket ?? 'documents' });
+    const scopedRequest: CreateUploadUrlRequest = {
+      ...dto,
+      user_id: user.userId,
+      brand_id: user.brandId,
+    };
+    this.logger.log(`Requesting upload URL for ${scopedRequest.filename} (brand ${scopedRequest.brand_id})`);
+    const data = await this.fileServiceClient.createUploadUrl(scopedRequest);
+    this.metricsService.fileUploadsTotal.inc({ file_type: scopedRequest.bucket ?? 'documents' });
     return data;
   }
 
@@ -397,13 +406,13 @@ export class FilesController {
   @ApiResponse({ status: 200, description: 'File transitioned to READY (or already was)' })
   async markFileReady(
     @Param('fileId') fileId: string,
-    @Query('brand_id') brandId: string,
     @Query('actual_size') actualSize?: string,
+    @CurrentUser() user: CurrentUserData,
   ): Promise<FileResponse> {
-    this.logger.log(`Marking file ready: ${fileId} (brand ${brandId})`);
+    this.logger.log(`Marking file ready: ${fileId} (brand ${user.brandId}, user ${user.userId})`);
     const parsed = actualSize ? Number(actualSize) : NaN;
     const size = !isNaN(parsed) ? parsed : undefined;
-    return this.fileServiceClient.markFileReady(fileId, brandId, size);
+    return this.fileServiceClient.markFileReady(fileId, user.userId, user.brandId, size);
   }
 
   @Post('presigned-upload-url')

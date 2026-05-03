@@ -134,6 +134,8 @@ MINIO_SECRET_KEY=your_do_secret_key
 MINIO_BUCKET=ybb-assets-dev
 MINIO_SECURE=true
 MINIO_REGION=sgp1
+# Shared key used by API gateway when calling private file/media/image endpoints
+FILE_SERVICE_INTERNAL_KEY=replace-with-shared-service-key
 ```
 
 For completely offline development, see the comments in `.env.example`.

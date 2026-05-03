@@ -31,9 +31,14 @@ from app.presentation.dependencies.container import (
     get_storage_service,
     get_upload_handler,
 )
+from app.presentation.dependencies.internal_auth import require_internal_service_key
 
 
-router = APIRouter(prefix="/files", tags=["files"])
+router = APIRouter(
+    prefix="/files",
+    tags=["files"],
+    dependencies=[Depends(require_internal_service_key)],
+)
 
 
 @router.post("/upload", response_model=UploadFileResponseDto, status_code=status.HTTP_201_CREATED)
@@ -154,6 +159,7 @@ async def request_upload_url(
 async def mark_file_ready(
     file_id: str,
     brand_id: str = Query(..., description="Brand ID — must match the row's brand_id"),
+    user_id: str = Query(..., description="User ID — must match the row's user_id"),
     actual_size: int | None = Query(None, description="Optional: correct size learned after upload"),
     handler: MarkFileReadyHandler = Depends(get_mark_file_ready_handler),
 ) -> FileDto:
@@ -166,6 +172,7 @@ async def mark_file_ready(
         command = MarkFileReadyCommand(
             file_id=file_id,
             brand_id=brand_id,
+            user_id=user_id,
             actual_size=actual_size,
         )
         return await handler.execute(command)
