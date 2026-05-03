@@ -22,7 +22,10 @@ export class MetricsService implements OnModuleInit {
     // Phase 2: Application Performance Deep Dive
     public readonly prismaQueryDuration: Histogram;
     public readonly prismaQueryTotal: Counter;
+    public readonly prismaSlowQueryTotal: Counter;
     public readonly prismaPoolConnectionsOpen: Gauge;
+    public readonly prismaPoolConnectionsIdle: Gauge;
+    public readonly prismaPoolConnectionsWaiting: Gauge;
     public readonly externalApiDuration: Histogram;
     // jobQueueDepth is typically best monitored via RabbitMQ exporter, but we can declare it here if we want to push it manually
     public readonly jobQueueDepth: Gauge; 
@@ -157,9 +160,28 @@ export class MetricsService implements OnModuleInit {
             registers: [this.registry],
         });
 
+        this.prismaSlowQueryTotal = new Counter({
+            name: 'prisma_slow_query_total',
+            help: 'Total number of Prisma queries exceeding the slow-query threshold',
+            labelNames: ['model', 'operation'],
+            registers: [this.registry],
+        });
+
         this.prismaPoolConnectionsOpen = new Gauge({
             name: 'prisma_pool_connections_open',
             help: 'Number of open connections in the Prisma pool',
+            registers: [this.registry],
+        });
+
+        this.prismaPoolConnectionsIdle = new Gauge({
+            name: 'prisma_pool_connections_idle',
+            help: 'Number of idle connections in the Prisma pool',
+            registers: [this.registry],
+        });
+
+        this.prismaPoolConnectionsWaiting = new Gauge({
+            name: 'prisma_pool_connections_waiting',
+            help: 'Number of waiting clients in the Prisma pool',
             registers: [this.registry],
         });
 
@@ -392,6 +414,21 @@ export class MetricsService implements OnModuleInit {
      */
     recordTracedTransaction(name: string, hasTraceId: boolean): void {
         this.tracedTransactionsTotal.inc({ name, has_trace_id: hasTraceId ? 'true' : 'false' });
+    }
+
+    recordPrismaQuery(model: string, operation: string, durationSeconds: number, isSlow: boolean): void {
+        this.prismaQueryDuration.observe({ model, operation }, durationSeconds);
+        this.prismaQueryTotal.inc({ model, operation });
+
+        if (isSlow) {
+            this.prismaSlowQueryTotal.inc({ model, operation });
+        }
+    }
+
+    updatePrismaPoolStats(open: number, idle: number, waiting: number): void {
+        this.prismaPoolConnectionsOpen.set(open);
+        this.prismaPoolConnectionsIdle.set(idle);
+        this.prismaPoolConnectionsWaiting.set(waiting);
     }
 
     getRegistry(): Registry {
