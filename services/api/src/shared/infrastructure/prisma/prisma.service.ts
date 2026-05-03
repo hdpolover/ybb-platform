@@ -1,4 +1,4 @@
-import { INestApplication, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { INestApplication, Injectable, OnModuleInit } from '@nestjs/common';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
@@ -15,38 +15,11 @@ import { MetricsService } from '../monitoring/metrics.service';
  */
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit {
-  private readonly logger = new Logger(PrismaService.name);
   private readonly pool: Pool;
-  private readonly poolConfig: {
-    max: number;
-    min: number;
-    idleTimeoutMillis: number;
-    connectionTimeoutMillis: number;
-  };
-  private readonly slowQueryThresholdMs: number;
-  private poolMetricsInterval?: NodeJS.Timeout;
 
   constructor(private readonly metricsService: MetricsService) {
     const connectionString = process.env.DATABASE_URL;
-    const poolMax = parseNumberEnv('DATABASE_POOL_MAX', 20);
-    const poolMin = parseNumberEnv('DATABASE_POOL_MIN', 2);
-    const poolIdleTimeoutMs = parseNumberEnv('DATABASE_POOL_IDLE_TIMEOUT_MS', 30_000);
-    const poolConnectionTimeoutMs = parseNumberEnv('DATABASE_POOL_CONNECTION_TIMEOUT_MS', 10_000);
-
-    const poolConfig = {
-      max: poolMax,
-      min: Math.min(poolMin, poolMax),
-      idleTimeoutMillis: poolIdleTimeoutMs,
-      connectionTimeoutMillis: poolConnectionTimeoutMs,
-    };
-
-    const pool = new Pool({
-      connectionString,
-      max: poolConfig.max,
-      min: poolConfig.min,
-      idleTimeoutMillis: poolConfig.idleTimeoutMillis,
-      connectionTimeoutMillis: poolConfig.connectionTimeoutMillis,
-    });
+    const pool = new Pool({ connectionString });
     const adapter = new PrismaPg(pool);
 
     super({
@@ -57,8 +30,6 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     });
 
     this.pool = pool;
-    this.poolConfig = poolConfig;
-    this.slowQueryThresholdMs = parseNumberEnv('PRISMA_SLOW_QUERY_MS', 250);
   }
 
 
@@ -68,20 +39,12 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
   async onModuleInit() {
     await this.$connect();
 
-    this.logger.log(
-      `Prisma pool configured (max=${this.poolConfig.max}, min=${this.poolConfig.min}, idleTimeoutMs=${this.poolConfig.idleTimeoutMillis}, connectionTimeoutMs=${this.poolConfig.connectionTimeoutMillis}, slowQueryMs=${this.slowQueryThresholdMs})`,
-    );
-
-    // Monitoring: update pool gauges every 5s
-    this.poolMetricsInterval = setInterval(() => {
-      this.metricsService.updatePrismaPoolStats(this.pool.totalCount, this.pool.idleCount, this.pool.waitingCount);
+    // Monitoring: Update pool size every 5 seconds
+    setInterval(() => {
+      this.metricsService.prismaPoolConnectionsOpen.set(this.pool.totalCount);
     }, 5000);
-    this.poolMetricsInterval.unref();
-    this.metricsService.updatePrismaPoolStats(this.pool.totalCount, this.pool.idleCount, this.pool.waitingCount);
 
     const metricsService = this.metricsService;
-    const logger = this.logger;
-    const slowQueryThresholdMs = this.slowQueryThresholdMs;
 
     // Use Prisma Extensions for Soft Delete since middleware ($use) is deprecated/removed in v7
     // Chain extensions: Monitoring (Inner) -> Soft Delete (Outer)
@@ -90,29 +53,19 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
         query: {
           $allModels: {
             async $allOperations({ model, operation, args, query }) {
-              const metricModel = model || 'raw';
               const start = Date.now();
               try {
                 const result = await query(args);
-                const durationMs = Date.now() - start;
-                const isSlow = durationMs >= slowQueryThresholdMs;
-                metricsService.recordPrismaQuery(metricModel, operation, durationMs / 1000, isSlow);
-                if (isSlow) {
-                  logger.warn(
-                    `Slow Prisma query detected (model=${metricModel}, operation=${operation}, durationMs=${durationMs})`,
-                  );
-                }
+                const duration = (Date.now() - start) / 1000;
+
+                metricsService.prismaQueryDuration.observe({ model, operation }, duration);
+                metricsService.prismaQueryTotal.inc({ model, operation });
 
                 return result;
               } catch (error) {
-                const durationMs = Date.now() - start;
-                const isSlow = durationMs >= slowQueryThresholdMs;
-                metricsService.recordPrismaQuery(metricModel, operation, durationMs / 1000, isSlow);
-                if (isSlow) {
-                  logger.warn(
-                    `Slow Prisma query failed (model=${metricModel}, operation=${operation}, durationMs=${durationMs})`,
-                  );
-                }
+                const duration = (Date.now() - start) / 1000;
+                metricsService.prismaQueryDuration.observe({ model, operation }, duration);
+                metricsService.prismaQueryTotal.inc({ model, operation });
                 throw error;
               }
             },
@@ -189,6 +142,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     // We patch ALL models to ensure monitoring logic applies to everything
     // Not just soft-delete models
     const models = Prisma.dmmf.datamodel.models;
+    console.log('Available Models in DMMF:', models.map(m => m.name).join(', '));
     for (const model of models) {
       // Always patch the model to use the extended client (which includes monitoring)
       const camelCaseName = toCamelCase(model.name);
@@ -211,9 +165,6 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
    * Disconnect when module is destroyed
    */
   async onModuleDestroy() {
-    if (this.poolMetricsInterval) {
-      clearInterval(this.poolMetricsInterval);
-    }
     await this.$disconnect();
   }
 
@@ -349,16 +300,4 @@ function applyNestedDeletedAtFilter(
   if (args.select) {
     args.select = applyDeletedAtToIncludes(modelName, args.select);
   }
-}
-
-function parseNumberEnv(key: string, defaultValue: number): number {
-  const raw = process.env[key];
-  if (!raw) return defaultValue;
-
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return defaultValue;
-  }
-
-  return Math.floor(parsed);
 }
