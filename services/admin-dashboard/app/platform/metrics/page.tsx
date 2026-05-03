@@ -153,7 +153,6 @@ export default function PlatformMetricsPage() {
     const processStartTimeSeconds = firstMetricValue(parsed, "process_start_time_seconds");
     const uptimeSeconds = processStartTimeSeconds > 0 ? Math.max(0, Date.now() / 1000 - processStartTimeSeconds) : 0;
     const metricFamilies = new Set(parsed.map((item) => item.name)).size;
-    const slowQueryMax = slowQueries[0]?.value ?? 0;
     const rawPreview = rawMetrics
       .split("\n")
       .filter((line) => line.trim() && !line.startsWith("#"))
@@ -171,7 +170,6 @@ export default function PlatformMetricsPage() {
       uptimeSeconds,
       metricFamilies,
       slowQueries,
-      slowQueryMax,
       rawPreview,
     };
   }, [rawMetrics]);
@@ -314,6 +312,9 @@ export default function PlatformMetricsPage() {
           <Card>
             <CardHeader>
               <CardTitle>Slow Query Breakdown</CardTitle>
+              <p className="text-sm text-zinc-500">
+                Counts are cumulative since the current API process started. Bars show each query&apos;s share of total slow-query events.
+              </p>
             </CardHeader>
             <CardContent>
               {metrics.slowQueries.length === 0 ? (
@@ -321,7 +322,7 @@ export default function PlatformMetricsPage() {
               ) : (
                 <div className="space-y-2">
                   {metrics.slowQueries.map((item, index) => {
-                    const ratio = metrics.slowQueryMax > 0 ? (item.value / metrics.slowQueryMax) * 100 : 0;
+                    const ratio = metrics.slowQueryTotal > 0 ? (item.value / metrics.slowQueryTotal) * 100 : 0;
                     return (
                       <div key={`${item.model}-${item.operation}-${index}`} className="rounded-md border border-zinc-100 bg-zinc-50 p-3">
                         <div className="mb-2 flex items-center justify-between gap-2">
@@ -329,7 +330,9 @@ export default function PlatformMetricsPage() {
                             <p className="truncate text-sm font-medium text-zinc-900">{item.model}</p>
                             <p className="text-xs text-zinc-500">{item.operation}</p>
                           </div>
-                          <Badge variant={item.value > 0 ? "warning" : "secondary"}>{formatNumber(item.value)}</Badge>
+                          <Badge variant={item.value > 0 ? "warning" : "secondary"}>
+                            {formatNumber(item.value)} ({formatNumber(ratio)}%)
+                          </Badge>
                         </div>
                         <div className="h-1.5 rounded-full bg-zinc-200">
                           <div className="h-1.5 rounded-full bg-amber-500" style={{ width: `${ratio}%` }} />
