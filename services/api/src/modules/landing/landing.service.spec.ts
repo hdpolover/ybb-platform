@@ -31,6 +31,7 @@ describe('LandingService', () => {
   const mockLandingSnapshotService = {
     getOrBuildHomeSnapshot: jest.fn(async (_brand: unknown, build: () => Promise<unknown>) => build()),
     getOrBuildProgramsSnapshot: jest.fn(async (_brand: unknown, build: () => Promise<unknown>) => build()),
+    getOrBuildProgramDetailSnapshot: jest.fn(async (_brand: unknown, _slug: string, build: () => Promise<unknown>) => build()),
   };
 
   beforeEach(async () => {
