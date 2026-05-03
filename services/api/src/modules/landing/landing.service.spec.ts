@@ -8,6 +8,7 @@ import { ProgramsStrategy } from './strategies/programs.strategy';
 import { PartnersSponsorsStrategy } from './strategies/partners-sponsors.strategy';
 import { AnnouncementsStrategy } from './strategies/announcements.strategy';
 import { SettingsStrategy } from './strategies/settings.strategy';
+import { FaqsStrategy } from './strategies/faqs.strategy';
 import { NotFoundException } from '@nestjs/common';
 
 describe('LandingService', () => {
@@ -37,6 +38,7 @@ describe('LandingService', () => {
         { provide: PartnersSponsorsStrategy, useValue: mockStrategy },
         { provide: AnnouncementsStrategy, useValue: mockStrategy },
         { provide: SettingsStrategy, useValue: mockStrategy },
+        { provide: FaqsStrategy, useValue: mockStrategy },
       ],
     }).compile();
 

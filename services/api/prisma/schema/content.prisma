@@ -2,6 +2,23 @@
 // PROGRAM CONTENT
 // ============================================================================
 
+model BrandLandingSnapshot {
+  brandId String @map("brand_id") @db.Uuid
+  page    String @db.VarChar(64)
+  slug    String @default("") @db.VarChar(255)
+
+  payloadJson   Json     @map("payload_json") @db.Json
+  schemaVersion Int      @default(1) @map("schema_version")
+  publishedAt   DateTime @default(now()) @map("published_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  @@id([brandId, page, slug])
+  @@index([publishedAt])
+  @@map("brand_landing_snapshots")
+}
+
 model ProgramFaq {
   id        String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   programId String      @map("program_id") @db.Uuid

@@ -72,6 +72,7 @@ model Brand {
   partnershipOpportunities PartnershipOpportunity[]
   sponsorshipTiers         SponsorshipTier[]
   partnershipEnquiries     PartnershipEnquiry[]
+  landingSnapshots         BrandLandingSnapshot[]
 
   @@index([slug])
   @@index([isActive])

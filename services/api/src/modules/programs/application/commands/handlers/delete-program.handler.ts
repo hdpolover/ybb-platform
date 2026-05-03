@@ -5,6 +5,7 @@ import { IProgramRepository } from '@core/interfaces/repositories/program.reposi
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
 import { UserActivityLog } from '@core/entities/user-activity-log.entity';
 import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
+import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
 
 @CommandHandler(DeleteProgramCommand)
 export class DeleteProgramHandler implements ICommandHandler<DeleteProgramCommand> {
@@ -14,6 +15,7 @@ export class DeleteProgramHandler implements ICommandHandler<DeleteProgramComman
         @Inject(IUserActivityLogRepository)
         private readonly activityLogRepository: IUserActivityLogRepository,
         private readonly cacheService: CacheService,
+        private readonly prisma: PrismaService,
     ) {}
 
     async execute(command: DeleteProgramCommand): Promise<void> {
@@ -27,8 +29,11 @@ export class DeleteProgramHandler implements ICommandHandler<DeleteProgramComman
         await this.programRepository.delete(programId);
 
         try {
-            await this.cacheService.invalidateBrandLandingCaches(existingProgram.brandId);
-            await this.cacheService.invalidateByPattern('program:*');
+            await Promise.all([
+                this.prisma.brandLandingSnapshot.deleteMany({ where: { brandId: existingProgram.brandId } }),
+                this.cacheService.invalidateBrandLandingCaches(existingProgram.brandId),
+                this.cacheService.invalidateByPattern('program:*'),
+            ]);
         } catch { /* non-critical */ }
 
         // Log activity

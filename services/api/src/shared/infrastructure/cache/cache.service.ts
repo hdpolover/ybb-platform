@@ -112,6 +112,7 @@ export class CacheService {
     await this.invalidateByPatterns([
       `landing:program:${brandId}:*`,
       `landing:faqs:${brandId}:*`,
+      `landing:snapshot:${brandId}:*`,
     ]);
   }
 
@@ -208,4 +209,3 @@ export class CacheService {
     this.metricsService?.recordLatency('clear', Date.now() - startTime);
   }
 }
-

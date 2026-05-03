@@ -41,8 +41,11 @@ async function invalidateLandingCacheByProgramId(
             select: { brandId: true },
         });
         if (program?.brandId) {
-            await cacheService.invalidateBrandLandingCaches(program.brandId);
-            await cacheService.invalidateByPattern('program:*');
+            await Promise.all([
+                prisma.brandLandingSnapshot.deleteMany({ where: { brandId: program.brandId } }),
+                cacheService.invalidateBrandLandingCaches(program.brandId),
+                cacheService.invalidateByPattern('program:*'),
+            ]);
         }
     } catch { /* non-critical */ }
 }
@@ -65,6 +68,7 @@ async function invalidatePricingTierCachesByProgramId(
         });
         if (program?.brandId) {
             await Promise.all([
+                prisma.brandLandingSnapshot.deleteMany({ where: { brandId: program.brandId } }),
                 cacheService.invalidateBrandLandingCaches(program.brandId),
                 cacheService.invalidateByPattern('program:*'),
                 cacheService.invalidateByPattern('portal:dashboard:*'),
@@ -91,6 +95,7 @@ async function invalidatePricingTierCachesByPricingTierId(
         });
         if (tier?.program?.brandId) {
             await Promise.all([
+                prisma.brandLandingSnapshot.deleteMany({ where: { brandId: tier.program.brandId } }),
                 cacheService.invalidateBrandLandingCaches(tier.program.brandId),
                 cacheService.invalidateByPattern('program:*'),
                 cacheService.invalidateByPattern('portal:dashboard:*'),
@@ -103,11 +108,15 @@ async function invalidatePricingTierCachesByPricingTierId(
 
 async function invalidateLandingCacheByBrandId(
     brandId: string,
+    prisma: PrismaService,
     cacheService: CacheService,
 ): Promise<void> {
     try {
-        await cacheService.invalidateBrandLandingCaches(brandId);
-        await cacheService.invalidateByPattern('program:*');
+        await Promise.all([
+            prisma.brandLandingSnapshot.deleteMany({ where: { brandId } }),
+            cacheService.invalidateBrandLandingCaches(brandId),
+            cacheService.invalidateByPattern('program:*'),
+        ]);
     } catch { /* non-critical */ }
 }
 async function invalidatePortalDocumentCaches(
@@ -466,6 +475,7 @@ export class DeleteProgramGalleryHandler implements ICommandHandler<DeleteProgra
 export class CreateProgramTestimonialHandler implements ICommandHandler<CreateProgramTestimonialCommand> {
     constructor(
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
     ) {}
     async execute(command: CreateProgramTestimonialCommand) {
@@ -475,7 +485,7 @@ export class CreateProgramTestimonialHandler implements ICommandHandler<CreatePr
             brandId: brandId,
         };
         const result = await this.repository.createTestimonial(dto);
-        if (brandId) await invalidateLandingCacheByBrandId(brandId, this.cacheService);
+        if (brandId) await invalidateLandingCacheByBrandId(brandId, this.prisma, this.cacheService);
         return result;
     }
 }
@@ -493,7 +503,7 @@ export class UpdateProgramTestimonialHandler implements ICommandHandler<UpdatePr
                 where: { id: command.id },
                 select: { brandId: true },
             });
-            if (testimonial?.brandId) await invalidateLandingCacheByBrandId(testimonial.brandId, this.cacheService);
+            if (testimonial?.brandId) await invalidateLandingCacheByBrandId(testimonial.brandId, this.prisma, this.cacheService);
         } catch { /* non-critical */ }
         return result;
     }
@@ -511,7 +521,7 @@ export class DeleteProgramTestimonialHandler implements ICommandHandler<DeletePr
             select: { brandId: true },
         });
         const result = await this.repository.deleteTestimonial(command.id);
-        if (testimonial?.brandId) await invalidateLandingCacheByBrandId(testimonial.brandId, this.cacheService);
+        if (testimonial?.brandId) await invalidateLandingCacheByBrandId(testimonial.brandId, this.prisma, this.cacheService);
         return result;
     }
 }

@@ -8,6 +8,7 @@ import { PartnersSponsorsStrategy } from './strategies/partners-sponsors.strateg
 import { AnnouncementsStrategy } from './strategies/announcements.strategy';
 import { SettingsStrategy } from './strategies/settings.strategy';
 import { FaqsStrategy } from './strategies/faqs.strategy';
+import { LandingSnapshotService } from './services/landing-snapshot.service';
 
 @Module({
   controllers: [LandingController],
@@ -20,6 +21,7 @@ import { FaqsStrategy } from './strategies/faqs.strategy';
     AnnouncementsStrategy,
     SettingsStrategy,
     FaqsStrategy,
+    LandingSnapshotService,
   ],
   exports: [LandingService],
 })

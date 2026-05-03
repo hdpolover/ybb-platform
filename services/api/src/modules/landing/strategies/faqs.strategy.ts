@@ -4,6 +4,7 @@ import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.serv
 import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
 import { Brand, Prisma } from '@prisma/client';
+import { LandingSnapshotService } from '../services/landing-snapshot.service';
 
 const DEFAULT_FAQ_LIMIT = 200;
 const MAX_FAQ_LIMIT = 500;
@@ -13,6 +14,7 @@ export class FaqsStrategy implements ILandingPageStrategy {
     constructor(
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
+        private readonly landingSnapshotService: LandingSnapshotService,
     ) { }
 
     // ILandingPageStrategy interface requirement
@@ -27,19 +29,43 @@ export class FaqsStrategy implements ILandingPageStrategy {
         limit: number = DEFAULT_FAQ_LIMIT,
         search?: string
     ) {
-        // Check cache first
-        const cacheKey = CACHE_KEYS.LANDING_FAQS(category?.id || 'default', page, limit, search || '');
-        const cached = await this.cacheService.get(cacheKey);
-        if (cached) {
-            return cached;
-        }
-
         // Ensure page and limit are valid numbers
         const pageNum = Number(page) > 0 ? Number(page) : 1;
         const rawLimit = Number(limit);
         const limitNum = Number.isFinite(rawLimit) && rawLimit > 0
             ? Math.min(Math.floor(rawLimit), MAX_FAQ_LIMIT)
             : DEFAULT_FAQ_LIMIT;
+        
+        if (category && this.shouldUseSnapshot(pageNum, limitNum, search)) {
+            return this.landingSnapshotService.getOrBuildFaqSnapshot(
+                category,
+                () => this.buildFaqsPayload(category, pageNum, limitNum, search),
+            );
+        }
+
+        const cacheKey = CACHE_KEYS.LANDING_FAQS(category?.id || 'default', pageNum, limitNum, search || '');
+        const cached = await this.cacheService.get(cacheKey);
+        if (cached) {
+            return cached;
+        }
+
+        const result = await this.buildFaqsPayload(category, pageNum, limitNum, search);
+
+        // Cache for 15 minutes (shorter TTL due to pagination/search)
+        await this.cacheService.set(cacheKey, result, CACHE_TTL.LONG);
+        return result;
+    }
+
+    private shouldUseSnapshot(page: number, limit: number, search?: string): boolean {
+        return page === 1 && limit === DEFAULT_FAQ_LIMIT && !search;
+    }
+
+    private async buildFaqsPayload(
+        category: Brand | null,
+        pageNum: number,
+        limitNum: number,
+        search?: string,
+    ) {
         const skip = (pageNum - 1) * limitNum;
 
         // 1. Resolve Category context and Target Program
@@ -177,9 +203,6 @@ export class FaqsStrategy implements ILandingPageStrategy {
             title: 'FAQs',
             sections: [heroSection, faqSection, ctaSection]
         };
-
-        // Cache for 15 minutes (shorter TTL due to pagination/search)
-        await this.cacheService.set(cacheKey, result, CACHE_TTL.LONG);
 
         return result;
     }
