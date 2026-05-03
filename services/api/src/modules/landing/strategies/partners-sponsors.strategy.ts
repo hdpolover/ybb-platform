@@ -4,21 +4,41 @@ import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.serv
 import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
 import { Brand } from '@prisma/client';
+import { LandingSnapshotService } from '../services/landing-snapshot.service';
+import { LandingPageResponseDto } from '../dto/landing-page.dto';
 
 @Injectable()
 export class PartnersSponsorsStrategy implements ILandingPageStrategy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cacheService: CacheService,
+    private readonly landingSnapshotService: LandingSnapshotService,
   ) { }
 
   async getData(category: Brand | null) {
+    if (category) {
+      return this.landingSnapshotService.getOrBuildPartnersSnapshot(
+        category,
+        () => this.buildPartnersPayload(category),
+      );
+    }
+
     // Check cache first
-    const cacheKey = CACHE_KEYS.LANDING_PARTNERS(category?.id || 'default');
+    const cacheKey = CACHE_KEYS.LANDING_PARTNERS('default');
     const cached = await this.cacheService.get(cacheKey);
     if (cached) {
       return cached;
     }
+
+    const result = await this.buildPartnersPayload(category);
+
+    // Cache for 1 hour
+    await this.cacheService.set(cacheKey, result, CACHE_TTL.HOUR);
+
+    return result;
+  }
+
+  private async buildPartnersPayload(category: Brand | null): Promise<LandingPageResponseDto> {
 
     const sponsors = category ? await this.prisma.sponsor.findMany({
       where: { brandId: category.id, isActive: true },
@@ -113,10 +133,6 @@ export class PartnersSponsorsStrategy implements ILandingPageStrategy {
       title: 'Partners & Sponsors',
       sections,
     };
-
-    // Cache for 1 hour
-    await this.cacheService.set(cacheKey, result, CACHE_TTL.HOUR);
-
-    return result;
+    return result as LandingPageResponseDto;
   }
 }

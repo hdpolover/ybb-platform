@@ -18,6 +18,7 @@ export class DeleteSponsorHandler implements ICommandHandler<DeleteSponsorComman
         if (!sponsor) throw new NotFoundException('Sponsor not found');
 
         await this.prisma.sponsor.delete({ where: { id: command.sponsorId } });
+        await this.prisma.brandLandingSnapshot.deleteMany({ where: { brandId: command.brandId } });
         await this.landingRevalidation.revalidateForBrand(command.brandId);
     }
 }

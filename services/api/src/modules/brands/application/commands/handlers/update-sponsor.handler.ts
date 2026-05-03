@@ -65,6 +65,7 @@ export class UpdateSponsorHandler implements ICommandHandler<UpdateSponsorComman
             },
         });
 
+        await this.prisma.brandLandingSnapshot.deleteMany({ where: { brandId } });
         await this.landingRevalidation.revalidateForBrand(brandId);
 
         return {

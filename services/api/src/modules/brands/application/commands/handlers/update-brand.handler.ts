@@ -6,6 +6,7 @@ import { Brand } from '@core/entities/brand.entity';
 import { StorageService } from '../../../../files/application/storage.service';
 import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
 import { LandingRevalidationService } from '../../services/landing-revalidation.service';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 
 @CommandHandler(UpdateBrandCommand)
 export class UpdateBrandHandler implements ICommandHandler<UpdateBrandCommand> {
@@ -14,6 +15,7 @@ export class UpdateBrandHandler implements ICommandHandler<UpdateBrandCommand> {
         private readonly brandRepository: IBrandRepository,
         private readonly storageService: StorageService,
         private readonly cacheService: CacheService,
+        private readonly prisma: PrismaService,
         private readonly landingRevalidation: LandingRevalidationService,
     ) { }
 
@@ -69,7 +71,10 @@ export class UpdateBrandHandler implements ICommandHandler<UpdateBrandCommand> {
      */
     private async invalidateLandingCaches(brandId: string): Promise<void> {
         try {
-            await this.cacheService.invalidateBrandLandingCaches(brandId);
+            await Promise.all([
+                this.prisma.brandLandingSnapshot.deleteMany({ where: { brandId } }),
+                this.cacheService.invalidateBrandLandingCaches(brandId),
+            ]);
         } catch (error) {
             console.error('Failed to invalidate landing caches:', error);
         }

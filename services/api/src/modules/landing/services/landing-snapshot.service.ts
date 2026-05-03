@@ -5,9 +5,10 @@ import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.serv
 import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
 
-const FAQS_PAGE = 'faqs';
 const ROOT_SLUG = '';
-const FAQS_SNAPSHOT_SCHEMA_VERSION = 1;
+const FAQS_PAGE = 'faqs';
+const PARTNERS_PAGE = 'partners-sponsors';
+const DEFAULT_SNAPSHOT_SCHEMA_VERSION = 1;
 
 type SnapshotBuilder = () => Promise<LandingPageResponseDto>;
 
@@ -22,7 +23,22 @@ export class LandingSnapshotService {
     brand: Brand,
     build: SnapshotBuilder,
   ): Promise<LandingPageResponseDto> {
-    const cacheKey = CACHE_KEYS.LANDING_SNAPSHOT(brand.id, FAQS_PAGE, ROOT_SLUG);
+    return this.getOrBuildPageSnapshot(brand, FAQS_PAGE, build);
+  }
+
+  async getOrBuildPartnersSnapshot(
+    brand: Brand,
+    build: SnapshotBuilder,
+  ): Promise<LandingPageResponseDto> {
+    return this.getOrBuildPageSnapshot(brand, PARTNERS_PAGE, build);
+  }
+
+  private async getOrBuildPageSnapshot(
+    brand: Brand,
+    page: string,
+    build: SnapshotBuilder,
+  ): Promise<LandingPageResponseDto> {
+    const cacheKey = CACHE_KEYS.LANDING_SNAPSHOT(brand.id, page, ROOT_SLUG);
     const cached = await this.cacheService.get<LandingPageResponseDto>(cacheKey);
     if (cached) {
       return cached;
@@ -32,7 +48,7 @@ export class LandingSnapshotService {
       where: {
         brandId_page_slug: {
           brandId: brand.id,
-          page: FAQS_PAGE,
+          page,
           slug: ROOT_SLUG,
         },
       },
@@ -52,21 +68,21 @@ export class LandingSnapshotService {
       where: {
         brandId_page_slug: {
           brandId: brand.id,
-          page: FAQS_PAGE,
+          page,
           slug: ROOT_SLUG,
         },
       },
       create: {
         brandId: brand.id,
-        page: FAQS_PAGE,
+        page,
         slug: ROOT_SLUG,
         payloadJson,
-        schemaVersion: FAQS_SNAPSHOT_SCHEMA_VERSION,
+        schemaVersion: DEFAULT_SNAPSHOT_SCHEMA_VERSION,
         publishedAt: new Date(),
       },
       update: {
         payloadJson,
-        schemaVersion: FAQS_SNAPSHOT_SCHEMA_VERSION,
+        schemaVersion: DEFAULT_SNAPSHOT_SCHEMA_VERSION,
         publishedAt: new Date(),
       },
     });

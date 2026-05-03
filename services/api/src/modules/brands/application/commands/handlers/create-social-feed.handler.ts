@@ -69,7 +69,10 @@ export class CreateSocialFeedHandler implements ICommandHandler<CreateSocialFeed
             },
         });
 
-        await this.cacheService.invalidateBrandLandingCaches(brandId);
+        await Promise.all([
+            this.prisma.brandLandingSnapshot.deleteMany({ where: { brandId } }),
+            this.cacheService.invalidateBrandLandingCaches(brandId),
+        ]);
         await this.landingRevalidation.revalidateForBrand(brandId);
 
         return {

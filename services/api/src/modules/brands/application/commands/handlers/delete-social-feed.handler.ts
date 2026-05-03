@@ -24,7 +24,10 @@ export class DeleteSocialFeedHandler implements ICommandHandler<DeleteSocialFeed
         await this.prisma.brandSocialFeed.delete({
             where: { id: command.socialFeedId },
         });
-        await this.cacheService.invalidateBrandLandingCaches(command.brandId);
+        await Promise.all([
+            this.prisma.brandLandingSnapshot.deleteMany({ where: { brandId: command.brandId } }),
+            this.cacheService.invalidateBrandLandingCaches(command.brandId),
+        ]);
         await this.landingRevalidation.revalidateForBrand(command.brandId);
     }
 }
