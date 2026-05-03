@@ -84,11 +84,11 @@ export class StatsService {
   private async getImpactStats(categoryId: string) {
     const [totalParticipants, alumni, totalCountries] = await Promise.all([
       this.prisma.participant.count({
-        where: { user: { brandId: categoryId }, deletedAt: null },
+        where: { user: { brandId: categoryId, deletedAt: null }, deletedAt: null },
       }),
       this.prisma.participantApplication.count({
         where: {
-          program: { brandId: categoryId },
+          program: { brandId: categoryId, deletedAt: null },
           status: { in: ['accepted', 'interview_scheduled'] },
           deletedAt: null,
         },
@@ -108,7 +108,7 @@ export class StatsService {
 
     // 1. Get Totals first for percentage calculation
     const totalParticipants = await this.prisma.participant.count({
-      where: { user: { brandId: categoryId }, deletedAt: null },
+      where: { user: { brandId: categoryId, deletedAt: null }, deletedAt: null },
     });
 
     if (totalParticipants === 0) return { items: [], meta: { total: 0, page, limit, totalPages: 0 } };
@@ -120,7 +120,7 @@ export class StatsService {
     const grouped = await this.prisma.participant.groupBy({
       by: ['originCountry'],
       where: {
-        user: { brandId: categoryId },
+        user: { brandId: categoryId, deletedAt: null },
         originCountry: { not: null },
         deletedAt: null,
       },
