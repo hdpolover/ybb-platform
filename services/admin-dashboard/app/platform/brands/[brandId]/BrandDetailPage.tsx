@@ -88,6 +88,7 @@ import {
   type BrandImpactStats,
   type BrandPromoCta,
   type BrandMomentsShorts,
+  type BrandProgramObjectives,
   type BrandPaymentInfo,
   type BrandPaymentInfoItem,
 } from "../../api";
@@ -1863,6 +1864,116 @@ function MomentsShortsSheet({
   );
 }
 
+// ─── Program Objectives Sheet ───────────────────────────────────────────────────
+
+function ProgramObjectivesSheet({
+  brandId,
+  initial,
+  onSaved,
+}: {
+  brandId: string;
+  initial: BrandProgramObjectives | undefined;
+  onSaved: (updated: BrandMetadata) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState<BrandProgramObjectives>(initial ?? {});
+
+  function resetState() {
+    setForm(initial ?? {});
+    setError(null);
+  }
+
+  function setField<K extends keyof BrandProgramObjectives>(key: K, value: BrandProgramObjectives[K]) {
+    setForm((current) => ({ ...current, [key]: value }));
+    setError(null);
+  }
+
+  function setItemsFromTextArea(value: string) {
+    setField(
+      "items",
+      value
+        .split("\n")
+        .map((item) => item.trim())
+        .filter(Boolean),
+    );
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await updatePlatformBrandMetadata(brandId, {
+        program_objectives: {
+          eyebrow: form.eyebrow?.trim() || undefined,
+          title: form.title?.trim() || undefined,
+          intro: form.intro?.trim() || undefined,
+          items: (form.items ?? []).map((item) => item.trim()).filter(Boolean),
+        },
+      });
+      onSaved(updated);
+      setOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <Button size="sm" variant="outline" onClick={() => { resetState(); setOpen(true); }}>
+        <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
+      </Button>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent side="right" className="sm:max-w-md overflow-y-auto">
+          <SheetHeader><SheetTitle>Edit Program Objectives</SheetTitle></SheetHeader>
+          <div className="mt-6 space-y-4">
+            <SheetMsg message={error} variant="error" />
+            <FieldInput
+              label="Eyebrow"
+              id="po-eyebrow"
+              value={form.eyebrow ?? ""}
+              onChange={(v) => setField("eyebrow", v)}
+              placeholder="Program Objective"
+            />
+            <FieldInput
+              label="Title"
+              id="po-title"
+              value={form.title ?? ""}
+              onChange={(v) => setField("title", v)}
+              placeholder="Program Objectives"
+            />
+            <FieldTextarea
+              label="Intro Paragraph"
+              id="po-intro"
+              value={form.intro ?? ""}
+              onChange={(v) => setField("intro", v)}
+              rows={4}
+            />
+            <FieldTextarea
+              label="Objective Items (one per line)"
+              id="po-items"
+              value={(form.items ?? []).join("\n")}
+              onChange={setItemsFromTextArea}
+              rows={7}
+            />
+            <p className="text-xs text-zinc-400">
+              If this is empty, the landing page uses objectives from the active program.
+            </p>
+          </div>
+          <SheetFooter className="mt-6">
+            <Button onClick={handleSave} loading={saving} disabled={saving}>
+              <Save className="mr-1.5 h-4 w-4" /> Save
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+    </>
+  );
+}
+
 // ─── Landing Page Tab ─────────────────────────────────────────────────────────
 
 function LandingPageTab({ brandId }: { brandId: string }) {
@@ -2010,6 +2121,39 @@ function LandingPageTab({ brandId }: { brandId: string }) {
             <FieldView label="Button URL" value={meta.promo_cta?.primary_cta_href} />
             <FieldView label="Desktop Background URL" value={meta.promo_cta?.background_image_url} />
             <FieldView label="Mobile Background URL" value={meta.promo_cta?.background_image_mobile_url} />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Program Objectives */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Program Objectives Section</CardTitle>
+            <ProgramObjectivesSheet brandId={brandId} initial={meta.program_objectives} onSaved={setMeta} />
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <FieldView label="Eyebrow" value={meta.program_objectives?.eyebrow} />
+            <FieldView label="Title" value={meta.program_objectives?.title} />
+          </div>
+          <div className="mt-3">
+            <FieldView label="Intro Paragraph" value={meta.program_objectives?.intro} />
+          </div>
+          <div className="mt-3">
+            <p className="text-xs font-medium text-zinc-500">Objective Items</p>
+            {meta.program_objectives?.items && meta.program_objectives.items.length > 0 ? (
+              <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-zinc-900">
+                {meta.program_objectives.items.map((item, index) => (
+                  <li key={`${index}-${item}`}>{item}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-0.5 text-sm text-zinc-400">
+                No custom objective items set. Landing page will use active program objectives.
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>

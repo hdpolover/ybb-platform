@@ -9,6 +9,13 @@ import { resolveMaskedFileUrl } from '@shared/utils/masked-file-url';
 const FULLY_FUNDED_PROCESS_COPY =
   'Complete the registration fee, submit the required documents and essay, and participate in the interview process.';
 
+type ProgramObjectivesMetadata = {
+  eyebrow?: string;
+  title?: string;
+  intro?: string;
+  items?: string[];
+};
+
 function normalizePaymentInfoContent(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null;
@@ -243,6 +250,21 @@ export class HomeStrategy implements ILandingPageStrategy {
       caption: img.title,
     }));
 
+    const objectivesMeta = (brandMeta.program_objectives as ProgramObjectivesMetadata | undefined) ?? {};
+    const fallbackObjectiveItems = (program?.objectives ?? []).map((obj) => ({
+      id: obj.id,
+      description: obj.description,
+      order: obj.order,
+    }));
+    const objectiveItemsFromMetadata = (objectivesMeta.items ?? [])
+      .map((item) => (typeof item === 'string' ? item.trim() : ''))
+      .filter((item) => item.length > 0)
+      .map((description, index) => ({
+        id: `meta-objective-${index + 1}`,
+        description,
+        order: index + 1,
+      }));
+
     const result = {
       slug: 'home',
       title: brand.name,
@@ -301,12 +323,12 @@ export class HomeStrategy implements ILandingPageStrategy {
         {
           type: 'program_objectives',
           content: {
-            title: 'Program Objectives',
-            items: program?.objectives?.map((obj) => ({
-              id: obj.id,
-              description: obj.description,
-              order: obj.order
-            })) || [],
+            eyebrow: (objectivesMeta.eyebrow || '').trim() || 'Program Objective',
+            title: (objectivesMeta.title || '').trim() || 'Program Objectives',
+            intro:
+              (objectivesMeta.intro || '').trim() ||
+              `The ${brand.name} program is carefully designed to shape delegates into impactful young leaders. Through a mix of forums, competitions, and collaborative projects, participants are guided to grow in character, skills, and global perspective.`,
+            items: objectiveItemsFromMetadata.length > 0 ? objectiveItemsFromMetadata : fallbackObjectiveItems,
             // `gallery` is canonical; keep `images` for backwards compatibility.
             gallery: objectiveImages,
             images: objectiveImages,
