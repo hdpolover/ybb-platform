@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -68,6 +69,9 @@ func LoadConfig() (*Config, error) {
 	if err := validatePaymentSecretsKey(cfg.PaymentSecretsKey); err != nil {
 		return nil, err
 	}
+	if err := validateInternalServiceKey(cfg.Environment, cfg.InternalServiceKey); err != nil {
+		return nil, err
+	}
 
 	return cfg, nil
 }
@@ -92,4 +96,25 @@ func validatePaymentSecretsKey(b64Key string) error {
 		return fmt.Errorf("PAYMENT_SECRETS_KEY must decode to exactly 32 bytes (got %d)", len(key))
 	}
 	return nil
+}
+
+func validateInternalServiceKey(environment, internalServiceKey string) error {
+	if !requiresInternalServiceKey(environment) {
+		return nil
+	}
+
+	if strings.TrimSpace(internalServiceKey) == "" {
+		return fmt.Errorf("INTERNAL_SERVICE_KEY is required when ENVIRONMENT=%s", strings.TrimSpace(environment))
+	}
+
+	return nil
+}
+
+func requiresInternalServiceKey(environment string) bool {
+	switch strings.ToLower(strings.TrimSpace(environment)) {
+	case "", "local", "development", "dev", "test":
+		return false
+	default:
+		return true
+	}
 }
