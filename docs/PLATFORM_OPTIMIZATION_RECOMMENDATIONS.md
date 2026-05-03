@@ -31,7 +31,9 @@ This section is updated during execution so progress can be tracked without chec
 | 2026-05-03 | PR #1 - Baseline + flags + smoke tests (`ybb-program-next`) | Merged | Added baseline checklist doc, feature-flag plumbing, and Playwright smoke coverage. PR: https://github.com/hdpolover/ybb-program-next/pull/14 |
 | 2026-05-03 | PR #2 - Root layout speed quick win (`ybb-program-next`) | Merged | Removed `getHomePageData()` dependency from root layout so shared layout work is lighter. PR: https://github.com/hdpolover/ybb-program-next/pull/15 |
 | 2026-05-03 | PR #3 - Script/image quick wins (`ybb-program-next`) | Merged | Added route-aware chat script gating and reduced home gallery initial render size. PR: https://github.com/hdpolover/ybb-program-next/pull/16 |
-| 2026-05-03 | PR #4 - Production safety (`ybb-program-next`) | In progress | Removed BFF debug payloads and hardcoded staging API fallbacks for auth-critical routes; added production env fail-closed checks for API URLs. PR: https://github.com/hdpolover/ybb-program-next/pull/17 |
+| 2026-05-03 | PR #4 - Production safety (`ybb-program-next`) | Merged | Removed BFF debug payloads and hardcoded staging API fallbacks for auth-critical routes; added production env fail-closed checks for API URLs. PR: https://github.com/hdpolover/ybb-program-next/pull/17 |
+| 2026-05-03 | PR #5 - Revalidation security (`ybb-program-next`) | Merged | Hardened settings/home revalidation endpoint auth with production-required secrets and constant-time bearer comparison. PR: https://github.com/hdpolover/ybb-program-next/pull/18 |
+| 2026-05-03 | PR #6 - BFF CSRF/origin guard (`ybb-program-next`) | In progress | Added shared same-origin guard for mutating BFF routes in log-only rollout mode behind `ENABLE_CSRF_GUARD`. PR: https://github.com/hdpolover/ybb-program-next/pull/19 |
 
 ## Priority Summary
 
