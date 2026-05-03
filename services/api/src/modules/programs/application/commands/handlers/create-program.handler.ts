@@ -6,6 +6,7 @@ import { Program } from '@core/entities/program.entity';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
 import { UserActivityLog } from '@core/entities/user-activity-log.entity';
 import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
+import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
 
 @CommandHandler(CreateProgramCommand)
 export class CreateProgramHandler implements ICommandHandler<CreateProgramCommand> {
@@ -15,6 +16,7 @@ export class CreateProgramHandler implements ICommandHandler<CreateProgramComman
         @Inject(IUserActivityLogRepository)
         private readonly activityLogRepository: IUserActivityLogRepository,
         private readonly cacheService: CacheService,
+        private readonly prisma: PrismaService,
     ) {}
 
     async execute(command: CreateProgramCommand): Promise<any> {
@@ -69,6 +71,7 @@ export class CreateProgramHandler implements ICommandHandler<CreateProgramComman
     private async invalidateProgramCaches(brandId: string): Promise<void> {
         try {
             await Promise.all([
+                this.prisma.brandLandingSnapshot.deleteMany({ where: { brandId } }),
                 this.cacheService.invalidateBrandLandingCaches(brandId),
                 this.cacheService.invalidateByPattern('program:list:*'),
             ]);

@@ -23,6 +23,7 @@ export const CACHE_KEYS = {
   LANDING_ANNOUNCEMENTS: (brandId: string) => `landing:announcements:${brandId}`,
   LANDING_FAQS: (brandId: string, page: number, limit: number, search: string) => `landing:faqs:${brandId}:${page}:${limit}:${search}`,
   LANDING_SETTINGS: (brandId: string) => `landing:settings:${brandId}`,
+  LANDING_SNAPSHOT: (brandId: string, page: string, slug: string = '') => `landing:snapshot:${brandId}:${page}:${slug || 'root'}`,
 
   // Portal cache keys
   PORTAL_DASHBOARD: (userId: string) => `portal:dashboard:${userId}`,
