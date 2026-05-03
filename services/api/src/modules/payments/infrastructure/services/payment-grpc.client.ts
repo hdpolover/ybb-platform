@@ -106,7 +106,6 @@ export class PaymentGrpcClient implements OnModuleInit {
   async processPayment(req: ProcessPaymentRequest): Promise<ProcessPaymentResponse> {
       try {
           const resp = await lastValueFrom(this.paymentService.ProcessPayment(req, this.metadata()));
-          this.logger.log(`ProcessPayment response: ${JSON.stringify(resp)}`);
           return resp;
       } catch (error) {
           this.rethrowAsHttp(error, 'process payment');

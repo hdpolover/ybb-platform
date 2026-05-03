@@ -26,6 +26,7 @@ import {
   Award,
   HelpCircle,
   BookOpen,
+  Handshake,
   ShieldCheck,
   Shield,
   Menu,
@@ -192,6 +193,7 @@ export const programNavSections: NavSection[] = [
         ],
       },
       { id: "announcements", label: "Announcements", href: "announcements", icon: Bell },
+      { id: "partnerships", label: "Partnerships", href: "partnerships", icon: Handshake },
     ],
   },
   {
