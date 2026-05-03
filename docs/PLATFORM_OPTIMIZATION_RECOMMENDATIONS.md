@@ -42,6 +42,7 @@ This section is updated during execution so progress can be tracked without chec
 | 2026-05-04 | PR #12 - Payment internal auth fail-closed (`ybb-platform/services/payment`) | In review | Payment service now requires `INTERNAL_SERVICE_KEY` in non-local environments so private HTTP/gRPC routes cannot run with empty internal auth config. PR: https://github.com/hdpolover/ybb-platform/pull/10 |
 | 2026-05-04 | PR #13 - Sensitive log redaction (`ybb-platform/services/api` + `services/notification`) | In review | Removed raw JWT/payment response logs and replaced notification auth/payment event payload logging with redacted summaries that avoid token/full-payload leakage. PR: https://github.com/hdpolover/ybb-platform/pull/11 |
 | 2026-05-04 | PR #14 - Phase 3 cache correctness batch (`ybb-program-next`) | In review | Added brand-domain resolution memoization, in-flight stampede protection for settings/home cache keys, and short-TTL brand-scoped payment-methods caching. PR: https://github.com/hdpolover/ybb-program-next/pull/22 |
+| 2026-05-04 | PR #15 - Application search trigram indexes (`ybb-platform/services/api`) | In review | Added `pg_trgm` and partial GIN trigram indexes for `participants.full_name` and `users.email` to speed case-insensitive application search filters. PR: https://github.com/hdpolover/ybb-platform/pull/12 |
 
 ## Priority Summary
 
