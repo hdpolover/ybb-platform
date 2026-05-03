@@ -6,6 +6,8 @@ import { BrandResponseDto } from '../../../presentation/dto/brand.dto';
 import { StorageService } from '../../../../files/application/storage.service';
 import { Brand } from '@core/entities/brand.entity';
 import { LandingRevalidationService } from '../../services/landing-revalidation.service';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
 
 @CommandHandler(UpdateBrandDetailsCommand)
 export class UpdateBrandDetailsHandler implements ICommandHandler<UpdateBrandDetailsCommand> {
@@ -13,6 +15,8 @@ export class UpdateBrandDetailsHandler implements ICommandHandler<UpdateBrandDet
         @Inject('IBrandRepository')
         private readonly brandRepository: IBrandRepository,
         private readonly storageService: StorageService,
+        private readonly prisma: PrismaService,
+        private readonly cacheService: CacheService,
         private readonly landingRevalidation: LandingRevalidationService,
     ) {}
 
@@ -71,6 +75,10 @@ export class UpdateBrandDetailsHandler implements ICommandHandler<UpdateBrandDet
             metaKeywords: dto.metaKeywords,
         });
 
+        await Promise.all([
+            this.prisma.brandLandingSnapshot.deleteMany({ where: { brandId: id } }),
+            this.cacheService.invalidateBrandLandingCaches(id),
+        ]);
         await this.landingRevalidation.revalidateForBrand(id, {
             landingUrl: updatedBrand.landingUrl,
             websiteUrl: updatedBrand.websiteUrl,

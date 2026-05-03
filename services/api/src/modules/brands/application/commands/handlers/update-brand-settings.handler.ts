@@ -6,12 +6,16 @@ import { BrandResponseDto } from '../../../presentation/dto/brand.dto';
 import { Brand } from '@core/entities/brand.entity';
 import { BrandSetting } from '@core/entities/brand-setting.entity';
 import { LandingRevalidationService } from '../../services/landing-revalidation.service';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
 
 @CommandHandler(UpdateBrandSettingsCommand)
 export class UpdateBrandSettingsHandler implements ICommandHandler<UpdateBrandSettingsCommand> {
     constructor(
         @Inject('IBrandRepository')
         private readonly brandRepository: IBrandRepository,
+        private readonly prisma: PrismaService,
+        private readonly cacheService: CacheService,
         private readonly landingRevalidation: LandingRevalidationService,
     ) {}
 
@@ -52,6 +56,10 @@ export class UpdateBrandSettingsHandler implements ICommandHandler<UpdateBrandSe
 
         const updatedBrand = await this.brandRepository.update(id, brandUpdate);
 
+        await Promise.all([
+            this.prisma.brandLandingSnapshot.deleteMany({ where: { brandId: id } }),
+            this.cacheService.invalidateBrandLandingCaches(id),
+        ]);
         await this.landingRevalidation.revalidateForBrand(id, {
             landingUrl: updatedBrand.landingUrl,
             websiteUrl: updatedBrand.websiteUrl,
