@@ -27,11 +27,18 @@ Welcome to the YBB Platform documentation. This directory contains comprehensive
 | **File Service** | http://localhost:8001 |
 | **File Service Docs** | http://localhost:8001/docs |
 | **Notification Service** | http://localhost:4002 |
+| **Landing Content Service** | http://localhost:4003 |
 | **MinIO Console** | http://localhost:9001 |
 | **RabbitMQ Console** | http://localhost:15672 |
 | **pgAdmin** | http://localhost:5050 |
 | **Grafana** | http://localhost:43000 |
 | **Prometheus** | http://localhost:49090 |
+
+## Internal Security Notes
+
+- `services/file` now uses `FILE_SERVICE_INTERNAL_KEY` to protect private file/media/image endpoints.
+- Set the same value in `services/api` (`FILE_SERVICE_INTERNAL_KEY`) and `services/file` (`FILE_SERVICE_INTERNAL_KEY`).
+- In production-like environments, missing/invalid key is rejected.
 
 ## Production URLs
 
@@ -42,6 +49,7 @@ Welcome to the YBB Platform documentation. This directory contains comprehensive
 | **Payment Service** | https://payments.ybbhub.com |
 | **File Service** | https://files.ybbhub.com |
 | **Notification Service** | https://notification.ybbhub.com |
+| **Landing Content Service** | Internal only (`http://ybb-prod-landing-content:4003` on `dokploy-network`) |
 | **MinIO Console** | https://minio.ybbhub.com |
 | **S3 Storage** | https://s3.ybbhub.com |
 | **RabbitMQ Console** | https://rabbitmq.ybbhub.com |

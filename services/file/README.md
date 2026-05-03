@@ -172,6 +172,7 @@ docker-compose up file
 
 ```bash
 curl -X POST "http://localhost:8001/api/v1/files/upload" \
+  -H "x-internal-service-key: ${FILE_SERVICE_INTERNAL_KEY}" \
   -F "file=@document.pdf" \
   -F "user_id=user123" \
   -F "brand_id=ybb" \
@@ -191,6 +192,9 @@ Response:
   "message": "File uploaded successfully"
 }
 ```
+
+> Note: `/api/v1/files/*`, `/api/v1/media/*`, and `/api/v1/images/*` are internal endpoints.
+> In staging/production they require `x-internal-service-key` and are intended to be called via the API gateway.
 
 ### 2. Export Participant Report
 

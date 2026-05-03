@@ -14,7 +14,17 @@ Decision rule:
 2. Add metrics around load, latency, CPU, memory, queue depth, and failure rate.
 3. Split into a new service only if the boundary needs independent scaling, deployment, ownership, or failure isolation.
 
-Most likely first split: **Landing Content Service**, but only after landing snapshots prove useful inside the API.
+## Implementation Status (May 2026)
+
+Landing Content has already passed the boundary-first rollout and is now running as a standalone service at `services/landing-content`.
+
+- Boundary phase completed in API: persisted `brand_landing_snapshots` + invalidation + backfill tooling.
+- Dedicated service deployed: read-only public endpoints under `/v1/public/:brand/*`.
+- Frontend (`ybb-program-next`) now uses landing-content-first reads with API fallback for:
+  - `home`, `settings`, `programs`, `partners`, `announcements`, `faqs`.
+- Production topology: internal-only service on `dokploy-network` (no public Traefik route required).
+
+This means the “first split” recommendation in this document has been implemented.
 
 ## Summary Recommendation
 

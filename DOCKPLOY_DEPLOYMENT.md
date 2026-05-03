@@ -18,7 +18,8 @@ Deploy in this order due to dependencies:
 | 1 | `shared-rabbitmq` | nothing |
 | 2 | `payment`, `file`, `notification` | RabbitMQ |
 | 3 | `api` | RabbitMQ + payment + file |
-| 4 | `admin-dashboard` | API URL (baked at build time) |
+| 4 | `landing-content` | API Postgres snapshot table |
+| 5 | `admin-dashboard` | API URL (baked at build time) |
 | anytime | `monitoring`, `pgadmin` | nothing critical |
 
 ---
@@ -106,14 +107,28 @@ For every service:
     - `NEXT_PUBLIC_API_URL`: `https://api.ybbhub.com` (**required at build time**)
     - `APP_DOMAINS_RULE`: `Host(\`admin.ybbhub.com\`)`
 
-## 7. Monitoring Stack (Prometheus + Grafana + Loki + Tempo)
+## 7. Landing Content Service (Internal Only)
+- **Compose Path**: `services/landing-content/docker-compose.dokploy.yml`
+- **Watch Path**: `services/landing-content/**`
+- **Environment Variables**:
+    - `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_NAME` (same API DB that stores `brand_landing_snapshots`)
+    - `DATABASE_URL` (optional override; otherwise composed from DB vars)
+    - `LOKI_URL`, `OTEL_EXPORTER_OTLP_ENDPOINT` (optional)
+- **Important**:
+    - This service is internal-only on `dokploy-network`.
+    - Do **not** set `APP_DOMAINS_RULE` for this service unless you intentionally want public exposure.
+    - If Dokploy says compose file not found, verify:
+      - Root Directory = repo root -> compose path must be `services/landing-content/docker-compose.dokploy.yml`
+      - Root Directory = `services/landing-content` -> compose path must be `docker-compose.dokploy.yml`
+
+## 8. Monitoring Stack (Prometheus + Grafana + Loki + Tempo)
 - **Compose Path**: `services/monitoring/docker-compose.dokploy.yml`
 - **Watch Path**: `services/monitoring/**`
 - **Environment Variables**:
     - `GRAFANA_USER`, `GRAFANA_PASSWORD`
     - `APP_DOMAINS_RULE`: `Host(\`monitor.ybbhub.com\`)`
 
-## 8. PgAdmin
+## 9. PgAdmin
 - **Compose Path**: `services/pgadmin/docker-compose.dokploy.yml`
 - **Watch Path**: `services/pgadmin/**`
 - **Environment Variables**:
