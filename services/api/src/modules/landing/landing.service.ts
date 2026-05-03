@@ -105,6 +105,13 @@ export class LandingService {
 
   async getProgramDetail(slug: string, url?: string): Promise<LandingPageResponseDto> {
     const brand = await this.resolveBrand(url);
+    if (brand) {
+      return this.landingSnapshotService.getOrBuildProgramDetailSnapshot(
+        brand,
+        slug,
+        () => this.programsStrategy.getProgramData(slug, brand) as Promise<LandingPageResponseDto>,
+      );
+    }
     return this.programsStrategy.getProgramData(slug, brand) as Promise<LandingPageResponseDto>;
   }
 

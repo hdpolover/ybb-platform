@@ -13,11 +13,32 @@ import {
 } from '../manage-system-announcement.commands';
 
 // Invalidates announcement cache. brandId=null means platform-wide → nuke all brands.
-async function invalidateAnnouncementCache(cache: CacheService, brandId: string | null) {
+async function invalidateAnnouncementCache(
+  prisma: PrismaService,
+  cache: CacheService,
+  brandId: string | null,
+) {
   if (brandId) {
-    await cache.invalidateKey(`landing:announcements:${brandId}`);
+    await Promise.all([
+      cache.invalidateKey(`landing:announcements:${brandId}`),
+      cache.invalidateByPattern(`landing:snapshot:${brandId}:announcements:*`),
+      prisma.brandLandingSnapshot.deleteMany({
+        where: {
+          brandId,
+          page: 'announcements',
+        },
+      }),
+    ]);
   } else {
-    await cache.invalidateByPattern('landing:announcements:*');
+    await Promise.all([
+      cache.invalidateByPattern('landing:announcements:*'),
+      cache.invalidateByPattern('landing:snapshot:*:announcements:*'),
+      prisma.brandLandingSnapshot.deleteMany({
+        where: {
+          page: 'announcements',
+        },
+      }),
+    ]);
   }
 }
 
@@ -87,7 +108,7 @@ export class CreateSystemAnnouncementHandler
       },
     });
 
-    await invalidateAnnouncementCache(this.cache, announcement.brandId);
+    await invalidateAnnouncementCache(this.prisma, this.cache, announcement.brandId);
     return announcement;
   }
 }
@@ -130,7 +151,7 @@ export class UpdateSystemAnnouncementHandler
       },
     });
 
-    await invalidateAnnouncementCache(this.cache, updated.brandId);
+    await invalidateAnnouncementCache(this.prisma, this.cache, updated.brandId);
     return updated;
   }
 }
@@ -152,7 +173,7 @@ export class DeleteSystemAnnouncementHandler
     if (!existing) throw new NotFoundException(`Announcement ${id} not found`);
 
     await this.prisma.systemAnnouncement.delete({ where: { id } });
-    await invalidateAnnouncementCache(this.cache, existing.brandId);
+    await invalidateAnnouncementCache(this.prisma, this.cache, existing.brandId);
     return { success: true, id };
   }
 }
@@ -182,7 +203,7 @@ export class TogglePublishSystemAnnouncementHandler
       },
     });
 
-    await invalidateAnnouncementCache(this.cache, updated.brandId);
+    await invalidateAnnouncementCache(this.prisma, this.cache, updated.brandId);
     return updated;
   }
 }
