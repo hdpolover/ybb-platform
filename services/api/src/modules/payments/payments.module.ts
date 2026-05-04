@@ -6,7 +6,6 @@ import { AuthModule } from '../auth/auth.module';
 import { ParticipantsModule } from '../participants/participants.module';
 import { FilesModule } from '../files/files.module';
 import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.module';
-import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { PaymentsController } from './presentation/payments.controller';
 import { PaymentAdminController } from './presentation/payment-admin.controller';
 import { GatewayAdminController } from './presentation/gateway-admin.controller';
@@ -19,6 +18,7 @@ import { ListUserPaymentsHandler } from './application/queries/handlers/list-use
 import { GetPaymentDetailHandler } from './application/queries/handlers/get-payment-detail.handler';
 import { CreateIntentHandler } from './application/commands/handlers/create-intent.handler';
 import { ProcessPaymentHandler } from './application/commands/handlers/process-payment.handler';
+import { PaymentOutboxService } from './infrastructure/services/payment-outbox.service';
 
 import { CacheModule } from '@shared/infrastructure/cache/cache.module';
 
@@ -46,7 +46,8 @@ import { CacheModule } from '@shared/infrastructure/cache/cache.module';
         GetPaymentDetailHandler,
         CreateIntentHandler,
         ProcessPaymentHandler,
+        PaymentOutboxService,
     ],
-    exports: ['IPaymentRepository', PaymentServiceHttpClient],
+    exports: ['IPaymentRepository', PaymentServiceHttpClient, PaymentOutboxService],
 })
 export class PaymentsModule { }
