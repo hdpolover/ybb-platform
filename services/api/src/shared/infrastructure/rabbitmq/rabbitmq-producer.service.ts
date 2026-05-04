@@ -3,6 +3,13 @@ import { connect, AmqpConnectionManager, ChannelWrapper } from 'amqp-connection-
 import { ConfigService } from '@nestjs/config';
 import { Channel, Options } from 'amqplib';
 
+type EmitOptions = {
+  messageId?: string;
+  correlationId?: string;
+  headers?: Record<string, unknown>;
+  persistent?: boolean;
+};
+
 @Injectable()
 export class RabbitMQProducerService implements OnModuleInit, OnModuleDestroy {
   private connection: AmqpConnectionManager;
@@ -37,14 +44,19 @@ export class RabbitMQProducerService implements OnModuleInit, OnModuleDestroy {
     await this.connection.close();
   }
 
-  async emit(pattern: string, data: unknown) {
+  async emit(pattern: string, data: unknown, options?: EmitOptions) {
     try {
       this.logger.log(`Publishing event to exchange '${this.exchange}' with routing key '${pattern}'`);
       await this.channelWrapper.publish(
         this.exchange,
         pattern,
         { pattern, data }, 
-        { persistent: true } as Options.Publish
+        {
+          persistent: options?.persistent ?? true,
+          messageId: options?.messageId,
+          correlationId: options?.correlationId,
+          headers: options?.headers,
+        } as Options.Publish
       );
       return true;
     } catch (error) {
