@@ -552,6 +552,7 @@ func (s *PaymentGrpcServer) SubmitManualPayment(ctx context.Context, req *pb.Sub
 	// We treat "manual_transfer" as the method ID
 	tx := entities.NewPaymentTransaction(intent.ID, "manual_transfer", intent.Amount)
 	tx.Status = entities.TransactionStatusNeedsReview
+	tx.ProofFileURL = req.ProofFileUrl
 
 	// 3. Store Proof details in GatewayResponse
 	proofData := map[string]interface{}{
