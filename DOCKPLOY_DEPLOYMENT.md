@@ -60,6 +60,7 @@ For every service:
     - `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_NAME` (e.g., `ybb_files_db`)
     - `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET`
     - `MINIO_PUBLIC_ENDPOINT`
+    - `FILE_SERVICE_INTERNAL_KEY` (shared secret for API ↔ file-service private routes)
     - `APP_DOMAINS_RULE`: `Host(\`files.ybbhub.com\`)`
     - `LOKI_URL`, `OTEL_EXPORTER_OTLP_ENDPOINT` (optional)
 
@@ -87,6 +88,7 @@ For every service:
     - `PAYMENT_SERVICE_FALLBACK_URL`: `https://payments.ybbhub.com` (used when internal Docker DNS fails)
     - `PAYMENT_SERVICE_INTERNAL_KEY`
     - `FILE_SERVICE_URL`: `http://ybb-prod-file:8001`
+    - `FILE_SERVICE_INTERNAL_KEY` (must match file-service secret)
     - `STORAGE_PUBLIC_URL`
     - `CORS_ORIGINS` (e.g., `https://chinayouthsummit.com,https://admin.ybbhub.com`)
     - `JWT_SECRET`, `JWT_EXPIRES_IN`

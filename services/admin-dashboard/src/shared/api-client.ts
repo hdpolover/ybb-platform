@@ -1274,7 +1274,7 @@ export async function createPaymentMethodWithIcon(
     const upload = await uploadFileViaPresignedUrl(iconFile, {
       userId,
       brandId,
-      bucket: "payment-methods",
+      bucket: "payment_methods",
       assetType: "payment-method-icon",
     });
     if (!upload.publicUrl) {
@@ -1309,7 +1309,7 @@ export async function updatePaymentMethodWithIcon(
     const upload = await uploadFileViaPresignedUrl(iconFile, {
       userId,
       brandId,
-      bucket: "payment-methods",
+      bucket: "payment_methods",
       assetType: "payment-method-icon",
     });
     if (!upload.publicUrl) {

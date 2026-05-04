@@ -29,9 +29,7 @@ export class QueueMonitoringService implements OnModuleInit, OnModuleDestroy {
 
     async onModuleInit() {
         try {
-            const url = this.configService.get<string>('RABBITMQ_URL') || 'amqp://guest:guest@localhost:5672/';
-            this.connection = await amqp.connect(url);
-            this.channel = await this.connection.createChannel();
+            await this.ensureMonitoringChannel();
             this.logger.log('Queue Monitoring Connected');
             this.intervalParams = setInterval(() => this.checkQueueDepths(), 15000);
         } catch (error) {
@@ -46,6 +44,13 @@ export class QueueMonitoringService implements OnModuleInit, OnModuleDestroy {
     }
 
     private async checkQueueDepths() {
+        try {
+            await this.ensureMonitoringChannel();
+        } catch (error) {
+            this.logger.warn(`Unable to refresh queue monitoring channel: ${error instanceof Error ? error.message : String(error)}`);
+            return;
+        }
+
         if (!this.channel) return;
 
         for (const queue of this.queues) {
@@ -56,10 +61,42 @@ export class QueueMonitoringService implements OnModuleInit, OnModuleDestroy {
                 this.metricsService.jobQueueConsumers.set({ queue_name: queue }, info.consumerCount);
             } catch (error) {
                 const err = error as { code?: number; message?: string };
-                if (err.code !== 404) {
+                const isNotFound = err.code === 404 || (err.message ?? '').includes('NOT_FOUND');
+                if (!isNotFound) {
                     this.logger.warn(`Failed to check queue depth for ${queue}: ${err.message ?? String(error)}`);
                 }
+                // checkQueue on a missing queue closes the channel; reconnect lazily on next interval.
+                if (isNotFound) {
+                    this.channel = null;
+                    break;
+                }
             }
+        }
+    }
+
+    private async ensureMonitoringChannel() {
+        if (!this.connection) {
+            const url = this.configService.get<string>('RABBITMQ_URL') || 'amqp://guest:guest@localhost:5672/';
+            this.connection = await amqp.connect(url);
+            this.connection.on('error', (error) => {
+                this.logger.warn(`Queue monitoring connection error: ${error instanceof Error ? error.message : String(error)}`);
+            });
+            this.connection.on('close', () => {
+                this.channel = null;
+                this.connection = null;
+                this.logger.warn('Queue monitoring connection closed');
+            });
+        }
+
+        if (!this.channel) {
+            this.channel = await this.connection.createChannel();
+            this.channel.on('error', (error) => {
+                this.logger.warn(`Queue monitoring channel error: ${error instanceof Error ? error.message : String(error)}`);
+            });
+            this.channel.on('close', () => {
+                this.channel = null;
+                this.logger.warn('Queue monitoring channel closed');
+            });
         }
     }
 

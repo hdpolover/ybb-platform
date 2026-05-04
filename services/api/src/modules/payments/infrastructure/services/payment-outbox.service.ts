@@ -1,9 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { Prisma } from '@prisma/client';
 import { createHash } from 'crypto';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
+import { PrismaTransactionClient } from '@shared/types/prisma-transaction.type';
 
 type EnqueuePaymentOutboxParams = {
     eventType: string;
@@ -58,7 +58,7 @@ export class PaymentOutboxService {
     }
 
     async enqueueInTransaction(
-        tx: Prisma.TransactionClient,
+        tx: PrismaTransactionClient,
         params: EnqueuePaymentOutboxParams,
     ): Promise<{ queued: boolean; dedupeKey: string }> {
         // Use JSON.stringify for the stored payload so that standard JSON semantics

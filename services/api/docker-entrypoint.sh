@@ -23,7 +23,11 @@ if [ $EXIT_CODE -ne 0 ]; then
 fi
 
 echo "🌱 Seeding reference data (auth providers, form fields, templates)..."
-npm run seed:reference:prod
+if [ "$NODE_ENV" = "production" ] || [ "$NODE_ENV" = "staging" ]; then
+  npm run seed:reference:prod
+else
+  npm run seed:reference
+fi
 
 if [ "$RUN_SEED" = "true" ]; then
   echo "🌱 Running full seed..."
