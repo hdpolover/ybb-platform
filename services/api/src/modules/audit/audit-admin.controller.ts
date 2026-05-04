@@ -20,6 +20,7 @@ import { Roles } from '../auth/application/decorators/roles.decorator';
 import { UserRole } from '../../core/entities/user.entity';
 import { CurrentUser, CurrentUserData } from '../../shared/decorators/current-user.decorator';
 import { QueryAuditLogsDto } from './dto/query-audit-logs.dto';
+import { ListAuditLogsDto } from './dto/list-audit-logs.dto';
 import { AuditCleanupService } from './audit-cleanup.service';
 import { Prisma, ChangeType, ChangedByType, RiskLevel } from '@prisma/client';
 
@@ -44,17 +45,16 @@ export class AuditAdminController {
     @ApiOperation({ summary: 'List Audit Logs (Admin)', operationId: 'listAuditLogs' })
     @ApiResponse({ status: 200, description: 'Paginated list of audit logs' })
     async list(
-        @Query() query: QueryAuditLogsDto,
+        @Query() query: ListAuditLogsDto,
         @CurrentUser() currentUser: CurrentUserData,
     ) {
         if (!currentUser.adminId) throw new UnauthorizedException('Admin access required');
 
         const { page = 1, limit = 20, cursor } = query;
+        // cursor key present in query (even empty string) = opt-in to cursor mode
+        const useCursorMode = cursor !== undefined;
         const cursorToken = cursor?.trim() || null;
-        const useCursorMode = cursorToken !== null;
-        const decodedCursor = useCursorMode
-            ? this.decodeCreatedAtCursor(cursorToken as string)
-            : null;
+        const decodedCursor = cursorToken ? this.decodeCreatedAtCursor(cursorToken) : null;
         const skip = (page - 1) * limit;
 
         const where = this.buildWhereClause(query);
@@ -121,7 +121,7 @@ export class AuditAdminController {
         @Param('entityId') entityId: string,
         @Query('page') page: number = 1,
         @Query('limit') limit: number = 50,
-        @Query('cursor') cursor: string = '',
+        @Query('cursor') cursor: string | undefined = undefined,
         @CurrentUser() currentUser: CurrentUserData,
     ) {
         if (!currentUser.adminId) throw new UnauthorizedException('Admin access required');
@@ -129,11 +129,10 @@ export class AuditAdminController {
         const pageNum = Number(page);
         const limitNum = Number(limit);
         const skip = (pageNum - 1) * limitNum;
+        // cursor key present in query (even empty string) = opt-in to cursor mode
+        const useCursorMode = cursor !== undefined;
         const cursorToken = cursor?.trim() || null;
-        const useCursorMode = cursorToken !== null;
-        const decodedCursor = useCursorMode
-            ? this.decodeCreatedAtCursor(cursorToken as string)
-            : null;
+        const decodedCursor = cursorToken ? this.decodeCreatedAtCursor(cursorToken) : null;
 
         const where = { entityType, entityId };
         const listWhere = useCursorMode
@@ -247,12 +246,18 @@ export class AuditAdminController {
         return where;
     }
 
+    private static readonly UUID_RE =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
     private decodeCreatedAtCursor(cursor: string): { id: string; createdAt: Date } {
         try {
             const json = Buffer.from(cursor, 'base64url').toString('utf8');
             const parsed = JSON.parse(json) as { id?: string; createdAt?: string };
             if (!parsed.id || !parsed.createdAt) {
                 throw new Error('missing cursor fields');
+            }
+            if (!AuditAdminController.UUID_RE.test(parsed.id)) {
+                throw new Error('invalid cursor id');
             }
             const createdAt = new Date(parsed.createdAt);
             if (Number.isNaN(createdAt.getTime())) {
