@@ -9,7 +9,8 @@ type EnqueuePaymentOutboxParams = {
     eventType: string;
     aggregateType: string;
     aggregateId: string;
-    payload: unknown;
+    /** Must be a JSON-serializable POJO (no Date, undefined, class instances, etc.) */
+    payload: Record<string, unknown>;
     dedupeKey?: string;
     correlationId?: string;
 };
@@ -37,6 +38,15 @@ export class PaymentOutboxService {
         process.env.PAYMENT_OUTBOX_MAX_RETRY_DELAY_SECONDS,
         900,
     );
+    /**
+     * How long (seconds) a row may remain in 'processing' before it is considered
+     * orphaned (worker crashed) and eligible for reclaim. Defaults to 120 s
+     * (enough to cover several cron intervals).
+     */
+    private readonly leaseDurationSeconds = parsePositiveInt(
+        process.env.PAYMENT_OUTBOX_LEASE_DURATION_SECONDS,
+        120,
+    );
 
     constructor(
         private readonly prisma: PrismaService,
@@ -51,7 +61,9 @@ export class PaymentOutboxService {
         tx: Prisma.TransactionClient,
         params: EnqueuePaymentOutboxParams,
     ): Promise<{ queued: boolean; dedupeKey: string }> {
-        const payloadJson = stableStringify(params.payload ?? {});
+        // Use JSON.stringify for the stored payload so that standard JSON semantics
+        // are preserved (Date → ISO string via toJSON, no undefined coercion, etc.).
+        const payloadJson = JSON.stringify(params.payload ?? {});
         const dedupeKey =
             normalizeString(params.dedupeKey) ??
             buildDedupeKey(params.eventType, params.aggregateId, payloadJson);
@@ -118,8 +130,10 @@ export class PaymentOutboxService {
             WITH next_events AS (
                 SELECT id
                 FROM payment_outbox_events
-                WHERE status IN ('pending', 'failed')
-                  AND next_attempt_at <= NOW()
+                WHERE (
+                    (status IN ('pending', 'failed') AND next_attempt_at <= NOW())
+                    OR (status = 'processing' AND updated_at < NOW() - (${this.leaseDurationSeconds} * INTERVAL '1 second'))
+                )
                   AND attempts < ${this.maxAttempts}
                 ORDER BY created_at ASC
                 LIMIT ${this.batchSize}
@@ -211,27 +225,13 @@ function normalizeString(value: string | undefined): string | undefined {
     return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function stableStringify(value: unknown): string {
-    if (value === null || value === undefined) return 'null';
-    if (typeof value !== 'object') return JSON.stringify(value);
-    if (Array.isArray(value)) {
-        return `[${value.map((item) => stableStringify(item)).join(',')}]`;
-    }
-
-    const entries = Object.entries(value as Record<string, unknown>).sort(
-        ([a], [b]) => a.localeCompare(b),
-    );
-    return `{${entries
-        .map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`)
-        .join(',')}}`;
-}
-
 function buildDedupeKey(eventType: string, aggregateId: string, payloadJson: string): string {
+    // Always returns a key ≤79 chars so it stays well within the VARCHAR(191) DB column.
+    // The full SHA-256 hex (64 chars) has negligible collision probability.
     const digest = createHash('sha256')
         .update(`${eventType}:${aggregateId}:${payloadJson}`)
-        .digest('hex')
-        .slice(0, 40);
-    return `payment-outbox:${eventType}:${aggregateId}:${digest}`;
+        .digest('hex'); // 64 hex chars
+    return `payment-outbox:${digest}`; // 15 + 64 = 79 chars
 }
 
 function toErrorMessage(error: unknown): string {

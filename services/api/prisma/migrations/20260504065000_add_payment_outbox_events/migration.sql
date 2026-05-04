@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS "payment_outbox_events" (
+CREATE TABLE "payment_outbox_events" (
     "id" UUID NOT NULL DEFAULT uuid_generate_v4(),
     "event_type" VARCHAR(120) NOT NULL,
     "aggregate_type" VARCHAR(64) NOT NULL,
@@ -17,11 +17,11 @@ CREATE TABLE IF NOT EXISTS "payment_outbox_events" (
     CONSTRAINT "payment_outbox_events_status_check" CHECK ("status" IN ('pending', 'processing', 'failed', 'published', 'dead'))
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS "payment_outbox_events_dedupe_key_key"
+CREATE UNIQUE INDEX "payment_outbox_events_dedupe_key_key"
     ON "payment_outbox_events"("dedupe_key");
 
-CREATE INDEX IF NOT EXISTS "idx_payment_outbox_status_next_attempt_at"
+CREATE INDEX "idx_payment_outbox_status_next_attempt_at"
     ON "payment_outbox_events"("status", "next_attempt_at");
 
-CREATE INDEX IF NOT EXISTS "idx_payment_outbox_aggregate"
+CREATE INDEX "idx_payment_outbox_aggregate"
     ON "payment_outbox_events"("aggregate_type", "aggregate_id");
