@@ -8,6 +8,7 @@ import {
   listProgramSupportTickets,
   replyProgramSupportTicket,
   updateProgramSupportTicket,
+  type ProgramSupportTicketAttachment,
   type ProgramSupportTicketDetail,
   type ProgramSupportTicketPriority,
   type ProgramSupportTicketStatus,
@@ -46,9 +47,86 @@ function sanitizeRichHtml(value: string): string {
     .replace(/<(?!\/?(p|br|strong|b|em|i|u|ul|ol|li|blockquote|code|pre)\b)[^>]*>/gi, "");
 }
 
+function stripUploadedScreenshotsSection(value: string): string {
+  return value
+    .replace(/<p>\s*<strong>\s*Uploaded screenshots\s*<\/strong>\s*<\/p>\s*<ul>[\s\S]*?<\/ul>/i, "")
+    .trim();
+}
+
+function guessMimeTypeFromUrl(url: string): string | undefined {
+  return /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/i.test(url) ? "image/*" : undefined;
+}
+
+function extractScreenshotAttachments(value: string): ProgramSupportTicketAttachment[] {
+  if (!value.trim()) return [];
+  const normalized = value.replace(/&amp;/gi, "&");
+  const matches = normalized.match(/https?:\/\/[^\s<>"')]+/gi) ?? [];
+  const urls = Array.from(new Set(matches.map((url) => url.replace(/[),.;]+$/, ""))));
+
+  return urls.map((fileUrl, index) => {
+    let fileName = `Screenshot ${index + 1}`;
+    try {
+      const pathName = decodeURIComponent(new URL(fileUrl).pathname);
+      const lastSegment = pathName.split("/").filter(Boolean).pop();
+      if (lastSegment) fileName = lastSegment;
+    } catch {
+      // Keep default for malformed URL.
+    }
+
+    return {
+      fileId: `external-${index}`,
+      fileName,
+      fileUrl,
+      mimeType: guessMimeTypeFromUrl(fileUrl),
+    };
+  });
+}
+
+function CompactAttachmentGrid({ attachments }: { attachments: ProgramSupportTicketAttachment[] }) {
+  if (attachments.length === 0) return null;
+
+  return (
+    <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-5">
+      {attachments.map((attachment) => {
+        const isImage =
+          (attachment.mimeType ?? "").startsWith("image/") ||
+          /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/i.test(attachment.fileUrl);
+
+        if (!isImage) {
+          return (
+            <a
+              key={attachment.fileId}
+              href={attachment.fileUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="line-clamp-2 rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-zinc-50"
+            >
+              {attachment.fileName}
+            </a>
+          );
+        }
+
+        return (
+          <a
+            key={attachment.fileId}
+            href={attachment.fileUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="overflow-hidden rounded-md border border-zinc-200 bg-zinc-100 hover:border-zinc-300"
+            title={attachment.fileName}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={attachment.fileUrl} alt={attachment.fileName} className="h-16 w-full object-cover" />
+          </a>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function ProgramSupportTicketsPage() {
   const params = useParams<{ programId: string }>();
-  const { accessiblePrograms, isPlatformAdmin } = useAuth();
+  const { accessiblePrograms, assignedPrograms, accessConfig } = useAuth();
 
   const selectedProgram = useMemo(
     () =>
@@ -60,6 +138,8 @@ export default function ProgramSupportTicketsPage() {
 
   const programId = selectedProgram?.programId ?? params.programId;
   const programName = selectedProgram?.programName ?? "Selected Program";
+  const isAssignedProgramAdmin = assignedPrograms.some((program) => program.programId === programId);
+  const canManageSupportTickets = accessConfig.isSuperAdmin || isAssignedProgramAdmin;
 
   const [tickets, setTickets] = useState<ProgramSupportTicketSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -80,6 +160,33 @@ export default function ProgramSupportTicketsPage() {
   const limit = 20;
 
   const totalPages = Math.max(1, Math.ceil(total / limit));
+  const originalMessage = useMemo(
+    () => selectedTicket?.messages.find((message) => !message.isFromAdmin),
+    [selectedTicket],
+  );
+  const originalContent =
+    selectedTicket?.description?.trim() ? selectedTicket.description : (originalMessage?.message ?? "");
+  const originalDescription = useMemo(
+    () => sanitizeRichHtml(stripUploadedScreenshotsSection(originalContent)),
+    [originalContent],
+  );
+  const originalAttachments = useMemo(() => {
+    const extracted = extractScreenshotAttachments(originalContent);
+    const merged = new Map<string, ProgramSupportTicketAttachment>();
+    const combined = [...(originalMessage?.attachments ?? []), ...extracted];
+
+    combined.forEach((attachment, index) => {
+      if (!attachment.fileUrl || merged.has(attachment.fileUrl)) return;
+      merged.set(attachment.fileUrl, {
+        ...attachment,
+        fileId: attachment.fileId || `${attachment.fileUrl}-${index}`,
+        fileName: attachment.fileName || `Screenshot ${merged.size + 1}`,
+        mimeType: attachment.mimeType ?? guessMimeTypeFromUrl(attachment.fileUrl),
+      });
+    });
+
+    return Array.from(merged.values());
+  }, [originalContent, originalMessage?.attachments]);
 
   const loadTickets = useCallback(async () => {
     if (!programId) return;
@@ -173,7 +280,7 @@ export default function ProgramSupportTicketsPage() {
     }
   }
 
-  if (isPlatformAdmin) {
+  if (!canManageSupportTickets) {
     return (
       <main className="space-y-4">
         <section className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800 shadow-sm">
@@ -418,9 +525,10 @@ export default function ProgramSupportTicketsPage() {
                 <div
                   className="prose prose-sm mt-1 max-w-none text-zinc-700"
                   dangerouslySetInnerHTML={{
-                    __html: sanitizeRichHtml(selectedTicket.description) || "<p>No description provided.</p>",
+                    __html: originalDescription || "<p>No description provided.</p>",
                   }}
                 />
+                <CompactAttachmentGrid attachments={originalAttachments} />
               </div>
 
               <div className="space-y-2">
@@ -428,26 +536,47 @@ export default function ProgramSupportTicketsPage() {
                 {selectedTicket.messages.length === 0 ? (
                   <p className="text-sm text-zinc-500">No messages yet.</p>
                 ) : (
-                  selectedTicket.messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`rounded-md border p-3 ${
-                        message.isFromAdmin ? "border-blue-200 bg-blue-50/50" : "border-zinc-200 bg-white"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-xs font-semibold text-zinc-700">
-                          {message.senderName}
-                          {message.isInternalNote ? " (Internal note)" : ""}
-                        </p>
-                        <p className="text-[11px] text-zinc-500">{formatDateTime(message.createdAt)}</p>
-                      </div>
+                  selectedTicket.messages.map((message, index) => {
+                    const isMainThread = originalMessage
+                      ? message.id === originalMessage.id
+                      : !message.isFromAdmin && index === 0;
+                    const messageTypeLabel = isMainThread
+                      ? "Main thread"
+                      : message.isFromAdmin
+                        ? "Admin reply"
+                        : "Participant reply";
+
+                    return (
                       <div
-                        className="prose prose-sm mt-1 max-w-none text-zinc-700"
-                        dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(message.message) }}
-                      />
-                    </div>
-                  ))
+                        key={message.id}
+                        className={`rounded-md border p-3 ${
+                          isMainThread
+                            ? "border-amber-200 bg-amber-50/40"
+                            : message.isFromAdmin
+                              ? "border-blue-200 bg-blue-50/50"
+                              : "border-zinc-200 bg-white"
+                        }`}
+                      >
+                        <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="inline-flex items-center rounded-full border border-zinc-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-700">
+                              {messageTypeLabel}
+                            </span>
+                            <p className="text-xs font-semibold text-zinc-700">
+                              {message.senderName}
+                              {message.isInternalNote ? " (Internal note)" : ""}
+                            </p>
+                          </div>
+                          <p className="text-[11px] text-zinc-500">{formatDateTime(message.createdAt)}</p>
+                        </div>
+                        <div
+                          className="prose prose-sm max-w-none text-zinc-700"
+                          dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(message.message) }}
+                        />
+                        <CompactAttachmentGrid attachments={message.attachments ?? []} />
+                      </div>
+                    );
+                  })
                 )}
               </div>
 

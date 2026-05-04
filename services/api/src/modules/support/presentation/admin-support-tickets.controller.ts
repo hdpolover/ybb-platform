@@ -95,6 +95,46 @@ type SupportTicketAttachmentResponse = {
 export class AdminSupportTicketsController {
   constructor(private readonly prisma: PrismaService) {}
 
+  private isJsonObject(value: Prisma.JsonValue): value is Prisma.JsonObject {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+  }
+
+  private isSuperAdmin(user: CurrentUserData): boolean {
+    if (Array.isArray(user.role)) {
+      return user.role.includes(UserRole.SUPER_ADMIN);
+    }
+
+    return user.role === UserRole.SUPER_ADMIN;
+  }
+
+  private async getProgramParticipantIds(programId: string): Promise<string[]> {
+    const applications = await this.prisma.participantApplication.findMany({
+      where: {
+        programId,
+        deletedAt: null,
+      },
+      select: {
+        participantId: true,
+      },
+      distinct: ['participantId'],
+    });
+
+    return applications.map((application) => application.participantId);
+  }
+
+  private buildProgramScopeWhere(programId: string, participantIdsInProgram: string[]): Prisma.SupportTicketWhereInput {
+    const scope: Prisma.SupportTicketWhereInput[] = [{ programId }];
+
+    if (participantIdsInProgram.length > 0) {
+      scope.push({
+        programId: null,
+        participantId: { in: participantIdsInProgram },
+      });
+    }
+
+    return { OR: scope };
+  }
+
   private async assertProgramAdminAccess(user: CurrentUserData, programId: string): Promise<{ adminId: string; adminName: string }> {
     const admin = await this.prisma.admin.findUnique({
       where: { userId: user.userId },
@@ -115,7 +155,7 @@ export class AdminSupportTicketsController {
       throw new ForbiddenException('Admin profile not found.');
     }
 
-    if (admin.adminPrograms.length === 0) {
+    if (!this.isSuperAdmin(user) && admin.adminPrograms.length === 0) {
       throw new ForbiddenException('You are not assigned to this program.');
     }
 
@@ -126,24 +166,33 @@ export class AdminSupportTicketsController {
     if (!Array.isArray(value)) return [];
 
     return value
-      .filter(
-        (item): item is Record<string, unknown> =>
-          typeof item === 'object' && item !== null,
-      )
-      .map((item, index) => {
+      .map((item, index): SupportTicketAttachmentResponse | null => {
+        if (!this.isJsonObject(item)) return null;
+
         const fileUrl = typeof item.fileUrl === 'string' ? item.fileUrl : '';
         const fileName = typeof item.fileName === 'string' ? item.fileName : `Attachment ${index + 1}`;
         const fileId = typeof item.fileId === 'string' ? item.fileId : `${fileUrl}-${index}`;
 
-        return {
+        const normalized: SupportTicketAttachmentResponse = {
           fileId,
           fileName,
           fileUrl,
-          mimeType: typeof item.mimeType === 'string' ? item.mimeType : undefined,
-          uploadedAt: typeof item.uploadedAt === 'string' ? item.uploadedAt : undefined,
         };
+
+        if (typeof item.mimeType === 'string') {
+          normalized.mimeType = item.mimeType;
+        }
+
+        if (typeof item.uploadedAt === 'string') {
+          normalized.uploadedAt = item.uploadedAt;
+        }
+
+        return normalized;
       })
-      .filter((attachment) => attachment.fileUrl.length > 0);
+      .filter(
+        (attachment): attachment is SupportTicketAttachmentResponse =>
+          attachment !== null && attachment.fileUrl.length > 0,
+      );
   }
 
   @Get()
@@ -168,10 +217,12 @@ export class AdminSupportTicketsController {
     const page = Math.max(1, Number(pageRaw || 1));
     const limit = Math.min(100, Math.max(1, Number(limitRaw || 20)));
     const trimmedSearch = search?.trim();
+    const participantIdsInProgram = await this.getProgramParticipantIds(programId);
+    const scopeWhere = this.buildProgramScopeWhere(programId, participantIdsInProgram);
 
     const where: Prisma.SupportTicketWhereInput = {
-      programId,
       deletedAt: null,
+      AND: [scopeWhere],
       ...(status && Object.values(SupportTicketStatus).includes(status as SupportTicketStatus)
         ? { status: status as SupportTicketStatus }
         : {}),
@@ -193,12 +244,22 @@ export class AdminSupportTicketsController {
       });
 
       const participantIds = matchedParticipants.map((participant) => participant.id);
-      where.OR = [
-        { ticketNumber: { contains: trimmedSearch, mode: 'insensitive' } },
-        { subject: { contains: trimmedSearch, mode: 'insensitive' } },
-        { category: { contains: trimmedSearch, mode: 'insensitive' } },
-        { subCategory: { contains: trimmedSearch, mode: 'insensitive' } },
-        ...(participantIds.length > 0 ? [{ participantId: { in: participantIds } }] : []),
+      const existingAnd = Array.isArray(where.AND)
+        ? where.AND
+        : where.AND
+          ? [where.AND]
+          : [];
+      where.AND = [
+        ...existingAnd,
+        {
+          OR: [
+            { ticketNumber: { contains: trimmedSearch, mode: 'insensitive' } },
+            { subject: { contains: trimmedSearch, mode: 'insensitive' } },
+            { category: { contains: trimmedSearch, mode: 'insensitive' } },
+            { subCategory: { contains: trimmedSearch, mode: 'insensitive' } },
+            ...(participantIds.length > 0 ? [{ participantId: { in: participantIds } }] : []),
+          ],
+        },
       ];
     }
 
@@ -270,12 +331,14 @@ export class AdminSupportTicketsController {
     @Param('id') id: string,
   ) {
     await this.assertProgramAdminAccess(user, programId);
+    const participantIdsInProgram = await this.getProgramParticipantIds(programId);
+    const scopeWhere = this.buildProgramScopeWhere(programId, participantIdsInProgram);
 
     const ticket = await this.prisma.supportTicket.findFirst({
       where: {
         id,
-        programId,
         deletedAt: null,
+        AND: [scopeWhere],
       },
       include: {
         messages: {
@@ -344,12 +407,14 @@ export class AdminSupportTicketsController {
     @Body() dto: AdminReplySupportTicketDto,
   ) {
     const { adminId, adminName } = await this.assertProgramAdminAccess(user, programId);
+    const participantIdsInProgram = await this.getProgramParticipantIds(programId);
+    const scopeWhere = this.buildProgramScopeWhere(programId, participantIdsInProgram);
 
     const ticket = await this.prisma.supportTicket.findFirst({
       where: {
         id,
-        programId,
         deletedAt: null,
+        AND: [scopeWhere],
       },
       select: {
         id: true,
@@ -404,12 +469,14 @@ export class AdminSupportTicketsController {
     @Body() dto: AdminUpdateSupportTicketDto,
   ) {
     const { adminId } = await this.assertProgramAdminAccess(user, programId);
+    const participantIdsInProgram = await this.getProgramParticipantIds(programId);
+    const scopeWhere = this.buildProgramScopeWhere(programId, participantIdsInProgram);
 
     const ticket = await this.prisma.supportTicket.findFirst({
       where: {
         id,
-        programId,
         deletedAt: null,
+        AND: [scopeWhere],
       },
       select: { id: true },
     });

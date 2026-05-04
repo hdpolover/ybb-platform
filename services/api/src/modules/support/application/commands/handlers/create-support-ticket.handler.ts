@@ -39,6 +39,22 @@ export class CreateSupportTicketHandler implements ICommandHandler<CreateSupport
             description: dto.description,
         });
 
+        const fallbackProgramApplication = dto.programId
+            ? null
+            : await this.prisma.participantApplication.findFirst({
+                where: {
+                    participantId: participant.id,
+                    deletedAt: null,
+                },
+                orderBy: {
+                    updatedAt: 'desc',
+                },
+                select: {
+                    programId: true,
+                },
+            });
+        const resolvedProgramId = dto.programId ?? fallbackProgramApplication?.programId;
+
         const ticketNumber = await this.repository.generateTicketNumber();
 
         const ticket = new SupportTicket(
@@ -54,7 +70,7 @@ export class CreateSupportTicketHandler implements ICommandHandler<CreateSupport
             new Date(),
             dto.subCategory,
             undefined,
-            dto.programId,
+            resolvedProgramId,
         );
 
         await this.unitOfWork.execute(
