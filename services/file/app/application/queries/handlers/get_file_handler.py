@@ -15,7 +15,7 @@ class GetFileHandler:
     PUBLIC_CATEGORIES = [
         'gallery', 'programs', 'banners', 'assets', 'partners',
         'sponsors', 'speakers', 'content', 'announcements', 'faq',
-        'payment_icons', 'payment_methods',
+        'payment_icons', 'payment-methods', 'payment_methods',
         'banner', 'logo', 'thumbnail',
         'brands', 'brands/logos', 'brands/banners', 'brands/sponsor-logos',
         'programs/banners', 'programs/logos', 'programs/thumbnails',

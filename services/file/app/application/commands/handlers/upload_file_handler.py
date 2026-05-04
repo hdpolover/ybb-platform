@@ -43,6 +43,7 @@ class UploadFileHandler:
         'announcements',
         'faq',
         'payment_icons',
+        'payment-methods',
         'payment_methods',
         'brands',
         'brands/logos',

@@ -17,13 +17,17 @@ async def require_internal_service_key(
     x_internal_service_key: Optional[str] = Header(default=None, alias="x-internal-service-key"),
 ) -> None:
     """Validate shared internal service key for private routes."""
-    expected = os.getenv("FILE_SERVICE_INTERNAL_KEY", "").strip()
+    expected = (
+        os.getenv("FILE_SERVICE_INTERNAL_KEY")
+        or os.getenv("INTERNAL_SERVICE_KEY")
+        or ""
+    ).strip()
 
     if not expected:
         if _is_prod_like():
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Internal service key is not configured",
+                detail="Internal service key is not configured (FILE_SERVICE_INTERNAL_KEY/INTERNAL_SERVICE_KEY)",
             )
         return
 

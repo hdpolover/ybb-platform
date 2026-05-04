@@ -40,10 +40,6 @@ async function bootstrap() {
       queue: 'audit_log_queue',
       queueOptions: {
         durable: true,
-        arguments: {
-          'x-dead-letter-exchange': '',
-          'x-dead-letter-routing-key': 'audit_log_queue.retry',
-        },
       },
       noAck: false,
       prefetchCount: 1,
@@ -58,10 +54,6 @@ async function bootstrap() {
       queue: 'reporting_queue',
       queueOptions: {
         durable: true,
-        arguments: {
-          'x-dead-letter-exchange': '',
-          'x-dead-letter-routing-key': 'reporting_queue.retry',
-        },
       },
       noAck: false,
       prefetchCount: 1,
@@ -87,10 +79,6 @@ async function bootstrap() {
       wildcards: true,
       queueOptions: {
         durable: true,
-        arguments: {
-          'x-dead-letter-exchange': '',
-          'x-dead-letter-routing-key': 'api-service-payment-events.retry',
-        },
       },
       noAck: false,
       prefetchCount: 1,
@@ -181,10 +169,6 @@ async function ensureRetryTopology(
 
     await channel.assertQueue(queueName, {
       durable: true,
-      arguments: {
-        'x-dead-letter-exchange': '',
-        'x-dead-letter-routing-key': `${queueName}.retry`,
-      },
     });
     await channel.assertQueue(`${queueName}.retry`, {
       durable: true,

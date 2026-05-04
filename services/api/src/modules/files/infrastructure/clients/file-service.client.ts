@@ -55,7 +55,9 @@ export class FileServiceClient {
       'FILE_SERVICE_URL',
       'http://file-service:8001',
     );
-    this.internalServiceKey = this.configService.get<string>('FILE_SERVICE_INTERNAL_KEY', '');
+    this.internalServiceKey =
+      this.configService.get<string>('FILE_SERVICE_INTERNAL_KEY') ||
+      this.configService.get<string>('INTERNAL_SERVICE_KEY', '');
     this.logger.log(`File Service URL: ${this.fileServiceUrl}`);
   }
 

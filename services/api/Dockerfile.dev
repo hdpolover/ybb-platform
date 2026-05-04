@@ -26,7 +26,10 @@ RUN mkdir -p dist/protos && cp src/protos/*.proto dist/protos/
 
 # Copy and set up entrypoint script
 COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN sed -i 's/\r$//' /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
+COPY rabbitmq-queue-cleanup.sh /app/rabbitmq-queue-cleanup.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.sh \
+  && sed -i 's/\r$//' /app/rabbitmq-queue-cleanup.sh \
+  && chmod +x /docker-entrypoint.sh /app/rabbitmq-queue-cleanup.sh
 
 # Expose port
 EXPOSE 4000
