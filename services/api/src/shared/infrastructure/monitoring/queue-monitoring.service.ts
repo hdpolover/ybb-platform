@@ -15,7 +15,11 @@ export class QueueMonitoringService implements OnModuleInit, OnModuleDestroy {
 
     private readonly queues = [
         'api-service-payment-events',
+        'api-service-payment-events.retry',
+        'api-service-payment-events.dlq',
         'notification_queue',
+        'notification_queue.retry',
+        'notification_queue.dlq',
     ];
 
     constructor(
