@@ -169,6 +169,9 @@ async function ensureRetryTopology(
 
     await channel.assertQueue(queueName, {
       durable: true,
+      arguments: {
+        'x-dead-letter-exchange': '',
+      },
     });
     await channel.assertQueue(`${queueName}.retry`, {
       durable: true,
