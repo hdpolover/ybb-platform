@@ -19,8 +19,10 @@ import { ConfigService } from '@nestjs/config';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
-        const lokiUrl = configService.get<string>('LOKI_URL') || 'http://loki:3100';
-        const LokiTransportConstructor = (LokiTransport as any).default || LokiTransport;
+        const lokiUrl =
+          configService.get<string>('LOKI_URL') || 'http://loki:3100';
+        const LokiTransportConstructor =
+          (LokiTransport as any).default || LokiTransport;
         return {
           transports: [
             new winston.transports.Console({
@@ -28,9 +30,11 @@ import { ConfigService } from '@nestjs/config';
                 winston.format.timestamp(),
                 winston.format.ms(),
                 winston.format.colorize(),
-                winston.format.printf(({ timestamp, level, message, context, ...meta }: any) => {
-                  return `${timestamp} [${context || 'Application'}] ${level}: ${message} ${Object.keys(meta).length ? JSON.stringify(meta) : ''}`;
-                }),
+                winston.format.printf(
+                  ({ timestamp, level, message, context, ...meta }: any) => {
+                    return `${timestamp} [${context || 'Application'}] ${level}: ${message} ${Object.keys(meta).length ? JSON.stringify(meta) : ''}`;
+                  },
+                ),
               ),
             }),
             new LokiTransportConstructor({
@@ -62,4 +66,4 @@ import { ConfigService } from '@nestjs/config';
   controllers: [AppController, MetricsController],
   providers: [AppService],
 })
-export class AppModule { }
+export class AppModule {}

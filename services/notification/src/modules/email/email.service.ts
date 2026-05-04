@@ -512,7 +512,11 @@ export class EmailService {
       supportUrl: this.resolveSupportUrl(payload.brand),
       brand: payload.brand,
     });
-    return this.sendRawEmail(to, `Support Ticket Received (${payload.ticketNumber})`, html);
+    return this.sendRawEmail(
+      to,
+      `Support Ticket Received (${payload.ticketNumber})`,
+      html,
+    );
   }
 
   async sendSupportTicketReplyEmail(to: string, payload: any) {
@@ -522,11 +526,16 @@ export class EmailService {
       subject: payload.subject,
       status: payload.status,
       responderName: payload.responderName || 'Support Team',
-      messagePreview: payload.messagePreview || 'You have a new update from support.',
+      messagePreview:
+        payload.messagePreview || 'You have a new update from support.',
       supportUrl: this.resolveSupportUrl(payload.brand),
       brand: payload.brand,
     });
-    return this.sendRawEmail(to, `New Support Reply (${payload.ticketNumber})`, html);
+    return this.sendRawEmail(
+      to,
+      `New Support Reply (${payload.ticketNumber})`,
+      html,
+    );
   }
 
   async sendSupportTicketStatusUpdatedEmail(to: string, payload: any) {
@@ -539,7 +548,11 @@ export class EmailService {
       supportUrl: this.resolveSupportUrl(payload.brand),
       brand: payload.brand,
     });
-    return this.sendRawEmail(to, `Support Ticket Status Updated (${payload.ticketNumber})`, html);
+    return this.sendRawEmail(
+      to,
+      `Support Ticket Status Updated (${payload.ticketNumber})`,
+      html,
+    );
   }
 
   private resolveSupportUrl(brand?: any): string {

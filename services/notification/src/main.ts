@@ -36,7 +36,11 @@ async function bootstrap() {
   await app.startAllMicroservices();
   await app.listen(process.env.PORT || 4002);
 
-  console.log(`\n🚀 Notification Service is running on: http://localhost:${process.env.PORT || 4002}`);
-  console.log(`📚 API Documentation: http://localhost:${process.env.PORT || 4002}/api/docs\n`);
+  console.log(
+    `\n🚀 Notification Service is running on: http://localhost:${process.env.PORT || 4002}`,
+  );
+  console.log(
+    `📚 API Documentation: http://localhost:${process.env.PORT || 4002}/api/docs\n`,
+  );
 }
 bootstrap();
