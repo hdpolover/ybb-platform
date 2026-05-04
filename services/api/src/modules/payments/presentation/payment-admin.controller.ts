@@ -71,6 +71,7 @@ export class PaymentAdminController {
     @ApiQuery({ name: 'maxAmount', required: false })
     @ApiQuery({ name: 'sortBy', required: false, description: 'createdAt | paidAt | amount | updatedAt' })
     @ApiQuery({ name: 'sortOrder', required: false, description: 'asc | desc' })
+    @ApiQuery({ name: 'cursor', required: false, description: 'Opaque cursor token for seek pagination' })
     async listInvoices(@Query() query: Record<string, string>) {
         const {
             programId,
@@ -91,6 +92,7 @@ export class PaymentAdminController {
             maxAmount,
             sortBy = 'createdAt',
             sortOrder = 'desc',
+            cursor,
         } = query;
 
         if (!programId) throw new HttpException('programId is required', 400);
@@ -98,6 +100,14 @@ export class PaymentAdminController {
         const pageNum = Math.max(1, parseInt(page, 10) || 1);
         const limitNum = Math.min(Math.max(1, parseInt(limit, 10) || 20), 100);
         const skip = (pageNum - 1) * limitNum;
+        const sortDirection = this.parseSortOrder(sortOrder);
+        // cursor key present in query (even empty string) = opt-in to cursor mode
+        const useCursorMode = cursor !== undefined;
+        const cursorToken = cursor?.trim() || null;
+        if (useCursorMode && sortBy !== 'createdAt') {
+            throw new HttpException('cursor pagination only supports sortBy=createdAt', 400);
+        }
+        const decodedCursor = cursorToken ? this.decodeCreatedAtCursor(cursorToken) : null;
         const minAmountNum = typeof minAmount === 'string' && minAmount.trim() !== '' ? Number(minAmount) : undefined;
         const maxAmountNum = typeof maxAmount === 'string' && maxAmount.trim() !== '' ? Number(maxAmount) : undefined;
 
@@ -150,17 +160,22 @@ export class PaymentAdminController {
         }
 
         const allowedSortBy: Record<string, Prisma.ApplicationInvoiceOrderByWithRelationInput> = {
-            createdAt: { createdAt: this.parseSortOrder(sortOrder) },
-            paidAt: { paidAt: this.parseSortOrder(sortOrder) },
-            amount: { amount: this.parseSortOrder(sortOrder) },
-            updatedAt: { updatedAt: this.parseSortOrder(sortOrder) },
+            createdAt: { createdAt: sortDirection },
+            paidAt: { paidAt: sortDirection },
+            amount: { amount: sortDirection },
+            updatedAt: { updatedAt: sortDirection },
         };
-        const orderBy = allowedSortBy[sortBy] ?? allowedSortBy.createdAt;
+        const orderBy = useCursorMode
+            ? [{ createdAt: sortDirection }, { id: sortDirection }]
+            : (allowedSortBy[sortBy] ?? allowedSortBy.createdAt);
+        const listWhere = useCursorMode
+            ? this.buildCreatedAtCursorWhere(where, decodedCursor, sortDirection)
+            : where;
         const summaryWhere: Prisma.ApplicationInvoiceWhereInput = { application: { programId } };
 
         const [invoices, total, summaryRows, overallSummaryRows, paidAggregate, totalsAggregate, tiers, paymentMethodOptionsRows, currencyOptionsRows, applicationStatusRows] = await Promise.all([
             this.prisma.applicationInvoice.findMany({
-                where,
+                where: listWhere,
                 include: {
                     application: {
                         include: {
@@ -172,8 +187,8 @@ export class PaymentAdminController {
                     pricingTier: { select: { id: true, name: true, feeType: true } },
                 },
                 orderBy,
-                skip,
-                take: limitNum,
+                ...(useCursorMode ? {} : { skip }),
+                take: useCursorMode ? limitNum + 1 : limitNum,
             }),
             this.prisma.applicationInvoice.count({ where }),
             this.prisma.applicationInvoice.groupBy({
@@ -224,7 +239,15 @@ export class PaymentAdminController {
             }),
         ]);
         const paymentMethodCatalog = await this.getPaymentMethodCatalog();
-        await this.enrichInvoicePaymentMethods(invoices, paymentMethodCatalog);
+        const hasMore = useCursorMode ? invoices.length > limitNum : pageNum * limitNum < total;
+        const invoiceWindow = useCursorMode ? invoices.slice(0, limitNum) : invoices;
+        await this.enrichInvoicePaymentMethods(invoiceWindow, paymentMethodCatalog);
+        const nextCursor = useCursorMode && hasMore
+            ? this.encodeCreatedAtCursor({
+                id: invoiceWindow[invoiceWindow.length - 1]?.id,
+                createdAt: invoiceWindow[invoiceWindow.length - 1]?.createdAt,
+            })
+            : null;
 
         const summary = this.initInvoiceSummary();
         const overallSummary = this.initInvoiceSummary();
@@ -265,8 +288,17 @@ export class PaymentAdminController {
             }));
 
         return {
-            data: invoices.map((inv) => this.toInvoiceDto(inv)),
-            meta: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
+            data: invoiceWindow.map((inv) => this.toInvoiceDto(inv)),
+            meta: {
+                total,
+                page: pageNum,
+                limit: limitNum,
+                totalPages: Math.ceil(total / limitNum),
+                mode: useCursorMode ? 'cursor' : 'offset',
+                cursor: cursorToken,
+                nextCursor,
+                hasMore,
+            },
             summary,
             overallSummary,
             metrics: {
@@ -327,6 +359,67 @@ export class PaymentAdminController {
             return new Date(dateString);
         }
         return new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), 23, 59, 59, 999));
+    }
+
+    private static readonly UUID_RE =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    private decodeCreatedAtCursor(cursor: string): { id: string; createdAt: Date } {
+        try {
+            const json = Buffer.from(cursor, 'base64url').toString('utf8');
+            const parsed = JSON.parse(json) as { id?: string; createdAt?: string };
+            if (!parsed.id || !parsed.createdAt) {
+                throw new Error('missing cursor fields');
+            }
+            if (!PaymentAdminController.UUID_RE.test(parsed.id)) {
+                throw new Error('invalid cursor id');
+            }
+            const createdAt = new Date(parsed.createdAt);
+            if (Number.isNaN(createdAt.getTime())) {
+                throw new Error('invalid cursor createdAt');
+            }
+            return { id: parsed.id, createdAt };
+        } catch {
+            throw new HttpException('Invalid cursor', 400);
+        }
+    }
+
+    private encodeCreatedAtCursor(cursor: { id?: string; createdAt?: Date }): string | null {
+        if (!cursor.id || !cursor.createdAt) return null;
+        return Buffer.from(
+            JSON.stringify({
+                id: cursor.id,
+                createdAt: cursor.createdAt.toISOString(),
+            }),
+            'utf8',
+        ).toString('base64url');
+    }
+
+    private buildCreatedAtCursorWhere(
+        baseWhere: Prisma.ApplicationInvoiceWhereInput,
+        cursor: { id: string; createdAt: Date } | null,
+        sortOrder: Prisma.SortOrder,
+    ): Prisma.ApplicationInvoiceWhereInput {
+        if (!cursor) return baseWhere;
+        const cursorWindow = sortOrder === 'asc'
+            ? {
+                OR: [
+                    { createdAt: { gt: cursor.createdAt } },
+                    { createdAt: cursor.createdAt, id: { gt: cursor.id } },
+                ],
+            }
+            : {
+                OR: [
+                    { createdAt: { lt: cursor.createdAt } },
+                    { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+                ],
+            };
+        return {
+            AND: [
+                baseWhere,
+                cursorWindow,
+            ],
+        };
     }
 
     @Get('invoices/:id')
