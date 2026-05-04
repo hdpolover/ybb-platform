@@ -72,6 +72,10 @@ docker-compose up notification
 | `PORT` | Service port | `4002` |
 | `NODE_ENV` | Environment | `development` |
 | `RABBITMQ_URL` | RabbitMQ connection | `amqp://guest:guest@rabbitmq:5672/` |
+| `REDIS_URL` | Redis connection for notification idempotency | - |
+| `NOTIFICATION_IDEMPOTENCY_ENABLED` | Enable dedupe guard for consumed events | `true` |
+| `NOTIFICATION_IDEMPOTENCY_DEFAULT_TTL_SECONDS` | Default dedupe TTL (non-payment events) | `86400` |
+| `NOTIFICATION_IDEMPOTENCY_PAYMENT_TTL_SECONDS` | Dedupe TTL for payment events | `604800` |
 | `SMTP_HOST` | Email server host | - |
 | `SMTP_PORT` | Email server port | `587` |
 | `SMTP_USER` | Email username | - |
