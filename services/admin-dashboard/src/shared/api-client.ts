@@ -501,6 +501,76 @@ export type PartnershipEnquiry = {
   updatedAt: string;
 };
 
+export type ProgramSupportTicketStatus =
+  | "open"
+  | "in_progress"
+  | "waiting_response"
+  | "resolved"
+  | "closed";
+
+export type ProgramSupportTicketPriority = "low" | "normal" | "high" | "urgent";
+
+export type ProgramSupportTicketAttachment = {
+  fileId: string;
+  fileName: string;
+  fileUrl: string;
+  mimeType?: string;
+  uploadedAt?: string;
+};
+
+export type ProgramSupportTicketMessage = {
+  id: string;
+  message: string;
+  isFromAdmin: boolean;
+  isInternalNote: boolean;
+  senderId: string;
+  senderName: string;
+  createdAt: string;
+  attachments: ProgramSupportTicketAttachment[];
+};
+
+export type ProgramSupportTicketSummary = {
+  id: string;
+  ticketNumber: string;
+  category: string;
+  subCategory: string | null;
+  subject: string;
+  status: ProgramSupportTicketStatus;
+  priority: ProgramSupportTicketPriority;
+  createdAt: string;
+  updatedAt: string;
+  lastMessageAt: string;
+  participant: {
+    id: string;
+    fullName: string;
+    email: string;
+  } | null;
+};
+
+export type ProgramSupportTicketDetail = {
+  id: string;
+  ticketNumber: string;
+  category: string;
+  subCategory: string | null;
+  subject: string;
+  description: string;
+  status: ProgramSupportTicketStatus;
+  priority: ProgramSupportTicketPriority;
+  resolution: string | null;
+  closedReason: string | null;
+  assignedTo: string | null;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt: string | null;
+  closedAt: string | null;
+  participant: {
+    id: string;
+    fullName: string;
+    email: string;
+  } | null;
+  messages: ProgramSupportTicketMessage[];
+};
+
 // ─── Admins ───────────────────────────────────────────────────────────────────
 
 export type SupportAccessConfig = {
@@ -1474,6 +1544,87 @@ export function updateProgramPartnershipEnquiryStatus(
     {
       method: "PATCH",
       body: JSON.stringify({ status }),
+    },
+  );
+}
+
+// ─── Program Support Tickets ──────────────────────────────────────────────────
+
+export function listProgramSupportTickets(
+  programId: string,
+  params?: {
+    page?: number;
+    limit?: number;
+    status?: ProgramSupportTicketStatus;
+    priority?: ProgramSupportTicketPriority;
+    search?: string;
+  },
+): Promise<Paginated<ProgramSupportTicketSummary>> {
+  const q = new URLSearchParams();
+  if (params?.page) q.set("page", String(params.page));
+  if (params?.limit) q.set("limit", String(params.limit));
+  if (params?.status) q.set("status", params.status);
+  if (params?.priority) q.set("priority", params.priority);
+  if (params?.search) q.set("search", params.search);
+  return requestPaginated<ProgramSupportTicketSummary>(
+    `/admin/programs/${encodeURIComponent(programId)}/support-tickets?${q}`,
+  );
+}
+
+export function getProgramSupportTicket(
+  programId: string,
+  ticketId: string,
+): Promise<ProgramSupportTicketDetail> {
+  return request<ProgramSupportTicketDetail>(
+    `/admin/programs/${encodeURIComponent(programId)}/support-tickets/${encodeURIComponent(ticketId)}`,
+  );
+}
+
+export function replyProgramSupportTicket(
+  programId: string,
+  ticketId: string,
+  input: {
+    message: string;
+    attachments?: ProgramSupportTicketAttachment[];
+    isInternalNote?: boolean;
+  },
+): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>(
+    `/admin/programs/${encodeURIComponent(programId)}/support-tickets/${encodeURIComponent(ticketId)}/messages`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function updateProgramSupportTicket(
+  programId: string,
+  ticketId: string,
+  input: {
+    status?: ProgramSupportTicketStatus;
+    priority?: ProgramSupportTicketPriority;
+    assignedTo?: string | null;
+    resolution?: string | null;
+    closedReason?: string | null;
+  },
+): Promise<{
+  id: string;
+  ticketNumber: string;
+  status: ProgramSupportTicketStatus;
+  priority: ProgramSupportTicketPriority;
+  resolution: string | null;
+  closedReason: string | null;
+  assignedTo: string | null;
+  updatedAt: string;
+  resolvedAt: string | null;
+  closedAt: string | null;
+}> {
+  return request(
+    `/admin/programs/${encodeURIComponent(programId)}/support-tickets/${encodeURIComponent(ticketId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(input),
     },
   );
 }
