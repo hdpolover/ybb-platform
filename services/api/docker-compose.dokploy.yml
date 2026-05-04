@@ -25,7 +25,7 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS}
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@ybb-prod-shared-rabbitmq:5672/
       RABBITMQ_QUEUE_CLEANUP_ON_DEPLOY: ${RABBITMQ_QUEUE_CLEANUP_ON_DEPLOY:-false}
-      RABBITMQ_QUEUE_CLEANUP_TARGETS: ${RABBITMQ_QUEUE_CLEANUP_TARGETS:-audit_log_queue,reporting_queue,api-service-payment-events,notification_queue}
+      RABBITMQ_QUEUE_CLEANUP_TARGETS: ${RABBITMQ_QUEUE_CLEANUP_TARGETS:-audit_log_queue,reporting_queue,api-service-payment-events}
       RABBITMQ_QUEUE_CLEANUP_INCLUDE_RETRY_DLQ: ${RABBITMQ_QUEUE_CLEANUP_INCLUDE_RETRY_DLQ:-true}
       # Optional overrides for RabbitMQ Management API used by cleanup script
       RABBITMQ_MANAGEMENT_URL: ${RABBITMQ_MANAGEMENT_URL:-}
