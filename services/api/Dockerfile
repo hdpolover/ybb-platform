@@ -30,7 +30,7 @@ FROM node:20-alpine AS production
 WORKDIR /app
 
 # Install OpenSSL for Prisma (needed for runtime)
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl curl
 
 ENV NODE_ENV=production
 
@@ -50,7 +50,10 @@ COPY --from=builder /app/dist ./dist
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN sed -i 's/\r$//' /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
+COPY rabbitmq-queue-cleanup.sh /app/rabbitmq-queue-cleanup.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.sh \
+  && sed -i 's/\r$//' /app/rabbitmq-queue-cleanup.sh \
+  && chmod +x /docker-entrypoint.sh /app/rabbitmq-queue-cleanup.sh
 
 # Expose port
 EXPOSE 4000
