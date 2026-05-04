@@ -1,5 +1,6 @@
 import { Controller, Logger, Optional } from '@nestjs/common';
 import { Ctx, EventPattern, Payload, RmqContext } from '@nestjs/microservices';
+import { createHash } from 'crypto';
 import { RmqEventPayload } from '@common/types/events';
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
@@ -9,6 +10,7 @@ import { RedisPubSubService } from '@shared/infrastructure/redis/redis-pubsub.se
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
 import { PaymentStatus, Prisma } from '@prisma/client';
 import { ReferralFunnelService } from '@modules/participants/application/services/referral-funnel.service';
+import { PaymentOutboxService } from '../infrastructure/services/payment-outbox.service';
 
 @Controller()
 export class PaymentEventsController {
@@ -24,6 +26,7 @@ export class PaymentEventsController {
         private readonly prisma: PrismaService,
         private readonly unitOfWork: UnitOfWork,
         private readonly cacheService: CacheService,
+        private readonly paymentOutbox: PaymentOutboxService,
         @Optional() private readonly pubSubService?: RedisPubSubService,
         @Optional() private readonly referralFunnel?: ReferralFunnelService,
     ) {}
@@ -166,6 +169,8 @@ export class PaymentEventsController {
         
         // Unit of Work: Application Payment Status Update + Invoice Creation
         let createdInvoiceId: string | null = null;
+        let outboxQueued = false;
+        let outboxDedupeKey: string | null = null;
         await this.unitOfWork.execute(
             async (repos) => {
                 // Update application payment status
@@ -216,10 +221,42 @@ export class PaymentEventsController {
                 } else {
                     this.logger.warn(`Skipping invoice creation for app ${applicationId} - no pricingTierId`);
                 }
+
+                const outboxResult = await this.paymentOutbox.enqueueInTransaction(repos.tx, {
+                    eventType: 'payment.application-status-updated',
+                    aggregateType: 'participant-application',
+                    aggregateId: applicationId,
+                    correlationId: intentId || transactionId || undefined,
+                    // Hash the variable-length external reference so the dedupe key always
+                    // fits within the VARCHAR(191) DB column regardless of provider ID length.
+                    dedupeKey: buildApplicationDedupeKey(
+                        applicationId,
+                        transactionId || intentId || createdInvoiceId || 'state-update',
+                    ),
+                    payload: {
+                        applicationId,
+                        invoiceId: createdInvoiceId,
+                        paymentCategory: category,
+                        paymentStatus: 'paid',
+                        amount,
+                        currency,
+                        transactionId,
+                        intentId: intentId || null,
+                        paymentMethod: method,
+                        processedAt: new Date().toISOString(),
+                    },
+                });
+                outboxQueued = outboxResult.queued;
+                outboxDedupeKey = outboxResult.dedupeKey;
             },
             { name: 'payment-success-application-update', timeout: 5000 }
         );
         this.logger.log(`Application ${applicationId} updated to PAID (Category: ${category})`);
+        if (this.paymentOutbox.isEnabled()) {
+            this.logger.log(
+                `[payment-outbox] queued=${outboxQueued} dedupe_key=${abbreviateKey(outboxDedupeKey)}`,
+            );
+        }
 
         // Return context for cache invalidation and referral funnel
         return {
@@ -471,4 +508,21 @@ function parsePositiveInt(value: string | undefined, defaultValue: number): numb
     return Number.isFinite(parsed) && parsed > 0
         ? Math.floor(parsed)
         : defaultValue;
+}
+
+function abbreviateKey(value: string | null): string {
+    if (!value) return 'none';
+    return value.length <= 28 ? value : `${value.slice(0, 28)}…`;
+}
+
+/**
+ * Build a dedupe key for the payment-application outbox event that always fits
+ * within the VARCHAR(191) DB column regardless of how long the external IDs are.
+ *
+ * Format: `payment-application:<applicationId>:<16-char hash of externalRef>`
+ * Maximum length: 20 + 36 + 1 + 16 = 73 chars.
+ */
+function buildApplicationDedupeKey(applicationId: string, externalRef: string): string {
+    const refHash = createHash('sha256').update(externalRef).digest('hex').slice(0, 16);
+    return `payment-application:${applicationId}:${refHash}`;
 }
