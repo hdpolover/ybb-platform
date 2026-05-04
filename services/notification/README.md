@@ -72,6 +72,8 @@ docker-compose up notification
 | `PORT` | Service port | `4002` |
 | `NODE_ENV` | Environment | `development` |
 | `RABBITMQ_URL` | RabbitMQ connection | `amqp://guest:guest@rabbitmq:5672/` |
+| `NOTIFICATION_QUEUE_MAX_RETRIES` | Max rejected deliveries before routing to DLQ | `3` |
+| `NOTIFICATION_QUEUE_RETRY_DELAY_MS` | Delay in retry queue before requeueing | `15000` |
 | `REDIS_URL` | Redis connection for notification idempotency | - |
 | `NOTIFICATION_IDEMPOTENCY_ENABLED` | Enable dedupe guard for consumed events | `true` |
 | `NOTIFICATION_IDEMPOTENCY_DEFAULT_TTL_SECONDS` | Default dedupe TTL (non-payment events) | `86400` |
