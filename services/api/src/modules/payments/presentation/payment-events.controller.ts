@@ -298,7 +298,7 @@ export class PaymentEventsController {
 
         const channel = context.getChannelRef() as RabbitChannel | undefined;
         const content = message?.content;
-        if (!channel || !content) {
+        if (!message || !channel || !content) {
             this.logger.error(
                 `[payment-events-retry] max retries reached but message could not be routed to DLQ event=${eventType}`,
             );

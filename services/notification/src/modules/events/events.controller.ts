@@ -456,7 +456,7 @@ export class EventsController {
 
     const channel = context.getChannelRef() as RabbitChannel | undefined;
     const content = message?.content;
-    if (!channel || !content) {
+    if (!message || !channel || !content) {
       this.logger.error(
         `[notification-retry] max retries reached but message could not be routed to DLQ event=${eventType}`,
       );
