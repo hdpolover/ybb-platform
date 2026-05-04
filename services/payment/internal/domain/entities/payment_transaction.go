@@ -31,7 +31,7 @@ type PaymentTransaction struct {
 	FeeProvider    float64 `gorm:"type:decimal(15,2);default:0" json:"fee_provider"`
 	NetAmount      float64 `gorm:"type:decimal(15,2);not null" json:"net_amount"`
 
-	Amount float64 `gorm:"type:decimal(15,2);not null" json:"-"` // Deprecated: Use AmountTotal
+	Amount float64 `gorm:"-" json:"-"` // Deprecated: kept in-memory only; DB uses amount_total
 
 	Status          TransactionStatus `gorm:"type:varchar(20);not null" json:"status"`
 	GatewayResponse json.RawMessage   `gorm:"type:jsonb" json:"gateway_response"`
