@@ -13,18 +13,37 @@ import { TransformInterceptor } from './shared/interceptors/transform.intercepto
 import { CdnMaskInterceptor } from './shared/interceptors/cdn-mask.interceptor';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { PrismaService } from './shared/infrastructure/prisma/prisma.service';
+import * as amqp from 'amqplib';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const rabbitMqUrl =
+    process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672/';
+  const retryDelayMs = parsePositiveInt(process.env.RABBITMQ_RETRY_DELAY_MS, 15000);
+
+  await ensureRetryTopology(rabbitMqUrl, 'audit_log_queue', { retryDelayMs });
+  await ensureRetryTopology(rabbitMqUrl, 'reporting_queue', { retryDelayMs });
+  await ensureRetryTopology(rabbitMqUrl, 'api-service-payment-events', {
+    retryDelayMs,
+    binding: {
+      exchange: 'payment-events',
+      exchangeType: 'topic',
+      routingKey: 'payment.#',
+    },
+  });
 
   // Connect Microservice for Event Consumption (Audit Logging)
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.RMQ,
     options: {
-      urls: [process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672/'],
+      urls: [rabbitMqUrl],
       queue: 'audit_log_queue',
       queueOptions: {
         durable: true,
+        arguments: {
+          'x-dead-letter-exchange': '',
+          'x-dead-letter-routing-key': 'audit_log_queue.retry',
+        },
       },
       noAck: false,
       prefetchCount: 1,
@@ -35,10 +54,14 @@ async function bootstrap() {
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.RMQ,
     options: {
-      urls: [process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672/'],
+      urls: [rabbitMqUrl],
       queue: 'reporting_queue',
       queueOptions: {
         durable: true,
+        arguments: {
+          'x-dead-letter-exchange': '',
+          'x-dead-letter-routing-key': 'reporting_queue.retry',
+        },
       },
       noAck: false,
       prefetchCount: 1,
@@ -56,7 +79,7 @@ async function bootstrap() {
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.RMQ,
     options: {
-      urls: [process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672/'],
+      urls: [rabbitMqUrl],
       queue: 'api-service-payment-events',
       exchange: 'payment-events',
       exchangeType: 'topic',
@@ -64,6 +87,10 @@ async function bootstrap() {
       wildcards: true,
       queueOptions: {
         durable: true,
+        arguments: {
+          'x-dead-letter-exchange': '',
+          'x-dead-letter-routing-key': 'api-service-payment-events.retry',
+        },
       },
       noAck: false,
       prefetchCount: 1,
@@ -129,3 +156,66 @@ async function bootstrap() {
 }
 
 bootstrap();
+
+async function ensureRetryTopology(
+  rabbitMqUrl: string,
+  queueName: string,
+  options: {
+    retryDelayMs: number;
+    binding?: {
+      exchange: string;
+      exchangeType: 'topic' | 'direct' | 'fanout' | 'headers';
+      routingKey: string;
+    };
+  },
+) {
+  const connection = await amqp.connect(rabbitMqUrl);
+  const channel = await connection.createChannel();
+
+  try {
+    if (options.binding) {
+      await channel.assertExchange(options.binding.exchange, options.binding.exchangeType, {
+        durable: true,
+      });
+    }
+
+    await channel.assertQueue(queueName, {
+      durable: true,
+      arguments: {
+        'x-dead-letter-exchange': '',
+        'x-dead-letter-routing-key': `${queueName}.retry`,
+      },
+    });
+    await channel.assertQueue(`${queueName}.retry`, {
+      durable: true,
+      arguments: {
+        'x-message-ttl': options.retryDelayMs,
+        'x-dead-letter-exchange': '',
+        'x-dead-letter-routing-key': queueName,
+      },
+    });
+    await channel.assertQueue(`${queueName}.dlq`, { durable: true });
+
+    if (options.binding) {
+      await channel.bindQueue(
+        queueName,
+        options.binding.exchange,
+        options.binding.routingKey,
+      );
+    }
+  } finally {
+    await channel.close();
+    await connection.close();
+  }
+}
+
+function parsePositiveInt(
+  value: string | undefined,
+  defaultValue: number,
+): number {
+  if (!value) return defaultValue;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0
+    ? Math.floor(parsed)
+    : defaultValue;
+}

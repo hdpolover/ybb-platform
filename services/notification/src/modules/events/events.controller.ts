@@ -13,10 +13,53 @@ import {
 
 type EventPayload = Record<string, unknown>;
 type ReceiptItem = { name: string; quantity: number; price: number };
+type RmqMessage = {
+  content?: Buffer;
+  properties?: {
+    headers?: Record<string, unknown>;
+    messageId?: string;
+    correlationId?: string;
+    contentType?: string;
+    contentEncoding?: string;
+    deliveryMode?: number;
+    priority?: number;
+    expiration?: string;
+    timestamp?: number;
+    type?: string;
+    userId?: string;
+    appId?: string;
+  };
+};
+type RabbitChannel = {
+  sendToQueue: (
+    queue: string,
+    content: Buffer,
+    options?: {
+      headers?: Record<string, unknown>;
+      contentType?: string;
+      contentEncoding?: string;
+      deliveryMode?: number;
+      priority?: number;
+      expiration?: string;
+      timestamp?: number;
+      type?: string;
+      userId?: string;
+      appId?: string;
+      persistent?: boolean;
+      messageId?: string;
+      correlationId?: string;
+    },
+  ) => boolean;
+};
 
 @Controller()
 export class EventsController {
   private readonly logger = new Logger(EventsController.name);
+  private readonly notificationQueue = 'notification_queue';
+  private readonly maxRetryAttempts = parsePositiveInt(
+    process.env.NOTIFICATION_QUEUE_MAX_RETRIES,
+    3,
+  );
 
   constructor(
     private readonly emailService: EmailService,
@@ -363,6 +406,10 @@ export class EventsController {
     data: EventPayload,
     context: RmqContext,
   ): Promise<boolean> {
+    if (this.moveToDlqWhenRetryExhausted(eventType, context)) {
+      return false;
+    }
+
     const message = context.getMessage();
     const messageProperties = asRecord(
       (message as { properties?: unknown } | undefined)?.properties,
@@ -393,6 +440,57 @@ export class EventsController {
       );
     }
 
+    return true;
+  }
+
+  private moveToDlqWhenRetryExhausted(
+    eventType: string,
+    context: RmqContext,
+  ): boolean {
+    const message = context.getMessage() as RmqMessage | undefined;
+    const headers = asRecord(message?.properties?.headers);
+    const retryCount = getRejectedRetryCount(headers, this.notificationQueue);
+    if (retryCount < this.maxRetryAttempts) {
+      return false;
+    }
+
+    const channel = context.getChannelRef() as RabbitChannel | undefined;
+    const content = message?.content;
+    if (!message || !channel || !content) {
+      this.logger.error(
+        `[notification-retry] max retries reached but message could not be routed to DLQ event=${eventType}`,
+      );
+      return true;
+    }
+
+    const dlqName = `${this.notificationQueue}.dlq`;
+    const existingHeaders = asRecord(message.properties?.headers);
+    const dlqHeaders: Record<string, unknown> = {
+      ...existingHeaders,
+      'x-final-reason': 'retry-exhausted',
+      'x-final-event-type': eventType,
+      'x-final-retry-count': retryCount,
+    };
+
+    channel.sendToQueue(dlqName, content, {
+      persistent: true,
+      headers: dlqHeaders,
+      messageId: message.properties?.messageId,
+      correlationId: message.properties?.correlationId,
+      contentType: message.properties?.contentType,
+      contentEncoding: message.properties?.contentEncoding,
+      deliveryMode: message.properties?.deliveryMode,
+      priority: message.properties?.priority,
+      expiration: message.properties?.expiration,
+      timestamp: message.properties?.timestamp,
+      type: message.properties?.type,
+      userId: message.properties?.userId,
+      appId: message.properties?.appId,
+    });
+
+    this.logger.error(
+      `[notification-retry] moved to DLQ event=${eventType} queue=${dlqName} retries=${retryCount}`,
+    );
     return true;
   }
 }
@@ -447,4 +545,46 @@ function getReceiptItems(
   }
 
   return normalized;
+}
+
+function getRejectedRetryCount(
+  headers: Record<string, unknown>,
+  queueName: string,
+): number {
+  const xDeathRaw = headers['x-death'];
+  if (!Array.isArray(xDeathRaw)) return 0;
+
+  let retries = 0;
+  for (const item of xDeathRaw) {
+    const death = asRecord(item);
+    const queue = getString(death, 'queue');
+    const reason = getString(death, 'reason');
+    if (queue !== queueName || reason !== 'rejected') continue;
+
+    const countRaw = death.count;
+    if (typeof countRaw === 'number' && Number.isFinite(countRaw)) {
+      retries += Math.floor(countRaw);
+      continue;
+    }
+
+    if (typeof countRaw === 'string' && countRaw.trim()) {
+      const parsed = Number(countRaw);
+      if (Number.isFinite(parsed)) {
+        retries += Math.floor(parsed);
+      }
+    }
+  }
+
+  return retries;
+}
+
+function parsePositiveInt(
+  value: string | undefined,
+  defaultValue: number,
+): number {
+  if (!value) return defaultValue;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0
+    ? Math.floor(parsed)
+    : defaultValue;
 }
