@@ -48,6 +48,8 @@ export class NotificationIdempotencyService implements OnModuleDestroy {
   /** Timestamp (ms) until which the circuit is open (error logs are suppressed). */
   private circuitOpenUntil = 0;
   private static readonly CIRCUIT_COOLDOWN_MS = 30_000;
+  private static readonly CIRCUIT_COOLDOWN_SECONDS =
+    NotificationIdempotencyService.CIRCUIT_COOLDOWN_MS / 1000;
 
   constructor(private readonly configService: ConfigService) {
     this.enabled = this.parseBool(
@@ -117,7 +119,7 @@ export class NotificationIdempotencyService implements OnModuleDestroy {
       if (now >= this.circuitOpenUntil) {
         this.logger.error(
           `Idempotency check failed for ${eventType}. Processing event in fallback mode. ` +
-            `(Further errors suppressed for ${NotificationIdempotencyService.CIRCUIT_COOLDOWN_MS / 1000}s)`,
+            `(Further errors suppressed for ${NotificationIdempotencyService.CIRCUIT_COOLDOWN_SECONDS}s)`,
           error instanceof Error ? error.stack : String(error),
         );
         this.circuitOpenUntil =
