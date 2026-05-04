@@ -49,4 +49,38 @@ export class ExcelService {
     await workbook.xlsx.write(res);
     res.end();
   }
+
+  async streamExcelRows(
+    res: Response,
+    rows: AsyncIterable<ExcelRow>,
+    columns: Partial<ExcelJS.Column>[],
+    fileName: string,
+    sheetName = 'Report',
+  ) {
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=${fileName}.xlsx`,
+    );
+
+    const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
+      stream: res,
+      useStyles: true,
+      useSharedStrings: false,
+    });
+    const worksheet = workbook.addWorksheet(sheetName);
+    worksheet.columns = columns;
+    worksheet.getRow(1).font = { bold: true };
+
+    for await (const row of rows) {
+      worksheet.addRow(row).commit();
+    }
+
+    worksheet.commit();
+    await workbook.commit();
+    res.end();
+  }
 }
