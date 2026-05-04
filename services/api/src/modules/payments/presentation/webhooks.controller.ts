@@ -11,7 +11,6 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import { WebhookValidationService } from '../infrastructure/webhook-validation.service';
 import { PaymentServiceHttpClient } from '../infrastructure/services/payment-service-http.client';
 
 @ApiTags('Webhooks')
@@ -23,7 +22,6 @@ export class WebhooksController {
     constructor(
         private readonly configService: ConfigService,
         private readonly paymentServiceClient: PaymentServiceHttpClient,
-        private readonly webhookValidation: WebhookValidationService,
     ) {
         this.paymentServiceInternalKey = this.configService.get<string>('PAYMENT_SERVICE_INTERNAL_KEY', '');
         if (!this.configService.get<string>('PAYMENT_SERVICE_URL')) {
@@ -45,15 +43,6 @@ export class WebhooksController {
 
         if (!this.configService.get<string>('PAYMENT_SERVICE_URL')) {
             throw new HttpException('Payment Service Not Configured', HttpStatus.SERVICE_UNAVAILABLE);
-        }
-
-        // Validate the gateway-specific signature before forwarding
-        const isValid = this.webhookValidation.validate(gateway, req);
-        if (!isValid) {
-            this.logger.warn(`Webhook signature validation failed for gateway: ${gateway}`);
-            return res.status(HttpStatus.BAD_REQUEST).json({
-                error: 'Invalid webhook signature',
-            });
         }
 
         const targetPath = `/api/v1/payments/webhook/${gateway}`;
