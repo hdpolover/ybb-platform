@@ -1,5 +1,5 @@
 import { Controller, Logger, Optional } from '@nestjs/common';
-import { EventPattern, Payload } from '@nestjs/microservices';
+import { Ctx, EventPattern, Payload, RmqContext } from '@nestjs/microservices';
 import { RmqEventPayload } from '@common/types/events';
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
@@ -13,6 +13,11 @@ import { ReferralFunnelService } from '@modules/participants/application/service
 @Controller()
 export class PaymentEventsController {
     private readonly logger = new Logger(PaymentEventsController.name);
+    private readonly queueName = 'api-service-payment-events';
+    private readonly maxRetryAttempts = parsePositiveInt(
+        process.env.API_PAYMENT_EVENTS_MAX_RETRIES,
+        3,
+    );
 
     constructor(
         private readonly metricsService: MetricsService,
@@ -24,8 +29,16 @@ export class PaymentEventsController {
     ) {}
 
     @EventPattern('payment.succeeded')
-    async handlePaymentSucceeded(@Payload() data: RmqEventPayload) {
+    async handlePaymentSucceeded(
+        @Payload() data: RmqEventPayload,
+        @Ctx() context: RmqContext,
+    ) {
         const start = Date.now();
+        let status: 'success' | 'failed' = 'success';
+        if (await this.moveToDlqWhenRetryExhausted('payment.succeeded', context)) {
+            return;
+        }
+
         try {
             // Log basic info for debugging
             this.logger.debug(`Metrics: payment.succeeded event received`);
@@ -98,11 +111,13 @@ export class PaymentEventsController {
         } catch (error) {
             const err = error instanceof Error ? error : new Error(String(error));
             this.logger.error(`Failed to handle payment.succeeded: ${err.message}`, err.stack);
+            status = 'failed';
+            throw err;
         } finally {
             const duration = (Date.now() - start) / 1000;
             this.metricsService.jobProcessingDuration.observe({ 
                 queue_name: 'payment.succeeded', 
-                status: 'success' 
+                status
             }, duration);
         }
     }
@@ -216,8 +231,16 @@ export class PaymentEventsController {
     }
 
     @EventPattern('payment.failed')
-    async handlePaymentFailed(@Payload() data: RmqEventPayload) {
+    async handlePaymentFailed(
+        @Payload() data: RmqEventPayload,
+        @Ctx() context: RmqContext,
+    ) {
         const start = Date.now();
+        let status: 'success' | 'failed' = 'success';
+        if (await this.moveToDlqWhenRetryExhausted('payment.failed', context)) {
+            return;
+        }
+
         try {
             this.logger.debug(`Metrics: payment.failed event received`);
             
@@ -251,13 +274,66 @@ export class PaymentEventsController {
         } catch (error) {
             const err = error instanceof Error ? error : new Error(String(error));
             this.logger.error(`Failed to handle payment.failed: ${err.message}`, err.stack);
+            status = 'failed';
+            throw err;
         } finally {
             const duration = (Date.now() - start) / 1000;
             this.metricsService.jobProcessingDuration.observe({ 
                 queue_name: 'payment.failed', 
-                status: 'success' 
+                status
             }, duration);
         }
+    }
+
+    private async moveToDlqWhenRetryExhausted(
+        eventType: string,
+        context: RmqContext,
+    ): Promise<boolean> {
+        const message = context.getMessage() as RmqMessage | undefined;
+        const headers = asRecord(message?.properties?.headers);
+        const retryCount = getRejectedRetryCount(headers, this.queueName);
+        if (retryCount < this.maxRetryAttempts) {
+            return false;
+        }
+
+        const channel = context.getChannelRef() as RabbitChannel | undefined;
+        const content = message?.content;
+        if (!channel || !content) {
+            this.logger.error(
+                `[payment-events-retry] max retries reached but message could not be routed to DLQ event=${eventType}`,
+            );
+            return true;
+        }
+
+        const dlqName = `${this.queueName}.dlq`;
+        const existingHeaders = asRecord(message.properties?.headers);
+        const dlqHeaders: Record<string, unknown> = {
+            ...existingHeaders,
+            'x-final-reason': 'retry-exhausted',
+            'x-final-event-type': eventType,
+            'x-final-retry-count': retryCount,
+        };
+
+        channel.sendToQueue(dlqName, content, {
+            persistent: true,
+            headers: dlqHeaders,
+            messageId: message.properties?.messageId,
+            correlationId: message.properties?.correlationId,
+            contentType: message.properties?.contentType,
+            contentEncoding: message.properties?.contentEncoding,
+            deliveryMode: message.properties?.deliveryMode,
+            priority: message.properties?.priority,
+            expiration: message.properties?.expiration,
+            timestamp: message.properties?.timestamp,
+            type: message.properties?.type,
+            userId: message.properties?.userId,
+            appId: message.properties?.appId,
+        });
+
+        this.logger.error(
+            `[payment-events-retry] moved to DLQ event=${eventType} queue=${dlqName} retries=${retryCount}`,
+        );
+        return true;
     }
 
     /**
@@ -305,4 +381,94 @@ export class PaymentEventsController {
             // Don't throw - cache invalidation failures shouldn't break payment processing
         }
     }
+}
+
+type RmqMessage = {
+    content?: Buffer;
+    properties?: {
+        headers?: Record<string, unknown>;
+        messageId?: string;
+        correlationId?: string;
+        contentType?: string;
+        contentEncoding?: string;
+        deliveryMode?: number;
+        priority?: number;
+        expiration?: string;
+        timestamp?: number;
+        type?: string;
+        userId?: string;
+        appId?: string;
+    };
+};
+
+type RabbitChannel = {
+    sendToQueue: (
+        queue: string,
+        content: Buffer,
+        options?: {
+            headers?: Record<string, unknown>;
+            contentType?: string;
+            contentEncoding?: string;
+            deliveryMode?: number;
+            priority?: number;
+            expiration?: string;
+            timestamp?: number;
+            type?: string;
+            userId?: string;
+            appId?: string;
+            persistent?: boolean;
+            messageId?: string;
+            correlationId?: string;
+        },
+    ) => boolean;
+};
+
+function asRecord(value: unknown): Record<string, unknown> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return {};
+    }
+    return value as Record<string, unknown>;
+}
+
+function getString(source: Record<string, unknown>, key: string): string | undefined {
+    const value = source[key];
+    if (typeof value !== 'string') return undefined;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function getRejectedRetryCount(headers: Record<string, unknown>, queueName: string): number {
+    const xDeathRaw = headers['x-death'];
+    if (!Array.isArray(xDeathRaw)) return 0;
+
+    let retries = 0;
+    for (const item of xDeathRaw) {
+        const death = asRecord(item);
+        const queue = getString(death, 'queue');
+        const reason = getString(death, 'reason');
+        if (queue !== queueName || reason !== 'rejected') continue;
+
+        const countRaw = death.count;
+        if (typeof countRaw === 'number' && Number.isFinite(countRaw)) {
+            retries += Math.floor(countRaw);
+            continue;
+        }
+
+        if (typeof countRaw === 'string' && countRaw.trim()) {
+            const parsed = Number(countRaw);
+            if (Number.isFinite(parsed)) {
+                retries += Math.floor(parsed);
+            }
+        }
+    }
+
+    return retries;
+}
+
+function parsePositiveInt(value: string | undefined, defaultValue: number): number {
+    if (!value) return defaultValue;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0
+        ? Math.floor(parsed)
+        : defaultValue;
 }
