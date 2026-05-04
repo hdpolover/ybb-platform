@@ -13,7 +13,7 @@ export class QueueMonitoringService implements OnModuleInit, OnModuleDestroy {
     private readonly logger = new Logger(QueueMonitoringService.name);
     private intervalParams: ReturnType<typeof setInterval> | null = null;
 
-    private readonly queues = [
+    private queues = [
         'api-service-payment-events',
         'api-service-payment-events.retry',
         'api-service-payment-events.dlq',
@@ -67,11 +67,18 @@ export class QueueMonitoringService implements OnModuleInit, OnModuleDestroy {
                 }
                 // checkQueue on a missing queue closes the channel; reconnect lazily on next interval.
                 if (isNotFound) {
+                    this.dropMissingQueueFamily(queue);
                     this.channel = null;
                     break;
                 }
             }
         }
+    }
+
+    private dropMissingQueueFamily(queue: string) {
+        const base = queue.replace(/(\.retry|\.dlq)$/, '');
+        this.queues = this.queues.filter((q) => q !== base && !q.startsWith(`${base}.`));
+        this.logger.warn(`Queue ${base} is missing in RabbitMQ; removed from monitoring targets`);
     }
 
     private async ensureMonitoringChannel() {

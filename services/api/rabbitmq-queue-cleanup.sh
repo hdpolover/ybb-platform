@@ -36,7 +36,7 @@ if [ -z "$RABBITMQ_MANAGEMENT_USER" ] || [ -z "$RABBITMQ_MANAGEMENT_PASS" ]; the
 fi
 
 VHOST_ENCODED="$(RABBITMQ_MANAGEMENT_VHOST="$RABBITMQ_MANAGEMENT_VHOST" node -p "encodeURIComponent(process.env.RABBITMQ_MANAGEMENT_VHOST || '/')")"
-QUEUE_BASE_NAMES="${RABBITMQ_QUEUE_CLEANUP_TARGETS:-audit_log_queue,reporting_queue,api-service-payment-events,notification_queue}"
+QUEUE_BASE_NAMES="${RABBITMQ_QUEUE_CLEANUP_TARGETS:-audit_log_queue,reporting_queue,api-service-payment-events}"
 INCLUDE_RETRY_DLQ="${RABBITMQ_QUEUE_CLEANUP_INCLUDE_RETRY_DLQ:-true}"
 
 delete_queue() {
