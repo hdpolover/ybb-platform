@@ -27,4 +27,11 @@ RUN --mount=type=cache,target=/root/.npm \
 
 COPY --from=builder /app/dist ./dist
 
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+COPY rabbitmq-queue-cleanup.sh /app/rabbitmq-queue-cleanup.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.sh \
+    && sed -i 's/\r$//' /app/rabbitmq-queue-cleanup.sh \
+    && chmod +x /docker-entrypoint.sh /app/rabbitmq-queue-cleanup.sh
+
+ENTRYPOINT ["/bin/sh", "/docker-entrypoint.sh"]
 CMD ["node", "dist/main"]
