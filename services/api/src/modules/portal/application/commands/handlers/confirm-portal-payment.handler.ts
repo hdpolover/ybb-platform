@@ -18,6 +18,20 @@ export class ConfirmPortalPaymentHandler {
 
     async execute(command: ConfirmPortalPaymentCommand): Promise<ConfirmPortalPaymentResponseDto> {
         const { userId, invoiceId, paymentType, paymentMethodId, details } = command;
+        if (paymentType === 'manual') {
+            if (!details?.accountName?.trim()) {
+                throw new BadRequestException('Account name is required for manual payment');
+            }
+            if (!details?.sourceName?.trim()) {
+                throw new BadRequestException('Source name is required for manual payment');
+            }
+            if (!details?.paymentDate?.trim()) {
+                throw new BadRequestException('Payment date is required for manual payment');
+            }
+            if (!details?.proofFileUrl?.trim()) {
+                throw new BadRequestException('Payment proof is required for manual payment');
+            }
+        }
 
         const participant = await this.portalCacheService.getParticipantProfile(userId);
         if (!participant) throw new NotFoundException('Participant not found');
@@ -95,11 +109,15 @@ export class ConfirmPortalPaymentHandler {
             // Submit manual payment details to the Payment Service
             const manualResponse = await this.paymentClient.submitManualPayment({
                 intent_id: intentResponse.intent_id,
+                proof_file_id: details?.proofFileId,
+                proof_file_url: details?.proofFileUrl,
                 details: JSON.stringify({
                     account_name: details?.accountName,
                     source_name: details?.sourceName,
                     payment_date: details?.paymentDate,
                     payment_method: paymentMethodId,
+                    proof_file_id: details?.proofFileId,
+                    proof_file_url: details?.proofFileUrl,
                     notes: details?.notes,
                 }),
             });

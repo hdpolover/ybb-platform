@@ -210,6 +210,16 @@ export class ConfirmPortalPaymentDto {
     @IsOptional()
     notes?: string;
 
+    @ApiPropertyOptional({ description: 'Uploaded payment proof file ID (manual only)' })
+    @IsString()
+    @IsOptional()
+    proof_file_id?: string;
+
+    @ApiPropertyOptional({ description: 'Uploaded payment proof URL (manual only)' })
+    @IsString()
+    @IsOptional()
+    proof_file_url?: string;
+
     @ApiPropertyOptional({ description: 'Token from gateway JS SDK (gateway only)' })
     @IsString()
     @IsOptional()

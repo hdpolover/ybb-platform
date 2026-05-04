@@ -45,6 +45,8 @@ export class ConfirmPortalPaymentCommand {
       sourceName?: string;
       paymentDate?: string;
       notes?: string;
+      proofFileId?: string;
+      proofFileUrl?: string;
       gatewayToken?: string;
     },
   ) { }

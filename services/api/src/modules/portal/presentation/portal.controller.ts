@@ -177,6 +177,8 @@ export class PortalController {
                     sourceName: dto.source_name,
                     paymentDate: dto.payment_date,
                     notes: dto.notes,
+                    proofFileId: dto.proof_file_id,
+                    proofFileUrl: dto.proof_file_url,
                     gatewayToken: dto.gateway_token,
                 },
             ),
