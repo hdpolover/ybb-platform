@@ -1,5 +1,6 @@
 import { Controller, Logger, Optional } from '@nestjs/common';
 import { Ctx, EventPattern, Payload, RmqContext } from '@nestjs/microservices';
+import { createHash } from 'crypto';
 import { RmqEventPayload } from '@common/types/events';
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
@@ -226,7 +227,12 @@ export class PaymentEventsController {
                     aggregateType: 'participant-application',
                     aggregateId: applicationId,
                     correlationId: intentId || transactionId || undefined,
-                    dedupeKey: `payment-application:${applicationId}:${transactionId || intentId || createdInvoiceId || 'state-update'}`,
+                    // Hash the variable-length external reference so the dedupe key always
+                    // fits within the VARCHAR(191) DB column regardless of provider ID length.
+                    dedupeKey: buildApplicationDedupeKey(
+                        applicationId,
+                        transactionId || intentId || createdInvoiceId || 'state-update',
+                    ),
                     payload: {
                         applicationId,
                         invoiceId: createdInvoiceId,
@@ -507,4 +513,16 @@ function parsePositiveInt(value: string | undefined, defaultValue: number): numb
 function abbreviateKey(value: string | null): string {
     if (!value) return 'none';
     return value.length <= 28 ? value : `${value.slice(0, 28)}…`;
+}
+
+/**
+ * Build a dedupe key for the payment-application outbox event that always fits
+ * within the VARCHAR(191) DB column regardless of how long the external IDs are.
+ *
+ * Format: `payment-application:<applicationId>:<16-char hash of externalRef>`
+ * Maximum length: 20 + 36 + 1 + 16 = 73 chars.
+ */
+function buildApplicationDedupeKey(applicationId: string, externalRef: string): string {
+    const refHash = createHash('sha256').update(externalRef).digest('hex').slice(0, 16);
+    return `payment-application:${applicationId}:${refHash}`;
 }
