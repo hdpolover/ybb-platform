@@ -47,7 +47,9 @@ function normalizeRichText(value: string): string {
 export default function PaymentMethodsPage() {
   const params = useParams<{ programId: string }>();
   const { accessiblePrograms, adminProfile } = useAuth();
-  const program = accessiblePrograms.find((p) => p.programId === params.programId);
+  const program = accessiblePrograms.find(
+    (p) => p.programId === params.programId || p.programSlug === params.programId,
+  );
   const brandId = program?.brandId ?? "";
   const userId = adminProfile?.userId ?? "";
   const [methods, setMethods] = useState<PaymentMethod[]>([]);

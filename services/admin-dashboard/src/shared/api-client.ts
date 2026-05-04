@@ -1225,16 +1225,26 @@ export function listPaymentMethods(): Promise<PaymentMethod[]> {
 }
 
 export function createPaymentMethod(input: Partial<PaymentMethod> & { name: string; code: string }): Promise<PaymentMethod> {
+  const payload: Record<string, unknown> = { ...input };
+  if (typeof payload.type === "string") {
+    const normalized = payload.type.trim().toLowerCase();
+    payload.type = normalized === "automatic" ? "automatic" : "manual";
+  }
   return request<PaymentMethod>("/admin/payments/methods", {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify(payload),
   });
 }
 
 export function updatePaymentMethod(id: string, input: Partial<PaymentMethod>): Promise<PaymentMethod> {
+  const payload: Record<string, unknown> = { ...input };
+  if (typeof payload.type === "string") {
+    const normalized = payload.type.trim().toLowerCase();
+    payload.type = normalized === "automatic" ? "automatic" : "manual";
+  }
   return request<PaymentMethod>(`/admin/payments/methods/${id}`, {
     method: "PUT",
-    body: JSON.stringify(input),
+    body: JSON.stringify(payload),
   });
 }
 
@@ -1252,7 +1262,11 @@ export async function createPaymentMethodWithIcon(
   },
 ): Promise<PaymentMethod> {
   const { iconFile, userId, brandId, ...rest } = input;
-  const payload: Partial<PaymentMethod> = { ...rest };
+  const payload: Record<string, unknown> = { ...rest };
+  if (typeof payload.type === "string") {
+    const normalized = payload.type.trim().toLowerCase();
+    payload.type = normalized === "automatic" ? "automatic" : "manual";
+  }
   if (iconFile) {
     if (!userId || !brandId) {
       throw new Error("userId and brandId are required when uploading an icon.");
@@ -1283,7 +1297,11 @@ export async function updatePaymentMethodWithIcon(
   },
 ): Promise<PaymentMethod> {
   const { iconFile, userId, brandId, ...rest } = input;
-  const payload: Partial<PaymentMethod> = { ...rest };
+  const payload: Record<string, unknown> = { ...rest };
+  if (typeof payload.type === "string") {
+    const normalized = payload.type.trim().toLowerCase();
+    payload.type = normalized === "automatic" ? "automatic" : "manual";
+  }
   if (iconFile) {
     if (!userId || !brandId) {
       throw new Error("userId and brandId are required when uploading an icon.");
