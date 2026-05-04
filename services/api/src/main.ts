@@ -40,6 +40,9 @@ async function bootstrap() {
       queue: 'audit_log_queue',
       queueOptions: {
         durable: true,
+        arguments: {
+          'x-dead-letter-exchange': '',
+        },
       },
       noAck: false,
       prefetchCount: 1,
@@ -54,6 +57,9 @@ async function bootstrap() {
       queue: 'reporting_queue',
       queueOptions: {
         durable: true,
+        arguments: {
+          'x-dead-letter-exchange': '',
+        },
       },
       noAck: false,
       prefetchCount: 1,
@@ -79,6 +85,9 @@ async function bootstrap() {
       wildcards: true,
       queueOptions: {
         durable: true,
+        arguments: {
+          'x-dead-letter-exchange': '',
+        },
       },
       noAck: false,
       prefetchCount: 1,
