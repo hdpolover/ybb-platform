@@ -4,6 +4,9 @@ set -e
 echo "� DEBUG: Checking environment..."
 echo "DATABASE_URL host: $(echo $DATABASE_URL | sed -n 's/.*@\([^:]*\).*/\1/p')"
 
+echo "🧹 Running prestart RabbitMQ queue migration cleanup..."
+/app/rabbitmq-queue-cleanup.sh
+
 echo "�🔄 Generating Prisma Client..."
 npx prisma generate
 

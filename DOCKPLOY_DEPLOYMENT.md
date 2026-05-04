@@ -98,6 +98,8 @@ For every service:
         - `CIRCUIT_BREAKER_FAILURE_THRESHOLD` (default: 5)
         - `CIRCUIT_BREAKER_SUCCESS_THRESHOLD` (default: 3)
         - `CIRCUIT_BREAKER_TIMEOUT` (default: 60000)
+        - `RABBITMQ_QUEUE_CLEANUP_ON_DEPLOY` (`true` for one deploy to clear/recreate legacy queues, then set back to `false`)
+        - `RABBITMQ_QUEUE_CLEANUP_TARGETS` (comma-separated queue base names to delete)
 
 ## 6. Admin Dashboard
 - **Compose Path**: `services/admin-dashboard/docker-compose.dokploy.yml`
