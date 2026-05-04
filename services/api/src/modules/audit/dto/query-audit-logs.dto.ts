@@ -18,11 +18,6 @@ export class QueryAuditLogsDto {
     @Max(100)
     limit?: number = 20;
 
-    @ApiPropertyOptional({ description: 'Opaque cursor token for seek pagination' })
-    @IsOptional()
-    @IsString()
-    cursor?: string;
-
     @ApiPropertyOptional({ description: 'Filter by entity type (e.g., ParticipantApplication)' })
     @IsOptional()
     @IsString()

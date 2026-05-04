@@ -101,14 +101,13 @@ export class PaymentAdminController {
         const limitNum = Math.min(Math.max(1, parseInt(limit, 10) || 20), 100);
         const skip = (pageNum - 1) * limitNum;
         const sortDirection = this.parseSortOrder(sortOrder);
+        // cursor key present in query (even empty string) = opt-in to cursor mode
+        const useCursorMode = cursor !== undefined;
         const cursorToken = cursor?.trim() || null;
-        const useCursorMode = cursorToken !== null;
         if (useCursorMode && sortBy !== 'createdAt') {
             throw new HttpException('cursor pagination only supports sortBy=createdAt', 400);
         }
-        const decodedCursor = useCursorMode
-            ? this.decodeCreatedAtCursor(cursorToken as string)
-            : null;
+        const decodedCursor = cursorToken ? this.decodeCreatedAtCursor(cursorToken) : null;
         const minAmountNum = typeof minAmount === 'string' && minAmount.trim() !== '' ? Number(minAmount) : undefined;
         const maxAmountNum = typeof maxAmount === 'string' && maxAmount.trim() !== '' ? Number(maxAmount) : undefined;
 
@@ -362,12 +361,18 @@ export class PaymentAdminController {
         return new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), 23, 59, 59, 999));
     }
 
+    private static readonly UUID_RE =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
     private decodeCreatedAtCursor(cursor: string): { id: string; createdAt: Date } {
         try {
             const json = Buffer.from(cursor, 'base64url').toString('utf8');
             const parsed = JSON.parse(json) as { id?: string; createdAt?: string };
             if (!parsed.id || !parsed.createdAt) {
                 throw new Error('missing cursor fields');
+            }
+            if (!PaymentAdminController.UUID_RE.test(parsed.id)) {
+                throw new Error('invalid cursor id');
             }
             const createdAt = new Date(parsed.createdAt);
             if (Number.isNaN(createdAt.getTime())) {
