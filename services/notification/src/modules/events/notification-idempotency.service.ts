@@ -32,6 +32,11 @@ const PAYMENT_EVENTS = new Set([
   'payment.refunded',
 ]);
 
+/** Returns the last `length` characters of a dedupe key for safe log output. */
+export function abbreviateDedupeKey(key: string, length = 12): string {
+  return key.length <= length ? key : `...${key.slice(-length)}`;
+}
+
 @Injectable()
 export class NotificationIdempotencyService implements OnModuleDestroy {
   private readonly logger = new Logger(NotificationIdempotencyService.name);
@@ -39,6 +44,10 @@ export class NotificationIdempotencyService implements OnModuleDestroy {
   private readonly defaultTtlSeconds: number;
   private readonly paymentTtlSeconds: number;
   private redisClient?: RedisSetClient;
+
+  /** Timestamp (ms) until which the circuit is open (error logs are suppressed). */
+  private circuitOpenUntil = 0;
+  private static readonly CIRCUIT_COOLDOWN_MS = 30_000;
 
   constructor(private readonly configService: ConfigService) {
     this.enabled = this.parseBool(
@@ -104,10 +113,16 @@ export class NotificationIdempotencyService implements OnModuleDestroy {
       }
       return { shouldProcess: false, dedupeKey, reason: 'duplicate' };
     } catch (error) {
-      this.logger.error(
-        `Idempotency check failed for ${eventType}. Processing event in fallback mode.`,
-        error instanceof Error ? error.stack : String(error),
-      );
+      const now = Date.now();
+      if (now >= this.circuitOpenUntil) {
+        this.logger.error(
+          `Idempotency check failed for ${eventType}. Processing event in fallback mode. ` +
+            `(Further errors suppressed for ${NotificationIdempotencyService.CIRCUIT_COOLDOWN_MS / 1000}s)`,
+          error instanceof Error ? error.stack : String(error),
+        );
+        this.circuitOpenUntil =
+          now + NotificationIdempotencyService.CIRCUIT_COOLDOWN_MS;
+      }
       return { shouldProcess: true, dedupeKey, reason: 'fallback' };
     }
   }
@@ -171,7 +186,6 @@ export class NotificationIdempotencyService implements OnModuleDestroy {
       this.asString(payloadRecord.external_intent_id) ||
       this.asString(metadata.invoice_id) ||
       this.asString(metadata.application_id) ||
-      this.asString(payloadRecord.email) ||
       this.hashPayload(payloadRecord);
 
     return `notification:idempotency:${eventType}:${sourceId}`;
