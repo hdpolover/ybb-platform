@@ -6,7 +6,10 @@ import {
   maskEmail,
   summarizeEventPayload,
 } from '../../common/logging/safe-log';
-import { NotificationIdempotencyService } from './notification-idempotency.service';
+import {
+  NotificationIdempotencyService,
+  abbreviateDedupeKey,
+} from './notification-idempotency.service';
 
 type EventPayload = Record<string, unknown>;
 type ReceiptItem = { name: string; quantity: number; price: number };
@@ -375,18 +378,18 @@ export class EventsController {
 
     if (!decision.shouldProcess) {
       this.logger.warn(
-        `[notification-idempotency] dedupe_hit=true processed=false event=${eventType} key=${decision.dedupeKey}`,
+        `[notification-idempotency] dedupe_hit=true processed=false event=${eventType} key=${abbreviateDedupeKey(decision.dedupeKey)}`,
       );
       return false;
     }
 
     this.logger.log(
-      `[notification-idempotency] dedupe_hit=false processed=true event=${eventType} key=${decision.dedupeKey} reason=${decision.reason}`,
+      `[notification-idempotency] dedupe_hit=false processed=true event=${eventType} key=${abbreviateDedupeKey(decision.dedupeKey)} reason=${decision.reason}`,
     );
 
     if (decision.reason === 'fallback') {
       this.logger.warn(
-        `[notification-idempotency] fallback processing event=${eventType} key=${decision.dedupeKey}`,
+        `[notification-idempotency] fallback processing event=${eventType} key=${abbreviateDedupeKey(decision.dedupeKey)}`,
       );
     }
 
