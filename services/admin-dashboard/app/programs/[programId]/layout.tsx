@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect } from "react";
+import { use, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../../contexts/AuthContext";
 import { AdminShell } from "@/src/admin/admin-shell";
@@ -22,6 +22,14 @@ export default function ProgramLayout({
   const hasProgramAccess =
     isPlatformAdmin || assignedPrograms.some((p) => p.programId === programId);
 
+  const scopedProgramNavSections = useMemo(() => {
+    if (!isPlatformAdmin) return programNavSections;
+    return programNavSections.map((section) => ({
+      ...section,
+      items: section.items.filter((item) => item.id !== "support-tickets"),
+    }));
+  }, [isPlatformAdmin]);
+
   useEffect(() => {
     if (isLoading) return;
     if (!adminProfile) { router.replace("/login"); return; }
@@ -38,7 +46,7 @@ export default function ProgramLayout({
 
   return (
     <AdminShell
-      navSections={programNavSections}
+      navSections={scopedProgramNavSections}
       hrefBase={`/programs/${programId}`}
       context="program"
       homeHref="/"
@@ -55,4 +63,3 @@ export default function ProgramLayout({
     </AdminShell>
   );
 }
-

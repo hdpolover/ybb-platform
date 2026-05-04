@@ -153,6 +153,12 @@ export const programNavSections: NavSection[] = [
         href: "ambassadors",
         icon: UserPlus,
       },
+      {
+        id: "support-tickets",
+        label: "Support Tickets",
+        href: "support-tickets",
+        icon: MessageSquare,
+      },
     ],
   },
   {
