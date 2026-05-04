@@ -17,18 +17,20 @@ export default function ProgramLayout({
 }) {
   const router = useRouter();
   const { programId } = use(params);
-  const { adminProfile, assignedPrograms, isLoading, isPlatformAdmin } = useAuth();
+  const { adminProfile, assignedPrograms, accessConfig, isLoading, isPlatformAdmin } = useAuth();
 
+  const isAssignedToCurrentProgram = assignedPrograms.some((p) => p.programId === programId);
   const hasProgramAccess =
-    isPlatformAdmin || assignedPrograms.some((p) => p.programId === programId);
+    isPlatformAdmin || isAssignedToCurrentProgram;
+  const canManageSupportTickets = accessConfig.isSuperAdmin || isAssignedToCurrentProgram;
 
   const scopedProgramNavSections = useMemo(() => {
-    if (!isPlatformAdmin) return programNavSections;
+    if (canManageSupportTickets) return programNavSections;
     return programNavSections.map((section) => ({
       ...section,
       items: section.items.filter((item) => item.id !== "support-tickets"),
     }));
-  }, [isPlatformAdmin]);
+  }, [canManageSupportTickets]);
 
   useEffect(() => {
     if (isLoading) return;
