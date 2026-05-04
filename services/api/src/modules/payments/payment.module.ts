@@ -27,12 +27,30 @@ import { PaymentController } from './infrastructure/presentation/payment.control
 
           const protoPath = protoPathStats.find(path => existsSync(path)) || protoPathStats[0];
 
+          const explicitGrpcUrl = configService.get<string>('PAYMENT_GRPC_URL')?.trim();
+          const paymentServiceUrl = configService.get<string>('PAYMENT_SERVICE_URL')?.trim();
+          let inferredGrpcUrl: string | undefined;
+
+          if (paymentServiceUrl) {
+            try {
+              const normalized = paymentServiceUrl.includes('://')
+                ? paymentServiceUrl
+                : `http://${paymentServiceUrl}`;
+              const parsed = new URL(normalized);
+              if (parsed.hostname) {
+                inferredGrpcUrl = `${parsed.hostname}:50053`;
+              }
+            } catch {
+              inferredGrpcUrl = undefined;
+            }
+          }
+
           return {
             transport: Transport.GRPC,
             options: {
               package: 'payment',
               protoPath: protoPath,
-              url: configService.get('PAYMENT_GRPC_URL') || 'host.docker.internal:50053',
+              url: explicitGrpcUrl || inferredGrpcUrl || 'payment-service:50053',
               loader: {
                 keepCase: true,
               },
