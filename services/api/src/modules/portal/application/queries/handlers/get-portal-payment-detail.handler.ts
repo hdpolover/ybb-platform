@@ -12,6 +12,14 @@ import {
     PaymentHistoryEntryDto,
 } from '../../../presentation/dto/portal-payment.dto';
 
+interface PendingTransactionContext {
+    actionUrl?: string;
+    accountName?: string;
+    sourceName?: string;
+    paymentDate?: string;
+    proofUrl?: string;
+}
+
 @Injectable()
 @QueryHandler(GetPortalPaymentDetailQuery)
 export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPaymentDetailQuery> {
@@ -62,7 +70,7 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
             throw new ForbiddenException('Access denied');
         }
 
-        const actionUrl = await this.resolvePendingActionUrl(invoice.externalTransactionId);
+        const pendingContext = await this.resolvePendingTransactionContext(invoice.externalTransactionId);
         const history: PaymentHistoryEntryDto[] = [];
 
         if (invoice.status === 'paid' && invoice.paidAt) {
@@ -92,7 +100,11 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
                 paymentMethod: invoice.paymentMethod ?? undefined,
                 dateTime: invoice.updatedAt.toISOString(),
                 amountLabel: `${invoice.currency} ${Number(invoice.amount).toFixed(2)}`,
-                actionUrl,
+                actionUrl: pendingContext.actionUrl,
+                accountName: pendingContext.accountName,
+                sourceName: pendingContext.sourceName,
+                paymentDate: pendingContext.paymentDate,
+                proofUrl: pendingContext.proofUrl,
             });
         } else if (invoice.status === 'failed') {
             history.push({
@@ -146,9 +158,9 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
         return internalKey ? { 'X-Internal-Service-Key': internalKey } : {};
     }
 
-    private async resolvePendingActionUrl(transactionId?: string | null): Promise<string | undefined> {
+    private async resolvePendingTransactionContext(transactionId?: string | null): Promise<PendingTransactionContext> {
         if (!transactionId) {
-            return undefined;
+            return {};
         }
 
         try {
@@ -156,16 +168,16 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
                 `/api/v1/payments/${transactionId}`,
                 { headers: this.buildInternalHeaders() },
             );
-            return this.extractActionUrl(data);
+            return this.extractPendingTransactionContext(data);
         } catch (error) {
             this.logger.debug(`Failed to resolve action URL for ${transactionId}: ${(error as Error).message}`);
-            return undefined;
+            return {};
         }
     }
 
-    private extractActionUrl(payload: unknown): string | undefined {
+    private extractPendingTransactionContext(payload: unknown): PendingTransactionContext {
         const data = this.unwrapPayloadObject(payload);
-        const direct = this.pickString(
+        const actionUrl = this.pickString(
             data.action_url,
             data.redirect_url,
             data.checkout_url,
@@ -173,22 +185,59 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
             data.payment_url,
             data.url,
         );
-        if (direct) return direct;
 
         const gatewayResponse = this.toRecord(data.gateway_response);
+        const notesJson = this.pickString(gatewayResponse?.notes);
+        const notes = notesJson ? this.tryParseObject(notesJson) : null;
+
+        const accountName = this.pickString(
+            data.account_name,
+            gatewayResponse?.account_name,
+            notes?.account_name,
+        );
+        const sourceName = this.pickString(
+            data.source_name,
+            gatewayResponse?.source_name,
+            notes?.source_name,
+        );
+        const paymentDate = this.pickString(
+            data.payment_date,
+            gatewayResponse?.payment_date,
+            notes?.payment_date,
+        );
+        const proofUrl = this.pickString(
+            data.proof_file_url,
+            data.proof_url,
+            gatewayResponse?.proof_file_url,
+            gatewayResponse?.proof_url,
+            notes?.proof_file_url,
+            notes?.proof_url,
+        );
+
         if (gatewayResponse) {
-            const fromGateway = this.pickString(
-                gatewayResponse.action_url,
-                gatewayResponse.redirect_url,
-                gatewayResponse.checkout_url,
-                gatewayResponse.invoice_url,
-                gatewayResponse.payment_url,
-                gatewayResponse.url,
-            );
-            if (fromGateway) return fromGateway;
+            return {
+                actionUrl: actionUrl ?? this.pickString(
+                    gatewayResponse.action_url,
+                    gatewayResponse.redirect_url,
+                    gatewayResponse.checkout_url,
+                    gatewayResponse.invoice_url,
+                    gatewayResponse.payment_url,
+                    gatewayResponse.url,
+                ),
+                accountName,
+                sourceName,
+                paymentDate,
+                proofUrl,
+            };
         }
 
-        return undefined;
+        return {
+            actionUrl,
+            accountName,
+            sourceName,
+            paymentDate,
+            proofUrl,
+        };
     }
 
     private unwrapPayloadObject(payload: unknown): Record<string, unknown> {
@@ -215,5 +264,17 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
             }
         }
         return undefined;
+    }
+
+    private tryParseObject(value: string): Record<string, unknown> | null {
+        try {
+            const parsed = JSON.parse(value);
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                return parsed as Record<string, unknown>;
+            }
+            return null;
+        } catch {
+            return null;
+        }
     }
 }

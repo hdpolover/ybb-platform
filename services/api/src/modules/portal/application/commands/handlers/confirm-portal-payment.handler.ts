@@ -100,6 +100,9 @@ export class ConfirmPortalPaymentHandler {
         if (invoice.status === 'paid') {
             throw new BadRequestException('Invoice is already paid');
         }
+        if (invoice.status === 'processing') {
+            throw new BadRequestException('This invoice already has a pending payment. Please continue the existing payment from Payment Details.');
+        }
         if (!invoice.pricingTier.isActive || invoice.pricingTier.deletedAt) {
             throw new BadRequestException('This payment option is no longer available for new payments.');
         }

@@ -52,6 +52,14 @@ export class ConfirmPortalPaymentCommand {
   ) { }
 }
 
+export class CancelPortalPaymentCommand {
+  constructor(
+    public readonly userId: string,
+    public readonly invoiceId: string,
+    public readonly reason?: string,
+  ) { }
+}
+
 export class EnsurePortalPaymentInvoiceCommand {
   constructor(
     public readonly userId: string,
