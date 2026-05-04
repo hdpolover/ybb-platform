@@ -15,6 +15,7 @@ import {
     GetPortalPaymentDetailQuery,
     GetPortalDocumentsQuery,
     ConfirmPortalPaymentCommand,
+    CancelPortalPaymentCommand,
     EnsurePortalPaymentInvoiceCommand,
     UploadSignedCopyCommand,
 } from '../application/queries/portal-queries';
@@ -25,12 +26,14 @@ import {
     PortalPaymentDetailResponseDto,
     ConfirmPortalPaymentDto,
     ConfirmPortalPaymentResponseDto,
+    CancelPortalPaymentResponseDto,
     PortalPaymentMethodDto,
     EnsurePortalPaymentInvoiceDto,
     EnsurePortalPaymentInvoiceResponseDto,
 } from './dto/portal-payment.dto';
 import { PortalDocumentResponseDto } from './dto/portal-document.dto';
 import { ConfirmPortalPaymentHandler } from '../application/commands/handlers/confirm-portal-payment.handler';
+import { CancelPortalPaymentHandler } from '../application/commands/handlers/cancel-portal-payment.handler';
 import { EnsurePortalPaymentInvoiceHandler } from '../application/commands/handlers/ensure-portal-payment-invoice.handler';
 import { PaymentServiceHttpClient } from '../../payments/infrastructure/services/payment-service-http.client';
 import type { AdminPaymentMethod } from '../../payments/common/proto/payment.interface';
@@ -44,6 +47,7 @@ export class PortalController {
         private readonly queryBus: QueryBus,
         private readonly commandBus: CommandBus,
         private readonly confirmPortalPaymentHandler: ConfirmPortalPaymentHandler,
+        private readonly cancelPortalPaymentHandler: CancelPortalPaymentHandler,
         private readonly ensurePortalPaymentInvoiceHandler: EnsurePortalPaymentInvoiceHandler,
         private readonly paymentServiceClient: PaymentServiceHttpClient,
         private readonly configService: ConfigService,
@@ -182,6 +186,20 @@ export class PortalController {
                     gatewayToken: dto.gateway_token,
                 },
             ),
+        );
+    }
+
+    @Post('payments/:id/cancel')
+    @ApiOperation({ summary: 'Cancel a pending payment for an invoice' })
+    @ApiResponse({ status: 200, type: CancelPortalPaymentResponseDto })
+    async cancelPayment(
+        @Param('id') id: string,
+        @CurrentUser() user: CurrentUserData,
+    ): Promise<CancelPortalPaymentResponseDto> {
+        const userId = user.userId;
+        if (!userId) throw new UnauthorizedException();
+        return this.cancelPortalPaymentHandler.execute(
+            new CancelPortalPaymentCommand(userId, id, 'Cancelled by participant'),
         );
     }
 

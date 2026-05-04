@@ -142,10 +142,19 @@ export class PaymentHistoryEntryDto {
     accountName?: string;
 
     @ApiPropertyOptional()
+    sourceName?: string;
+
+    @ApiPropertyOptional()
+    paymentDate?: string;
+
+    @ApiPropertyOptional()
     amountLabel?: string;
 
     @ApiPropertyOptional({ description: 'Gateway action URL to continue pending payment' })
     actionUrl?: string;
+
+    @ApiPropertyOptional({ description: 'Manual payment proof image URL' })
+    proofUrl?: string;
 }
 
 export class PaymentInvoiceDetailDto {
@@ -244,6 +253,17 @@ export class ConfirmPortalPaymentResponseDto {
         type: 'redirect' | 'checkout';
         url: string;
     };
+
+    @ApiProperty()
+    message: string;
+}
+
+export class CancelPortalPaymentResponseDto {
+    @ApiProperty()
+    invoice_id: string;
+
+    @ApiProperty({ enum: ['CANCELLED'] })
+    status: 'CANCELLED';
 
     @ApiProperty()
     message: string;

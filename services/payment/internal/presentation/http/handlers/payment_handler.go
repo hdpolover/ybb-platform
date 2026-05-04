@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -472,11 +473,155 @@ func (h *PaymentHandler) VerifyPayment(c *gin.Context) {
 	c.JSON(http.StatusNotFound, gin.H{"error": "Payment transaction not found"})
 }
 
+type CancelPaymentRequest struct {
+	Reason string `json:"reason"`
+}
+
+// CancelPayment godoc
+// @Summary      Cancel pending payment (Participant)
+// @Description  Cancels a pending payment transaction and sets intent back to REQUIRES_PAYMENT_METHOD
+// @Tags         Payments
+// @Accept       json
+// @Produce      json
+// @Param        id      path  string                true  "Transaction ID (UUID)"
+// @Param        request body  CancelPaymentRequest  false "Cancellation reason"
+// @Success      200     {object}  map[string]interface{}
+// @Failure      400     {object}  map[string]interface{}
+// @Failure      404     {object}  map[string]interface{}
+// @Failure      502     {object}  map[string]interface{}
+// @Router       /payments/{id}/cancel [post]
+func (h *PaymentHandler) CancelPayment(c *gin.Context) {
+	paymentID := c.Param("id")
+	if paymentID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "payment id is required"})
+		return
+	}
+
+	var req CancelPaymentRequest
+	if c.Request.ContentLength > 0 {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+			return
+		}
+	}
+
+	tx, err := h.txRepo.FindByID(c.Request.Context(), paymentID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Payment transaction not found"})
+		return
+	}
+
+	intent, err := h.intentRepo.FindByID(c.Request.Context(), tx.IntentID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Intent not found"})
+		return
+	}
+
+	switch tx.Status {
+	case entities.TransactionStatusSuccess, entities.TransactionStatusFailed, entities.TransactionStatusRejected, entities.TransactionStatusVoid:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Only pending payments can be cancelled"})
+		return
+	}
+
+	gatewayName, gatewayOrderID := resolveGatewayCancelTarget(tx)
+	if gatewayName != "" && gatewayOrderID != "" {
+		gateway, gwErr := h.gatewayFactory.GetGateway(gatewayName)
+		if gwErr != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("gateway not found: %s", gatewayName)})
+			return
+		}
+		if cancelErr := gateway.CancelPayment(c.Request.Context(), gatewayOrderID); cancelErr != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("failed to cancel payment at gateway: %v", cancelErr)})
+			return
+		}
+	}
+
+	now := time.Now()
+	tx.Status = entities.TransactionStatusVoid
+	tx.UpdatedAt = now
+	if strings.TrimSpace(req.Reason) != "" {
+		tx.AdminNotes = req.Reason
+	} else {
+		tx.AdminNotes = "Cancelled by participant"
+	}
+
+	intent.Status = entities.PaymentIntentStatusRequiresMethod
+	intent.UpdatedAt = now
+
+	if err := h.txRepo.Update(c.Request.Context(), tx); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update transaction"})
+		return
+	}
+	if err := h.intentRepo.Update(c.Request.Context(), intent); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update payment intent"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"message": "Payment cancelled successfully",
+		"data": gin.H{
+			"transaction_id":     tx.ID,
+			"transaction_status": tx.Status,
+			"intent_id":          intent.ID,
+			"intent_status":      intent.Status,
+		},
+	})
+}
+
 // VerifyPaymentRequest represents the admin verification payload
 type VerifyPaymentRequest struct {
 	Action  string `json:"action"`   // "approve" or "reject"
 	Reason  string `json:"reason"`   // Required if rejected
 	AdminID string `json:"admin_id"` // Simulated Admin ID
+}
+
+func resolveGatewayCancelTarget(tx *entities.PaymentTransaction) (string, string) {
+	method := strings.ToLower(strings.TrimSpace(tx.PaymentMethodID))
+	var gatewayResponse map[string]interface{}
+	if len(tx.GatewayResponse) > 0 {
+		_ = json.Unmarshal(tx.GatewayResponse, &gatewayResponse)
+	}
+
+	provider := strings.ToLower(strings.TrimSpace(stringValue(gatewayResponse, "provider")))
+	switch provider {
+	case "xendit":
+		orderID := stringValue(gatewayResponse, "token")
+		if orderID == "" {
+			orderID = tx.GatewayReferenceID
+		}
+		return "xendit", orderID
+	case "midtrans":
+		return "midtrans", tx.ID
+	}
+
+	if strings.Contains(method, "xendit") {
+		orderID := stringValue(gatewayResponse, "token")
+		if orderID == "" {
+			orderID = tx.GatewayReferenceID
+		}
+		return "xendit", orderID
+	}
+
+	if strings.Contains(method, "midtrans") ||
+		strings.Contains(method, "credit_card") ||
+		strings.Contains(method, "_va") ||
+		strings.Contains(method, "gopay") ||
+		strings.Contains(method, "qris") {
+		return "midtrans", tx.ID
+	}
+
+	return "", ""
+}
+
+func stringValue(values map[string]interface{}, key string) string {
+	if values == nil {
+		return ""
+	}
+	if value, ok := values[key].(string); ok {
+		return value
+	}
+	return ""
 }
 
 func buildIntentResponses(ctx context.Context, txRepo repositories.PaymentTransactionRepository, intents []*entities.PaymentIntent) []gin.H {

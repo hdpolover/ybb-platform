@@ -406,6 +406,7 @@ func setupRouter(
 		{
 			payments.GET("/:id", paymentHandler.GetPayment)
 			payments.GET("/user/:userId", paymentHandler.GetPaymentsByUser)
+			payments.POST("/:id/cancel", paymentHandler.CancelPayment)
 
 			// Manual Payment Features
 			payments.POST("/:id/proof", paymentHandler.UploadProof)

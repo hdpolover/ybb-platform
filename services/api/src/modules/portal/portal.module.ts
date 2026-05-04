@@ -14,6 +14,7 @@ import { GetPortalDocumentsHandler } from './application/queries/handlers/get-po
 import { PortalCacheService } from './application/services/portal-cache.service';
 import { PortalReceiptService } from './application/services/portal-receipt.service';
 import { ConfirmPortalPaymentHandler } from './application/commands/handlers/confirm-portal-payment.handler';
+import { CancelPortalPaymentHandler } from './application/commands/handlers/cancel-portal-payment.handler';
 import { EnsurePortalPaymentInvoiceHandler } from './application/commands/handlers/ensure-portal-payment-invoice.handler';
 
 // New — Submissions
@@ -54,9 +55,9 @@ import { UploadSignedCopyHandler } from './application/commands/handlers/upload-
         PortalSubmitApplicationHandler,
         DownloadCertificateHandler,
         ConfirmPortalPaymentHandler,
+        CancelPortalPaymentHandler,
         EnsurePortalPaymentInvoiceHandler,
         UploadSignedCopyHandler,
     ],
 })
 export class PortalModule { }
-
