@@ -72,6 +72,9 @@ docker-compose up notification
 | `PORT` | Service port | `4002` |
 | `NODE_ENV` | Environment | `development` |
 | `RABBITMQ_URL` | RabbitMQ connection | `amqp://guest:guest@rabbitmq:5672/` |
+| `NOTIFICATION_QUEUE_CLEANUP_ON_DEPLOY` | One-time deploy startup cleanup for legacy queues | `false` |
+| `NOTIFICATION_QUEUE_CLEANUP_TARGETS` | Comma-separated queue base names to delete during cleanup | `notification_queue` |
+| `NOTIFICATION_QUEUE_CLEANUP_INCLUDE_RETRY_DLQ` | Also delete `.retry` and `.dlq` variants | `true` |
 | `NOTIFICATION_QUEUE_MAX_RETRIES` | Max rejected deliveries before routing to DLQ | `3` |
 | `NOTIFICATION_QUEUE_RETRY_DELAY_MS` | Delay in retry queue before requeueing | `15000` |
 | `REDIS_URL` | Redis connection for notification idempotency | - |

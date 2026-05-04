@@ -72,6 +72,9 @@ For every service:
     - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` (if using SMTP instead of Resend)
     - `APP_DOMAINS_RULE`: `Host(\`notifications.ybbhub.com\`)` (optional)
     - `LOKI_URL`, `OTEL_EXPORTER_OTLP_ENDPOINT` (optional)
+    - **Optional queue migration cleanup**:
+        - `NOTIFICATION_QUEUE_CLEANUP_ON_DEPLOY` (`true` for one deploy to clear/recreate legacy queues, then set back to `false`)
+        - `NOTIFICATION_QUEUE_CLEANUP_TARGETS` (comma-separated queue base names; default `notification_queue`)
 
 ## 5. API Service
 - **Compose Path**: `services/api/docker-compose.dokploy.yml`
