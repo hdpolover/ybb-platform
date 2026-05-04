@@ -143,6 +143,9 @@ export class PaymentHistoryEntryDto {
 
     @ApiPropertyOptional()
     amountLabel?: string;
+
+    @ApiPropertyOptional({ description: 'Gateway action URL to continue pending payment' })
+    actionUrl?: string;
 }
 
 export class PaymentInvoiceDetailDto {

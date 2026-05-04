@@ -6,6 +6,8 @@ import (
 
 	"fmt"
 	"log"
+	"math"
+	"strings"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -200,16 +202,46 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 		return nil, status.Errorf(codes.InvalidArgument, "invalid payment method: %v", err)
 	}
 
+	var gatewayName string
+	if !method.Type.IsManual() {
+		gatewayName, err = services.ResolveGatewayName(method, s.defaultGateway)
+		if err != nil {
+			s.failIdempotency(ctx, idempotencyRecord, err)
+			return nil, status.Errorf(codes.InvalidArgument, "invalid payment method gateway: %v", err)
+		}
+	}
+
 	// Calculate Fees
 	fee, total, net := services.CalculateFee(method, intent.Amount)
 
+	chargeCurrency := intent.Currency
+	chargeSubtotal := intent.Amount
+	chargeTotal := total
+	chargeNet := net
+	chargeFee := fee
+
+	if !method.Type.IsManual() && requiresIDRCurrency(gatewayName) && strings.EqualFold(intent.Currency, "USD") {
+		if intent.ExchangeRate == nil || *intent.ExchangeRate <= 0 {
+			missingRateErr := fmt.Errorf("missing exchange rate for %s payment in USD", gatewayName)
+			s.failIdempotency(ctx, idempotencyRecord, missingRateErr)
+			return nil, status.Error(codes.FailedPrecondition, missingRateErr.Error())
+		}
+
+		rate := *intent.ExchangeRate
+		chargeCurrency = "IDR"
+		chargeSubtotal = toIDR(chargeSubtotal, rate)
+		chargeTotal = toIDR(chargeTotal, rate)
+		chargeNet = toIDR(chargeNet, rate)
+		chargeFee = math.Max(chargeTotal-chargeSubtotal, 0)
+	}
+
 	// 3. Create Transaction (Pending)
-	tx := entities.NewPaymentTransaction(intent.ID, req.PaymentMethodId, total)
-	tx.AmountSubtotal = intent.Amount
-	tx.AmountTotal = total
-	tx.FeeProvider = fee
-	tx.NetAmount = net
-	tx.Currency = intent.Currency
+	tx := entities.NewPaymentTransaction(intent.ID, req.PaymentMethodId, chargeTotal)
+	tx.AmountSubtotal = chargeSubtotal
+	tx.AmountTotal = chargeTotal
+	tx.FeeProvider = chargeFee
+	tx.NetAmount = chargeNet
+	tx.Currency = chargeCurrency
 
 	if err := s.txRepo.Create(ctx, tx); err != nil {
 		s.failIdempotency(ctx, idempotencyRecord, err)
@@ -249,12 +281,6 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 		}
 		s.completeIdempotency(ctx, idempotencyRecord, tx.ID, response)
 		return response, nil
-	}
-
-	gatewayName, err := services.ResolveGatewayName(method, s.defaultGateway)
-	if err != nil {
-		s.failIdempotency(ctx, idempotencyRecord, err)
-		return nil, status.Errorf(codes.InvalidArgument, "invalid payment method gateway: %v", err)
 	}
 
 	gateway, err := s.gatewayFact.GetGateway(gatewayName)
@@ -313,9 +339,26 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 			ID:   intent.ReferenceID,
 			Name: desc,
 			// Assuming IDR/No-decimal currency for price mapping
-			Price:    int64(intent.Amount),
+			Price:    int64(math.Round(tx.AmountSubtotal)),
 			Quantity: 1,
 		})
+	}
+
+	// If gateway currency differs from the invoice currency (e.g. USD invoice paid in IDR),
+	// send a single consolidated line item so gateway totals stay consistent and readable.
+	if !strings.EqualFold(tx.Currency, intent.Currency) {
+		desc := "Payment Total (Consolidated)"
+		if d, ok := metaMap["description"].(string); ok && d != "" {
+			desc = d
+		}
+		itemDetails = []gateways.ItemDetails{
+			{
+				ID:       intent.ReferenceID,
+				Name:     desc,
+				Price:    int64(math.Round(tx.AmountTotal)),
+				Quantity: 1,
+			},
+		}
 	}
 
 	// Validate Item Sum for Gateway Consistency (e.g. Midtrans rejects if Sum != Gross Amount)
@@ -354,7 +397,7 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 		TransactionID:   tx.ID,
 		IntentID:        intent.ID,
 		Amount:          tx.AmountTotal, // Charge the TOTAL (inc surcharge if any)
-		Currency:        intent.Currency,
+		Currency:        tx.Currency,
 		PaymentMethodID: req.PaymentMethodId,
 		GatewayToken:    req.GatewayToken,
 		PaymentDetails:  paymentDetails,
@@ -468,18 +511,22 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 		tx.Status = entities.TransactionStatusPending
 	}
 
-	if resp.Metadata != nil {
-		rawBytes, _ := json.Marshal(resp.Metadata)
-		tx.GatewayResponse = rawBytes
+	enrichedMetadata := make(map[string]interface{})
+	for k, v := range resp.Metadata {
+		enrichedMetadata[k] = v
 	}
+	enrichedMetadata["action_type"] = resp.ActionType
+	enrichedMetadata["action_url"] = resp.ActionURL
+	enrichedMetadata["payment_method_id"] = req.PaymentMethodId
+	enrichedMetadata["gateway_reference_id"] = resp.GatewayReferenceID
+
+	rawBytes, _ := json.Marshal(enrichedMetadata)
+	tx.GatewayResponse = rawBytes
 
 	// Prepare metadata for proto response
-	var protoMetadata map[string]string
-	if resp.Metadata != nil {
-		protoMetadata = make(map[string]string)
-		for k, v := range resp.Metadata {
-			protoMetadata[k] = fmt.Sprintf("%v", v)
-		}
+	protoMetadata := make(map[string]string)
+	for k, v := range enrichedMetadata {
+		protoMetadata[k] = fmt.Sprintf("%v", v)
 	}
 
 	s.txRepo.Update(ctx, tx)
@@ -537,6 +584,19 @@ func (s *PaymentGrpcServer) failIdempotency(ctx context.Context, record *entitie
 	if err := s.idempotencyRepo.Update(ctx, record); err != nil {
 		log.Printf("failed to update grpc idempotency failure: %v", err)
 	}
+}
+
+func requiresIDRCurrency(gatewayName string) bool {
+	switch strings.ToLower(strings.TrimSpace(gatewayName)) {
+	case "midtrans", "xendit":
+		return true
+	default:
+		return false
+	}
+}
+
+func toIDR(amount float64, rate float64) float64 {
+	return math.Round(amount * rate)
 }
 
 func (s *PaymentGrpcServer) SubmitManualPayment(ctx context.Context, req *pb.SubmitManualPaymentRequest) (*pb.SubmitManualPaymentResponse, error) {

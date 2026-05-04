@@ -7,6 +7,25 @@ import { ConfirmPortalPaymentCommand } from '../../queries/portal-queries';
 import { ConfirmPortalPaymentResponseDto } from '../../../presentation/dto/portal-payment.dto';
 import { PaymentGrpcClient } from '@modules/payments/infrastructure/services/payment-grpc.client';
 
+function parseUsdInIdrRate(settings: unknown): number | undefined {
+    if (!settings || typeof settings !== 'object') {
+        return undefined;
+    }
+
+    const candidate = (settings as Record<string, unknown>).usdInIdr;
+    if (typeof candidate === 'number' && Number.isFinite(candidate) && candidate > 0) {
+        return candidate;
+    }
+    if (typeof candidate === 'string') {
+        const parsed = Number(candidate);
+        if (Number.isFinite(parsed) && parsed > 0) {
+            return parsed;
+        }
+    }
+
+    return undefined;
+}
+
 @Injectable()
 export class ConfirmPortalPaymentHandler {
     constructor(
@@ -44,7 +63,15 @@ export class ConfirmPortalPaymentHandler {
                         participantId: true,
                         programId: true,
                         program: {
-                            select: { name: true, currency: true },
+                            select: {
+                                name: true,
+                                currency: true,
+                                brand: {
+                                    select: {
+                                        settings: true,
+                                    },
+                                },
+                            },
                         },
                         participant: {
                             select: {
@@ -83,6 +110,9 @@ export class ConfirmPortalPaymentHandler {
         // notification consumer because it short-circuits when `data.email` is empty.
         const customerEmail = invoice.application.participant?.user?.email ?? '';
         const customerName = invoice.application.participant?.fullName ?? customerEmail;
+        const exchangeRate = invoice.exchangeRateSnapshot
+            ? Number(invoice.exchangeRateSnapshot)
+            : parseUsdInIdrRate(invoice.application.program.brand?.settings);
 
         // Create a payment intent via the Payment Service
         const intentResponse = await this.paymentClient.createIntent({
@@ -103,6 +133,7 @@ export class ConfirmPortalPaymentHandler {
                 customer_name: customerName,
                 payment_category: 'registration',
             },
+            exchange_rate: exchangeRate,
         });
 
         if (paymentType === 'manual') {
