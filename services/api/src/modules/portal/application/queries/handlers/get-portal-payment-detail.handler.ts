@@ -1,10 +1,12 @@
 import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
-import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Injectable, ForbiddenException, Logger, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { PortalCacheService } from '../../services/portal-cache.service';
 import { GetPortalPaymentDetailQuery } from '../portal-queries';
+import { PaymentServiceHttpClient } from '@modules/payments/infrastructure/services/payment-service-http.client';
 import {
     PortalPaymentDetailResponseDto,
     PaymentHistoryEntryDto,
@@ -13,10 +15,14 @@ import {
 @Injectable()
 @QueryHandler(GetPortalPaymentDetailQuery)
 export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPaymentDetailQuery> {
+    private readonly logger = new Logger(GetPortalPaymentDetailHandler.name);
+
     constructor(
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
         private readonly portalCacheService: PortalCacheService,
+        private readonly paymentServiceClient: PaymentServiceHttpClient,
+        private readonly configService: ConfigService,
     ) {}
 
     async execute(query: GetPortalPaymentDetailQuery): Promise<PortalPaymentDetailResponseDto> {
@@ -56,6 +62,7 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
             throw new ForbiddenException('Access denied');
         }
 
+        const actionUrl = await this.resolvePendingActionUrl(invoice.externalTransactionId);
         const history: PaymentHistoryEntryDto[] = [];
 
         if (invoice.status === 'paid' && invoice.paidAt) {
@@ -85,6 +92,7 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
                 paymentMethod: invoice.paymentMethod ?? undefined,
                 dateTime: invoice.updatedAt.toISOString(),
                 amountLabel: `${invoice.currency} ${Number(invoice.amount).toFixed(2)}`,
+                actionUrl,
             });
         } else if (invoice.status === 'failed') {
             history.push({
@@ -131,5 +139,81 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
 
         await this.cacheService.set(cacheKey, result, CACHE_TTL.SHORT);
         return result;
+    }
+
+    private buildInternalHeaders(): Record<string, string> {
+        const internalKey = this.configService.get<string>('PAYMENT_SERVICE_INTERNAL_KEY', '').trim();
+        return internalKey ? { 'X-Internal-Service-Key': internalKey } : {};
+    }
+
+    private async resolvePendingActionUrl(transactionId?: string | null): Promise<string | undefined> {
+        if (!transactionId) {
+            return undefined;
+        }
+
+        try {
+            const { data } = await this.paymentServiceClient.get<unknown>(
+                `/api/v1/payments/${transactionId}`,
+                { headers: this.buildInternalHeaders() },
+            );
+            return this.extractActionUrl(data);
+        } catch (error) {
+            this.logger.debug(`Failed to resolve action URL for ${transactionId}: ${(error as Error).message}`);
+            return undefined;
+        }
+    }
+
+    private extractActionUrl(payload: unknown): string | undefined {
+        const data = this.unwrapPayloadObject(payload);
+        const direct = this.pickString(
+            data.action_url,
+            data.redirect_url,
+            data.checkout_url,
+            data.invoice_url,
+            data.payment_url,
+            data.url,
+        );
+        if (direct) return direct;
+
+        const gatewayResponse = this.toRecord(data.gateway_response);
+        if (gatewayResponse) {
+            const fromGateway = this.pickString(
+                gatewayResponse.action_url,
+                gatewayResponse.redirect_url,
+                gatewayResponse.checkout_url,
+                gatewayResponse.invoice_url,
+                gatewayResponse.payment_url,
+                gatewayResponse.url,
+            );
+            if (fromGateway) return fromGateway;
+        }
+
+        return undefined;
+    }
+
+    private unwrapPayloadObject(payload: unknown): Record<string, unknown> {
+        const direct = this.toRecord(payload);
+        if (!direct) {
+            return {};
+        }
+
+        const nested = this.toRecord(direct.data);
+        return nested ?? direct;
+    }
+
+    private toRecord(value: unknown): Record<string, unknown> | null {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+            return null;
+        }
+        return value as Record<string, unknown>;
+    }
+
+    private pickString(...values: unknown[]): string | undefined {
+        for (const value of values) {
+            if (typeof value === 'string' && value.trim().length > 0) {
+                return value.trim();
+            }
+        }
+        return undefined;
     }
 }

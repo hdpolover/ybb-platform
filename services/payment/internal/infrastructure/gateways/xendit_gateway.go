@@ -42,6 +42,9 @@ func (g *XenditGateway) CreatePayment(ctx context.Context, req *domainGateways.C
 		req.Payment.ID,
 		float32(req.Payment.Amount),
 	)
+	if req.Payment.Currency != "" {
+		createInvoiceRequest.SetCurrency(strings.ToUpper(req.Payment.Currency))
+	}
 
 	if req.CustomerEmail != "" {
 		createInvoiceRequest.SetPayerEmail(req.CustomerEmail)
@@ -52,6 +55,9 @@ func (g *XenditGateway) CreatePayment(ctx context.Context, req *domainGateways.C
 	if req.CallbackURL != "" {
 		createInvoiceRequest.SetSuccessRedirectUrl(req.CallbackURL)
 		createInvoiceRequest.SetFailureRedirectUrl(req.CallbackURL)
+	}
+	if methods := mapXenditInvoicePaymentMethods(req.PaymentMethod); len(methods) > 0 {
+		createInvoiceRequest.SetPaymentMethods(methods)
 	}
 
 	resp, _, err := g.client.InvoiceApi.CreateInvoice(ctx).CreateInvoiceRequest(createInvoiceRequest).Execute()
@@ -96,8 +102,9 @@ func (g *XenditGateway) ChargePayment(ctx context.Context, req *domainGateways.C
 		ActionType:         "redirect",
 		ActionURL:          createResp.RedirectURL,
 		Metadata: map[string]interface{}{
-			"provider": "xendit",
-			"token":    createResp.Token,
+			"provider":    "xendit",
+			"token":       createResp.Token,
+			"invoice_url": createResp.RedirectURL,
 		},
 	}, nil
 }
@@ -208,4 +215,42 @@ func stringValue(values map[string]interface{}, key string) string {
 		return value
 	}
 	return ""
+}
+
+func mapXenditInvoicePaymentMethods(method entities.PaymentMethod) []string {
+	code := strings.ToLower(strings.TrimSpace(string(method)))
+	if code == "" {
+		return nil
+	}
+
+	switch {
+	case strings.Contains(code, "credit_card") || strings.HasSuffix(code, "_cc") || strings.Contains(code, "card"):
+		return []string{"CREDIT_CARD"}
+	case strings.Contains(code, "qris"):
+		return []string{"QRIS"}
+	case strings.Contains(code, "bca"):
+		return []string{"BCA"}
+	case strings.Contains(code, "bni"):
+		return []string{"BNI"}
+	case strings.Contains(code, "bri"):
+		return []string{"BRI"}
+	case strings.Contains(code, "mandiri"):
+		return []string{"MANDIRI"}
+	case strings.Contains(code, "permata"):
+		return []string{"PERMATA"}
+	case strings.Contains(code, "ovo"):
+		return []string{"OVO"}
+	case strings.Contains(code, "dana"):
+		return []string{"DANA"}
+	case strings.Contains(code, "linkaja"):
+		return []string{"LINKAJA"}
+	case strings.Contains(code, "shopeepay"):
+		return []string{"SHOPEEPAY"}
+	case strings.Contains(code, "alfamart"):
+		return []string{"ALFAMART"}
+	case strings.Contains(code, "indomaret"):
+		return []string{"INDOMARET"}
+	default:
+		return nil
+	}
 }
