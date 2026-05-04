@@ -13,7 +13,6 @@ import { PaymentEventsController } from './presentation/payment-events.controlle
 import { WebhooksController } from './presentation/webhooks.controller';
 import { PaymentRepository } from './infrastructure/persistence/payment.repository';
 import { PaymentServiceHttpClient } from './infrastructure/services/payment-service-http.client';
-import { WebhookValidationService } from './infrastructure/webhook-validation.service';
 import { ListUserPaymentsHandler } from './application/queries/handlers/list-user-payments.handler';
 import { GetPaymentDetailHandler } from './application/queries/handlers/get-payment-detail.handler';
 import { CreateIntentHandler } from './application/commands/handlers/create-intent.handler';
@@ -41,7 +40,6 @@ import { CacheModule } from '@shared/infrastructure/cache/cache.module';
         },
         PaymentRepository,
         PaymentServiceHttpClient,
-        WebhookValidationService,
         ListUserPaymentsHandler,
         GetPaymentDetailHandler,
         CreateIntentHandler,
