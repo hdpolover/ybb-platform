@@ -7,6 +7,7 @@ import {
     Res,
     UseGuards,
     UnauthorizedException,
+    HttpException,
     Logger,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
@@ -20,7 +21,7 @@ import { UserRole } from '../../core/entities/user.entity';
 import { CurrentUser, CurrentUserData } from '../../shared/decorators/current-user.decorator';
 import { QueryAuditLogsDto } from './dto/query-audit-logs.dto';
 import { AuditCleanupService } from './audit-cleanup.service';
-import { Prisma, DataChangeLog, ChangeType, ChangedByType, RiskLevel } from '@prisma/client';
+import { Prisma, ChangeType, ChangedByType, RiskLevel } from '@prisma/client';
 
 @ApiTags('audit')
 @Controller('admin/audit-logs')
@@ -48,24 +49,49 @@ export class AuditAdminController {
     ) {
         if (!currentUser.adminId) throw new UnauthorizedException('Admin access required');
 
-        const { page = 1, limit = 20 } = query;
+        const { page = 1, limit = 20, cursor } = query;
+        const cursorToken = cursor?.trim() || null;
+        const useCursorMode = cursorToken !== null;
+        const decodedCursor = useCursorMode
+            ? this.decodeCreatedAtCursor(cursorToken as string)
+            : null;
         const skip = (page - 1) * limit;
 
         const where = this.buildWhereClause(query);
+        const listWhere = useCursorMode
+            ? this.buildCreatedAtCursorWhere(where, decodedCursor, 'desc')
+            : where;
 
         const [data, total] = await Promise.all([
             this.prisma.dataChangeLog.findMany({
-                where,
-                orderBy: { createdAt: 'desc' },
-                skip,
-                take: limit,
+                where: listWhere,
+                orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+                ...(useCursorMode ? {} : { skip }),
+                take: useCursorMode ? limit + 1 : limit,
             }),
             this.prisma.dataChangeLog.count({ where }),
         ]);
+        const hasMore = useCursorMode ? data.length > limit : page * limit < total;
+        const window = useCursorMode ? data.slice(0, limit) : data;
+        const nextCursor = useCursorMode && hasMore
+            ? this.encodeCreatedAtCursor({
+                id: window[window.length - 1]?.id,
+                createdAt: window[window.length - 1]?.createdAt,
+            })
+            : null;
 
         return {
-            data,
-            meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+            data: window,
+            meta: {
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
+                mode: useCursorMode ? 'cursor' : 'offset',
+                cursor: cursorToken,
+                nextCursor,
+                hasMore,
+            },
         };
     }
 
@@ -95,27 +121,55 @@ export class AuditAdminController {
         @Param('entityId') entityId: string,
         @Query('page') page: number = 1,
         @Query('limit') limit: number = 50,
+        @Query('cursor') cursor: string = '',
         @CurrentUser() currentUser: CurrentUserData,
     ) {
         if (!currentUser.adminId) throw new UnauthorizedException('Admin access required');
 
-        const skip = (Number(page) - 1) * Number(limit);
+        const pageNum = Number(page);
+        const limitNum = Number(limit);
+        const skip = (pageNum - 1) * limitNum;
+        const cursorToken = cursor?.trim() || null;
+        const useCursorMode = cursorToken !== null;
+        const decodedCursor = useCursorMode
+            ? this.decodeCreatedAtCursor(cursorToken as string)
+            : null;
 
         const where = { entityType, entityId };
+        const listWhere = useCursorMode
+            ? this.buildCreatedAtCursorWhere(where, decodedCursor, 'desc')
+            : where;
 
         const [data, total] = await Promise.all([
             this.prisma.dataChangeLog.findMany({
-                where,
-                orderBy: { createdAt: 'desc' },
-                skip,
-                take: Number(limit),
+                where: listWhere,
+                orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+                ...(useCursorMode ? {} : { skip }),
+                take: useCursorMode ? limitNum + 1 : limitNum,
             }),
             this.prisma.dataChangeLog.count({ where }),
         ]);
+        const hasMore = useCursorMode ? data.length > limitNum : pageNum * limitNum < total;
+        const window = useCursorMode ? data.slice(0, limitNum) : data;
+        const nextCursor = useCursorMode && hasMore
+            ? this.encodeCreatedAtCursor({
+                id: window[window.length - 1]?.id,
+                createdAt: window[window.length - 1]?.createdAt,
+            })
+            : null;
 
         return {
-            data,
-            meta: { total, page: Number(page), limit: Number(limit), totalPages: Math.ceil(total / Number(limit)) },
+            data: window,
+            meta: {
+                total,
+                page: pageNum,
+                limit: limitNum,
+                totalPages: Math.ceil(total / limitNum),
+                mode: useCursorMode ? 'cursor' : 'offset',
+                cursor: cursorToken,
+                nextCursor,
+                hasMore,
+            },
         };
     }
 
@@ -133,32 +187,6 @@ export class AuditAdminController {
         if (!currentUser.adminId) throw new UnauthorizedException('Admin access required');
 
         const where = this.buildWhereClause(query);
-
-        const logs = await this.prisma.dataChangeLog.findMany({
-            where,
-            orderBy: { createdAt: 'desc' },
-            take: 5000,
-        });
-
-        const data = logs.map((log: DataChangeLog) => ({
-            id: log.id,
-            timestamp: log.createdAt,
-            action: log.action,
-            entityType: log.entityType,
-            entityId: log.entityId || '',
-            event: log.event || '',
-            actorType: log.actorType,
-            actorId: log.actorId || '',
-            riskLevel: log.riskLevel,
-            source: log.source || '',
-            endpoint: log.endpoint || '',
-            status: log.status,
-            changedFields: (log.changedFields || []).join(', '),
-            reason: log.reason || '',
-            beforeState: log.beforeState ? JSON.stringify(log.beforeState) : '',
-            afterState: log.afterState ? JSON.stringify(log.afterState) : '',
-            ip: log.ipAddress,
-        }));
 
         const columns = [
             { header: 'ID', key: 'id', width: 36 },
@@ -180,7 +208,12 @@ export class AuditAdminController {
             { header: 'IP Address', key: 'ip', width: 15 },
         ];
 
-        await this.excelService.streamExcel(res, data, columns, 'audit-logs-export');
+        await this.excelService.streamExcelRows(
+            res,
+            this.iterateAuditExportRows(where),
+            columns,
+            'audit-logs-export',
+        );
     }
 
     /**
@@ -212,6 +245,115 @@ export class AuditAdminController {
         }
 
         return where;
+    }
+
+    private decodeCreatedAtCursor(cursor: string): { id: string; createdAt: Date } {
+        try {
+            const json = Buffer.from(cursor, 'base64url').toString('utf8');
+            const parsed = JSON.parse(json) as { id?: string; createdAt?: string };
+            if (!parsed.id || !parsed.createdAt) {
+                throw new Error('missing cursor fields');
+            }
+            const createdAt = new Date(parsed.createdAt);
+            if (Number.isNaN(createdAt.getTime())) {
+                throw new Error('invalid cursor createdAt');
+            }
+            return { id: parsed.id, createdAt };
+        } catch {
+            throw new HttpException('Invalid cursor token', 400);
+        }
+    }
+
+    private encodeCreatedAtCursor(cursor: { id?: string; createdAt?: Date }): string | null {
+        if (!cursor.id || !cursor.createdAt) return null;
+        return Buffer.from(
+            JSON.stringify({
+                id: cursor.id,
+                createdAt: cursor.createdAt.toISOString(),
+            }),
+            'utf8',
+        ).toString('base64url');
+    }
+
+    private buildCreatedAtCursorWhere(
+        baseWhere: Prisma.DataChangeLogWhereInput,
+        cursor: { id: string; createdAt: Date } | null,
+        sortOrder: Prisma.SortOrder,
+    ): Prisma.DataChangeLogWhereInput {
+        if (!cursor) return baseWhere;
+        const cursorWindow = sortOrder === 'asc'
+            ? {
+                OR: [
+                    { createdAt: { gt: cursor.createdAt } },
+                    { createdAt: cursor.createdAt, id: { gt: cursor.id } },
+                ],
+            }
+            : {
+                OR: [
+                    { createdAt: { lt: cursor.createdAt } },
+                    { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+                ],
+            };
+        return {
+            AND: [
+                baseWhere,
+                cursorWindow,
+            ],
+        };
+    }
+
+    private async *iterateAuditExportRows(where: Prisma.DataChangeLogWhereInput) {
+        let cursor: { id: string; createdAt: Date } | null = null;
+        const batchSize = 500;
+
+        while (true) {
+            const logs = await this.prisma.dataChangeLog.findMany({
+                where: cursor
+                    ? {
+                        AND: [
+                            where,
+                            {
+                                OR: [
+                                    { createdAt: { lt: cursor.createdAt } },
+                                    { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+                                ],
+                            },
+                        ],
+                    }
+                    : where,
+                orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+                take: batchSize,
+            });
+
+            if (logs.length === 0) {
+                return;
+            }
+
+            for (const log of logs) {
+                yield {
+                    id: log.id,
+                    timestamp: log.createdAt,
+                    action: log.action,
+                    entityType: log.entityType,
+                    entityId: log.entityId || '',
+                    event: log.event || '',
+                    actorType: log.actorType,
+                    actorId: log.actorId || '',
+                    riskLevel: log.riskLevel,
+                    source: log.source || '',
+                    endpoint: log.endpoint || '',
+                    status: log.status,
+                    changedFields: (log.changedFields || []).join(', '),
+                    reason: log.reason || '',
+                    beforeState: log.beforeState ? JSON.stringify(log.beforeState) : '',
+                    afterState: log.afterState ? JSON.stringify(log.afterState) : '',
+                    ip: log.ipAddress,
+                };
+            }
+
+            const last = logs[logs.length - 1];
+            cursor = { id: last.id, createdAt: last.createdAt };
+        }
     }
 
     /**
