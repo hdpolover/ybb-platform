@@ -4,8 +4,8 @@ import { ConfigModule } from '@nestjs/config';
 import { ReceiptService } from './receipt.service';
 
 @Module({
-    imports: [ConfigModule],
-    providers: [EmailService, ReceiptService],
-    exports: [EmailService, ReceiptService],
+  imports: [ConfigModule],
+  providers: [EmailService, ReceiptService],
+  exports: [EmailService, ReceiptService],
 })
-export class EmailModule { }
+export class EmailModule {}
