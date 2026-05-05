@@ -28,6 +28,9 @@ describe('HomeStrategy', () => {
         participant: {
             count: jest.fn(),
         },
+        file: {
+            findFirst: jest.fn().mockResolvedValue(null),
+        },
     };
 
     const mockCacheService = {

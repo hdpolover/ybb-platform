@@ -16,6 +16,15 @@ type ProgramObjectivesMetadata = {
   items?: string[];
 };
 
+type FurtherInformationMetadata = {
+  eyebrow?: string;
+  title?: string;
+  subtitle?: string;
+  background_image_url?: string;
+  background_image_mobile_url?: string;
+  mockup_image_url?: string;
+};
+
 function normalizePaymentInfoContent(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null;
@@ -44,6 +53,26 @@ function normalizePaymentInfoContent(value: unknown): Record<string, unknown> | 
 
       return paymentItem;
     }),
+  };
+}
+
+function normalizeFurtherInformationContent(value: unknown): FurtherInformationMetadata | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const content = value as Record<string, unknown>;
+  return {
+    eyebrow: typeof content.eyebrow === 'string' ? content.eyebrow : undefined,
+    title: typeof content.title === 'string' ? content.title : undefined,
+    subtitle: typeof content.subtitle === 'string' ? content.subtitle : undefined,
+    background_image_url:
+      typeof content.background_image_url === 'string' ? content.background_image_url : undefined,
+    background_image_mobile_url:
+      typeof content.background_image_mobile_url === 'string'
+        ? content.background_image_mobile_url
+        : undefined,
+    mockup_image_url: typeof content.mockup_image_url === 'string' ? content.mockup_image_url : undefined,
   };
 }
 
@@ -251,6 +280,7 @@ export class HomeStrategy implements ILandingPageStrategy {
     }));
 
     const objectivesMeta = (brandMeta.program_objectives as ProgramObjectivesMetadata | undefined) ?? {};
+    const furtherInformationMeta = normalizeFurtherInformationContent(brandMeta.further_information);
     const fallbackObjectiveItems = (program?.objectives ?? []).map((obj) => ({
       id: obj.id,
       description: obj.description,
@@ -523,6 +553,20 @@ export class HomeStrategy implements ILandingPageStrategy {
               low: 'Low participation',
               none: 'No participants',
             },
+          },
+        },
+        {
+          type: 'further_information',
+          content: {
+            eyebrow: furtherInformationMeta?.eyebrow || 'Guideline',
+            title: furtherInformationMeta?.title || 'Further Information',
+            subtitle:
+              furtherInformationMeta?.subtitle ||
+              'The complete information regarding this program can be seen in the guideline below.',
+            background_image_url: furtherInformationMeta?.background_image_url || '/img/halfback.png',
+            background_image_mobile_url:
+              furtherInformationMeta?.background_image_mobile_url || '/img/backgroundformobile.png',
+            mockup_image_url: furtherInformationMeta?.mockup_image_url || '/img/mockupjapan.png',
           },
         },
         {

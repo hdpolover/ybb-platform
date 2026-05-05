@@ -499,6 +499,15 @@ export type BrandProgramObjectives = {
   items?: string[];
 };
 
+export type BrandFurtherInformation = {
+  eyebrow?: string;
+  title?: string;
+  subtitle?: string;
+  background_image_url?: string;
+  background_image_mobile_url?: string;
+  mockup_image_url?: string;
+};
+
 export type BrandPaymentInfoItem = {
   id: string;
   icon: string;
@@ -526,6 +535,7 @@ export type BrandMetadata = {
   promo_cta?: BrandPromoCta;
   moments_shorts?: BrandMomentsShorts;
   program_objectives?: BrandProgramObjectives;
+  further_information?: BrandFurtherInformation;
   partners_canva_url?: string | null;
   affiliateCommission?: AffiliateCommissionMetadata | null;
   recognition?: Record<string, unknown>;

@@ -89,6 +89,7 @@ import {
   type BrandPromoCta,
   type BrandMomentsShorts,
   type BrandProgramObjectives,
+  type BrandFurtherInformation,
   type BrandPaymentInfo,
   type BrandPaymentInfoItem,
 } from "../../api";
@@ -1804,6 +1805,127 @@ function PromoCtaSheet({
   );
 }
 
+function FurtherInformationSheet({
+  brandId,
+  initial,
+  onSaved,
+}: {
+  brandId: string;
+  initial: BrandFurtherInformation | undefined;
+  onSaved: (updated: BrandMetadata) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState<BrandFurtherInformation>(initial ?? {});
+
+  function set<K extends keyof BrandFurtherInformation>(key: K, value: BrandFurtherInformation[K]) {
+    setForm((current) => ({ ...current, [key]: value }));
+    setError(null);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await updatePlatformBrandMetadata(brandId, {
+        further_information: {
+          eyebrow: form.eyebrow?.trim() || undefined,
+          title: form.title?.trim() || undefined,
+          subtitle: form.subtitle?.trim() || undefined,
+          background_image_url: form.background_image_url?.trim() || undefined,
+          background_image_mobile_url: form.background_image_mobile_url?.trim() || undefined,
+          mockup_image_url: form.mockup_image_url?.trim() || undefined,
+        },
+      });
+      onSaved(updated);
+      setOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => {
+          setForm(initial ?? {});
+          setError(null);
+          setOpen(true);
+        }}
+      >
+        <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
+      </Button>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent side="right" className="sm:max-w-md overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Edit Further Information CTA</SheetTitle>
+          </SheetHeader>
+          <div className="mt-6 space-y-4">
+            <SheetMsg message={error} variant="error" />
+            <FieldInput
+              label="Eyebrow"
+              id="fi-eyebrow"
+              value={form.eyebrow ?? ""}
+              onChange={(v) => set("eyebrow", v)}
+              placeholder="Guidebook"
+            />
+            <FieldInput
+              label="Title"
+              id="fi-title"
+              value={form.title ?? ""}
+              onChange={(v) => set("title", v)}
+              placeholder="Further Information"
+            />
+            <FieldTextarea
+              label="Subtitle"
+              id="fi-subtitle"
+              value={form.subtitle ?? ""}
+              onChange={(v) => set("subtitle", v)}
+              rows={3}
+            />
+            <div className="border-t border-zinc-100 pt-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">Images</p>
+              <div className="space-y-3">
+                <FieldInput
+                  label="Desktop Background Image URL"
+                  id="fi-bg-desktop"
+                  value={form.background_image_url ?? ""}
+                  onChange={(v) => set("background_image_url", v)}
+                  placeholder="https://... or /img/halfback.png"
+                />
+                <FieldInput
+                  label="Mobile Background Image URL"
+                  id="fi-bg-mobile"
+                  value={form.background_image_mobile_url ?? ""}
+                  onChange={(v) => set("background_image_mobile_url", v)}
+                  placeholder="https://... or /img/backgroundformobile.png"
+                />
+                <FieldInput
+                  label="Mockup Image URL"
+                  id="fi-mockup"
+                  value={form.mockup_image_url ?? ""}
+                  onChange={(v) => set("mockup_image_url", v)}
+                  placeholder="https://... or /img/mockupjapan.png"
+                />
+              </div>
+            </div>
+          </div>
+          <SheetFooter className="mt-6">
+            <Button onClick={handleSave} loading={saving} disabled={saving}>
+              <Save className="mr-1.5 h-4 w-4" /> Save
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+    </>
+  );
+}
+
 // ─── Moments Shorts Sheet ─────────────────────────────────────────────────────
 
 function MomentsShortsSheet({
@@ -2121,6 +2243,26 @@ function LandingPageTab({ brandId }: { brandId: string }) {
             <FieldView label="Button URL" value={meta.promo_cta?.primary_cta_href} />
             <FieldView label="Desktop Background URL" value={meta.promo_cta?.background_image_url} />
             <FieldView label="Mobile Background URL" value={meta.promo_cta?.background_image_mobile_url} />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Further Information CTA */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Further Information CTA Section</CardTitle>
+            <FurtherInformationSheet brandId={brandId} initial={meta.further_information} onSaved={setMeta} />
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <FieldView label="Eyebrow" value={meta.further_information?.eyebrow} />
+            <FieldView label="Title" value={meta.further_information?.title} />
+            <FieldView label="Subtitle" value={meta.further_information?.subtitle} />
+            <FieldView label="Desktop Background URL" value={meta.further_information?.background_image_url} />
+            <FieldView label="Mobile Background URL" value={meta.further_information?.background_image_mobile_url} />
+            <FieldView label="Mockup Image URL" value={meta.further_information?.mockup_image_url} />
           </div>
         </CardContent>
       </Card>
