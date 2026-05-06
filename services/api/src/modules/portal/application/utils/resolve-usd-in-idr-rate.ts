@@ -10,6 +10,41 @@ function toPositiveNumber(value: unknown): number | undefined {
         }
     }
 
+    if (value && typeof value === 'object') {
+        const decimalLike = value as {
+            toNumber?: () => number;
+            valueOf?: () => unknown;
+            toString?: () => string;
+        };
+
+        if (typeof decimalLike.toNumber === 'function') {
+            const parsed = decimalLike.toNumber();
+            if (Number.isFinite(parsed) && parsed > 0) {
+                return parsed;
+            }
+        }
+
+        if (typeof decimalLike.valueOf === 'function') {
+            const primitive = decimalLike.valueOf();
+            if (primitive !== value) {
+                const parsed = toPositiveNumber(primitive);
+                if (parsed !== undefined) {
+                    return parsed;
+                }
+            }
+        }
+
+        if (typeof decimalLike.toString === 'function') {
+            const rendered = decimalLike.toString();
+            if (rendered && rendered !== '[object Object]') {
+                const parsed = Number(rendered);
+                if (Number.isFinite(parsed) && parsed > 0) {
+                    return parsed;
+                }
+            }
+        }
+    }
+
     return undefined;
 }
 

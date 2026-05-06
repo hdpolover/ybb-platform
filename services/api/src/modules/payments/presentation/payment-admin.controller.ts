@@ -90,7 +90,7 @@ export class PaymentAdminController {
             paidTo,
             minAmount,
             maxAmount,
-            sortBy = 'createdAt',
+            sortBy = 'updatedAt',
             sortOrder = 'desc',
             cursor,
         } = query;
@@ -451,19 +451,49 @@ export class PaymentAdminController {
 
         if (!invoice) throw new HttpException('Invoice not found', 404);
 
-        let transaction: unknown = null;
+        let transaction: Record<string, unknown> | null = null;
+        let transactions: Array<Record<string, unknown>> = [];
         const paymentMethodCatalog = await this.getPaymentMethodCatalog();
         let resolvedMethod = this.normalizePaymentMethod(invoice.paymentMethod, paymentMethodCatalog);
-        if (invoice.externalTransactionId) {
+
+        if (invoice.externalIntentId) {
+            try {
+                const { data } = await this.paymentServiceClient.get(
+                    `/api/v1/payments/${invoice.externalIntentId}`,
+                    { headers: this.buildInternalHeaders() },
+                );
+                transactions = this.extractTransactionsFromPaymentPayload(data, paymentMethodCatalog);
+                transaction = this.pickCurrentTransaction(transactions, invoice.externalTransactionId);
+                if (!resolvedMethod && transaction) {
+                    const extractedFromTxn = this.extractPaymentMethodFromTransaction(transaction);
+                    resolvedMethod = this.normalizePaymentMethod(extractedFromTxn, paymentMethodCatalog);
+                }
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.logger.warn(`Failed to fetch payment intent ${invoice.externalIntentId}: ${message}`);
+            }
+        }
+
+        if (!transaction && invoice.externalTransactionId) {
             try {
                 const { data } = await this.paymentServiceClient.get(
                     `/api/v1/payments/${invoice.externalTransactionId}`,
                     { headers: this.buildInternalHeaders() },
                 );
-                transaction = data;
-                if (!resolvedMethod && data && typeof data === 'object') {
-                    const extractedFromTxn = this.extractPaymentMethodFromTransaction(data as Record<string, unknown>);
-                    resolvedMethod = this.normalizePaymentMethod(extractedFromTxn, paymentMethodCatalog);
+                if (data && typeof data === 'object' && !Array.isArray(data)) {
+                    transaction = this.decoratePaymentTransaction(data as Record<string, unknown>, paymentMethodCatalog);
+                    if (
+                        invoice.externalTransactionId &&
+                        !transactions.some((item) =>
+                            this.matchesTransaction(item, invoice.externalTransactionId as string),
+                        )
+                    ) {
+                        transactions = [transaction, ...transactions];
+                    }
+                    if (!resolvedMethod) {
+                        const extractedFromTxn = this.extractPaymentMethodFromTransaction(transaction);
+                        resolvedMethod = this.normalizePaymentMethod(extractedFromTxn, paymentMethodCatalog);
+                    }
                 }
             } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
@@ -476,7 +506,7 @@ export class PaymentAdminController {
             paymentMethod: resolvedMethod?.label ?? null,
         };
 
-        return { ...this.toInvoiceDto(enrichedInvoice), transaction };
+        return { ...this.toInvoiceDto(enrichedInvoice), transaction, transactions };
     }
 
     @Post('invoices/:id/verify')
@@ -839,6 +869,64 @@ export class PaymentAdminController {
             return payload.data as Record<string, unknown>;
         }
         return payload;
+    }
+
+    private extractTransactionsFromPaymentPayload(
+        payload: unknown,
+        catalog: Array<{ value: string; label: string }>,
+    ): Array<Record<string, unknown>> {
+        if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+            return [];
+        }
+
+        const source = this.unwrapPayloadObject(payload as Record<string, unknown>);
+        const rawTransactions = Array.isArray(source.transactions) ? source.transactions : [];
+
+        return rawTransactions
+            .filter(
+                (item): item is Record<string, unknown> =>
+                    Boolean(item) && typeof item === 'object' && !Array.isArray(item),
+            )
+            .map((item) => this.decoratePaymentTransaction(item, catalog));
+    }
+
+    private decoratePaymentTransaction(
+        transaction: Record<string, unknown>,
+        catalog: Array<{ value: string; label: string }>,
+    ): Record<string, unknown> {
+        const source = this.unwrapPayloadObject(transaction);
+        const extractedMethod = this.extractPaymentMethodFromTransaction(source);
+        const normalizedMethod = this.normalizePaymentMethod(extractedMethod, catalog);
+
+        return {
+            ...source,
+            payment_method_label: normalizedMethod?.label ?? null,
+        };
+    }
+
+    private pickCurrentTransaction(
+        transactions: Array<Record<string, unknown>>,
+        externalTransactionId: string | null,
+    ): Record<string, unknown> | null {
+        if (transactions.length === 0) return null;
+        if (!externalTransactionId) return transactions[0];
+
+        const matched = transactions.find((transaction) =>
+            this.matchesTransaction(transaction, externalTransactionId),
+        );
+        return matched ?? transactions[0];
+    }
+
+    private matchesTransaction(
+        transaction: Record<string, unknown>,
+        externalTransactionId: string,
+    ): boolean {
+        const transactionId = this.pickString(
+            transaction.id,
+            transaction.transaction_id,
+            transaction.transactionId,
+        );
+        return transactionId === externalTransactionId;
     }
 
     private normalizePaymentMethod(

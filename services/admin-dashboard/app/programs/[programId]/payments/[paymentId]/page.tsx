@@ -23,19 +23,25 @@ import { Button } from "@/src/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/src/ui/card";
 import { formatDate, formatDateTime } from "@/lib/utils";
 
-const STATUS_CLASS: Record<InvoiceStatus, string> = {
+const STATUS_CLASS: Record<string, string> = {
   paid: "bg-emerald-50 text-emerald-700 border-emerald-200",
   unpaid: "bg-amber-50 text-amber-700 border-amber-200",
   processing: "bg-blue-50 text-blue-700 border-blue-200",
   failed: "bg-red-50 text-red-700 border-red-200",
   refunded: "bg-purple-50 text-purple-700 border-purple-200",
+  pending: "bg-blue-50 text-blue-700 border-blue-200",
+  needs_review: "bg-orange-50 text-orange-700 border-orange-200",
+  success: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  rejected: "bg-red-50 text-red-700 border-red-200",
+  void: "bg-zinc-100 text-zinc-700 border-zinc-300",
 };
 
 function StatusPill({ status }: { status: string }) {
-  const cls = STATUS_CLASS[status as InvoiceStatus] ?? "bg-zinc-50 text-zinc-600 border-zinc-200";
+  const normalizedStatus = status.trim().toLowerCase();
+  const cls = STATUS_CLASS[normalizedStatus] ?? "bg-zinc-50 text-zinc-600 border-zinc-200";
   return (
     <span className={`inline-flex items-center rounded border px-2.5 py-0.5 text-xs font-medium capitalize ${cls}`}>
-      {status}
+      {formatKeyLabel(normalizedStatus)}
     </span>
   );
 }
@@ -90,9 +96,10 @@ export default function PaymentDetailPage({
 
   const txn = invoice?.transaction as Record<string, unknown> | null | undefined;
   const txnStatus = txn?.status as string | undefined;
+  const attempts = invoice?.transactions ?? [];
   const needsReview = txnStatus === "NEEDS_REVIEW";
   const paymentMethodValue = formatPaymentMethod(invoice?.paymentMethod ?? null);
-  const proofUrl = extractProofUrl(txn);
+  const proofUrl = extractProofUrl(txn) ?? attempts.map((attempt) => extractProofUrl(attempt)).find(Boolean) ?? null;
   const isManualTransfer = isManualTransferPayment(invoice?.paymentMethod ?? null, txn);
   const showPaymentControls = Boolean(invoice);
 
@@ -282,7 +289,7 @@ export default function PaymentDetailPage({
                   <CardHeader>
                     <CardTitle className="text-base flex items-center gap-2">
                       <CreditCard className="h-4 w-4 text-zinc-400" />
-                      Payment Transaction
+                      Latest Payment Transaction
                       {txnStatus && (
                         <span className="ml-auto">
                           <StatusPill status={txnStatus} />
@@ -317,6 +324,114 @@ export default function PaymentDetailPage({
                           </div>
                         ))}
                     </dl>
+                  </CardContent>
+                </Card>
+              )}
+
+              {attempts.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center justify-between gap-2">
+                      <span>Payment Attempts</span>
+                      <span className="text-sm font-normal text-zinc-500">{attempts.length} total</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {attempts.map((attempt, index) => {
+                      const attemptStatus = getStringValue(attempt, "status");
+                      const attemptMethod =
+                        getStringValue(attempt, "payment_method_label") ??
+                        getStringValue(attempt, "payment_method_id");
+                      const attemptProofUrl = extractProofUrl(attempt);
+                      const attemptGatewayResponse = getObjectValue(attempt, "gateway_response");
+                      const attemptNumber = attempts.length - index;
+                      return (
+                        <div key={getStringValue(attempt, "id") ?? `${attemptNumber}-${index}`} className="rounded-lg border border-zinc-200 p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-sm font-semibold text-zinc-900">Attempt {attemptNumber}</p>
+                                {index === 0 && (
+                                  <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-600">
+                                    Latest
+                                  </span>
+                                )}
+                                {attemptStatus && <StatusPill status={attemptStatus} />}
+                              </div>
+                              <p className="mt-1 text-xs text-zinc-500">
+                                Created {formatOptionalDateTime(getStringValue(attempt, "created_at"))}
+                                {" · "}
+                                Updated {formatOptionalDateTime(getStringValue(attempt, "updated_at"))}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {attemptGatewayResponse && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setDetailModal({ key: `gateway_response_attempt_${attemptNumber}`, value: attemptGatewayResponse })}
+                                >
+                                  Gateway Response
+                                </Button>
+                              )}
+                              {attemptProofUrl && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => window.open(attemptProofUrl, "_blank", "noopener,noreferrer")}
+                                >
+                                  Open Proof
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+
+                          <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-3 text-sm md:grid-cols-2 xl:grid-cols-3">
+                            <div>
+                              <dt className="text-zinc-500">Transaction ID</dt>
+                              <dd className="font-mono text-xs text-zinc-800 break-all">
+                                {getStringValue(attempt, "id") ?? "—"}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="text-zinc-500">Method</dt>
+                              <dd className="text-zinc-900">{formatPaymentMethod(attemptMethod ?? null)}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-zinc-500">Gateway Reference</dt>
+                              <dd className="font-mono text-xs text-zinc-800 break-all">
+                                {getStringValue(attempt, "gateway_reference_id") ?? "—"}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="text-zinc-500">Amount</dt>
+                              <dd className="text-zinc-900">
+                                {formatAttemptAmount(attempt, invoice.currency)}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="text-zinc-500">Error Code</dt>
+                              <dd className="text-zinc-900">{getStringValue(attempt, "error_code") ?? "—"}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-zinc-500">Reviewed At</dt>
+                              <dd className="text-zinc-900">
+                                {formatOptionalDateTime(getStringValue(attempt, "reviewed_at"))}
+                              </dd>
+                            </div>
+                          </dl>
+
+                          {getStringValue(attempt, "admin_notes") && (
+                            <div className="mt-3 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+                              <span className="font-medium text-zinc-800">Admin notes:</span>{" "}
+                              {getStringValue(attempt, "admin_notes")}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </CardContent>
                 </Card>
               )}
@@ -620,6 +735,31 @@ function extractProofUrl(transaction: Record<string, unknown> | null | undefined
     "receipt_url",
     "receiptUrl",
   ]);
+}
+
+function getStringValue(source: Record<string, unknown>, key: string): string | null {
+  const value = source[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function getObjectValue(source: Record<string, unknown>, key: string): Record<string, unknown> | null {
+  const value = source[key];
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function formatOptionalDateTime(value: string | null): string {
+  return value ? formatDateTime(value) : "—";
+}
+
+function formatAttemptAmount(attempt: Record<string, unknown>, fallbackCurrency: string): string {
+  const amount =
+    typeof attempt.amount_total === "number"
+      ? attempt.amount_total
+      : typeof attempt.amount === "number"
+        ? attempt.amount
+        : null;
+  const currency = getStringValue(attempt, "currency") ?? fallbackCurrency;
+  return amount === null ? "—" : formatCurrency(amount, currency);
 }
 
 function isManualTransferPayment(

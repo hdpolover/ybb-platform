@@ -39,10 +39,10 @@ import {
 import { formatDate, formatDateTime } from "@/lib/utils";
 
 const SORT_OPTIONS: Array<{ value: "createdAt" | "paidAt" | "amount" | "updatedAt"; label: string }> = [
+  { value: "updatedAt", label: "Recently Updated" },
   { value: "createdAt", label: "Newest Invoice" },
   { value: "paidAt", label: "Newest Payment" },
   { value: "amount", label: "Highest Amount" },
-  { value: "updatedAt", label: "Recently Updated" },
 ];
 
 const STATUS_CLASS: Record<InvoiceStatus, string> = {
@@ -142,7 +142,7 @@ export default function PaymentsPage({
   const [paidTo, setPaidTo] = useState("");
   const [minAmount, setMinAmount] = useState("");
   const [maxAmount, setMaxAmount] = useState("");
-  const [sortBy, setSortBy] = useState<"createdAt" | "paidAt" | "amount" | "updatedAt">("createdAt");
+  const [sortBy, setSortBy] = useState<"createdAt" | "paidAt" | "amount" | "updatedAt">("updatedAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
@@ -160,7 +160,7 @@ export default function PaymentsPage({
     paidTo ||
     minAmount ||
     maxAmount ||
-    sortBy !== "createdAt" ||
+    sortBy !== "updatedAt" ||
     sortOrder !== "desc" ||
     pageSize !== 20,
   );
@@ -240,7 +240,7 @@ export default function PaymentsPage({
     setPaidTo("");
     setMinAmount("");
     setMaxAmount("");
-    setSortBy("createdAt");
+    setSortBy("updatedAt");
     setSortOrder("desc");
     setPageSize(20);
     setPage(1);
