@@ -2,10 +2,19 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class ProgramDashboardKpiDto {
   @ApiProperty({ example: 688 })
-  totalParticipants: number;
+  registeredUsers: number;
 
   @ApiProperty({ example: 166 })
-  participantsToday: number;
+  registrationsToday: number;
+
+  @ApiProperty({ example: 420 })
+  formsStarted: number;
+
+  @ApiProperty({ example: 275 })
+  submittedApplications: number;
+
+  @ApiProperty({ example: 268 })
+  registeredOnly: number;
 
   @ApiProperty({ example: 59 })
   totalAmbassadors: number;
