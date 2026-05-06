@@ -3864,7 +3864,7 @@ function EmailTemplateSheet({
   );
 }
 
-function EmailTemplatesTab({ brandId }: { brandId: string }) {
+function _EmailTemplatesTab({ brandId }: { brandId: string }) {
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -4333,7 +4333,27 @@ export default function BrandDetailPage({ brandId }: { brandId: string }) {
           <AdminsTab brandId={brandId} />
         </TabsContent>
         <TabsContent value="email-templates" className="mt-4">
-          <EmailTemplatesTab brandId={brandId} />
+          <Card>
+            <CardHeader>
+              <CardTitle>Email Templates</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
+                <p className="font-semibold">Email templates are now managed centrally.</p>
+                <p className="mt-1">
+                  Configure the global defaults once from the top-level Email Templates menu, then add brand or program overrides only when this brand needs different wording.
+                </p>
+              </div>
+              <div className="flex justify-end">
+                <Link href="/platform/email-templates">
+                  <Button>
+                    <Mail className="mr-1.5 h-4 w-4" />
+                    Open Email Templates
+                  </Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
         <TabsContent value="legal-docs" className="mt-4">
           <LegalDocsTab brandSlug={brand.slug} />

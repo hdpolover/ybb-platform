@@ -27,6 +27,7 @@ import {
   HelpCircle,
   BookOpen,
   Handshake,
+  Mail,
   ShieldCheck,
   Shield,
   Menu,
@@ -81,6 +82,7 @@ export const platformNavSections: NavSection[] = [
     title: "Content",
     items: [
       { id: "system-announcements", label: "Announcements", href: "/platform/announcements", icon: Bell },
+      { id: "email-templates", label: "Email Templates", href: "/platform/email-templates", icon: Mail },
     ],
   },
   {
