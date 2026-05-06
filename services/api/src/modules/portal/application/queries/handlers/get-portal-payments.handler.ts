@@ -266,6 +266,9 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                 const period = resolveTierPeriod(archivedPeriods, invoice.createdAt, now);
                 const normalizedStatus = String(invoice.status).toLowerCase();
                 const feeType = archivedTier?.feeType ?? undefined;
+                if (feeType === 'registration_fee') {
+                    continue;
+                }
                 const tierOrder = typeof archivedTier?.order === 'number' ? archivedTier.order : 999;
                 const sequenceOrder = getFeeTypePriority(feeType) * 1000 + tierOrder;
 

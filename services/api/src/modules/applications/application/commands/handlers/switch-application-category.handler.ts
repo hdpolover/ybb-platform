@@ -22,7 +22,15 @@ export class SwitchApplicationCategoryHandler {
     const application = await this.prisma.participantApplication.findUnique({
       where: { id: applicationId },
       include: {
-        invoices: true,
+        invoices: {
+          include: {
+            pricingTier: {
+              select: {
+                feeType: true,
+              },
+            },
+          },
+        },
         program: {
           include: {
             pricingTiers: true,
@@ -42,15 +50,20 @@ export class SwitchApplicationCategoryHandler {
     }
 
     // 3. Validate Payments
-    // "when payment attemps/invoices exist, category switch is still possible if none is successful."
-    const successfulPaymentStatus = 'paid'; // defined in PaymentStatus enum
+    const switchLockedStatuses = new Set(['processing', 'paid']);
+    const hasLockedRegistrationInvoice = application.invoices.some(
+      (invoice) =>
+        invoice.pricingTier?.feeType === 'registration_fee' &&
+        switchLockedStatuses.has(String(invoice.status).toLowerCase()),
+    );
+    const hasLockedRegistrationPayment = switchLockedStatuses.has(
+      String(application.registrationPaymentStatus ?? '').toLowerCase(),
+    );
 
-    const hasSuccessfulInvoice = application.invoices.some(inv => inv.status === successfulPaymentStatus);
-    const hasSuccessfulRegistrationPayment = application.registrationPaymentStatus === successfulPaymentStatus;
-
-    // Any successful registration payment locks category switching in both directions.
-    if (hasSuccessfulInvoice || hasSuccessfulRegistrationPayment) {
-      throw new BadRequestException('Cannot switch category after a successful registration payment exists.');
+    if (hasLockedRegistrationInvoice || hasLockedRegistrationPayment) {
+      throw new BadRequestException(
+        'Cannot switch category while a registration fee payment is processing or already paid.',
+      );
     }
 
     // 4. Validate Target Category Eligibility
