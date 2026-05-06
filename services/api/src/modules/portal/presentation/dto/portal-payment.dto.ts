@@ -190,6 +190,9 @@ export class PaymentInvoiceDetailDto {
 
     @ApiPropertyOptional()
     intentId?: string;
+
+    @ApiPropertyOptional({ description: 'Resolved USD to IDR exchange rate used for payment processing' })
+    exchangeRate?: number;
 }
 
 export class PortalPaymentDetailResponseDto {

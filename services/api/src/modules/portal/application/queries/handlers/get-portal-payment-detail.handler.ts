@@ -11,6 +11,7 @@ import {
     PortalPaymentDetailResponseDto,
     PaymentHistoryEntryDto,
 } from '../../../presentation/dto/portal-payment.dto';
+import { resolveUsdInIdrRate } from '../../utils/resolve-usd-in-idr-rate';
 
 interface PendingTransactionContext {
     actionUrl?: string;
@@ -47,7 +48,14 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
             where: { id: invoiceId },
             include: {
                 application: {
-                    select: { participantId: true },
+                    select: {
+                        participantId: true,
+                        program: {
+                            select: {
+                                usdInIdr: true,
+                            },
+                        },
+                    },
                 },
                 pricingTier: {
                     select: {
@@ -141,6 +149,10 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
         const periods = invoice.pricingTier.validityPeriods;
         const fallbackLatestPeriod = periods.length > 0 ? periods[periods.length - 1] : undefined;
         const dueDate = periodByInvoiceDate?.endDate ?? nearestActiveOrUpcomingPeriod?.endDate ?? fallbackLatestPeriod?.endDate;
+        const exchangeRate = resolveUsdInIdrRate({
+            snapshot: invoice.exchangeRateSnapshot,
+            programRate: invoice.application.program?.usdInIdr,
+        });
 
         const result: PortalPaymentDetailResponseDto = {
             invoice: {
@@ -153,6 +165,7 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
                 currency: invoice.currency,
                 transactionId: invoice.externalTransactionId ?? undefined,
                 intentId: invoice.externalIntentId ?? undefined,
+                exchangeRate,
             },
             history,
         };
