@@ -10,6 +10,7 @@ import { CACHE_KEYS } from '@shared/constants/cache-keys';
 import { PortalCacheService } from '../../services/portal-cache.service';
 import { EnsurePortalPaymentInvoiceCommand } from '../../queries/portal-queries';
 import { EnsurePortalPaymentInvoiceResponseDto } from '../../../presentation/dto/portal-payment.dto';
+import { resolveUsdInIdrRate } from '../../utils/resolve-usd-in-idr-rate';
 
 @Injectable()
 export class EnsurePortalPaymentInvoiceHandler {
@@ -38,6 +39,16 @@ export class EnsurePortalPaymentInvoiceHandler {
                 id: true,
                 programId: true,
                 applicationCategory: true,
+                program: {
+                    select: {
+                        usdInIdr: true,
+                        brand: {
+                            select: {
+                                settings: true,
+                            },
+                        },
+                    },
+                },
             },
             orderBy: { createdAt: 'desc' },
         });
@@ -98,6 +109,11 @@ export class EnsurePortalPaymentInvoiceHandler {
             throw new NotFoundException('Payment option amount is invalid');
         }
 
+        const exchangeRateSnapshot = resolveUsdInIdrRate({
+            programRate: application.program?.usdInIdr,
+            brandSettings: application.program?.brand?.settings,
+        });
+
         const invoice = await this.prisma.applicationInvoice.create({
             data: {
                 applicationId: application.id,
@@ -105,6 +121,7 @@ export class EnsurePortalPaymentInvoiceHandler {
                 amount,
                 currency: tier.currency,
                 status: 'unpaid',
+                exchangeRateSnapshot,
             },
             select: { id: true },
         });
