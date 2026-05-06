@@ -15,16 +15,38 @@ import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { PrismaService } from './shared/infrastructure/prisma/prisma.service';
 import * as amqp from 'amqplib';
 
+type AmqpConnection = Awaited<ReturnType<typeof amqp.connect>>;
+type AmqpChannel = Awaited<ReturnType<AmqpConnection['createChannel']>>;
+type PrimaryQueueOptions = {
+  arguments?: Record<string, string>;
+};
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const rabbitMqUrl =
     process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672/';
   const retryDelayMs = parsePositiveInt(process.env.RABBITMQ_RETRY_DELAY_MS, 15000);
+  const [
+    auditQueueOptions,
+    reportingQueueOptions,
+    paymentEventsQueueOptions,
+  ] = await Promise.all([
+    resolvePrimaryQueueOptions(rabbitMqUrl, 'audit_log_queue'),
+    resolvePrimaryQueueOptions(rabbitMqUrl, 'reporting_queue'),
+    resolvePrimaryQueueOptions(rabbitMqUrl, 'api-service-payment-events'),
+  ]);
 
-  await ensureRetryTopology(rabbitMqUrl, 'audit_log_queue', { retryDelayMs });
-  await ensureRetryTopology(rabbitMqUrl, 'reporting_queue', { retryDelayMs });
+  await ensureRetryTopology(rabbitMqUrl, 'audit_log_queue', {
+    retryDelayMs,
+    primaryQueueOptions: auditQueueOptions,
+  });
+  await ensureRetryTopology(rabbitMqUrl, 'reporting_queue', {
+    retryDelayMs,
+    primaryQueueOptions: reportingQueueOptions,
+  });
   await ensureRetryTopology(rabbitMqUrl, 'api-service-payment-events', {
     retryDelayMs,
+    primaryQueueOptions: paymentEventsQueueOptions,
     binding: {
       exchange: 'payment-events',
       exchangeType: 'topic',
@@ -40,6 +62,7 @@ async function bootstrap() {
       queue: 'audit_log_queue',
       queueOptions: {
         durable: true,
+        ...auditQueueOptions,
       },
       noAck: false,
       prefetchCount: 1,
@@ -54,6 +77,7 @@ async function bootstrap() {
       queue: 'reporting_queue',
       queueOptions: {
         durable: true,
+        ...reportingQueueOptions,
       },
       noAck: false,
       prefetchCount: 1,
@@ -79,6 +103,7 @@ async function bootstrap() {
       wildcards: true,
       queueOptions: {
         durable: true,
+        ...paymentEventsQueueOptions,
       },
       noAck: false,
       prefetchCount: 1,
@@ -150,6 +175,7 @@ async function ensureRetryTopology(
   queueName: string,
   options: {
     retryDelayMs: number;
+    primaryQueueOptions: PrimaryQueueOptions;
     binding?: {
       exchange: string;
       exchangeType: 'topic' | 'direct' | 'fanout' | 'headers';
@@ -167,10 +193,10 @@ async function ensureRetryTopology(
       });
     }
 
-    // Primary queues already exist in some environments without DLX arguments.
-    // Re-declaring them with x-dead-letter-exchange causes RabbitMQ 406
-    // PRECONDITION_FAILED at startup because queue arguments are immutable.
-    await channel.assertQueue(queueName, { durable: true });
+    await channel.assertQueue(queueName, {
+      durable: true,
+      ...options.primaryQueueOptions,
+    });
     await channel.assertQueue(`${queueName}.retry`, {
       durable: true,
       arguments: {
@@ -203,4 +229,89 @@ function parsePositiveInt(
   return Number.isFinite(parsed) && parsed > 0
     ? Math.floor(parsed)
     : defaultValue;
+}
+
+function buildPrimaryQueueOptions(
+  queueName: string,
+): PrimaryQueueOptions {
+  return {
+    arguments: {
+      'x-dead-letter-exchange': '',
+      'x-dead-letter-routing-key': `${queueName}.retry`,
+    },
+  };
+}
+
+async function resolvePrimaryQueueOptions(
+  rabbitMqUrl: string,
+  queueName: string,
+): Promise<PrimaryQueueOptions> {
+  const retryTopologyOptions = buildPrimaryQueueOptions(queueName);
+
+  try {
+    await probePrimaryQueue(rabbitMqUrl, queueName, retryTopologyOptions);
+    return retryTopologyOptions;
+  } catch (error) {
+    if (!isQueuePreconditionFailure(error)) {
+      throw error;
+    }
+  }
+
+  await probePrimaryQueue(rabbitMqUrl, queueName, {});
+  console.warn(
+    `[rabbitmq] queue ${queueName} is using legacy arguments; keeping current shape to avoid 406 PRECONDITION_FAILED. Run one deploy with RABBITMQ_QUEUE_CLEANUP_ON_DEPLOY=true to migrate it to retry topology.`,
+  );
+  return {};
+}
+
+async function probePrimaryQueue(
+  rabbitMqUrl: string,
+  queueName: string,
+  queueOptions: PrimaryQueueOptions,
+): Promise<void> {
+  const connection = await amqp.connect(rabbitMqUrl);
+  let channel: AmqpChannel | undefined;
+
+  try {
+    channel = await connection.createChannel();
+    await channel.assertQueue(queueName, {
+      durable: true,
+      ...queueOptions,
+    });
+  } finally {
+    await closeAmqpChannel(channel);
+    await closeAmqpConnection(connection);
+  }
+}
+
+function isQueuePreconditionFailure(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const maybeError = error as { code?: number; message?: string };
+  return (
+    maybeError.code === 406 ||
+    maybeError.message?.includes('PRECONDITION_FAILED') === true
+  );
+}
+
+async function closeAmqpChannel(channel: AmqpChannel | undefined) {
+  if (!channel) return;
+
+  try {
+    await channel.close();
+  } catch {
+    // RabbitMQ closes the channel itself on 406 PRECONDITION_FAILED.
+  }
+}
+
+async function closeAmqpConnection(connection: AmqpConnection | undefined) {
+  if (!connection) return;
+
+  try {
+    await connection.close();
+  } catch {
+    // The connection may already be closed after a failed channel assertion.
+  }
 }
