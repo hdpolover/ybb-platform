@@ -25,6 +25,7 @@ export interface CreateIntentRequest {
   description?: string;
   item_details?: ItemDetail[];
   exchange_rate?: number;
+  exchangeRate?: number;
 }
 
 export interface CreateIntentResponse {
