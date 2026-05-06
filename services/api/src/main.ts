@@ -39,10 +39,20 @@ async function bootstrap() {
   await ensureRetryTopology(rabbitMqUrl, 'audit_log_queue', {
     retryDelayMs,
     primaryQueueOptions: auditQueueOptions,
+    binding: {
+      exchange: 'ybb.events',
+      exchangeType: 'topic',
+      routingKey: '#',
+    },
   });
   await ensureRetryTopology(rabbitMqUrl, 'reporting_queue', {
     retryDelayMs,
     primaryQueueOptions: reportingQueueOptions,
+    binding: {
+      exchange: 'ybb.events',
+      exchangeType: 'topic',
+      routingKey: '#',
+    },
   });
   await ensureRetryTopology(rabbitMqUrl, 'api-service-payment-events', {
     retryDelayMs,
