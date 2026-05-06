@@ -2396,6 +2396,7 @@ export type InvoiceListItem = {
 
 export type InvoiceDetail = InvoiceListItem & {
   transaction: Record<string, unknown> | null;
+  transactions: Array<Record<string, unknown>>;
 };
 
 export type InvoiceSummary = Record<InvoiceStatus, { count: number; amount: number }>;
