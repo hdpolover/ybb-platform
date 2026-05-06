@@ -127,8 +127,7 @@ export class PaymentAdminController {
                     { originCountry: { contains: searchKeyword, mode: 'insensitive' } },
                 ],
             };
-            where.OR = [
-                { id: { contains: searchKeyword, mode: 'insensitive' } },
+            const invoiceSearch: Prisma.ApplicationInvoiceWhereInput[] = [
                 { externalTransactionId: { contains: searchKeyword, mode: 'insensitive' } },
                 { externalIntentId: { contains: searchKeyword, mode: 'insensitive' } },
                 {
@@ -138,6 +137,10 @@ export class PaymentAdminController {
                     },
                 },
             ];
+            if (PaymentAdminController.UUID_RE.test(searchKeyword)) {
+                invoiceSearch.unshift({ id: searchKeyword });
+            }
+            where.OR = invoiceSearch;
         }
         if (status) where.status = status as PaymentStatus;
         if (paymentMethod?.trim()) where.paymentMethod = paymentMethod.trim();
