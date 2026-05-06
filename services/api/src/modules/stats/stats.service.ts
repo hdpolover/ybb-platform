@@ -8,6 +8,7 @@ import { ProgramDashboardResponseDto } from './dto/program-dashboard-response.dt
 
 import { CacheService } from '../../shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '../../shared/constants/cache-keys';
+import { getCountryDisplayName } from '@shared/utils/country-display';
 
 type ProgramDashboardApplication = {
   createdAt: Date;
@@ -142,20 +143,20 @@ export class StatsService {
       orderBy: {
         _count: { id: 'desc' },
       },
-      // Note: Getting ALL groups then paginating in memory might be safer if country count is small (~200 max).
-      // But if we want DB pagination: Use take/skip.
-      take: limit,
-      skip: skip,
+      // Country cardinality is small enough that normalizing/merging in memory is safer than paginating raw values.
     });
 
-    const distinctCountriesCount = await this.getDistinctCountryCount(categoryId);
+    const normalizedGroups = this.normalizeCountryGroups(
+      grouped.map((g) => ({ country: g.originCountry, count: g._count.id })),
+    );
 
-
-    const items: ParticipantGeographyItemDto[] = grouped.map((g) => {
-      const count = g._count.id;
+    const items: ParticipantGeographyItemDto[] = normalizedGroups
+      .slice(skip, skip + limit)
+      .map((g) => {
+      const count = g.count;
       const percentage = (count / totalParticipants) * 100;
       return {
-        country: g.originCountry || 'Unknown',
+        country: g.country,
         participants: count,
         percentage: Number(percentage.toFixed(1)),
       };
@@ -164,26 +165,28 @@ export class StatsService {
     return {
       items,
       meta: {
-        total: distinctCountriesCount,
+        total: normalizedGroups.length,
         page,
         limit,
-        totalPages: Math.ceil(distinctCountriesCount / limit)
+        totalPages: Math.ceil(normalizedGroups.length / limit)
       }
     }
   }
 
   private async getDistinctCountryCount(categoryId: string): Promise<number> {
-    const result = await this.prisma.$queryRaw<Array<{ count: bigint | number }>>`
-      SELECT COUNT(DISTINCT p.origin_country) AS count
-      FROM participants p
-      INNER JOIN users u ON u.id = p.user_id
-      WHERE u.brand_id = ${categoryId}
-        AND p.origin_country IS NOT NULL
-        AND p.deleted_at IS NULL
-        AND u.deleted_at IS NULL
-    `;
-    const countValue = result[0]?.count ?? 0;
-    return typeof countValue === 'bigint' ? Number(countValue) : countValue;
+    const grouped = await this.prisma.participant.groupBy({
+      by: ['originCountry'],
+      where: {
+        user: { brandId: categoryId, deletedAt: null },
+        originCountry: { not: null },
+        deletedAt: null,
+      },
+      _count: { id: true },
+    });
+
+    return this.normalizeCountryGroups(
+      grouped.map((item) => ({ country: item.originCountry, count: item._count.id })),
+    ).length;
   }
 
   async getAdminAnalytics(brandId?: string) {
@@ -369,7 +372,10 @@ export class StatsService {
     const nationalities = this.buildTopNationalities(applications);
     const topAmbassadors = ambassadorRows.map((item) => ({
       name: item.fullName,
-      country: item.user.participant?.originCountry ?? item.user.participant?.nationality ?? item.institution ?? 'Unknown',
+      country: this.resolveCountryName(
+        item.user.participant?.originCountry,
+        item.user.participant?.nationality,
+      ) ?? item.institution ?? 'Unknown',
       referrals: item.successfulReferrals > 0 ? item.successfulReferrals : Math.max(item.totalReferrals, item._count.referrals),
     }));
 
@@ -567,17 +573,37 @@ export class StatsService {
   private buildTopNationalities(
     applications: ProgramDashboardApplication[],
   ): { country: string; count: number }[] {
+    return this.normalizeCountryGroups(
+      applications.map((item) => ({
+        country: this.resolveCountryName(item.participant.originCountry, item.participant.nationality),
+        count: 1,
+      })),
+    ).slice(0, 10);
+  }
+
+  private resolveCountryName(...values: Array<string | null | undefined>): string | null {
+    for (const value of values) {
+      const normalized = getCountryDisplayName(value);
+      if (normalized) return normalized;
+    }
+
+    return null;
+  }
+
+  private normalizeCountryGroups(
+    groups: Array<{ country: string | null | undefined; count: number }>,
+  ): Array<{ country: string; count: number }> {
     const counts = new Map<string, number>();
 
-    for (const item of applications) {
-      const country = item.participant.originCountry ?? item.participant.nationality ?? 'Unknown';
-      counts.set(country, (counts.get(country) ?? 0) + 1);
+    for (const group of groups) {
+      const country = this.resolveCountryName(group.country);
+      if (!country) continue;
+      counts.set(country, (counts.get(country) ?? 0) + group.count);
     }
 
     return Array.from(counts.entries())
       .map(([country, count]) => ({ country, count }))
-      .sort((a, b) => b.count - a.count || a.country.localeCompare(b.country))
-      .slice(0, 10);
+      .sort((a, b) => b.count - a.count || a.country.localeCompare(b.country));
   }
 
   private calculateAge(birthdate: Date, now: Date): number {

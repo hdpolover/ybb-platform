@@ -351,7 +351,7 @@ export default function PaymentsPage({
             <div className="relative lg:col-span-2">
               <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />
               <Input
-                placeholder="Search name, email, country, nationality…"
+                placeholder="Search name, email, invoice ID, transaction ID…"
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                 className="pl-8 h-10 text-sm"
@@ -586,6 +586,15 @@ export default function PaymentsPage({
                   <div className="text-xs text-zinc-400">
                     Paid: {inv.paidAt ? formatDateTime(inv.paidAt) : "—"}
                   </div>
+                  {inv.externalTransactionId ? (
+                    <div className="mt-1 flex items-center gap-1.5 text-xs font-mono text-zinc-400">
+                      <span>Txn: {inv.externalTransactionId.slice(0, 8)}…{inv.externalTransactionId.slice(-4)}</span>
+                      <CopyCellButton
+                        copied={copiedKey === `transaction-${inv.id}`}
+                        onClick={() => void handleCopy(`transaction-${inv.id}`, inv.externalTransactionId)}
+                      />
+                    </div>
+                  ) : null}
                 </TableCell>
                 <TableCell>
                   <div className="font-medium text-sm">{inv.participant.fullName}</div>
