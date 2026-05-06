@@ -49,6 +49,11 @@ BANNER_SIZES = {
     'brand': (1920, 400),
 }
 
+BRAND_LOGO_SIZE = (500, 200)
+BRAND_ICON_SIZE = (512, 512)
+FAVICON_SIZE = (64, 64)
+APPLE_ICON_SIZE = (180, 180)
+
 
 def validate_image(file: UploadFile, max_size: int) -> bytes:
     """Validate image file type and size."""
@@ -122,6 +127,25 @@ def get_extension(content_type: str) -> str:
         'image/webp': 'webp',
     }
     return extensions.get(content_type, 'jpg')
+
+
+async def upload_processed_image(
+    *,
+    storage_service,
+    bucket: str,
+    object_name: str,
+    file_data: BytesIO,
+    content_type: str,
+) -> str:
+    size = file_data.getbuffer().nbytes
+    await storage_service.upload(
+        bucket=bucket,
+        object_name=object_name,
+        file_data=file_data,
+        content_type=content_type,
+        size=size,
+    )
+    return storage_service.get_public_url(bucket, object_name)
 
 
 @router.post("/avatar")
@@ -611,6 +635,152 @@ async def upload_brand_logo(
             "url": f"/api/v1/images/brand/{brand_id}/logo"
         }
         
+    except InvalidFileTypeException as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except FileSizeLimitException as e:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Upload failed: {str(e)}")
+
+
+@router.post("/brand/logo-assets")
+async def upload_brand_logo_assets(
+    file: Annotated[UploadFile, File(description="Brand logo image")],
+    brand_id: Annotated[str, Form(description="Brand ID")],
+    storage_service = Depends(get_storage_service)
+):
+    """
+    Upload brand logo and generate derived icon assets.
+
+    - Accepts: PNG (for transparency), JPEG, WebP
+    - Max size: 5MB
+    - Generates:
+      - main logo (fit within 500x200)
+      - logo icon (fit within 512x512)
+      - favicon (fit within 64x64)
+      - apple touch icon (fit within 180x180)
+    """
+    try:
+        contents = validate_image(file, MAX_IMAGE_SIZE)
+
+        processed_logo = await run_in_threadpool(
+            process_image,
+            contents,
+            BRAND_LOGO_SIZE,
+            output_format='PNG',
+            quality=95,
+            crop_to_fit=False
+        )
+        processed_logo_icon = await run_in_threadpool(
+            process_image,
+            contents,
+            BRAND_ICON_SIZE,
+            output_format='PNG',
+            quality=95,
+            crop_to_fit=False
+        )
+        processed_favicon = await run_in_threadpool(
+            process_image,
+            contents,
+            FAVICON_SIZE,
+            output_format='PNG',
+            quality=95,
+            crop_to_fit=False
+        )
+        processed_apple_icon = await run_in_threadpool(
+            process_image,
+            contents,
+            APPLE_ICON_SIZE,
+            output_format='PNG',
+            quality=95,
+            crop_to_fit=False
+        )
+
+        logo_id = str(uuid.uuid4())
+        logo_filename = f"{logo_id}.png"
+        logo_path = f"{_ENV_PREFIX}/{brand_id}/brands/logo/{logo_filename}"
+
+        logo_icon_id = str(uuid.uuid4())
+        logo_icon_filename = f"{logo_icon_id}.png"
+        logo_icon_path = f"{_ENV_PREFIX}/{brand_id}/brands/logo-icon/{logo_icon_filename}"
+
+        favicon_id = str(uuid.uuid4())
+        favicon_filename = f"{favicon_id}.png"
+        favicon_path = f"{_ENV_PREFIX}/{brand_id}/brands/favicon/{favicon_filename}"
+
+        apple_icon_id = str(uuid.uuid4())
+        apple_icon_filename = f"{apple_icon_id}.png"
+        apple_icon_path = f"{_ENV_PREFIX}/{brand_id}/brands/apple-icon/{apple_icon_filename}"
+
+        logo_url = await upload_processed_image(
+            storage_service=storage_service,
+            bucket="brands",
+            object_name=logo_path,
+            file_data=processed_logo,
+            content_type="image/png",
+        )
+        logo_icon_url = await upload_processed_image(
+            storage_service=storage_service,
+            bucket="brands",
+            object_name=logo_icon_path,
+            file_data=processed_logo_icon,
+            content_type="image/png",
+        )
+        favicon_url = await upload_processed_image(
+            storage_service=storage_service,
+            bucket="brands",
+            object_name=favicon_path,
+            file_data=processed_favicon,
+            content_type="image/png",
+        )
+        apple_icon_url = await upload_processed_image(
+            storage_service=storage_service,
+            bucket="brands",
+            object_name=apple_icon_path,
+            file_data=processed_apple_icon,
+            content_type="image/png",
+        )
+
+        return {
+            "success": True,
+            "logo": {
+                "file_id": logo_id,
+                "filename": logo_filename,
+                "storage_path": logo_path,
+                "bucket": "brands",
+                "size": processed_logo.getbuffer().nbytes,
+                "dimensions": {"width": BRAND_LOGO_SIZE[0], "height": BRAND_LOGO_SIZE[1]},
+                "url": logo_url,
+            },
+            "logo_icon": {
+                "file_id": logo_icon_id,
+                "filename": logo_icon_filename,
+                "storage_path": logo_icon_path,
+                "bucket": "brands",
+                "size": processed_logo_icon.getbuffer().nbytes,
+                "dimensions": {"width": BRAND_ICON_SIZE[0], "height": BRAND_ICON_SIZE[1]},
+                "url": logo_icon_url,
+            },
+            "favicon": {
+                "file_id": favicon_id,
+                "filename": favicon_filename,
+                "storage_path": favicon_path,
+                "bucket": "brands",
+                "size": processed_favicon.getbuffer().nbytes,
+                "dimensions": {"width": FAVICON_SIZE[0], "height": FAVICON_SIZE[1]},
+                "url": favicon_url,
+            },
+            "apple_icon": {
+                "file_id": apple_icon_id,
+                "filename": apple_icon_filename,
+                "storage_path": apple_icon_path,
+                "bucket": "brands",
+                "size": processed_apple_icon.getbuffer().nbytes,
+                "dimensions": {"width": APPLE_ICON_SIZE[0], "height": APPLE_ICON_SIZE[1]},
+                "url": apple_icon_url,
+            },
+        }
+
     except InvalidFileTypeException as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except FileSizeLimitException as e:

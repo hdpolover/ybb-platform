@@ -391,7 +391,6 @@ export function updatePlatformBrandSettings(
     enableMultiCurrency?: boolean;
     isMaintenanceMode?: boolean;
     maintenanceMessage?: string;
-    usdInIdr?: number;
     googleAnalyticsId?: string;
     pixelId?: string;
     supportEmail?: string;

@@ -145,7 +145,7 @@ export function ExchangeRateTab({ programId }: { programId: string }) {
                 <p className="mt-1 text-xs text-zinc-500">
                   Source:{" "}
                   <span className={`font-semibold ${current.source === "program" ? "text-blue-600" : "text-amber-600"}`}>
-                    {current.source === "program" ? "Program override" : "Brand default"}
+                    {current.source === "program" ? "Program setting" : "Not configured"}
                   </span>
                   {" · "}Last updated {formatDateTime(current.updatedAt)}
                 </p>

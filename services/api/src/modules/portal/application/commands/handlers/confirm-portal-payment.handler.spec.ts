@@ -72,11 +72,6 @@ describe('ConfirmPortalPaymentHandler', () => {
                     name: 'China Youth Summit 2026',
                     currency: 'USD',
                     usdInIdr: '17580',
-                    brand: {
-                        settings: {
-                            usdInIdr: '16000',
-                        },
-                    },
                 },
                 participant: {
                     fullName: 'Hendra',

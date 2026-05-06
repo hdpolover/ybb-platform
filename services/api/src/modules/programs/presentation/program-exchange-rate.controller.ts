@@ -27,7 +27,7 @@ export class ProgramExchangeRateController {
 
     @Get()
     @Public()
-    @ApiOperation({ summary: 'Get current exchange rate for a program (with brand fallback)' })
+    @ApiOperation({ summary: 'Get current exchange rate configured for a program' })
     @ApiResponse({ status: 200, type: ExchangeRateResponseDto })
     async getExchangeRate(
         @Param('programId') programId: string,

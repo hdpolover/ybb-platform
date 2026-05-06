@@ -7,6 +7,9 @@ import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-a
 import { StorageService } from '../../../../files/application/storage.service';
 import { UserActivityLog } from '@core/entities/user-activity-log.entity';
 import { LandingRevalidationService } from '../../services/landing-revalidation.service';
+import { BrandLogoAssetsService } from '../../services/brand-logo-assets.service';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 
 @CommandHandler(CreateBrandCommand)
 export class CreateBrandHandler implements ICommandHandler<CreateBrandCommand> {
@@ -16,6 +19,8 @@ export class CreateBrandHandler implements ICommandHandler<CreateBrandCommand> {
         @Inject(IUserActivityLogRepository)
         private readonly activityLogRepository: IUserActivityLogRepository,
         private readonly storageService: StorageService,
+        private readonly brandLogoAssetsService: BrandLogoAssetsService,
+        private readonly prisma: PrismaService,
         private readonly landingRevalidation: LandingRevalidationService,
     ) {}
 
@@ -41,17 +46,17 @@ export class CreateBrandHandler implements ICommandHandler<CreateBrandCommand> {
         let brand = await this.brandRepository.create(dto);
         const updates: Record<string, unknown> = {};
         let needsUpdate = false;
+        let metadataPatch: Record<string, string> | null = null;
 
         if (files) {
-             if (files.logo) {
-                const result = await this.storageService.uploadFile(
+              if (files.logo) {
+                const logoAssets = await this.brandLogoAssetsService.uploadBrandLogoAssets(
                     files.logo,
-                    userId,
-                    brand.id, // Now we have the brand ID
-                    'brands/logos',
-                    undefined 
+                    brand.id,
                 );
-                updates.logoUrl = result.url;
+                updates.logoUrl = logoAssets.logoUrl;
+                updates.logoIconUrl = logoAssets.logoIconUrl;
+                metadataPatch = logoAssets.metadataPatch;
                 needsUpdate = true;
             }
 
@@ -68,8 +73,30 @@ export class CreateBrandHandler implements ICommandHandler<CreateBrandCommand> {
             }
         }
 
+        if (!metadataPatch && dto.logoUrl) {
+            updates.logoIconUrl = dto.logoUrl;
+            metadataPatch = {
+                favicon_url: dto.logoUrl,
+                apple_icon_url: dto.logoUrl,
+            };
+            needsUpdate = true;
+        }
+
         if (needsUpdate) {
             brand = await this.brandRepository.update(brand.id, updates as Partial<Brand>);
+        }
+
+        if (metadataPatch) {
+            const existingMetadata = await this.brandRepository.getMetadata(brand.id);
+            await this.prisma.brand.update({
+                where: { id: brand.id },
+                data: {
+                    metadata: {
+                        ...(existingMetadata ?? {}),
+                        ...metadataPatch,
+                    } as Prisma.InputJsonValue,
+                },
+            });
         }
 
         // Log activity

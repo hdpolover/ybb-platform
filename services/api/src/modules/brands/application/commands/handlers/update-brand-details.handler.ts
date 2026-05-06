@@ -8,6 +8,8 @@ import { Brand } from '@core/entities/brand.entity';
 import { LandingRevalidationService } from '../../services/landing-revalidation.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { BrandLogoAssetsService } from '../../services/brand-logo-assets.service';
+import { Prisma } from '@prisma/client';
 
 @CommandHandler(UpdateBrandDetailsCommand)
 export class UpdateBrandDetailsHandler implements ICommandHandler<UpdateBrandDetailsCommand> {
@@ -17,6 +19,7 @@ export class UpdateBrandDetailsHandler implements ICommandHandler<UpdateBrandDet
         private readonly storageService: StorageService,
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
+        private readonly brandLogoAssetsService: BrandLogoAssetsService,
         private readonly landingRevalidation: LandingRevalidationService,
     ) {}
 
@@ -30,14 +33,16 @@ export class UpdateBrandDetailsHandler implements ICommandHandler<UpdateBrandDet
 
         if (files) {
             if (files.logo) {
-                const result = await this.storageService.uploadFile(
+                const logoAssets = await this.brandLogoAssetsService.uploadBrandLogoAssets(
                     files.logo,
-                    userId,
                     brand.id,
-                    'brands/logos',
-                    undefined
                 );
-                dto.logoUrl = result.url;
+                dto.logoUrl = logoAssets.logoUrl;
+                await this.updateBrandAssetMetadata(brand.id, logoAssets.metadataPatch);
+                await this.prisma.brand.update({
+                    where: { id: brand.id },
+                    data: { logoIconUrl: logoAssets.logoIconUrl },
+                });
             }
 
             if (files.banner) {
@@ -50,6 +55,17 @@ export class UpdateBrandDetailsHandler implements ICommandHandler<UpdateBrandDet
                 );
                 dto.bannerUrl = result.url;
             }
+        }
+
+        if (!files?.logo && dto.logoUrl) {
+            await this.updateBrandAssetMetadata(brand.id, {
+                favicon_url: dto.logoUrl,
+                apple_icon_url: dto.logoUrl,
+            });
+            await this.prisma.brand.update({
+                where: { id: brand.id },
+                data: { logoIconUrl: dto.logoUrl },
+            });
         }
 
         const updatedBrand = await this.brandRepository.update(id, {
@@ -93,6 +109,7 @@ export class UpdateBrandDetailsHandler implements ICommandHandler<UpdateBrandDet
         dto.slug = brand.slug;
         dto.description = brand.description;
         dto.logoUrl = brand.logoUrl;
+        dto.logoIconUrl = brand.logoIconUrl;
         dto.bannerUrl = brand.bannerUrl;
         dto.websiteUrl = brand.websiteUrl;
         dto.landingUrl = brand.landingUrl;
@@ -119,5 +136,18 @@ export class UpdateBrandDetailsHandler implements ICommandHandler<UpdateBrandDet
         dto.deletedAt = brand.deletedAt;
         dto.settings = brand.settings as unknown as Record<string, unknown> | null;
         return dto;
+    }
+
+    private async updateBrandAssetMetadata(brandId: string, patch: Record<string, string>): Promise<void> {
+        const current = await this.brandRepository.getMetadata(brandId);
+        await this.prisma.brand.update({
+            where: { id: brandId },
+            data: {
+                metadata: {
+                    ...(current ?? {}),
+                    ...patch,
+                } as Prisma.InputJsonValue,
+            },
+        });
     }
 }

@@ -42,11 +42,6 @@ export class EnsurePortalPaymentInvoiceHandler {
                 program: {
                     select: {
                         usdInIdr: true,
-                        brand: {
-                            select: {
-                                settings: true,
-                            },
-                        },
                     },
                 },
             },
@@ -111,7 +106,6 @@ export class EnsurePortalPaymentInvoiceHandler {
 
         const exchangeRateSnapshot = resolveUsdInIdrRate({
             programRate: application.program?.usdInIdr,
-            brandSettings: application.program?.brand?.settings,
         });
 
         const invoice = await this.prisma.applicationInvoice.create({

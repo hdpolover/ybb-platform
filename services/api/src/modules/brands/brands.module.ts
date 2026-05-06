@@ -7,6 +7,7 @@ import { FilesModule } from '../files/files.module';
 import { UsersModule } from '../users/users.module';
 import { ProgramsModule } from '../programs/programs.module';
 import { LandingRevalidationService } from './application/services/landing-revalidation.service';
+import { BrandLogoAssetsService } from './application/services/brand-logo-assets.service';
 import { BrandsController } from './presentation/brands.controller';
 import { BrandRepository } from './infrastructure/persistence/brand.repository';
 import { SponsorRepository } from './infrastructure/persistence/sponsor.repository';
@@ -36,6 +37,7 @@ import { DeleteSocialFeedHandler } from './application/commands/handlers/delete-
     controllers: [BrandsController],
     providers: [
         LandingRevalidationService,
+        BrandLogoAssetsService,
         {
             provide: 'IBrandRepository',
             useClass: BrandRepository,

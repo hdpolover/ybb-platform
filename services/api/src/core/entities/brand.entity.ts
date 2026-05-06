@@ -7,6 +7,7 @@ export class Brand {
         public readonly slug: string,
         public readonly description: string | null,
         public readonly logoUrl: string | null,
+        public readonly logoIconUrl: string | null,
         public readonly bannerUrl: string | null,
         public readonly websiteUrl: string | null,
         public readonly landingUrl: string | null,

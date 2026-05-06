@@ -27,6 +27,12 @@ export class BrandSettingsDto {
   @ApiProperty({ example: 'https://example.com/icon.png', required: false, description: 'Icon logo variant' })
   logo_icon_url?: string;
 
+  @ApiProperty({ example: 'https://example.com/favicon.png', required: false, description: 'Dedicated favicon asset URL' })
+  favicon_url?: string;
+
+  @ApiProperty({ example: 'https://example.com/apple-icon.png', required: false, description: 'Dedicated Apple touch icon asset URL' })
+  apple_icon_url?: string;
+
   @ApiProperty({ example: '#123456', required: false, description: 'Primary brand color code (hex)' })
   primary_color?: string;
 
@@ -88,6 +94,8 @@ export class ActiveProgramDto {
   @ApiProperty({ required: false }) logo_white_url?: string;
   @ApiProperty({ required: false }) logo_color_url?: string;
   @ApiProperty({ required: false }) logo_icon_url?: string;
+  @ApiProperty({ required: false }) favicon_url?: string;
+  @ApiProperty({ required: false }) apple_icon_url?: string;
 }
 
 export class AvailableBrandDto {

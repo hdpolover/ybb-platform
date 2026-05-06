@@ -74,6 +74,7 @@ export class UpdateBrandSettingsHandler implements ICommandHandler<UpdateBrandSe
         dto.slug = brand.slug;
         dto.description = brand.description;
         dto.logoUrl = brand.logoUrl;
+        dto.logoIconUrl = brand.logoIconUrl;
         dto.bannerUrl = brand.bannerUrl;
         dto.websiteUrl = brand.websiteUrl;
         dto.landingUrl = brand.landingUrl;

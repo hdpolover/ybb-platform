@@ -16,7 +16,6 @@ function toPositiveNumber(value: unknown): number | undefined {
 export function resolveUsdInIdrRate(input: {
     snapshot?: unknown;
     programRate?: unknown;
-    brandSettings?: unknown;
 }): number | undefined {
     const snapshot = toPositiveNumber(input.snapshot);
     if (snapshot !== undefined) {
@@ -27,10 +26,6 @@ export function resolveUsdInIdrRate(input: {
     if (programRate !== undefined) {
         return programRate;
     }
-
-    if (!input.brandSettings || typeof input.brandSettings !== 'object') {
-        return undefined;
-    }
-
-    return toPositiveNumber((input.brandSettings as Record<string, unknown>).usdInIdr);
+    
+    return undefined;
 }

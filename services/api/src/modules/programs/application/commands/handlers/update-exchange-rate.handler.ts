@@ -16,27 +16,16 @@ export class UpdateExchangeRateHandler {
     async getExchangeRate(programId: string): Promise<ExchangeRateResponseDto> {
         const program = await this.prisma.program.findUnique({
             where: { id: programId },
-            include: {
-                brand: {
-                    include: { settings: true },
-                },
-            },
         });
 
         if (!program) {
             throw new NotFoundException(`Program ${programId} not found`);
         }
 
-        // Program-level rate takes priority, fall back to brand setting
-        const programRate = program.usdInIdr ? Number(program.usdInIdr) : null;
-        const brandRate = program.brand?.settings?.usdInIdr
-            ? Number(program.brand.settings.usdInIdr)
-            : 16000;
-
         return {
             programId: program.id,
-            usdInIdr: programRate ?? brandRate,
-            source: programRate !== null ? 'program' : 'brand',
+            usdInIdr: program.usdInIdr ? Number(program.usdInIdr) : null,
+            source: program.usdInIdr ? 'program' : 'unset',
             updatedAt: program.updatedAt,
         };
     }
@@ -49,10 +38,10 @@ export class UpdateExchangeRateHandler {
     ): Promise<ExchangeRateResponseDto> {
         const program = await this.prisma.program.findUnique({
             where: { id: programId },
-            include: {
-                brand: {
-                    include: { settings: true },
-                },
+            select: {
+                id: true,
+                brandId: true,
+                usdInIdr: true,
             },
         });
 
@@ -60,12 +49,7 @@ export class UpdateExchangeRateHandler {
             throw new NotFoundException(`Program ${programId} not found`);
         }
 
-        // Determine old rate (program-level or brand fallback)
-        const oldRate = program.usdInIdr
-            ? Number(program.usdInIdr)
-            : program.brand?.settings?.usdInIdr
-              ? Number(program.brand.settings.usdInIdr)
-              : 16000;
+        const oldRate = program.usdInIdr ? Number(program.usdInIdr) : newRate;
 
         // Update program and create history entry in a transaction
         const [updatedProgram] = await this.prisma.$transaction([

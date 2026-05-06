@@ -54,11 +54,6 @@ describe('EnsurePortalPaymentInvoiceHandler', () => {
             applicationCategory: 'self_funded',
             program: {
                 usdInIdr: '17580',
-                brand: {
-                    settings: {
-                        usdInIdr: '16000',
-                    },
-                },
             },
         });
         mockPrisma.programPricingTier.findFirst.mockResolvedValue({

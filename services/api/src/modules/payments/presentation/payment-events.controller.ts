@@ -145,7 +145,6 @@ export class PaymentEventsController {
                     select: {
                         id: true,
                         usdInIdr: true,
-                        brand: { select: { settings: { select: { usdInIdr: true } } } },
                     },
                 },
             }
@@ -195,13 +194,10 @@ export class PaymentEventsController {
                     });
                     createdInvoiceId = updated.id;
                 } else if (application.pricingTierId) {
-                    // Snapshot rate: program-level > brand fallback > hardcoded default
                     const exchangeRateSnapshot =
                         application.program?.usdInIdr != null
                             ? Number(application.program.usdInIdr)
-                            : application.program?.brand?.settings?.usdInIdr != null
-                              ? Number(application.program.brand.settings.usdInIdr)
-                              : null;
+                            : null;
 
                     const createdInvoice = await repos.tx.applicationInvoice.create({
                         data: {
