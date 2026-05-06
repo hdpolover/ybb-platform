@@ -71,8 +71,11 @@ export function ProgramDashboard({ selectedProgramId }: ProgramDashboardProps) {
   const topAmbassadors = dashboardData?.topAmbassadors ?? [];
 
   const fallbackKpis: ProgramDashboardAnalytics["kpis"] = {
-    totalParticipants: 0,
-    participantsToday: 0,
+    registeredUsers: 0,
+    registrationsToday: 0,
+    formsStarted: 0,
+    submittedApplications: 0,
+    registeredOnly: 0,
     totalAmbassadors: 0,
     activeAmbassadors: 0,
     referredParticipants: 0,

@@ -11,11 +11,22 @@ describe('StatsService', () => {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
     },
+    program: {
+      findUnique: jest.fn(),
+    },
     participant: {
       count: jest.fn(),
       groupBy: jest.fn(),
     },
     participantApplication: {
+      count: jest.fn(),
+      findMany: jest.fn(),
+    },
+    ambassador: {
+      count: jest.fn(),
+      findMany: jest.fn(),
+    },
+    ambassadorReferral: {
       count: jest.fn(),
     },
     $queryRaw: jest.fn(),
@@ -88,5 +99,99 @@ describe('StatsService', () => {
       },
     });
     expect(mockPrismaService.$queryRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns dashboard funnel stats for registered users, started forms, and submitted applications', async () => {
+    mockPrismaService.program.findUnique.mockResolvedValue({
+      id: 'program-1',
+      status: 'published',
+      isActive: true,
+      registrationCloseDate: new Date('2026-07-15T07:00:00.000Z'),
+      endDate: null,
+    });
+    mockPrismaService.participantApplication.findMany.mockResolvedValue([
+      {
+        createdAt: new Date(),
+        lastEditedAt: null,
+        submittedAt: null,
+        status: 'draft',
+        participant: {
+          gender: 'female',
+          birthdate: new Date('2004-04-02'),
+          originCountry: 'Indonesia',
+          nationality: 'Indonesia',
+          profileCompletedAt: null,
+        },
+      },
+      {
+        createdAt: new Date('2026-05-05T00:00:00.000Z'),
+        lastEditedAt: new Date('2026-05-05T10:00:00.000Z'),
+        submittedAt: null,
+        status: 'draft',
+        participant: {
+          gender: 'male',
+          birthdate: new Date('2001-06-12'),
+          originCountry: 'Japan',
+          nationality: 'Japan',
+          profileCompletedAt: new Date('2026-05-05T09:00:00.000Z'),
+        },
+      },
+      {
+        createdAt: new Date('2026-05-04T00:00:00.000Z'),
+        lastEditedAt: new Date('2026-05-04T08:00:00.000Z'),
+        submittedAt: new Date('2026-05-04T09:00:00.000Z'),
+        status: 'submitted',
+        participant: {
+          gender: null,
+          birthdate: null,
+          originCountry: null,
+          nationality: 'Singapore',
+          profileCompletedAt: new Date('2026-05-04T08:00:00.000Z'),
+        },
+      },
+    ]);
+    mockPrismaService.ambassador.count
+      .mockResolvedValueOnce(5)
+      .mockResolvedValueOnce(4);
+    mockPrismaService.ambassadorReferral.count.mockResolvedValue(2);
+    mockPrismaService.ambassador.findMany.mockResolvedValue([
+      {
+        fullName: 'Alya Putri',
+        institution: 'Tokyo University',
+        successfulReferrals: 2,
+        totalReferrals: 3,
+        _count: { referrals: 3 },
+        user: {
+          participant: {
+            originCountry: 'Indonesia',
+            nationality: 'Indonesia',
+          },
+        },
+      },
+    ]);
+
+    const result = await service.getAdminProgramDashboard('program-1');
+
+    expect(result.kpis).toEqual({
+      registeredUsers: 3,
+      registrationsToday: 1,
+      formsStarted: 2,
+      submittedApplications: 1,
+      registeredOnly: 1,
+      totalAmbassadors: 5,
+      activeAmbassadors: 4,
+      referredParticipants: 2,
+      referredParticipantsPercent: 66.7,
+      programStatus: 'active',
+      programStatusDate: '2026-07-15T07:00:00.000Z',
+    });
+    expect(result.topAmbassadors).toEqual([
+      { name: 'Alya Putri', country: 'Indonesia', referrals: 2 },
+    ]);
+    expect(result.gender).toEqual([
+      { name: 'Female', value: 1 },
+      { name: 'Male', value: 1 },
+      { name: 'Unknown', value: 1 },
+    ]);
   });
 });

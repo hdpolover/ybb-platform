@@ -238,8 +238,11 @@ export type AdminAnalytics = {
 
 export type ProgramDashboardAnalytics = {
   kpis: {
-    totalParticipants: number;
-    participantsToday: number;
+    registeredUsers: number;
+    registrationsToday: number;
+    formsStarted: number;
+    submittedApplications: number;
+    registeredOnly: number;
     totalAmbassadors: number;
     activeAmbassadors: number;
     referredParticipants: number;

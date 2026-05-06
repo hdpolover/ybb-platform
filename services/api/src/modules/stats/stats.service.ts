@@ -2,12 +2,26 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../shared/infrastructure/prisma/prisma.service';
 import { GetStatsQueryDto, StatSection } from './dto/get-stats.dto';
-import { Brand } from '@prisma/client';
+import { ApplicationStatus, Brand } from '@prisma/client';
 import { StatsResponseDto, ParticipantGeographyItemDto } from './dto/stats-response.dto';
 import { ProgramDashboardResponseDto } from './dto/program-dashboard-response.dto';
 
 import { CacheService } from '../../shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '../../shared/constants/cache-keys';
+
+type ProgramDashboardApplication = {
+  createdAt: Date;
+  lastEditedAt: Date | null;
+  submittedAt: Date | null;
+  status: ApplicationStatus;
+  participant: {
+    gender: 'male' | 'female' | null;
+    birthdate: Date | null;
+    originCountry: string | null;
+    nationality: string | null;
+    profileCompletedAt: Date | null;
+  };
+};
 
 @Injectable()
 export class StatsService {
@@ -278,12 +292,16 @@ export class StatsService {
         where: { programId, deletedAt: null },
         select: {
           createdAt: true,
+          lastEditedAt: true,
+          submittedAt: true,
+          status: true,
           participant: {
             select: {
               gender: true,
               birthdate: true,
               originCountry: true,
               nationality: true,
+              profileCompletedAt: true,
             },
           },
         },
@@ -334,12 +352,15 @@ export class StatsService {
       }),
     ]);
 
-    const totalParticipants = applications.length;
+    const registeredUsers = applications.length;
     const startOfTodayUtc = this.startOfUtcDay(new Date());
-    const participantsToday = applications.filter((item) => item.createdAt >= startOfTodayUtc).length;
+    const registrationsToday = applications.filter((item) => item.createdAt >= startOfTodayUtc).length;
+    const formsStarted = applications.filter((item) => this.hasStartedApplication(item)).length;
+    const submittedApplications = applications.filter((item) => this.isSubmittedApplication(item)).length;
+    const registeredOnly = Math.max(registeredUsers - formsStarted, 0);
 
-    const referredParticipantsPercent = totalParticipants > 0
-      ? Number(((referredParticipants / totalParticipants) * 100).toFixed(1))
+    const referredParticipantsPercent = registeredUsers > 0
+      ? Number(((referredParticipants / registeredUsers) * 100).toFixed(1))
       : 0;
 
     const createdAtValues = applications.map((item) => item.createdAt);
@@ -354,8 +375,11 @@ export class StatsService {
 
     return {
       kpis: {
-        totalParticipants,
-        participantsToday,
+        registeredUsers,
+        registrationsToday,
+        formsStarted,
+        submittedApplications,
+        registeredOnly,
         totalAmbassadors,
         activeAmbassadors,
         referredParticipants,
@@ -373,6 +397,16 @@ export class StatsService {
       nationalities,
       topAmbassadors,
     };
+  }
+
+  private hasStartedApplication(application: ProgramDashboardApplication): boolean {
+    return this.isSubmittedApplication(application)
+      || Boolean(application.lastEditedAt)
+      || Boolean(application.participant.profileCompletedAt);
+  }
+
+  private isSubmittedApplication(application: ProgramDashboardApplication): boolean {
+    return Boolean(application.submittedAt) || application.status !== ApplicationStatus.draft;
   }
 
   private startOfUtcDay(date: Date): Date {
@@ -487,11 +521,7 @@ export class StatsService {
   }
 
   private buildGenderDistribution(
-    applications: Array<{
-      participant: {
-        gender: 'male' | 'female' | null;
-      };
-    }>,
+    applications: ProgramDashboardApplication[],
   ): { name: string; value: number }[] {
     const counts = new Map<string, number>();
     for (const item of applications) {
@@ -509,11 +539,7 @@ export class StatsService {
   }
 
   private buildAgeDistribution(
-    applications: Array<{
-      participant: {
-        birthdate: Date | null;
-      };
-    }>,
+    applications: ProgramDashboardApplication[],
   ): { range: string; count: number }[] {
     const buckets = [
       { range: '17-20', min: 17, max: 20, count: 0 },
@@ -539,12 +565,7 @@ export class StatsService {
   }
 
   private buildTopNationalities(
-    applications: Array<{
-      participant: {
-        originCountry: string | null;
-        nationality: string | null;
-      };
-    }>,
+    applications: ProgramDashboardApplication[],
   ): { country: string; count: number }[] {
     const counts = new Map<string, number>();
 
