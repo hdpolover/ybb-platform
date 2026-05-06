@@ -5,12 +5,8 @@ import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { InboundMessageDeserializer } from './common/deserializers/inbound-message.deserializer';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
-import {
-  connect as connectAmqp,
-  AmqpConnectionManager,
-  ChannelWrapper,
-} from 'amqp-connection-manager';
-type QueueAssertChannel = {
+
+type AmqpChannel = {
   assertQueue: (
     queue: string,
     options?: {
@@ -18,6 +14,22 @@ type QueueAssertChannel = {
       arguments?: Record<string, unknown>;
     },
   ) => Promise<unknown>;
+  close(): Promise<void>;
+};
+
+type AmqpConnection = {
+  createChannel(): Promise<AmqpChannel>;
+  close(): Promise<void>;
+};
+
+type AmqpModule = {
+  connect(url: string): Promise<AmqpConnection>;
+};
+
+const amqp = require('amqplib') as AmqpModule;
+
+type PrimaryQueueOptions = {
+  arguments?: Record<string, string>;
 };
 
 async function bootstrap() {
@@ -26,8 +38,13 @@ async function bootstrap() {
   const rabbitMqUrl =
     process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672/';
   const notificationQueue = 'notification_queue';
+  const notificationQueueOptions = await resolvePrimaryQueueOptions(
+    rabbitMqUrl,
+    notificationQueue,
+  );
 
   await ensureRetryTopology(rabbitMqUrl, notificationQueue, {
+    primaryQueueOptions: notificationQueueOptions,
     retryDelayMs: parsePositiveInt(
       process.env.NOTIFICATION_QUEUE_RETRY_DELAY_MS,
       15000,
@@ -41,10 +58,7 @@ async function bootstrap() {
       queue: notificationQueue,
       queueOptions: {
         durable: true,
-        arguments: {
-          'x-dead-letter-exchange': '',
-          'x-dead-letter-routing-key': `${notificationQueue}.retry`,
-        },
+        ...notificationQueueOptions,
       },
       noAck: false,
       prefetchCount: 1,
@@ -78,36 +92,29 @@ void bootstrap();
 async function ensureRetryTopology(
   rabbitMqUrl: string,
   queueName: string,
-  options: { retryDelayMs: number },
+  options: { retryDelayMs: number; primaryQueueOptions: PrimaryQueueOptions },
 ) {
-  const connection: AmqpConnectionManager = connectAmqp([rabbitMqUrl]);
-  const channel: ChannelWrapper = connection.createChannel({
-    setup: async (rawChannel: unknown): Promise<void> => {
-      const ch = rawChannel as QueueAssertChannel;
-      await ch.assertQueue(queueName, {
-        durable: true,
-        arguments: {
-          'x-dead-letter-exchange': '',
-          'x-dead-letter-routing-key': `${queueName}.retry`,
-        },
-      });
-      await ch.assertQueue(`${queueName}.retry`, {
-        durable: true,
-        arguments: {
-          'x-message-ttl': options.retryDelayMs,
-          'x-dead-letter-exchange': '',
-          'x-dead-letter-routing-key': queueName,
-        },
-      });
-      await ch.assertQueue(`${queueName}.dlq`, { durable: true });
-    },
-  });
+  const connection = await amqp.connect(rabbitMqUrl);
+  let channel: AmqpChannel | undefined;
 
   try {
-    await channel.waitForConnect();
+    channel = await connection.createChannel();
+    await channel.assertQueue(queueName, {
+      durable: true,
+      ...options.primaryQueueOptions,
+    });
+    await channel.assertQueue(`${queueName}.retry`, {
+      durable: true,
+      arguments: {
+        'x-message-ttl': options.retryDelayMs,
+        'x-dead-letter-exchange': '',
+        'x-dead-letter-routing-key': queueName,
+      },
+    });
+    await channel.assertQueue(`${queueName}.dlq`, { durable: true });
   } finally {
-    await channel.close();
-    await connection.close();
+    await closeAmqpChannel(channel);
+    await closeAmqpConnection(connection);
   }
 }
 
@@ -120,4 +127,89 @@ function parsePositiveInt(
   return Number.isFinite(parsed) && parsed > 0
     ? Math.floor(parsed)
     : defaultValue;
+}
+
+function buildPrimaryQueueOptions(
+  queueName: string,
+): PrimaryQueueOptions {
+  return {
+    arguments: {
+      'x-dead-letter-exchange': '',
+      'x-dead-letter-routing-key': `${queueName}.retry`,
+    },
+  };
+}
+
+async function resolvePrimaryQueueOptions(
+  rabbitMqUrl: string,
+  queueName: string,
+): Promise<PrimaryQueueOptions> {
+  const retryTopologyOptions = buildPrimaryQueueOptions(queueName);
+
+  try {
+    await probePrimaryQueue(rabbitMqUrl, queueName, retryTopologyOptions);
+    return retryTopologyOptions;
+  } catch (error) {
+    if (!isQueuePreconditionFailure(error)) {
+      throw error;
+    }
+  }
+
+  await probePrimaryQueue(rabbitMqUrl, queueName, {});
+  console.warn(
+    `[rabbitmq] queue ${queueName} is using legacy arguments; keeping current shape to avoid 406 PRECONDITION_FAILED. Run one deploy with NOTIFICATION_QUEUE_CLEANUP_ON_DEPLOY=true to migrate it to retry topology.`,
+  );
+  return {};
+}
+
+async function probePrimaryQueue(
+  rabbitMqUrl: string,
+  queueName: string,
+  queueOptions: PrimaryQueueOptions,
+): Promise<void> {
+  const connection = await amqp.connect(rabbitMqUrl);
+  let channel: AmqpChannel | undefined;
+
+  try {
+    channel = await connection.createChannel();
+    await channel.assertQueue(queueName, {
+      durable: true,
+      ...queueOptions,
+    });
+  } finally {
+    await closeAmqpChannel(channel);
+    await closeAmqpConnection(connection);
+  }
+}
+
+function isQueuePreconditionFailure(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const maybeError = error as { code?: number; message?: string };
+  return (
+    maybeError.code === 406 ||
+    maybeError.message?.includes('PRECONDITION_FAILED') === true
+  );
+}
+
+async function closeAmqpChannel(channel: AmqpChannel | undefined) {
+  if (!channel) return;
+
+  try {
+    await channel.close();
+  } catch {
+    // RabbitMQ closes the channel itself on 406 PRECONDITION_FAILED.
+  }
+}
+
+async function closeAmqpConnection(connection: AmqpConnection | undefined) {
+  if (!connection) return;
+
+  try {
+    await connection.close();
+  } catch {
+    // The connection may already be closed after a failed channel assertion.
+  }
 }

@@ -39,6 +39,21 @@ VHOST_ENCODED="$(RABBITMQ_MANAGEMENT_VHOST="$RABBITMQ_MANAGEMENT_VHOST" node -p 
 QUEUE_BASE_NAMES="${RABBITMQ_QUEUE_CLEANUP_TARGETS:-audit_log_queue,reporting_queue,api-service-payment-events}"
 INCLUDE_RETRY_DLQ="${RABBITMQ_QUEUE_CLEANUP_INCLUDE_RETRY_DLQ:-true}"
 
+wait_for_management_api() {
+  retries=20
+  while [ "$retries" -gt 0 ]; do
+    if curl -sS -u "${RABBITMQ_MANAGEMENT_USER}:${RABBITMQ_MANAGEMENT_PASS}" "${RABBITMQ_MANAGEMENT_URL%/}/api/overview" >/dev/null 2>&1; then
+      return 0
+    fi
+
+    retries=$((retries - 1))
+    sleep 2
+  done
+
+  echo "❌ RabbitMQ management API is not reachable at ${RABBITMQ_MANAGEMENT_URL}."
+  return 1
+}
+
 delete_queue() {
   queue_name="$1"
   endpoint="${RABBITMQ_MANAGEMENT_URL%/}/api/queues/${VHOST_ENCODED}/${queue_name}"
@@ -65,6 +80,7 @@ delete_queue() {
 }
 
 echo "🧹 Running RabbitMQ queue cleanup against ${RABBITMQ_MANAGEMENT_URL}"
+wait_for_management_api
 OLD_IFS="$IFS"
 IFS=','
 set -- $QUEUE_BASE_NAMES
