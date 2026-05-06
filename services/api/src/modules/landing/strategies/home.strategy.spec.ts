@@ -5,7 +5,6 @@ import { CacheService } from '../../../shared/infrastructure/cache/cache.service
 
 describe('HomeStrategy', () => {
     let strategy: HomeStrategy;
-    let prismaService: any;
 
     const mockPrismaService = {
         program: {
@@ -52,7 +51,6 @@ describe('HomeStrategy', () => {
         }).compile();
 
         strategy = module.get<HomeStrategy>(HomeStrategy);
-        prismaService = module.get<PrismaService>(PrismaService);
 
         jest.clearAllMocks();
     });

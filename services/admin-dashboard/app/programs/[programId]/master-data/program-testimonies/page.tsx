@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useParams } from "next/navigation";
 import {
   PlusIcon,
@@ -11,7 +11,7 @@ import {
   XMarkIcon,
   UserCircleIcon,
 } from "@heroicons/react/24/outline";
-import { StarIcon as StarSolidIcon } from "@heroicons/react/24/solid";
+import { MagnifyingGlassIcon, StarIcon as StarSolidIcon } from "@heroicons/react/24/solid";
 import { useAuth } from "@/app/contexts/AuthContext";
 import {
   Sheet,
@@ -35,6 +35,10 @@ export default function ProgramTestimoniesPage() {
   const [items, setItems] = useState<ProgramTestimonial[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [featuredFilter, setFeaturedFilter] = useState<"all" | "featured" | "regular">("all");
+  const [sortBy, setSortBy] = useState<"order-asc" | "order-desc" | "name-asc" | "name-desc">("order-asc");
   const [showCreate, setShowCreate] = useState(false);
   const [editTarget, setEditTarget] = useState<ProgramTestimonial | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProgramTestimonial | null>(null);
@@ -60,6 +64,31 @@ export default function ProgramTestimoniesPage() {
   }, [params.programId]);
 
   useEffect(() => { load(); }, [load]);
+
+  const categoryOptions = useMemo(
+    () => Array.from(new Set(items.map((item) => (item.category ?? "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [items],
+  );
+
+  const filteredItems = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    return [...items]
+      .filter((item) => {
+        const matchesSearch = !normalizedSearch || [item.name, item.role ?? "", item.company ?? "", item.testimonial].join(" ").toLowerCase().includes(normalizedSearch);
+        const matchesCategory = categoryFilter === "all" || (item.category ?? "").trim() === categoryFilter;
+        const matchesFeatured = featuredFilter === "all" || (featuredFilter === "featured" ? Boolean(item.isFeatured) : !item.isFeatured);
+        return matchesSearch && matchesCategory && matchesFeatured;
+      })
+      .sort((left, right) => compareTestimonials(left, right, sortBy));
+  }, [items, searchTerm, categoryFilter, featuredFilter, sortBy]);
+
+  function resetFilters() {
+    setSearchTerm("");
+    setCategoryFilter("all");
+    setFeaturedFilter("all");
+    setSortBy("order-asc");
+  }
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -87,7 +116,7 @@ export default function ProgramTestimoniesPage() {
 
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
         <div className="mb-3 flex items-center justify-between">
-          <p className="text-[11px] text-zinc-500">{items.length} testimonial(s)</p>
+          <p className="text-[11px] text-zinc-500">Showing {filteredItems.length} of {items.length} testimonial(s)</p>
           <div className="flex gap-2">
             <button
               type="button"
@@ -112,6 +141,45 @@ export default function ProgramTestimoniesPage() {
           <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>
         )}
 
+        <div className="mb-4 space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/70 p-4">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]">
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Search</label>
+              <div className="relative">
+                <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+                <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search name, role, company, or testimonial..." className="block w-full rounded-md border border-zinc-200 bg-white py-2 pl-8 pr-3 text-xs text-zinc-900 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Category</label>
+              <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+                <option value="all">All categories</option>
+                {categoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Featured</label>
+              <select value={featuredFilter} onChange={(e) => setFeaturedFilter(e.target.value as typeof featuredFilter)} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+                <option value="all">All testimonials</option>
+                <option value="featured">Featured only</option>
+                <option value="regular">Regular only</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Sort by</label>
+              <select value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+                <option value="order-asc">Order: low to high</option>
+                <option value="order-desc">Order: high to low</option>
+                <option value="name-asc">Name: A-Z</option>
+                <option value="name-desc">Name: Z-A</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <button type="button" onClick={resetFilters} className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-[11px] font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50">Reset filters</button>
+          </div>
+        </div>
+
         <div className="overflow-hidden rounded-md border border-zinc-200">
           <table className="min-w-full text-left text-[11px]">
             <thead className="bg-zinc-50 text-zinc-600">
@@ -134,7 +202,12 @@ export default function ProgramTestimoniesPage() {
                   <td colSpan={5} className="px-3 py-6 text-center text-zinc-400">No testimonials yet.</td>
                 </tr>
               )}
-              {!loading && items.map((t, idx) => (
+              {!loading && items.length > 0 && filteredItems.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-3 py-6 text-center text-zinc-400">No testimonials match the current filters.</td>
+                </tr>
+              )}
+              {!loading && filteredItems.map((t, idx) => (
                 <tr key={t.id} className={idx % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}>
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2.5">
@@ -227,6 +300,17 @@ export default function ProgramTestimoniesPage() {
       )}
     </main>
   );
+}
+
+function compareTestimonials(
+  left: ProgramTestimonial,
+  right: ProgramTestimonial,
+  sortBy: "order-asc" | "order-desc" | "name-asc" | "name-desc",
+): number {
+  if (sortBy === "name-asc") return left.name.localeCompare(right.name);
+  if (sortBy === "name-desc") return right.name.localeCompare(left.name);
+  if (sortBy === "order-desc") return right.order - left.order || left.name.localeCompare(right.name);
+  return left.order - right.order || left.name.localeCompare(right.name);
 }
 
 // ─── Testimonial Sheet (Add / Edit) ──────────────────────────────────────────
@@ -552,4 +636,3 @@ const COUNTRIES = [
   "United States", "Uruguay", "Uzbekistan", "Venezuela", "Vietnam", "Yemen", "Zambia",
   "Zimbabwe",
 ] as const;
-
