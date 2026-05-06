@@ -49,12 +49,17 @@ describe('StatsService', () => {
     jest.clearAllMocks();
   });
 
-  it('returns impact stats using COUNT(DISTINCT origin_country)', async () => {
+  it('returns impact stats using normalized distinct countries', async () => {
     mockPrismaService.brand.findUnique.mockResolvedValue({ id: 'brand-1' });
     mockCacheService.get.mockResolvedValue(null);
     mockPrismaService.participant.count.mockResolvedValue(120);
+    mockPrismaService.participant.groupBy.mockResolvedValue([
+      { originCountry: 'ID', _count: { id: 40 } },
+      { originCountry: 'Indonesia', _count: { id: 20 } },
+      { originCountry: 'JP', _count: { id: 10 } },
+      { originCountry: null, _count: { id: 5 } },
+    ]);
     mockPrismaService.participantApplication.count.mockResolvedValue(32);
-    mockPrismaService.$queryRaw.mockResolvedValue([{ count: 18n }]);
 
     const result = await service.getStats({
       brandId: 'brand-1',
@@ -63,10 +68,9 @@ describe('StatsService', () => {
 
     expect(result.impact).toEqual({
       total_participants: 120,
-      total_countries: 18,
+      total_countries: 2,
       alumni: 32,
     });
-    expect(mockPrismaService.$queryRaw).toHaveBeenCalledTimes(1);
   });
 
   it('returns geography stats with distinct-country total from raw SQL', async () => {
@@ -74,10 +78,11 @@ describe('StatsService', () => {
     mockCacheService.get.mockResolvedValue(null);
     mockPrismaService.participant.count.mockResolvedValue(10);
     mockPrismaService.participant.groupBy.mockResolvedValue([
-      { originCountry: 'Indonesia', _count: { id: 6 } },
-      { originCountry: 'Japan', _count: { id: 2 } },
+      { originCountry: 'ID', _count: { id: 4 } },
+      { originCountry: 'Indonesia', _count: { id: 2 } },
+      { originCountry: 'JP', _count: { id: 2 } },
+      { originCountry: '', _count: { id: 1 } },
     ]);
-    mockPrismaService.$queryRaw.mockResolvedValue([{ count: 4 }]);
 
     const result = await service.getStats({
       brandId: 'brand-1',
@@ -92,13 +97,12 @@ describe('StatsService', () => {
         { country: 'Japan', participants: 2, percentage: 20 },
       ],
       meta: {
-        total: 4,
+        total: 2,
         page: 1,
         limit: 2,
-        totalPages: 2,
+        totalPages: 1,
       },
     });
-    expect(mockPrismaService.$queryRaw).toHaveBeenCalledTimes(1);
   });
 
   it('returns dashboard funnel stats for registered users, started forms, and submitted applications', async () => {
@@ -118,7 +122,7 @@ describe('StatsService', () => {
         participant: {
           gender: 'female',
           birthdate: new Date('2004-04-02'),
-          originCountry: 'Indonesia',
+          originCountry: 'ID',
           nationality: 'Indonesia',
           profileCompletedAt: null,
         },
@@ -131,7 +135,7 @@ describe('StatsService', () => {
         participant: {
           gender: 'male',
           birthdate: new Date('2001-06-12'),
-          originCountry: 'Japan',
+          originCountry: 'JP',
           nationality: 'Japan',
           profileCompletedAt: new Date('2026-05-05T09:00:00.000Z'),
         },
@@ -145,7 +149,7 @@ describe('StatsService', () => {
           gender: null,
           birthdate: null,
           originCountry: null,
-          nationality: 'Singapore',
+          nationality: '',
           profileCompletedAt: new Date('2026-05-04T08:00:00.000Z'),
         },
       },
@@ -163,7 +167,7 @@ describe('StatsService', () => {
         _count: { referrals: 3 },
         user: {
           participant: {
-            originCountry: 'Indonesia',
+            originCountry: 'ID',
             nationality: 'Indonesia',
           },
         },
@@ -187,6 +191,10 @@ describe('StatsService', () => {
     });
     expect(result.topAmbassadors).toEqual([
       { name: 'Alya Putri', country: 'Indonesia', referrals: 2 },
+    ]);
+    expect(result.nationalities).toEqual([
+      { country: 'Indonesia', count: 1 },
+      { country: 'Japan', count: 1 },
     ]);
     expect(result.gender).toEqual([
       { name: 'Female', value: 1 },

@@ -112,26 +112,33 @@ export class PaymentAdminController {
         const maxAmountNum = typeof maxAmount === 'string' && maxAmount.trim() !== '' ? Number(maxAmount) : undefined;
 
         const applicationFilter: Prisma.ParticipantApplicationWhereInput = { programId };
-        const participantFilters: Prisma.ParticipantWhereInput[] = [];
-        if (search?.trim()) {
-            const keyword = search.trim();
-            participantFilters.push({
-                OR: [
-                    { fullName: { contains: keyword, mode: 'insensitive' } },
-                    { user: { email: { contains: keyword, mode: 'insensitive' } } },
-                    { nationality: { contains: keyword, mode: 'insensitive' } },
-                    { originCountry: { contains: keyword, mode: 'insensitive' } },
-                ],
-            });
-        }
-        if (participantFilters.length > 0) {
-            applicationFilter.participant = { AND: participantFilters };
-        }
+        const searchKeyword = search?.trim() || null;
         if (applicationStatus?.trim()) {
             applicationFilter.status = applicationStatus as Prisma.EnumApplicationStatusFilter;
         }
 
         const where: Prisma.ApplicationInvoiceWhereInput = { application: applicationFilter };
+        if (searchKeyword) {
+            const participantSearch: Prisma.ParticipantWhereInput = {
+                OR: [
+                    { fullName: { contains: searchKeyword, mode: 'insensitive' } },
+                    { user: { email: { contains: searchKeyword, mode: 'insensitive' } } },
+                    { nationality: { contains: searchKeyword, mode: 'insensitive' } },
+                    { originCountry: { contains: searchKeyword, mode: 'insensitive' } },
+                ],
+            };
+            where.OR = [
+                { id: { contains: searchKeyword, mode: 'insensitive' } },
+                { externalTransactionId: { contains: searchKeyword, mode: 'insensitive' } },
+                { externalIntentId: { contains: searchKeyword, mode: 'insensitive' } },
+                {
+                    application: {
+                        ...applicationFilter,
+                        participant: participantSearch,
+                    },
+                },
+            ];
+        }
         if (status) where.status = status as PaymentStatus;
         if (paymentMethod?.trim()) where.paymentMethod = paymentMethod.trim();
         if (tierId?.trim()) where.pricingTierId = tierId.trim();

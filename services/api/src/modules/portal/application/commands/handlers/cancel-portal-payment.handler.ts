@@ -26,7 +26,7 @@ export class CancelPortalPaymentHandler {
             where: { id: command.invoiceId },
             include: {
                 application: {
-                    select: { participantId: true },
+                    select: { participantId: true, programId: true },
                 },
             },
         });
@@ -65,8 +65,11 @@ export class CancelPortalPaymentHandler {
         });
 
         await Promise.all([
+            this.cacheService.invalidateInvoiceCache(command.invoiceId, command.userId),
             this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_PAYMENTS(command.userId)),
-            this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_PAYMENT_DETAIL(command.invoiceId)),
+            this.cacheService.invalidateKey(
+                CACHE_KEYS.PORTAL_PAYMENTS(command.userId, invoice.application.programId),
+            ),
         ]);
 
         return {

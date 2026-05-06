@@ -14,6 +14,7 @@ import {
 import {
   getProgramInvoice,
   updateProgramInvoiceStatus,
+  verifyInvoice,
   type InvoiceDetail,
   type InvoiceStatus,
 } from "@/src/shared/api-client";
@@ -93,6 +94,7 @@ export default function PaymentDetailPage({
   const paymentMethodValue = formatPaymentMethod(invoice?.paymentMethod ?? null);
   const proofUrl = extractProofUrl(txn);
   const isManualTransfer = isManualTransferPayment(invoice?.paymentMethod ?? null, txn);
+  const showPaymentControls = Boolean(invoice);
 
   useEffect(() => {
     if (invoice?.status) {
@@ -359,15 +361,77 @@ export default function PaymentDetailPage({
             </div>
 
             <div className="space-y-4 xl:col-span-4">
-            {isManualTransfer && (
+            {showPaymentControls && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Manual Transfer Review</CardTitle>
+                  <CardTitle className="text-base">
+                    {isManualTransfer ? "Manual Transfer Review" : "Payment Controls"}
+                  </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <p className="text-xs text-zinc-500">
-                    Update invoice status after checking transfer proof.
+                    {isManualTransfer
+                      ? "Update invoice status after checking transfer proof."
+                      : needsReview
+                        ? "This gateway transaction is waiting for admin review. You can verify it here or apply a manual override."
+                        : "Use these controls when you need to sync or override the invoice status."}
                   </p>
+                  {needsReview && invoice?.externalTransactionId ? (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={manualSaving || !invoice}
+                        onClick={async () => {
+                          if (!invoice) return;
+                          setManualSaving(true);
+                          setToast(null);
+                          try {
+                            await verifyInvoice(invoice.id, "approve", manualReason || undefined);
+                            setToast({ text: "Gateway payment approved.", ok: true });
+                            await fetchInvoice();
+                          } catch (err) {
+                            setToast({ text: err instanceof Error ? err.message : "Failed to approve payment", ok: false });
+                          } finally {
+                            setManualSaving(false);
+                          }
+                        }}
+                      >
+                        {manualSaving ? (
+                          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <ShieldCheck className="mr-2 h-3.5 w-3.5" />
+                        )}
+                        Approve Payment
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={manualSaving || !invoice}
+                        onClick={async () => {
+                          if (!invoice) return;
+                          setManualSaving(true);
+                          setToast(null);
+                          try {
+                            await verifyInvoice(invoice.id, "reject", manualReason || undefined);
+                            setToast({ text: "Gateway payment rejected.", ok: true });
+                            await fetchInvoice();
+                          } catch (err) {
+                            setToast({ text: err instanceof Error ? err.message : "Failed to reject payment", ok: false });
+                          } finally {
+                            setManualSaving(false);
+                          }
+                        }}
+                      >
+                        {manualSaving ? (
+                          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <ShieldCheck className="mr-2 h-3.5 w-3.5" />
+                        )}
+                        Reject Payment
+                      </Button>
+                    </div>
+                  ) : null}
                   <div>
                     <label className="text-xs font-medium text-zinc-600 mb-1 block">
                       Status

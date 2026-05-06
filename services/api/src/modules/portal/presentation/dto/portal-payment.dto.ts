@@ -133,6 +133,12 @@ export class PaymentHistoryEntryDto {
     code?: string;
 
     @ApiPropertyOptional()
+    invoiceId?: string;
+
+    @ApiPropertyOptional()
+    transactionId?: string;
+
+    @ApiPropertyOptional()
     paymentMethod?: string;
 
     @ApiPropertyOptional()
@@ -178,6 +184,12 @@ export class PaymentInvoiceDetailDto {
 
     @ApiProperty()
     currency: string;
+
+    @ApiPropertyOptional()
+    transactionId?: string;
+
+    @ApiPropertyOptional()
+    intentId?: string;
 }
 
 export class PortalPaymentDetailResponseDto {
