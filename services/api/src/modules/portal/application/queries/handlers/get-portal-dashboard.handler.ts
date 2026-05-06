@@ -132,13 +132,19 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                     }
                 },
                 registrationPaymentStatus: true,
-                invoices: {
-                    select: {
-                        id: true,
-                        status: true,
-                        amount: true
-                    }
-                }
+                        invoices: {
+                            select: {
+                                id: true,
+                                status: true,
+                                amount: true
+                                ,
+                                pricingTier: {
+                                    select: {
+                                        feeType: true,
+                                    },
+                                },
+                            }
+                        }
             }
         });
 
@@ -171,14 +177,26 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
             );
             const bothTiersActive = hasSelfFundedTier && hasFullyFundedTier;
 
-            const hasSuccessfulPayment =
-                latestApplication.invoices.some(inv => inv.status === 'paid') ||
-                latestApplication.registrationPaymentStatus === 'paid';
-            // Switch is available only during draft and only if no successful registration payment exists.
-            const canSwitchCategory =
-                bothTiersActive &&
-                latestApplication.status === 'draft' &&
-                !hasSuccessfulPayment;
+            const switchLockedStatuses = new Set(['processing', 'paid']);
+            const hasLockedRegistrationInvoice = latestApplication.invoices.some(
+                (invoice) =>
+                    invoice.pricingTier?.feeType === 'registration_fee' &&
+                    switchLockedStatuses.has(String(invoice.status).toLowerCase()),
+            );
+            const hasLockedRegistrationPayment = switchLockedStatuses.has(
+                String(latestApplication.registrationPaymentStatus ?? '').toLowerCase(),
+            );
+
+            let switchCategoryMessage: string | undefined;
+            if (!bothTiersActive) {
+                switchCategoryMessage = 'Category switching is unavailable because one registration category is inactive.';
+            } else if (latestApplication.status !== 'draft') {
+                switchCategoryMessage = 'Category switching is only available while your application is still in draft.';
+            } else if (hasLockedRegistrationInvoice || hasLockedRegistrationPayment) {
+                switchCategoryMessage = 'Category switching is locked because a registration fee payment is processing or already paid.';
+            }
+
+            const canSwitchCategory = !switchCategoryMessage;
 
             const guidebooks = await Promise.all(
                 latestApplication.program.resources
@@ -195,6 +213,7 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                 status: latestApplication.status,
                 category: latestApplication.applicationCategory || 'general',
                 canSwitchCategory,
+                switchCategoryMessage,
                 progress: calculateSubmissionProgress(latestApplication),
                 currentStep: determineSubmissionCurrentStep(latestApplication),
                 daysUntilDeadline: this.calculateDaysUntilDeadline(latestApplication.program.applicationDeadline),

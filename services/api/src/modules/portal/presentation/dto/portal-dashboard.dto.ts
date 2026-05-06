@@ -61,6 +61,9 @@ export class PortalApplicationSummaryDto {
     @ApiProperty({ description: 'Indicates if category switching is allowed' })
     canSwitchCategory: boolean;
 
+    @ApiProperty({ required: false, description: 'Explains why category switching is unavailable' })
+    switchCategoryMessage?: string;
+
     @ApiProperty()
     progress: number;
 
