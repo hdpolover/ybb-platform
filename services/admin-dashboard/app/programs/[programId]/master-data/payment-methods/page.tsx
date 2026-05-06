@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import Image from "next/image";
 import { useParams } from "next/navigation";
 import { PlusIcon, PencilSquareIcon, TrashIcon, ArrowPathIcon, CloudArrowUpIcon, ExclamationTriangleIcon, CheckCircleIcon } from "@heroicons/react/24/outline";
+import { MagnifyingGlassIcon } from "@heroicons/react/24/solid";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
 import {
@@ -56,6 +57,11 @@ export default function PaymentMethodsPage() {
   const [activeGatewayNames, setActiveGatewayNames] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"all" | "MANUAL" | "AUTOMATIC">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [visibilityFilter, setVisibilityFilter] = useState<"all" | "visible" | "hidden">("all");
+  const [sortBy, setSortBy] = useState<"order-asc" | "order-desc" | "name-asc" | "name-desc">("order-asc");
   const [showCreate, setShowCreate] = useState(false);
   const [editTarget, setEditTarget] = useState<PaymentMethod | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PaymentMethod | null>(null);
@@ -90,6 +96,38 @@ export default function PaymentMethodsPage() {
 
   useEffect(() => { fetch(); }, [fetch]);
 
+  const filteredMethods = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    return [...methods]
+      .filter((method) => {
+        const methodType = normalizePaymentMethodType(method.type);
+        const gatewayActive = methodType === "MANUAL" || (method.gateway_name && activeGatewayNames.has(method.gateway_name));
+        const visibleToParticipants = method.is_active && gatewayActive;
+        const matchesSearch = !normalizedSearch || [
+          method.display_name,
+          method.name,
+          method.bank_name,
+          method.gateway_name,
+          method.account_name,
+          method.account_number,
+        ].join(" ").toLowerCase().includes(normalizedSearch);
+        const matchesType = typeFilter === "all" || methodType === typeFilter;
+        const matchesStatus = statusFilter === "all" || (statusFilter === "active" ? method.is_active : !method.is_active);
+        const matchesVisibility = visibilityFilter === "all" || (visibilityFilter === "visible" ? visibleToParticipants : !visibleToParticipants);
+        return matchesSearch && matchesType && matchesStatus && matchesVisibility;
+      })
+      .sort((left, right) => comparePaymentMethods(left, right, sortBy));
+  }, [methods, activeGatewayNames, searchTerm, typeFilter, statusFilter, visibilityFilter, sortBy]);
+
+  function resetFilters() {
+    setSearchTerm("");
+    setTypeFilter("all");
+    setStatusFilter("all");
+    setVisibilityFilter("all");
+    setSortBy("order-asc");
+  }
+
   async function handleDelete() {
     if (!deleteTarget) return;
     setDeleteLoading(true);
@@ -108,7 +146,7 @@ export default function PaymentMethodsPage() {
 
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
         <div className="mb-3 flex items-center justify-between">
-          <p className="text-[11px] text-zinc-500">{methods.length} method(s)</p>
+          <p className="text-[11px] text-zinc-500">Showing {filteredMethods.length} of {methods.length} method(s)</p>
           <div className="flex gap-2">
             <button type="button" onClick={fetch} className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50"><ArrowPathIcon className="h-3.5 w-3.5" />Refresh</button>
             <button type="button" onClick={() => setShowCreate(true)} className="inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600"><PlusIcon className="h-3.5 w-3.5" />Add Method</button>
@@ -134,6 +172,53 @@ export default function PaymentMethodsPage() {
             </div>
           );
         })()}
+        <div className="mb-4 space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/70 p-4">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))]">
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Search</label>
+              <div className="relative">
+                <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+                <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search method, gateway, bank, account..." className="block w-full rounded-md border border-zinc-200 bg-white py-2 pl-8 pr-3 text-xs text-zinc-900 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Type</label>
+              <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as typeof typeFilter)} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+                <option value="all">All types</option>
+                <option value="MANUAL">Manual</option>
+                <option value="AUTOMATIC">Automatic</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Status</label>
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+                <option value="all">All statuses</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Visibility</label>
+              <select value={visibilityFilter} onChange={(e) => setVisibilityFilter(e.target.value as typeof visibilityFilter)} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+                <option value="all">All visibility</option>
+                <option value="visible">Visible</option>
+                <option value="hidden">Hidden</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Sort by</label>
+              <select value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+                <option value="order-asc">Order: low to high</option>
+                <option value="order-desc">Order: high to low</option>
+                <option value="name-asc">Name: A-Z</option>
+                <option value="name-desc">Name: Z-A</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <button type="button" onClick={resetFilters} className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-[11px] font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50">Reset filters</button>
+          </div>
+        </div>
         <div className="overflow-hidden rounded-md border border-zinc-200">
           <table className="min-w-full text-left text-[11px]">
             <thead className="bg-zinc-50 text-zinc-600">
@@ -150,7 +235,8 @@ export default function PaymentMethodsPage() {
             <tbody>
               {loading && <tr><td colSpan={7} className="px-3 py-6 text-center text-zinc-400">Loading…</td></tr>}
               {!loading && methods.length === 0 && <tr><td colSpan={7} className="px-3 py-6 text-center text-zinc-400">No payment methods yet.</td></tr>}
-              {!loading && methods.map((m, idx) => {
+              {!loading && methods.length > 0 && filteredMethods.length === 0 && <tr><td colSpan={7} className="px-3 py-6 text-center text-zinc-400">No payment methods match the current filters.</td></tr>}
+              {!loading && filteredMethods.map((m, idx) => {
                 const label = m.display_name || m.name || "";
                 const isManual = normalizePaymentMethodType(m.type) === "MANUAL";
                 const gatewayActive = isManual || (m.gateway_name && activeGatewayNames.has(m.gateway_name));
@@ -562,6 +648,19 @@ function Field({ label, required, children }: { label: string; required?: boolea
 }
 
 const inputCls = "block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
+
+function comparePaymentMethods(
+  left: PaymentMethod,
+  right: PaymentMethod,
+  sortBy: "order-asc" | "order-desc" | "name-asc" | "name-desc",
+): number {
+  const leftLabel = left.display_name || left.name;
+  const rightLabel = right.display_name || right.name;
+  if (sortBy === "name-asc") return leftLabel.localeCompare(rightLabel);
+  if (sortBy === "name-desc") return rightLabel.localeCompare(leftLabel);
+  if (sortBy === "order-desc") return right.sort_order - left.sort_order || leftLabel.localeCompare(rightLabel);
+  return left.sort_order - right.sort_order || leftLabel.localeCompare(rightLabel);
+}
 
 function slugify(input: string): string {
   return input

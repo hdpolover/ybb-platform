@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useParams } from "next/navigation";
 import {
   PlusIcon,
@@ -10,6 +10,7 @@ import {
   UserCircleIcon,
   ExclamationTriangleIcon,
 } from "@heroicons/react/24/outline";
+import { MagnifyingGlassIcon } from "@heroicons/react/24/solid";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
 import {
@@ -239,6 +240,9 @@ export default function ProgramSpeakersPage() {
   const [speakers, setSpeakers] = useState<ProgramSpeaker[]>([]);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [organizationFilter, setOrganizationFilter] = useState("all");
+  const [sortBy, setSortBy] = useState<"order-asc" | "order-desc" | "name-asc" | "name-desc">("order-asc");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [formState, setFormState] = useState<SpeakerFormState>(emptyForm());
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -265,6 +269,29 @@ export default function ProgramSpeakersPage() {
   }, [params.programId]);
 
   useEffect(() => { void fetchSpeakers(); }, [fetchSpeakers]);
+
+  const organizationOptions = useMemo(
+    () => Array.from(new Set(speakers.map((speaker) => (speaker.organization ?? "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [speakers],
+  );
+
+  const filteredSpeakers = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    return [...speakers]
+      .filter((speaker) => {
+        const matchesSearch = !normalizedSearch || [speaker.name, speaker.title ?? "", speaker.organization ?? "", speaker.bio ?? ""].join(" ").toLowerCase().includes(normalizedSearch);
+        const matchesOrganization = organizationFilter === "all" || (speaker.organization ?? "").trim() === organizationFilter;
+        return matchesSearch && matchesOrganization;
+      })
+      .sort((left, right) => compareSpeakers(left, right, sortBy));
+  }, [speakers, searchTerm, organizationFilter, sortBy]);
+
+  function resetFilters() {
+    setSearchTerm("");
+    setOrganizationFilter("all");
+    setSortBy("order-asc");
+  }
 
   function openCreate() {
     setFormState(emptyForm());
@@ -354,7 +381,7 @@ export default function ProgramSpeakersPage() {
 
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
         <div className="mb-4 flex items-center justify-between gap-4">
-          <p className="text-sm text-zinc-500">{speakers.length} speaker(s)</p>
+          <p className="text-sm text-zinc-500">Showing {filteredSpeakers.length} of {speakers.length} speaker(s)</p>
           <div className="flex gap-2">
             <button
               type="button"
@@ -382,6 +409,43 @@ export default function ProgramSpeakersPage() {
           </div>
         )}
 
+        <div className="mb-4 space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/70 p-4">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_repeat(2,minmax(0,1fr))]">
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Search</label>
+              <div className="relative">
+                <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search name, title, organization..."
+                  className="block w-full rounded-md border border-zinc-200 bg-white py-2 pl-8 pr-3 text-xs text-zinc-900 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Organization</label>
+              <select value={organizationFilter} onChange={(e) => setOrganizationFilter(e.target.value)} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+                <option value="all">All organizations</option>
+                {organizationOptions.map((organization) => <option key={organization} value={organization}>{organization}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Sort by</label>
+              <select value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+                <option value="order-asc">Order: low to high</option>
+                <option value="order-desc">Order: high to low</option>
+                <option value="name-asc">Name: A-Z</option>
+                <option value="name-desc">Name: Z-A</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <button type="button" onClick={resetFilters} className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-[11px] font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50">Reset filters</button>
+          </div>
+        </div>
+
         <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
             <table className="min-w-full border-collapse text-left text-sm">
@@ -407,8 +471,14 @@ export default function ProgramSpeakersPage() {
                       No speakers configured yet.
                     </td>
                   </tr>
+                ) : filteredSpeakers.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-12 text-center text-sm text-zinc-500">
+                      No speakers match the current filters.
+                    </td>
+                  </tr>
                 ) : (
-                  speakers.map((s, idx) => (
+                  filteredSpeakers.map((s, idx) => (
                     <tr key={s.id} className="transition-colors hover:bg-zinc-50/50">
                       <td className="px-6 py-4 align-middle text-xs font-medium text-zinc-500">
                         {idx + 1}
@@ -474,4 +544,15 @@ export default function ProgramSpeakersPage() {
       />
     </main>
   );
+}
+
+function compareSpeakers(
+  left: ProgramSpeaker,
+  right: ProgramSpeaker,
+  sortBy: "order-asc" | "order-desc" | "name-asc" | "name-desc",
+): number {
+  if (sortBy === "name-asc") return left.name.localeCompare(right.name);
+  if (sortBy === "name-desc") return right.name.localeCompare(left.name);
+  if (sortBy === "order-desc") return right.order - left.order || left.name.localeCompare(right.name);
+  return left.order - right.order || left.name.localeCompare(right.name);
 }
