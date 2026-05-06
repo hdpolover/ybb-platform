@@ -89,7 +89,12 @@ export class PaymentGrpcClient implements OnModuleInit {
 
   async createIntent(req: CreateIntentRequest): Promise<CreateIntentResponse> {
       try {
-          return await lastValueFrom(this.paymentService.CreateIntent(req, this.metadata()));
+          const normalizedReq: CreateIntentRequest = {
+            ...req,
+            ...(req.exchange_rate !== undefined ? { exchangeRate: req.exchange_rate } : {}),
+            ...(req.exchangeRate !== undefined ? { exchange_rate: req.exchangeRate } : {}),
+          };
+          return await lastValueFrom(this.paymentService.CreateIntent(normalizedReq, this.metadata()));
       } catch (error) {
           this.rethrowAsHttp(error, 'create payment intent');
       }
