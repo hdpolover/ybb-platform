@@ -34,6 +34,24 @@ export interface CreateUploadUrlResponse {
   expires_in_seconds: number;
 }
 
+export interface UploadedBrandImageAsset {
+  file_id: string;
+  filename: string;
+  storage_path: string;
+  bucket: string;
+  size: number;
+  dimensions: { width: number; height: number };
+  url: string;
+}
+
+export interface BrandLogoAssetsResponse {
+  success: boolean;
+  logo: UploadedBrandImageAsset;
+  logo_icon: UploadedBrandImageAsset;
+  favicon: UploadedBrandImageAsset;
+  apple_icon: UploadedBrandImageAsset;
+}
+
 /**
  * File Service HTTP Client
  * 
@@ -121,6 +139,36 @@ export class FileServiceClient {
         throw error;
       }
     });
+  }
+
+  async uploadBrandLogoAssets(
+    file: Express.Multer.File,
+    brandId: string,
+  ): Promise<BrandLogoAssetsResponse> {
+    const formData = new FormData();
+    formData.append('file', file.buffer, {
+      filename: file.originalname,
+      contentType: file.mimetype,
+    });
+    formData.append('brand_id', brandId);
+
+    return this.executeRequest(async () => {
+      try {
+        const response: AxiosResponse<BrandLogoAssetsResponse> = await firstValueFrom(
+          this.httpService.post(
+            `${this.fileServiceUrl}/api/v1/images/brand/logo-assets`,
+            formData,
+            {
+              headers: this.getInternalHeaders(formData.getHeaders() as Record<string, string>),
+            },
+          ),
+        );
+        return response.data;
+      } catch (error: unknown) {
+        this.logger.error(`Failed to upload brand logo assets: ${error instanceof Error ? error.message : String(error)}`);
+        throw error;
+      }
+    }, 'brand-logo-assets');
   }
 
   /**

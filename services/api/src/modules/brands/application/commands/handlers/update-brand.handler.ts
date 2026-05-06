@@ -7,6 +7,8 @@ import { StorageService } from '../../../../files/application/storage.service';
 import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
 import { LandingRevalidationService } from '../../services/landing-revalidation.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { BrandLogoAssetsService } from '../../services/brand-logo-assets.service';
+import { Prisma } from '@prisma/client';
 
 @CommandHandler(UpdateBrandCommand)
 export class UpdateBrandHandler implements ICommandHandler<UpdateBrandCommand> {
@@ -16,6 +18,7 @@ export class UpdateBrandHandler implements ICommandHandler<UpdateBrandCommand> {
         private readonly storageService: StorageService,
         private readonly cacheService: CacheService,
         private readonly prisma: PrismaService,
+        private readonly brandLogoAssetsService: BrandLogoAssetsService,
         private readonly landingRevalidation: LandingRevalidationService,
     ) { }
 
@@ -28,14 +31,16 @@ export class UpdateBrandHandler implements ICommandHandler<UpdateBrandCommand> {
 
         if (files) {
             if (files.logo) {
-                const result = await this.storageService.uploadFile(
+                const logoAssets = await this.brandLogoAssetsService.uploadBrandLogoAssets(
                     files.logo,
-                    userId || 'system',
                     brand.id,
-                    'brands/logos',
-                    undefined
                 );
-                dto.logoUrl = result.url;
+                dto.logoUrl = logoAssets.logoUrl;
+                await this.updateBrandAssetMetadata(brand.id, logoAssets.metadataPatch);
+                await this.prisma.brand.update({
+                    where: { id: brand.id },
+                    data: { logoIconUrl: logoAssets.logoIconUrl },
+                });
             }
 
             if (files.banner) {
@@ -48,6 +53,17 @@ export class UpdateBrandHandler implements ICommandHandler<UpdateBrandCommand> {
                 );
                 dto.bannerUrl = result.url;
             }
+        }
+
+        if (!files?.logo && dto.logoUrl) {
+            await this.updateBrandAssetMetadata(brand.id, {
+                favicon_url: dto.logoUrl,
+                apple_icon_url: dto.logoUrl,
+            });
+            await this.prisma.brand.update({
+                where: { id: brand.id },
+                data: { logoIconUrl: dto.logoUrl },
+            });
         }
 
 
@@ -78,5 +94,18 @@ export class UpdateBrandHandler implements ICommandHandler<UpdateBrandCommand> {
         } catch (error) {
             console.error('Failed to invalidate landing caches:', error);
         }
+    }
+
+    private async updateBrandAssetMetadata(brandId: string, patch: Record<string, string>): Promise<void> {
+        const current = await this.brandRepository.getMetadata(brandId);
+        await this.prisma.brand.update({
+            where: { id: brandId },
+            data: {
+                metadata: {
+                    ...(current ?? {}),
+                    ...patch,
+                } as Prisma.InputJsonValue,
+            },
+        });
     }
 }

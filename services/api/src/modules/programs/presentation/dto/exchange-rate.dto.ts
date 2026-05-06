@@ -15,8 +15,8 @@ export class UpdateExchangeRateDto {
 
 export class ExchangeRateResponseDto {
     @ApiProperty() programId: string;
-    @ApiProperty() usdInIdr: number;
-    @ApiProperty() source: 'program' | 'brand';
+    @ApiProperty({ nullable: true }) usdInIdr: number | null;
+    @ApiProperty({ enum: ['program', 'unset'] }) source: 'program' | 'unset';
     @ApiProperty() updatedAt: Date;
 }
 

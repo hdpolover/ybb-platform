@@ -918,7 +918,6 @@ function SettingsSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved
   const [form, setForm] = useState({
     defaultCurrency: brand.defaultCurrency ?? "IDR",
     enableMultiCurrency: brand.enableMultiCurrency ?? false,
-    usdInIdr: String(brand.settings?.usdInIdr ?? ""),
     isMaintenanceMode: brand.settings?.isMaintenanceMode ?? false,
     maintenanceMessage: brand.settings?.maintenanceMessage ?? "",
     supportEmail: brand.settings?.supportEmail ?? "",
@@ -937,7 +936,6 @@ function SettingsSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved
       await updatePlatformBrandSettings(brand.id, {
         defaultCurrency: form.defaultCurrency || undefined,
         enableMultiCurrency: form.enableMultiCurrency,
-        usdInIdr: form.usdInIdr ? Number(form.usdInIdr) : undefined,
         isMaintenanceMode: form.isMaintenanceMode,
         maintenanceMessage: form.maintenanceMessage || undefined,
         supportEmail: form.supportEmail || undefined,
@@ -966,7 +964,6 @@ function SettingsSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved
             <SheetMsg message={success} variant="success" />
             <FieldInput label="Default Currency" id="defaultCurrency" value={form.defaultCurrency} onChange={(v) => set("defaultCurrency", v)} placeholder="IDR" />
             <FieldCheckbox label="Enable Multi-Currency" id="enableMultiCurrency" checked={form.enableMultiCurrency} onChange={(v) => set("enableMultiCurrency", v)} />
-            <FieldInput label="USD → IDR Rate" id="usdInIdr" value={form.usdInIdr} onChange={(v) => set("usdInIdr", v)} type="number" placeholder="16000" />
             <div className="border-t border-zinc-100 pt-4">
               <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">Maintenance</p>
               <div className="space-y-4">
@@ -1262,7 +1259,6 @@ function SettingsTab({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved: 
     <div className="space-y-4">
       <Section title="Currency" action={<SettingsSheet brand={brand} onSaved={onSaved} />}>
         <FieldView label="Default Currency" value={brand.defaultCurrency} />
-        <FieldView label="USD → IDR Rate" value={s?.usdInIdr != null ? `Rp ${Number(s.usdInIdr).toLocaleString()}` : undefined} />
         <div>
           <p className="text-xs font-medium text-zinc-500">Multi-Currency</p>
           <p className="mt-0.5">

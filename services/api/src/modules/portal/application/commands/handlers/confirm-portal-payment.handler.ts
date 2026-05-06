@@ -49,11 +49,6 @@ export class ConfirmPortalPaymentHandler {
                                 name: true,
                                 currency: true,
                                 usdInIdr: true,
-                                brand: {
-                                    select: {
-                                        settings: true,
-                                    },
-                                },
                             },
                         },
                         participant: {
@@ -99,7 +94,6 @@ export class ConfirmPortalPaymentHandler {
         const exchangeRate = resolveUsdInIdrRate({
             snapshot: invoice.exchangeRateSnapshot,
             programRate: invoice.application.program.usdInIdr,
-            brandSettings: invoice.application.program.brand?.settings,
         });
 
         // Create a payment intent via the Payment Service

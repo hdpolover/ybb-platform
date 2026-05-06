@@ -6,6 +6,11 @@ import { Brand } from '@prisma/client';
 import { LandingSettingsResponseDto } from '../dto/landing-settings.dto';
 import { LandingSnapshotService } from '../services/landing-snapshot.service';
 
+function readBrandMetadataString(category: Brand, key: string): string | undefined {
+    const raw = (category.metadata as Record<string, unknown> | null)?.[key];
+    return typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : undefined;
+}
+
 @Injectable()
 export class SettingsStrategy {
     constructor(
@@ -74,10 +79,12 @@ export class SettingsStrategy {
             where: { brandId: category.id }
         });
 
-        // Exchange rate: program-level takes priority, then brand setting, then default
-        const brandRate = settings?.usdInIdr ? Number(settings.usdInIdr) : 16000;
+        // Exchange rate is configured per program. Keep a neutral fallback only
+        // when no active program or program-specific rate is available yet.
         const programRate = program?.usdInIdr ? Number(program.usdInIdr) : null;
-        const effectiveRate = programRate ?? brandRate;
+        const effectiveRate = programRate ?? 16000;
+        const faviconUrl = readBrandMetadataString(category, 'favicon_url');
+        const appleIconUrl = readBrandMetadataString(category, 'apple_icon_url');
 
         const result = {
             maintenance: {
@@ -91,6 +98,8 @@ export class SettingsStrategy {
                 logo_white_url: category.logoWhiteUrl || undefined,
                 logo_color_url: category.logoColorUrl || undefined,
                 logo_icon_url: category.logoIconUrl || program?.logoUrl || category.logoUrl || undefined,
+                favicon_url: faviconUrl || category.logoIconUrl || program?.logoUrl || category.logoUrl || undefined,
+                apple_icon_url: appleIconUrl || category.logoIconUrl || program?.logoUrl || category.logoUrl || undefined,
                 primary_color: category.primaryColor || undefined,
                 description: category.about || category.description || undefined,
                 support_email: settings?.supportEmail || category.contactEmail || undefined,
@@ -114,7 +123,9 @@ export class SettingsStrategy {
                 logo_url: program.logoUrl || undefined,
                 logo_white_url: program.logoWhiteUrl || undefined,
                 logo_color_url: program.logoColorUrl || undefined,
-                logo_icon_url: program.logoIconUrl || program.logoUrl || category.logoIconUrl || category.logoUrl || undefined
+                logo_icon_url: program.logoIconUrl || program.logoUrl || category.logoIconUrl || category.logoUrl || undefined,
+                favicon_url: faviconUrl || category.logoIconUrl || program.logoIconUrl || program.logoUrl || category.logoUrl || undefined,
+                apple_icon_url: appleIconUrl || category.logoIconUrl || program.logoIconUrl || program.logoUrl || category.logoUrl || undefined,
             } : undefined,
             available_brands: availableBrands.map((brand) => ({
                 id: brand.id,

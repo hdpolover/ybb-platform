@@ -55,6 +55,7 @@ export class BrandRepository implements IBrandRepository {
                 slug: data.slug!,
                 description: data.description,
                 logoUrl: data.logoUrl,
+                logoIconUrl: data.logoIconUrl,
                 websiteUrl: data.websiteUrl,
                 landingUrl: data.landingUrl,
                 primaryColor: data.primaryColor,
@@ -94,6 +95,7 @@ export class BrandRepository implements IBrandRepository {
                 slug: data.slug,
                 description: data.description,
                 logoUrl: data.logoUrl,
+                logoIconUrl: data.logoIconUrl,
                 bannerUrl: data.bannerUrl,
                 websiteUrl: data.websiteUrl,
                 landingUrl: data.landingUrl,
@@ -189,6 +191,7 @@ export class BrandRepository implements IBrandRepository {
             prismaEntity.slug,
             prismaEntity.description,
             prismaEntity.logoUrl,
+            prismaEntity.logoIconUrl,
             prismaEntity.bannerUrl, // New
             prismaEntity.websiteUrl,
             prismaEntity.landingUrl,

@@ -33,6 +33,9 @@ export class GetBrandDetailHandler implements IQueryHandler<GetBrandDetailQuery>
             logoUrl: brand.logoUrl 
                 ? (brand.logoUrl.startsWith('http') ? brand.logoUrl : `${this.storageUrl}/${brand.logoUrl}`)
                 : null,
+            logoIconUrl: brand.logoIconUrl
+                ? (brand.logoIconUrl.startsWith('http') ? brand.logoIconUrl : `${this.storageUrl}/${brand.logoIconUrl}`)
+                : null,
             bannerUrl: brand.bannerUrl 
                 ? (brand.bannerUrl.startsWith('http') ? brand.bannerUrl : `${this.storageUrl}/${brand.bannerUrl}`)
                 : null,

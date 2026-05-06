@@ -568,7 +568,6 @@ function SettingsTab({
   );
   const [defaultCurrency, setDefaultCurrency] = useState(brand.defaultCurrency ?? "USD");
   const [enableMultiCurrency, setEnableMultiCurrency] = useState(brand.enableMultiCurrency ?? false);
-  const [usdInIdr, setUsdInIdr] = useState(String(s?.usdInIdr ?? 16000));
   const [isMaintenanceMode, setIsMaintenanceMode] = useState(s?.isMaintenanceMode ?? false);
   const [maintenanceMessage, setMaintenanceMessage] = useState(s?.maintenanceMessage ?? "");
   const [supportEmail, setSupportEmail] = useState(s?.supportEmail ?? "");
@@ -589,7 +588,6 @@ function SettingsTab({
         requireEmailVerification,
         defaultCurrency,
         enableMultiCurrency,
-        usdInIdr: Number(usdInIdr),
         isMaintenanceMode,
         maintenanceMessage: maintenanceMessage || undefined,
         supportEmail: supportEmail || undefined,
@@ -617,14 +615,6 @@ function SettingsTab({
             onChange={setDefaultCurrency}
             placeholder="USD"
             hint="3-letter ISO code, e.g. USD, IDR"
-          />
-          <Field
-            label="USD → IDR Rate"
-            id="usdInIdr"
-            value={usdInIdr}
-            onChange={setUsdInIdr}
-            type="number"
-            placeholder="16000"
           />
           <CheckboxField
             label="Enable Multi-Currency"

@@ -849,8 +849,8 @@ export function updateProgramConfig(
 
 export type ExchangeRate = {
   programId: string;
-  usdInIdr: number;
-  source: "program" | "brand";
+  usdInIdr: number | null;
+  source: "program" | "unset";
   updatedAt: string;
 };
 

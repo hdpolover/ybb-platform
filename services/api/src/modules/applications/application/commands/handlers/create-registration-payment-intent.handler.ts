@@ -51,24 +51,15 @@ export class CreateRegistrationPaymentIntentHandler {
         throw new BadRequestException('Pricing tier not selected or invalid amount.');
     }
 
-    // 4. Get exchange rate snapshot (program-level, with brand fallback)
+    // 4. Get exchange rate snapshot from the program configuration
     const program = await this.prisma.program.findUnique({
         where: { id: application.programId },
-        include: {
-            brand: {
-                include: { settings: true },
-            },
+        select: {
+            usdInIdr: true,
         },
     });
 
-    let exchangeRate: number | undefined;
-    if (program) {
-        exchangeRate = program.usdInIdr
-            ? Number(program.usdInIdr)
-            : program.brand?.settings?.usdInIdr
-              ? Number(program.brand.settings.usdInIdr)
-              : 16000;
-    }
+    const exchangeRate = program?.usdInIdr ? Number(program.usdInIdr) : undefined;
 
     // 5. Create Intent via Payment Service (with exchange rate snapshot)
     const metadata = {

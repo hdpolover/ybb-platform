@@ -17,6 +17,9 @@ export class BrandResponseDto {
     logoUrl?: string | null;
 
     @ApiProperty({ required: false, nullable: true })
+    logoIconUrl?: string | null;
+
+    @ApiProperty({ required: false, nullable: true })
     bannerUrl?: string | null;
 
     @ApiProperty({ required: false, nullable: true })
