@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
+import { MagnifyingGlassIcon } from "@heroicons/react/24/solid";
 import { PlusIcon, PencilSquareIcon, TrashIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
@@ -27,6 +28,11 @@ export default function ProgramRundownsPage() {
   const [items, setItems] = useState<ProgramSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [dateFilter, setDateFilter] = useState("");
+  const [timeFilter, setTimeFilter] = useState<"all" | "morning" | "afternoon" | "evening" | "unscheduled">("all");
+  const [locationFilter, setLocationFilter] = useState("all");
+  const [sortBy, setSortBy] = useState<"date-asc" | "date-desc" | "time-asc" | "time-desc" | "activity-asc" | "activity-desc">("date-asc");
   const [showCreate, setShowCreate] = useState(false);
   const [editTarget, setEditTarget] = useState<ProgramSchedule | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProgramSchedule | null>(null);
@@ -43,6 +49,50 @@ export default function ProgramRundownsPage() {
   }, [params.programId]);
 
   useEffect(() => { fetch(); }, [fetch]);
+
+  const locationOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        items
+          .map((item) => (item.location ?? "").trim())
+          .filter(Boolean),
+      ),
+    ).sort((a, b) => a.localeCompare(b));
+  }, [items]);
+
+  const filteredItems = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    const next = items.filter((item) => {
+      const matchesSearch = !normalizedSearch || [
+        item.activity,
+        item.description ?? "",
+        item.location ?? "",
+        formatDay(item.day),
+        item.startTime ?? "",
+        item.endTime ?? "",
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedSearch);
+
+      const matchesDate = !dateFilter || toDateInputValue(item.day) === dateFilter;
+      const normalizedLocation = (item.location ?? "").trim();
+      const matchesLocation = locationFilter === "all" || normalizedLocation === locationFilter;
+      const matchesTime = timeFilter === "all" || matchTimeFilter(item.startTime, timeFilter);
+
+      return matchesSearch && matchesDate && matchesLocation && matchesTime;
+    });
+
+    return next.sort((left, right) => compareSchedules(left, right, sortBy));
+  }, [items, searchTerm, dateFilter, locationFilter, timeFilter, sortBy]);
+
+  function resetFilters() {
+    setSearchTerm("");
+    setDateFilter("");
+    setTimeFilter("all");
+    setLocationFilter("all");
+    setSortBy("date-asc");
+  }
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -67,13 +117,92 @@ export default function ProgramRundownsPage() {
 
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
         <div className="mb-3 flex items-center justify-between">
-          <p className="text-[11px] text-zinc-500">{items.length} session(s)</p>
+          <p className="text-[11px] text-zinc-500">
+            Showing {filteredItems.length} of {items.length} session(s)
+          </p>
           <div className="flex gap-2">
             <button type="button" onClick={fetch} className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50"><ArrowPathIcon className="h-3.5 w-3.5" />Refresh</button>
             <button type="button" onClick={() => setShowCreate(true)} className="inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600"><PlusIcon className="h-3.5 w-3.5" />Add Session</button>
           </div>
         </div>
         {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+        <div className="mb-4 space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/70 p-4">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))]">
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Search</label>
+              <div className="relative">
+                <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search activity, description, date, location..."
+                  className="block w-full rounded-md border border-zinc-200 bg-white py-2 pl-8 pr-3 text-xs text-zinc-900 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Date</label>
+              <input
+                type="date"
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Time</label>
+              <select
+                value={timeFilter}
+                onChange={(e) => setTimeFilter(e.target.value as typeof timeFilter)}
+                className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              >
+                <option value="all">All times</option>
+                <option value="morning">Morning</option>
+                <option value="afternoon">Afternoon</option>
+                <option value="evening">Evening</option>
+                <option value="unscheduled">No time set</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Location</label>
+              <select
+                value={locationFilter}
+                onChange={(e) => setLocationFilter(e.target.value)}
+                className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              >
+                <option value="all">All locations</option>
+                {locationOptions.map((location) => (
+                  <option key={location} value={location}>{location}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Sort by</label>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              >
+                <option value="date-asc">Date: earliest first</option>
+                <option value="date-desc">Date: latest first</option>
+                <option value="time-asc">Time: earliest first</option>
+                <option value="time-desc">Time: latest first</option>
+                <option value="activity-asc">Activity: A-Z</option>
+                <option value="activity-desc">Activity: Z-A</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="inline-flex items-center rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-[11px] font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+            >
+              Reset filters
+            </button>
+          </div>
+        </div>
         <div className="overflow-hidden rounded-md border border-zinc-200">
           <table className="min-w-full text-left text-[11px]">
             <thead className="bg-zinc-50 text-zinc-600">
@@ -88,7 +217,8 @@ export default function ProgramRundownsPage() {
             <tbody>
               {loading && <tr><td colSpan={5} className="px-3 py-6 text-center text-zinc-400">Loading…</td></tr>}
               {!loading && items.length === 0 && <tr><td colSpan={5} className="px-3 py-6 text-center text-zinc-400">No sessions yet.</td></tr>}
-              {!loading && items.map((s, idx) => (
+              {!loading && items.length > 0 && filteredItems.length === 0 && <tr><td colSpan={5} className="px-3 py-6 text-center text-zinc-400">No sessions match the current filters.</td></tr>}
+              {!loading && filteredItems.map((s, idx) => (
                 <tr key={s.id} className={idx % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}>
                   <td className="px-3 py-2 font-medium text-zinc-900">{s.activity}</td>
                   <td className="px-3 py-2 text-zinc-600">{formatDay(s.day)}</td>
@@ -278,4 +408,59 @@ function formatDay(day: string | null | undefined): string {
     if (!isNaN(d.getTime())) return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
   }
   return day;
+}
+
+function parseDateRank(day: string | null | undefined): number {
+  if (!day) return Number.MAX_SAFE_INTEGER;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    const parsed = new Date(`${day}T00:00:00`);
+    if (!Number.isNaN(parsed.getTime())) return parsed.getTime();
+  }
+  const parsed = new Date(day);
+  return Number.isNaN(parsed.getTime()) ? Number.MAX_SAFE_INTEGER : parsed.getTime();
+}
+
+function parseTimeRank(time: string | null | undefined): number {
+  if (!time) return Number.MAX_SAFE_INTEGER;
+  const match = time.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return Number.MAX_SAFE_INTEGER;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function matchTimeFilter(startTime: string | null | undefined, filter: "morning" | "afternoon" | "evening" | "unscheduled"): boolean {
+  const timeRank = parseTimeRank(startTime);
+  if (filter === "unscheduled") return timeRank === Number.MAX_SAFE_INTEGER;
+  if (timeRank === Number.MAX_SAFE_INTEGER) return false;
+  if (filter === "morning") return timeRank < 12 * 60;
+  if (filter === "afternoon") return timeRank >= 12 * 60 && timeRank < 17 * 60;
+  return timeRank >= 17 * 60;
+}
+
+function compareSchedules(
+  left: ProgramSchedule,
+  right: ProgramSchedule,
+  sortBy: "date-asc" | "date-desc" | "time-asc" | "time-desc" | "activity-asc" | "activity-desc",
+): number {
+  if (sortBy === "activity-asc") {
+    return left.activity.localeCompare(right.activity);
+  }
+  if (sortBy === "activity-desc") {
+    return right.activity.localeCompare(left.activity);
+  }
+
+  const leftDate = parseDateRank(left.day);
+  const rightDate = parseDateRank(right.day);
+  const leftTime = parseTimeRank(left.startTime);
+  const rightTime = parseTimeRank(right.startTime);
+
+  if (sortBy === "date-asc") {
+    return leftDate - rightDate || leftTime - rightTime || left.activity.localeCompare(right.activity);
+  }
+  if (sortBy === "date-desc") {
+    return rightDate - leftDate || leftTime - rightTime || left.activity.localeCompare(right.activity);
+  }
+  if (sortBy === "time-asc") {
+    return leftTime - rightTime || leftDate - rightDate || left.activity.localeCompare(right.activity);
+  }
+  return rightTime - leftTime || leftDate - rightDate || left.activity.localeCompare(right.activity);
 }

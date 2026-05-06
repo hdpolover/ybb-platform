@@ -16,6 +16,48 @@ function getInclusiveUtcDaySpan(start: Date, end: Date): number {
     return Math.floor((toUtcDayStartMs(end) - toUtcDayStartMs(start)) / DAY_MS) + 1;
 }
 
+function formatUtcDateOnly(value: Date): string {
+    return `${value.getUTCFullYear()}-${String(value.getUTCMonth() + 1).padStart(2, '0')}-${String(value.getUTCDate()).padStart(2, '0')}`;
+}
+
+function resolveScheduleDate(day: string | null | undefined, programStartDate: Date | null): string | null {
+    const rawDay = (day ?? '').trim();
+    const dayMatch = rawDay.match(/Day (\d+)/i);
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(rawDay)) {
+        return rawDay;
+    }
+
+    if (dayMatch && programStartDate && !Number.isNaN(programStartDate.getTime())) {
+        const scheduleDate = new Date(Date.UTC(
+            programStartDate.getUTCFullYear(),
+            programStartDate.getUTCMonth(),
+            programStartDate.getUTCDate(),
+        ));
+        const dayOffset = parseInt(dayMatch[1], 10) - 1;
+        scheduleDate.setUTCDate(scheduleDate.getUTCDate() + dayOffset);
+        return formatUtcDateOnly(scheduleDate);
+    }
+
+    if (rawDay) {
+        const parsed = new Date(rawDay);
+        if (!Number.isNaN(parsed.getTime())) {
+            return formatUtcDateOnly(parsed);
+        }
+    }
+
+    if (programStartDate && !Number.isNaN(programStartDate.getTime())) {
+        const scheduleDate = new Date(Date.UTC(
+            programStartDate.getUTCFullYear(),
+            programStartDate.getUTCMonth(),
+            programStartDate.getUTCDate(),
+        ));
+        return formatUtcDateOnly(scheduleDate);
+    }
+
+    return null;
+}
+
 @Injectable()
 export class ProgramsStrategy implements ILandingPageStrategy {
     constructor(
@@ -287,7 +329,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
 
             // Section 3b: Detailed Activities (Rundown)
             if (currentProgram.schedules && currentProgram.schedules.length > 0) {
-                const startDate = new Date(currentProgram.startDate);
+                const startDate = currentProgram.startDate ? new Date(currentProgram.startDate) : null;
 
                 sections.push({
                     type: 'program_activities',
@@ -295,13 +337,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                         title: `${currentProgram.name} Activity`,
                         subtitle: 'Detailed schedule of activities for this program',
                         items: currentProgram.schedules.map((schedule) => {
-                            // Calculate Date: "Day N" logic
-                            const scheduleDate = new Date(startDate);
-                            const dayMatch = schedule.day.match(/Day (\d+)/i);
-                            if (dayMatch) {
-                                const dayOffset = parseInt(dayMatch[1]) - 1;
-                                scheduleDate.setDate(startDate.getDate() + dayOffset);
-                            }
+                            const scheduleDate = resolveScheduleDate(schedule.day, startDate);
 
                             // Parse Checkitems from Description
                             // Convention: Text description... \n[CHECKLIST]Item1,Item2

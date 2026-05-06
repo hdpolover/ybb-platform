@@ -8,7 +8,7 @@ import { ProgramDashboardResponseDto } from './dto/program-dashboard-response.dt
 
 import { CacheService } from '../../shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '../../shared/constants/cache-keys';
-import { getCountryDisplayName } from '@shared/utils/country-display';
+import { normalizeCountryGroups, resolveCountryName } from '@shared/utils/country-groups';
 
 type ProgramDashboardApplication = {
   createdAt: Date;
@@ -582,28 +582,13 @@ export class StatsService {
   }
 
   private resolveCountryName(...values: Array<string | null | undefined>): string | null {
-    for (const value of values) {
-      const normalized = getCountryDisplayName(value);
-      if (normalized) return normalized;
-    }
-
-    return null;
+    return resolveCountryName(...values);
   }
 
   private normalizeCountryGroups(
     groups: Array<{ country: string | null | undefined; count: number }>,
   ): Array<{ country: string; count: number }> {
-    const counts = new Map<string, number>();
-
-    for (const group of groups) {
-      const country = this.resolveCountryName(group.country);
-      if (!country) continue;
-      counts.set(country, (counts.get(country) ?? 0) + group.count);
-    }
-
-    return Array.from(counts.entries())
-      .map(([country, count]) => ({ country, count }))
-      .sort((a, b) => b.count - a.count || a.country.localeCompare(b.country));
+    return normalizeCountryGroups(groups);
   }
 
   private calculateAge(birthdate: Date, now: Date): number {
