@@ -34,6 +34,65 @@ export class EmailTemplateRepository {
         });
     }
 
+    async findByTypeAndScope(
+        type: string,
+        scope: { brandId?: string | null; programId?: string | null },
+        excludeId?: string,
+    ): Promise<EmailTemplate | null> {
+        return this.prisma.emailTemplate.findFirst({
+            where: {
+                type,
+                brandId: scope.brandId ?? null,
+                programId: scope.programId ?? null,
+                deletedAt: null,
+                ...(excludeId ? { id: { not: excludeId } } : {}),
+            },
+            orderBy: { updatedAt: 'desc' },
+        });
+    }
+
+    async resolveActiveTemplate(
+        type: string,
+        scope: { brandId?: string | null; programId?: string | null },
+    ): Promise<EmailTemplate | null> {
+        const candidates: Array<{ brandId?: string | null; programId?: string | null }> = [];
+
+        if (scope.programId) {
+            candidates.push({
+                programId: scope.programId,
+                brandId: scope.brandId ?? null,
+            });
+        }
+
+        if (scope.brandId) {
+            candidates.push({
+                brandId: scope.brandId,
+                programId: null,
+            });
+        }
+
+        candidates.push({ brandId: null, programId: null });
+
+        for (const candidate of candidates) {
+            const template = await this.prisma.emailTemplate.findFirst({
+                where: {
+                    type,
+                    isActive: true,
+                    brandId: candidate.brandId ?? null,
+                    programId: candidate.programId ?? null,
+                    deletedAt: null,
+                },
+                orderBy: { updatedAt: 'desc' },
+            });
+
+            if (template) {
+                return template;
+            }
+        }
+
+        return null;
+    }
+
     async create(data: CreateEmailTemplateDto): Promise<EmailTemplate> {
         return this.prisma.emailTemplate.create({
             data: {

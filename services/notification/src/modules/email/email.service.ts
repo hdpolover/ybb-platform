@@ -7,6 +7,16 @@ import * as path from 'path';
 import { Resend } from 'resend';
 import { maskEmail } from '../../common/logging/safe-log';
 
+interface ManagedEmailTemplate {
+  id: string;
+  type: string;
+  subject: string;
+  body: string;
+  brandId?: string | null;
+  programId?: string | null;
+  updatedAt?: string;
+}
+
 @Injectable()
 export class EmailService {
   private transporter: nodemailer.Transporter;
@@ -180,6 +190,154 @@ export class EmailService {
     };
   }
 
+  private getTemplateApiBaseUrl(): string | null {
+    const candidates = [
+      this.configService.get<string>('API_INTERNAL_URL'),
+      this.configService.get<string>('API_URL'),
+    ];
+
+    for (const candidate of candidates) {
+      if (candidate?.trim()) {
+        return candidate.replace(/\/$/, '');
+      }
+    }
+
+    return null;
+  }
+
+  private buildTemplateResolveHeaders(): Record<string, string> {
+    const internalKey = this.configService
+      .get<string>('NOTIFICATION_SERVICE_INTERNAL_KEY', '')
+      .trim();
+
+    return internalKey ? { Authorization: `Bearer ${internalKey}` } : {};
+  }
+
+  private extractBrandId(data: any): string | undefined {
+    const candidates = [data?.brandId, data?.brand?.id];
+    return candidates.find(
+      (value): value is string =>
+        typeof value === 'string' && value.trim().length > 0,
+    );
+  }
+
+  private extractProgramId(data: any): string | undefined {
+    const candidates = [data?.programId, data?.program?.id];
+    return candidates.find(
+      (value): value is string =>
+        typeof value === 'string' && value.trim().length > 0,
+    );
+  }
+
+  private compileStringTemplate(source: string, data: any): string {
+    const templateData = this.enrichTemplateData(data);
+    return hbs.compile(source)(templateData);
+  }
+
+  private renderBodyWithLayout(body: string, data: any): string {
+    const layoutPath = path.join(__dirname, 'templates/layout.hbs');
+    if (fs.existsSync(layoutPath)) {
+      const layoutTemplate = fs.readFileSync(layoutPath, 'utf8');
+      const layoutCompiled = hbs.compile(layoutTemplate);
+      return layoutCompiled({ ...data, body, year: new Date().getFullYear() });
+    }
+
+    return body;
+  }
+
+  private renderManagedTemplateBody(source: string, data: any): string {
+    const templateData = this.enrichTemplateData(data);
+    const body = hbs.compile(source)(templateData);
+    return this.renderBodyWithLayout(body, templateData);
+  }
+
+  private async fetchManagedTemplate(
+    type: string,
+    data: any,
+  ): Promise<ManagedEmailTemplate | null> {
+    const baseUrl = this.getTemplateApiBaseUrl();
+    if (!baseUrl) {
+      return null;
+    }
+
+    const params = new URLSearchParams({ type });
+    const brandId = this.extractBrandId(data);
+    const programId = this.extractProgramId(data);
+
+    if (brandId) {
+      params.set('brandId', brandId);
+    }
+    if (programId) {
+      params.set('programId', programId);
+    }
+
+    try {
+      const response = await fetch(
+        `${baseUrl}/internal/email-templates/resolve?${params.toString()}`,
+        {
+          method: 'GET',
+          headers: this.buildTemplateResolveHeaders(),
+        },
+      );
+
+      if (response.status === 404) {
+        return null;
+      }
+
+      if (!response.ok) {
+        this.logger.warn(
+          `Template lookup failed for ${type}: ${response.status} ${response.statusText}`,
+        );
+        return null;
+      }
+
+      const payload = (await response.json()) as ManagedEmailTemplate | null;
+      if (!payload || typeof payload !== 'object') {
+        return null;
+      }
+
+      return payload;
+    } catch (error) {
+      this.logger.warn(
+        `Managed template lookup failed for ${type}: ${(error as Error).message}`,
+      );
+      return null;
+    }
+  }
+
+  private async resolveEmailContent(options: {
+    type: string;
+    fallbackTemplateName: string;
+    fallbackSubject: string;
+    data: any;
+  }): Promise<{ subject: string; html: string }> {
+    const managedTemplate = await this.fetchManagedTemplate(
+      options.type,
+      options.data,
+    );
+
+    if (managedTemplate?.body?.trim() && managedTemplate.subject?.trim()) {
+      return {
+        subject: this.compileStringTemplate(
+          managedTemplate.subject,
+          options.data,
+        ),
+        html: this.renderManagedTemplateBody(
+          managedTemplate.body,
+          options.data,
+        ),
+      };
+    }
+
+    return {
+      subject: options.fallbackSubject,
+      html: await this.compileTemplate(
+        options.fallbackTemplateName,
+        options.data,
+      ),
+    };
+  }
+
   private async compileTemplate(
     templateName: string,
     data: any,
@@ -218,21 +376,7 @@ export class EmailService {
     compiledTemplate: hbs.TemplateDelegate,
     data: any,
   ): string {
-    // If we have a layout, we might want to wrap it manually or use handlebars-layouts
-    // For simplicity here, we'll assume the template extends the layout or is standalone
-    // But to actually use the layout wrapper we defined earlier, we can do this:
-    const layoutPath = path.join(__dirname, 'templates/layout.hbs');
-    if (fs.existsSync(layoutPath)) {
-      // Note: Layout caching could also be implemented for further optimization
-      const layoutTemplate = fs.readFileSync(layoutPath, 'utf8');
-      const layoutCompiled = hbs.compile(layoutTemplate);
-      // Render the body first
-      const body = compiledTemplate(data);
-      // Then render the layout with the body
-      return layoutCompiled({ ...data, body, year: new Date().getFullYear() });
-    }
-
-    return compiledTemplate(data);
+    return this.renderBodyWithLayout(compiledTemplate(data), data);
   }
 
   async sendEmail(to: string, subject: string, html: string) {
@@ -339,14 +483,20 @@ export class EmailService {
       baseUrl = brand.websiteUrl.replace(/\/$/, '');
     }
 
-    const html = await this.compileTemplate('welcome', {
+    const templateData = {
       name,
       loginUrl: `${baseUrl}/login`,
       brand,
-    });
-    const subject = brand
+    };
+    const fallbackSubject = brand
       ? `Welcome to ${brand.name}`
       : 'Welcome to YBB Platform';
+    const { subject, html } = await this.resolveEmailContent({
+      type: 'welcome',
+      fallbackTemplateName: 'welcome',
+      fallbackSubject,
+      data: templateData,
+    });
     return this.sendRawEmail(to, subject, html);
   }
 
@@ -357,12 +507,18 @@ export class EmailService {
       baseUrl = brand.websiteUrl.replace(/\/$/, '');
     }
 
-    const html = await this.compileTemplate('email-verified', {
+    const templateData = {
       name,
       loginUrl: `${baseUrl}/login`,
       brand,
+    };
+    const fallbackSubject = brand ? `Email Verified - ${brand.name}` : 'Email Verified';
+    const { subject, html } = await this.resolveEmailContent({
+      type: 'email_verified',
+      fallbackTemplateName: 'email-verified',
+      fallbackSubject,
+      data: templateData,
     });
-    const subject = brand ? `Email Verified - ${brand.name}` : 'Email Verified';
     return this.sendRawEmail(to, subject, html);
   }
 
@@ -371,7 +527,7 @@ export class EmailService {
     paymentData: any,
     receiptBuffer?: Buffer,
   ) {
-    const html = await this.compileTemplate('payment-success', {
+    const templateData = {
       name: paymentData.name,
       amount: paymentData.amount,
       currency: paymentData.currency || 'IDR',
@@ -379,7 +535,11 @@ export class EmailService {
       date: new Date().toLocaleDateString(),
       description: paymentData.description,
       invoiceUrl: paymentData.invoiceUrl || '#',
-    });
+      brand: paymentData.brand,
+      program: paymentData.program,
+      brandId: paymentData.brandId,
+      programId: paymentData.programId,
+    };
 
     const attachments = receiptBuffer
       ? [
@@ -390,7 +550,13 @@ export class EmailService {
         ]
       : [];
 
-    return this.sendRawEmail(to, 'Payment Confirmation', html, attachments);
+    const { subject, html } = await this.resolveEmailContent({
+      type: 'payment_received',
+      fallbackTemplateName: 'payment-success',
+      fallbackSubject: 'Payment Confirmation',
+      data: templateData,
+    });
+    return this.sendRawEmail(to, subject, html, attachments);
   }
 
   async sendForgotPasswordEmail(
@@ -410,15 +576,21 @@ export class EmailService {
       : `https://${baseUrl}`;
     const resetUrl = `${normalizedBaseUrl.replace(/\/$/, '')}/auth/reset-password?token=${encodeURIComponent(token)}`;
 
-    const html = await this.compileTemplate('forgot-password', {
+    const templateData = {
       name,
       resetUrl,
       brand,
-    });
+    };
 
-    const subject = brand
+    const fallbackSubject = brand
       ? `Reset Your Password - ${brand.name}`
       : 'Reset Your Password';
+    const { subject, html } = await this.resolveEmailContent({
+      type: 'password_reset',
+      fallbackTemplateName: 'forgot-password',
+      fallbackSubject,
+      data: templateData,
+    });
     return this.sendRawEmail(to, subject, html);
   }
 
@@ -449,26 +621,42 @@ export class EmailService {
       : `https://${baseUrl}`;
     const verificationUrl = `${normalizedBaseUrl.replace(/\/$/, '')}/auth/verify-email?token=${encodeURIComponent(token)}`;
 
-    const html = await this.compileTemplate('verify-email', {
+    const templateData = {
       name,
       verificationUrl,
       brand,
-    });
-    const subject = brand
+    };
+    const fallbackSubject = brand
       ? `Verify Your Email for ${brand.name}`
       : 'Verify Your Email Address';
+    const { subject, html } = await this.resolveEmailContent({
+      type: 'email_verification',
+      fallbackTemplateName: 'verify-email',
+      fallbackSubject,
+      data: templateData,
+    });
     return this.sendRawEmail(to, subject, html);
   }
 
   async sendManualPaymentReceivedEmail(to: string, paymentData: any) {
-    const html = await this.compileTemplate('manual-payment-received', {
+    const templateData = {
       name: paymentData.name,
       amount: paymentData.amount,
       currency: paymentData.currency || 'IDR',
       orderId: paymentData.orderId,
       date: new Date().toLocaleDateString(),
+      brand: paymentData.brand,
+      program: paymentData.program,
+      brandId: paymentData.brandId,
+      programId: paymentData.programId,
+    };
+    const { subject, html } = await this.resolveEmailContent({
+      type: 'manual_payment_received',
+      fallbackTemplateName: 'manual-payment-received',
+      fallbackSubject: 'Payment Proof Received',
+      data: templateData,
     });
-    return this.sendRawEmail(to, 'Payment Proof Received', html);
+    return this.sendRawEmail(to, subject, html);
   }
 
   async sendPaymentFailedEmail(to: string, paymentData: any) {
@@ -476,7 +664,7 @@ export class EmailService {
       ? `${this.configService.get('FRONTEND_URL')}/dashboard/payments`
       : '#';
 
-    const html = await this.compileTemplate('payment-failed', {
+    const templateData = {
       name: paymentData.name,
       amount: paymentData.amount,
       currency: paymentData.currency || 'IDR',
@@ -484,24 +672,44 @@ export class EmailService {
       date: new Date().toLocaleDateString(),
       reason: paymentData.reason,
       retryUrl: paymentData.retryUrl || retryUrl,
+      brand: paymentData.brand,
+      program: paymentData.program,
+      brandId: paymentData.brandId,
+      programId: paymentData.programId,
+    };
+    const { subject, html } = await this.resolveEmailContent({
+      type: 'payment_failed',
+      fallbackTemplateName: 'payment-failed',
+      fallbackSubject: 'Payment Failed',
+      data: templateData,
     });
-    return this.sendRawEmail(to, 'Payment Failed', html);
+    return this.sendRawEmail(to, subject, html);
   }
 
   async sendPaymentRefundedEmail(to: string, paymentData: any) {
-    const html = await this.compileTemplate('payment-refunded', {
+    const templateData = {
       name: paymentData.name,
       amount: paymentData.amount,
       currency: paymentData.currency || 'IDR',
       orderId: paymentData.orderId,
       date: new Date().toLocaleDateString(),
       description: paymentData.description,
+      brand: paymentData.brand,
+      program: paymentData.program,
+      brandId: paymentData.brandId,
+      programId: paymentData.programId,
+    };
+    const { subject, html } = await this.resolveEmailContent({
+      type: 'payment_refunded',
+      fallbackTemplateName: 'payment-refunded',
+      fallbackSubject: 'Payment Refunded',
+      data: templateData,
     });
-    return this.sendRawEmail(to, 'Payment Refunded', html);
+    return this.sendRawEmail(to, subject, html);
   }
 
   async sendSupportTicketCreatedEmail(to: string, payload: any) {
-    const html = await this.compileTemplate('support-ticket-created', {
+    const templateData = {
       name: payload.name || 'Participant',
       ticketNumber: payload.ticketNumber,
       subject: payload.subject,
@@ -511,16 +719,25 @@ export class EmailService {
       status: payload.status || 'open',
       supportUrl: this.resolveSupportUrl(payload.brand),
       brand: payload.brand,
+      program: payload.program,
+      brandId: payload.brandId ?? payload.brand?.id,
+      programId: payload.programId ?? payload.program?.id,
+    };
+    const { subject, html } = await this.resolveEmailContent({
+      type: 'support_ticket_created',
+      fallbackTemplateName: 'support-ticket-created',
+      fallbackSubject: `Support Ticket Received (${payload.ticketNumber})`,
+      data: templateData,
     });
     return this.sendRawEmail(
       to,
-      `Support Ticket Received (${payload.ticketNumber})`,
+      subject,
       html,
     );
   }
 
   async sendSupportTicketReplyEmail(to: string, payload: any) {
-    const html = await this.compileTemplate('support-ticket-replied', {
+    const templateData = {
       name: payload.name || 'Participant',
       ticketNumber: payload.ticketNumber,
       subject: payload.subject,
@@ -530,16 +747,25 @@ export class EmailService {
         payload.messagePreview || 'You have a new update from support.',
       supportUrl: this.resolveSupportUrl(payload.brand),
       brand: payload.brand,
+      program: payload.program,
+      brandId: payload.brandId ?? payload.brand?.id,
+      programId: payload.programId ?? payload.program?.id,
+    };
+    const { subject, html } = await this.resolveEmailContent({
+      type: 'support_ticket_replied',
+      fallbackTemplateName: 'support-ticket-replied',
+      fallbackSubject: `New Support Reply (${payload.ticketNumber})`,
+      data: templateData,
     });
     return this.sendRawEmail(
       to,
-      `New Support Reply (${payload.ticketNumber})`,
+      subject,
       html,
     );
   }
 
   async sendSupportTicketStatusUpdatedEmail(to: string, payload: any) {
-    const html = await this.compileTemplate('support-ticket-status-updated', {
+    const templateData = {
       name: payload.name || 'Participant',
       ticketNumber: payload.ticketNumber,
       subject: payload.subject,
@@ -547,10 +773,19 @@ export class EmailService {
       status: payload.status,
       supportUrl: this.resolveSupportUrl(payload.brand),
       brand: payload.brand,
+      program: payload.program,
+      brandId: payload.brandId ?? payload.brand?.id,
+      programId: payload.programId ?? payload.program?.id,
+    };
+    const { subject, html } = await this.resolveEmailContent({
+      type: 'support_ticket_status_updated',
+      fallbackTemplateName: 'support-ticket-status-updated',
+      fallbackSubject: `Support Ticket Status Updated (${payload.ticketNumber})`,
+      data: templateData,
     });
     return this.sendRawEmail(
       to,
-      `Support Ticket Status Updated (${payload.ticketNumber})`,
+      subject,
       html,
     );
   }
