@@ -5,6 +5,11 @@ import { CacheService } from '../../../shared/infrastructure/cache/cache.service
 import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
 import { Brand } from '@prisma/client';
 import { resolveMaskedFileUrl } from '@shared/utils/masked-file-url';
+import {
+  buildParticipantDistributionLevels,
+  normalizeCountryGroups,
+  resolveCountryName,
+} from '@shared/utils/country-groups';
 
 const FULLY_FUNDED_PROCESS_COPY =
   'Complete the registration fee, submit the required documents and essay, and participate in the interview process.';
@@ -104,7 +109,7 @@ export class HomeStrategy implements ILandingPageStrategy {
 
     const brandMeta = (brand as Brand & { metadata?: Record<string, unknown> }).metadata || {};
 
-    const [program, brandImageGallery, brandSponsors, socialFeeds, videoPrograms, alumniTestimonials, delegateTestimonials, latestProgramWithAwards] = await Promise.all([
+    const [program, brandImageGallery, brandSponsors, socialFeeds, videoPrograms, alumniTestimonials, delegateTestimonials, latestProgramWithAwards, submittedApplications] = await Promise.all([
       this.prisma.program.findFirst({
         where: {
           brandId: brand.id, // Scoped to brand
@@ -237,7 +242,29 @@ export class HomeStrategy implements ILandingPageStrategy {
             orderBy: { order: 'asc' }
           }
         }
-      })
+      }),
+      this.prisma.participantApplication.findMany({
+        where: {
+          submittedAt: { not: null },
+          deletedAt: null,
+          program: {
+            brandId: brand.id,
+            isPublished: true,
+            deletedAt: null,
+          },
+          participant: {
+            deletedAt: null,
+          },
+        },
+        select: {
+          participant: {
+            select: {
+              originCountry: true,
+              nationality: true,
+            },
+          },
+        },
+      }),
     ]);
 
     const guidebookResources = await Promise.all(
@@ -294,6 +321,20 @@ export class HomeStrategy implements ILandingPageStrategy {
         description,
         order: index + 1,
       }));
+
+    const participantCountryGroups = normalizeCountryGroups(
+      submittedApplications.map((application) => ({
+        country: resolveCountryName(
+          application.participant.originCountry,
+          application.participant.nationality,
+        ),
+        count: 1,
+      })),
+    );
+    const countryParticipants = Object.fromEntries(
+      participantCountryGroups.map(({ country, count }) => [country, count]),
+    );
+    const countryLevels = buildParticipantDistributionLevels(countryParticipants);
 
     const result = {
       slug: 'home',
@@ -542,11 +583,11 @@ export class HomeStrategy implements ILandingPageStrategy {
         },
         {
           type: 'participant_demographics',
-          content: brandMeta.participant_demographics || {
+          content: {
             eyebrow: 'Participant Geography',
             title: 'Participant Distribution by Country',
-            country_levels: {},
-            country_participants: {},
+            country_levels: countryLevels,
+            country_participants: countryParticipants,
             legend: {
               high: 'High participation',
               medium: 'Medium participation',

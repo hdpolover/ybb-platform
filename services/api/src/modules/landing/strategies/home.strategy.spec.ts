@@ -28,6 +28,9 @@ describe('HomeStrategy', () => {
         participant: {
             count: jest.fn(),
         },
+        participantApplication: {
+            findMany: jest.fn(),
+        },
         file: {
             findFirst: jest.fn().mockResolvedValue(null),
         },
@@ -75,6 +78,13 @@ describe('HomeStrategy', () => {
             websiteUrl: 'http://brand.com',
             vision: 'Vision',
             mission: 'Mission',
+            metadata: {
+                participant_demographics: {
+                    title: 'Seeded Data',
+                    country_levels: { China: 'high' },
+                    country_participants: { China: 999 },
+                },
+            },
         };
 
         // 1. Program with details
@@ -134,6 +144,12 @@ describe('HomeStrategy', () => {
         mockPrismaService.programTestimonial.findMany.mockResolvedValue([
             { id: 'test-1', name: 'Alumni', testimonial: 'Great!' }
         ]);
+        mockPrismaService.participantApplication.findMany.mockResolvedValue([
+            { participant: { originCountry: 'ID', nationality: 'Indonesia' } },
+            { participant: { originCountry: 'Indonesia', nationality: 'Indonesia' } },
+            { participant: { originCountry: 'JP', nationality: 'Japan' } },
+            { participant: { originCountry: null, nationality: null } },
+        ]);
 
         const result: any = await strategy.getData(category as any);
 
@@ -173,5 +189,20 @@ describe('HomeStrategy', () => {
         const sponsors = sections.find(s => s.type === 'supported_by');
         expect(sponsors).toBeDefined();
         expect(sponsors?.data).toHaveLength(1);
+
+        const demographics = sections.find(s => s.type === 'participant_demographics');
+        expect(demographics).toMatchObject({
+            content: {
+                title: 'Participant Distribution by Country',
+                country_participants: {
+                    Indonesia: 2,
+                    Japan: 1,
+                },
+                country_levels: {
+                    Indonesia: 'high',
+                    Japan: 'medium',
+                },
+            },
+        });
     });
 });
