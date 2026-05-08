@@ -6,5 +6,6 @@ export class GetAdminsQuery {
         public readonly search?: string,
         public readonly roleId?: string,
         public readonly brandId?: string,
+        public readonly programId?: string,
     ) { }
 }

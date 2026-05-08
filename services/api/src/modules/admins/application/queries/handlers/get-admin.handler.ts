@@ -18,7 +18,7 @@ export class GetAdminHandler {
         const admin = await this.prisma.admin.findUnique({
             where: { id: query.id },
             include: {
-                user: { select: { email: true, isActive: true, lastLoginAt: true } },
+                user: { select: { id: true, email: true, isActive: true, lastLoginAt: true, createdAt: true } },
                 role: true,
                 adminBrands: {
                     include: {
@@ -122,22 +122,37 @@ export class GetAdminHandler {
 
         return {
             id: admin.id,
+            userId: admin.userId,
             fullName: admin.fullName,
-            email: admin.user.email,
-            isActive: admin.user.isActive,
-            lastLoginAt: admin.user.lastLoginAt,
-            avatarUrl: admin.avatarUrl,
             accessLevel: admin.accessLevel,
             canManageAdmins: admin.canManageAdmins,
             canAssignRoles: admin.canAssignRoles,
-            customPermissions: normalizePermissions(admin.customPermissions),
-            role: {
-                id: admin.roleId,
-                name: admin.role?.name,
-                permissions: normalizePermissions(admin.role?.permissions)
+            user: {
+                id: admin.user.id,
+                email: admin.user.email,
+                isActive: admin.user.isActive,
+                createdAt: admin.user.createdAt,
             },
-            brands: admin.adminBrands.map((assignment) => mapAdminBrandAssignment(assignment)),
-            programs: admin.adminPrograms.map((assignment) => mapAdminProgramAssignment(assignment)),
+            lastLoginAt: admin.user.lastLoginAt,
+            avatarUrl: admin.avatarUrl,
+            customPermissions: normalizePermissions(admin.customPermissions),
+            roleId: admin.roleId,
+            role: admin.role ? {
+                id: admin.roleId,
+                name: admin.role.name,
+                permissions: normalizePermissions(admin.role.permissions),
+                isActive: admin.role.isActive,
+            } : null,
+            brandIds: admin.adminBrands.map((assignment) => assignment.brandId),
+            programIds: admin.adminPrograms.map((assignment) => assignment.programId),
+            brands: admin.adminBrands.map((assignment) => ({
+                ...mapAdminBrandAssignment(assignment),
+                roleInBrand: assignment.roleInBrand ?? 'member',
+            })),
+            programs: admin.adminPrograms.map((assignment) => ({
+                ...mapAdminProgramAssignment(assignment),
+                roleInProgram: assignment.roleInProgram ?? 'member',
+            })),
             accessiblePrograms,
             createdAt: admin.createdAt,
             updatedAt: admin.updatedAt,

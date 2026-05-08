@@ -50,6 +50,8 @@ type RabbitChannel = {
       correlationId?: string;
     },
   ) => boolean;
+  ack: (message: unknown) => void;
+  nack: (message: unknown, allUpTo?: boolean, requeue?: boolean) => void;
 };
 
 @Controller()
@@ -73,61 +75,61 @@ export class EventsController {
     @Ctx() context: RmqContext,
   ) {
     const payload = asRecord(data);
-    if (!(await this.canProcess('payment.succeeded', payload, context))) return;
-
-    this.logger.log(
-      `Received payment.succeeded event: ${JSON.stringify(summarizeEventPayload(payload))}`,
-    );
-
-    const email = getString(payload, 'email');
-    if (!email) return;
-
-    const metadata = asRecord(payload.metadata);
-    const items = getReceiptItems(metadata, 'item_details');
-    const description =
-      getString(metadata, 'description') || 'Payment for services';
-    const customerName =
-      getString(metadata, 'customer_name') ||
-      getString(payload, 'customer_name') ||
-      'Customer';
-    const orderId =
-      getString(payload, 'order_id') ||
-      getString(payload, 'payment_id') ||
-      'unknown-order';
-    const amount = getNumber(payload, 'amount');
-    const currency = getString(payload, 'currency') || 'IDR';
-
-    let receiptBuffer: Buffer | undefined;
-    try {
-      receiptBuffer = await this.receiptService.generateReceipt({
-        orderId,
-        amount,
-        currency,
-        customerName,
-        date: new Date().toLocaleDateString(),
-        description,
-        items,
-      });
-    } catch (error) {
-      this.logger.error(
-        'Failed to generate receipt',
-        error instanceof Error ? error.stack : String(error),
+    await this.processEvent('payment.succeeded', payload, context, async () => {
+      this.logger.log(
+        `Received payment.succeeded event: ${JSON.stringify(summarizeEventPayload(payload))}`,
       );
-    }
 
-    await this.emailService.sendPaymentSuccessEmail(
-      email,
-      {
-        name: customerName,
-        amount,
-        currency,
-        orderId,
-        description,
-        invoiceUrl: '#',
-        items,
-      },
-      receiptBuffer,
-    );
+      const email = getString(payload, 'email');
+      if (!email) return;
+
+      const metadata = asRecord(payload.metadata);
+      const items = getReceiptItems(metadata, 'item_details');
+      const description =
+        getString(metadata, 'description') || 'Payment for services';
+      const customerName =
+        getString(metadata, 'customer_name') ||
+        getString(payload, 'customer_name') ||
+        'Customer';
+      const orderId =
+        getString(payload, 'order_id') ||
+        getString(payload, 'payment_id') ||
+        'unknown-order';
+      const amount = getNumber(payload, 'amount');
+      const currency = getString(payload, 'currency') || 'IDR';
+
+      let receiptBuffer: Buffer | undefined;
+      try {
+        receiptBuffer = await this.receiptService.generateReceipt({
+          orderId,
+          amount,
+          currency,
+          customerName,
+          date: new Date().toLocaleDateString(),
+          description,
+          items,
+        });
+      } catch (error) {
+        this.logger.error(
+          'Failed to generate receipt',
+          error instanceof Error ? error.stack : String(error),
+        );
+      }
+
+      await this.emailService.sendPaymentSuccessEmail(
+        email,
+        {
+          name: customerName,
+          amount,
+          currency,
+          orderId,
+          description,
+          invoiceUrl: '#',
+          items,
+        },
+        receiptBuffer,
+      );
+    });
   }
 
   @EventPattern('payment.created')
@@ -136,28 +138,28 @@ export class EventsController {
     @Ctx() context: RmqContext,
   ) {
     const payload = asRecord(data);
-    if (!(await this.canProcess('payment.created', payload, context))) return;
+    await this.processEvent('payment.created', payload, context, async () => {
+      this.logger.log(
+        `Received payment.created event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+      );
 
-    this.logger.log(
-      `Received payment.created event: ${JSON.stringify(summarizeEventPayload(payload))}`,
-    );
+      const status = getString(payload, 'status');
+      const email = getString(payload, 'email');
+      if (status !== 'PENDING_REVIEW' || !email) return;
 
-    const status = getString(payload, 'status');
-    const email = getString(payload, 'email');
-    if (status !== 'PENDING_REVIEW' || !email) return;
-
-    const metadata = asRecord(payload.metadata);
-    await this.emailService.sendManualPaymentReceivedEmail(email, {
-      name:
-        getString(metadata, 'customer_name') ||
-        getString(payload, 'customer_name') ||
-        'Customer',
-      amount: getNumber(payload, 'amount'),
-      currency: getString(payload, 'currency') || 'IDR',
-      orderId:
-        getString(payload, 'order_id') ||
-        getString(payload, 'payment_id') ||
-        'unknown-order',
+      const metadata = asRecord(payload.metadata);
+      await this.emailService.sendManualPaymentReceivedEmail(email, {
+        name:
+          getString(metadata, 'customer_name') ||
+          getString(payload, 'customer_name') ||
+          'Customer',
+        amount: getNumber(payload, 'amount'),
+        currency: getString(payload, 'currency') || 'IDR',
+        orderId:
+          getString(payload, 'order_id') ||
+          getString(payload, 'payment_id') ||
+          'unknown-order',
+      });
     });
   }
 
@@ -167,30 +169,30 @@ export class EventsController {
     @Ctx() context: RmqContext,
   ) {
     const payload = asRecord(data);
-    if (!(await this.canProcess('payment.failed', payload, context))) return;
+    await this.processEvent('payment.failed', payload, context, async () => {
+      this.logger.log(
+        `Received payment.failed event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+      );
 
-    this.logger.log(
-      `Received payment.failed event: ${JSON.stringify(summarizeEventPayload(payload))}`,
-    );
+      const email = getString(payload, 'email');
+      if (!email) return;
 
-    const email = getString(payload, 'email');
-    if (!email) return;
-
-    const metadata = asRecord(payload.metadata);
-    await this.emailService.sendPaymentFailedEmail(email, {
-      name:
-        getString(metadata, 'customer_name') ||
-        getString(payload, 'customer_name') ||
-        'Customer',
-      amount: getNumber(payload, 'amount'),
-      currency: getString(payload, 'currency') || 'IDR',
-      orderId:
-        getString(payload, 'order_id') ||
-        getString(payload, 'payment_id') ||
-        'unknown-order',
-      reason:
-        getString(metadata, 'failure_reason') ||
-        'Transaction could not be processed',
+      const metadata = asRecord(payload.metadata);
+      await this.emailService.sendPaymentFailedEmail(email, {
+        name:
+          getString(metadata, 'customer_name') ||
+          getString(payload, 'customer_name') ||
+          'Customer',
+        amount: getNumber(payload, 'amount'),
+        currency: getString(payload, 'currency') || 'IDR',
+        orderId:
+          getString(payload, 'order_id') ||
+          getString(payload, 'payment_id') ||
+          'unknown-order',
+        reason:
+          getString(metadata, 'failure_reason') ||
+          'Transaction could not be processed',
+      });
     });
   }
 
@@ -200,28 +202,28 @@ export class EventsController {
     @Ctx() context: RmqContext,
   ) {
     const payload = asRecord(data);
-    if (!(await this.canProcess('payment.refunded', payload, context))) return;
+    await this.processEvent('payment.refunded', payload, context, async () => {
+      this.logger.log(
+        `Received payment.refunded event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+      );
 
-    this.logger.log(
-      `Received payment.refunded event: ${JSON.stringify(summarizeEventPayload(payload))}`,
-    );
+      const email = getString(payload, 'email');
+      if (!email) return;
 
-    const email = getString(payload, 'email');
-    if (!email) return;
-
-    const metadata = asRecord(payload.metadata);
-    await this.emailService.sendPaymentRefundedEmail(email, {
-      name:
-        getString(metadata, 'customer_name') ||
-        getString(payload, 'customer_name') ||
-        'Customer',
-      amount: getNumber(payload, 'amount'),
-      currency: getString(payload, 'currency') || 'IDR',
-      orderId:
-        getString(payload, 'order_id') ||
-        getString(payload, 'payment_id') ||
-        'unknown-order',
-      description: 'Refund for services',
+      const metadata = asRecord(payload.metadata);
+      await this.emailService.sendPaymentRefundedEmail(email, {
+        name:
+          getString(metadata, 'customer_name') ||
+          getString(payload, 'customer_name') ||
+          'Customer',
+        amount: getNumber(payload, 'amount'),
+        currency: getString(payload, 'currency') || 'IDR',
+        orderId:
+          getString(payload, 'order_id') ||
+          getString(payload, 'payment_id') ||
+          'unknown-order',
+        description: 'Refund for services',
+      });
     });
   }
 
@@ -231,20 +233,22 @@ export class EventsController {
     @Ctx() context: RmqContext,
   ) {
     const payload = asRecord(data);
-    if (!(await this.canProcess('user.registered', payload, context))) return;
+    await this.processEvent('user.registered', payload, context, async () => {
+      this.logger.log(
+        `Received user.registered event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+      );
 
-    this.logger.log(
-      `Received user.registered event: ${JSON.stringify(summarizeEventPayload(payload))}`,
-    );
+      const email = getString(payload, 'email');
+      if (!email) return;
 
-    const email = getString(payload, 'email');
-    if (!email) return;
-
-    await this.emailService.sendWelcomeEmail(
-      email,
-      getString(payload, 'first_name') || getString(payload, 'name') || 'User',
-      payload.brand,
-    );
+      await this.emailService.sendWelcomeEmail(
+        email,
+        getString(payload, 'first_name') ||
+          getString(payload, 'name') ||
+          'User',
+        payload.brand,
+      );
+    });
   }
 
   @EventPattern('user.forgot-password')
@@ -253,22 +257,26 @@ export class EventsController {
     @Ctx() context: RmqContext,
   ) {
     const payload = asRecord(data);
-    if (!(await this.canProcess('user.forgot-password', payload, context)))
-      return;
+    await this.processEvent(
+      'user.forgot-password',
+      payload,
+      context,
+      async () => {
+        this.logger.log(
+          `Received user.forgot-password event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+        );
 
-    this.logger.log(
-      `Received user.forgot-password event: ${JSON.stringify(summarizeEventPayload(payload))}`,
-    );
+        const email = getString(payload, 'email');
+        const token = getString(payload, 'token');
+        if (!email || !token) return;
 
-    const email = getString(payload, 'email');
-    const token = getString(payload, 'token');
-    if (!email || !token) return;
-
-    await this.emailService.sendForgotPasswordEmail(
-      email,
-      getString(payload, 'name') || 'User',
-      token,
-      payload.brand,
+        await this.emailService.sendForgotPasswordEmail(
+          email,
+          getString(payload, 'name') || 'User',
+          token,
+          payload.brand,
+        );
+      },
     );
   }
 
@@ -278,23 +286,21 @@ export class EventsController {
     @Ctx() context: RmqContext,
   ) {
     const payload = asRecord(data);
-    if (!(await this.canProcess('user.verify-email', payload, context))) return;
-
-    this.logger.log('Received user.verify-email event START processing');
-    this.logger.log(
-      `Event Data: ${JSON.stringify(summarizeEventPayload(payload))}`,
-    );
-
-    const email = getString(payload, 'email');
-    const token = getString(payload, 'token');
-    if (!email || !token) {
-      this.logger.warn(
-        'Invalid data received for user.verify-email: Missing email or token',
+    await this.processEvent('user.verify-email', payload, context, async () => {
+      this.logger.log('Received user.verify-email event START processing');
+      this.logger.log(
+        `Event Data: ${JSON.stringify(summarizeEventPayload(payload))}`,
       );
-      return;
-    }
 
-    try {
+      const email = getString(payload, 'email');
+      const token = getString(payload, 'token');
+      if (!email || !token) {
+        this.logger.warn(
+          'Invalid data received for user.verify-email: Missing email or token',
+        );
+        return;
+      }
+
       this.logger.log(
         `Calling emailService.sendVerificationEmail for ${maskEmail(email)}`,
       );
@@ -307,14 +313,8 @@ export class EventsController {
       this.logger.log(
         `Email service returned successfully for ${maskEmail(email)}`,
       );
-    } catch (error) {
-      this.logger.error(
-        `Error processing user.verify-email event: ${error instanceof Error ? error.message : String(error)}`,
-        error instanceof Error ? error.stack : undefined,
-      );
-    }
-
-    this.logger.log('Received user.verify-email event FINISHED processing');
+      this.logger.log('Received user.verify-email event FINISHED processing');
+    });
   }
 
   @EventPattern('user.email-verified')
@@ -323,20 +323,24 @@ export class EventsController {
     @Ctx() context: RmqContext,
   ) {
     const payload = asRecord(data);
-    if (!(await this.canProcess('user.email-verified', payload, context)))
-      return;
+    await this.processEvent(
+      'user.email-verified',
+      payload,
+      context,
+      async () => {
+        this.logger.log(
+          `Received user.email-verified event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+        );
 
-    this.logger.log(
-      `Received user.email-verified event: ${JSON.stringify(summarizeEventPayload(payload))}`,
-    );
+        const email = getString(payload, 'email');
+        if (!email) return;
 
-    const email = getString(payload, 'email');
-    if (!email) return;
-
-    await this.emailService.sendEmailVerifiedEmail(
-      email,
-      getString(payload, 'name') || 'User',
-      payload.brand,
+        await this.emailService.sendEmailVerifiedEmail(
+          email,
+          getString(payload, 'name') || 'User',
+          payload.brand,
+        );
+      },
     );
   }
 
@@ -346,16 +350,20 @@ export class EventsController {
     @Ctx() context: RmqContext,
   ) {
     const payload = asRecord(data);
-    if (!(await this.canProcess('support.ticket.created', payload, context)))
-      return;
+    await this.processEvent(
+      'support.ticket.created',
+      payload,
+      context,
+      async () => {
+        this.logger.log(
+          `Received support.ticket.created event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+        );
 
-    this.logger.log(
-      `Received support.ticket.created event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+        const email = getString(payload, 'email');
+        if (!email) return;
+        await this.emailService.sendSupportTicketCreatedEmail(email, payload);
+      },
     );
-
-    const email = getString(payload, 'email');
-    if (!email) return;
-    await this.emailService.sendSupportTicketCreatedEmail(email, payload);
   }
 
   @EventPattern('support.ticket.replied')
@@ -364,17 +372,21 @@ export class EventsController {
     @Ctx() context: RmqContext,
   ) {
     const payload = asRecord(data);
-    if (!(await this.canProcess('support.ticket.replied', payload, context)))
-      return;
+    await this.processEvent(
+      'support.ticket.replied',
+      payload,
+      context,
+      async () => {
+        this.logger.log(
+          `Received support.ticket.replied event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+        );
 
-    this.logger.log(
-      `Received support.ticket.replied event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+        const email = getString(payload, 'email');
+        const actorRole = getString(payload, 'actorRole');
+        if (actorRole !== 'admin' || !email) return;
+        await this.emailService.sendSupportTicketReplyEmail(email, payload);
+      },
     );
-
-    const email = getString(payload, 'email');
-    const actorRole = getString(payload, 'actorRole');
-    if (actorRole !== 'admin' || !email) return;
-    await this.emailService.sendSupportTicketReplyEmail(email, payload);
   }
 
   @EventPattern('support.ticket.status-updated')
@@ -383,22 +395,77 @@ export class EventsController {
     @Ctx() context: RmqContext,
   ) {
     const payload = asRecord(data);
-    if (
-      !(await this.canProcess(
-        'support.ticket.status-updated',
-        payload,
-        context,
-      ))
-    )
-      return;
+    await this.processEvent(
+      'support.ticket.status-updated',
+      payload,
+      context,
+      async () => {
+        this.logger.log(
+          `Received support.ticket.status-updated event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+        );
 
-    this.logger.log(
-      `Received support.ticket.status-updated event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+        const email = getString(payload, 'email');
+        if (!email) return;
+        await this.emailService.sendSupportTicketStatusUpdatedEmail(
+          email,
+          payload,
+        );
+      },
     );
+  }
 
-    const email = getString(payload, 'email');
-    if (!email) return;
-    await this.emailService.sendSupportTicketStatusUpdatedEmail(email, payload);
+  private async processEvent(
+    eventType: string,
+    data: EventPayload,
+    context: RmqContext,
+    processor: () => Promise<void>,
+  ): Promise<void> {
+    if (!(await this.canProcess(eventType, data, context))) {
+      this.acknowledgeMessage(context, eventType, 'skipped');
+      return;
+    }
+
+    try {
+      await processor();
+      this.acknowledgeMessage(context, eventType, 'processed');
+    } catch (error) {
+      this.logger.error(
+        `[notification-retry] processing failed event=${eventType}; routing to retry queue`,
+        error instanceof Error ? error.stack : String(error),
+      );
+      this.rejectForRetry(context, eventType);
+    }
+  }
+
+  private acknowledgeMessage(
+    context: RmqContext,
+    eventType: string,
+    reason: 'processed' | 'skipped',
+  ) {
+    const message = context.getMessage();
+    const channel = context.getChannelRef() as RabbitChannel | undefined;
+    if (!message || !channel) {
+      this.logger.error(
+        `[notification-ack] unable to ack event=${eventType} reason=${reason}`,
+      );
+      return;
+    }
+
+    channel.ack(message);
+  }
+
+  private rejectForRetry(context: RmqContext, eventType: string) {
+    const message = context.getMessage();
+    const channel = context.getChannelRef() as RabbitChannel | undefined;
+    if (!message || !channel) {
+      this.logger.error(
+        `[notification-retry] unable to nack event=${eventType}; message or channel missing`,
+      );
+      return;
+    }
+
+    // requeue=false delegates retry scheduling to notification_queue.retry via DLX.
+    channel.nack(message, false, false);
   }
 
   private async canProcess(

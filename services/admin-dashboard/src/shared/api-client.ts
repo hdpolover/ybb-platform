@@ -133,8 +133,12 @@ async function requestPaginated<T>(path: string, init?: RequestInit): Promise<Pa
 export type AdminRole = {
   id: string;
   name: string;
-  permissions: Record<string, boolean>;
+  description?: string | null;
+  permissions: string[];
   isActive: boolean;
+  usersCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type Admin = {
@@ -150,9 +154,43 @@ export type Admin = {
     createdAt: string;
   };
   brandIds: string[];
-  accessLevel: string | null;
+  programIds?: string[];
+  brands?: Array<{
+    brandId: string;
+    brandName: string;
+    roleInBrand?: string | null;
+    permissions: string[];
+  }>;
+  programs?: Array<{
+    programId: string;
+    programName: string;
+    brandId: string;
+    roleInProgram?: string | null;
+    permissions: string[];
+  }>;
+  lastLoginAt?: string | null;
+  avatarUrl?: string | null;
+  accessiblePrograms?: Array<{
+    programId: string;
+    brandId: string;
+    brandName: string;
+    brandSlug: string;
+    programName: string;
+    programSlug: string;
+    programYear: number;
+    programStatus: string;
+    isActive: boolean;
+    startDate: string;
+    endDate: string;
+    logoUrl?: string | null;
+    role: string | null;
+    permissions: string[];
+    accessType: "assigned" | "brand_scope" | "platform";
+  }>;
+  accessLevel: number | null;
   canManageAdmins: boolean;
   canAssignRoles: boolean;
+  customPermissions?: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -163,14 +201,24 @@ export type CreateAdminInput = {
   password: string;
   roleId?: string;
   brandIds?: string[];
+  programIds?: string[];
 };
 
 export type UpdateAdminInput = {
   fullName?: string;
   roleId?: string;
   brandIds?: string[];
+  programIds?: string[];
   isActive?: boolean;
 };
+
+export type CreateAdminRoleInput = {
+  name: string;
+  description?: string;
+  permissions: string[];
+};
+
+export type UpdateAdminRoleInput = Partial<CreateAdminRoleInput>;
 
 export type User = {
   id: string;
@@ -610,6 +658,7 @@ export function listAdmins(params?: {
   search?: string;
   roleId?: string;
   brandId?: string;
+  programId?: string;
 }): Promise<Paginated<Admin>> {
   const q = new URLSearchParams();
   if (params?.page) q.set("page", String(params.page));
@@ -617,6 +666,7 @@ export function listAdmins(params?: {
   if (params?.search) q.set("search", params.search);
   if (params?.roleId) q.set("roleId", params.roleId);
   if (params?.brandId) q.set("brandId", params.brandId);
+  if (params?.programId) q.set("programId", params.programId);
   return requestPaginated<Admin>(`/admins?${q}`);
 }
 
@@ -642,8 +692,41 @@ export function deleteAdmin(id: string): Promise<void> {
   return request<void>(`/admins/${id}`, { method: "DELETE" });
 }
 
-export function listAdminRoles(): Promise<AdminRole[]> {
-  return request<AdminRole[]>("/admin-roles");
+export function resetAdminPassword(id: string, password: string): Promise<{ message: string }> {
+  return request<{ message: string }>(`/admins/${id}/reset-password`, {
+    method: "POST",
+    body: JSON.stringify({ password }),
+  });
+}
+
+export function listAdminRoles(params?: {
+  programId?: string;
+  search?: string;
+}): Promise<AdminRole[]> {
+  const q = new URLSearchParams();
+  if (params?.programId) q.set("programId", params.programId);
+  if (params?.search) q.set("search", params.search);
+  return request<AdminRole[]>(`/admin-roles${q.size > 0 ? `?${q.toString()}` : ""}`);
+}
+
+export function createAdminRole(input: CreateAdminRoleInput): Promise<AdminRole> {
+  return request<AdminRole>("/admin-roles", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateAdminRole(id: string, input: UpdateAdminRoleInput): Promise<AdminRole> {
+  return request<AdminRole>(`/admin-roles/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteAdminRole(id: string): Promise<{ message: string }> {
+  return request<{ message: string }>(`/admin-roles/${id}`, {
+    method: "DELETE",
+  });
 }
 
 export function getSupportAccessConfig(): Promise<SupportAccessConfig> {
@@ -1402,7 +1485,21 @@ export async function listApplications(params?: {
   programId?: string;
   participantId?: string;
   status?: string;
+  category?: "fully_funded" | "self_funded";
   search?: string;
+  country?: string;
+  registrationPaymentStatus?: "unpaid" | "paid" | "processing" | "failed" | "refunded";
+  programPaymentStatus?: "unpaid" | "paid" | "processing" | "failed" | "refunded";
+  sortBy?:
+    | "updatedAt"
+    | "createdAt"
+    | "submittedAt"
+    | "participantName"
+    | "country"
+    | "status"
+    | "registrationPaymentStatus"
+    | "programPaymentStatus";
+  sortOrder?: "asc" | "desc";
   startDate?: string;
   endDate?: string;
   limit?: number;
@@ -1413,7 +1510,13 @@ export async function listApplications(params?: {
   if (params?.programId) q.set("programId", params.programId);
   if (params?.participantId) q.set("participantId", params.participantId);
   if (params?.status) q.set("status", params.status);
+  if (params?.category) q.set("category", params.category);
   if (params?.search) q.set("search", params.search);
+  if (params?.country) q.set("country", params.country);
+  if (params?.registrationPaymentStatus) q.set("registrationPaymentStatus", params.registrationPaymentStatus);
+  if (params?.programPaymentStatus) q.set("programPaymentStatus", params.programPaymentStatus);
+  if (params?.sortBy) q.set("sortBy", params.sortBy);
+  if (params?.sortOrder) q.set("sortOrder", params.sortOrder);
   if (params?.startDate) q.set("startDate", params.startDate);
   if (params?.endDate) q.set("endDate", params.endDate);
   if (params?.limit !== undefined) q.set("limit", String(params.limit));

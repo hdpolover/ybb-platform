@@ -1,5 +1,4 @@
 import { prisma, log } from './utils';
-import * as bcrypt from 'bcrypt';
 
 export async function seedAuth() {
   log('🌱 Seeding Auth...');
@@ -12,7 +11,7 @@ export async function seedAuth() {
   ];
 
   for (const p of providers) {
-    const provider = await prisma.authProvider.upsert({
+    await prisma.authProvider.upsert({
       where: { name: p.name },
       update: {
         order: p.order,
@@ -46,22 +45,102 @@ export async function seedAuth() {
     {
       name: 'Platform Admin',
       description: 'Platform-wide operational access across brands and programs without super-admin elevation.',
-      permissions: ['platform.manage', 'platform_access', 'brand.manage', 'program:read', 'program:write', 'content:write'],
+      permissions: [
+        'platform.manage',
+        'platform_access',
+        'brand.manage',
+        'program:read',
+        'program:write',
+        'content:read',
+        'content:write',
+        'documents:read',
+        'documents:write',
+        'media:read',
+        'media:write',
+        'announcements:read',
+        'announcements:write',
+        'participants:read',
+        'participants:write',
+        'applications:read',
+        'applications:write',
+        'payments:read',
+        'payments:write',
+        'roles.manage',
+      ],
     },
     {
       name: 'Admin',
       description: 'Brand or platform administrator with operational program access.',
-      permissions: ['platform_access', 'brand.manage', 'program:read', 'program:write'],
+      permissions: [
+        'platform_access',
+        'brand.manage',
+        'program:read',
+        'program:write',
+        'content:read',
+        'content:write',
+        'documents:read',
+        'documents:write',
+        'media:read',
+        'media:write',
+        'announcements:read',
+        'announcements:write',
+        'participants:read',
+        'participants:write',
+        'applications:read',
+        'applications:write',
+        'payments:read',
+        'payments:write',
+      ],
     },
     {
       name: 'Program Admin',
       description: 'Program-scoped administrator for applications, participants, and program operations.',
-      permissions: ['program:read', 'program:write', 'applications:read', 'applications:write', 'participants:read', 'payments:read'],
+      permissions: [
+        'program:read',
+        'program:write',
+        'applications:read',
+        'applications:write',
+        'participants:read',
+        'participants:write',
+        'payments:read',
+        'documents:read',
+        'announcements:read',
+        'media:read',
+      ],
     },
     {
       name: 'Editor',
       description: 'Content editor for program materials and CMS-managed content.',
-      permissions: ['program:read', 'content:write'],
+      permissions: [
+        'program:read',
+        'content:read',
+        'content:write',
+        'documents:read',
+        'documents:write',
+        'media:read',
+        'media:write',
+        'announcements:read',
+        'announcements:write',
+      ],
+    },
+    {
+      name: 'Reviewer',
+      description: 'Review applications, essays, and scoring data without broader admin access.',
+      permissions: ['program:read', 'applications:read', 'applications:write', 'review:read', 'review:write', 'documents:read'],
+    },
+    {
+      name: 'News Writer',
+      description: 'Manage announcements and supporting content assets for a specific program.',
+      permissions: [
+        'program:read',
+        'content:read',
+        'content:write',
+        'announcements:read',
+        'announcements:write',
+        'media:read',
+        'media:write',
+        'documents:read',
+      ],
     },
     {
       name: 'Participant',

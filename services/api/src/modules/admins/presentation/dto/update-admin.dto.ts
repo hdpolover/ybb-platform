@@ -19,6 +19,12 @@ export class UpdateAdminDto {
     @IsUUID('4', { each: true })
     brandIds?: string[];
 
+    @ApiProperty({ required: false, isArray: true })
+    @IsOptional()
+    @IsArray()
+    @IsUUID('4', { each: true })
+    programIds?: string[];
+
     @ApiProperty({ required: false })
     @IsOptional()
     @IsBoolean()

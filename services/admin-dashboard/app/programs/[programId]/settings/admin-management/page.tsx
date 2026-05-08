@@ -16,5 +16,5 @@ export default function AdminManagementPage({
     "Selected Program";
   const allPrograms = Array.from(new Set(accessiblePrograms.map((program) => program.programName)));
 
-  return <AdminManagement programName={programName} allPrograms={allPrograms} />;
+  return <AdminManagement programId={programId} programName={programName} allPrograms={allPrograms} />;
 }

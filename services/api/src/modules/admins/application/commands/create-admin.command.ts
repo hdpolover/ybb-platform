@@ -7,5 +7,6 @@ export class CreateAdminCommand {
         public readonly createdBy: string, // Admin ID of creator
         public readonly roleId?: string,
         public readonly brandIds?: string[],
+        public readonly programIds?: string[],
     ) { }
 }

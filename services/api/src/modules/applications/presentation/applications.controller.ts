@@ -19,7 +19,7 @@ import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheInvalidate } from '@shared/decorators/cache-invalidate.decorator';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
-import { ChangeType } from '@prisma/client';
+import { ChangeType, PaymentStatus } from '@prisma/client';
 
 // Commands
 import { CreateApplicationHandler } from '../application/commands/handlers/create-application.handler';
@@ -43,7 +43,11 @@ import { GetApplicationHandler } from '../application/queries/handlers/get-appli
 import { ListApplicationsHandler } from '../application/queries/handlers/list-applications.handler';
 import { ExportApplicationsHandler } from '../application/queries/handlers/export-applications.handler';
 import { GetApplicationQuery } from '../application/queries/get-application.query';
-import { ListApplicationsQuery } from '../application/queries/list-applications.query';
+import {
+  ListApplicationsQuery,
+  ListApplicationsSortBy,
+  ListApplicationsSortOrder,
+} from '../application/queries/list-applications.query';
 import { ExportApplicationsQuery } from '../application/queries/export-applications.query';
 import { StreamableFile } from '@nestjs/common';
 import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
@@ -54,7 +58,7 @@ import { UpdateApplicationRequestDto } from './dto/update-application-request.dt
 import { ReviewApplicationRequestDto } from './dto/review-application-request.dto';
 import { SwitchApplicationCategoryRequestDto } from './dto/switch-application-category-request.dto';
 import { ApplicationResponseDto, ApplicationListResponseDto } from '../application/dto/application-response.dto';
-import { ApplicationStatus } from '@core/entities/participant-application.entity';
+import { ApplicationCategory, ApplicationStatus } from '@core/entities/participant-application.entity';
 
 /**
  * Applications Controller
@@ -68,6 +72,28 @@ import { ApplicationStatus } from '@core/entities/participant-application.entity
 @ApiBearerAuth()
 export class ApplicationsController {
   private readonly logger = new Logger(ApplicationsController.name);
+  private static readonly SORT_BY_VALUES: ReadonlySet<ListApplicationsSortBy> = new Set([
+    'updatedAt',
+    'createdAt',
+    'submittedAt',
+    'participantName',
+    'country',
+    'status',
+    'registrationPaymentStatus',
+    'programPaymentStatus',
+  ]);
+  private static readonly SORT_ORDER_VALUES: ReadonlySet<ListApplicationsSortOrder> = new Set(['asc', 'desc']);
+  private static readonly CATEGORY_VALUES: ReadonlySet<ApplicationCategory> = new Set([
+    ApplicationCategory.FULLY_FUNDED,
+    ApplicationCategory.SELF_FUNDED,
+  ]);
+  private static readonly PAYMENT_STATUS_VALUES: ReadonlySet<PaymentStatus> = new Set([
+    PaymentStatus.unpaid,
+    PaymentStatus.paid,
+    PaymentStatus.processing,
+    PaymentStatus.failed,
+    PaymentStatus.refunded,
+  ]);
 
   constructor(
     private readonly createApplicationHandler: CreateApplicationHandler,
@@ -97,6 +123,40 @@ export class ApplicationsController {
 
     if (startDate && endDate && startDate > endDate) {
       throw new BadRequestException('startDate cannot be after endDate.');
+    }
+  }
+
+  private validateListFilters(params: {
+    sortBy?: string;
+    sortOrder?: string;
+    category?: string;
+    registrationPaymentStatus?: string;
+    programPaymentStatus?: string;
+  }): void {
+    if (params.sortBy && !ApplicationsController.SORT_BY_VALUES.has(params.sortBy as ListApplicationsSortBy)) {
+      throw new BadRequestException('Invalid sortBy value.');
+    }
+
+    if (params.sortOrder && !ApplicationsController.SORT_ORDER_VALUES.has(params.sortOrder as ListApplicationsSortOrder)) {
+      throw new BadRequestException('Invalid sortOrder value.');
+    }
+
+    if (params.category && !ApplicationsController.CATEGORY_VALUES.has(params.category as ApplicationCategory)) {
+      throw new BadRequestException('Invalid category value.');
+    }
+
+    if (
+      params.registrationPaymentStatus &&
+      !ApplicationsController.PAYMENT_STATUS_VALUES.has(params.registrationPaymentStatus as PaymentStatus)
+    ) {
+      throw new BadRequestException('Invalid registrationPaymentStatus value.');
+    }
+
+    if (
+      params.programPaymentStatus &&
+      !ApplicationsController.PAYMENT_STATUS_VALUES.has(params.programPaymentStatus as PaymentStatus)
+    ) {
+      throw new BadRequestException('Invalid programPaymentStatus value.');
     }
   }
 
@@ -132,7 +192,13 @@ export class ApplicationsController {
   @ApiQuery({ name: 'brandId', required: true })
   @ApiQuery({ name: 'programId', required: false })
   @ApiQuery({ name: 'status', enum: ApplicationStatus, required: false })
+  @ApiQuery({ name: 'category', enum: ApplicationCategory, required: false })
   @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'country', required: false })
+  @ApiQuery({ name: 'registrationPaymentStatus', enum: PaymentStatus, required: false })
+  @ApiQuery({ name: 'programPaymentStatus', enum: PaymentStatus, required: false })
+  @ApiQuery({ name: 'sortBy', required: false, enum: ['updatedAt', 'createdAt', 'submittedAt', 'participantName', 'country', 'status', 'registrationPaymentStatus', 'programPaymentStatus'] })
+  @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
   @ApiQuery({ name: 'startDate', required: false, description: 'Applied from date (YYYY-MM-DD)' })
   @ApiQuery({ name: 'endDate', required: false, description: 'Applied until date (YYYY-MM-DD)' })
   @ApiResponse({ status: 200, description: 'CSV file stream' })
@@ -175,7 +241,13 @@ export class ApplicationsController {
     @Query('programId') programId?: string,
     @Query('participantId') participantId?: string,
     @Query('status') status?: ApplicationStatus,
+    @Query('category') category?: ApplicationCategory,
     @Query('search') search?: string,
+    @Query('country') country?: string,
+    @Query('registrationPaymentStatus') registrationPaymentStatus?: PaymentStatus,
+    @Query('programPaymentStatus') programPaymentStatus?: PaymentStatus,
+    @Query('sortBy') sortBy?: ListApplicationsSortBy,
+    @Query('sortOrder') sortOrder?: ListApplicationsSortOrder,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('limit') limit?: number,
@@ -183,6 +255,13 @@ export class ApplicationsController {
   ): Promise<ApplicationListResponseDto> {
     this.logger.log(`Listing applications with filters: brandId=${brandId}, programId=${programId}`);
     this.validateDateRange(startDate, endDate);
+    this.validateListFilters({
+      sortBy,
+      sortOrder,
+      category,
+      registrationPaymentStatus,
+      programPaymentStatus,
+    });
 
     const actualLimit = limit ? Number(limit) : 20;
     const actualOffset = offset ? Number(offset) : 0;
@@ -194,7 +273,21 @@ export class ApplicationsController {
 
     if (shouldCache) {
       // Create a deterministic cache key based on all filters
-      const filterParams = JSON.stringify({ participantId, status, search, startDate, endDate, limit: actualLimit, offset: actualOffset });
+      const filterParams = JSON.stringify({
+        participantId,
+        status,
+        category,
+        search,
+        country,
+        registrationPaymentStatus,
+        programPaymentStatus,
+        sortBy,
+        sortOrder,
+        startDate,
+        endDate,
+        limit: actualLimit,
+        offset: actualOffset,
+      });
       // We hash the params to keep the key length manageable, or just use stringified if short enough. 
       // For simplicity/readability in redis, we'll use a simple string representation if it's not too long, 
       // but here we can just use the stringified JSON.
@@ -215,7 +308,13 @@ export class ApplicationsController {
       programId,
       participantId,
       status,
+      category,
       search,
+      country,
+      registrationPaymentStatus,
+      programPaymentStatus,
+      sortBy,
+      sortOrder,
       startDate,
       endDate,
       limit: actualLimit,

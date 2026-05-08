@@ -71,6 +71,37 @@ const STATUS_FILTERS = [
   { value: "withdrawn", label: "Withdrawn" },
 ];
 
+const CATEGORY_FILTERS = [
+  { value: "", label: "All categories" },
+  { value: "fully_funded", label: "Fully Funded" },
+  { value: "self_funded", label: "Self Funded" },
+] as const;
+
+const PAYMENT_STATUS_FILTERS = [
+  { value: "", label: "All" },
+  { value: "unpaid", label: "Unpaid" },
+  { value: "paid", label: "Paid" },
+  { value: "processing", label: "Processing" },
+  { value: "failed", label: "Failed" },
+  { value: "refunded", label: "Refunded" },
+] as const;
+
+const SORT_BY_OPTIONS = [
+  { value: "updatedAt", label: "Last Updated" },
+  { value: "createdAt", label: "Created At" },
+  { value: "submittedAt", label: "Submitted At" },
+  { value: "participantName", label: "Participant Name" },
+  { value: "country", label: "Country" },
+  { value: "status", label: "Status" },
+  { value: "registrationPaymentStatus", label: "Reg. Payment" },
+  { value: "programPaymentStatus", label: "Prog. Payment" },
+] as const;
+
+const SORT_ORDER_OPTIONS = [
+  { value: "desc", label: "Descending" },
+  { value: "asc", label: "Ascending" },
+] as const;
+
 const DEFAULT_PAGE_SIZE = 20;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
@@ -91,6 +122,12 @@ export default function ParticipantsPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [countryFilter, setCountryFilter] = useState("");
+  const [registrationPaymentStatusFilter, setRegistrationPaymentStatusFilter] = useState("");
+  const [programPaymentStatusFilter, setProgramPaymentStatusFilter] = useState("");
+  const [sortBy, setSortBy] = useState<(typeof SORT_BY_OPTIONS)[number]["value"]>("updatedAt");
+  const [sortOrder, setSortOrder] = useState<(typeof SORT_ORDER_OPTIONS)[number]["value"]>("desc");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
@@ -99,7 +136,19 @@ export default function ParticipantsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const hasInvalidDateRange = Boolean(startDate && endDate && startDate > endDate);
-  const hasActiveFilters = Boolean(search || statusFilter || startDate || endDate || pageSize !== DEFAULT_PAGE_SIZE);
+  const hasActiveFilters = Boolean(
+    search ||
+      statusFilter ||
+      categoryFilter ||
+      countryFilter ||
+      registrationPaymentStatusFilter ||
+      programPaymentStatusFilter ||
+      startDate ||
+      endDate ||
+      pageSize !== DEFAULT_PAGE_SIZE ||
+      sortBy !== "updatedAt" ||
+      sortOrder !== "desc",
+  );
   const showingFrom = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const showingTo = total === 0 ? 0 : showingFrom + items.length - 1;
 
@@ -117,13 +166,19 @@ export default function ParticipantsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await listApplications({
-        programId: resolvedProgramId,
-        status: statusFilter || undefined,
-        search: search || undefined,
-        startDate: startDate || undefined,
-        endDate: endDate || undefined,
-        limit: pageSize,
+        const res = await listApplications({
+          programId: resolvedProgramId,
+          status: statusFilter || undefined,
+          category: categoryFilter || undefined,
+          search: search || undefined,
+          country: countryFilter || undefined,
+          registrationPaymentStatus: registrationPaymentStatusFilter || undefined,
+          programPaymentStatus: programPaymentStatusFilter || undefined,
+          sortBy,
+          sortOrder,
+          startDate: startDate || undefined,
+          endDate: endDate || undefined,
+          limit: pageSize,
         offset: (page - 1) * pageSize,
       });
       setItems(res.data);
@@ -133,7 +188,22 @@ export default function ParticipantsPage() {
     } finally {
       setLoading(false);
     }
-  }, [resolvedProgramId, hasInvalidDateRange, statusFilter, search, startDate, endDate, page, pageSize]);
+  }, [
+    resolvedProgramId,
+    hasInvalidDateRange,
+    statusFilter,
+    categoryFilter,
+    search,
+    countryFilter,
+    registrationPaymentStatusFilter,
+    programPaymentStatusFilter,
+    sortBy,
+    sortOrder,
+    startDate,
+    endDate,
+    page,
+    pageSize,
+  ]);
 
   useEffect(() => {
     void fetchParticipants();
@@ -151,6 +221,12 @@ export default function ParticipantsPage() {
   const resetFilters = useCallback(() => {
     setSearch("");
     setStatusFilter("");
+    setCategoryFilter("");
+    setCountryFilter("");
+    setRegistrationPaymentStatusFilter("");
+    setProgramPaymentStatusFilter("");
+    setSortBy("updatedAt");
+    setSortOrder("desc");
     setStartDate("");
     setEndDate("");
     setPageSize(DEFAULT_PAGE_SIZE);
@@ -302,6 +378,112 @@ export default function ParticipantsPage() {
           </div>
         </div>
 
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-6">
+          <div className="space-y-1">
+            <label className="block text-[11px] font-medium uppercase tracking-wide text-zinc-500">Category</label>
+            <select
+              value={categoryFilter}
+              onChange={(e) => {
+                setCategoryFilter(e.target.value);
+                setPage(1);
+              }}
+              className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs text-zinc-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            >
+              {CATEGORY_FILTERS.map((option) => (
+                <option key={option.value || "all"} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="block text-[11px] font-medium uppercase tracking-wide text-zinc-500">Country</label>
+            <input
+              type="text"
+              value={countryFilter}
+              placeholder="e.g. Indonesia"
+              onChange={(e) => {
+                setCountryFilter(e.target.value);
+                setPage(1);
+              }}
+              className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs text-zinc-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="block text-[11px] font-medium uppercase tracking-wide text-zinc-500">Reg. Payment</label>
+            <select
+              value={registrationPaymentStatusFilter}
+              onChange={(e) => {
+                setRegistrationPaymentStatusFilter(e.target.value);
+                setPage(1);
+              }}
+              className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs text-zinc-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            >
+              {PAYMENT_STATUS_FILTERS.map((option) => (
+                <option key={`reg-${option.value || "all"}`} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="block text-[11px] font-medium uppercase tracking-wide text-zinc-500">Prog. Payment</label>
+            <select
+              value={programPaymentStatusFilter}
+              onChange={(e) => {
+                setProgramPaymentStatusFilter(e.target.value);
+                setPage(1);
+              }}
+              className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs text-zinc-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            >
+              {PAYMENT_STATUS_FILTERS.map((option) => (
+                <option key={`prog-${option.value || "all"}`} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="block text-[11px] font-medium uppercase tracking-wide text-zinc-500">Sort by</label>
+            <select
+              value={sortBy}
+              onChange={(e) => {
+                setSortBy(e.target.value as (typeof SORT_BY_OPTIONS)[number]["value"]);
+                setPage(1);
+              }}
+              className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs text-zinc-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            >
+              {SORT_BY_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="block text-[11px] font-medium uppercase tracking-wide text-zinc-500">Sort order</label>
+            <select
+              value={sortOrder}
+              onChange={(e) => {
+                setSortOrder(e.target.value as (typeof SORT_ORDER_OPTIONS)[number]["value"]);
+                setPage(1);
+              }}
+              className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs text-zinc-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            >
+              {SORT_ORDER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         <div className="flex flex-wrap gap-1.5">
           {STATUS_FILTERS.map((f) => (
             <button
@@ -336,21 +518,22 @@ export default function ParticipantsPage() {
                 <th className="px-3 py-2 font-semibold">Status</th>
                 <th className="px-3 py-2 font-semibold">Reg. Payment</th>
                 <th className="px-3 py-2 font-semibold">Prog. Payment</th>
-                <th className="px-3 py-2 font-semibold">Applied</th>
+                <th className="px-3 py-2 font-semibold">Created At</th>
+                <th className="px-3 py-2 font-semibold">Updated At</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-6 text-center text-zinc-400">Loading…</td>
+                  <td colSpan={7} className="px-3 py-6 text-center text-zinc-400">Loading…</td>
                 </tr>
               )}
               {!loading && items.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-2">
+                  <td colSpan={7} className="px-3 py-2">
                     <EmptyState
                       title="No participants found"
-                      description="Try adjusting the search, status, or applied date range."
+                      description="Try adjusting the search, status, payment, country, or date filters."
                       className="py-10"
                     />
                   </td>
@@ -396,6 +579,11 @@ export default function ParticipantsPage() {
                   <td className="px-3 py-2 text-zinc-500">
                     <Link href={`/programs/${params.programId}/participants/${app.participantId}`} className="block">
                       {formatDate(app.createdAt)}
+                    </Link>
+                  </td>
+                  <td className="px-3 py-2 text-zinc-500">
+                    <Link href={`/programs/${params.programId}/participants/${app.participantId}`} className="block">
+                      {formatDate(app.updatedAt)}
                     </Link>
                   </td>
                 </tr>

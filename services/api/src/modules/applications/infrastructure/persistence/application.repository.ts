@@ -1,9 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { IApplicationRepository } from '@core/interfaces/repositories/application.repository.interface';
-import { ParticipantApplication, ApplicationStatus } from '@core/entities/participant-application.entity';
+import {
+  ParticipantApplication,
+  ApplicationStatus,
+} from '@core/entities/participant-application.entity';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { ApplicationMapper } from '../mappers/application.mapper';
-import { Prisma } from '@prisma/client';
+import {
+  ApplicationCategory as PrismaApplicationCategory,
+  PaymentStatus,
+  Prisma,
+} from '@prisma/client';
 
 /**
  * Application Repository
@@ -34,6 +41,45 @@ export class ApplicationRepository implements IApplicationRepository {
     }
 
     return createdAt;
+  }
+
+  private buildOrderBy(filters?: {
+    sortBy?:
+      | 'updatedAt'
+      | 'createdAt'
+      | 'submittedAt'
+      | 'participantName'
+      | 'country'
+      | 'status'
+      | 'registrationPaymentStatus'
+      | 'programPaymentStatus';
+    sortOrder?: 'asc' | 'desc';
+  }): Prisma.ParticipantApplicationOrderByWithRelationInput[] {
+    const sortOrder: Prisma.SortOrder = filters?.sortOrder === 'asc' ? 'asc' : 'desc';
+
+    if (!filters?.sortBy) {
+      return [{ updatedAt: 'desc' }, { createdAt: 'desc' }];
+    }
+
+    switch (filters.sortBy) {
+      case 'createdAt':
+        return [{ createdAt: sortOrder }, { updatedAt: 'desc' }];
+      case 'submittedAt':
+        return [{ submittedAt: sortOrder }, { updatedAt: 'desc' }];
+      case 'participantName':
+        return [{ participant: { fullName: sortOrder } }, { updatedAt: 'desc' }];
+      case 'country':
+        return [{ participant: { originCountry: sortOrder } }, { updatedAt: 'desc' }];
+      case 'status':
+        return [{ status: sortOrder }, { updatedAt: 'desc' }];
+      case 'registrationPaymentStatus':
+        return [{ registrationPaymentStatus: sortOrder }, { updatedAt: 'desc' }];
+      case 'programPaymentStatus':
+        return [{ programPaymentStatus: sortOrder }, { updatedAt: 'desc' }];
+      case 'updatedAt':
+      default:
+        return [{ updatedAt: sortOrder }, { createdAt: 'desc' }];
+    }
   }
 
   async findById(id: string): Promise<ParticipantApplication | null> {
@@ -75,6 +121,19 @@ export class ApplicationRepository implements IApplicationRepository {
       status?: ApplicationStatus;
       category?: string;
       search?: string;
+      country?: string;
+      registrationPaymentStatus?: PaymentStatus;
+      programPaymentStatus?: PaymentStatus;
+      sortBy?:
+        | 'updatedAt'
+        | 'createdAt'
+        | 'submittedAt'
+        | 'participantName'
+        | 'country'
+        | 'status'
+        | 'registrationPaymentStatus'
+        | 'programPaymentStatus';
+      sortOrder?: 'asc' | 'desc';
       startDate?: string;
       endDate?: string;
       limit?: number;
@@ -88,7 +147,7 @@ export class ApplicationRepository implements IApplicationRepository {
     }
 
     if (filters?.category) {
-      where.applicationCategory = filters.category as import('@prisma/client').ApplicationCategory;
+      where.applicationCategory = filters.category as PrismaApplicationCategory;
     }
 
     if (filters?.search) {
@@ -101,6 +160,31 @@ export class ApplicationRepository implements IApplicationRepository {
       ];
     }
 
+    if (filters?.country) {
+      const andConditions = Array.isArray(where.AND)
+        ? where.AND
+        : where.AND
+          ? [where.AND]
+          : [];
+      where.AND = [
+        ...andConditions,
+        {
+          OR: [
+            { participant: { originCountry: { contains: filters.country, mode: 'insensitive' } } },
+            { participant: { nationality: { contains: filters.country, mode: 'insensitive' } } },
+          ],
+        },
+      ];
+    }
+
+    if (filters?.registrationPaymentStatus) {
+      where.registrationPaymentStatus = filters.registrationPaymentStatus;
+    }
+
+    if (filters?.programPaymentStatus) {
+      where.programPaymentStatus = filters.programPaymentStatus;
+    }
+
     const createdAt = this.buildCreatedAtFilter(filters?.startDate, filters?.endDate);
     if (createdAt) {
       where.createdAt = createdAt;
@@ -111,7 +195,7 @@ export class ApplicationRepository implements IApplicationRepository {
         where,
         take: filters?.limit,
         skip: filters?.offset,
-        orderBy: { submittedAt: 'desc' },
+        orderBy: this.buildOrderBy(filters),
       }),
       this.prisma.participantApplication.count({ where }),
     ]);
@@ -127,7 +211,21 @@ export class ApplicationRepository implements IApplicationRepository {
     filters?: {
       programId?: string;
       status?: ApplicationStatus;
+      category?: string;
       search?: string;
+      country?: string;
+      registrationPaymentStatus?: PaymentStatus;
+      programPaymentStatus?: PaymentStatus;
+      sortBy?:
+        | 'updatedAt'
+        | 'createdAt'
+        | 'submittedAt'
+        | 'participantName'
+        | 'country'
+        | 'status'
+        | 'registrationPaymentStatus'
+        | 'programPaymentStatus';
+      sortOrder?: 'asc' | 'desc';
       startDate?: string;
       endDate?: string;
       limit?: number;
@@ -150,6 +248,10 @@ export class ApplicationRepository implements IApplicationRepository {
       where.status = filters.status;
     }
 
+    if (filters?.category) {
+      where.applicationCategory = filters.category as PrismaApplicationCategory;
+    }
+
     if (filters?.search) {
       where.OR = [
         { motivationLetter: { contains: filters.search, mode: 'insensitive' } },
@@ -158,6 +260,31 @@ export class ApplicationRepository implements IApplicationRepository {
         { participant: { fullName: { contains: filters.search, mode: 'insensitive' } } },
         { participant: { user: { email: { contains: filters.search, mode: 'insensitive' } } } },
       ];
+    }
+
+    if (filters?.country) {
+      const andConditions = Array.isArray(where.AND)
+        ? where.AND
+        : where.AND
+          ? [where.AND]
+          : [];
+      where.AND = [
+        ...andConditions,
+        {
+          OR: [
+            { participant: { originCountry: { contains: filters.country, mode: 'insensitive' } } },
+            { participant: { nationality: { contains: filters.country, mode: 'insensitive' } } },
+          ],
+        },
+      ];
+    }
+
+    if (filters?.registrationPaymentStatus) {
+      where.registrationPaymentStatus = filters.registrationPaymentStatus;
+    }
+
+    if (filters?.programPaymentStatus) {
+      where.programPaymentStatus = filters.programPaymentStatus;
     }
 
     const createdAt = this.buildCreatedAtFilter(filters?.startDate, filters?.endDate);
@@ -170,7 +297,7 @@ export class ApplicationRepository implements IApplicationRepository {
         where,
         take: filters?.limit,
         skip: filters?.offset,
-        orderBy: { submittedAt: 'desc' },
+        orderBy: this.buildOrderBy(filters),
       }),
       this.prisma.participantApplication.count({ where }),
     ]);

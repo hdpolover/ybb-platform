@@ -1,32 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  AdjustmentsHorizontalIcon,
   CheckCircleIcon,
   ClockIcon,
-  EnvelopeIcon,
   KeyIcon,
-  ShieldCheckIcon,
+  PlusIcon,
   UserGroupIcon,
 } from "@heroicons/react/24/solid";
-import { AdminManagementHeader } from "./adminManagement/AdminManagementHeader";
-import { AdminManagementTable } from "./adminManagement/AdminManagementTable";
+import { toast } from "sonner";
+import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
+import { useAuth } from "@/app/contexts/AuthContext";
+import {
+  createAdmin,
+  deleteAdmin,
+  getAdmin,
+  listAdminRoles,
+  listAdmins,
+  resetAdminPassword,
+  updateAdmin,
+  type Admin,
+  type AdminRole as ApiAdminRole,
+  type CreateAdminInput,
+  type UpdateAdminInput,
+} from "@/src/shared/api-client";
 
 export type AdminStatus = "Active" | "Inactive";
-
-export type AdminRole =
-  | "Super Admin"
-  | "Project Manager"
-  | "Tnd"
-  | "Reviewer"
-  | "Ambassador Coordinator"
-  | "Mentor"
-  | "News Writer"
-  | "Digital Marketing";
+export type AdminRole = string;
 
 export type AdminRow = {
-  id: number;
+  id: string;
   name: string;
   email: string;
   role: AdminRole;
@@ -35,622 +38,730 @@ export type AdminRow = {
   lastLogin: string;
 };
 
-const mockAdmins: AdminRow[] = [
-  {
-    id: 1,
-    name: "Hilmi Farrel",
-    email: "hilmi@ybb.org",
-    role: "Super Admin",
-    programs: ["Istanbul Youth Summit 2026", "Japan Youth Summit 2026"],
-    status: "Active",
-    lastLogin: "Today, 09:12 AM",
-  },
-  {
-    id: 2,
-    name: "Nabila Putri",
-    email: "nabila@ybb.org",
-    role: "Project Manager",
-    programs: ["Japan Youth Summit 2026"],
-    status: "Active",
-    lastLogin: "Yesterday, 10:45 PM",
-  },
-  {
-    id: 3,
-    name: "Andi Pratama",
-    email: "andi@ybb.org",
-    role: "Reviewer",
-    programs: ["Istanbul Youth Summit 2026"],
-    status: "Inactive",
-    lastLogin: "7 days ago",
-  },
-];
-
 export type AdminManagementProps = {
+  programId: string;
   programName: string;
   allPrograms: string[];
 };
 
-export function AdminManagement({ programName, allPrograms }: AdminManagementProps) {
-  const [admins, setAdmins] = useState<AdminRow[]>(mockAdmins);
-  const [roleFilter, setRoleFilter] = useState<AdminRole | "All Roles">("All Roles");
-  const [programFilter, setProgramFilter] = useState<string | "All Programs">(
-    "All Programs",
-  );
-  const [statusFilter, setStatusFilter] = useState<AdminStatus | "All Status">(
-    "All Status",
-  );
+type AdminFormState = {
+  fullName: string;
+  email: string;
+  password: string;
+  roleId: string;
+  isActive: boolean;
+  programIds: string[];
+};
+
+const defaultFormState: AdminFormState = {
+  fullName: "",
+  email: "",
+  password: "",
+  roleId: "",
+  isActive: true,
+  programIds: [],
+};
+
+function formatLastLogin(value?: string | null): string {
+  if (!value) return "Not logged in yet";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}
+
+function adminToRow(admin: Admin): AdminRow {
+  return {
+    id: admin.id,
+    name: admin.fullName,
+    email: admin.user.email,
+    role: admin.role?.name ?? "No Role",
+    programs: admin.programs?.map((program) => program.programName) ?? [],
+    status: admin.user.isActive ? "Active" : "Inactive",
+    lastLogin: formatLastLogin(admin.lastLoginAt),
+  };
+}
+
+export function AdminManagement({ programId, programName }: AdminManagementProps) {
+  const { accessiblePrograms, accessConfig } = useAuth();
+  const [admins, setAdmins] = useState<Admin[]>([]);
+  const [roles, setRoles] = useState<ApiAdminRole[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [showFormModal, setShowFormModal] = useState(false);
-  const [editingAdmin, setEditingAdmin] = useState<AdminRow | null>(null);
-  const [showDetailModal, setShowDetailModal] = useState(false);
-  const [selectedAdmin, setSelectedAdmin] = useState<AdminRow | null>(null);
-  const [showResetModal, setShowResetModal] = useState(false);
-  const [resetTargetAdmin, setResetTargetAdmin] = useState<AdminRow | null>(null);
+  const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | AdminStatus>("all");
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [selectedAdmin, setSelectedAdmin] = useState<Admin | null>(null);
+  const [form, setForm] = useState<AdminFormState>(defaultFormState);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [password, setPassword] = useState("");
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [resettingPassword, setResettingPassword] = useState(false);
 
-  const totalAdmins = admins.length;
-  const activeAdmins = admins.filter((admin) => admin.status === "Active").length;
-  const superAdmins = admins.filter((admin) => admin.role === "Super Admin").length;
-  const recentLogins = 5;
+  const canManageAdmins = accessConfig.canManageAdmins;
 
-  const filteredAdmins = admins.filter((admin) => {
-    const matchesRole =
-      roleFilter === "All Roles" ? true : admin.role === roleFilter;
-    const matchesProgram =
-      programFilter === "All Programs"
-        ? true
-        : admin.programs.some((program) => program === programFilter);
-    const matchesStatus =
-      statusFilter === "All Status" ? true : admin.status === statusFilter;
+  const programOptions = useMemo(
+    () =>
+      accessiblePrograms.map((program) => ({
+        id: program.programId,
+        name: program.programName,
+      })),
+    [accessiblePrograms],
+  );
 
-    const matchesSearch = (() => {
-      if (!search.trim()) return true;
-      const q = search.toLowerCase();
-      return (
-        admin.name.toLowerCase().includes(q) ||
-        admin.email.toLowerCase().includes(q) ||
-        admin.role.toLowerCase().includes(q) ||
-        admin.programs.join(", ").toLowerCase().includes(q)
-      );
-    })();
-
-    return matchesRole && matchesProgram && matchesStatus && matchesSearch;
-  });
-
-  const handleSubmitAdmin = (payload: Omit<AdminRow, "id"> & { id?: number }) => {
-    if (editingAdmin) {
-      const updated: AdminRow = {
-        id: editingAdmin.id,
-        name: payload.name,
-        email: payload.email,
-        role: payload.role,
-        programs: payload.programs,
-        status: payload.status,
-        lastLogin: payload.lastLogin,
-      };
-
-      setAdmins((prev) => prev.map((admin) => (admin.id === editingAdmin.id ? updated : admin)));
-      console.log("Edit administrator:", updated);
-    } else {
-      const newId = admins.length > 0 ? Math.max(...admins.map((a) => a.id)) + 1 : 1;
-      const created: AdminRow = {
-        id: newId,
-        name: payload.name,
-        email: payload.email,
-        role: payload.role,
-        programs: payload.programs,
-        status: payload.status,
-        lastLogin: payload.lastLogin || "Not logged in yet",
-      };
-
-      setAdmins((prev) => [...prev, created]);
-      console.log("Create administrator:", created);
+  const loadData = useCallback(async () => {
+    if (!canManageAdmins) {
+      setLoading(false);
+      return;
     }
 
-    setShowFormModal(false);
-    setEditingAdmin(null);
+    setLoading(true);
+    setError(null);
+
+    try {
+      const [adminsResponse, roleResponse] = await Promise.all([
+        listAdmins({ page: 1, limit: 100, programId }),
+        listAdminRoles({ programId }),
+      ]);
+
+      setAdmins(adminsResponse.data);
+      setRoles(roleResponse);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Failed to load administrators.");
+    } finally {
+      setLoading(false);
+    }
+  }, [canManageAdmins, programId]);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
+
+  const filteredAdmins = useMemo(() => {
+    return admins.filter((admin) => {
+      const matchesSearch =
+        search.trim().length === 0 ||
+        [admin.fullName, admin.user.email, admin.role?.name ?? "", ...(admin.programs?.map((program) => program.programName) ?? [])]
+          .join(" ")
+          .toLowerCase()
+          .includes(search.trim().toLowerCase());
+
+      const matchesRole = roleFilter === "all" || admin.roleId === roleFilter;
+      const adminStatus: AdminStatus = admin.user.isActive ? "Active" : "Inactive";
+      const matchesStatus = statusFilter === "all" || adminStatus === statusFilter;
+
+      return matchesSearch && matchesRole && matchesStatus;
+    });
+  }, [admins, roleFilter, search, statusFilter]);
+
+  const summaryRows = filteredAdmins.map(adminToRow);
+  const totalAdmins = filteredAdmins.length;
+  const activeAdmins = filteredAdmins.filter((admin) => admin.user.isActive).length;
+  const superAdmins = filteredAdmins.filter((admin) => admin.role?.name === "Super Admin").length;
+  const recentLogins = filteredAdmins.filter((admin) => Boolean(admin.lastLoginAt)).length;
+
+  const openCreateDrawer = () => {
+    setSelectedAdmin(null);
+    setForm({
+      ...defaultFormState,
+      roleId: roles[0]?.id ?? "",
+      programIds: programId ? [programId] : [],
+    });
+    setFormError(null);
+    setDrawerOpen(true);
   };
 
-  const handleConfirmResetPassword = (newPassword: string) => {
-    if (!resetTargetAdmin) return;
-    console.log("Reset password for administrator:", {
-      admin: resetTargetAdmin,
-      newPassword,
-    });
-    setShowResetModal(false);
-    setResetTargetAdmin(null);
+  const openEditDrawer = async (admin: Admin) => {
+    setSaving(true);
+    setFormError(null);
+    try {
+      const detail = await getAdmin(admin.id);
+      setSelectedAdmin(detail);
+      setForm({
+        fullName: detail.fullName,
+        email: detail.user.email,
+        password: "",
+        roleId: detail.roleId ?? "",
+        isActive: detail.user.isActive,
+        programIds: detail.programs?.map((program) => program.programId) ?? [programId],
+      });
+      setDrawerOpen(true);
+    } catch (loadError) {
+      toast.error(loadError instanceof Error ? loadError.message : "Failed to load administrator.");
+    } finally {
+      setSaving(false);
+    }
   };
+
+  const openDetailDrawer = async (admin: Admin) => {
+    try {
+      const detail = await getAdmin(admin.id);
+      setSelectedAdmin(detail);
+      setDetailOpen(true);
+    } catch (loadError) {
+      toast.error(loadError instanceof Error ? loadError.message : "Failed to load administrator.");
+    }
+  };
+
+  const handleSubmit = async () => {
+    setSaving(true);
+    setFormError(null);
+
+    try {
+      if (!form.roleId) {
+        throw new Error("Select a role before saving.");
+      }
+
+      if (form.programIds.length === 0) {
+        throw new Error("Assign at least one program.");
+      }
+
+      if (selectedAdmin) {
+        const payload: UpdateAdminInput = {
+          fullName: form.fullName.trim(),
+          roleId: form.roleId,
+          isActive: form.isActive,
+          programIds: form.programIds,
+        };
+        await updateAdmin(selectedAdmin.id, payload);
+        toast.success("Administrator updated.");
+      } else {
+        if (form.password.trim().length < 8) {
+          throw new Error("Password must be at least 8 characters.");
+        }
+
+        const payload: CreateAdminInput = {
+          fullName: form.fullName.trim(),
+          email: form.email.trim(),
+          password: form.password,
+          roleId: form.roleId,
+          programIds: form.programIds,
+        };
+        await createAdmin(payload);
+        toast.success("Administrator created.");
+      }
+
+      setDrawerOpen(false);
+      setSelectedAdmin(null);
+      setForm(defaultFormState);
+      await loadData();
+    } catch (saveError) {
+      setFormError(saveError instanceof Error ? saveError.message : "Failed to save administrator.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (admin: Admin) => {
+    if (!window.confirm(`Deactivate ${admin.fullName}?`)) {
+      return;
+    }
+
+    try {
+      await deleteAdmin(admin.id);
+      toast.success("Administrator deactivated.");
+      await loadData();
+    } catch (deleteError) {
+      toast.error(deleteError instanceof Error ? deleteError.message : "Failed to deactivate administrator.");
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!selectedAdmin) return;
+
+    setResettingPassword(true);
+    setPasswordError(null);
+
+    try {
+      if (password.trim().length < 8) {
+        throw new Error("Password must be at least 8 characters.");
+      }
+
+      await resetAdminPassword(selectedAdmin.id, password);
+      toast.success("Password reset.");
+      setPassword("");
+      setPasswordOpen(false);
+    } catch (resetError) {
+      setPasswordError(resetError instanceof Error ? resetError.message : "Failed to reset password.");
+    } finally {
+      setResettingPassword(false);
+    }
+  };
+
+  if (!canManageAdmins) {
+    return (
+      <section className="rounded-md border border-zinc-200 bg-white px-5 py-10 text-center text-sm text-zinc-600 shadow-sm">
+        This program role cannot manage administrators.
+      </section>
+    );
+  }
 
   return (
     <main className="space-y-4 text-sm md:text-base">
-      <AdminManagementHeader
-        programName={programName}
-        totalAdmins={totalAdmins}
-        activeAdmins={activeAdmins}
-        superAdmins={superAdmins}
-        recentLogins={recentLogins}
-      />
+      <section className="rounded-md border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 shadow-sm md:px-5 md:py-4 md:text-base">
+        <div className="mb-3 space-y-1">
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-0.5 text-xs font-semibold uppercase tracking-wide text-blue-700">
+            <span>Settings</span>
+          </div>
+          <h1 className="text-base font-semibold text-zinc-900 md:text-lg">Administrator Management</h1>
+          <p className="text-xs text-zinc-500 md:text-sm">
+            Create real program admins, assign roles, reset passwords, and control which programs they can access.
+          </p>
+          <p className="text-[11px] text-zinc-400 md:text-xs">
+            Currently viewing administrators for: <span className="font-medium">{programName}</span>
+          </p>
+        </div>
 
-      <AdminManagementTable
-        admins={filteredAdmins}
-        roleFilter={roleFilter}
-        onChangeRoleFilter={(value) => setRoleFilter(value)}
-        programFilter={programFilter}
-        onChangeProgramFilter={(value) => setProgramFilter(value)}
-        statusFilter={statusFilter}
-        onChangeStatusFilter={(value) => setStatusFilter(value)}
-        search={search}
-        onChangeSearch={(value) => setSearch(value)}
-        allPrograms={allPrograms}
-        onAddAdmin={() => {
-          setEditingAdmin(null);
-          setShowFormModal(true);
+        <div className="grid gap-3 md:grid-cols-4">
+          <SummaryCard label="Total Admins" value={totalAdmins} icon={<UserGroupIcon className="h-5 w-5 text-blue-600" />} tone="blue" />
+          <SummaryCard label="Active Admins" value={activeAdmins} icon={<CheckCircleIcon className="h-5 w-5 text-emerald-600" />} tone="emerald" />
+          <SummaryCard label="Super Admins" value={superAdmins} icon={<KeyIcon className="h-5 w-5 text-amber-600" />} tone="amber" />
+          <SummaryCard label="Recent Logins" value={recentLogins} icon={<ClockIcon className="h-5 w-5 text-purple-600" />} tone="purple" />
+        </div>
+      </section>
+
+      <section className="rounded-md border border-zinc-200 bg-white px-4 py-3 text-xs text-zinc-700 shadow-sm md:px-5 md:py-4 md:text-sm">
+        <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-0.5">
+            <h2 className="text-sm font-semibold text-zinc-900 md:text-base">Program administrators</h2>
+            <p className="text-[11px] text-zinc-500 md:text-xs">
+              This list is live and only shows admins currently assigned to this program.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-600 md:text-sm"
+            onClick={openCreateDrawer}
+          >
+            <PlusIcon className="h-4 w-4" />
+            <span>Add Administrator</span>
+          </button>
+        </div>
+
+        <div className="mb-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_220px]">
+          <div>
+            <label className="mb-1 block text-[11px] font-medium text-zinc-700">Search</label>
+            <input
+              type="text"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search by name, email, role, or program..."
+              className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-[11px] text-zinc-900 shadow-sm outline-none placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 md:text-xs"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[11px] font-medium text-zinc-700">Role</label>
+            <select
+              value={roleFilter}
+              onChange={(event) => setRoleFilter(event.target.value)}
+              className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-[11px] text-zinc-900 shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 md:text-xs"
+            >
+              <option value="all">All roles</option>
+              {roles.map((role) => (
+                <option key={role.id} value={role.id}>
+                  {role.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-[11px] font-medium text-zinc-700">Status</label>
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value as "all" | AdminStatus)}
+              className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-[11px] text-zinc-900 shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 md:text-xs"
+            >
+              <option value="all">All statuses</option>
+              <option value="Active">Active</option>
+              <option value="Inactive">Inactive</option>
+            </select>
+          </div>
+        </div>
+
+        {error ? (
+          <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            {error}
+          </div>
+        ) : null}
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full border-collapse text-left text-[11px] md:text-xs">
+            <thead>
+              <tr className="border-y border-zinc-200 bg-zinc-50 text-[10px] uppercase tracking-wide text-zinc-500">
+                <th className="w-10 px-3 py-2">No.</th>
+                <th className="px-3 py-2">Admin</th>
+                <th className="px-3 py-2">Role</th>
+                <th className="px-3 py-2">Programs</th>
+                <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2">Last Login</th>
+                <th className="px-3 py-2 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="px-3 py-10 text-center text-[11px] text-zinc-500">
+                    Loading administrators...
+                  </td>
+                </tr>
+              ) : summaryRows.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-3 py-10 text-center text-[11px] text-zinc-500">
+                    No administrators found for this program.
+                  </td>
+                </tr>
+              ) : (
+                summaryRows.map((admin, index) => {
+                  const source = filteredAdmins[index];
+                  return (
+                    <tr key={admin.id} className="border-b border-zinc-100 hover:bg-zinc-50">
+                      <td className="px-3 py-2 align-top text-[10px] text-zinc-500">{index + 1}</td>
+                      <td className="px-3 py-2 align-top">
+                        <div className="space-y-0.5">
+                          <div className="text-[11px] font-semibold text-zinc-900 md:text-xs">{admin.name}</div>
+                          <div className="text-[10px] text-zinc-500">{admin.email}</div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 align-top text-[11px] text-zinc-700 md:text-xs">{admin.role}</td>
+                      <td className="px-3 py-2 align-top">
+                        <div className="flex flex-wrap gap-1">
+                          {admin.programs.map((program) => (
+                            <span
+                              key={`${admin.id}-${program}`}
+                              className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700 ring-1 ring-blue-100"
+                            >
+                              {program}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 align-top">
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                            admin.status === "Active"
+                              ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100"
+                              : "bg-zinc-50 text-zinc-600 ring-1 ring-zinc-200"
+                          }`}
+                        >
+                          {admin.status}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 align-top text-[10px] text-zinc-600">{admin.lastLogin}</td>
+                      <td className="px-3 py-2 align-top">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <ActionButton label="View" onClick={() => void openDetailDrawer(source)} tone="blue" />
+                          <ActionButton label="Edit" onClick={() => void openEditDrawer(source)} tone="amber" />
+                          <ActionButton
+                            label="Password"
+                            onClick={() => {
+                              setSelectedAdmin(source);
+                              setPassword("");
+                              setPasswordError(null);
+                              setPasswordOpen(true);
+                            }}
+                            tone="purple"
+                          />
+                          <ActionButton label="Deactivate" onClick={() => void handleDelete(source)} tone="rose" />
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <DrawerShell
+        open={drawerOpen}
+        onClose={() => {
+          setDrawerOpen(false);
+          setSelectedAdmin(null);
+          setForm(defaultFormState);
+          setFormError(null);
         }}
-        onViewAdmin={(admin) => {
-          setSelectedAdmin(admin);
-          setShowDetailModal(true);
+        title={selectedAdmin ? "Edit administrator" : "Add administrator"}
+        description={
+          selectedAdmin
+            ? "Update this admin's role, program assignments, and access status."
+            : "Create a real admin account with a password and assign it to one or more programs."
+        }
+        error={formError}
+        locked={saving}
+        footer={
+          <>
+            <button
+              type="button"
+              className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+              onClick={() => setDrawerOpen(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="rounded-md border border-blue-500 bg-blue-500 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-60"
+              onClick={() => void handleSubmit()}
+              disabled={saving}
+            >
+              {saving ? "Saving..." : selectedAdmin ? "Save changes" : "Create administrator"}
+            </button>
+          </>
+        }
+      >
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-zinc-700">Full name</label>
+            <input
+              type="text"
+              value={form.fullName}
+              onChange={(event) => setForm((current) => ({ ...current, fullName: event.target.value }))}
+              className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-zinc-700">Email</label>
+            <input
+              type="email"
+              value={form.email}
+              disabled={Boolean(selectedAdmin)}
+              onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
+              className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-zinc-50"
+            />
+          </div>
+          {!selectedAdmin ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">Password</label>
+              <input
+                type="password"
+                value={form.password}
+                onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
+                placeholder="Minimum 8 characters"
+                className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+          ) : null}
+          <div>
+            <label className="mb-1 block text-sm font-medium text-zinc-700">Role</label>
+            <select
+              value={form.roleId}
+              onChange={(event) => setForm((current) => ({ ...current, roleId: event.target.value }))}
+              className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            >
+              <option value="">Select role</option>
+              {roles.map((role) => (
+                <option key={role.id} value={role.id}>
+                  {role.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium text-zinc-700">Programs</label>
+            <span className="text-xs text-zinc-500">Assign one or more program workspaces.</span>
+          </div>
+          <div className="grid gap-2 md:grid-cols-2">
+            {programOptions.map((program) => {
+              const checked = form.programIds.includes(program.id);
+              return (
+                <label
+                  key={program.id}
+                  className={`flex items-center gap-3 rounded-md border px-3 py-2 text-sm ${
+                    checked ? "border-blue-300 bg-blue-50 text-blue-900" : "border-zinc-200 bg-white text-zinc-700"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() =>
+                      setForm((current) => ({
+                        ...current,
+                        programIds: checked
+                          ? current.programIds.filter((id) => id !== program.id)
+                          : [...current.programIds, program.id],
+                      }))
+                    }
+                  />
+                  <span>{program.name}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+
+        {selectedAdmin ? (
+          <label className="flex items-center gap-2 text-sm font-medium text-zinc-700">
+            <input
+              type="checkbox"
+              checked={form.isActive}
+              onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.checked }))}
+            />
+            Active account
+          </label>
+        ) : null}
+      </DrawerShell>
+
+      <DrawerShell
+        open={detailOpen}
+        onClose={() => {
+          setDetailOpen(false);
+          setSelectedAdmin(null);
         }}
-        onEditAdmin={(admin) => {
-          setEditingAdmin(admin);
-          setShowFormModal(true);
+        title={selectedAdmin?.fullName ?? "Administrator"}
+        description={selectedAdmin?.user.email ?? "Administrator details"}
+        footer={
+          <button
+            type="button"
+            className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+            onClick={() => setDetailOpen(false)}
+          >
+            Close
+          </button>
+        }
+      >
+        {selectedAdmin ? (
+          <div className="grid gap-6 md:grid-cols-2">
+            <DetailBlock label="Role" value={selectedAdmin.role?.name ?? "No Role"} />
+            <DetailBlock label="Status" value={selectedAdmin.user.isActive ? "Active" : "Inactive"} />
+            <DetailBlock label="Last login" value={formatLastLogin(selectedAdmin.lastLoginAt)} />
+            <DetailBlock
+              label="Programs"
+              value={(selectedAdmin.programs?.map((program) => program.programName).join(", ") || "None assigned")}
+            />
+            <DetailBlock
+              label="Brands"
+              value={(selectedAdmin.brands?.map((brand) => brand.brandName).join(", ") || "None assigned")}
+            />
+            <DetailBlock
+              label="Permissions"
+              value={selectedAdmin.role?.permissions?.join(", ") || "No permissions configured"}
+            />
+          </div>
+        ) : null}
+      </DrawerShell>
+
+      <DrawerShell
+        open={passwordOpen}
+        onClose={() => {
+          setPasswordOpen(false);
+          setPassword("");
+          setPasswordError(null);
         }}
-        onResetPassword={(admin) => {
-          setResetTargetAdmin(admin);
-          setShowResetModal(true);
-        }}
-        onDeleteAdmin={(admin) => {
-          console.log("Delete administrator (placeholder):", admin);
-        }}
-      />
-      {showFormModal && (
-        <AdminFormModal
-          isOpen={showFormModal}
-          onClose={() => {
-            setShowFormModal(false);
-            setEditingAdmin(null);
-          }}
-          onSubmit={handleSubmitAdmin}
-          admin={editingAdmin}
-          allPrograms={allPrograms}
-        />
-      )}
-      {showDetailModal && selectedAdmin && (
-        <AdminDetailModal
-          admin={selectedAdmin}
-          onClose={() => {
-            setShowDetailModal(false);
-            setSelectedAdmin(null);
-          }}
-        />
-      )}
-      {showResetModal && resetTargetAdmin && (
-        <AdminResetPasswordModal
-          admin={resetTargetAdmin}
-          onConfirm={handleConfirmResetPassword}
-          onClose={() => {
-            setShowResetModal(false);
-            setResetTargetAdmin(null);
-          }}
-        />
-      )}
+        title="Reset password"
+        description={selectedAdmin ? `Set a new password for ${selectedAdmin.fullName}.` : undefined}
+        error={passwordError}
+        locked={resettingPassword}
+        footer={
+          <>
+            <button
+              type="button"
+              className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+              onClick={() => setPasswordOpen(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="rounded-md border border-blue-500 bg-blue-500 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-60"
+              onClick={() => void handleResetPassword()}
+              disabled={resettingPassword}
+            >
+              {resettingPassword ? "Saving..." : "Reset password"}
+            </button>
+          </>
+        }
+      >
+        <div>
+          <label className="mb-1 block text-sm font-medium text-zinc-700">New password</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="Minimum 8 characters"
+            className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+          />
+        </div>
+      </DrawerShell>
     </main>
   );
 }
 
-type AdminFormModalProps = {
-  isOpen: boolean;
-  onClose: () => void;
-  onSubmit: (payload: Omit<AdminRow, "id"> & { id?: number }) => void;
-  admin: AdminRow | null;
-  allPrograms: string[];
-};
-
-function AdminFormModal({ isOpen, onClose, onSubmit, admin, allPrograms }: AdminFormModalProps) {
-  const isEditMode = Boolean(admin);
-
-  const [name, setName] = useState(() => admin?.name ?? "");
-  const [email, setEmail] = useState(() => admin?.email ?? "");
-  const [role, setRole] = useState<AdminRole>(() => admin?.role ?? "Super Admin");
-  const [status, setStatus] = useState<AdminStatus>(() => admin?.status ?? "Active");
-  const [selectedPrograms, setSelectedPrograms] = useState<string[]>(() => admin?.programs ?? []);
-
-  if (!isOpen) return null;
-
-  const handleSubmit = (event: React.FormEvent) => {
-    event.preventDefault();
-    const programs = selectedPrograms;
-
-    const payload: Omit<AdminRow, "id"> & { id?: number } = {
-      name,
-      email,
-      role,
-      programs,
-      status,
-      lastLogin: admin?.lastLogin ?? "Not logged in yet",
-      id: admin?.id,
-    };
-
-    onSubmit(payload);
-  };
-
-  const handleToggleProgram = (program: string) => {
-    setSelectedPrograms((prev) => {
-      if (prev.includes(program)) {
-        return prev.filter((item) => item !== program);
-      }
-      return [...prev, program];
-    });
-  };
+function SummaryCard({
+  label,
+  value,
+  icon,
+  tone,
+}: {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+  tone: "blue" | "emerald" | "amber" | "purple";
+}) {
+  const toneClass =
+    tone === "blue"
+      ? "bg-blue-100"
+      : tone === "emerald"
+        ? "bg-emerald-100"
+        : tone === "amber"
+          ? "bg-amber-100"
+          : "bg-purple-100";
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-3 md:px-4">
-      <div className="w-full max-w-3xl rounded-md border border-zinc-200 bg-white text-xs text-zinc-700 shadow-lg md:text-sm">
-        <div className="flex items-center justify-between gap-2 border-b border-zinc-200 px-4 py-3">
-          <div>
-            <h3 className="text-sm font-semibold text-zinc-900 md:text-base">
-              {isEditMode ? "Edit Administrator" : "Add Administrator"}
-            </h3>
-            <p className="text-[11px] text-zinc-500">
-              {isEditMode
-                ? "Update the administrator's basic information, role, programs, and status."
-                : "Create a new administrator and assign roles and programs."}
-            </p>
-          </div>
-          <button
-            type="button"
-            className="flex h-7 w-7 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            ×
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4 px-4 py-3">
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-3">
-              <div>
-                <label className="mb-1 block text-[11px] font-medium text-zinc-700">
-                  Full Name <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                  placeholder="e.g., Hilmi Farrel"
-                  required
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-[11px] font-medium text-zinc-700">
-                  Email <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                  placeholder="e.g., admin@ybb.org"
-                  required
-                />
-              </div>
-              <div className="grid gap-2 md:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-[11px] font-medium text-zinc-700">
-                    Role <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    value={role}
-                    onChange={(event) => setRole(event.target.value as AdminRole)}
-                    className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                  >
-                    <option value="Super Admin">Super Admin</option>
-                    <option value="Project Manager">Project Manager</option>
-                    <option value="Tnd">Tnd</option>
-                    <option value="Reviewer">Reviewer</option>
-                    <option value="Ambassador Coordinator">Ambassador Coordinator</option>
-                    <option value="Mentor">Mentor</option>
-                    <option value="News Writer">News Writer</option>
-                    <option value="Digital Marketing">Digital Marketing</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-[11px] font-medium text-zinc-700">
-                    Status <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    value={status}
-                    onChange={(event) => setStatus(event.target.value as AdminStatus)}
-                    className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                  >
-                    <option value="Active">Active</option>
-                    <option value="Inactive">Inactive</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="mb-1 block text-[11px] font-medium text-zinc-700">
-                  Programs <span className="text-rose-500">*</span>
-                </label>
-                <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs">
-                  {allPrograms.map((program) => (
-                    <label
-                      key={program}
-                      className="flex items-center gap-2 py-0.5 text-[11px] text-zinc-700"
-                    >
-                      <input
-                        type="checkbox"
-                        className="h-3.5 w-3.5 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
-                        checked={selectedPrograms.includes(program)}
-                        onChange={() => handleToggleProgram(program)}
-                      />
-                      <span className="line-clamp-1">{program}</span>
-                    </label>
-                  ))}
-                </div>
-                <p className="mt-1 text-[10px] text-zinc-400">
-                  Select one or more programs where this administrator has access.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-2 flex items-center justify-end gap-2 border-t border-zinc-200 bg-zinc-50 px-0 py-2.5">
-            <button
-              type="button"
-              className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-sm hover:bg-zinc-100 md:text-sm"
-              onClick={onClose}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="rounded-md border border-blue-500 bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-600 md:text-sm"
-            >
-              {isEditMode ? "Save Changes" : "Add Administrator"}
-            </button>
-          </div>
-        </form>
+    <div className="flex items-center justify-between gap-3 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2.5">
+      <div>
+        <div className="text-[11px] font-medium text-zinc-500">{label}</div>
+        <div className="text-lg font-semibold text-zinc-900 md:text-xl">{value}</div>
       </div>
+      <div className={`flex h-9 w-9 items-center justify-center rounded-full ${toneClass}`}>{icon}</div>
     </div>
   );
 }
 
-type AdminDetailModalProps = {
-  admin: AdminRow;
-  onClose: () => void;
-};
+function ActionButton({
+  label,
+  onClick,
+  tone,
+}: {
+  label: string;
+  onClick: () => void;
+  tone: "blue" | "amber" | "purple" | "rose";
+}) {
+  const toneClass =
+    tone === "blue"
+      ? "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+      : tone === "amber"
+        ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+        : tone === "purple"
+          ? "border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100"
+          : "border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100";
 
-function AdminDetailModal({ admin, onClose }: AdminDetailModalProps) {
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-3 md:px-4">
-      <div className="w-full max-w-3xl rounded-md border border-zinc-200 bg-white text-xs text-zinc-700 shadow-lg md:text-sm">
-        <div className="flex items-center justify-between gap-2 border-b border-zinc-200 px-4 py-3">
-          <div className="space-y-0.5">
-            <h3 className="text-sm font-semibold text-zinc-900 md:text-base">
-              Administrator Details
-            </h3>
-            <p className="text-[11px] text-zinc-500">
-              Overview of administrator profile, role, and program assignments.
-            </p>
-          </div>
-          <button
-            type="button"
-            className="flex h-7 w-7 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            ×
-          </button>
-        </div>
-
-        <div className="space-y-4 px-4 py-3">
-          <div className="flex items-center gap-3">
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 text-sm font-semibold text-blue-700">
-              {admin.name
-                .split(" ")
-                .map((part) => part.charAt(0))
-                .join("")
-                .slice(0, 2)}
-            </span>
-            <div>
-              <div className="text-sm font-semibold text-zinc-900 md:text-base">
-                {admin.name}
-              </div>
-              <div className="flex items-center gap-1 text-[11px] text-zinc-500 md:text-xs">
-                <EnvelopeIcon className="h-3.5 w-3.5" />
-                <span>{admin.email}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="space-y-1">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
-                Role
-              </div>
-              <span className="inline-flex items-center gap-1 rounded-full bg-zinc-50 px-2 py-0.5 text-[11px] font-medium text-zinc-700 ring-1 ring-zinc-200">
-                <AdjustmentsHorizontalIcon className="h-3.5 w-3.5" />
-                <span>{admin.role}</span>
-              </span>
-            </div>
-            <div className="space-y-1">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
-                Status
-              </div>
-              <span
-                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                  admin.status === "Active"
-                    ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100"
-                    : "bg-zinc-50 text-zinc-600 ring-1 ring-zinc-200"
-                }`}
-              >
-                {admin.status === "Active" ? (
-                  <CheckCircleIcon className="h-3.5 w-3.5" />
-                ) : (
-                  <ClockIcon className="h-3.5 w-3.5" />
-                )}
-                <span>{admin.status}</span>
-              </span>
-            </div>
-            <div className="space-y-1">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
-                Last Login
-              </div>
-              <div className="text-sm font-medium text-zinc-900">{admin.lastLogin}</div>
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
-              Programs
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {admin.programs.map((program) => (
-                <span
-                  key={program}
-                  className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 ring-1 ring-blue-100"
-                >
-                  {program}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-2 flex items-center justify-end gap-2 border-t border-zinc-200 bg-zinc-50 px-0 py-2.5">
-            <button
-              type="button"
-              className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-sm hover:bg-zinc-100 md:text-sm"
-              onClick={onClose}
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <button
+      type="button"
+      className={`rounded-md border px-2.5 py-1 text-[10px] font-semibold shadow-sm ${toneClass}`}
+      onClick={onClick}
+    >
+      {label}
+    </button>
   );
 }
 
-type AdminResetPasswordModalProps = {
-  admin: AdminRow;
-  onConfirm: (newPassword: string) => void;
-  onClose: () => void;
-};
-
-function AdminResetPasswordModal({ admin, onConfirm, onClose }: AdminResetPasswordModalProps) {
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [error, setError] = useState("");
-
-  const handleSubmit = (event: React.FormEvent) => {
-    event.preventDefault();
-    if (newPassword.length < 8) {
-      setError("Password must be at least 8 characters long.");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setError("Passwords do not match.");
-      return;
-    }
-
-    setError("");
-    onConfirm(newPassword);
-  };
-
+function DetailBlock({ label, value }: { label: string; value: string }) {
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-3 md:px-4">
-      <div className="w-full max-w-md rounded-md border border-zinc-200 bg-white text-xs text-zinc-700 shadow-lg md:text-sm">
-        <div className="flex items-center justify-between gap-2 border-b border-zinc-200 px-4 py-3">
-          <div className="space-y-0.5">
-            <h3 className="text-sm font-semibold text-zinc-900 md:text-base">
-              Reset Administrator Password
-            </h3>
-            <p className="text-[11px] text-zinc-500">
-              Confirm to send a password reset instruction to this administrator.
-            </p>
-          </div>
-          <button
-            type="button"
-            className="flex h-7 w-7 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            ×
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4 px-4 py-3">
-          <div className="flex items-start gap-3">
-            <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-purple-50 text-purple-700">
-              <KeyIcon className="h-4 w-4" />
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs text-zinc-700 md:text-sm">
-                Warning: You are about to reset the password for
-                {" "}
-                <span className="font-semibold text-zinc-900">{admin.name}</span>.
-                {" "}
-                The admin will need to use this new password to log in.
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <div>
-              <label className="mb-1 block text-[11px] font-medium text-zinc-700">
-                New Password <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
-                className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-purple-500 focus:ring-2 focus:ring-purple-100"
-                placeholder="At least 8 characters"
-                required
-                minLength={8}
-              />
-              <p className="mt-1 text-[10px] text-zinc-400">
-                Password must be at least 8 characters long.
-              </p>
-            </div>
-            <div>
-              <label className="mb-1 block text-[11px] font-medium text-zinc-700">
-                Confirm Password <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-                className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-purple-500 focus:ring-2 focus:ring-purple-100"
-                required
-              />
-            </div>
-            {error && (
-              <p className="text-[11px] font-medium text-rose-600">{error}</p>
-            )}
-          </div>
-
-          <div className="mt-2 flex items-center justify-end gap-2 border-t border-zinc-200 bg-zinc-50 px-0 py-2.5">
-            <button
-              type="button"
-              className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-sm hover:bg-zinc-100 md:text-sm"
-              onClick={onClose}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="rounded-md border border-purple-500 bg-purple-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-purple-600 md:text-sm"
-            >
-              Confirm Reset
-            </button>
-          </div>
-        </form>
-      </div>
+    <div className="space-y-1">
+      <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{label}</div>
+      <div className="text-sm text-zinc-900">{value}</div>
     </div>
   );
 }

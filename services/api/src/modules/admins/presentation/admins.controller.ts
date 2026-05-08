@@ -22,10 +22,14 @@ import { UpdateAdminDto } from './dto/update-admin.dto';
 import { AuditTrail } from '../../../shared/decorators/audit-trail.decorator';
 import { ChangeType } from '@prisma/client';
 import { SupportAccessService } from '../application/services/support-access.service';
+import { AdminAccessControlService } from '../application/services/admin-access-control.service';
 import {
     CreateSupportImpersonationDto,
     UpdateSupportAccessConfigDto,
 } from './dto/support-access.dto';
+import { ResetAdminPasswordDto } from './dto/reset-admin-password.dto';
+import * as bcrypt from 'bcrypt';
+import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
 
 @ApiTags('admins')
 @Controller('admins')
@@ -40,6 +44,8 @@ export class AdminsController {
         private readonly updateAdminHandler: UpdateAdminHandler,
         private readonly deleteAdminHandler: DeleteAdminHandler,
         private readonly supportAccessService: SupportAccessService,
+        private readonly adminAccessControl: AdminAccessControlService,
+        private readonly prisma: PrismaService,
     ) { }
 
     @Post()
@@ -50,18 +56,18 @@ export class AdminsController {
         @Body() dto: CreateAdminDto,
         @CurrentUser() currentUser: CurrentUserData
     ) {
-        // TODO: Verify if currentUser is Super Admin or has 'manage_admins' permission
-        // For now, assume protected by role check in Guard or simple check here
-
-        if (!currentUser.adminId) throw new UnauthorizedException('Admin access required');
+        await this.adminAccessControl.assertCanManageAdmins(currentUser);
+        const adminId = currentUser.adminId;
+        if (!adminId) throw new UnauthorizedException('Admin access required');
 
         const command = new CreateAdminCommand(
             dto.email,
             dto.fullName,
             dto.password,
-            currentUser.adminId, // Ensure CurrentUserData has adminId (it does from AdminLoginHandler)
+            adminId,
             dto.roleId,
-            dto.brandIds
+            dto.brandIds,
+            dto.programIds,
         );
         return this.createAdminHandler.execute(command);
     }
@@ -75,15 +81,24 @@ export class AdminsController {
         @Query('search') search?: string,
         @Query('roleId') roleId?: string,
         @Query('brandId') brandId?: string,
+        @Query('programId') programId?: string,
+        @CurrentUser() currentUser?: CurrentUserData,
     ) {
-        const query = new GetAdminsQuery(Number(page), Number(limit), search, roleId, brandId);
+        if (currentUser) {
+            await this.adminAccessControl.assertCanManageAdmins(currentUser);
+        }
+        const query = new GetAdminsQuery(Number(page), Number(limit), search, roleId, brandId, programId);
         return this.getAdminsHandler.execute(query);
     }
 
     @Get(':id')
     @ApiOperation({ summary: 'Get Admin Details' })
     @ApiResponse({ status: 200, description: 'Admin details' })
-    async findOne(@Param('id') id: string) {
+    async findOne(
+        @Param('id') id: string,
+        @CurrentUser() currentUser: CurrentUserData,
+    ) {
+        await this.adminAccessControl.assertCanManageAdmins(currentUser);
         const query = new GetAdminQuery(id);
         return this.getAdminHandler.execute(query);
     }
@@ -97,9 +112,45 @@ export class AdminsController {
         @Body() dto: UpdateAdminDto,
         @CurrentUser() currentUser: CurrentUserData
     ) {
-        if (!currentUser.adminId) throw new UnauthorizedException('Admin access required');
-        const command = new UpdateAdminCommand(id, dto, currentUser.adminId);
+        await this.adminAccessControl.assertCanManageAdmins(currentUser);
+        const adminId = currentUser.adminId;
+        if (!adminId) throw new UnauthorizedException('Admin access required');
+        const command = new UpdateAdminCommand(id, dto, adminId);
         return this.updateAdminHandler.execute(command);
+    }
+
+    @Post(':id/reset-password')
+    @ApiOperation({ summary: 'Reset Admin Password' })
+    @ApiResponse({ status: 200, description: 'Admin password reset successfully' })
+    async resetPassword(
+        @Param('id') id: string,
+        @Body() dto: ResetAdminPasswordDto,
+        @CurrentUser() currentUser: CurrentUserData,
+    ) {
+        await this.adminAccessControl.assertCanManageAdmins(currentUser);
+
+        const admin = await this.prisma.admin.findUnique({
+            where: { id },
+            include: {
+                user: {
+                    select: { id: true },
+                },
+            },
+        });
+
+        if (!admin?.user?.id) {
+            throw new UnauthorizedException('Admin access required');
+        }
+
+        await this.prisma.user.update({
+            where: { id: admin.user.id },
+            data: {
+                passwordHash: await bcrypt.hash(dto.password, 10),
+                failedLoginAttempts: 0,
+            },
+        });
+
+        return { message: 'Admin password reset successfully' };
     }
 
     @Delete(':id')
@@ -110,8 +161,10 @@ export class AdminsController {
         @Param('id') id: string,
         @CurrentUser() currentUser: CurrentUserData
     ) {
-        if (!currentUser.adminId) throw new UnauthorizedException('Admin access required');
-        const command = new DeleteAdminCommand(id, currentUser.adminId);
+        await this.adminAccessControl.assertCanManageAdmins(currentUser);
+        const adminId = currentUser.adminId;
+        if (!adminId) throw new UnauthorizedException('Admin access required');
+        const command = new DeleteAdminCommand(id, adminId);
         return this.deleteAdminHandler.execute(command);
     }
 
@@ -119,6 +172,7 @@ export class AdminsController {
     @ApiOperation({ summary: 'Get support access configuration (Super Admin only)' })
     @ApiResponse({ status: 200, description: 'Support access configuration loaded' })
     async getSupportAccessConfig(@CurrentUser() currentUser: CurrentUserData) {
+        if (!currentUser.adminId) throw new UnauthorizedException('Admin access required');
         return this.supportAccessService.getConfig(currentUser);
     }
 
@@ -129,6 +183,7 @@ export class AdminsController {
         @CurrentUser() currentUser: CurrentUserData,
         @Body() dto: UpdateSupportAccessConfigDto,
     ) {
+        if (!currentUser.adminId) throw new UnauthorizedException('Admin access required');
         return this.supportAccessService.updateConfig(currentUser, dto);
     }
 
@@ -141,6 +196,7 @@ export class AdminsController {
         @Ip() ipAddress: string,
         @Req() req: Request,
     ) {
+        if (!currentUser.adminId) throw new UnauthorizedException('Admin access required');
         return this.supportAccessService.createImpersonation(
             currentUser,
             dto,

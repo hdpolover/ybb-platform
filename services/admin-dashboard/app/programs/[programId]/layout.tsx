@@ -7,6 +7,7 @@ import { AdminShell } from "@/src/admin/admin-shell";
 import { ProgramSelect } from "../../components/navbar/ProgramSelect";
 import { AccountMenu } from "../../components/navbar/AccountMenu";
 import { programNavSections } from "@/lib/nav-config";
+import { buildPermissionSet, filterProgramNavSectionsByPermissions } from "@/lib/admin-access";
 
 export default function ProgramLayout({
   params,
@@ -17,20 +18,23 @@ export default function ProgramLayout({
 }) {
   const router = useRouter();
   const { programId } = use(params);
-  const { adminProfile, assignedPrograms, accessConfig, isLoading, isPlatformAdmin } = useAuth();
+  const { adminProfile, accessiblePrograms, accessConfig, isLoading, isPlatformAdmin } = useAuth();
 
-  const isAssignedToCurrentProgram = assignedPrograms.some((p) => p.programId === programId);
+  const isAssignedToCurrentProgram = accessiblePrograms.some((p) => p.programId === programId);
   const hasProgramAccess =
     isPlatformAdmin || isAssignedToCurrentProgram;
-  const canManageSupportTickets = accessConfig.isSuperAdmin || isAssignedToCurrentProgram;
+  const permissionSet = useMemo(
+    () => buildPermissionSet(adminProfile, programId),
+    [adminProfile, programId],
+  );
 
   const scopedProgramNavSections = useMemo(() => {
-    if (canManageSupportTickets) return programNavSections;
-    return programNavSections.map((section) => ({
-      ...section,
-      items: section.items.filter((item) => item.id !== "support-tickets"),
-    }));
-  }, [canManageSupportTickets]);
+    if (accessConfig.isSuperAdmin) {
+      return programNavSections;
+    }
+
+    return filterProgramNavSectionsByPermissions(programNavSections, permissionSet);
+  }, [accessConfig.isSuperAdmin, permissionSet]);
 
   useEffect(() => {
     if (isLoading) return;

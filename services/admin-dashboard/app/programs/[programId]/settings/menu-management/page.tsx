@@ -15,5 +15,5 @@ export default function MenuManagementPage({
     accessiblePrograms.find((program) => program.programId === programId)?.programName ??
     "Selected Program";
 
-  return <MenuManagement programName={programName} />;
+  return <MenuManagement programId={programId} programName={programName} />;
 }
