@@ -6,7 +6,6 @@ import { AdminsController } from './presentation/admins.controller';
 import { AdminRolesController } from './presentation/admin-roles.controller';
 import { SupportAccessController } from './presentation/support-access.controller';
 import { CreateAdminHandler } from './application/commands/handlers/create-admin.handler';
-import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 
 import { GetAdminsHandler } from './application/queries/handlers/get-admins.handler';
 import { GetAdminHandler } from './application/queries/handlers/get-admin.handler';
@@ -41,7 +40,6 @@ import { AuthModule } from '../auth/auth.module';
         DeleteAdminHandler,
         SupportAccessService,
         AdminAccessControlService,
-        PrismaService,
     ],
 })
 export class AdminsModule { }
