@@ -302,8 +302,19 @@ function computeAccessConfig(profile: AdminProfile | null): AdminAccessConfig {
     isSuperAdmin,
     canAccessPlatform,
     canAccessPrograms,
-    canManageAdmins: profile.canManageAdmins || isSuperAdmin,
-    canAssignRoles: profile.canAssignRoles || isSuperAdmin,
+    canManageAdmins:
+      profile.canManageAdmins ||
+      isSuperAdmin ||
+      permissionSet.has("admin.manage") ||
+      permissionSet.has("admin.*") ||
+      permissionSet.has("platform.manage"),
+    canAssignRoles:
+      profile.canAssignRoles ||
+      isSuperAdmin ||
+      permissionSet.has("roles.manage") ||
+      permissionSet.has("admin.manage") ||
+      permissionSet.has("admin.*") ||
+      permissionSet.has("platform.manage"),
   };
 }
 

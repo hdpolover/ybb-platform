@@ -15,5 +15,5 @@ export default function RolesPermissionsSettingsPage({
     accessiblePrograms.find((program) => program.programId === programId)?.programName ??
     "Selected Program";
 
-  return <RolesPermissionsSettings programName={programName} />;
+  return <RolesPermissionsSettings programId={programId} programName={programName} />;
 }

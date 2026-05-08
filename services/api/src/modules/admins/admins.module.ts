@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AdminsController } from './presentation/admins.controller';
+import { AdminRolesController } from './presentation/admin-roles.controller';
 import { SupportAccessController } from './presentation/support-access.controller';
 import { CreateAdminHandler } from './application/commands/handlers/create-admin.handler';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
@@ -12,6 +13,7 @@ import { GetAdminHandler } from './application/queries/handlers/get-admin.handle
 import { UpdateAdminHandler } from './application/commands/handlers/update-admin.handler';
 import { DeleteAdminHandler } from './application/commands/handlers/delete-admin.handler';
 import { SupportAccessService } from './application/services/support-access.service';
+import { AdminAccessControlService } from './application/services/admin-access-control.service';
 
 import { AuthModule } from '../auth/auth.module';
 
@@ -30,7 +32,7 @@ import { AuthModule } from '../auth/auth.module';
             }),
         }),
     ],
-    controllers: [AdminsController, SupportAccessController],
+    controllers: [AdminsController, AdminRolesController, SupportAccessController],
     providers: [
         CreateAdminHandler,
         GetAdminsHandler,
@@ -38,6 +40,8 @@ import { AuthModule } from '../auth/auth.module';
         UpdateAdminHandler,
         DeleteAdminHandler,
         SupportAccessService,
+        AdminAccessControlService,
+        PrismaService,
     ],
 })
 export class AdminsModule { }
