@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { CommandBus } from '@nestjs/cqrs';
 import { ProgramsController } from './programs.controller';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
 
@@ -27,10 +28,15 @@ describe('ProgramsController', () => {
             UpdateProgramBrandingHandler, DeleteProgramHandler, GetParticipantProgressHandler
         ];
 
-        return handlers.map(handler => ({
+        const handlerProviders = handlers.map(handler => ({
             provide: handler,
             useValue: mockExecute
         }));
+
+        return [
+            ...handlerProviders,
+            { provide: CommandBus, useValue: mockExecute },
+        ];
     };
 
     beforeEach(async () => {

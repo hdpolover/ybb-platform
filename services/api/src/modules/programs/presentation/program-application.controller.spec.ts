@@ -84,8 +84,8 @@ describe('ProgramApplicationConfigController', () => {
             const dto = { 
                 programId: 'prog-1',
                 name: 'Standard',
-                price: 100,
-                currency: 'USD',
+                usdPrice: 100,
+                idrPrice: 1500000,
                 description: 'Standard Access',
                 validFrom: new Date().toISOString(),
                 validUntil: new Date().toISOString()

@@ -46,5 +46,6 @@ export class Program {
         public readonly deletedAt: Date | null,
         public readonly brandName?: string | null,
         public readonly theme?: string | null,
+        public readonly paymentInfoHtml?: string | null,
     ) { }
 }

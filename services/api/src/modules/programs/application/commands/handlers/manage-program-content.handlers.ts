@@ -27,6 +27,7 @@ import {
     CreateProgramSubthemeCommand, UpdateProgramSubthemeCommand, DeleteProgramSubthemeCommand,
     CreateDocumentTemplateCommand, UpdateDocumentTemplateCommand, DeleteDocumentTemplateCommand,
     GenerateLOACommand,
+    UpdateProgramPaymentInfoCommand,
 } from '../program-content.commands';
 
 // ─── Shared cache-invalidation helpers ───────────────────────────────────────
@@ -881,9 +882,9 @@ export class CreateProgramPricingTierHandler implements ICommandHandler<CreatePr
         if (command.dto.feeType === 'registration_fee' && command.dto.allowedCategories && command.dto.allowedCategories.length > 0) {
             const existingTiers = await this.repository.findPricingTiersByProgramId(command.dto.programId);
              for (const category of command.dto.allowedCategories) {
-                 const hasConflict = existingTiers.some(tier => 
-                     tier.isActive && 
-                     !tier.deletedAt && 
+                 const hasConflict = existingTiers.some(tier =>
+                     tier.isActive &&
+                     !tier.deletedAt &&
                      tier.feeType === 'registration_fee' &&
                      tier.allowedCategories &&
                      (tier.allowedCategories as unknown as string[]).includes(category)
@@ -894,16 +895,32 @@ export class CreateProgramPricingTierHandler implements ICommandHandler<CreatePr
              }
         }
 
-        const { feeType, allowedCategories, validFrom, validUntil, ...rest } = command.dto;
+        // Defense-in-depth validation on the new canonical price fields
+        // (DTO already validates these; keep checks here in case a caller bypasses the DTO layer).
+        if (typeof command.dto.usdPrice !== 'number' || command.dto.usdPrice <= 0) {
+            throw new BadRequestException('usdPrice must be a positive number');
+        }
+        if (!Number.isInteger(command.dto.idrPrice) || command.dto.idrPrice <= 0) {
+            throw new BadRequestException('idrPrice must be a positive integer');
+        }
+
+        const { feeType, allowedCategories, validFrom, validUntil, price: _legacyPrice, currency: _legacyCurrency, usdPrice, idrPrice, ...rest } = command.dto;
+
+        // Derive transitional legacy fields from the new canonical USD price so any
+        // code path still reading `price`/`currency` sees a coherent value until the
+        // legacy columns are dropped in Phase 5.
         const dto = {
             ...rest,
-            price: new Prisma.Decimal(command.dto.price),
-            feeType: command.dto.feeType ? command.dto.feeType as PricingFeeType : undefined,
-            allowedCategories: command.dto.allowedCategories
-                ? command.dto.allowedCategories.map(c => c as ApplicationCategory)
-                : undefined
+            usdPrice: new Prisma.Decimal(usdPrice),
+            idrPrice: new Prisma.Decimal(idrPrice),
+            price: new Prisma.Decimal(usdPrice),
+            currency: 'USD',
+            feeType: feeType ? feeType as PricingFeeType : undefined,
+            allowedCategories: allowedCategories
+                ? allowedCategories.map(c => c as ApplicationCategory)
+                : undefined,
         };
-        const result = await this.repository.createPricingTier(dto as Partial<ProgramPricingTier>);
+        const result = await this.repository.createPricingTier(dto as unknown as Partial<ProgramPricingTier>);
 
         // Auto-create initial validity period from validFrom/validUntil if provided
         if (validFrom && validUntil) {
@@ -956,17 +973,52 @@ export class UpdateProgramPricingTierHandler implements ICommandHandler<UpdatePr
              }
         }
 
+        // Defense-in-depth validation on the new canonical price fields when present
+        if (command.dto.usdPrice !== undefined) {
+            if (typeof command.dto.usdPrice !== 'number' || command.dto.usdPrice <= 0) {
+                throw new BadRequestException('usdPrice must be a positive number');
+            }
+        }
+        if (command.dto.idrPrice !== undefined) {
+            if (!Number.isInteger(command.dto.idrPrice) || command.dto.idrPrice <= 0) {
+                throw new BadRequestException('idrPrice must be a positive integer');
+            }
+        }
+
         // validFrom/validUntil are not fields on ProgramPricingTier — managed via PricingTierValidityPeriod
-        const { feeType, allowedCategories, validFrom: _vf, validUntil: _vu, ...rest } = command.dto;
-        const dto = {
+        // Drop legacy `price`/`currency` from rest — they are derived from usdPrice when usdPrice changes.
+        const {
+            feeType,
+            allowedCategories,
+            validFrom: _vf,
+            validUntil: _vu,
+            price: _legacyPrice,
+            currency: _legacyCurrency,
+            usdPrice,
+            idrPrice,
+            ...rest
+        } = command.dto;
+
+        const dto: Record<string, unknown> = {
             ...rest,
-            price: command.dto.price ? new Prisma.Decimal(command.dto.price) : undefined,
-            feeType: command.dto.feeType ? command.dto.feeType as PricingFeeType : undefined,
-            allowedCategories: command.dto.allowedCategories
-                ? command.dto.allowedCategories.map(c => c as ApplicationCategory)
-                : undefined
+            feeType: feeType ? feeType as PricingFeeType : undefined,
+            allowedCategories: allowedCategories
+                ? allowedCategories.map(c => c as ApplicationCategory)
+                : undefined,
         };
-        const result = await this.repository.updatePricingTier(command.id, dto as Partial<ProgramPricingTier>);
+
+        // When usdPrice is provided, also sync the legacy `price`/`currency` columns so
+        // any code path still reading them stays consistent until they are dropped.
+        if (usdPrice !== undefined) {
+            dto.usdPrice = new Prisma.Decimal(usdPrice);
+            dto.price = new Prisma.Decimal(usdPrice);
+            dto.currency = 'USD';
+        }
+        if (idrPrice !== undefined) {
+            dto.idrPrice = new Prisma.Decimal(idrPrice);
+        }
+
+        const result = await this.repository.updatePricingTier(command.id, dto as unknown as Partial<ProgramPricingTier>);
         await invalidatePricingTierCachesByProgramId(existingTier.programId, this.prisma, this.cacheService);
         return result;
     }
@@ -1501,5 +1553,30 @@ export class GenerateLOAHandler implements ICommandHandler<GenerateLOACommand> {
 
         await invalidatePortalDocumentCaches(this.cacheService);
         return { generated, failed };
+    }
+}
+
+// --- Program Payment Info Handler ---
+@CommandHandler(UpdateProgramPaymentInfoCommand)
+export class UpdateProgramPaymentInfoHandler implements ICommandHandler<UpdateProgramPaymentInfoCommand> {
+    constructor(
+        @Inject('IProgramRepository') private readonly programRepository: IProgramRepository,
+        private readonly prisma: PrismaService,
+        private readonly cacheService: CacheService,
+    ) {}
+
+    async execute(command: UpdateProgramPaymentInfoCommand): Promise<void> {
+        const program = await this.programRepository.findById(command.programId);
+        if (!program) {
+            throw new NotFoundException(`Program ${command.programId} not found`);
+        }
+
+        // This endpoint replaces the field: undefined or null in the DTO clears the value,
+        // a string sets it. (See controller for the resolution at the API surface.)
+        await this.programRepository.update(command.programId, {
+            paymentInfoHtml: command.dto.paymentInfoHtml ?? null,
+        });
+
+        await invalidatePricingTierCachesByProgramId(command.programId, this.prisma, this.cacheService);
     }
 }

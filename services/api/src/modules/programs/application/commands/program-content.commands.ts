@@ -15,6 +15,7 @@ import {
     CreateProgramParticipationCategoryDto, UpdateProgramParticipationCategoryDto,
     CreateProgramSubthemeDto, UpdateProgramSubthemeDto,
     CreateDocumentTemplateDto, UpdateDocumentTemplateDto,
+    UpdateProgramPaymentInfoDto,
 } from '../../presentation/dto/create-update-program-content.dto';
 
 // Timeline
@@ -272,4 +273,13 @@ export class GenerateLOACommand {
         public readonly participantId?: string,
         public readonly bulk?: boolean,
     ) {}
+}
+
+// Program-level payment info
+export class UpdateProgramPaymentInfoCommand {
+    constructor(
+        public readonly programId: string,
+        public readonly dto: UpdateProgramPaymentInfoDto,
+        public readonly userId: string,
+    ) { }
 }
