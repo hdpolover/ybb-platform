@@ -207,13 +207,53 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                 });
             const applicableTierIds = new Set(applicableTiers.map((tier) => tier.id));
 
+            // Build a map of orphan invoices by feeType: invoices whose pricingTier
+            // is no longer in `applicableTiers` (because the tier was deactivated,
+            // deleted, or excluded after a category switch). These still represent
+            // the participant's actual paid/processing state for that fee stage and
+            // must not be shadowed by a fresh "available method" entry for the new
+            // current tier of the same feeType.
+            const orphanInvoicesByFeeType = new Map<string, (typeof application.invoices)[number]>();
+            for (const [tierId, invoice] of latestInvoiceByTier.entries()) {
+                if (applicableTierIds.has(tierId)) {
+                    continue;
+                }
+                const feeType = invoice.pricingTier?.feeType;
+                if (!feeType) {
+                    continue;
+                }
+                const existing = orphanInvoicesByFeeType.get(feeType);
+                if (!existing || invoice.createdAt > existing.createdAt) {
+                    orphanInvoicesByFeeType.set(feeType, invoice);
+                }
+            }
+
             // Visibility rule:
             // - tiers are shown in fee-stage order
             // - stop at the first tier that is unpaid/processing/failed/cancelled
             // - do not show future tiers before their start date
+            // - when a previous-tier orphan invoice covers the same feeType, treat
+            //   the stage as covered by that orphan (no duplicate available-method
+            //   row, and future stages stay locked unless the orphan is paid).
             const visibleTierIds = new Set<string>();
             for (const tier of applicableTiers) {
                 const invoice = latestInvoiceByTier.get(tier.id);
+                const orphanInvoice = !invoice && tier.feeType
+                    ? orphanInvoicesByFeeType.get(tier.feeType)
+                    : undefined;
+
+                if (orphanInvoice) {
+                    // Orphan covers this stage. The orphan invoice surfaces from the
+                    // archived loop below, so we intentionally do not mark this tier
+                    // as visible (would otherwise emit a duplicate available-method
+                    // row).
+                    const orphanStatus = String(orphanInvoice.status).toLowerCase();
+                    if (orphanStatus !== 'paid') {
+                        break;
+                    }
+                    continue;
+                }
+
                 const period = resolveTierPeriod(tier.validityPeriods, invoice?.createdAt ?? now, now);
                 const startDate = period?.startDate;
                 const hasStarted = !startDate || startDate <= now;
@@ -302,8 +342,13 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
             }
 
             // Preserve past invoice records tied to inactive/deleted/out-of-scope tiers.
-            // These records should remain visible in participant history, but no new
-            // payment should be initiated from them.
+            // These records should remain visible in participant history (and in the
+            // outstanding list when still processing/unpaid), but no new payment
+            // should be initiated from them (canPay = false below).
+            //
+            // Note: the visibility loop above suppresses available-method emission
+            // for any currently-applicable tier whose feeType has an orphan invoice
+            // here, so surfacing this orphan does not produce a duplicate stage row.
             for (const [tierId, invoice] of latestInvoiceByTier.entries()) {
                 if (applicableTierIds.has(tierId)) {
                     continue;
@@ -314,9 +359,6 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                 const period = resolveTierPeriod(archivedPeriods, invoice.createdAt, now);
                 const normalizedStatus = String(invoice.status).toLowerCase();
                 const feeType = archivedTier?.feeType ?? undefined;
-                if (feeType === 'registration_fee') {
-                    continue;
-                }
                 const tierOrder = typeof archivedTier?.order === 'number' ? archivedTier.order : 999;
                 const sequenceOrder = getFeeTypePriority(feeType) * 1000 + tierOrder;
 
