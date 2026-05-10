@@ -211,6 +211,15 @@ export class PaymentInvoiceDetailDto {
 
     @ApiPropertyOptional({ description: 'Resolved USD to IDR exchange rate used for payment processing' })
     exchangeRate?: number;
+
+    @ApiPropertyOptional({ description: 'Tier USD price (for gateway display)' })
+    usdPrice?: number;
+
+    @ApiPropertyOptional({ description: 'Tier IDR price (for manual display)' })
+    idrPrice?: number;
+
+    @ApiPropertyOptional({ description: 'Program-level payment info copy (HTML)' })
+    paymentInfoHtml?: string | null;
 }
 
 export class PortalPaymentDetailResponseDto {

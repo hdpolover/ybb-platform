@@ -54,6 +54,7 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
                             select: {
                                 usdInIdr: true,
                                 brandId: true,
+                                paymentInfoHtml: true,
                             },
                         },
                     },
@@ -62,6 +63,10 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
                     select: {
                         name: true,
                         feeType: true,
+                        price: true,
+                        currency: true,
+                        usdPrice: true,
+                        idrPrice: true,
                         validityPeriods: {
                             select: {
                                 startDate: true,
@@ -163,6 +168,20 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
             exchangeRate = resolveUsdInIdrRate({ programRate: brandSettings?.usdInIdr });
         }
 
+        // Resolve tier dual prices with legacy fallback. Mirrors the pattern in
+        // get-portal-payments.handler.ts so portal list and detail stay aligned
+        // until Phase 5 promotes usd_price/idr_price to NOT NULL columns and a
+        // shared helper is extracted.
+        const tier = invoice.pricingTier;
+        const legacyTierPrice = Number(tier.price);
+        const legacyTierCurrency = (tier.currency || '').toUpperCase();
+        const usdPrice = tier.usdPrice !== null && tier.usdPrice !== undefined
+            ? Number(tier.usdPrice)
+            : (legacyTierCurrency === 'USD' ? legacyTierPrice : 0);
+        const idrPrice = tier.idrPrice !== null && tier.idrPrice !== undefined
+            ? Number(tier.idrPrice)
+            : (legacyTierCurrency === 'IDR' ? legacyTierPrice : 0);
+
         const result: PortalPaymentDetailResponseDto = {
             invoice: {
                 id: invoice.id,
@@ -175,6 +194,9 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
                 transactionId: invoice.externalTransactionId ?? undefined,
                 intentId: invoice.externalIntentId ?? undefined,
                 exchangeRate,
+                usdPrice,
+                idrPrice,
+                paymentInfoHtml: invoice.application.program?.paymentInfoHtml ?? null,
             },
             history,
         };
