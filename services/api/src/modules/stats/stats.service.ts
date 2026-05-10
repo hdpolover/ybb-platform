@@ -795,22 +795,25 @@ export class StatsService {
       .sort((a, b) => b[1] - a[1])
       .map(([method, count]) => ({ method, count }));
 
-    // ── Payer countries ───────────────────────────────────────────────────────
-    const countryGroups = this.normalizeCountryGroups(
-      paidInvoices.map((inv) => ({
-        country: this.resolveCountryName(
-          inv.application.participant?.originCountry,
-          inv.application.participant?.nationality,
-        ),
-        count: 1,
-      })),
-    );
-    const totalPaid = paidInvoices.length;
-    const payerCountries = countryGroups.slice(0, 15).map((g) => ({
-      country: g.country,
-      count: g.count,
-      pct: totalPaid > 0 ? Number(((g.count / totalPaid) * 100).toFixed(1)) : 0,
-    }));
+    // ── Countries by payment status ───────────────────────────────────────────
+    const csMap = new Map<string, { paid: number; processing: number; unpaid: number; failed: number }>();
+    for (const inv of invoiceRows) {
+      const country = this.resolveCountryName(
+        inv.application.participant?.originCountry,
+        inv.application.participant?.nationality,
+      );
+      const entry = csMap.get(country) ?? { paid: 0, processing: 0, unpaid: 0, failed: 0 };
+      const s = inv.status.toLowerCase();
+      if (s === 'paid') entry.paid += 1;
+      else if (s === 'processing') entry.processing += 1;
+      else if (s === 'failed') entry.failed += 1;
+      else entry.unpaid += 1;
+      csMap.set(country, entry);
+    }
+    const countriesByStatus = Array.from(csMap.entries())
+      .map(([country, s]) => ({ country, ...s, total: s.paid + s.processing + s.unpaid + s.failed }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 15);
 
     return {
       participants: { funnel, byCategory, byEducation, topInstitutions },
@@ -828,7 +831,7 @@ export class StatsService {
         revenueByMonth,
         byTier,
         byPaymentMethod,
-        payerCountries,
+        countriesByStatus,
       },
     };
   }
