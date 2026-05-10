@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class ProgramTimelineResponseDto {
     @ApiProperty()
@@ -226,12 +226,20 @@ export class ProgramPricingTierResponseDto {
     @ApiProperty({ required: false })
     description?: string;
 
-    @ApiProperty()
-    price: number;
+    // NEW — required dual-pricing fields
+    @ApiProperty({ description: 'Price in USD for automatic gateway payments' })
+    usdPrice: number;
 
-    @ApiProperty()
-    currency: string;
-    
+    @ApiProperty({ description: 'Price in IDR for manual transfer payments' })
+    idrPrice: number;
+
+    // DEPRECATED — kept for transitional clients
+    @ApiPropertyOptional({ deprecated: true })
+    price?: number;
+
+    @ApiPropertyOptional({ deprecated: true })
+    currency?: string;
+
     @ApiProperty({ required: false })
     feeType?: string;
 

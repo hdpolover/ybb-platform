@@ -21,11 +21,20 @@ export class PaymentItemDto {
     @ApiProperty()
     title: string;
 
-    @ApiProperty()
+    @ApiProperty({ description: 'Snapshotted invoice amount (USD or IDR depending on method)' })
     amount: number;
 
     @ApiProperty()
     currency: string;
+
+    @ApiPropertyOptional({ description: 'Tier USD price (for gateway display)' })
+    usdPrice?: number;
+
+    @ApiPropertyOptional({ description: 'Tier IDR price (for manual transfer display)' })
+    idrPrice?: number;
+
+    @ApiPropertyOptional({ description: 'Exchange rate at time of invoice issue (program.usdInIdr snapshot)' })
+    exchangeRate?: number;
 
     @ApiProperty({ enum: ['unpaid', 'processing', 'paid', 'failed', 'due', 'cancelled', 'pending'] })
     status: string;
@@ -68,11 +77,17 @@ export class AvailablePaymentDto {
     @ApiProperty()
     description: string;
 
-    @ApiProperty()
+    @ApiProperty({ description: 'Display amount (currency-dependent)' })
     amount: number;
 
     @ApiProperty()
     currency: string;
+
+    @ApiPropertyOptional({ description: 'Tier USD price (for gateway display)' })
+    usdPrice?: number;
+
+    @ApiPropertyOptional({ description: 'Tier IDR price (for manual transfer display)' })
+    idrPrice?: number;
 
     @ApiProperty()
     type: string;
