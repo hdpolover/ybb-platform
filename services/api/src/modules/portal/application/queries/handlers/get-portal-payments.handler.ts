@@ -20,6 +20,31 @@ function getFeeTypePriority(feeType?: string | null): number {
     return 99;
 }
 
+// Resolve dual prices with the same fallback rule as the program-content
+// repository: prefer the explicit usd/idr columns, otherwise fall back to
+// the legacy `price` only when the legacy currency matches; mismatches
+// return 0 so the gap is visible rather than silently miscomputed.
+// Mirrors `withDualPriceFallback` until Phase 5 makes the columns NOT NULL.
+function resolveTierDualPrices(tier: {
+    price: { toString(): string } | number;
+    currency: string;
+    usdPrice: { toString(): string } | number | null | undefined;
+    idrPrice: { toString(): string } | number | null | undefined;
+}): { usdPrice: number; idrPrice: number } {
+    const legacyPrice = Number(tier.price);
+    const legacyCurrency = (tier.currency || '').toUpperCase();
+    const usdRaw = tier.usdPrice;
+    const idrRaw = tier.idrPrice;
+    return {
+        usdPrice: usdRaw !== null && usdRaw !== undefined
+            ? Number(usdRaw)
+            : (legacyCurrency === 'USD' ? legacyPrice : 0),
+        idrPrice: idrRaw !== null && idrRaw !== undefined
+            ? Number(idrRaw)
+            : (legacyCurrency === 'IDR' ? legacyPrice : 0),
+    };
+}
+
 function resolveTierPeriod(
     periods: Array<{ startDate: Date; endDate: Date }>,
     referenceDate: Date,
@@ -70,6 +95,7 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                         createdAt: true,
                         paymentMethod: true,
                         pricingTierId: true,
+                        exchangeRateSnapshot: true,
                         pricingTier: {
                             select: {
                                 id: true,
@@ -78,6 +104,10 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                                 order: true,
                                 isActive: true,
                                 deletedAt: true,
+                                price: true,
+                                currency: true,
+                                usdPrice: true,
+                                idrPrice: true,
                                 validityPeriods: {
                                     select: {
                                         startDate: true,
@@ -104,6 +134,8 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                                 description: true,
                                 price: true,
                                 currency: true,
+                                usdPrice: true,
+                                idrPrice: true,
                                 feeType: true,
                                 allowedCategories: true,
                                 order: true,
@@ -209,11 +241,17 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
 
                 if (invoice) {
                     const normalizedStatus = String(invoice.status).toLowerCase();
+                    const tierPrices = resolveTierDualPrices(tier);
                     const item: PaymentItemDto = {
                         id: invoice.id,
                         title: tier.name,
                         amount: Number(invoice.amount),
                         currency: invoice.currency,
+                        usdPrice: tierPrices.usdPrice,
+                        idrPrice: tierPrices.idrPrice,
+                        exchangeRate: invoice.exchangeRateSnapshot
+                            ? Number(invoice.exchangeRateSnapshot)
+                            : undefined,
                         status: invoice.status,
                         dueDate: dueDate || undefined,
                         paidAt: invoice.paidAt || undefined,
@@ -239,12 +277,15 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                     continue;
                 }
 
+                const availableTierPrices = resolveTierDualPrices(tier);
                 availableMethods.push({
                     id: tier.id,
                     title: tier.name,
                     description: tier.description || '',
                     amount: Number(tier.price),
                     currency: tier.currency,
+                    usdPrice: availableTierPrices.usdPrice,
+                    idrPrice: availableTierPrices.idrPrice,
                     type: tier.feeType,
                     startDate: startDate || undefined,
                     dueDate: dueDate || undefined,
@@ -272,11 +313,19 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                 const tierOrder = typeof archivedTier?.order === 'number' ? archivedTier.order : 999;
                 const sequenceOrder = getFeeTypePriority(feeType) * 1000 + tierOrder;
 
+                const archivedPrices = archivedTier
+                    ? resolveTierDualPrices(archivedTier)
+                    : { usdPrice: 0, idrPrice: 0 };
                 const item: PaymentItemDto = {
                     id: invoice.id,
                     title: archivedTier?.name ?? 'Archived Payment Option',
                     amount: Number(invoice.amount),
                     currency: invoice.currency,
+                    usdPrice: archivedTier ? archivedPrices.usdPrice : undefined,
+                    idrPrice: archivedTier ? archivedPrices.idrPrice : undefined,
+                    exchangeRate: invoice.exchangeRateSnapshot
+                        ? Number(invoice.exchangeRateSnapshot)
+                        : undefined,
                     status: invoice.status,
                     dueDate: period?.endDate || undefined,
                     paidAt: invoice.paidAt || undefined,
