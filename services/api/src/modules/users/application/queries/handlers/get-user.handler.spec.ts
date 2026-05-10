@@ -4,6 +4,7 @@ import { GetUserHandler } from './get-user.handler';
 import { GetUserQuery } from '../get-user.query';
 import { IUserRepository } from '@core/interfaces/repositories/user.repository.interface';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { NotFoundException } from '@nestjs/common';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { User } from '@core/entities/user.entity';
@@ -22,12 +23,19 @@ describe('GetUserHandler', () => {
         set: jest.fn(),
     };
 
+    const mockPrismaService = {
+        user: {
+            findUnique: jest.fn().mockResolvedValue(null),
+        },
+    };
+
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
             providers: [
                 GetUserHandler,
                 { provide: IUserRepository, useValue: mockUserRepository },
                 { provide: CacheService, useValue: mockCacheService },
+                { provide: PrismaService, useValue: mockPrismaService },
             ],
         }).compile();
 

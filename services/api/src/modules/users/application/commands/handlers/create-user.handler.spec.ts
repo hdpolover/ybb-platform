@@ -4,6 +4,7 @@ import { CreateUserHandler } from './create-user.handler';
 import { CreateUserCommand } from '../create-user.command';
 import { IUserRepository } from '@core/interfaces/repositories/user.repository.interface';
 import { RabbitMQProducerService } from '../../../../../shared/infrastructure/rabbitmq/rabbitmq-producer.service';
+import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
 import { ConflictException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 
@@ -25,12 +26,17 @@ describe('CreateUserHandler', () => {
         emit: jest.fn(),
     };
 
+    const mockCacheService = {
+        invalidateByPattern: jest.fn().mockResolvedValue(undefined),
+    };
+
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
             providers: [
                 CreateUserHandler,
                 { provide: IUserRepository, useValue: mockRepository },
                 { provide: RabbitMQProducerService, useValue: mockRabbitMQ },
+                { provide: CacheService, useValue: mockCacheService },
             ],
         }).compile();
 
