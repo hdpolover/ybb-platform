@@ -1,6 +1,6 @@
-import { IsString, IsNotEmpty, IsOptional, IsDateString, IsNumber, IsBoolean, IsUUID, IsArray, IsEnum, IsIn, IsUrl } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsDateString, IsNumber, IsInt, Min, IsBoolean, IsUUID, IsArray, IsEnum, IsIn, IsUrl } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { FaqCategory } from '@prisma/client';
 
 // Timeline DTOs
@@ -879,15 +879,29 @@ export class CreateProgramPricingTierDto {
     @IsOptional()
     description?: string;
 
-    @ApiProperty()
+    // NEW — both required
+    @ApiProperty({ description: 'Price in USD for automatic gateway payments' })
     @IsNumber()
+    @Min(0.01)
     @IsNotEmpty()
-    price: number;
+    usdPrice: number;
 
-    @ApiProperty()
-    @IsString()
+    @ApiProperty({ description: 'Price in IDR for manual transfer payments (no decimals)' })
+    @IsInt()
+    @Min(1)
     @IsNotEmpty()
-    currency: string;
+    idrPrice: number;
+
+    // DEPRECATED — kept for transitional API compatibility, ignored by handler
+    @ApiPropertyOptional({ deprecated: true })
+    @IsNumber()
+    @IsOptional()
+    price?: number;
+
+    @ApiPropertyOptional({ deprecated: true })
+    @IsString()
+    @IsOptional()
+    currency?: string;
 
     @ApiProperty({ required: false })
     @IsNumber()
@@ -988,12 +1002,26 @@ export class UpdateProgramPricingTierDto {
     @IsOptional()
     description?: string;
 
-    @ApiProperty({ required: false })
+    // NEW
+    @ApiPropertyOptional()
+    @IsNumber()
+    @Min(0.01)
+    @IsOptional()
+    usdPrice?: number;
+
+    @ApiPropertyOptional()
+    @IsInt()
+    @Min(1)
+    @IsOptional()
+    idrPrice?: number;
+
+    // DEPRECATED
+    @ApiPropertyOptional({ deprecated: true })
     @IsNumber()
     @IsOptional()
     price?: number;
 
-    @ApiProperty({ required: false })
+    @ApiPropertyOptional({ deprecated: true })
     @IsString()
     @IsOptional()
     currency?: string;
@@ -1494,4 +1522,12 @@ export class UpdateDocumentTemplateDto {
     @IsBoolean()
     @IsOptional()
     isActive?: boolean;
+}
+
+// Program-level payment info DTO
+export class UpdateProgramPaymentInfoDto {
+    @ApiPropertyOptional({ description: 'Rich-text HTML shown in participant payment-page currency callout' })
+    @IsString()
+    @IsOptional()
+    paymentInfoHtml?: string | null;
 }
