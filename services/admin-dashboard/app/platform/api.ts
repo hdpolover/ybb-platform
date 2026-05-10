@@ -999,6 +999,8 @@ export type PricingTier = {
   description?: string;
   price: number;
   currency: string;
+  usdPrice: number;
+  idrPrice: number;
   feeType?: string;
   allowedCategories?: string[];
   capacity?: number;
@@ -1018,6 +1020,8 @@ type RawPricingTier = Partial<PricingTier> & {
   sold_count?: number;
   is_active?: boolean;
   validity_periods?: RawValidityPeriod[];
+  usd_price?: number;
+  idr_price?: number;
 };
 
 function normalizeValidityPeriod(raw: RawValidityPeriod): ValidityPeriod {
@@ -1032,14 +1036,18 @@ function normalizeValidityPeriod(raw: RawValidityPeriod): ValidityPeriod {
 
 function normalizePricingTier(raw: RawPricingTier): PricingTier {
   const periods = (raw.validityPeriods ?? raw.validity_periods ?? []) as RawValidityPeriod[];
+  const usdPrice = Number(raw.usdPrice ?? raw.usd_price ?? raw.price ?? 0);
+  const idrPrice = Number(raw.idrPrice ?? raw.idr_price ?? 0);
 
   return {
     id: raw.id ?? "",
     programId: raw.programId ?? raw.program_id ?? "",
     name: raw.name ?? "",
     description: raw.description ?? undefined,
-    price: Number(raw.price ?? 0),
+    price: Number(raw.price ?? raw.usdPrice ?? raw.usd_price ?? 0),
     currency: raw.currency ?? "USD",
+    usdPrice,
+    idrPrice,
     feeType: raw.feeType ?? raw.fee_type ?? undefined,
     allowedCategories: raw.allowedCategories ?? raw.allowed_categories ?? undefined,
     capacity: raw.capacity ?? undefined,
