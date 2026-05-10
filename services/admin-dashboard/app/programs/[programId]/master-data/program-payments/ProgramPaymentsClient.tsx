@@ -5,6 +5,7 @@ import { ProgramPaymentsTable } from "@/app/components/programPaymentsMasterData
 import type { PaymentOptionRow } from "@/app/components/programPaymentsMasterData/options/PaymentOptionTable";
 import { getPricingTiers } from "@/app/platform/api";
 import type { PricingTier } from "@/app/platform/api";
+import { getExchangeRate } from "@/src/shared/api-client";
 import { parseApiDate } from "@/lib/utils";
 
 function parseDateLike(value: unknown): Date | null {
@@ -81,6 +82,7 @@ export function ProgramPaymentsClient({
   programName: string;
 }) {
   const [rows, setRows] = useState<PaymentOptionRow[]>([]);
+  const [programUsdInIdr, setProgramUsdInIdr] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [search] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -89,8 +91,14 @@ export function ProgramPaymentsClient({
     setLoading(true);
     setError(null);
     try {
-      const tiers = await getPricingTiers(programId);
+      // Fetch tiers and exchange rate in parallel. Rate is non-blocking — if it
+      // fails, the drawer simply disables auto-fill and the divergence preview.
+      const [tiers, rate] = await Promise.all([
+        getPricingTiers(programId),
+        getExchangeRate(programId).catch(() => null),
+      ]);
       setRows(tiers.map((t, i) => tierToRow(t, i)));
+      setProgramUsdInIdr(rate?.usdInIdr ?? null);
     } catch (err) {
       setRows([]);
       setError(
@@ -149,6 +157,7 @@ export function ProgramPaymentsClient({
             currentSearch={search}
             onRefresh={load}
             programId={programId}
+            programUsdInIdr={programUsdInIdr}
           />
         )}
       </section>
