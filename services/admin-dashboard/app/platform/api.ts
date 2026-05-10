@@ -59,6 +59,7 @@ export type PlatformProgram = {
   registrationOpenDate?: string | null;
   registrationCloseDate?: string | null;
   registrationFee?: number | null;
+  paymentInfoHtml?: string | null;
   isPublished: boolean;
   isActive: boolean;
   status: string;
@@ -951,6 +952,19 @@ export function deletePlatformProgram(programId: string): Promise<void> {
   return request<void>(`/programs/${programId}`, {
     method: "DELETE",
   });
+}
+
+/**
+ * Fetch a single program by ID via the admin-only endpoint, which bypasses the
+ * global soft-delete filter and includes admin-only fields like
+ * `paymentInfoHtml`.
+ *
+ * The endpoint returns a richer shape than the list/create/update endpoints
+ * (e.g. brand object, content fields). The return type here is intentionally
+ * narrow — extend `PlatformProgram` if more fields are needed by callers.
+ */
+export function getPlatformProgramById(programId: string): Promise<PlatformProgram> {
+  return request<PlatformProgram>(`/admin/programs/${programId}`);
 }
 
 /**
