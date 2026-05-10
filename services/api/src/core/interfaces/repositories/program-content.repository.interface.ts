@@ -16,9 +16,18 @@ import {
     ProgramParticipationCategory,
     ProgramSubtheme,
     DocumentTemplate,
+    Prisma,
 } from '@prisma/client';
 
-export type ProgramPricingTierWithPeriods = ProgramPricingTier & { validityPeriods: PricingTierValidityPeriod[] };
+// `usdPrice` and `idrPrice` are nullable on the Prisma model during the
+// dual-pricing rollout, but the repository always applies a read-time
+// fallback (see `withDualPriceFallback`) so consumers can rely on non-null
+// values. Narrow the shape at the interface boundary to reflect that.
+export type ProgramPricingTierWithPeriods = Omit<ProgramPricingTier, 'usdPrice' | 'idrPrice'> & {
+    usdPrice: Prisma.Decimal;
+    idrPrice: Prisma.Decimal;
+    validityPeriods: PricingTierValidityPeriod[];
+};
 
 export interface IProgramContentRepository {
     findTimelineByProgramId(programId: string): Promise<ProgramTimeline[]>;
