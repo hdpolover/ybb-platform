@@ -953,18 +953,27 @@ export function deletePlatformProgram(programId: string): Promise<void> {
   });
 }
 
+/**
+ * Update or clear the rich-text payment info shown to participants on the
+ * payment page. Pass `null` to clear the existing value, or an HTML string
+ * to set it.
+ *
+ * Returns void — the backend acknowledges with `{ message }` only and does
+ * not echo the updated program. Callers that need fresh program state
+ * should refetch via `getPlatformProgramById`.
+ */
 export function updateProgramPaymentInfo(
   programId: string,
   paymentInfoHtml: string | null,
-): Promise<PlatformProgram> {
-  return request<MutationEnvelope<PlatformProgram>>(
+): Promise<void> {
+  return request<{ message: string }>(
     `/programs/${programId}/payment-info`,
     {
       method: "PUT",
       body: JSON.stringify({ paymentInfoHtml }),
     },
-    { unwrapData: true },
-  ).then((payload) => payload.data);
+    { unwrapData: false },
+  ).then(() => undefined);
 }
 
 // ─── Pricing Tiers & Validity Periods ─────────────────────────────────────────
