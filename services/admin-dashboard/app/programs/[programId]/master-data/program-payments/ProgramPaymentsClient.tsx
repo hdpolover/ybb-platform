@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { ExclamationTriangleIcon } from "@heroicons/react/24/outline";
 import { ProgramPaymentsTable } from "@/app/components/programPaymentsMasterData/options/PaymentOptionTable";
 import type { PaymentOptionRow } from "@/app/components/programPaymentsMasterData/options/PaymentOptionTable";
 import {
@@ -12,6 +13,21 @@ import type { PricingTier } from "@/app/platform/api";
 import { getExchangeRate } from "@/src/shared/api-client";
 import { parseApiDate } from "@/lib/utils";
 import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
+
+/**
+ * A tier is "likely backfilled" when its idrPrice exactly matches what the
+ * Phase 1 backfill migration would have produced: round(usdPrice * rate / 1000) * 1000.
+ *
+ * The literal "% 1000 !== 0" check from the plan would yield 0 hits because the
+ * backfill rounds to nearest 1000. Matching the converted value preserves the
+ * banner's intent (flag auto-derived prices for admin review) while staying
+ * accurate against real backfilled data.
+ */
+function isLikelyBackfilled(row: PaymentOptionRow, rate: number | null): boolean {
+  if (!rate || rate <= 0) return false;
+  const expected = Math.round((row.usdPrice * rate) / 1000) * 1000;
+  return row.idrPrice === expected;
+}
 
 const DEFAULT_PAYMENT_INFO_HTML =
   "<p>Although the amount is displayed in USD for gateway payments, payments will be processed in IDR (Indonesian Rupiah).</p>" +
@@ -259,6 +275,12 @@ export function ProgramPaymentsClient({
     );
   });
 
+  const tiersNeedingReview = rows.filter((row) =>
+    isLikelyBackfilled(row, programUsdInIdr),
+  );
+  const needsBackfillReview = tiersNeedingReview.length > 0;
+  const idrFormatter = new Intl.NumberFormat("id-ID");
+
   return (
     <main className="space-y-4">
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
@@ -282,6 +304,35 @@ export function ProgramPaymentsClient({
         initialHtml={paymentInfoHtml}
         onSaved={setPaymentInfoHtml}
       />
+
+      {needsBackfillReview && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <div className="flex items-start gap-3">
+            <ExclamationTriangleIcon className="mt-0.5 h-5 w-5 flex-none text-amber-500" />
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-amber-900">
+                {tiersNeedingReview.length} tier
+                {tiersNeedingReview.length === 1 ? "" : "s"} have auto-generated IDR prices
+              </p>
+              <p className="text-xs text-amber-800">
+                IDR prices were derived from the USD price × exchange rate during the last
+                migration. Review and round each to a clean amount (e.g., Rp 250.000 instead of
+                Rp 263.000).
+              </p>
+              <ul className="mt-1 space-y-0.5 text-xs text-amber-800">
+                {tiersNeedingReview.slice(0, 5).map((tier) => (
+                  <li key={tier._id}>
+                    • {tier.optionName}: Rp {idrFormatter.format(tier.idrPrice)}
+                  </li>
+                ))}
+                {tiersNeedingReview.length > 5 && (
+                  <li className="italic">…and {tiersNeedingReview.length - 5} more</li>
+                )}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
         {error ? (
