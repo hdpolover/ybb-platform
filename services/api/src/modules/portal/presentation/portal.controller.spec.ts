@@ -1,13 +1,20 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PortalController } from './portal.controller';
-import { QueryBus } from '@nestjs/cqrs';
+import { QueryBus, CommandBus } from '@nestjs/cqrs';
+import { ConfigService } from '@nestjs/config';
 import { UnauthorizedException } from '@nestjs/common';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
-import { 
-  GetPortalDashboardQuery, 
-  GetPortalSubmissionsQuery, 
-  GetPortalPaymentsQuery, 
-  GetPortalDocumentsQuery 
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { PortalReceiptService } from '../application/services/portal-receipt.service';
+import { ConfirmPortalPaymentHandler } from '../application/commands/handlers/confirm-portal-payment.handler';
+import { CancelPortalPaymentHandler } from '../application/commands/handlers/cancel-portal-payment.handler';
+import { EnsurePortalPaymentInvoiceHandler } from '../application/commands/handlers/ensure-portal-payment-invoice.handler';
+import { PaymentServiceHttpClient } from '../../payments/infrastructure/services/payment-service-http.client';
+import {
+  GetPortalDashboardQuery,
+  GetPortalSubmissionsQuery,
+  GetPortalPaymentsQuery,
+  GetPortalDocumentsQuery
 } from '../application/queries/portal-queries';
 
 describe('PortalController', () => {
@@ -20,12 +27,15 @@ describe('PortalController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [PortalController],
       providers: [
-        {
-          provide: QueryBus,
-          useValue: {
-            execute: jest.fn(),
-          },
-        },
+        { provide: QueryBus, useValue: { execute: jest.fn() } },
+        { provide: CommandBus, useValue: { execute: jest.fn() } },
+        { provide: ConfirmPortalPaymentHandler, useValue: { execute: jest.fn() } },
+        { provide: CancelPortalPaymentHandler, useValue: { execute: jest.fn() } },
+        { provide: EnsurePortalPaymentInvoiceHandler, useValue: { execute: jest.fn() } },
+        { provide: PaymentServiceHttpClient, useValue: { get: jest.fn() } },
+        { provide: ConfigService, useValue: { get: jest.fn() } },
+        { provide: PrismaService, useValue: { applicationInvoice: { findUnique: jest.fn() } } },
+        { provide: PortalReceiptService, useValue: { generate: jest.fn() } },
       ],
     })
     .overrideGuard(JwtAuthGuard)
