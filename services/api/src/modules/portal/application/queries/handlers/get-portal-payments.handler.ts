@@ -6,11 +6,12 @@ import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { PortalCacheService } from '../../services/portal-cache.service';
 import { GetPortalPaymentsQuery } from '../portal-queries';
-import { 
-    PortalPaymentResponseDto, 
+import {
+    PortalPaymentResponseDto,
     PaymentItemDto,
     AvailablePaymentDto
 } from '../../../presentation/dto/portal-payment.dto';
+import { resolveUsdInIdrRate } from '../../utils/resolve-usd-in-idr-rate';
 
 function getFeeTypePriority(feeType?: string | null): number {
     const normalized = String(feeType ?? '').toLowerCase();
@@ -20,11 +21,11 @@ function getFeeTypePriority(feeType?: string | null): number {
     return 99;
 }
 
-// Resolve dual prices with the same fallback rule as the program-content
-// repository: prefer the explicit usd/idr columns, otherwise fall back to
-// the legacy `price` only when the legacy currency matches; mismatches
-// return 0 so the gap is visible rather than silently miscomputed.
-// Mirrors `withDualPriceFallback` until Phase 5 makes the columns NOT NULL.
+// Implements the same defensive fallback policy as `withDualPriceFallback`
+// in `program-content.repository.ts`, with case-insensitive currency matching
+// added here for defense against pre-existing rows where currency casing varies.
+// Both helpers can be removed in Phase 5 once `usd_price`/`idr_price` become
+// NOT NULL columns.
 function resolveTierDualPrices(tier: {
     price: { toString(): string } | number;
     currency: string;
@@ -123,6 +124,7 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                     select: {
                         id: true,
                         currency: true,
+                        usdInIdr: true,
                         pricingTiers: {
                             where: {
                                 isActive: true,
@@ -249,9 +251,10 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                         currency: invoice.currency,
                         usdPrice: tierPrices.usdPrice,
                         idrPrice: tierPrices.idrPrice,
-                        exchangeRate: invoice.exchangeRateSnapshot
-                            ? Number(invoice.exchangeRateSnapshot)
-                            : undefined,
+                        exchangeRate: resolveUsdInIdrRate({
+                            snapshot: invoice.exchangeRateSnapshot,
+                            programRate: application.program?.usdInIdr,
+                        }),
                         status: invoice.status,
                         dueDate: dueDate || undefined,
                         paidAt: invoice.paidAt || undefined,
@@ -286,6 +289,10 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                     currency: tier.currency,
                     usdPrice: availableTierPrices.usdPrice,
                     idrPrice: availableTierPrices.idrPrice,
+                    exchangeRate: resolveUsdInIdrRate({
+                        snapshot: null,
+                        programRate: application.program?.usdInIdr,
+                    }),
                     type: tier.feeType,
                     startDate: startDate || undefined,
                     dueDate: dueDate || undefined,
@@ -323,9 +330,10 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                     currency: invoice.currency,
                     usdPrice: archivedTier ? archivedPrices.usdPrice : undefined,
                     idrPrice: archivedTier ? archivedPrices.idrPrice : undefined,
-                    exchangeRate: invoice.exchangeRateSnapshot
-                        ? Number(invoice.exchangeRateSnapshot)
-                        : undefined,
+                    exchangeRate: resolveUsdInIdrRate({
+                        snapshot: invoice.exchangeRateSnapshot,
+                        programRate: application.program?.usdInIdr,
+                    }),
                     status: invoice.status,
                     dueDate: period?.endDate || undefined,
                     paidAt: invoice.paidAt || undefined,
