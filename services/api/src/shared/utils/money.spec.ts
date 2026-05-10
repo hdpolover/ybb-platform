@@ -1,4 +1,4 @@
-import { roundToNearest, convertUsdToIdr, convertIdrToUsd } from './money.util';
+import { roundToNearest, convertUsdToIdr, convertIdrToUsd } from './money';
 
 describe('money utilities', () => {
   describe('roundToNearest', () => {
