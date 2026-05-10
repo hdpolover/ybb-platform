@@ -34,11 +34,13 @@ export function ProgramPaymentsTable({
   currentSearch,
   onRefresh,
   programId,
+  programUsdInIdr,
 }: {
   data: PaymentOptionRow[];
   currentSearch: string;
   onRefresh?: () => void;
   programId?: string;
+  programUsdInIdr: number | null;
 }) {
   return (
     <div className="space-y-4">
@@ -47,7 +49,7 @@ export function ProgramPaymentsTable({
           <h2 className="text-base font-bold text-zinc-900">Payment Options</h2>
           <p className="text-sm text-zinc-500">Configure payment options, funding types, and their active periods.</p>
         </div>
-        <AddPaymentOptionAction programId={programId} onSaved={onRefresh} />
+        <AddPaymentOptionAction programId={programId} programUsdInIdr={programUsdInIdr} onSaved={onRefresh} />
       </div>
 
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -150,7 +152,7 @@ export function ProgramPaymentsTable({
                   <td className="px-6 py-4 align-top text-right">
                     <div className="inline-flex items-center justify-end gap-2">
                       <ManagePeriodsAction optionId={row._id} />
-                      <EditPaymentOptionAction option={row} onSaved={onRefresh} />
+                      <EditPaymentOptionAction option={row} programUsdInIdr={programUsdInIdr} onSaved={onRefresh} />
                       <DeletePaymentOptionAction id={row._id} onDeleted={onRefresh} />
                     </div>
                   </td>

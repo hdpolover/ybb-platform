@@ -49,6 +49,131 @@ export function PaymentOptionSearch({ initialSearch }: { initialSearch: string }
   );
 }
 
+// DUAL PRICING BLOCK (Internal)
+// Renders the two-input pricing block (USD gateway + IDR manual transfer) with
+// auto-fill from the program exchange rate and a soft >10% divergence warning.
+// The inputs use plain `name` attributes so the parent's FormData submit handler
+// can read them — internal `useState` only powers the live conversion + warning UI.
+function DualPricingBlock({
+  initialUsdPrice,
+  initialIdrPrice,
+  programUsdInIdr,
+}: {
+  initialUsdPrice: number;
+  initialIdrPrice: number;
+  programUsdInIdr: number | null;
+}) {
+  const [usdPrice, setUsdPrice] = useState<number>(initialUsdPrice);
+  const [idrPrice, setIdrPrice] = useState<number>(initialIdrPrice);
+
+  // Re-sync when initial values change (drawer reopens for a different row).
+  useEffect(() => {
+    setUsdPrice(initialUsdPrice);
+    setIdrPrice(initialIdrPrice);
+  }, [initialUsdPrice, initialIdrPrice]);
+
+  const expectedIdr = programUsdInIdr
+    ? Math.round((usdPrice * programUsdInIdr) / 1000) * 1000
+    : 0;
+  const divergencePct =
+    expectedIdr > 0 ? ((idrPrice - expectedIdr) / expectedIdr) * 100 : 0;
+  const showDivergenceWarning =
+    expectedIdr > 0 && idrPrice > 0 && Math.abs(divergencePct) > 10;
+
+  const handleAutoFillIdr = () => {
+    if (programUsdInIdr && usdPrice > 0) setIdrPrice(expectedIdr);
+  };
+
+  return (
+    <div className="space-y-3 rounded-xl border border-zinc-200 p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Pricing</p>
+
+      <div className="grid gap-5 md:grid-cols-2">
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-zinc-500">
+            Gateway price (USD) <span className="text-rose-500">*</span>
+          </label>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-400">$</span>
+            <input
+              name="usdPrice"
+              type="number"
+              step="0.01"
+              min="0.01"
+              value={Number.isFinite(usdPrice) && usdPrice > 0 ? usdPrice : ""}
+              onChange={(e) => setUsdPrice(parseFloat(e.target.value) || 0)}
+              className="block w-full rounded-md border border-zinc-200 bg-white py-2 pl-7 pr-3 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              required
+            />
+          </div>
+          <p className="mt-1 text-xs text-zinc-400">Used for automatic payment gateway</p>
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-zinc-500">
+            Manual transfer (IDR) <span className="text-rose-500">*</span>
+          </label>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-400">Rp</span>
+              <input
+                name="idrPrice"
+                type="number"
+                step="1000"
+                min="1"
+                value={Number.isFinite(idrPrice) && idrPrice > 0 ? idrPrice : ""}
+                onChange={(e) => setIdrPrice(parseInt(e.target.value, 10) || 0)}
+                className="block w-full rounded-md border border-zinc-200 bg-white py-2 pl-9 pr-3 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                required
+              />
+            </div>
+            <button
+              type="button"
+              onClick={handleAutoFillIdr}
+              disabled={!programUsdInIdr || usdPrice <= 0}
+              title="Auto-fill IDR from USD × current exchange rate"
+              aria-label="Auto-fill IDR price from USD price using the current exchange rate"
+              className="rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-600 transition hover:bg-zinc-50 disabled:opacity-40"
+            >
+              ↻
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-zinc-400">Used for manual bank transfer</p>
+        </div>
+      </div>
+
+      {programUsdInIdr ? (
+        <div className="space-y-1 text-xs text-zinc-500">
+          <p>
+            Current exchange rate: 1 USD ={" "}
+            {new Intl.NumberFormat("id-ID").format(programUsdInIdr)} IDR
+          </p>
+          {usdPrice > 0 && idrPrice > 0 && (
+            <p>
+              At this rate, ${usdPrice.toFixed(2)} ≈ Rp{" "}
+              {new Intl.NumberFormat("id-ID").format(expectedIdr)}. You set Rp{" "}
+              {new Intl.NumberFormat("id-ID").format(idrPrice)} (
+              {divergencePct >= 0 ? "+" : ""}
+              {divergencePct.toFixed(1)}%).
+            </p>
+          )}
+        </div>
+      ) : (
+        <p className="text-xs text-amber-600">
+          ⚠ Program exchange rate is not set — auto-fill is disabled.
+        </p>
+      )}
+
+      {showDivergenceWarning && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+          ⓘ Manual price differs from converted USD by{" "}
+          {Math.abs(divergencePct).toFixed(1)}%. Save anyway if intentional.
+        </div>
+      )}
+    </div>
+  );
+}
+
 // FORM DRAWER COMPONENT (Internal)
 function PaymentOptionDrawer({
   isOpen,
@@ -56,12 +181,14 @@ function PaymentOptionDrawer({
   onSaved,
   initialData,
   programId,
+  programUsdInIdr,
 }: {
   isOpen: boolean;
   onClose: () => void;
   onSaved?: () => void;
   initialData?: PaymentOptionRow;
   programId?: string;
+  programUsdInIdr: number | null;
 }) {
   const isEditMode = !!initialData;
   const [saving, setSaving] = useState(false);
@@ -89,8 +216,8 @@ function PaymentOptionDrawer({
     const fd = new FormData(form);
 
     const name = (fd.get("name") as string).trim();
-    const price = parseFloat(fd.get("price") as string);
-    const currency = fd.get("currency") as string;
+    const usdPrice = parseFloat(fd.get("usdPrice") as string);
+    const idrPrice = parseInt(fd.get("idrPrice") as string, 10);
     const feeType = fd.get("feeType") as string;
     const allowedCategoriesRaw = fd.get("allowedCategories") as string;
     const isActive = fd.get("isActive") === "true";
@@ -105,15 +232,24 @@ function PaymentOptionDrawer({
     const requirements = requirementsRaw ? requirementsRaw.split("\n").map((s) => s.trim()).filter(Boolean) : [];
     const descriptionToSave = description.trim();
 
+    if (!Number.isFinite(usdPrice) || usdPrice <= 0) {
+      setError("USD price must be a positive number");
+      return;
+    }
+    if (!Number.isInteger(idrPrice) || idrPrice <= 0) {
+      setError("IDR price must be a positive whole number");
+      return;
+    }
+
     setSaving(true);
     setError(null);
     try {
       const validFromUtc = toUtcIsoFromLocalInput(validFrom);
       const validUntilUtc = toUtcIsoFromLocalInput(validUntil);
 
-        if (isEditMode && initialData) {
-          await updatePricingTier(initialData._id, {
-          name, description: descriptionToSave, price, currency, feeType, allowedCategories, isActive, benefits, requirements,
+      if (isEditMode && initialData) {
+        await updatePricingTier(initialData._id, {
+          name, description: descriptionToSave, usdPrice, idrPrice, feeType, allowedCategories, isActive, benefits, requirements,
           ...(validFromUtc ? { validFrom: validFromUtc } : {}),
           ...(validUntilUtc ? { validUntil: validUntilUtc } : {}),
         });
@@ -121,7 +257,7 @@ function PaymentOptionDrawer({
         if (!programId) throw new Error("Program ID is required");
         if (!validFromUtc || !validUntilUtc) throw new Error("Valid From and Valid Until are required");
         await createPricingTier(programId, {
-          name, description: descriptionToSave, price, currency, feeType, allowedCategories, benefits, requirements, validFrom: validFromUtc, validUntil: validUntilUtc,
+          name, description: descriptionToSave, usdPrice, idrPrice, feeType, allowedCategories, benefits, requirements, validFrom: validFromUtc, validUntil: validUntilUtc,
         });
       }
       onClose();
@@ -179,27 +315,20 @@ function PaymentOptionDrawer({
           </div>
         </div>
 
-        <div className="grid gap-5 md:grid-cols-3">
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Allowed Categories</label>
-            <select name="allowedCategories" defaultValue={allowedCatsValue} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
-              <option value="self_funded,fully_funded">All</option>
-              <option value="self_funded">Self Funded</option>
-              <option value="fully_funded">Fully Funded</option>
-            </select>
-          </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-zinc-500">USD Amount</label>
-            <input name="price" type="number" step="0.01" defaultValue={initialData?.amountUsd} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100" required />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Currency</label>
-            <select name="currency" defaultValue="USD" className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
-              <option value="USD">USD</option>
-              <option value="IDR">IDR</option>
-            </select>
-          </div>
+        <div className="md:w-1/2">
+          <label className="mb-1.5 block text-xs font-medium text-zinc-500">Allowed Categories</label>
+          <select name="allowedCategories" defaultValue={allowedCatsValue} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+            <option value="self_funded,fully_funded">All</option>
+            <option value="self_funded">Self Funded</option>
+            <option value="fully_funded">Fully Funded</option>
+          </select>
         </div>
+
+        <DualPricingBlock
+          initialUsdPrice={initialData?.usdPrice ?? 0}
+          initialIdrPrice={initialData?.idrPrice ?? 0}
+          programUsdInIdr={programUsdInIdr}
+        />
 
         <div>
           <label className="mb-1.5 block text-xs font-medium text-zinc-500">Description</label>
@@ -281,9 +410,11 @@ function PaymentOptionDrawer({
 // EXPORTED ACTION BUTTONS
 export function AddPaymentOptionAction({
   programId,
+  programUsdInIdr,
   onSaved,
 }: {
   programId?: string;
+  programUsdInIdr: number | null;
   onSaved?: () => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -293,7 +424,13 @@ export function AddPaymentOptionAction({
         <PlusIcon className="h-4 w-4" />
         <span>Add Payment Option</span>
       </button>
-      <PaymentOptionDrawer isOpen={isOpen} onClose={() => setIsOpen(false)} onSaved={onSaved} programId={programId} />
+      <PaymentOptionDrawer
+        isOpen={isOpen}
+        onClose={() => setIsOpen(false)}
+        onSaved={onSaved}
+        programId={programId}
+        programUsdInIdr={programUsdInIdr}
+      />
     </>
   );
 }
@@ -316,9 +453,11 @@ export function ManagePeriodsAction({ optionId }: { optionId: string }) {
 
 export function EditPaymentOptionAction({
   option,
+  programUsdInIdr,
   onSaved,
 }: {
   option: PaymentOptionRow;
+  programUsdInIdr: number | null;
   onSaved?: () => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -332,7 +471,13 @@ export function EditPaymentOptionAction({
       >
         <PencilSquareIcon className="h-4 w-4" />
       </button>
-      <PaymentOptionDrawer isOpen={isOpen} onClose={() => setIsOpen(false)} onSaved={onSaved} initialData={option} />
+      <PaymentOptionDrawer
+        isOpen={isOpen}
+        onClose={() => setIsOpen(false)}
+        onSaved={onSaved}
+        initialData={option}
+        programUsdInIdr={programUsdInIdr}
+      />
     </>
   );
 }
