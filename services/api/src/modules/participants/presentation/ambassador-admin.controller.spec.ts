@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AmbassadorAdminController } from './ambassador-admin.controller';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { GetAmbassadorsListQuery, UpdateAmbassadorStatusCommand } from '../application/commands/ambassador-admin.commands';
 
 describe('AmbassadorAdminController', () => {
@@ -12,6 +13,18 @@ describe('AmbassadorAdminController', () => {
 
   const mockCommandBus = { execute: jest.fn() };
   const mockQueryBus = { execute: jest.fn() };
+  const mockPrismaService = {
+    ambassador: {
+      findFirst: jest.fn(),
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+    },
+    ambassadorReferral: { findMany: jest.fn() },
+    program: { findUnique: jest.fn() },
+    user: { findFirst: jest.fn(), create: jest.fn() },
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -19,6 +32,7 @@ describe('AmbassadorAdminController', () => {
       providers: [
         { provide: CommandBus, useValue: mockCommandBus },
         { provide: QueryBus, useValue: mockQueryBus },
+        { provide: PrismaService, useValue: mockPrismaService },
       ],
     })
     .overrideGuard(JwtAuthGuard)
