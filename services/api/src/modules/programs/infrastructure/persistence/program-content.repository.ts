@@ -23,28 +23,19 @@ import {
 import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service';
 import { IProgramContentRepository, ProgramPricingTierWithPeriods } from '../../../../core/interfaces/repositories/program-content.repository.interface';
 
-// Defensive read-time fallback: if a tier row was written before the Phase 3
-// backfill ran (or by a future code path that bypasses DTO validation),
-// substitute non-null dual-pricing values derived from the legacy `price`
-// column so consumers never see NULL `usdPrice`/`idrPrice`.
-//
-// Phase 5 of the dual-pricing rollout enforces NOT NULL at the DB level. Once
-// that lands, this helper becomes unnecessary and can be removed.
-//
-// Note: we do not have the program's exchange rate at read time, so we don't
-// compute a converted IDR value when the legacy currency was USD. We surface
-// `0` in that case to flag the gap to downstream consumers rather than
-// silently misreport the price.
-type DualPriceFields = Pick<ProgramPricingTier, 'price' | 'currency' | 'usdPrice' | 'idrPrice'>;
-type WithDualPrice<T extends DualPriceFields> = Omit<T, 'usdPrice' | 'idrPrice'> & {
-    usdPrice: Prisma.Decimal;
-    idrPrice: Prisma.Decimal;
-};
-
-function withDualPriceFallback<T extends DualPriceFields>(row: T): WithDualPrice<T> {
+// Defensive read-time fallback: if a row was written before backfill ran (or
+// by a code path that didn't set the new fields), substitute a value derived
+// from the legacy `price` column ONLY when the legacy currency matches.
+// For mismatched currencies we surface 0 to flag the gap rather than silently
+// misreport a converted amount we can't compute at read time.
+// Phase 5 enforces NOT NULL at the DB level; once that lands, this helper
+// becomes unnecessary and can be removed.
+function withDualPriceFallback<T extends Pick<ProgramPricingTier, 'price' | 'currency' | 'usdPrice' | 'idrPrice'>>(
+    row: T,
+): Omit<T, 'usdPrice' | 'idrPrice'> & { usdPrice: Prisma.Decimal; idrPrice: Prisma.Decimal } {
     return {
         ...row,
-        usdPrice: row.usdPrice ?? row.price,
+        usdPrice: row.usdPrice ?? (row.currency === 'USD' ? row.price : new Prisma.Decimal(0)),
         idrPrice: row.idrPrice ?? (row.currency === 'IDR' ? row.price : new Prisma.Decimal(0)),
     };
 }
