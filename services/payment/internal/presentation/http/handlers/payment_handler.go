@@ -206,7 +206,7 @@ func (h *PaymentHandler) HandleWebhook(c *gin.Context) {
 	}
 
 	log.Printf("payment_webhook transaction_not_found request_id=%s gateway=%s transaction_id=%s gateway_reference=%s", requestID, gatewayName, updatedData.ID, updatedData.GatewayOrderID)
-	c.JSON(http.StatusNotFound, gin.H{"error": "Order ID not found in payment transactions"})
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "warning": "transaction not found"})
 }
 
 func (h *PaymentHandler) handleTransactionWebhook(c *gin.Context, tx *entities.PaymentTransaction, updatedData *entities.Payment) {
