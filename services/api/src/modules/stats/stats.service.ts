@@ -799,9 +799,9 @@ export class StatsService {
     const csMap = new Map<string, { paid: number; processing: number; unpaid: number; failed: number }>();
     for (const inv of invoiceRows) {
       const country = this.resolveCountryName(
-        inv.application.participant?.originCountry,
-        inv.application.participant?.nationality,
-      );
+        inv.application.participant?.originCountry ?? '',
+        inv.application.participant?.nationality ?? '',
+      ) ?? 'Unknown';
       const entry = csMap.get(country) ?? { paid: 0, processing: 0, unpaid: 0, failed: 0 };
       const s = inv.status.toLowerCase();
       if (s === 'paid') entry.paid += 1;

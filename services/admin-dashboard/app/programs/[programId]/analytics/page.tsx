@@ -557,83 +557,53 @@ function PaymentsTab({ analytics }: { analytics: ProgramAnalytics }) {
         </div>
       </ChartCard>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {/* Payer countries */}
-        <ChartCard title="Payer Countries" sub="Countries of participants who paid">
-          {payerCountries.length === 0 ? (
-            <p className="py-8 text-center text-xs text-zinc-400">No payment data yet.</p>
-          ) : (
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={payerCountries.slice(0, 12)}
-                  layout="vertical"
-                  margin={{ left: 40, right: 10, top: 4 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e5e7eb" />
-                  <XAxis type="number" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                  <YAxis
-                    type="category"
-                    dataKey="country"
-                    tick={{ fontSize: 11 }}
-                    tickLine={false}
-                    axisLine={false}
-                    width={80}
-                  />
-                  <Tooltip
-                    contentStyle={{ fontSize: 11 }}
-                    formatter={(v: number, _: string, props: { payload?: { pct?: number } }) => [
-                      `${v} (${props.payload?.pct ?? 0}%)`,
-                      "Payers",
-                    ]}
-                  />
-                  <Bar dataKey="count" fill="#3b82f6" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </ChartCard>
+      {/* Countries by payment status — stacked */}
+      <ChartCard title="Payments by Country & Status" sub="Invoice breakdown per applicant country — top 15 by volume">
+        {countriesByStatus.length === 0 ? (
+          <p className="py-8 text-center text-xs text-zinc-400">No invoice data yet.</p>
+        ) : (
+          <div style={{ height: `${Math.max(240, countriesByStatus.length * 28 + 60)}px` }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={countriesByStatus} layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e5e7eb" />
+                <XAxis type="number" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} />
+                <YAxis type="category" dataKey="country" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={110} />
+                <Tooltip contentStyle={{ fontSize: 11 }} />
+                <Legend verticalAlign="top" height={28} formatter={(v) => <span className="text-[11px] capitalize text-zinc-600">{v}</span>} />
+                <Bar dataKey="paid" stackId="a" fill="#10b981" name="Paid" />
+                <Bar dataKey="processing" stackId="a" fill="#3b82f6" name="Processing" />
+                <Bar dataKey="unpaid" stackId="a" fill="#a1a1aa" name="Unpaid" />
+                <Bar dataKey="failed" stackId="a" fill="#ef4444" name="Failed" radius={[0, 3, 3, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </ChartCard>
 
-        {/* By payment method */}
-        <ChartCard title="Payment Methods" sub="How participants paid">
-          {byPaymentMethod.length === 0 ? (
-            <p className="py-8 text-center text-xs text-zinc-400">No payment data yet.</p>
-          ) : (
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={byPaymentMethod.map((m) => ({
-                      name: humanizeKey(m.method),
-                      value: m.count,
-                    }))}
-                    dataKey="value"
-                    cx="50%"
-                    cy="45%"
-                    outerRadius={80}
-                    paddingAngle={2}
-                    label={({ value }: { value?: number; name?: string }) => {
-                      const total = byPaymentMethod.reduce((s, m) => s + m.count, 0);
-                      const pct = total ? (((value ?? 0) / total) * 100).toFixed(0) : "0";
-                      return `${pct}%`;
-                    }}
-                    labelLine={false}
-                  >
-                    {byPaymentMethod.map((_, idx) => (
-                      <Cell key={idx} fill={PALETTE[idx % PALETTE.length]} />
-                    ))}
-                  </Pie>
-                  <Legend
-                    verticalAlign="bottom"
-                    height={36}
-                    formatter={(v) => <span className="text-[11px] text-zinc-600">{v}</span>}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </ChartCard>
-      </div>
+      {/* Payment method */}
+      <ChartCard title="Payment Methods" sub="How participants paid">
+        {byPaymentMethod.length === 0 ? (
+          <p className="py-8 text-center text-xs text-zinc-400">No payment data yet.</p>
+        ) : (
+          <div className="h-56">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={byPaymentMethod.map((m) => ({ name: humanizeKey(m.method), value: m.count }))}
+                  dataKey="value" cx="50%" cy="45%" outerRadius={75} paddingAngle={2}
+                  label={({ value }: { value?: number; name?: string }) => {
+                    const total = byPaymentMethod.reduce((s, m) => s + m.count, 0);
+                    return `${total ? (((value ?? 0) / total) * 100).toFixed(0) : 0}%`;
+                  }}
+                  labelLine={false}
+                >
+                  {byPaymentMethod.map((_, idx) => <Cell key={idx} fill={PALETTE[idx % PALETTE.length]} />)}
+                </Pie>
+                <Legend verticalAlign="bottom" height={32} formatter={(v) => <span className="text-[11px] text-zinc-600">{v}</span>} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </ChartCard>
 
       {/* By pricing tier */}
       <ChartCard title="Revenue by Pricing Tier" sub="Paid invoice counts and amounts per tier">
