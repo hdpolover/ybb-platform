@@ -42,6 +42,7 @@ export class EnsurePortalPaymentInvoiceHandler {
                 program: {
                     select: {
                         usdInIdr: true,
+                        brandId: true,
                     },
                 },
             },
@@ -104,9 +105,17 @@ export class EnsurePortalPaymentInvoiceHandler {
             throw new NotFoundException('Payment option amount is invalid');
         }
 
-        const exchangeRateSnapshot = resolveUsdInIdrRate({
+        let exchangeRateSnapshot = resolveUsdInIdrRate({
             programRate: application.program?.usdInIdr,
         });
+
+        if (exchangeRateSnapshot === undefined && tier.currency?.toUpperCase() === 'USD') {
+            const brandSettings = await this.prisma.brandSetting.findFirst({
+                where: { brandId: application.program?.brandId },
+                select: { usdInIdr: true },
+            });
+            exchangeRateSnapshot = resolveUsdInIdrRate({ programRate: brandSettings?.usdInIdr });
+        }
 
         const invoice = await this.prisma.applicationInvoice.create({
             data: {

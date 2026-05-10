@@ -49,6 +49,7 @@ export class ConfirmPortalPaymentHandler {
                                 name: true,
                                 currency: true,
                                 usdInIdr: true,
+                                brandId: true,
                             },
                         },
                         participant: {
@@ -91,10 +92,18 @@ export class ConfirmPortalPaymentHandler {
         // notification consumer because it short-circuits when `data.email` is empty.
         const customerEmail = invoice.application.participant?.user?.email ?? '';
         const customerName = invoice.application.participant?.fullName ?? customerEmail;
-        const exchangeRate = resolveUsdInIdrRate({
+        let exchangeRate = resolveUsdInIdrRate({
             snapshot: invoice.exchangeRateSnapshot,
             programRate: invoice.application.program.usdInIdr,
         });
+
+        if (exchangeRate === undefined && invoice.currency.toUpperCase() === 'USD') {
+            const brandSettings = await this.prisma.brandSetting.findFirst({
+                where: { brandId: invoice.application.program.brandId },
+                select: { usdInIdr: true },
+            });
+            exchangeRate = resolveUsdInIdrRate({ programRate: brandSettings?.usdInIdr });
+        }
 
         // Create a payment intent via the Payment Service
         const intentResponse = await this.paymentClient.createIntent({
