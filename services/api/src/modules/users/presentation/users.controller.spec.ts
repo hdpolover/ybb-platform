@@ -13,6 +13,8 @@ import { MarkNotificationReadHandler } from '../application/commands/handlers/ma
 import { ListUserActivityLogsHandler } from '../application/queries/handlers/list-user-activity-logs.handler';
 import { ListUserSecurityLogsHandler } from '../application/queries/handlers/list-user-security-logs.handler';
 import { CreateDeletionRequestHandler } from '../application/commands/handlers/create-deletion-request.handler';
+import { ActivateUserHandler } from '../application/commands/handlers/activate-user.handler';
+import { DeactivateUserHandler } from '../application/commands/handlers/deactivate-user.handler';
 
 // Commands & Queries
 import { GetUserPreferencesQuery } from '../application/queries/get-user-preferences.query';
@@ -20,12 +22,15 @@ import { UpdateUserPreferencesCommand } from '../application/commands/update-use
 import { ListUserNotificationsQuery } from '../application/queries/list-user-notifications.query';
 import { MarkNotificationReadCommand } from '../application/commands/mark-notification-read.command';
 
+// Shared
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
+
 // Guards
 import { JwtAuthGuard } from '../../auth/infrastructure/guards/jwt-auth.guard';
 
 describe('UsersController', () => {
   let controller: UsersController;
-  
+
   // Mocks
   const mockCreateUserHandler = { execute: jest.fn() };
   const mockGetUserHandler = { execute: jest.fn() };
@@ -37,6 +42,14 @@ describe('UsersController', () => {
   const mockListUserActivityLogsHandler = { execute: jest.fn() };
   const mockListUserSecurityLogsHandler = { execute: jest.fn() };
   const mockCreateDeletionRequestHandler = { execute: jest.fn() };
+  const mockActivateUserHandler = { execute: jest.fn() };
+  const mockDeactivateUserHandler = { execute: jest.fn() };
+  const mockCacheService = {
+    get: jest.fn(),
+    set: jest.fn(),
+    del: jest.fn(),
+    invalidateByPattern: jest.fn(),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -52,6 +65,9 @@ describe('UsersController', () => {
         { provide: ListUserActivityLogsHandler, useValue: mockListUserActivityLogsHandler },
         { provide: ListUserSecurityLogsHandler, useValue: mockListUserSecurityLogsHandler },
         { provide: CreateDeletionRequestHandler, useValue: mockCreateDeletionRequestHandler },
+        { provide: ActivateUserHandler, useValue: mockActivateUserHandler },
+        { provide: DeactivateUserHandler, useValue: mockDeactivateUserHandler },
+        { provide: CacheService, useValue: mockCacheService },
       ],
     })
     .overrideGuard(JwtAuthGuard)
