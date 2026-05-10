@@ -12,6 +12,9 @@ describe('GetPortalDashboardHandler', () => {
         participantApplication: {
             findFirst: jest.fn(),
         },
+        file: {
+            findFirst: jest.fn().mockResolvedValue(null),
+        },
     };
 
     const mockCacheService = {
