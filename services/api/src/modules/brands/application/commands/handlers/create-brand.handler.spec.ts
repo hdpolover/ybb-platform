@@ -5,6 +5,9 @@ import { CreateBrandCommand } from '../create-brand.command';
 import { IBrandRepository } from '@core/interfaces/repositories/brand.repository.interface';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
 import { StorageService } from '../../../../files/application/storage.service';
+import { BrandLogoAssetsService } from '../../services/brand-logo-assets.service';
+import { LandingRevalidationService } from '../../services/landing-revalidation.service';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CreateBrandDto } from '../../../presentation/dto/create-brand.dto';
 import { Brand } from '@core/entities/brand.entity';
 
@@ -17,6 +20,7 @@ describe('CreateBrandHandler', () => {
     const mockBrandRepository = {
         create: jest.fn(),
         update: jest.fn(),
+        getMetadata: jest.fn().mockResolvedValue(null),
     };
 
     const mockActivityLogRepository = {
@@ -27,6 +31,20 @@ describe('CreateBrandHandler', () => {
         uploadFile: jest.fn(),
     };
 
+    const mockBrandLogoAssetsService = {
+        uploadBrandLogoAssets: jest.fn(),
+    };
+
+    const mockLandingRevalidationService = {
+        revalidateForBrand: jest.fn().mockResolvedValue(undefined),
+    };
+
+    const mockPrismaService = {
+        brand: {
+            update: jest.fn().mockResolvedValue(undefined),
+        },
+    };
+
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
             providers: [
@@ -34,6 +52,9 @@ describe('CreateBrandHandler', () => {
                 { provide: 'IBrandRepository', useValue: mockBrandRepository },
                 { provide: IUserActivityLogRepository, useValue: mockActivityLogRepository },
                 { provide: StorageService, useValue: mockStorageService },
+                { provide: BrandLogoAssetsService, useValue: mockBrandLogoAssetsService },
+                { provide: LandingRevalidationService, useValue: mockLandingRevalidationService },
+                { provide: PrismaService, useValue: mockPrismaService },
             ],
         }).compile();
 
@@ -87,32 +108,38 @@ describe('CreateBrandHandler', () => {
         // 1. Create initial brand
         mockBrandRepository.create.mockResolvedValue({ id: 'brand-1', ...dto, slug: 'brand-with-files' });
 
-        // 2. Upload mocks
-        mockStorageService.uploadFile.mockImplementation((file: any) => {
-            if (file === files.logo) return Promise.resolve({ url: 'http://cdn/logo.png' });
-            if (file === files.banner) return Promise.resolve({ url: 'http://cdn/banner.png' });
-            return Promise.resolve({ url: '' });
+        // 2. Logo asset mock (handler delegates logo handling to BrandLogoAssetsService)
+        mockBrandLogoAssetsService.uploadBrandLogoAssets.mockResolvedValue({
+            logoUrl: 'http://cdn/logo.png',
+            logoIconUrl: 'http://cdn/logo-icon.png',
+            metadataPatch: { favicon_url: 'http://cdn/logo-icon.png', apple_icon_url: 'http://cdn/logo-icon.png' },
         });
 
-        // 3. Update mock
-        mockBrandRepository.update.mockResolvedValue({ 
-            id: 'brand-1', 
+        // 3. Banner upload mock (handler still uses StorageService for banner)
+        mockStorageService.uploadFile.mockResolvedValue({ url: 'http://cdn/banner.png' });
+
+        // 4. Update mock
+        mockBrandRepository.update.mockResolvedValue({
+            id: 'brand-1',
             ...dto,
             slug: 'brand-with-files',
             logoUrl: 'http://cdn/logo.png',
-            bannerUrl: 'http://cdn/banner.png'
+            logoIconUrl: 'http://cdn/logo-icon.png',
+            bannerUrl: 'http://cdn/banner.png',
         });
 
         const result = await handler.execute(command);
 
         // Verify Upload Calls
-        expect(mockStorageService.uploadFile).toHaveBeenCalledTimes(2);
-        
+        expect(mockBrandLogoAssetsService.uploadBrandLogoAssets).toHaveBeenCalledTimes(1);
+        expect(mockStorageService.uploadFile).toHaveBeenCalledTimes(1);
+
         // Verify Update Call
-        expect(mockBrandRepository.update).toHaveBeenCalledWith('brand-1', {
+        expect(mockBrandRepository.update).toHaveBeenCalledWith('brand-1', expect.objectContaining({
             logoUrl: 'http://cdn/logo.png',
-            bannerUrl: 'http://cdn/banner.png'
-        });
+            logoIconUrl: 'http://cdn/logo-icon.png',
+            bannerUrl: 'http://cdn/banner.png',
+        }));
 
         expect(result.logoUrl).toBe('http://cdn/logo.png');
     });
