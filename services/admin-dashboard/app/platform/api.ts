@@ -953,6 +953,20 @@ export function deletePlatformProgram(programId: string): Promise<void> {
   });
 }
 
+export function updateProgramPaymentInfo(
+  programId: string,
+  paymentInfoHtml: string | null,
+): Promise<PlatformProgram> {
+  return request<MutationEnvelope<PlatformProgram>>(
+    `/programs/${programId}/payment-info`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ paymentInfoHtml }),
+    },
+    { unwrapData: true },
+  ).then((payload) => payload.data);
+}
+
 // ─── Pricing Tiers & Validity Periods ─────────────────────────────────────────
 
 export type ValidityPeriod = {
@@ -1047,8 +1061,8 @@ export function createPricingTier(
   data: {
     name: string;
     description?: string;
-    price: number;
-    currency: string;
+    usdPrice: number;
+    idrPrice: number;
     feeType?: string;
     allowedCategories?: string[];
     capacity?: number;
@@ -1072,8 +1086,8 @@ export function updatePricingTier(
   data: Partial<{
     name: string;
     description: string;
-    price: number;
-    currency: string;
+    usdPrice: number;
+    idrPrice: number;
     feeType: string;
     allowedCategories: string[];
     capacity: number;
