@@ -53,6 +53,7 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
                         program: {
                             select: {
                                 usdInIdr: true,
+                                brandId: true,
                             },
                         },
                     },
@@ -149,10 +150,18 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
         const periods = invoice.pricingTier.validityPeriods;
         const fallbackLatestPeriod = periods.length > 0 ? periods[periods.length - 1] : undefined;
         const dueDate = periodByInvoiceDate?.endDate ?? nearestActiveOrUpcomingPeriod?.endDate ?? fallbackLatestPeriod?.endDate;
-        const exchangeRate = resolveUsdInIdrRate({
+        let exchangeRate = resolveUsdInIdrRate({
             snapshot: invoice.exchangeRateSnapshot,
             programRate: invoice.application.program?.usdInIdr,
         });
+
+        if (exchangeRate === undefined && invoice.currency.toUpperCase() === 'USD') {
+            const brandSettings = await this.prisma.brandSetting.findFirst({
+                where: { brandId: invoice.application.program?.brandId },
+                select: { usdInIdr: true },
+            });
+            exchangeRate = resolveUsdInIdrRate({ programRate: brandSettings?.usdInIdr });
+        }
 
         const result: PortalPaymentDetailResponseDto = {
             invoice: {
