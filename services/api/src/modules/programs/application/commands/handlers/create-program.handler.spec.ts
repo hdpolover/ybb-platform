@@ -5,6 +5,7 @@ import { CreateProgramCommand } from '../create-program.command';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
 import { CreateProgramDto } from '../../../presentation/dto/create-program.dto';
 import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
+import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
 
 describe('CreateProgramHandler', () => {
     let handler: CreateProgramHandler;
@@ -24,6 +25,12 @@ describe('CreateProgramHandler', () => {
         invalidateByPattern: jest.fn().mockResolvedValue(undefined),
     };
 
+    const mockPrismaService = {
+        brandLandingSnapshot: {
+            deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+        },
+    };
+
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
             providers: [
@@ -31,6 +38,7 @@ describe('CreateProgramHandler', () => {
                 { provide: 'IProgramRepository', useValue: mockProgramRepository },
                 { provide: IUserActivityLogRepository, useValue: mockActivityLogRepository },
                 { provide: CacheService, useValue: mockCacheService },
+                { provide: PrismaService, useValue: mockPrismaService },
             ],
         }).compile();
 

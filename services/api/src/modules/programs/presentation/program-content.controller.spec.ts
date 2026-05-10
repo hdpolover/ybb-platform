@@ -7,6 +7,7 @@ import {
   ListProgramTestimonialsHandler,
   ListProgramFaqsHandler,
   ListProgramResourcesHandler,
+  ListDocumentTemplatesHandler,
 } from '../application/queries/handlers/list-program-content.handlers';
 
 import {
@@ -14,6 +15,8 @@ import {
   CreateProgramTestimonialHandler, UpdateProgramTestimonialHandler, DeleteProgramTestimonialHandler,
   CreateProgramFaqHandler, UpdateProgramFaqHandler, DeleteProgramFaqHandler,
   CreateProgramResourceHandler, UpdateProgramResourceHandler, DeleteProgramResourceHandler,
+  CreateDocumentTemplateHandler, UpdateDocumentTemplateHandler, DeleteDocumentTemplateHandler,
+  GenerateLOAHandler,
 } from '../application/commands/handlers/manage-program-content.handlers';
 
 import { ListProgramGalleryQuery } from '../application/queries/list-program-content.queries';
@@ -29,10 +32,13 @@ describe('ProgramContentController', () => {
     const createMockProviders = () => {
         const handlers = [
             ListProgramGalleryHandler, ListProgramTestimonialsHandler, ListProgramFaqsHandler, ListProgramResourcesHandler,
+            ListDocumentTemplatesHandler,
             CreateProgramGalleryHandler, UpdateProgramGalleryHandler, DeleteProgramGalleryHandler,
             CreateProgramTestimonialHandler, UpdateProgramTestimonialHandler, DeleteProgramTestimonialHandler,
             CreateProgramFaqHandler, UpdateProgramFaqHandler, DeleteProgramFaqHandler,
-            CreateProgramResourceHandler, UpdateProgramResourceHandler, DeleteProgramResourceHandler
+            CreateProgramResourceHandler, UpdateProgramResourceHandler, DeleteProgramResourceHandler,
+            CreateDocumentTemplateHandler, UpdateDocumentTemplateHandler, DeleteDocumentTemplateHandler,
+            GenerateLOAHandler,
         ];
 
         return handlers.map(handler => ({

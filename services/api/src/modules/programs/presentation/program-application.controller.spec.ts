@@ -10,17 +10,21 @@ import {
 
 import {
   ListProgramPricingTiersHandler,
+  GetPricingTierByIdHandler,
   ListProgramRequirementsHandler,
   ListProgramEssaysHandler,
   ListProgramParticipationCategoriesHandler,
+  ListProgramSubthemesHandler,
 } from '../application/queries/handlers/list-program-content.handlers';
 import { GetApplicationFormFieldsHandler } from '../application/queries/handlers/get-application-form-fields.handler';
 
 import {
   CreateProgramPricingTierHandler, UpdateProgramPricingTierHandler, DeleteProgramPricingTierHandler,
+  CreateValidityPeriodHandler, UpdateValidityPeriodHandler, DeleteValidityPeriodHandler,
   CreateProgramRequirementHandler, UpdateProgramRequirementHandler, DeleteProgramRequirementHandler,
-  CreateProgramEssayHandler, UpdateProgramEssayHandler, DeleteProgramEssayHandler,
+  CreateProgramEssayHandler, UpdateProgramEssayHandler, DeleteProgramEssayHandler, UpdateProgramEssayGuidelinesHandler,
   CreateProgramParticipationCategoryHandler, UpdateProgramParticipationCategoryHandler, DeleteProgramParticipationCategoryHandler,
+  CreateProgramSubthemeHandler, UpdateProgramSubthemeHandler, DeleteProgramSubthemeHandler,
 } from '../application/commands/handlers/manage-program-content.handlers';
 import {
   CreateApplicationFormFieldHandler,
@@ -40,15 +44,17 @@ describe('ProgramApplicationConfigController', () => {
     // Function to create providers list
     const createMockProviders = () => {
         const handlers = [
-            ListProgramPricingTiersHandler, ListProgramRequirementsHandler,
-            ListProgramEssaysHandler, ListProgramParticipationCategoriesHandler,
+            ListProgramPricingTiersHandler, GetPricingTierByIdHandler, ListProgramRequirementsHandler,
+            ListProgramEssaysHandler, ListProgramParticipationCategoriesHandler, ListProgramSubthemesHandler,
             GetApplicationFormFieldsHandler,
-            
+
             CreateProgramPricingTierHandler, UpdateProgramPricingTierHandler, DeleteProgramPricingTierHandler,
+            CreateValidityPeriodHandler, UpdateValidityPeriodHandler, DeleteValidityPeriodHandler,
             CreateProgramRequirementHandler, UpdateProgramRequirementHandler, DeleteProgramRequirementHandler,
-            CreateProgramEssayHandler, UpdateProgramEssayHandler, DeleteProgramEssayHandler,
+            CreateProgramEssayHandler, UpdateProgramEssayHandler, DeleteProgramEssayHandler, UpdateProgramEssayGuidelinesHandler,
             CreateProgramParticipationCategoryHandler, UpdateProgramParticipationCategoryHandler, DeleteProgramParticipationCategoryHandler,
-            
+            CreateProgramSubthemeHandler, UpdateProgramSubthemeHandler, DeleteProgramSubthemeHandler,
+
             CreateApplicationFormFieldHandler, UpdateApplicationFormFieldHandler, DeleteApplicationFormFieldHandler
         ];
 
@@ -61,7 +67,10 @@ describe('ProgramApplicationConfigController', () => {
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
             controllers: [ProgramApplicationConfigController],
-            providers: createMockProviders(),
+            providers: [
+                ...createMockProviders(),
+                { provide: 'IProgramRepository', useValue: { findById: jest.fn(), findBySlug: jest.fn() } },
+            ],
         })
         .overrideGuard(JwtAuthGuard)
         .useValue({ canActivate: () => true })
