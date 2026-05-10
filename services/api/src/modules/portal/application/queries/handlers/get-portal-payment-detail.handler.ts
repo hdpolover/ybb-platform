@@ -182,6 +182,21 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
             ? Number(tier.idrPrice)
             : (legacyTierCurrency === 'IDR' ? legacyTierPrice : 0);
 
+        // Surface the participant's submission details inline on the invoice when a
+        // payment is awaiting verification. This avoids forcing the participant to
+        // open the "Payment History" modal to confirm what they submitted.
+        const pendingSubmission = invoiceStatus === 'processing'
+            ? {
+                  accountName: pendingContext.accountName,
+                  sourceName: pendingContext.sourceName,
+                  paymentDate: pendingContext.paymentDate,
+                  proofUrl: pendingContext.proofUrl,
+                  paymentMethod: invoice.paymentMethod ?? undefined,
+                  actionUrl: pendingContext.actionUrl,
+                  submittedAt: invoice.updatedAt.toISOString(),
+              }
+            : undefined;
+
         const result: PortalPaymentDetailResponseDto = {
             invoice: {
                 id: invoice.id,
@@ -197,6 +212,7 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
                 usdPrice,
                 idrPrice,
                 paymentInfoHtml: invoice.application.program?.paymentInfoHtml ?? null,
+                pendingSubmission,
             },
             history,
         };

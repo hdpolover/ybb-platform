@@ -181,6 +181,29 @@ export class PaymentHistoryEntryDto {
     proofUrl?: string;
 }
 
+export class PendingPaymentSubmissionDto {
+    @ApiPropertyOptional({ description: 'Payer-supplied account name on the manual submission' })
+    accountName?: string;
+
+    @ApiPropertyOptional({ description: 'Payer-supplied source name (bank/wallet) on the manual submission' })
+    sourceName?: string;
+
+    @ApiPropertyOptional({ description: 'Date the payer reported making the transfer (ISO string)' })
+    paymentDate?: string;
+
+    @ApiPropertyOptional({ description: 'URL to the uploaded payment proof file' })
+    proofUrl?: string;
+
+    @ApiPropertyOptional({ description: 'Payment method id selected by the payer (e.g. bca, bni)' })
+    paymentMethod?: string;
+
+    @ApiPropertyOptional({ description: 'Gateway action URL to continue a pending gateway payment' })
+    actionUrl?: string;
+
+    @ApiPropertyOptional({ description: 'Timestamp when the manual payment was submitted (ISO string)' })
+    submittedAt?: string;
+}
+
 export class PaymentInvoiceDetailDto {
     @ApiProperty()
     id: string;
@@ -220,6 +243,9 @@ export class PaymentInvoiceDetailDto {
 
     @ApiPropertyOptional({ description: 'Program-level payment info copy (HTML)' })
     paymentInfoHtml?: string | null;
+
+    @ApiPropertyOptional({ description: 'Manual/gateway submission details available while a payment is awaiting verification' })
+    pendingSubmission?: PendingPaymentSubmissionDto;
 }
 
 export class PortalPaymentDetailResponseDto {
