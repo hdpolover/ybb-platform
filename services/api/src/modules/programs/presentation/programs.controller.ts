@@ -1,4 +1,5 @@
 import { Controller, Get, Query, Param, Put, Post, Delete, Body, UseGuards, Request, UseInterceptors, UploadedFiles } from '@nestjs/common';
+import { CommandBus } from '@nestjs/cqrs';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { Request as ExpressRequest } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery, ApiConsumes } from '@nestjs/swagger';
@@ -27,8 +28,10 @@ import { Public } from '../../../shared/decorators/public.decorator';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
 import { AuditTrail } from '../../../shared/decorators/audit-trail.decorator';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
-import { LANDING_BRAND_PATTERNS } from '../../../shared/constants/cache-patterns';
+import { LANDING_BRAND_PATTERNS, PROGRAM_CONTENT_PATTERNS } from '../../../shared/constants/cache-patterns';
 import { ChangeType } from '@prisma/client';
+import { UpdateProgramPaymentInfoDto } from './dto/create-update-program-content.dto';
+import { UpdateProgramPaymentInfoCommand } from '../application/commands/program-content.commands';
 
 interface AuthenticatedRequest extends ExpressRequest {
   user: { id: string; userId: string; email: string; brandId: string };
@@ -75,6 +78,7 @@ export class ProgramsController {
     private readonly updateProgramBrandingHandler: UpdateProgramBrandingHandler,
     private readonly deleteProgramHandler: DeleteProgramHandler,
     private readonly getParticipantProgressHandler: GetParticipantProgressHandler,
+    private readonly commandBus: CommandBus,
   ) { }
 
   @Get()
@@ -163,6 +167,30 @@ export class ProgramsController {
       message: 'Program updated successfully',
       data: this.mapToResponse(program),
     };
+  }
+
+  @Put(':id/payment-info')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Update program payment-info HTML',
+    description:
+      'Replaces the rich-text payment info shown to participants on the payment page. ' +
+      'Send `paymentInfoHtml: "<p>...</p>"` to set, or omit / send `null` to clear.',
+  })
+  @ApiResponse({ status: 200, description: 'Payment info updated successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'Program not found' })
+  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
+  async updatePaymentInfo(
+    @Param('id') id: string,
+    @Body() dto: UpdateProgramPaymentInfoDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    await this.commandBus.execute(
+      new UpdateProgramPaymentInfoCommand(id, dto, req.user.id),
+    );
+    return { message: 'Payment info updated successfully' };
   }
 
   private mapToResponse(program: ProgramLike): ProgramResponseDto {

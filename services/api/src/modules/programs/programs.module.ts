@@ -81,6 +81,7 @@ import {
   CreateProgramSubthemeHandler, UpdateProgramSubthemeHandler, DeleteProgramSubthemeHandler,
   CreateDocumentTemplateHandler, UpdateDocumentTemplateHandler, DeleteDocumentTemplateHandler,
   GenerateLOAHandler,
+  UpdateProgramPaymentInfoHandler,
 } from './application/commands/handlers/manage-program-content.handlers';
 import {
   CreateApplicationFormFieldHandler,
@@ -164,6 +165,7 @@ import { FormFieldKeyValidator } from './application/validators/form-field-key.v
     CreateProgramSubthemeHandler, UpdateProgramSubthemeHandler, DeleteProgramSubthemeHandler,
     CreateDocumentTemplateHandler, UpdateDocumentTemplateHandler, DeleteDocumentTemplateHandler,
     GenerateLOAHandler,
+    UpdateProgramPaymentInfoHandler,
     // Form Field Handlers
     CreateApplicationFormFieldHandler,
     UpdateApplicationFormFieldHandler,

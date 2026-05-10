@@ -146,6 +146,7 @@ export class ProgramRepository implements IProgramRepository {
                 previewChecklistItems: data.previewChecklistItems ?? [],
                 metaTitle: data.metaTitle,
                 metaDescription: data.metaDescription,
+                paymentInfoHtml: data.paymentInfoHtml,
             },
             include: {
                 brand: {
@@ -201,6 +202,7 @@ export class ProgramRepository implements IProgramRepository {
                 previewChecklistItems: data.previewChecklistItems,
                 metaTitle: data.metaTitle,
                 metaDescription: data.metaDescription,
+                paymentInfoHtml: data.paymentInfoHtml,
             },
             include: {
                 brand: {
@@ -269,6 +271,7 @@ export class ProgramRepository implements IProgramRepository {
             prismaEntity.deletedAt,
             (prismaEntity as Record<string, unknown> & { brand?: { name?: string } }).brand?.name ?? null,
             prismaEntity.theme,
+            prismaEntity.paymentInfoHtml ?? null,
         );
     }
 }
