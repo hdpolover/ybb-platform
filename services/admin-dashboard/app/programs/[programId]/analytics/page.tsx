@@ -473,7 +473,7 @@ function ParticipantsTab({
 // ─── Payments tab ─────────────────────────────────────────────────────────────
 
 function PaymentsTab({ analytics }: { analytics: ProgramAnalytics }) {
-  const { kpis, revenueByMonth, byTier, byPaymentMethod, payerCountries } = analytics.payments;
+  const { kpis, revenueByMonth, byTier, byPaymentMethod, countriesByStatus } = analytics.payments;
 
   const revenueChartData = revenueByMonth.map((m) => ({
     ...m,
@@ -725,7 +725,7 @@ export default function AnalyticsPage({
   }, [programId, appliedFilters]);
 
   return (
-    <div className="space-y-6 px-6 py-6">
+    <div className="space-y-6">
       <PageHeader
         title="Analytics"
         description="Centralized insights for participants and payments"

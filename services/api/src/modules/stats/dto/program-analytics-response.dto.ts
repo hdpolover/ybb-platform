@@ -19,6 +19,6 @@ export class ProgramAnalyticsResponseDto {
         revenueByMonth: Array<{ label: string; idr: number; usd: number }>;
         byTier: Array<{ name: string; paidCount: number; totalAmount: number; currency: string }>;
         byPaymentMethod: Array<{ method: string; count: number }>;
-        payerCountries: Array<{ country: string; count: number; pct: number }>;
+        countriesByStatus: Array<{ country: string; paid: number; processing: number; unpaid: number; failed: number; total: number }>;
     };
 }
