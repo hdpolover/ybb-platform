@@ -14,6 +14,7 @@ import { createPricingTier, updatePricingTier, deletePricingTier } from "@/app/p
 import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
 import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
 import { toUtcIsoFromLocalInput } from "@/lib/utils";
+import { convertUsdToIdr } from "@/src/shared/money";
 
 // SEARCH COMPONENT
 export function PaymentOptionSearch({ initialSearch }: { initialSearch: string }) {
@@ -72,9 +73,8 @@ function DualPricingBlock({
     setIdrPrice(initialIdrPrice);
   }, [initialUsdPrice, initialIdrPrice]);
 
-  const expectedIdr = programUsdInIdr
-    ? Math.round((usdPrice * programUsdInIdr) / 1000) * 1000
-    : 0;
+  const expectedIdr =
+    programUsdInIdr && usdPrice > 0 ? convertUsdToIdr(usdPrice, programUsdInIdr) : 0;
   const divergencePct =
     expectedIdr > 0 ? ((idrPrice - expectedIdr) / expectedIdr) * 100 : 0;
   const showDivergenceWarning =
