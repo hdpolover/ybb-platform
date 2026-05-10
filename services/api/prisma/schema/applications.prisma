@@ -9,6 +9,12 @@ model ProgramPricingTier {
   description  String? @db.Text
   price        Decimal @db.Decimal(10, 2)
   currency     String  @default("IDR") @db.VarChar(3)
+
+  // Dual-pricing fields (Phase 1: nullable; promoted to NOT NULL in Phase 5).
+  // `price` + `currency` remain in use until all code paths migrate.
+  usdPrice     Decimal? @map("usd_price") @db.Decimal(10, 2)
+  idrPrice     Decimal? @map("idr_price") @db.Decimal(15, 0)
+
   capacity     Int?    @default(0) // 0 or null = unlimited
   currentCount Int     @default(0) @map("current_count") // Track usage
 
