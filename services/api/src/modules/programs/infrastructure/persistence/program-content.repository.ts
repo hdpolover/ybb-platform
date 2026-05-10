@@ -23,6 +23,32 @@ import {
 import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service';
 import { IProgramContentRepository, ProgramPricingTierWithPeriods } from '../../../../core/interfaces/repositories/program-content.repository.interface';
 
+// Defensive read-time fallback: if a tier row was written before the Phase 3
+// backfill ran (or by a future code path that bypasses DTO validation),
+// substitute non-null dual-pricing values derived from the legacy `price`
+// column so consumers never see NULL `usdPrice`/`idrPrice`.
+//
+// Phase 5 of the dual-pricing rollout enforces NOT NULL at the DB level. Once
+// that lands, this helper becomes unnecessary and can be removed.
+//
+// Note: we do not have the program's exchange rate at read time, so we don't
+// compute a converted IDR value when the legacy currency was USD. We surface
+// `0` in that case to flag the gap to downstream consumers rather than
+// silently misreport the price.
+type DualPriceFields = Pick<ProgramPricingTier, 'price' | 'currency' | 'usdPrice' | 'idrPrice'>;
+type WithDualPrice<T extends DualPriceFields> = Omit<T, 'usdPrice' | 'idrPrice'> & {
+    usdPrice: Prisma.Decimal;
+    idrPrice: Prisma.Decimal;
+};
+
+function withDualPriceFallback<T extends DualPriceFields>(row: T): WithDualPrice<T> {
+    return {
+        ...row,
+        usdPrice: row.usdPrice ?? row.price,
+        idrPrice: row.idrPrice ?? (row.currency === 'IDR' ? row.price : new Prisma.Decimal(0)),
+    };
+}
+
 @Injectable()
 export class ProgramContentRepository implements IProgramContentRepository {
     constructor(private readonly prisma: PrismaService) { }
@@ -93,13 +119,14 @@ export class ProgramContentRepository implements IProgramContentRepository {
     }
 
     async findPricingTiersByProgramId(programId: string): Promise<ProgramPricingTierWithPeriods[]> {
-        return this.prisma.programPricingTier.findMany({
+        const rows = await this.prisma.programPricingTier.findMany({
             where: { programId, isActive: true },
             orderBy: { order: 'asc' },
             include: {
                 validityPeriods: true
             }
         });
+        return rows.map(withDualPriceFallback);
     }
 
     async findRequirementsByProgramId(programId: string): Promise<ProgramRequirement[]> {
@@ -246,7 +273,8 @@ export class ProgramContentRepository implements IProgramContentRepository {
         await this.prisma.programPricingTier.delete({ where: { id } });
     }
     async findPricingTierById(id: string): Promise<ProgramPricingTierWithPeriods | null> {
-        return this.prisma.programPricingTier.findUnique({ where: { id }, include: { validityPeriods: { orderBy: { startDate: 'asc' } } } });
+        const row = await this.prisma.programPricingTier.findUnique({ where: { id }, include: { validityPeriods: { orderBy: { startDate: 'asc' } } } });
+        return row ? withDualPriceFallback(row) : null;
     }
 
     // CRUD for Validity Periods
