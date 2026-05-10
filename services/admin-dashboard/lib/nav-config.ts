@@ -114,6 +114,7 @@ export const programNavSections: NavSection[] = [
     id: "main",
     items: [
       { id: "dashboard", label: "Dashboard", href: "", icon: LayoutDashboard },
+      { id: "analytics", label: "Analytics", href: "analytics", icon: BarChart3 },
     ],
   },
   {

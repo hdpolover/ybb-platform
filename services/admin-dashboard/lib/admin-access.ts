@@ -81,6 +81,7 @@ export const permissionCategories: PermissionCategoryDefinition[] = [
 
 const menuPermissionRules: Record<string, string[]> = {
   dashboard: [],
+  analytics: ["participants:read", "payments:read", "program:read"],
   payments: ["payments:read", "payments:write", "program:write"],
   scoring: ["review:read", "review:write", "applications:read", "applications:write"],
   "scoring-fully-funded": ["review:read", "review:write", "applications:read", "applications:write"],
