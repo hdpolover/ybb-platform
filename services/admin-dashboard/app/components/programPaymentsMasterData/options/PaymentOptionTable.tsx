@@ -13,8 +13,10 @@ export interface PaymentOptionRow {
   optionName: string;
   category: "Registration Fee" | "Program Fee 1" | "Program Fee 2";
   fundingType: "All" | "Self Funded" | "Fully Funded";
+  /** Legacy alias for `usdPrice`. Retained transitionally; Phase 5 cleanup drops this. */
   amountUsd: number;
-  amountIdrApprox: string;
+  usdPrice: number;
+  idrPrice: number;
   currentActivePeriodLabel: string | null;
   currentActivePeriodRange: string | null;
   currentActiveStatusBadge?: "Active Now" | null;
@@ -88,9 +90,17 @@ export function ProgramPaymentsTable({
                   </td>
                   
                   <td className="px-6 py-4 align-top">
-                    <div className="space-y-1">
-                      <div className="text-sm font-semibold text-zinc-900">${row.amountUsd.toFixed(2)}</div>
-                      <div className="text-xs text-zinc-500">{row.amountIdrApprox}</div>
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-1.5 text-sm">
+                        <span className="text-xs uppercase tracking-wide text-zinc-400">Gateway</span>
+                        <span className="font-semibold text-zinc-900">${row.usdPrice.toFixed(2)}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-sm">
+                        <span className="text-xs uppercase tracking-wide text-zinc-400">Manual</span>
+                        <span className="font-semibold text-zinc-900">
+                          Rp {new Intl.NumberFormat("id-ID").format(row.idrPrice)}
+                        </span>
+                      </div>
                     </div>
                   </td>
                   
