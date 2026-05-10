@@ -116,9 +116,10 @@ export class GetApplicationHandler {
             reference_type: 'application',
             reference_id: application.id
         });
-        
-        const successfulPayment = payments.intents.find(i => 
-             i.status === 'SUCCEEDED' 
+
+        const intents = payments?.intents ?? [];
+        const successfulPayment = intents.find(i =>
+             i.status === 'SUCCEEDED'
              && i.metadata?.['payment_category'] === 'registration'
         );
 
@@ -127,8 +128,7 @@ export class GetApplicationHandler {
              dto.paymentId = successfulPayment.id;
              dto.paymentAmount = Number(successfulPayment.amount);
         } else {
-             // Look for pending registration payments to resume
-             const pending = payments.intents.find(i => 
+             const pending = intents.find(i =>
                  ['PENDING', 'REQUIRES_PAYMENT_METHOD'].includes(i.status)
                  && i.metadata?.['payment_category'] === 'registration'
              );
