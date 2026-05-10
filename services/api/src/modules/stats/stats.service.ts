@@ -5,6 +5,7 @@ import { GetStatsQueryDto, StatSection } from './dto/get-stats.dto';
 import { ApplicationStatus, Brand } from '@prisma/client';
 import { StatsResponseDto, ParticipantGeographyItemDto } from './dto/stats-response.dto';
 import { ProgramDashboardResponseDto } from './dto/program-dashboard-response.dto';
+import { ProgramAnalyticsResponseDto } from './dto/program-analytics-response.dto';
 
 import { CacheService } from '../../shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '../../shared/constants/cache-keys';
@@ -599,5 +600,236 @@ export class StatsService {
       age -= 1;
     }
     return age;
+  }
+
+  async getAdminProgramAnalytics(
+    programId: string,
+    filters: {
+      dateFrom?: string;
+      dateTo?: string;
+      payDateFrom?: string;
+      payDateTo?: string;
+      appStatuses?: string[];
+      appCategory?: string;
+      paymentStatuses?: string[];
+      currency?: string;
+    } = {},
+  ): Promise<ProgramAnalyticsResponseDto> {
+    const program = await this.prisma.program.findUnique({ where: { id: programId }, select: { id: true } });
+    if (!program) throw new NotFoundException(`Program ${programId} not found`);
+
+    const MS_DAY = 86399999;
+    const appDateFrom = filters.dateFrom ? new Date(filters.dateFrom) : undefined;
+    const appDateTo = filters.dateTo ? new Date(new Date(filters.dateTo).getTime() + MS_DAY) : undefined;
+    const payDateFrom = filters.payDateFrom ? new Date(filters.payDateFrom) : undefined;
+    const payDateTo = filters.payDateTo ? new Date(new Date(filters.payDateTo).getTime() + MS_DAY) : undefined;
+
+    const [appRows, invoiceRows] = await Promise.all([
+      this.prisma.participantApplication.findMany({
+        where: {
+          programId,
+          deletedAt: null,
+          ...(appDateFrom || appDateTo
+            ? { createdAt: { ...(appDateFrom && { gte: appDateFrom }), ...(appDateTo && { lte: appDateTo }) } }
+            : {}),
+          ...(filters.appStatuses?.length ? { status: { in: filters.appStatuses as ApplicationStatus[] } } : {}),
+          ...(filters.appCategory ? { applicationCategory: filters.appCategory as any } : {}),
+        },
+        select: {
+          id: true,
+          status: true,
+          applicationCategory: true,
+          submittedAt: true,
+          lastEditedAt: true,
+          participant: {
+            select: {
+              educationLevel: true,
+              institution: true,
+              originCountry: true,
+              nationality: true,
+              profileCompletedAt: true,
+            },
+          },
+        },
+      }),
+      this.prisma.applicationInvoice.findMany({
+        where: {
+          application: { programId },
+          ...(payDateFrom || payDateTo
+            ? { paidAt: { ...(payDateFrom && { gte: payDateFrom }), ...(payDateTo && { lte: payDateTo }) } }
+            : {}),
+          ...(filters.paymentStatuses?.length ? { status: { in: filters.paymentStatuses as any[] } } : {}),
+          ...(filters.currency ? { currency: { equals: filters.currency, mode: 'insensitive' } } : {}),
+        },
+        select: {
+          applicationId: true,
+          amount: true,
+          currency: true,
+          status: true,
+          paymentMethod: true,
+          paidAt: true,
+          exchangeRateSnapshot: true,
+          pricingTier: { select: { name: true, feeType: true } },
+          application: {
+            select: {
+              participant: { select: { originCountry: true, nationality: true } },
+            },
+          },
+        },
+      }),
+    ]);
+
+    const total = appRows.length;
+    const pct = (n: number) => (total > 0 ? Number(((n / total) * 100).toFixed(1)) : 0);
+
+    // ── Funnel ────────────────────────────────────────────────────────────────
+    const formsStarted = appRows.filter(
+      (a) => Boolean(a.lastEditedAt) || Boolean(a.participant.profileCompletedAt) || a.status !== 'draft',
+    ).length;
+    const submitted = appRows.filter((a) => Boolean(a.submittedAt) || a.status !== 'draft').length;
+    const accepted = appRows.filter((a) => ['accepted', 'interview_scheduled'].includes(a.status)).length;
+    const paidAppIds = new Set(
+      invoiceRows.filter((i) => i.status === 'paid').map((i) => i.applicationId),
+    );
+    const paid = paidAppIds.size;
+
+    const funnel = [
+      { stage: 'Registered', count: total, pct: 100 },
+      { stage: 'Form Started', count: formsStarted, pct: total > 0 ? Number(((formsStarted / total) * 100).toFixed(1)) : 0 },
+      { stage: 'Submitted', count: submitted, pct: total > 0 ? Number(((submitted / total) * 100).toFixed(1)) : 0 },
+      { stage: 'Accepted', count: accepted, pct: total > 0 ? Number(((accepted / total) * 100).toFixed(1)) : 0 },
+      { stage: 'Paid', count: paid, pct: total > 0 ? Number(((paid / total) * 100).toFixed(1)) : 0 },
+    ];
+
+    // ── Category breakdown ────────────────────────────────────────────────────
+    const catMap = new Map<string, number>();
+    for (const a of appRows) {
+      const cat = a.applicationCategory ?? 'unset';
+      catMap.set(cat, (catMap.get(cat) ?? 0) + 1);
+    }
+    const byCategory = Array.from(catMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([category, count]) => ({ category, count, pct: pct(count) }));
+
+    // ── Education breakdown ───────────────────────────────────────────────────
+    const eduMap = new Map<string, number>();
+    for (const a of appRows) {
+      const lvl = a.participant.educationLevel ?? 'Unknown';
+      eduMap.set(lvl, (eduMap.get(lvl) ?? 0) + 1);
+    }
+    const byEducation = Array.from(eduMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([level, count]) => ({ level, count, pct: pct(count) }));
+
+    // ── Top institutions ──────────────────────────────────────────────────────
+    const instMap = new Map<string, number>();
+    for (const a of appRows) {
+      const inst = a.participant.institution?.trim();
+      if (inst) instMap.set(inst, (instMap.get(inst) ?? 0) + 1);
+    }
+    const topInstitutions = Array.from(instMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([name, count]) => ({ name, count }));
+
+    // ── Payment KPIs ──────────────────────────────────────────────────────────
+    const paidInvoices = invoiceRows.filter((i) => i.status === 'paid');
+    const DEFAULT_RATE = 16000;
+    let totalIdr = 0;
+    let totalUsd = 0;
+    for (const inv of paidInvoices) {
+      const amt = Number(inv.amount);
+      if (inv.currency.toUpperCase() === 'USD') {
+        totalUsd += amt;
+        const rate = inv.exchangeRateSnapshot ? Number(inv.exchangeRateSnapshot) : DEFAULT_RATE;
+        totalIdr += amt * rate;
+      } else {
+        totalIdr += amt;
+      }
+    }
+
+    const submittedCount = appRows.filter((a) => Boolean(a.submittedAt) || a.status !== 'draft').length;
+    const conversionRate = submittedCount > 0 ? Number(((paidInvoices.length / submittedCount) * 100).toFixed(1)) : 0;
+
+    // ── Revenue by month (6 months) ───────────────────────────────────────────
+    const now = new Date();
+    const revenueByMonth = Array.from({ length: 6 }, (_, idx) => {
+      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (5 - idx), 1));
+      const next = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));
+      const label = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' });
+      let idr = 0;
+      let usd = 0;
+      for (const inv of paidInvoices) {
+        if (!inv.paidAt || inv.paidAt < d || inv.paidAt >= next) continue;
+        const amt = Number(inv.amount);
+        if (inv.currency.toUpperCase() === 'USD') {
+          usd += amt;
+          idr += amt * (inv.exchangeRateSnapshot ? Number(inv.exchangeRateSnapshot) : DEFAULT_RATE);
+        } else {
+          idr += amt;
+        }
+      }
+      return { label, idr: Math.round(idr), usd: Number(usd.toFixed(2)) };
+    });
+
+    // ── By tier ───────────────────────────────────────────────────────────────
+    const tierMap = new Map<string, { paidCount: number; totalAmount: number; currency: string }>();
+    for (const inv of paidInvoices) {
+      const key = inv.pricingTier?.name ?? 'Unknown';
+      const existing = tierMap.get(key) ?? { paidCount: 0, totalAmount: 0, currency: inv.currency };
+      existing.paidCount += 1;
+      existing.totalAmount += Number(inv.amount);
+      tierMap.set(key, existing);
+    }
+    const byTier = Array.from(tierMap.entries())
+      .sort((a, b) => b[1].paidCount - a[1].paidCount)
+      .map(([name, v]) => ({ name, ...v }));
+
+    // ── By payment method ─────────────────────────────────────────────────────
+    const methodMap = new Map<string, number>();
+    for (const inv of paidInvoices) {
+      const method = inv.paymentMethod ?? 'unknown';
+      methodMap.set(method, (methodMap.get(method) ?? 0) + 1);
+    }
+    const byPaymentMethod = Array.from(methodMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([method, count]) => ({ method, count }));
+
+    // ── Payer countries ───────────────────────────────────────────────────────
+    const countryGroups = this.normalizeCountryGroups(
+      paidInvoices.map((inv) => ({
+        country: this.resolveCountryName(
+          inv.application.participant?.originCountry,
+          inv.application.participant?.nationality,
+        ),
+        count: 1,
+      })),
+    );
+    const totalPaid = paidInvoices.length;
+    const payerCountries = countryGroups.slice(0, 15).map((g) => ({
+      country: g.country,
+      count: g.count,
+      pct: totalPaid > 0 ? Number(((g.count / totalPaid) * 100).toFixed(1)) : 0,
+    }));
+
+    return {
+      participants: { funnel, byCategory, byEducation, topInstitutions },
+      payments: {
+        kpis: {
+          totalInvoices: invoiceRows.length,
+          paidCount: paidInvoices.length,
+          processingCount: invoiceRows.filter((i) => i.status === 'processing').length,
+          unpaidCount: invoiceRows.filter((i) => i.status === 'unpaid').length,
+          failedCount: invoiceRows.filter((i) => i.status === 'failed').length,
+          totalRevenueIdr: Math.round(totalIdr),
+          totalRevenueUsd: Number(totalUsd.toFixed(2)),
+          conversionRate,
+        },
+        revenueByMonth,
+        byTier,
+        byPaymentMethod,
+        payerCountries,
+      },
+    };
   }
 }

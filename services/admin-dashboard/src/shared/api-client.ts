@@ -904,6 +904,58 @@ export function getProgramDashboardAnalytics(programId: string): Promise<Program
   return request<ProgramDashboardAnalytics>(`/stats/admin/programs/${encodeURIComponent(programId)}/dashboard`);
 }
 
+export type ProgramAnalytics = {
+  participants: {
+    funnel: Array<{ stage: string; count: number; pct: number }>;
+    byCategory: Array<{ category: string; count: number; pct: number }>;
+    byEducation: Array<{ level: string; count: number; pct: number }>;
+    topInstitutions: Array<{ name: string; count: number }>;
+  };
+  payments: {
+    kpis: {
+      totalInvoices: number;
+      paidCount: number;
+      processingCount: number;
+      unpaidCount: number;
+      failedCount: number;
+      totalRevenueIdr: number;
+      totalRevenueUsd: number;
+      conversionRate: number;
+    };
+    revenueByMonth: Array<{ label: string; idr: number; usd: number }>;
+    byTier: Array<{ name: string; paidCount: number; totalAmount: number; currency: string }>;
+    byPaymentMethod: Array<{ method: string; count: number }>;
+    payerCountries: Array<{ country: string; count: number; pct: number }>;
+  };
+};
+
+export type AnalyticsFilters = {
+  dateFrom?: string;
+  dateTo?: string;
+  payDateFrom?: string;
+  payDateTo?: string;
+  appStatuses?: string[];
+  appCategory?: string;
+  paymentStatuses?: string[];
+  currency?: string;
+};
+
+export function getProgramAnalytics(programId: string, filters?: AnalyticsFilters): Promise<ProgramAnalytics> {
+  const p = new URLSearchParams();
+  if (filters?.dateFrom) p.set('dateFrom', filters.dateFrom);
+  if (filters?.dateTo) p.set('dateTo', filters.dateTo);
+  if (filters?.payDateFrom) p.set('payDateFrom', filters.payDateFrom);
+  if (filters?.payDateTo) p.set('payDateTo', filters.payDateTo);
+  if (filters?.appStatuses?.length) p.set('appStatuses', filters.appStatuses.join(','));
+  if (filters?.appCategory) p.set('appCategory', filters.appCategory);
+  if (filters?.paymentStatuses?.length) p.set('paymentStatuses', filters.paymentStatuses.join(','));
+  if (filters?.currency) p.set('currency', filters.currency);
+  const qs = p.toString();
+  return request<ProgramAnalytics>(
+    `/stats/admin/programs/${encodeURIComponent(programId)}/analytics${qs ? `?${qs}` : ''}`,
+  );
+}
+
 // ─── Program Config ───────────────────────────────────────────────────────────
 
 export type ProgramConfig = {
