@@ -99,6 +99,7 @@ export class AdminProgramsController {
         benefitsDescription: program.benefitsDescription ?? null,
         termsAndConditions: program.termsAndConditions ?? null,
         previewChecklistItems: program.previewChecklistItems ?? [],
+        paymentInfoHtml: program.paymentInfoHtml ?? null,
         metaTitle: program.metaTitle ?? null,
         metaDescription: program.metaDescription ?? null,
         deletedAt: program.deletedAt ?? null,

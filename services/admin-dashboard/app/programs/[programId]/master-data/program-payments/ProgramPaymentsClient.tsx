@@ -3,10 +3,140 @@
 import { useState, useEffect, useCallback } from "react";
 import { ProgramPaymentsTable } from "@/app/components/programPaymentsMasterData/options/PaymentOptionTable";
 import type { PaymentOptionRow } from "@/app/components/programPaymentsMasterData/options/PaymentOptionTable";
-import { getPricingTiers } from "@/app/platform/api";
+import {
+  getPlatformProgramById,
+  getPricingTiers,
+  updateProgramPaymentInfo,
+} from "@/app/platform/api";
 import type { PricingTier } from "@/app/platform/api";
 import { getExchangeRate } from "@/src/shared/api-client";
 import { parseApiDate } from "@/lib/utils";
+import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
+
+const DEFAULT_PAYMENT_INFO_HTML =
+  "<p>Although the amount is displayed in USD for gateway payments, payments will be processed in IDR (Indonesian Rupiah).</p>" +
+  "<p>You can pay automatically via gateway (charged in USD and converted at our published rate) or by direct bank transfer in IDR. Choose whichever works for you.</p>";
+
+interface PaymentInfoEditorProps {
+  programId: string;
+  initialHtml: string | null;
+  onSaved?: (newHtml: string | null) => void;
+}
+
+function PaymentInfoEditor({ programId, initialHtml, onSaved }: PaymentInfoEditorProps) {
+  const [html, setHtml] = useState<string>(initialHtml ?? "");
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Sync local state when parent reloads with a fresh value (e.g. after the
+  // initial fetch resolves or after a sibling action invalidates the program).
+  useEffect(() => {
+    if (!editing) {
+      setHtml(initialHtml ?? "");
+    }
+  }, [initialHtml, editing]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const trimmed = html.trim();
+      const valueToSend = trimmed.length === 0 ? null : html;
+      await updateProgramPaymentInfo(programId, valueToSend);
+      setEditing(false);
+      onSaved?.(valueToSend);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save payment information.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setHtml(initialHtml ?? "");
+    setEditing(false);
+    setError(null);
+  };
+
+  const handleUseDefault = () => {
+    setHtml(DEFAULT_PAYMENT_INFO_HTML);
+  };
+
+  if (!editing) {
+    return (
+      <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-zinc-900">Payment Information</h3>
+            <p className="text-xs text-zinc-500">Shown to participants on the payment page.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50"
+          >
+            Edit
+          </button>
+        </div>
+        {initialHtml ? (
+          <div
+            className="prose prose-sm max-w-none text-zinc-700"
+            dangerouslySetInnerHTML={{ __html: initialHtml }}
+          />
+        ) : (
+          <p className="text-sm italic text-zinc-400">
+            Not set — participants will see a built-in default. Click Edit to customize.
+          </p>
+        )}
+      </section>
+    );
+  }
+
+  return (
+    <section className="space-y-3 rounded-xl border border-blue-200 bg-blue-50/30 p-5 shadow-sm">
+      <div>
+        <h3 className="text-sm font-semibold text-zinc-900">Edit Payment Information</h3>
+        <p className="text-xs text-zinc-500">
+          Use the rich-text editor below. Leave empty to fall back to the built-in default copy.
+        </p>
+      </div>
+      <RichTextEditor
+        content={html}
+        onChange={setHtml}
+        placeholder="Explain how payment works for participants..."
+        className="bg-white [&_.ProseMirror]:min-h-[160px]"
+      />
+      {error ? <p className="text-xs text-rose-600">{error}</p> : null}
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving}
+          className="rounded-md bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-600 disabled:opacity-60"
+        >
+          {saving ? "Saving…" : "Save"}
+        </button>
+        <button
+          type="button"
+          onClick={handleCancel}
+          disabled={saving}
+          className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-60"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={handleUseDefault}
+          disabled={saving}
+          className="ml-auto rounded-md border border-dashed border-zinc-300 bg-white px-3 py-1.5 text-xs text-zinc-500 hover:bg-zinc-50 disabled:opacity-60"
+        >
+          Use default template
+        </button>
+      </div>
+    </section>
+  );
+}
 
 function parseDateLike(value: unknown): Date | null {
   if (typeof value === "number") {
@@ -83,6 +213,7 @@ export function ProgramPaymentsClient({
 }) {
   const [rows, setRows] = useState<PaymentOptionRow[]>([]);
   const [programUsdInIdr, setProgramUsdInIdr] = useState<number | null>(null);
+  const [paymentInfoHtml, setPaymentInfoHtml] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [search] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -91,14 +222,17 @@ export function ProgramPaymentsClient({
     setLoading(true);
     setError(null);
     try {
-      // Fetch tiers and exchange rate in parallel. Rate is non-blocking — if it
-      // fails, the drawer simply disables auto-fill and the divergence preview.
-      const [tiers, rate] = await Promise.all([
+      // Fetch tiers, exchange rate, and program detail in parallel. Rate and
+      // program lookups are non-blocking — if either fails, the page still
+      // renders the options table with sensible fallbacks.
+      const [tiers, rate, program] = await Promise.all([
         getPricingTiers(programId),
         getExchangeRate(programId).catch(() => null),
+        getPlatformProgramById(programId).catch(() => null),
       ]);
       setRows(tiers.map((t, i) => tierToRow(t, i)));
       setProgramUsdInIdr(rate?.usdInIdr ?? null);
+      setPaymentInfoHtml(program?.paymentInfoHtml ?? null);
     } catch (err) {
       setRows([]);
       setError(
@@ -142,6 +276,12 @@ export function ProgramPaymentsClient({
           </div>
         </div>
       </section>
+
+      <PaymentInfoEditor
+        programId={programId}
+        initialHtml={paymentInfoHtml}
+        onSaved={setPaymentInfoHtml}
+      />
 
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
         {error ? (
