@@ -89,6 +89,9 @@ export class AvailablePaymentDto {
     @ApiPropertyOptional({ description: 'Tier IDR price (for manual transfer display)' })
     idrPrice?: number;
 
+    @ApiPropertyOptional({ description: 'Current program USD→IDR rate (no snapshot since uninvoiced)' })
+    exchangeRate?: number;
+
     @ApiProperty()
     type: string;
 
