@@ -25,9 +25,16 @@ type FurtherInformationMetadata = {
   eyebrow?: string;
   title?: string;
   subtitle?: string;
+  /** @deprecated Use section_background instead */
   background_image_url?: string;
+  /** @deprecated Use section_background instead */
   background_image_mobile_url?: string;
   mockup_image_url?: string;
+};
+
+type SectionBackgroundMetadata = {
+  desktop_url?: string;
+  mobile_url?: string;
 };
 
 function normalizePaymentInfoContent(value: unknown): Record<string, unknown> | null {
@@ -308,6 +315,16 @@ export class HomeStrategy implements ILandingPageStrategy {
 
     const objectivesMeta = (brandMeta.program_objectives as ProgramObjectivesMetadata | undefined) ?? {};
     const furtherInformationMeta = normalizeFurtherInformationContent(brandMeta.further_information);
+    const globalBg = (brandMeta.section_background as SectionBackgroundMetadata | undefined);
+    // Resolve background URLs: global setting → legacy per-section fields → static fallbacks
+    const sectionBgDesktop =
+      globalBg?.desktop_url ||
+      furtherInformationMeta?.background_image_url ||
+      '/img/halfback.png';
+    const sectionBgMobile =
+      globalBg?.mobile_url ||
+      furtherInformationMeta?.background_image_mobile_url ||
+      '/img/backgroundformobile.png';
     const fallbackObjectiveItems = (program?.objectives ?? []).map((obj) => ({
       id: obj.id,
       description: obj.description,
@@ -470,6 +487,7 @@ export class HomeStrategy implements ILandingPageStrategy {
             eyebrow: (brandMeta.moments_shorts as { eyebrow?: string; title?: string; description?: string } | undefined)?.eyebrow || 'Short Highlights',
             title: (brandMeta.moments_shorts as { eyebrow?: string; title?: string; description?: string } | undefined)?.title || 'Discover Our Moments in 60 Seconds',
             description: (brandMeta.moments_shorts as { eyebrow?: string; title?: string; description?: string } | undefined)?.description || `Watch bite-sized highlights from ${brand.name}'s workshops and cultural sessions.`,
+            background_image_url: sectionBgDesktop,
             items: shortsGallery.map(s => ({
               id: s.id,
               title: s.title,
@@ -507,10 +525,14 @@ export class HomeStrategy implements ILandingPageStrategy {
         },
         {
           type: 'program_benefits',
-          content: brandMeta.benefits || {
-            eyebrow: 'Program Benefits',
-            title: 'Built for Students, University Students & Professionals',
-            groups: [],
+          content: {
+            ...(brandMeta.benefits || {
+              eyebrow: 'Program Benefits',
+              title: 'Built for Students, University Students & Professionals',
+              groups: [],
+            }),
+            background_image_url: sectionBgDesktop,
+            background_image_mobile_url: sectionBgMobile,
           },
         },
         {
@@ -604,25 +626,25 @@ export class HomeStrategy implements ILandingPageStrategy {
             subtitle:
               furtherInformationMeta?.subtitle ||
               'The complete information regarding this program can be seen in the guideline below.',
-            background_image_url: furtherInformationMeta?.background_image_url || '/img/halfback.png',
-            background_image_mobile_url:
-              furtherInformationMeta?.background_image_mobile_url || '/img/backgroundformobile.png',
+            background_image_url: sectionBgDesktop,
+            background_image_mobile_url: sectionBgMobile,
             mockup_image_url: furtherInformationMeta?.mockup_image_url || '/img/mockupjapan.png',
           },
         },
         {
           type: 'promo_cta',
-          content: brandMeta.promo_cta || {
+          content: {
             eyebrow: 'Ready to Innovate?',
             title: `Ready to Innovate? Join ${brand.name} Now!`,
             subtitle: 'Be part of a global community of young leaders and innovators who are creating real impact through international programs.',
             primary_cta_label: 'Apply Now',
             primary_cta_href: '/apply',
-            background_image_url: '/img/ctabekground.png',
-            background_image_mobile_url: '/img/ctabackgroundformobile.png',
-            video_url: program?.videoUrl || null,
-            video_title: program ? `${program.name} Registration Guideline` : null,
-            video_description: null,
+            ...((brandMeta.promo_cta as Record<string, unknown>) || {}),
+            background_image_url: sectionBgDesktop,
+            background_image_mobile_url: sectionBgMobile,
+            video_url: (brandMeta.promo_cta as { video_url?: string } | undefined)?.video_url || program?.videoUrl || null,
+            video_title: (brandMeta.promo_cta as { video_title?: string } | undefined)?.video_title || (program ? `${program.name} Registration Guideline` : null),
+            video_description: (brandMeta.promo_cta as { video_description?: string } | undefined)?.video_description || null,
           },
         },
       ],
