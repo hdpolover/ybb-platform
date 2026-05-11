@@ -28,6 +28,7 @@ import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { PaymentServiceHttpClient } from '../infrastructure/services/payment-service-http.client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 
 @ApiTags('Admin Payments')
 @Controller('admin/payments')
@@ -44,6 +45,7 @@ export class PaymentAdminController {
         private readonly fileService: FileServiceClient,
         private readonly cacheService: CacheService,
         private readonly prisma: PrismaService,
+        private readonly rabbitmqProducer: RabbitMQProducerService,
     ) {
         this.logger.log("Using HTTP Payment Admin Controller");
         this.paymentServiceInternalKey = this.configService.get<string>('PAYMENT_SERVICE_INTERNAL_KEY', '');
@@ -526,10 +528,20 @@ export class PaymentAdminController {
         const invoice = await this.prisma.applicationInvoice.findUnique({
             where: { id },
             select: {
+                id: true,
+                applicationId: true,
+                amount: true,
+                currency: true,
                 externalTransactionId: true,
                 application: {
                     select: {
-                        participant: { select: { userId: true } },
+                        participant: {
+                            select: {
+                                fullName: true,
+                                userId: true,
+                                user: { select: { email: true } },
+                            },
+                        },
                     },
                 },
             },
@@ -549,11 +561,12 @@ export class PaymentAdminController {
 
             // Persist verifier audit trail on the local invoice. Source of truth for
             // who/when/why; the payment service stores the same in PaymentTransaction.
+            const now = new Date();
             await this.prisma.applicationInvoice.update({
                 where: { id },
                 data: {
                     verifiedBy: user.userId,
-                    verifiedAt: new Date(),
+                    verifiedAt: now,
                     rejectionReason: body.action === 'reject' ? (body.reason ?? null) : null,
                 },
             });
@@ -563,10 +576,55 @@ export class PaymentAdminController {
                 await this.cacheService.invalidateInvoiceCache(id, participantUserId);
             }
 
+            // Notify participant when admin rejects the payment so they know to
+            // resubmit with the admin-provided reason.
+            if (body.action === 'reject') {
+                const email = invoice.application?.participant?.user?.email;
+                if (email) {
+                    try {
+                        await this.rabbitmqProducer.emit('payment.rejected', {
+                            email,
+                            customer_name: invoice.application?.participant?.fullName ?? 'Participant',
+                            amount: Number(invoice.amount),
+                            currency: invoice.currency,
+                            order_id: invoice.id,
+                            reason: body.reason?.trim() || 'No reason provided',
+                            paymentsPageUrl: this.buildParticipantPaymentsUrl(),
+                            metadata: {
+                                application_id: invoice.applicationId,
+                                invoice_id: invoice.id,
+                                verified_by: user.userId,
+                                verified_at: now.toISOString(),
+                            },
+                        });
+                    } catch (emitError) {
+                        const message = emitError instanceof Error ? emitError.message : String(emitError);
+                        this.logger.error(
+                            `Failed to publish payment.rejected for invoice ${id}: ${message}`,
+                        );
+                        // Do not fail the verify request just because notification dispatch hiccuped.
+                    }
+                } else {
+                    this.logger.warn(
+                        `Skipping payment.rejected notification for invoice ${id}: participant email not found`,
+                    );
+                }
+            }
+
             return data;
         } catch (error) {
             this.handleError(error);
         }
+    }
+
+    private buildParticipantPaymentsUrl(): string {
+        const base = (
+            this.configService.get<string>('PARTICIPANT_APP_URL')
+            ?? this.configService.get<string>('FRONTEND_URL')
+            ?? ''
+        ).trim().replace(/\/$/, '');
+        if (!base) return '';
+        return `${base}/dashboard/payments`;
     }
 
     @Patch('invoices/:id/status')

@@ -196,6 +196,45 @@ export class EventsController {
     });
   }
 
+  @EventPattern('payment.rejected')
+  async handlePaymentRejected(
+    @Payload() data: unknown,
+    @Ctx() context: RmqContext,
+  ) {
+    const payload = asRecord(data);
+    await this.processEvent('payment.rejected', payload, context, async () => {
+      this.logger.log(
+        `Received payment.rejected event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+      );
+
+      const email = getString(payload, 'email');
+      if (!email) return;
+
+      const metadata = asRecord(payload.metadata);
+      await this.emailService.sendPaymentRejectedEmail(email, {
+        name:
+          getString(payload, 'customer_name') ||
+          getString(metadata, 'customer_name') ||
+          'Participant',
+        amount: getNumber(payload, 'amount'),
+        currency: getString(payload, 'currency') || 'IDR',
+        orderId:
+          getString(payload, 'order_id') ||
+          getString(payload, 'invoice_id') ||
+          getString(metadata, 'invoice_id') ||
+          'unknown-invoice',
+        reason:
+          getString(payload, 'reason') ||
+          getString(metadata, 'reason') ||
+          'No reason provided',
+        paymentsPageUrl:
+          getString(payload, 'paymentsPageUrl') ||
+          getString(payload, 'payments_page_url') ||
+          undefined,
+      });
+    });
+  }
+
   @EventPattern('payment.cancelled')
   handlePaymentCancelled(@Ctx() context: RmqContext) {
     this.acknowledgeMessage(context, 'payment.cancelled', 'skipped');
