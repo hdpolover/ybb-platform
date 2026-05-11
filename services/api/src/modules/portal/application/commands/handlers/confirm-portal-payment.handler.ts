@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException, PreconditionFailedException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, PreconditionFailedException, Logger } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
@@ -10,6 +10,8 @@ import { resolveUsdInIdrRate } from '../../utils/resolve-usd-in-idr-rate';
 
 @Injectable()
 export class ConfirmPortalPaymentHandler {
+    private readonly logger = new Logger(ConfirmPortalPaymentHandler.name);
+
     constructor(
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
@@ -127,6 +129,8 @@ export class ConfirmPortalPaymentHandler {
                 'Exchange rate (USD → IDR) is not configured for this program. Please contact an administrator to set it up before retrying.'
             );
         }
+
+        this.logger.log(`[confirm-payment] invoiceId=${invoiceId} currency=${settlementCurrency} programUsdInIdr=${invoice.application.program.usdInIdr} snapshot=${invoice.exchangeRateSnapshot} resolvedRate=${exchangeRate}`);
 
         // Create a payment intent via the Payment Service
         const intentResponse = await this.paymentClient.createIntent({
