@@ -38,10 +38,6 @@ export class GetProgramDetailHandler {
     announcementsLimit = Number(announcementsLimit);
     resourcesLimit = Number(resourcesLimit);
 
-    this.logger.debug(`GetProgramDetailHandler limits sanitized: ${JSON.stringify({ testimonialsLimit, announcementsLimit, resourcesLimit })}`);
-
-    console.log('DEBUG: GetProgramDetailHandler limits sanitized:', { testimonialsLimit, announcementsLimit, resourcesLimit });
-
     // Try to get from cache
     const cached = await this.cacheManager.get(cacheKey);
     if (cached) {

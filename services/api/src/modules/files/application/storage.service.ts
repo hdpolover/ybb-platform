@@ -33,7 +33,8 @@ export class StorageService {
     targetBucket: string = 'ybb',
     participantId?: string
   ): Promise<StorageUploadResult> {
-    this.logger.log(`Uploading file to folder ${folder} for program ${programId}`);
+    const programSuffix = programId ? ` for program ${programId}` : '';
+    this.logger.log(`Uploading file to folder ${folder}${programSuffix}`);
 
     this.logger.log('Uploading via gRPC...');
     const grpcResult = await this.fileGrpcClient.uploadFile(file.buffer, {
