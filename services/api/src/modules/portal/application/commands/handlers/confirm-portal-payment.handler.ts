@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, PreconditionFailedException } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
@@ -116,6 +116,16 @@ export class ConfirmPortalPaymentHandler {
                 select: { usdInIdr: true },
             });
             exchangeRate = resolveUsdInIdrRate({ programRate: brandSettings?.usdInIdr });
+        }
+
+        // Fail early when gateway payment needs IDR conversion but no rate is configured.
+        // Without this check, createIntent succeeds with a nil exchange rate, and the
+        // downstream ProcessPayment call returns a cryptic 412 after the intent is
+        // already written to the DB.
+        if (paymentType !== 'manual' && settlementCurrency.toUpperCase() === 'USD' && exchangeRate === undefined) {
+            throw new PreconditionFailedException(
+                'Exchange rate (USD → IDR) is not configured for this program. Please contact an administrator to set it up before retrying.'
+            );
         }
 
         // Create a payment intent via the Payment Service

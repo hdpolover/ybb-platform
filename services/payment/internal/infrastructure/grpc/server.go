@@ -220,7 +220,7 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 	chargeNet := net
 	chargeFee := fee
 
-	if !method.Type.IsManual() && requiresIDRCurrency(gatewayName) && strings.EqualFold(intent.Currency, "USD") {
+	if !method.Type.IsManual() && services.RequiresIDRCurrency(gatewayName) && strings.EqualFold(intent.Currency, "USD") {
 		if intent.ExchangeRate == nil || *intent.ExchangeRate <= 0 {
 			missingRateErr := fmt.Errorf("missing exchange rate for %s payment in USD", gatewayName)
 			s.failIdempotency(ctx, idempotencyRecord, missingRateErr)
@@ -586,14 +586,6 @@ func (s *PaymentGrpcServer) failIdempotency(ctx context.Context, record *entitie
 	}
 }
 
-func requiresIDRCurrency(gatewayName string) bool {
-	switch strings.ToLower(strings.TrimSpace(gatewayName)) {
-	case "midtrans", "xendit":
-		return true
-	default:
-		return false
-	}
-}
 
 func toIDR(amount float64, rate float64) float64 {
 	return math.Round(amount * rate)
