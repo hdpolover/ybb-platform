@@ -196,6 +196,11 @@ export class EventsController {
     });
   }
 
+  @EventPattern('payment.cancelled')
+  handlePaymentCancelled(@Ctx() context: RmqContext) {
+    this.acknowledgeMessage(context, 'payment.cancelled', 'skipped');
+  }
+
   @EventPattern('payment.refunded')
   async handlePaymentRefunded(
     @Payload() data: unknown,
