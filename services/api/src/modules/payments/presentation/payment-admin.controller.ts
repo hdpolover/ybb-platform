@@ -196,7 +196,7 @@ export class PaymentAdminController {
                             },
                         },
                     },
-                    pricingTier: { select: { id: true, name: true, feeType: true } },
+                    pricingTier: { select: { id: true, name: true, feeType: true, usdPrice: true, idrPrice: true } },
                 },
                 orderBy,
                 ...(useCursorMode ? {} : { skip }),
@@ -447,7 +447,7 @@ export class PaymentAdminController {
                         },
                     },
                 },
-                pricingTier: { select: { id: true, name: true, feeType: true } },
+                pricingTier: { select: { id: true, name: true, feeType: true, usdPrice: true, idrPrice: true } },
             },
         });
 
@@ -699,7 +699,7 @@ export class PaymentAdminController {
                             },
                         },
                     },
-                    pricingTier: { select: { id: true, name: true, feeType: true } },
+                    pricingTier: { select: { id: true, name: true, feeType: true, usdPrice: true, idrPrice: true } },
                 },
             }),
             this.prisma.participantApplication.update({
@@ -1073,6 +1073,16 @@ export class PaymentAdminController {
     }
 
     private toInvoiceDto(invoice: any) {
+        const pricingTier = invoice.pricingTier as
+            | {
+                id: string;
+                name: string;
+                feeType: string;
+                usdPrice?: { toString(): string } | number | null;
+                idrPrice?: { toString(): string } | number | null;
+            }
+            | undefined;
+
         return {
             id: invoice.id as string,
             applicationId: invoice.applicationId as string,
@@ -1083,7 +1093,21 @@ export class PaymentAdminController {
             paidAt: invoice.paidAt ? (invoice.paidAt as Date).toISOString() : null,
             externalTransactionId: invoice.externalTransactionId as string | null,
             externalIntentId: invoice.externalIntentId as string | null,
-            pricingTier: invoice.pricingTier as { id: string; name: string; feeType: string },
+            pricingTier: pricingTier
+                ? {
+                    id: pricingTier.id,
+                    name: pricingTier.name,
+                    feeType: pricingTier.feeType,
+                    usdPrice:
+                        pricingTier.usdPrice === null || pricingTier.usdPrice === undefined
+                            ? null
+                            : Number(pricingTier.usdPrice),
+                    idrPrice:
+                        pricingTier.idrPrice === null || pricingTier.idrPrice === undefined
+                            ? null
+                            : Number(pricingTier.idrPrice),
+                }
+                : null,
             // Verifier audit trail — set when an admin approves, rejects, or
             // manually overrides the invoice. Null on auto-progressed invoices.
             verifiedBy: (invoice.verifiedBy ?? null) as string | null,

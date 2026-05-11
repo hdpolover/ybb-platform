@@ -54,6 +54,22 @@ function formatCurrency(amount: number, currency: string) {
   }).format(amount);
 }
 
+function formatUsd(amount: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
+function formatIdr(amount: number) {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
 function formatKeyLabel(value: string) {
   return value
     .replace(/_/g, " ")
@@ -283,6 +299,17 @@ export default function PaymentDetailPage({
                   </CardContent>
                 </Card>
               </div>
+
+              {(invoice.pricingTier.usdPrice !== null || invoice.pricingTier.idrPrice !== null) && (
+                <PricingTierBreakdownCard
+                  tierName={invoice.pricingTier.name}
+                  feeType={invoice.pricingTier.feeType}
+                  usdPrice={invoice.pricingTier.usdPrice}
+                  idrPrice={invoice.pricingTier.idrPrice}
+                  billedCurrency={invoice.currency}
+                  billedAmount={invoice.amount}
+                />
+              )}
 
               {txn && (
                 <Card>
@@ -699,6 +726,102 @@ export default function PaymentDetailPage({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function PricingTierBreakdownCard({
+  tierName,
+  feeType,
+  usdPrice,
+  idrPrice,
+  billedCurrency,
+  billedAmount,
+}: {
+  tierName: string;
+  feeType: string;
+  usdPrice: number | null;
+  idrPrice: number | null;
+  billedCurrency: string;
+  billedAmount: number;
+}) {
+  const normalizedBilled = billedCurrency.trim().toUpperCase();
+  const billedIsUsd = normalizedBilled === "USD";
+  const billedIsIdr = normalizedBilled === "IDR";
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <CreditCard className="h-4 w-4 text-zinc-400" />
+          Pricing Tier Breakdown
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold text-zinc-900">{tierName}</p>
+            <p className="text-xs text-zinc-500 capitalize">{feeType.replace(/_/g, " ")}</p>
+          </div>
+          <p className="text-xs text-zinc-500">
+            Billed: <span className="font-medium text-zinc-700">{formatCurrency(billedAmount, billedCurrency)}</span>
+          </p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <PriceRow
+            label="Gateway price (USD)"
+            sublabel="Stripe / PayPal"
+            value={usdPrice !== null ? formatUsd(usdPrice) : null}
+            highlighted={billedIsUsd}
+          />
+          <PriceRow
+            label="Manual transfer (IDR)"
+            sublabel="Bank transfer"
+            value={idrPrice !== null ? formatIdr(idrPrice) : null}
+            highlighted={billedIsIdr}
+          />
+        </div>
+
+        {!billedIsUsd && !billedIsIdr && (
+          <p className="text-[11px] text-zinc-500">
+            Invoice currency ({normalizedBilled}) does not match either tier price; verify before paying out.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PriceRow({
+  label,
+  sublabel,
+  value,
+  highlighted,
+}: {
+  label: string;
+  sublabel: string;
+  value: string | null;
+  highlighted: boolean;
+}) {
+  const baseClasses = "rounded-md border px-3 py-3 transition-colors";
+  const stateClasses = highlighted
+    ? "border-emerald-300 bg-emerald-50"
+    : "border-zinc-200 bg-white";
+  return (
+    <div className={`${baseClasses} ${stateClasses}`}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">{label}</p>
+        {highlighted && (
+          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+            Billed
+          </span>
+        )}
+      </div>
+      <p className="mt-1 text-sm font-semibold text-zinc-900">
+        {value ?? <span className="text-zinc-400">Not set</span>}
+      </p>
+      <p className="text-[11px] text-zinc-500">{sublabel}</p>
     </div>
   );
 }

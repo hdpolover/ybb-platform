@@ -2531,7 +2531,15 @@ export type InvoiceListItem = {
   paidAt: string | null;
   externalTransactionId: string | null;
   externalIntentId: string | null;
-  pricingTier: { id: string; name: string; feeType: string };
+  pricingTier: {
+    id: string;
+    name: string;
+    feeType: string;
+    // Dual-pricing fields. Either may be null on legacy tiers that haven't
+    // been backfilled yet, so always treat them as optional in UI.
+    usdPrice: number | null;
+    idrPrice: number | null;
+  };
   application: {
     status: string;
     applicationCategory: string | null;
@@ -2545,6 +2553,11 @@ export type InvoiceListItem = {
     nationality: string | null;
     originCountry: string | null;
   };
+  // Verifier audit trail — populated when an admin approves, rejects, or
+  // manually overrides the invoice. Null on auto-progressed invoices.
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+  rejectionReason: string | null;
   createdAt: string;
   updatedAt: string;
 };
