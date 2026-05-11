@@ -476,6 +476,8 @@ export type BrandImpactStats = {
 export type BrandSectionBackground = {
   desktop_url?: string;
   mobile_url?: string;
+  /** Controls text visibility on top of the background image. 'light' = white text, 'dark' = dark text (default). */
+  text_color_scheme?: 'light' | 'dark';
 };
 
 export type BrandPromoCta = {
