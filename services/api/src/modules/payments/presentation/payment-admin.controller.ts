@@ -516,6 +516,13 @@ export class PaymentAdminController {
         @Body() body: { action: 'approve' | 'reject'; reason?: string },
         @CurrentUser() user: CurrentUserData,
     ) {
+        if (body.action !== 'approve' && body.action !== 'reject') {
+            throw new HttpException("Invalid action. Use 'approve' or 'reject'", 400);
+        }
+        if (body.action === 'reject' && !body.reason?.trim()) {
+            throw new HttpException('Reason is required for rejection', 400);
+        }
+
         const invoice = await this.prisma.applicationInvoice.findUnique({
             where: { id },
             select: {
@@ -540,6 +547,17 @@ export class PaymentAdminController {
                 { headers: this.buildInternalHeaders() },
             );
 
+            // Persist verifier audit trail on the local invoice. Source of truth for
+            // who/when/why; the payment service stores the same in PaymentTransaction.
+            await this.prisma.applicationInvoice.update({
+                where: { id },
+                data: {
+                    verifiedBy: user.userId,
+                    verifiedAt: new Date(),
+                    rejectionReason: body.action === 'reject' ? (body.reason ?? null) : null,
+                },
+            });
+
             const participantUserId = invoice.application?.participant?.userId;
             if (participantUserId) {
                 await this.cacheService.invalidateInvoiceCache(id, participantUserId);
@@ -556,6 +574,7 @@ export class PaymentAdminController {
     async updateInvoiceStatus(
         @Param('id') id: string,
         @Body() body: { status: PaymentStatus; reason?: string },
+        @CurrentUser() user: CurrentUserData,
     ) {
         if (!Object.values(PaymentStatus).includes(body.status)) {
             throw new HttpException('Invalid payment status', 400);
@@ -578,9 +597,31 @@ export class PaymentAdminController {
             throw new HttpException('Invoice not found', 404);
         }
 
+        const trimmedReason = body.reason?.trim() ?? '';
+        const now = new Date();
+        // Audit fields: capture who/when on every admin-driven status change, plus
+        // the rejection reason when failing/cancelling so the participant gets context.
+        const isVerifierAuditableStatus =
+            body.status === PaymentStatus.paid
+            || body.status === PaymentStatus.failed
+            || body.status === PaymentStatus.cancelled;
+
+        const auditPatch: Pick<Prisma.ApplicationInvoiceUpdateInput, 'verifiedBy' | 'verifiedAt' | 'rejectionReason'> =
+            isVerifierAuditableStatus
+                ? {
+                    verifiedBy: user.userId,
+                    verifiedAt: now,
+                    rejectionReason:
+                        body.status === PaymentStatus.paid
+                            ? null
+                            : (trimmedReason.length > 0 ? trimmedReason : null),
+                }
+                : {};
+
         const updatePayload: Prisma.ApplicationInvoiceUpdateInput = {
             status: body.status,
-            paidAt: body.status === PaymentStatus.paid ? (invoice.paidAt ?? new Date()) : null,
+            paidAt: body.status === PaymentStatus.paid ? (invoice.paidAt ?? now) : null,
+            ...auditPatch,
         };
 
         const isRegistrationFee = invoice.pricingTier.feeType === 'registration_fee';
@@ -985,6 +1026,11 @@ export class PaymentAdminController {
             externalTransactionId: invoice.externalTransactionId as string | null,
             externalIntentId: invoice.externalIntentId as string | null,
             pricingTier: invoice.pricingTier as { id: string; name: string; feeType: string },
+            // Verifier audit trail — set when an admin approves, rejects, or
+            // manually overrides the invoice. Null on auto-progressed invoices.
+            verifiedBy: (invoice.verifiedBy ?? null) as string | null,
+            verifiedAt: invoice.verifiedAt ? (invoice.verifiedAt as Date).toISOString() : null,
+            rejectionReason: (invoice.rejectionReason ?? null) as string | null,
             application: {
                 status: invoice.application.status as string,
                 applicationCategory: invoice.application.applicationCategory as string | null,
