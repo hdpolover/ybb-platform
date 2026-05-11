@@ -77,6 +77,8 @@ func (s *PaymentGrpcServer) CreateIntent(ctx context.Context, req *pb.CreateInte
 		metadata["item_details"] = req.ItemDetails
 	}
 
+	log.Printf("[CreateIntent] received exchange_rate=%.4f for currency=%s", req.ExchangeRate, req.Currency)
+
 	var exchangeRate *float64
 	if req.ExchangeRate > 0 {
 		rate := req.ExchangeRate
