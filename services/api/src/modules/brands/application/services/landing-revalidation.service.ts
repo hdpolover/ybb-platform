@@ -88,7 +88,8 @@ export class LandingRevalidationService {
     private async post(baseUrl: string): Promise<void> {
         const url = `${baseUrl}/api/settings/revalidate`;
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (this.revalidateSecret) {
+        const hasSecret = Boolean(this.revalidateSecret);
+        if (hasSecret) {
             headers['Authorization'] = `Bearer ${this.revalidateSecret}`;
         }
 
@@ -97,7 +98,21 @@ export class LandingRevalidationService {
                 this.httpService.post(url, {}, { headers }).pipe(
                     timeout(3000),
                     catchError((err) => {
-                        this.logger.warn(`Landing revalidation failed (${url}): ${err?.message ?? err}`);
+                        // 401 here means the landing app's
+                        // SETTINGS_REVALIDATE_SECRET doesn't match the value we
+                        // sent (or we sent none). Surface that hint in the log
+                        // so the next "Landing revalidation failed" line points
+                        // directly at the env var to fix.
+                        const status = err?.response?.status;
+                        const hint =
+                            status === 401
+                                ? hasSecret
+                                    ? ' — SETTINGS_REVALIDATE_SECRET on the API does not match the value on the landing app'
+                                    : ' — SETTINGS_REVALIDATE_SECRET is not set on the API but the landing app requires it'
+                                : '';
+                        this.logger.warn(
+                            `Landing revalidation failed (${url}): ${err?.message ?? err}${hint}`,
+                        );
                         return of(null);
                     }),
                 ),
