@@ -178,22 +178,31 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
             const bothTiersActive = hasSelfFundedTier && hasFullyFundedTier;
 
             const switchLockedStatuses = new Set(['processing', 'paid']);
-            const hasLockedRegistrationInvoice = latestApplication.invoices.some(
+            const blockingRegistrationInvoice = latestApplication.invoices.find(
                 (invoice) =>
                     invoice.pricingTier?.feeType === 'registration_fee' &&
                     switchLockedStatuses.has(String(invoice.status).toLowerCase()),
             );
+            const hasLockedRegistrationInvoice = Boolean(blockingRegistrationInvoice);
             const hasLockedRegistrationPayment = switchLockedStatuses.has(
                 String(latestApplication.registrationPaymentStatus ?? '').toLowerCase(),
             );
 
             let switchCategoryMessage: string | undefined;
+            let switchCategoryBlockingInvoiceId: string | undefined;
             if (!bothTiersActive) {
                 switchCategoryMessage = 'Category switching is unavailable because one registration category is inactive.';
             } else if (latestApplication.status !== 'draft') {
                 switchCategoryMessage = 'Category switching is only available while your application is still in draft.';
             } else if (hasLockedRegistrationInvoice || hasLockedRegistrationPayment) {
                 switchCategoryMessage = 'Category switching is locked because a registration fee payment is processing or already paid.';
+                // Only expose an invoice id when a specific invoice is the
+                // blocker. If the lock fires only from `registrationPaymentStatus`
+                // (a stale/aggregate flag with no associated invoice row), leave
+                // the field undefined so the frontend doesn't render a broken link.
+                if (blockingRegistrationInvoice) {
+                    switchCategoryBlockingInvoiceId = blockingRegistrationInvoice.id;
+                }
             }
 
             const canSwitchCategory = !switchCategoryMessage;
@@ -214,6 +223,7 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                 category: latestApplication.applicationCategory || 'general',
                 canSwitchCategory,
                 switchCategoryMessage,
+                switchCategoryBlockingInvoiceId,
                 progress: calculateSubmissionProgress(latestApplication),
                 currentStep: determineSubmissionCurrentStep(latestApplication),
                 daysUntilDeadline: this.calculateDaysUntilDeadline(latestApplication.program.applicationDeadline),

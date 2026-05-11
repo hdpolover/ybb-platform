@@ -91,18 +91,46 @@ export class SwitchApplicationCategoryHandler {
       throw new BadRequestException(`The target category ${targetCategory} is not currently available for this program.`);
     }
 
-    // 5. Perform Switch
-    const updatedApplication = await this.prisma.participantApplication.update({
-      where: { id: applicationId },
-      data: {
-        applicationCategory: targetCategory,
-        updatedAt: new Date(),
+    // 5. Auto-cancel any unpaid invoices on this application.
+    //
+    // Rationale: once the participant moves to a different category, any
+    // outstanding `unpaid` invoice from the old category is no longer
+    // actionable for them (the visible payment list filters by their current
+    // category). Marking these `cancelled` keeps the historical record while
+    // preventing them from appearing as outstanding obligations or being paid
+    // accidentally.
+    //
+    // Invoices in `processing` or `paid` are intentionally NOT touched —
+    // those are the same statuses that block the switch at step 3 above, so
+    // by the time we reach this point there should be none. Defensive note:
+    // we still scope the auto-cancel to status `unpaid` explicitly so any
+    // unexpected race that resurfaces a processing/paid invoice doesn't
+    // get clobbered.
+    const cancellableInvoiceIds = application.invoices
+      .filter((invoice) => String(invoice.status).toLowerCase() === 'unpaid')
+      .map((invoice) => invoice.id);
+
+    // 6. Perform Switch (and auto-cancel) atomically.
+    const updatedApplication = await this.prisma.$transaction(async (tx) => {
+      if (cancellableInvoiceIds.length > 0) {
+        await tx.applicationInvoice.updateMany({
+          where: { id: { in: cancellableInvoiceIds } },
+          data: { status: 'cancelled' },
+        });
       }
+
+      return tx.participantApplication.update({
+        where: { id: applicationId },
+        data: {
+          applicationCategory: targetCategory,
+          updatedAt: new Date(),
+        },
+      });
     });
 
     await this.invalidateParticipantCache(application.participantId, command.userId);
 
-    // 6. Return Response
+    // 7. Return Response
     return this.applicationMapper.toDto(this.applicationMapper.toDomain(updatedApplication));
   }
 
