@@ -122,13 +122,13 @@ export class ReportingController {
   @EventPattern('payment.application-status-updated')
   ackPaymentApplicationStatusUpdated(@Ctx() context: RmqContext) { this.ack(context); }
 
-  // Catch-all for orphaned/unknown events (old queue messages, stale bindings,
-  // legacy publishers without NestJS envelope). ACK cleanly to prevent retry loops.
-  @EventPattern('__unhandled__')
-  ackUnhandled(@Ctx() context: RmqContext) {
-    this.logger.warn(`[reporting] unhandled event ACKed pattern=${context.getPattern()}`);
-    this.ack(context);
-  }
+  // No __unhandled__ handler here on purpose. NestJS dispatches every
+  // @EventPattern('__unhandled__') handler in the whole app for any unhandled
+  // message, regardless of which queue/microservice it arrived on. Registering
+  // it in two places (here AND AuditController) made the same delivery get
+  // ACKed twice on the same channel — the broker then returned 406
+  // PRECONDITION_FAILED on Basic.Ack and closed the channel. The single
+  // catch-all on AuditController services both queues.
 
   private ack(context: RmqContext) {
     acknowledgeRmqMessage(context, this.logger, context.getPattern(), 'reporting-processed');

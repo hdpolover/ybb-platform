@@ -81,9 +81,15 @@ export class AuditController {
   @EventPattern('payment.application-status-updated')
   paymentApplicationStatusUpdated(@Payload() d: RmqEventPayload, @Ctx() c: RmqContext) { return this.log(d, c); }
 
-  // Catch-all for orphaned/unknown events (old queue messages, stale bindings,
-  // legacy publishers without the NestJS envelope). ACK and log a warning so
-  // RabbitMQ drops them cleanly instead of bouncing them through the retry queue.
+  // App-wide catch-all for orphaned/unknown events (old queue messages, stale
+  // bindings, legacy publishers without the NestJS envelope). NestJS dispatches
+  // this pattern to every matching handler in the Nest app, so it fires for
+  // unhandled messages from any consumer queue (audit_log_queue,
+  // reporting_queue, api-service-payment-events, …) — the context binds to the
+  // source channel, so the ACK lands on the right delivery tag. Do NOT
+  // duplicate this handler in another controller: NestJS would fire all
+  // copies for the same delivery and the broker would close the channel with
+  // 406 PRECONDITION_FAILED on the second Basic.Ack.
   @EventPattern('__unhandled__')
   unhandledEvent(@Ctx() c: RmqContext) {
     const pattern = c.getPattern();
