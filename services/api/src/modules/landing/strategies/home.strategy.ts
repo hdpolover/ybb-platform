@@ -316,15 +316,15 @@ export class HomeStrategy implements ILandingPageStrategy {
     const objectivesMeta = (brandMeta.program_objectives as ProgramObjectivesMetadata | undefined) ?? {};
     const furtherInformationMeta = normalizeFurtherInformationContent(brandMeta.further_information);
     const globalBg = (brandMeta.section_background as SectionBackgroundMetadata | undefined);
-    // Resolve background URLs: global setting → legacy per-section fields → static fallbacks
+    // Resolve background URLs: global section_background → legacy per-section fields → undefined (no image)
     const sectionBgDesktop =
       globalBg?.desktop_url ||
       furtherInformationMeta?.background_image_url ||
-      '/img/halfback.png';
+      undefined;
     const sectionBgMobile =
       globalBg?.mobile_url ||
       furtherInformationMeta?.background_image_mobile_url ||
-      '/img/backgroundformobile.png';
+      undefined;
     const fallbackObjectiveItems = (program?.objectives ?? []).map((obj) => ({
       id: obj.id,
       description: obj.description,
