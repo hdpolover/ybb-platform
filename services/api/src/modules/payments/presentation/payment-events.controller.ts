@@ -11,6 +11,10 @@ import { CACHE_KEYS } from '@shared/constants/cache-keys';
 import { PaymentStatus, Prisma } from '@prisma/client';
 import { ReferralFunnelService } from '@modules/participants/application/services/referral-funnel.service';
 import { PaymentOutboxService } from '../infrastructure/services/payment-outbox.service';
+import {
+    acknowledgeRmqMessage,
+    rejectRmqMessageForRetry,
+} from '@shared/infrastructure/rabbitmq/rmq-ack';
 
 @Controller()
 export class PaymentEventsController {
@@ -115,7 +119,8 @@ export class PaymentEventsController {
             const err = error instanceof Error ? error : new Error(String(error));
             this.logger.error(`Failed to handle payment.succeeded: ${err.message}`, err.stack);
             status = 'failed';
-            throw err;
+            rejectRmqMessageForRetry(context, this.logger, 'payment.succeeded');
+            return;
         } finally {
             const duration = (Date.now() - start) / 1000;
             this.metricsService.jobProcessingDuration.observe({ 
@@ -123,6 +128,8 @@ export class PaymentEventsController {
                 status
             }, duration);
         }
+
+        acknowledgeRmqMessage(context, this.logger, 'payment.succeeded', 'processed');
     }
 
     private async processApplicationPayment(
@@ -308,7 +315,8 @@ export class PaymentEventsController {
             const err = error instanceof Error ? error : new Error(String(error));
             this.logger.error(`Failed to handle payment.failed: ${err.message}`, err.stack);
             status = 'failed';
-            throw err;
+            rejectRmqMessageForRetry(context, this.logger, 'payment.failed');
+            return;
         } finally {
             const duration = (Date.now() - start) / 1000;
             this.metricsService.jobProcessingDuration.observe({ 
@@ -316,6 +324,8 @@ export class PaymentEventsController {
                 status
             }, duration);
         }
+
+        acknowledgeRmqMessage(context, this.logger, 'payment.failed', 'processed');
     }
 
     private async moveToDlqWhenRetryExhausted(
@@ -366,6 +376,7 @@ export class PaymentEventsController {
         this.logger.error(
             `[payment-events-retry] moved to DLQ event=${eventType} queue=${dlqName} retries=${retryCount}`,
         );
+        acknowledgeRmqMessage(context, this.logger, eventType, 'retry-exhausted');
         return true;
     }
 
@@ -435,6 +446,7 @@ type RmqMessage = {
 };
 
 type RabbitChannel = {
+    ack(message: unknown): void;
     sendToQueue: (
         queue: string,
         content: Buffer,

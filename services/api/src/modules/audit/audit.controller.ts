@@ -2,6 +2,7 @@ import { Controller, Logger } from '@nestjs/common';
 import { Ctx, EventPattern, Payload, RmqContext } from '@nestjs/microservices';
 import { AuditService } from './audit.service';
 import { RmqEventPayload } from '@common/types/events';
+import { acknowledgeRmqMessage } from '@shared/infrastructure/rabbitmq/rmq-ack';
 
 // NestJS @EventPattern does literal string match on the deserialized `pattern`
 // field — it does NOT expand AMQP wildcards. A previous version of this file
@@ -78,6 +79,8 @@ export class AuditController {
         `Failed to persist audit event ${pattern}: ${(error as Error).message}`,
         (error as Error).stack,
       );
+    } finally {
+      acknowledgeRmqMessage(context, this.logger, pattern, 'audit-processed');
     }
   }
 }
