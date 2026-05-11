@@ -114,6 +114,9 @@ export class AvailableBrandDto {
   @ApiProperty({ required: false, nullable: true, example: 'https://iys.ybbhub.com' })
   landing_url?: string;
 
+  @ApiProperty({ required: false, nullable: true, example: 'https://cdn.example.com/iys-logo.png' })
+  logo_url?: string;
+
   @ApiProperty({ required: false, nullable: true, example: 'https://cdn.example.com/iys-icon.png' })
   logo_icon_url?: string;
 }

@@ -52,6 +52,7 @@ export class SettingsStrategy {
                 name: true,
                 websiteUrl: true,
                 landingUrl: true,
+                logoUrl: true,
                 logoIconUrl: true,
             },
             orderBy: { name: 'asc' },
@@ -69,7 +70,8 @@ export class SettingsStrategy {
                     name: brand.name,
                     website_url: brand.websiteUrl || undefined,
                     landing_url: brand.landingUrl || undefined,
-                    logo_icon_url: brand.logoIconUrl || undefined,
+                    logo_url: brand.logoUrl || undefined,
+                    logo_icon_url: brand.logoIconUrl || brand.logoUrl || undefined,
                 })),
             };
         }
@@ -133,7 +135,8 @@ export class SettingsStrategy {
                 name: brand.name,
                 website_url: brand.websiteUrl || undefined,
                 landing_url: brand.landingUrl || undefined,
-                logo_icon_url: brand.logoIconUrl || undefined,
+                logo_url: brand.logoUrl || undefined,
+                logo_icon_url: brand.logoIconUrl || brand.logoUrl || undefined,
             })),
         };
 
