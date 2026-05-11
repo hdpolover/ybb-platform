@@ -408,6 +408,7 @@ export class HomeStrategy implements ILandingPageStrategy {
               vision: brand.vision || '',
               mission: brand.mission || '',
             },
+            background_image_url: sectionBgDesktop,
           },
         },
         {
