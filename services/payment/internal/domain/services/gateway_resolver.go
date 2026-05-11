@@ -45,3 +45,15 @@ func inferGatewayNameFromCode(code string) string {
 func normalizeGatewayName(name string) string {
 	return strings.ToLower(strings.TrimSpace(name))
 }
+
+// RequiresIDRCurrency reports whether the named gateway settles exclusively in IDR.
+// These gateways cannot charge USD directly and require an exchange rate when the
+// invoice currency is USD so the service can convert the amount before charging.
+func RequiresIDRCurrency(gatewayName string) bool {
+	switch strings.ToLower(strings.TrimSpace(gatewayName)) {
+	case "midtrans", "xendit":
+		return true
+	default:
+		return false
+	}
+}
