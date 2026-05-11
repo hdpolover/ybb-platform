@@ -64,6 +64,13 @@ export class PortalApplicationSummaryDto {
     @ApiProperty({ required: false, description: 'Explains why category switching is unavailable' })
     switchCategoryMessage?: string;
 
+    @ApiProperty({
+        required: false,
+        description:
+            'When category switching is locked because of a specific processing/paid registration invoice, this is that invoice id so the UI can deep-link to the payment detail page.',
+    })
+    switchCategoryBlockingInvoiceId?: string;
+
     @ApiProperty()
     progress: number;
 
