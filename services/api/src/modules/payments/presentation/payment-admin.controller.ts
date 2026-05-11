@@ -1099,11 +1099,26 @@ export class PaymentAdminController {
             }
             | undefined;
 
+        // Dual-price snapshots frozen at intent creation. `amount`/`currency`
+        // remain the canonical settlement values (flipped to IDR on manual
+        // confirm); these are reference fields so admin views can show both
+        // sides of the dual price even after settlement.
+        const amountUsd =
+            invoice.amountUsd === null || invoice.amountUsd === undefined
+                ? null
+                : Number(invoice.amountUsd);
+        const amountIdr =
+            invoice.amountIdr === null || invoice.amountIdr === undefined
+                ? null
+                : Number(invoice.amountIdr);
+
         return {
             id: invoice.id as string,
             applicationId: invoice.applicationId as string,
             amount: Number(invoice.amount),
             currency: invoice.currency as string,
+            amountUsd,
+            amountIdr,
             status: invoice.status as string,
             paymentMethod: invoice.paymentMethod as string | null,
             paidAt: invoice.paidAt ? (invoice.paidAt as Date).toISOString() : null,

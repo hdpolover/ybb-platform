@@ -224,6 +224,13 @@ model ApplicationInvoice {
   status        PaymentStatus @default(unpaid)
   paidAt        DateTime?     @map("paid_at") @db.Timestamptz(6)
 
+  // Dual-price snapshots: frozen at intent creation so later tier price edits
+  // don't retroactively change what the participant owed. `amount` + `currency`
+  // are the canonical settlement values — USD by default, flipped to IDR on
+  // manual confirm. These columns are reference snapshots for both currencies.
+  amountUsd Decimal? @map("amount_usd") @db.Decimal(10, 2)
+  amountIdr Decimal? @map("amount_idr") @db.Decimal(15, 0)
+
   // Exchange rate snapshot at time of payment — locked so past invoices are unaffected by future rate changes
   exchangeRateSnapshot Decimal? @map("exchange_rate_snapshot") @db.Decimal(10, 2)
 
