@@ -29,7 +29,7 @@ export class RoutingKeyDeserializer implements ConsumerDeserializer {
     const fromBody = r?.type ?? r?.eventType ?? r?.event_type;
 
     return {
-      pattern: routingKey ?? fromBody ?? '',
+      pattern: routingKey ?? fromBody ?? '__unhandled__',
       data: raw,
     } as IncomingEvent;
   }
