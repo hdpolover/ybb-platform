@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -83,6 +84,13 @@ func (s *PaymentGrpcServer) CreateIntent(ctx context.Context, req *pb.CreateInte
 	if req.ExchangeRate > 0 {
 		rate := req.ExchangeRate
 		exchangeRate = &rate
+	} else if rateStr, ok := req.Metadata["exchange_rate_value"]; ok && rateStr != "" {
+		// Fallback: double field (field 13) is dropped by @grpc/proto-loader+keepCase on the NestJS side.
+		// NestJS encodes the rate as a string in metadata as a reliable alternative.
+		if parsed, err := strconv.ParseFloat(rateStr, 64); err == nil && parsed > 0 {
+			exchangeRate = &parsed
+			log.Printf("[CreateIntent] resolved exchange_rate from metadata fallback: %.4f", parsed)
+		}
 	}
 
 	intent := entities.NewPaymentIntent(
