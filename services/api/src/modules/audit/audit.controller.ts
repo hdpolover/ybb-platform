@@ -24,6 +24,9 @@ const AUDITED_EVENTS = [
   'payment.failed',
   'payment.cancelled',
   'payment.refunded',
+  // payment.* — emitted from API service (admin reject, outbox application update)
+  'payment.rejected',
+  'payment.application-status-updated',
   // support.* — emitted from support ticket workflows
   'support.ticket.created',
   'support.ticket.replied',
@@ -71,6 +74,22 @@ export class AuditController {
 
   @EventPattern('support.ticket.status-updated')
   supportTicketStatusUpdated(@Payload() d: RmqEventPayload, @Ctx() c: RmqContext) { return this.log(d, c); }
+
+  @EventPattern('payment.rejected')
+  paymentRejected(@Payload() d: RmqEventPayload, @Ctx() c: RmqContext) { return this.log(d, c); }
+
+  @EventPattern('payment.application-status-updated')
+  paymentApplicationStatusUpdated(@Payload() d: RmqEventPayload, @Ctx() c: RmqContext) { return this.log(d, c); }
+
+  // Catch-all for orphaned/unknown events (old queue messages, stale bindings,
+  // legacy publishers without the NestJS envelope). ACK and log a warning so
+  // RabbitMQ drops them cleanly instead of bouncing them through the retry queue.
+  @EventPattern('__unhandled__')
+  unhandledEvent(@Ctx() c: RmqContext) {
+    const pattern = c.getPattern();
+    this.logger.warn(`[audit] unhandled event received pattern=${pattern} — ACKing to prevent retry loop`);
+    acknowledgeRmqMessage(c, this.logger, pattern, 'audit-unhandled');
+  }
 
   private async log(data: RmqEventPayload, context: RmqContext) {
     const pattern = context.getPattern();

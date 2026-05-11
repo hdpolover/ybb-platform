@@ -64,6 +64,13 @@ async function bootstrap() {
     },
   });
 
+  // Shared deserializer: maps AMQP routing key → NestJS pattern for messages
+  // that don't carry the { pattern, data } NestJS envelope (e.g. Go service,
+  // legacy publishers, orphaned queue messages).  Safe to use on all queues —
+  // messages that already have a `pattern` field are passed through unchanged.
+  const { RoutingKeyDeserializer } = await import('./shared/infrastructure/rabbitmq/routing-key-deserializer');
+  const deserializer = new RoutingKeyDeserializer();
+
   // Connect Microservice for Event Consumption (Audit Logging)
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.RMQ,
@@ -76,6 +83,7 @@ async function bootstrap() {
       },
       noAck: false,
       prefetchCount: 1,
+      deserializer,
     },
   });
 
@@ -91,6 +99,7 @@ async function bootstrap() {
       },
       noAck: false,
       prefetchCount: 1,
+      deserializer,
     },
   });
 
@@ -101,7 +110,6 @@ async function bootstrap() {
   // this binding, payment.succeeded / payment.failed events are dropped.
   // Custom deserializer maps the AMQP routing key to the NestJS pattern,
   // because the Go publisher emits raw payloads (no { pattern, data } envelope).
-  const { RoutingKeyDeserializer } = await import('./shared/infrastructure/rabbitmq/routing-key-deserializer');
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.RMQ,
     options: {
@@ -117,7 +125,7 @@ async function bootstrap() {
       },
       noAck: false,
       prefetchCount: 1,
-      deserializer: new RoutingKeyDeserializer(),
+      deserializer,
     },
   });
 

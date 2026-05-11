@@ -116,6 +116,20 @@ export class ReportingController {
   @EventPattern('support.ticket.status-updated')
   ackSupportTicketStatusUpdated(@Ctx() context: RmqContext) { this.ack(context); }
 
+  @EventPattern('payment.rejected')
+  ackPaymentRejected(@Ctx() context: RmqContext) { this.ack(context); }
+
+  @EventPattern('payment.application-status-updated')
+  ackPaymentApplicationStatusUpdated(@Ctx() context: RmqContext) { this.ack(context); }
+
+  // Catch-all for orphaned/unknown events (old queue messages, stale bindings,
+  // legacy publishers without NestJS envelope). ACK cleanly to prevent retry loops.
+  @EventPattern('__unhandled__')
+  ackUnhandled(@Ctx() context: RmqContext) {
+    this.logger.warn(`[reporting] unhandled event ACKed pattern=${context.getPattern()}`);
+    this.ack(context);
+  }
+
   private ack(context: RmqContext) {
     acknowledgeRmqMessage(context, this.logger, context.getPattern(), 'reporting-processed');
   }
