@@ -109,6 +109,7 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                                 currency: true,
                                 usdPrice: true,
                                 idrPrice: true,
+                                allowedCategories: true,
                                 validityPeriods: {
                                     select: {
                                         startDate: true,
@@ -349,6 +350,15 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
             // Note: the visibility loop above suppresses available-method emission
             // for any currently-applicable tier whose feeType has an orphan invoice
             // here, so surfacing this orphan does not produce a duplicate stage row.
+            //
+            // Category-scoped visibility rule: when an orphan invoice belongs to a
+            // tier whose `allowedCategories` does not include the participant's
+            // current `applicationCategory` (i.e. it was created against their
+            // previous category), only surface it if its status is `processing` or
+            // `paid`. These statuses block category switching and the participant
+            // needs to see what's blocking them. Other statuses (unpaid/failed/
+            // cancelled) for the old category should be hidden — they're either
+            // auto-cancelled on switch or unactionable.
             for (const [tierId, invoice] of latestInvoiceByTier.entries()) {
                 if (applicableTierIds.has(tierId)) {
                     continue;
@@ -358,6 +368,23 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                 const archivedPeriods = archivedTier?.validityPeriods ?? [];
                 const period = resolveTierPeriod(archivedPeriods, invoice.createdAt, now);
                 const normalizedStatus = String(invoice.status).toLowerCase();
+
+                // Off-category filter: if this orphan belongs to a tier whose
+                // allowedCategories excludes the participant's current category,
+                // hide it unless it's blocking a switch (processing/paid).
+                const archivedAllowedCategories = archivedTier?.allowedCategories ?? [];
+                const isOffCategory =
+                    currentCategory != null &&
+                    archivedAllowedCategories.length > 0 &&
+                    !archivedAllowedCategories.includes(currentCategory);
+                if (
+                    isOffCategory &&
+                    normalizedStatus !== 'processing' &&
+                    normalizedStatus !== 'paid'
+                ) {
+                    continue;
+                }
+
                 const feeType = archivedTier?.feeType ?? undefined;
                 const tierOrder = typeof archivedTier?.order === 'number' ? archivedTier.order : 999;
                 const sequenceOrder = getFeeTypePriority(feeType) * 1000 + tierOrder;
