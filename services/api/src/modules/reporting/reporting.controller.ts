@@ -8,6 +8,7 @@ import { JwtAuthGuard } from '../auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/infrastructure/guards/roles.guard';
 import { Roles } from '../auth/application/decorators/roles.decorator';
 import { UserRole } from '../../core/entities/user.entity';
+import { acknowledgeRmqMessage } from '@shared/infrastructure/rabbitmq/rmq-ack';
 
 @ApiTags('Reporting')
 @Controller('reporting')
@@ -68,12 +69,14 @@ export class ReportingController {
   async handlePaymentSucceeded(@Payload() data: PaymentSucceededPayload, @Ctx() context: RmqContext) {
     this.logger.log(`[Reporting] Processing Payment Succeeded: ${data.amount} ${data.currency}`);
     // Future: this.reportingService.recordRevenue(data);
+    this.ack(context);
   }
 
   @EventPattern('user.registered')
   async handleUserRegistered(@Payload() data: UserRegisteredPayload, @Ctx() context: RmqContext) {
     this.logger.log(`[Reporting] Processing User Registration: ${data.email}`);
     // Future: this.reportingService.recordSignups(data);
+    this.ack(context);
   }
 
   // ── No-op acks ─────────────────────────────────────────────────────────────
@@ -84,29 +87,33 @@ export class ReportingController {
   // Remove an entry once reporting actually needs to consume that event.
 
   @EventPattern('user.verify-email')
-  ackUserVerifyEmail() { /* no-op */ }
+  ackUserVerifyEmail(@Ctx() context: RmqContext) { this.ack(context); }
 
   @EventPattern('user.email-verified')
-  ackUserEmailVerified() { /* no-op */ }
+  ackUserEmailVerified(@Ctx() context: RmqContext) { this.ack(context); }
 
   @EventPattern('user.forgot-password')
-  ackUserForgotPassword() { /* no-op */ }
+  ackUserForgotPassword(@Ctx() context: RmqContext) { this.ack(context); }
 
   @EventPattern('payment.created')
-  ackPaymentCreated() { /* no-op */ }
+  ackPaymentCreated(@Ctx() context: RmqContext) { this.ack(context); }
 
   @EventPattern('payment.failed')
-  ackPaymentFailed() { /* no-op */ }
+  ackPaymentFailed(@Ctx() context: RmqContext) { this.ack(context); }
 
   @EventPattern('payment.refunded')
-  ackPaymentRefunded() { /* no-op */ }
+  ackPaymentRefunded(@Ctx() context: RmqContext) { this.ack(context); }
 
   @EventPattern('support.ticket.created')
-  ackSupportTicketCreated() { /* no-op */ }
+  ackSupportTicketCreated(@Ctx() context: RmqContext) { this.ack(context); }
 
   @EventPattern('support.ticket.replied')
-  ackSupportTicketReplied() { /* no-op */ }
+  ackSupportTicketReplied(@Ctx() context: RmqContext) { this.ack(context); }
 
   @EventPattern('support.ticket.status-updated')
-  ackSupportTicketStatusUpdated() { /* no-op */ }
+  ackSupportTicketStatusUpdated(@Ctx() context: RmqContext) { this.ack(context); }
+
+  private ack(context: RmqContext) {
+    acknowledgeRmqMessage(context, this.logger, context.getPattern(), 'reporting-processed');
+  }
 }
