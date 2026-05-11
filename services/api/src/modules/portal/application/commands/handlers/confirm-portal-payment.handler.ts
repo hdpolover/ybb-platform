@@ -150,6 +150,7 @@ export class ConfirmPortalPaymentHandler {
                 customer_email: customerEmail,
                 customer_name: customerName,
                 payment_category: 'registration',
+                ...(exchangeRate !== undefined ? { exchange_rate_value: String(exchangeRate) } : {}),
             },
             exchange_rate: exchangeRate,
         });
