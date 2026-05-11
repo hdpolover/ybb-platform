@@ -473,14 +473,17 @@ export type BrandImpactStats = {
   editions_held?: string;
 };
 
+export type BrandSectionBackground = {
+  desktop_url?: string;
+  mobile_url?: string;
+};
+
 export type BrandPromoCta = {
   eyebrow?: string;
   title?: string;
   subtitle?: string;
   primary_cta_label?: string;
   primary_cta_href?: string;
-  background_image_url?: string;
-  background_image_mobile_url?: string;
   video_url?: string;
   video_title?: string;
   video_description?: string;
@@ -536,6 +539,8 @@ export type BrandMetadata = {
   moments_shorts?: BrandMomentsShorts;
   program_objectives?: BrandProgramObjectives;
   further_information?: BrandFurtherInformation;
+  /** Global background image used by all landing sections (benefits, shorts, promo CTA, further info). */
+  section_background?: BrandSectionBackground;
   partners_canva_url?: string | null;
   affiliateCommission?: AffiliateCommissionMetadata | null;
   recognition?: Record<string, unknown>;

@@ -90,6 +90,7 @@ import {
   type BrandMomentsShorts,
   type BrandProgramObjectives,
   type BrandFurtherInformation,
+  type BrandSectionBackground,
   type BrandPaymentInfo,
   type BrandPaymentInfoItem,
 } from "../../api";
@@ -1722,6 +1723,206 @@ function ImpactStatsSheet({
   );
 }
 
+// ─── Section Background Sheet ─────────────────────────────────────────────────
+
+function SectionBackgroundSheet({
+  brandId,
+  initial,
+  onSaved,
+}: {
+  brandId: string;
+  initial: BrandSectionBackground | undefined;
+  onSaved: (updated: BrandMetadata) => void;
+}) {
+  const { adminProfile } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState<BrandSectionBackground>(initial ?? {});
+  const [pendingDesktopFile, setPendingDesktopFile] = useState<File | null>(null);
+  const [pendingMobileFile, setPendingMobileFile] = useState<File | null>(null);
+  const desktopInputRef = useRef<HTMLInputElement>(null);
+  const mobileInputRef = useRef<HTMLInputElement>(null);
+
+  function set<K extends keyof BrandSectionBackground>(key: K, value: BrandSectionBackground[K]) {
+    setForm((current) => ({ ...current, [key]: value }));
+    setError(null);
+  }
+
+  async function handleSave() {
+    if ((pendingDesktopFile || pendingMobileFile) && !adminProfile?.userId) {
+      setError("An admin user session is required before images can be uploaded.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      let desktopUrl = form.desktop_url?.trim() || undefined;
+      let mobileUrl = form.mobile_url?.trim() || undefined;
+
+      if (pendingDesktopFile) {
+        const upload = await uploadFileViaPresignedUrl(pendingDesktopFile, {
+          userId: adminProfile!.userId,
+          brandId,
+          bucket: "brands",
+          assetType: "image",
+          title: pendingDesktopFile.name,
+          altText: "Section background desktop",
+        });
+        if (!upload.publicUrl) throw new Error("Desktop image upload succeeded but no public URL was returned.");
+        desktopUrl = upload.publicUrl;
+      }
+
+      if (pendingMobileFile) {
+        const upload = await uploadFileViaPresignedUrl(pendingMobileFile, {
+          userId: adminProfile!.userId,
+          brandId,
+          bucket: "brands",
+          assetType: "image",
+          title: pendingMobileFile.name,
+          altText: "Section background mobile",
+        });
+        if (!upload.publicUrl) throw new Error("Mobile image upload succeeded but no public URL was returned.");
+        mobileUrl = upload.publicUrl;
+      }
+
+      const updated = await updatePlatformBrandMetadata(brandId, {
+        section_background: { desktop_url: desktopUrl, mobile_url: mobileUrl },
+      });
+      onSaved(updated);
+      setOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function openSheet() {
+    setForm(initial ?? {});
+    setPendingDesktopFile(null);
+    setPendingMobileFile(null);
+    setError(null);
+    setOpen(true);
+  }
+
+  return (
+    <>
+      <Button size="sm" variant="outline" onClick={openSheet}>
+        <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
+      </Button>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent side="right" className="sm:max-w-md overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Section Background Image</SheetTitle>
+          </SheetHeader>
+          <p className="mt-2 text-sm text-zinc-500">
+            This image is shared across all landing page sections that use a background (Benefits, Video Shorts, Promo CTA, Further Information).
+          </p>
+          <div className="mt-6 space-y-4">
+            <SheetMsg message={error} variant="error" />
+
+            {/* Desktop Background Image */}
+            <div className="space-y-1.5">
+              <Label>Desktop Background Image</Label>
+              <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
+                <div
+                  className="flex h-28 items-center justify-center bg-zinc-50 cursor-pointer"
+                  onClick={() => desktopInputRef.current?.click()}
+                >
+                  {pendingDesktopFile ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={URL.createObjectURL(pendingDesktopFile)} alt="Desktop preview" className="h-full w-full object-cover" />
+                  ) : form.desktop_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={form.desktop_url} alt="Desktop background" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex flex-col items-center gap-1.5 text-zinc-400">
+                      <ImageIcon className="h-6 w-6" />
+                      <span className="text-xs">Upload or paste URL</span>
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-2 border-t border-zinc-100 p-3">
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" type="button" onClick={() => desktopInputRef.current?.click()}>
+                      <Upload className="mr-1 h-3.5 w-3.5" /> Upload image
+                    </Button>
+                    {(pendingDesktopFile || form.desktop_url) && (
+                      <Button size="sm" variant="ghost" type="button" onClick={() => { setPendingDesktopFile(null); set("desktop_url", undefined); }}>
+                        <X className="mr-1 h-3.5 w-3.5" /> Clear
+                      </Button>
+                    )}
+                  </div>
+                  <Input
+                    value={form.desktop_url ?? ""}
+                    onChange={(e) => { set("desktop_url", e.target.value); setPendingDesktopFile(null); }}
+                    placeholder="https://... or /img/background.png"
+                  />
+                  {pendingDesktopFile && (
+                    <p className="text-xs font-medium text-blue-600">{pendingDesktopFile.name} selected. Save to upload.</p>
+                  )}
+                </div>
+              </div>
+              <input ref={desktopInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0] ?? null; setPendingDesktopFile(f); if (f) set("desktop_url", undefined); e.target.value = ""; }} />
+            </div>
+
+            {/* Mobile Background Image */}
+            <div className="space-y-1.5">
+              <Label>Mobile Background Image</Label>
+              <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
+                <div
+                  className="flex h-28 items-center justify-center bg-zinc-50 cursor-pointer"
+                  onClick={() => mobileInputRef.current?.click()}
+                >
+                  {pendingMobileFile ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={URL.createObjectURL(pendingMobileFile)} alt="Mobile preview" className="h-full w-full object-cover" />
+                  ) : form.mobile_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={form.mobile_url} alt="Mobile background" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex flex-col items-center gap-1.5 text-zinc-400">
+                      <ImageIcon className="h-6 w-6" />
+                      <span className="text-xs">Upload or paste URL</span>
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-2 border-t border-zinc-100 p-3">
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" type="button" onClick={() => mobileInputRef.current?.click()}>
+                      <Upload className="mr-1 h-3.5 w-3.5" /> Upload image
+                    </Button>
+                    {(pendingMobileFile || form.mobile_url) && (
+                      <Button size="sm" variant="ghost" type="button" onClick={() => { setPendingMobileFile(null); set("mobile_url", undefined); }}>
+                        <X className="mr-1 h-3.5 w-3.5" /> Clear
+                      </Button>
+                    )}
+                  </div>
+                  <Input
+                    value={form.mobile_url ?? ""}
+                    onChange={(e) => { set("mobile_url", e.target.value); setPendingMobileFile(null); }}
+                    placeholder="https://... or /img/background-mobile.png"
+                  />
+                  {pendingMobileFile && (
+                    <p className="text-xs font-medium text-blue-600">{pendingMobileFile.name} selected. Save to upload.</p>
+                  )}
+                </div>
+              </div>
+              <input ref={mobileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0] ?? null; setPendingMobileFile(f); if (f) set("mobile_url", undefined); e.target.value = ""; }} />
+            </div>
+          </div>
+          <SheetFooter className="mt-6">
+            <Button onClick={handleSave} loading={saving} disabled={saving}>
+              <Save className="mr-1.5 h-4 w-4" /> Save
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+    </>
+  );
+}
+
 // ─── Promo CTA Sheet ──────────────────────────────────────────────────────────
 
 function PromoCtaSheet({
@@ -1775,13 +1976,6 @@ function PromoCtaSheet({
               <FieldInput label="Button URL" id="cta-href" value={form.primary_cta_href ?? ""} onChange={(v) => set("primary_cta_href", v)} placeholder="/apply" />
             </div>
             <div className="border-t border-zinc-100 pt-4">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">Background</p>
-              <div className="space-y-3">
-                <FieldInput label="Desktop Background Image URL" id="cta-bg-desktop" value={form.background_image_url ?? ""} onChange={(v) => set("background_image_url", v)} placeholder="https://... or /img/ctabekground.png" />
-                <FieldInput label="Mobile Background Image URL" id="cta-bg-mobile" value={form.background_image_mobile_url ?? ""} onChange={(v) => set("background_image_mobile_url", v)} placeholder="https://... or /img/ctabackgroundformobile.png" />
-              </div>
-            </div>
-            <div className="border-t border-zinc-100 pt-4">
               <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">Video</p>
               <div className="space-y-3">
                 <FieldInput label="Embed URL" id="cta-video" value={form.video_url ?? ""} onChange={(v) => set("video_url", v)} placeholder="https://youtube.com/embed/..." />
@@ -1810,15 +2004,10 @@ function FurtherInformationSheet({
   initial: BrandFurtherInformation | undefined;
   onSaved: (updated: BrandMetadata) => void;
 }) {
-  const { adminProfile } = useAuth();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<BrandFurtherInformation>(initial ?? {});
-  const [pendingDesktopFile, setPendingDesktopFile] = useState<File | null>(null);
-  const [pendingMobileFile, setPendingMobileFile] = useState<File | null>(null);
-  const desktopInputRef = useRef<HTMLInputElement>(null);
-  const mobileInputRef = useRef<HTMLInputElement>(null);
 
   function set<K extends keyof BrandFurtherInformation>(key: K, value: BrandFurtherInformation[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -1826,49 +2015,14 @@ function FurtherInformationSheet({
   }
 
   async function handleSave() {
-    if ((pendingDesktopFile || pendingMobileFile) && !adminProfile?.userId) {
-      setError("An admin user session is required before images can be uploaded.");
-      return;
-    }
     setSaving(true);
     setError(null);
     try {
-      let desktopUrl = form.background_image_url?.trim() || undefined;
-      let mobileUrl = form.background_image_mobile_url?.trim() || undefined;
-
-      if (pendingDesktopFile) {
-        const upload = await uploadFileViaPresignedUrl(pendingDesktopFile, {
-          userId: adminProfile!.userId,
-          brandId,
-          bucket: "brands",
-          assetType: "image",
-          title: pendingDesktopFile.name,
-          altText: "Further information desktop background",
-        });
-        if (!upload.publicUrl) throw new Error("Desktop image upload succeeded but no public URL was returned.");
-        desktopUrl = upload.publicUrl;
-      }
-
-      if (pendingMobileFile) {
-        const upload = await uploadFileViaPresignedUrl(pendingMobileFile, {
-          userId: adminProfile!.userId,
-          brandId,
-          bucket: "brands",
-          assetType: "image",
-          title: pendingMobileFile.name,
-          altText: "Further information mobile background",
-        });
-        if (!upload.publicUrl) throw new Error("Mobile image upload succeeded but no public URL was returned.");
-        mobileUrl = upload.publicUrl;
-      }
-
       const updated = await updatePlatformBrandMetadata(brandId, {
         further_information: {
           eyebrow: form.eyebrow?.trim() || undefined,
           title: form.title?.trim() || undefined,
           subtitle: form.subtitle?.trim() || undefined,
-          background_image_url: desktopUrl,
-          background_image_mobile_url: mobileUrl,
         },
       });
       onSaved(updated);
@@ -1882,8 +2036,6 @@ function FurtherInformationSheet({
 
   function openSheet() {
     setForm(initial ?? {});
-    setPendingDesktopFile(null);
-    setPendingMobileFile(null);
     setError(null);
     setOpen(true);
   }
@@ -1921,100 +2073,6 @@ function FurtherInformationSheet({
               onChange={(v) => set("subtitle", v)}
               rows={3}
             />
-            <div className="border-t border-zinc-100 pt-4">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">Images</p>
-              <div className="space-y-4">
-                {/* Desktop Background Image */}
-                <div className="space-y-1.5">
-                  <Label>Desktop Background Image</Label>
-                  <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
-                    <div
-                      className="flex h-28 items-center justify-center bg-zinc-50 cursor-pointer"
-                      onClick={() => desktopInputRef.current?.click()}
-                    >
-                      {pendingDesktopFile ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={URL.createObjectURL(pendingDesktopFile)} alt="Desktop preview" className="h-full w-full object-cover" />
-                      ) : form.background_image_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={form.background_image_url} alt="Desktop background" className="h-full w-full object-cover" />
-                      ) : (
-                        <div className="flex flex-col items-center gap-1.5 text-zinc-400">
-                          <ImageIcon className="h-6 w-6" />
-                          <span className="text-xs">Upload or paste URL</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="space-y-2 border-t border-zinc-100 p-3">
-                      <div className="flex flex-wrap gap-2">
-                        <Button size="sm" variant="outline" type="button" onClick={() => desktopInputRef.current?.click()}>
-                          <Upload className="mr-1 h-3.5 w-3.5" /> Upload image
-                        </Button>
-                        {(pendingDesktopFile || form.background_image_url) && (
-                          <Button size="sm" variant="ghost" type="button" onClick={() => { setPendingDesktopFile(null); set("background_image_url", undefined); }}>
-                            <X className="mr-1 h-3.5 w-3.5" /> Clear
-                          </Button>
-                        )}
-                      </div>
-                      <Input
-                        value={form.background_image_url ?? ""}
-                        onChange={(e) => { set("background_image_url", e.target.value); setPendingDesktopFile(null); }}
-                        placeholder="https://... or /img/halfback.png"
-                      />
-                      {pendingDesktopFile && (
-                        <p className="text-xs font-medium text-blue-600">{pendingDesktopFile.name} selected. Save to upload.</p>
-                      )}
-                    </div>
-                  </div>
-                  <input ref={desktopInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0] ?? null; setPendingDesktopFile(f); if (f) set("background_image_url", undefined); e.target.value = ""; }} />
-                </div>
-
-                {/* Mobile Background Image */}
-                <div className="space-y-1.5">
-                  <Label>Mobile Background Image</Label>
-                  <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
-                    <div
-                      className="flex h-28 items-center justify-center bg-zinc-50 cursor-pointer"
-                      onClick={() => mobileInputRef.current?.click()}
-                    >
-                      {pendingMobileFile ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={URL.createObjectURL(pendingMobileFile)} alt="Mobile preview" className="h-full w-full object-cover" />
-                      ) : form.background_image_mobile_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={form.background_image_mobile_url} alt="Mobile background" className="h-full w-full object-cover" />
-                      ) : (
-                        <div className="flex flex-col items-center gap-1.5 text-zinc-400">
-                          <ImageIcon className="h-6 w-6" />
-                          <span className="text-xs">Upload or paste URL</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="space-y-2 border-t border-zinc-100 p-3">
-                      <div className="flex flex-wrap gap-2">
-                        <Button size="sm" variant="outline" type="button" onClick={() => mobileInputRef.current?.click()}>
-                          <Upload className="mr-1 h-3.5 w-3.5" /> Upload image
-                        </Button>
-                        {(pendingMobileFile || form.background_image_mobile_url) && (
-                          <Button size="sm" variant="ghost" type="button" onClick={() => { setPendingMobileFile(null); set("background_image_mobile_url", undefined); }}>
-                            <X className="mr-1 h-3.5 w-3.5" /> Clear
-                          </Button>
-                        )}
-                      </div>
-                      <Input
-                        value={form.background_image_mobile_url ?? ""}
-                        onChange={(e) => { set("background_image_mobile_url", e.target.value); setPendingMobileFile(null); }}
-                        placeholder="https://... or /img/backgroundformobile.png"
-                      />
-                      {pendingMobileFile && (
-                        <p className="text-xs font-medium text-blue-600">{pendingMobileFile.name} selected. Save to upload.</p>
-                      )}
-                    </div>
-                  </div>
-                  <input ref={mobileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0] ?? null; setPendingMobileFile(f); if (f) set("background_image_mobile_url", undefined); e.target.value = ""; }} />
-                </div>
-              </div>
-            </div>
           </div>
           <SheetFooter className="mt-6">
             <Button onClick={handleSave} loading={saving} disabled={saving}>
@@ -2226,6 +2284,27 @@ function LandingPageTab({ brandId }: { brandId: string }) {
 
   return (
     <div className="space-y-4">
+      {/* Section Background Image */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Section Background Image</CardTitle>
+            <SectionBackgroundSheet brandId={brandId} initial={meta.section_background} onSaved={setMeta} />
+          </div>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-3 text-xs text-zinc-500">Used by all sections that have a background image (Benefits, Video Shorts, Promo CTA, Further Information).</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <FieldView label="Desktop URL" value={meta.section_background?.desktop_url} />
+            <FieldView label="Mobile URL" value={meta.section_background?.mobile_url} />
+          </div>
+          {meta.section_background?.desktop_url && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={meta.section_background.desktop_url} alt="Section background preview" className="mt-3 h-24 w-full rounded-lg object-cover" />
+          )}
+        </CardContent>
+      </Card>
+
       {/* Benefits */}
       <Card>
         <CardHeader>
@@ -2342,8 +2421,6 @@ function LandingPageTab({ brandId }: { brandId: string }) {
             <FieldView label="Button Label" value={meta.promo_cta?.primary_cta_label} />
             <FieldView label="Title" value={meta.promo_cta?.title} />
             <FieldView label="Button URL" value={meta.promo_cta?.primary_cta_href} />
-            <FieldView label="Desktop Background URL" value={meta.promo_cta?.background_image_url} />
-            <FieldView label="Mobile Background URL" value={meta.promo_cta?.background_image_mobile_url} />
           </div>
         </CardContent>
       </Card>
@@ -2361,8 +2438,6 @@ function LandingPageTab({ brandId }: { brandId: string }) {
             <FieldView label="Eyebrow" value={meta.further_information?.eyebrow} />
             <FieldView label="Title" value={meta.further_information?.title} />
             <FieldView label="Subtitle" value={meta.further_information?.subtitle} />
-            <FieldView label="Desktop Background URL" value={meta.further_information?.background_image_url} />
-            <FieldView label="Mobile Background URL" value={meta.further_information?.background_image_mobile_url} />
             <FieldView label="Mockup Image URL" value={meta.further_information?.mockup_image_url} />
           </div>
         </CardContent>
