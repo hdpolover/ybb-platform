@@ -22,6 +22,7 @@ const AUDITED_EVENTS = [
   'payment.succeeded',
   'payment.created',
   'payment.failed',
+  'payment.cancelled',
   'payment.refunded',
   // support.* — emitted from support ticket workflows
   'support.ticket.created',
@@ -55,6 +56,9 @@ export class AuditController {
 
   @EventPattern('payment.failed')
   paymentFailed(@Payload() d: RmqEventPayload, @Ctx() c: RmqContext) { return this.log(d, c); }
+
+  @EventPattern('payment.cancelled')
+  paymentCancelled(@Payload() d: RmqEventPayload, @Ctx() c: RmqContext) { return this.log(d, c); }
 
   @EventPattern('payment.refunded')
   paymentRefunded(@Payload() d: RmqEventPayload, @Ctx() c: RmqContext) { return this.log(d, c); }

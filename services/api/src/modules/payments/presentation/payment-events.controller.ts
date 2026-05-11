@@ -35,6 +35,21 @@ export class PaymentEventsController {
         @Optional() private readonly referralFunnel?: ReferralFunnelService,
     ) {}
 
+    @EventPattern('payment.created')
+    handlePaymentCreated(@Ctx() context: RmqContext) {
+        this.ackIgnoredPaymentEvent(context);
+    }
+
+    @EventPattern('payment.cancelled')
+    handlePaymentCancelled(@Ctx() context: RmqContext) {
+        this.ackIgnoredPaymentEvent(context);
+    }
+
+    @EventPattern('payment.refunded')
+    handlePaymentRefunded(@Ctx() context: RmqContext) {
+        this.ackIgnoredPaymentEvent(context);
+    }
+
     @EventPattern('payment.succeeded')
     async handlePaymentSucceeded(
         @Payload() data: RmqEventPayload,
@@ -345,7 +360,7 @@ export class PaymentEventsController {
             this.logger.error(
                 `[payment-events-retry] max retries reached but message could not be routed to DLQ event=${eventType}`,
             );
-            return true;
+            return false;
         }
 
         const dlqName = `${this.queueName}.dlq`;
@@ -378,6 +393,10 @@ export class PaymentEventsController {
         );
         acknowledgeRmqMessage(context, this.logger, eventType, 'retry-exhausted');
         return true;
+    }
+
+    private ackIgnoredPaymentEvent(context: RmqContext) {
+        acknowledgeRmqMessage(context, this.logger, context.getPattern(), 'ignored');
     }
 
     /**

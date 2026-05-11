@@ -101,6 +101,9 @@ export class ReportingController {
   @EventPattern('payment.failed')
   ackPaymentFailed(@Ctx() context: RmqContext) { this.ack(context); }
 
+  @EventPattern('payment.cancelled')
+  ackPaymentCancelled(@Ctx() context: RmqContext) { this.ack(context); }
+
   @EventPattern('payment.refunded')
   ackPaymentRefunded(@Ctx() context: RmqContext) { this.ack(context); }
 
