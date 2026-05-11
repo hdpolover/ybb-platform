@@ -35,6 +35,7 @@ type FurtherInformationMetadata = {
 type SectionBackgroundMetadata = {
   desktop_url?: string;
   mobile_url?: string;
+  text_color_scheme?: 'light' | 'dark';
 };
 
 function normalizePaymentInfoContent(value: unknown): Record<string, unknown> | null {
@@ -325,6 +326,7 @@ export class HomeStrategy implements ILandingPageStrategy {
       globalBg?.mobile_url ||
       furtherInformationMeta?.background_image_mobile_url ||
       undefined;
+    const sectionTextColorScheme = globalBg?.text_color_scheme || 'dark';
     const fallbackObjectiveItems = (program?.objectives ?? []).map((obj) => ({
       id: obj.id,
       description: obj.description,
@@ -488,6 +490,7 @@ export class HomeStrategy implements ILandingPageStrategy {
             title: (brandMeta.moments_shorts as { eyebrow?: string; title?: string; description?: string } | undefined)?.title || 'Discover Our Moments in 60 Seconds',
             description: (brandMeta.moments_shorts as { eyebrow?: string; title?: string; description?: string } | undefined)?.description || `Watch bite-sized highlights from ${brand.name}'s workshops and cultural sessions.`,
             background_image_url: sectionBgDesktop,
+            text_color_scheme: sectionTextColorScheme,
             items: shortsGallery.map(s => ({
               id: s.id,
               title: s.title,
@@ -533,6 +536,7 @@ export class HomeStrategy implements ILandingPageStrategy {
             }),
             background_image_url: sectionBgDesktop,
             background_image_mobile_url: sectionBgMobile,
+            text_color_scheme: sectionTextColorScheme,
           },
         },
         {
@@ -628,6 +632,7 @@ export class HomeStrategy implements ILandingPageStrategy {
               'The complete information regarding this program can be seen in the guideline below.',
             background_image_url: sectionBgDesktop,
             background_image_mobile_url: sectionBgMobile,
+            text_color_scheme: sectionTextColorScheme,
             mockup_image_url: furtherInformationMeta?.mockup_image_url || '/img/mockupjapan.png',
           },
         },
@@ -642,6 +647,7 @@ export class HomeStrategy implements ILandingPageStrategy {
             ...((brandMeta.promo_cta as Record<string, unknown>) || {}),
             background_image_url: sectionBgDesktop,
             background_image_mobile_url: sectionBgMobile,
+            text_color_scheme: sectionTextColorScheme,
             video_url: (brandMeta.promo_cta as { video_url?: string } | undefined)?.video_url || program?.videoUrl || null,
             video_title: (brandMeta.promo_cta as { video_title?: string } | undefined)?.video_title || (program ? `${program.name} Registration Guideline` : null),
             video_description: (brandMeta.promo_cta as { video_description?: string } | undefined)?.video_description || null,

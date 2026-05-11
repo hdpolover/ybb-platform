@@ -1787,7 +1787,7 @@ function SectionBackgroundSheet({
       }
 
       const updated = await updatePlatformBrandMetadata(brandId, {
-        section_background: { desktop_url: desktopUrl, mobile_url: mobileUrl },
+        section_background: { desktop_url: desktopUrl, mobile_url: mobileUrl, text_color_scheme: form.text_color_scheme },
       });
       onSaved(updated);
       setOpen(false);
@@ -1910,6 +1910,31 @@ function SectionBackgroundSheet({
                 </div>
               </div>
               <input ref={mobileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0] ?? null; setPendingMobileFile(f); if (f) set("mobile_url", undefined); e.target.value = ""; }} />
+            </div>
+
+            {/* Text Color Scheme */}
+            <div className="border-t border-zinc-100 pt-4">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Text Color on Background</p>
+              <p className="mb-3 text-xs text-zinc-500">Choose whether titles and labels on top of the background image should be dark or light (white).</p>
+              <div className="grid grid-cols-2 gap-2">
+                {(['dark', 'light'] as const).map((scheme) => (
+                  <button
+                    key={scheme}
+                    type="button"
+                    onClick={() => set("text_color_scheme", scheme)}
+                    className={`flex flex-col items-center gap-2 rounded-lg border-2 p-3 text-sm font-medium transition ${
+                      (form.text_color_scheme ?? 'dark') === scheme
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300'
+                    }`}
+                  >
+                    <span className={`flex h-8 w-full items-center justify-center rounded ${scheme === 'dark' ? 'bg-zinc-800 text-white' : 'bg-zinc-200 text-zinc-900'}`}>
+                      Aa
+                    </span>
+                    {scheme === 'dark' ? 'Dark text' : 'Light (white) text'}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
           <SheetFooter className="mt-6">
@@ -2294,13 +2319,16 @@ function LandingPageTab({ brandId }: { brandId: string }) {
         </CardHeader>
         <CardContent>
           <p className="mb-3 text-xs text-zinc-500">Used by all sections that have a background image (Benefits, Video Shorts, Promo CTA, Further Information).</p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <FieldView label="Desktop URL" value={meta.section_background?.desktop_url} />
-            <FieldView label="Mobile URL" value={meta.section_background?.mobile_url} />
-          </div>
-          {meta.section_background?.desktop_url && (
+          {meta.section_background?.desktop_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={meta.section_background.desktop_url} alt="Section background preview" className="mt-3 h-24 w-full rounded-lg object-cover" />
+            <img src={meta.section_background.desktop_url} alt="Section background preview" className="h-24 w-full rounded-lg object-cover" />
+          ) : (
+            <p className="text-sm text-zinc-400">No background image set. Sections will use the brand color.</p>
+          )}
+          {meta.section_background && (
+            <p className="mt-2 text-xs text-zinc-500">
+              Text color: <span className="font-medium text-zinc-700">{meta.section_background.text_color_scheme === 'light' ? 'Light (white)' : 'Dark (default)'}</span>
+            </p>
           )}
         </CardContent>
       </Card>
