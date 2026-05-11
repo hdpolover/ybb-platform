@@ -542,6 +542,13 @@ export class PaymentAdminController {
                                 user: { select: { email: true } },
                             },
                         },
+                        program: {
+                            select: {
+                                brand: {
+                                    select: { landingUrl: true, websiteUrl: true },
+                                },
+                            },
+                        },
                     },
                 },
             },
@@ -581,6 +588,13 @@ export class PaymentAdminController {
             if (body.action === 'reject') {
                 const email = invoice.application?.participant?.user?.email;
                 if (email) {
+                    const brand = invoice.application?.program?.brand;
+                    const paymentsPageUrl = this.buildParticipantPaymentsUrl(brand);
+                    if (!paymentsPageUrl) {
+                        this.logger.warn(
+                            `payment.rejected for invoice ${id} has no paymentsPageUrl: brand.landingUrl/websiteUrl unset`,
+                        );
+                    }
                     try {
                         await this.rabbitmqProducer.emit('payment.rejected', {
                             email,
@@ -589,7 +603,7 @@ export class PaymentAdminController {
                             currency: invoice.currency,
                             order_id: invoice.id,
                             reason: body.reason?.trim() || 'No reason provided',
-                            paymentsPageUrl: this.buildParticipantPaymentsUrl(),
+                            paymentsPageUrl,
                             metadata: {
                                 application_id: invoice.applicationId,
                                 invoice_id: invoice.id,
@@ -617,12 +631,14 @@ export class PaymentAdminController {
         }
     }
 
-    private buildParticipantPaymentsUrl(): string {
-        const base = (
-            this.configService.get<string>('PARTICIPANT_APP_URL')
-            ?? this.configService.get<string>('FRONTEND_URL')
-            ?? ''
-        ).trim().replace(/\/$/, '');
+    // Resolve the participant payments URL from the brand the invoice belongs to.
+    // landingUrl is canonical; websiteUrl is a fallback for brands that haven't
+    // configured one yet. Returns empty when neither is set so the notification
+    // template can render without a CTA rather than linking to nowhere.
+    private buildParticipantPaymentsUrl(
+        brand: { landingUrl?: string | null; websiteUrl?: string | null } | null | undefined,
+    ): string {
+        const base = (brand?.landingUrl ?? brand?.websiteUrl ?? '').trim().replace(/\/$/, '');
         if (!base) return '';
         return `${base}/dashboard/payments`;
     }
