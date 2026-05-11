@@ -233,6 +233,13 @@ model ApplicationInvoice {
   externalIntentId      String? @map("external_intent_id") @db.VarChar(100)
   paymentMethod         String? @map("payment_method") @db.VarChar(50)
 
+  // Verifier audit trail — populated whenever an admin manually approves,
+  // rejects, or overrides this invoice's status. Source of truth for the
+  // payment service's PaymentTransaction.AdminNotes / ReviewedBy fields.
+  verifiedBy      String?   @map("verified_by") @db.Uuid
+  verifiedAt      DateTime? @map("verified_at") @db.Timestamptz(6)
+  rejectionReason String?   @map("rejection_reason") @db.Text
+
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
