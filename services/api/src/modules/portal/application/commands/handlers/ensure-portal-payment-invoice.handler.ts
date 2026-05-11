@@ -65,6 +65,8 @@ export class EnsurePortalPaymentInvoiceHandler {
                 name: true,
                 price: true,
                 currency: true,
+                usdPrice: true,
+                idrPrice: true,
                 allowedCategories: true,
             },
         });
@@ -100,8 +102,23 @@ export class EnsurePortalPaymentInvoiceHandler {
             };
         }
 
-        const amount = Number(tier.price);
-        if (Number.isNaN(amount) || amount < 0) {
+        // Dual-pricing snapshots: prefer the explicit usdPrice/idrPrice fields
+        // on the tier when present (admin-curated, locked at invoice creation
+        // so later tier edits or FX drift can't retroactively change what the
+        // participant owed). Fall back to the legacy `tier.price`/`tier.currency`
+        // for tiers not yet migrated to dual-pricing.
+        const usdSnapshot = tier.usdPrice !== null && tier.usdPrice !== undefined ? Number(tier.usdPrice) : null;
+        const idrSnapshot = tier.idrPrice !== null && tier.idrPrice !== undefined ? Number(tier.idrPrice) : null;
+
+        // Canonical amount/currency for an unpaid invoice: USD if a usdPrice
+        // snapshot exists (the new dual-price model treats USD as canonical),
+        // otherwise the legacy tier price + currency. On manual confirm the
+        // ConfirmPortalPayment handler swaps these to the IDR snapshot.
+        const useDualPricing = usdSnapshot !== null;
+        const canonicalAmount = useDualPricing ? usdSnapshot : Number(tier.price);
+        const canonicalCurrency = useDualPricing ? 'USD' : tier.currency;
+
+        if (Number.isNaN(canonicalAmount) || canonicalAmount < 0) {
             throw new NotFoundException('Payment option amount is invalid');
         }
 
@@ -109,7 +126,7 @@ export class EnsurePortalPaymentInvoiceHandler {
             programRate: application.program?.usdInIdr,
         });
 
-        if (exchangeRateSnapshot === undefined && tier.currency?.toUpperCase() === 'USD') {
+        if (exchangeRateSnapshot === undefined && canonicalCurrency.toUpperCase() === 'USD') {
             const brandSettings = await this.prisma.brandSetting.findFirst({
                 where: { brandId: application.program?.brandId },
                 select: { usdInIdr: true },
@@ -121,8 +138,10 @@ export class EnsurePortalPaymentInvoiceHandler {
             data: {
                 applicationId: application.id,
                 pricingTierId: tier.id,
-                amount,
-                currency: tier.currency,
+                amount: canonicalAmount,
+                currency: canonicalCurrency,
+                amountUsd: usdSnapshot,
+                amountIdr: idrSnapshot,
                 status: 'unpaid',
                 exchangeRateSnapshot,
             },

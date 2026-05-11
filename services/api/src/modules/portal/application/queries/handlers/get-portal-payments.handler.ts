@@ -91,6 +91,8 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                         id: true,
                         amount: true,
                         currency: true,
+                        amountUsd: true,
+                        amountIdr: true,
                         status: true,
                         paidAt: true,
                         createdAt: true,
@@ -285,13 +287,22 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                 if (invoice) {
                     const normalizedStatus = String(invoice.status).toLowerCase();
                     const tierPrices = resolveTierDualPrices(tier);
+                    // Prefer the invoice's own snapshot — it's frozen at intent
+                    // creation. Fall back to the tier only for legacy invoices
+                    // that predate the snapshot columns.
+                    const usdPrice = invoice.amountUsd !== null && invoice.amountUsd !== undefined
+                        ? Number(invoice.amountUsd)
+                        : tierPrices.usdPrice;
+                    const idrPrice = invoice.amountIdr !== null && invoice.amountIdr !== undefined
+                        ? Number(invoice.amountIdr)
+                        : tierPrices.idrPrice;
                     const item: PaymentItemDto = {
                         id: invoice.id,
                         title: tier.name,
                         amount: Number(invoice.amount),
                         currency: invoice.currency,
-                        usdPrice: tierPrices.usdPrice,
-                        idrPrice: tierPrices.idrPrice,
+                        usdPrice,
+                        idrPrice,
                         exchangeRate: resolveUsdInIdrRate({
                             snapshot: invoice.exchangeRateSnapshot,
                             programRate: application.program?.usdInIdr,
@@ -392,13 +403,20 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                 const archivedPrices = archivedTier
                     ? resolveTierDualPrices(archivedTier)
                     : { usdPrice: 0, idrPrice: 0 };
+                // Same precedence as the in-scope branch above: invoice snapshot wins.
+                const archivedUsdPrice = invoice.amountUsd !== null && invoice.amountUsd !== undefined
+                    ? Number(invoice.amountUsd)
+                    : (archivedTier ? archivedPrices.usdPrice : undefined);
+                const archivedIdrPrice = invoice.amountIdr !== null && invoice.amountIdr !== undefined
+                    ? Number(invoice.amountIdr)
+                    : (archivedTier ? archivedPrices.idrPrice : undefined);
                 const item: PaymentItemDto = {
                     id: invoice.id,
                     title: archivedTier?.name ?? 'Archived Payment Option',
                     amount: Number(invoice.amount),
                     currency: invoice.currency,
-                    usdPrice: archivedTier ? archivedPrices.usdPrice : undefined,
-                    idrPrice: archivedTier ? archivedPrices.idrPrice : undefined,
+                    usdPrice: archivedUsdPrice,
+                    idrPrice: archivedIdrPrice,
                     exchangeRate: resolveUsdInIdrRate({
                         snapshot: invoice.exchangeRateSnapshot,
                         programRate: application.program?.usdInIdr,

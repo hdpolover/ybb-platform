@@ -92,12 +92,25 @@ export class ConfirmPortalPaymentHandler {
         // notification consumer because it short-circuits when `data.email` is empty.
         const customerEmail = invoice.application.participant?.user?.email ?? '';
         const customerName = invoice.application.participant?.fullName ?? customerEmail;
+
+        // Manual transfers settle in IDR — flip the canonical amount/currency to
+        // the IDR snapshot taken at invoice creation. Gateway flows stay USD.
+        // If the IDR snapshot is missing (legacy tier without dual pricing), we
+        // fall through with whatever the invoice currently holds.
+        const idrSnapshot = invoice.amountIdr !== null && invoice.amountIdr !== undefined
+            ? Number(invoice.amountIdr)
+            : null;
+        const settlementIsManualIdr =
+            paymentType === 'manual' && idrSnapshot !== null && idrSnapshot > 0;
+        const settlementAmount = settlementIsManualIdr ? idrSnapshot : Number(invoice.amount);
+        const settlementCurrency = settlementIsManualIdr ? 'IDR' : invoice.currency;
+
         let exchangeRate = resolveUsdInIdrRate({
             snapshot: invoice.exchangeRateSnapshot,
             programRate: invoice.application.program.usdInIdr,
         });
 
-        if (exchangeRate === undefined && invoice.currency.toUpperCase() === 'USD') {
+        if (exchangeRate === undefined && settlementCurrency.toUpperCase() === 'USD') {
             const brandSettings = await this.prisma.brandSetting.findFirst({
                 where: { brandId: invoice.application.program.brandId },
                 select: { usdInIdr: true },
@@ -109,8 +122,8 @@ export class ConfirmPortalPaymentHandler {
         const intentResponse = await this.paymentClient.createIntent({
             user_id: userId,
             participant_id: participant.id,
-            amount: Number(invoice.amount),
-            currency: invoice.currency,
+            amount: settlementAmount,
+            currency: settlementCurrency,
             reference_type: 'invoice',
             reference_id: invoice.id,
             description: `${invoice.pricingTier.name} - ${invoice.application.program.name}`,
@@ -144,7 +157,10 @@ export class ConfirmPortalPaymentHandler {
                 }),
             });
 
-            // Mark invoice as processing
+            // Mark invoice as processing. For manual transfers the canonical
+            // settlement is in IDR, so flip amount/currency to the IDR snapshot
+            // when available — this is what the participant actually wired and
+            // what admin verification needs to match against.
             await this.prisma.applicationInvoice.update({
                 where: { id: invoiceId },
                 data: {
@@ -152,6 +168,9 @@ export class ConfirmPortalPaymentHandler {
                     paymentMethod: paymentMethodId,
                     externalIntentId: intentResponse.intent_id,
                     externalTransactionId: manualResponse.transaction_id,
+                    ...(settlementIsManualIdr
+                        ? { amount: settlementAmount, currency: settlementCurrency }
+                        : {}),
                 },
             });
 

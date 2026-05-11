@@ -168,19 +168,27 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
             exchangeRate = resolveUsdInIdrRate({ programRate: brandSettings?.usdInIdr });
         }
 
-        // Resolve tier dual prices with legacy fallback. Mirrors the pattern in
-        // get-portal-payments.handler.ts so portal list and detail stay aligned
-        // until Phase 5 promotes usd_price/idr_price to NOT NULL columns and a
-        // shared helper is extracted.
+        // Resolve dual prices. The invoice's own amountUsd/amountIdr snapshots
+        // are authoritative — they freeze what the participant was quoted at
+        // intent creation, so later tier price edits don't retroactively change
+        // historic invoices. Fall back to the tier (with legacy currency mapping)
+        // only when the snapshot is missing (legacy invoices created before the
+        // snapshot columns existed).
         const tier = invoice.pricingTier;
         const legacyTierPrice = Number(tier.price);
         const legacyTierCurrency = (tier.currency || '').toUpperCase();
-        const usdPrice = tier.usdPrice !== null && tier.usdPrice !== undefined
+        const tierUsdPrice = tier.usdPrice !== null && tier.usdPrice !== undefined
             ? Number(tier.usdPrice)
             : (legacyTierCurrency === 'USD' ? legacyTierPrice : 0);
-        const idrPrice = tier.idrPrice !== null && tier.idrPrice !== undefined
+        const tierIdrPrice = tier.idrPrice !== null && tier.idrPrice !== undefined
             ? Number(tier.idrPrice)
             : (legacyTierCurrency === 'IDR' ? legacyTierPrice : 0);
+        const usdPrice = invoice.amountUsd !== null && invoice.amountUsd !== undefined
+            ? Number(invoice.amountUsd)
+            : tierUsdPrice;
+        const idrPrice = invoice.amountIdr !== null && invoice.amountIdr !== undefined
+            ? Number(invoice.amountIdr)
+            : tierIdrPrice;
 
         // Surface the participant's submission details inline on the invoice when a
         // payment is awaiting verification. This avoids forcing the participant to
