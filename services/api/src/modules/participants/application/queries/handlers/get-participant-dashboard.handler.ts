@@ -9,6 +9,7 @@ import {
     ParticipantDashboardAnnouncementDto
 } from '../../../presentation/dto/participant-dashboard.dto';
 import { ApplicationStatus } from '@core/entities/participant-application.entity';
+import { buildRichTextPreview } from '@shared/utils/rich-text';
 
 @Injectable()
 @QueryHandler(GetParticipantDashboardQuery)
@@ -125,7 +126,7 @@ export class GetParticipantDashboardHandler implements IQueryHandler<GetParticip
                  id: a.id,
                  title: a.title,
                  date: a.createdAt,
-                 preview: a.content.substring(0, 100) + '...',
+                 preview: buildRichTextPreview(a.content),
                  isRead: a.reads.length > 0
              }));
 

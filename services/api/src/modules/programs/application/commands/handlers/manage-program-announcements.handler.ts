@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
 import {
+  GetProgramAnnouncementCommand,
   CreateProgramAnnouncementCommand,
   UpdateProgramAnnouncementCommand,
   DeleteProgramAnnouncementCommand,
@@ -33,6 +34,25 @@ export class ListProgramAnnouncementsHandler {
       data,
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     };
+  }
+}
+
+@Injectable()
+export class GetProgramAnnouncementHandler {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async execute(command: GetProgramAnnouncementCommand) {
+    const { id } = command;
+
+    const announcement = await this.prisma.programAnnouncement.findUnique({
+      where: { id },
+    });
+
+    if (!announcement) {
+      throw new NotFoundException(`Announcement ${id} not found`);
+    }
+
+    return announcement;
   }
 }
 

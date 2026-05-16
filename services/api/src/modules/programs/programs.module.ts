@@ -28,6 +28,7 @@ import {
 } from './application/queries/handlers/get-form-templates.handler';
 import {
   ListProgramAnnouncementsHandler,
+  GetProgramAnnouncementHandler,
   CreateProgramAnnouncementHandler,
   UpdateProgramAnnouncementHandler,
   DeleteProgramAnnouncementHandler,
@@ -192,6 +193,7 @@ import { FormFieldKeyValidator } from './application/validators/form-field-key.v
 
     // Announcement Handlers
     ListProgramAnnouncementsHandler,
+    GetProgramAnnouncementHandler,
     CreateProgramAnnouncementHandler,
     UpdateProgramAnnouncementHandler,
     DeleteProgramAnnouncementHandler,

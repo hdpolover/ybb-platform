@@ -5,6 +5,7 @@ import { CacheService } from '../../../shared/infrastructure/cache/cache.service
 import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
 import { Brand } from '@prisma/client';
 import { LandingSnapshotService } from '../services/landing-snapshot.service';
+import { buildRichTextPreview } from '@shared/utils/rich-text';
 
 @Injectable()
 export class AnnouncementsStrategy implements ILandingPageStrategy {
@@ -66,15 +67,20 @@ export class AnnouncementsStrategy implements ILandingPageStrategy {
           type: 'announcement_list',
           data: announcements.map(a => {
             const meta = (a.metadata as Record<string, unknown>) ?? {};
+            const tags = Array.isArray(meta.tags)
+              ? meta.tags.filter((tag): tag is string => typeof tag === 'string' && tag.trim().length > 0)
+              : [];
             return {
               id: a.id,
               title: a.title,
-              excerpt: a.summary ?? null,
+              excerpt: a.summary ?? buildRichTextPreview(a.content, 160),
+              content: a.content,
               image: (meta.imageUrl as string) ?? null,
               author: (meta.author as string) ?? null,
               date: a.publishedAt,
               href: a.actionUrl ?? null,
               category: a.type,
+              tags,
             };
           }),
         },

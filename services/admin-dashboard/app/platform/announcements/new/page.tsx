@@ -7,6 +7,8 @@ import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 import { toast } from "sonner";
 import { createSystemAnnouncement } from "@/src/shared/api-client";
 import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
+import { SystemAnnouncementPreview } from "../_components/SystemAnnouncementPreview";
+import { parseTagInput } from "../_components/system-announcement-utils";
 
 type Status = "draft" | "published";
 
@@ -21,6 +23,7 @@ export default function NewAnnouncementPage() {
   const [targetAudience, setTargetAudience] = useState("all");
   const [imageUrl, setImageUrl] = useState("");
   const [author, setAuthor] = useState("");
+  const [tagsInput, setTagsInput] = useState("");
   const [actionLabel, setActionLabel] = useState("");
   const [actionUrl, setActionUrl] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -58,6 +61,7 @@ export default function NewAnnouncementPage() {
         metadata: {
           imageUrl: imageUrl.trim() || undefined,
           author: author.trim() || undefined,
+          tags: parseTagInput(tagsInput),
         },
       });
       toast.success(targetStatus === "published" ? "Published!" : "Saved as draft.");
@@ -134,6 +138,19 @@ export default function NewAnnouncementPage() {
             placeholder="Write your announcement here…"
             onChange={handleContentChange}
           />
+
+          <SystemAnnouncementPreview
+            title={title}
+            summary={summary}
+            content={content}
+            type={type}
+            priority={priority}
+            imageUrl={imageUrl}
+            author={author}
+            tags={parseTagInput(tagsInput)}
+            actionLabel={actionLabel}
+            actionUrl={actionUrl}
+          />
         </main>
 
         {/* Sidebar */}
@@ -192,6 +209,18 @@ export default function NewAnnouncementPage() {
             <div>
               <label className="mb-1 block text-[11px] font-medium text-zinc-700">Author</label>
               <input type="text" value={author} onChange={(e) => setAuthor(e.target.value)} placeholder="YBB Team" className={inputCls} />
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-zinc-700">
+                Tags <span className="text-zinc-400">(comma separated)</span>
+              </label>
+              <input
+                type="text"
+                value={tagsInput}
+                onChange={(e) => setTagsInput(e.target.value)}
+                placeholder="announcement, update, deadline"
+                className={inputCls}
+              />
             </div>
           </section>
 

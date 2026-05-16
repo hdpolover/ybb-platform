@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
@@ -24,6 +24,8 @@ import {
   Code2,
   Link as LinkIcon,
   ImageIcon,
+  Upload,
+  Paperclip,
   AlignLeft,
   AlignCenter,
   AlignRight,
@@ -38,6 +40,17 @@ interface RichTextEditorProps {
   placeholder?: string;
   onChange?: (html: string) => void;
   className?: string;
+  onUploadImage?: (file: File) => Promise<string>;
+  onUploadFile?: (file: File) => Promise<{ url: string; name?: string }>;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function ToolbarButton({
@@ -79,11 +92,23 @@ function Divider() {
   return <div className="mx-0.5 h-5 w-px bg-zinc-200" />;
 }
 
-export function RichTextEditor({ content = "", placeholder, onChange, className }: RichTextEditorProps) {
+export function RichTextEditor({
+  content = "",
+  placeholder,
+  onChange,
+  className,
+  onUploadImage,
+  onUploadFile,
+}: RichTextEditorProps) {
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
   const [imageUrl, setImageUrl] = useState("");
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const imageUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const fileUploadInputRef = useRef<HTMLInputElement | null>(null);
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -133,7 +158,65 @@ export function RichTextEditor({ content = "", placeholder, onChange, className 
     editor.chain().focus().setImage({ src: imageUrl.trim() }).run();
     setImageUrl("");
     setImageDialogOpen(false);
+    setUploadError(null);
   }, [editor, imageUrl]);
+
+  const handleImageUpload = useCallback(
+    async (file: File | null) => {
+      if (!editor || !file || !onUploadImage) return;
+
+      setUploadingImage(true);
+      setUploadError(null);
+
+      try {
+        const url = await onUploadImage(file);
+        if (!url.trim()) {
+          throw new Error("Image upload succeeded but no URL was returned.");
+        }
+        editor.chain().focus().setImage({ src: url }).run();
+      } catch (error) {
+        setUploadError(error instanceof Error ? error.message : "Failed to upload image.");
+      } finally {
+        setUploadingImage(false);
+        if (imageUploadInputRef.current) {
+          imageUploadInputRef.current.value = "";
+        }
+      }
+    },
+    [editor, onUploadImage],
+  );
+
+  const handleFileUpload = useCallback(
+    async (file: File | null) => {
+      if (!editor || !file || !onUploadFile) return;
+
+      setUploadingFile(true);
+      setUploadError(null);
+
+      try {
+        const uploaded = await onUploadFile(file);
+        const href = uploaded.url.trim();
+        if (!href) {
+          throw new Error("Attachment upload succeeded but no URL was returned.");
+        }
+
+        const label = escapeHtml((uploaded.name ?? file.name).trim() || "Download attachment");
+        editor
+          .chain()
+          .focus()
+          .insertContent(`<p><a href="${escapeHtml(href)}">${label}</a></p>`)
+          .run();
+      } catch (error) {
+        setUploadError(error instanceof Error ? error.message : "Failed to upload attachment.");
+      } finally {
+        setUploadingFile(false);
+        if (fileUploadInputRef.current) {
+          fileUploadInputRef.current.value = "";
+        }
+      }
+    },
+    [editor, onUploadFile],
+  );
 
   if (!editor) return null;
 
@@ -311,6 +394,24 @@ export function RichTextEditor({ content = "", placeholder, onChange, className 
         >
           <ImageIcon className="h-3.5 w-3.5" />
         </ToolbarButton>
+        {onUploadImage && (
+          <ToolbarButton
+            title="Upload Image"
+            disabled={uploadingImage}
+            onClick={() => imageUploadInputRef.current?.click()}
+          >
+            <Upload className="h-3.5 w-3.5" />
+          </ToolbarButton>
+        )}
+        {onUploadFile && (
+          <ToolbarButton
+            title="Upload Attachment"
+            disabled={uploadingFile}
+            onClick={() => fileUploadInputRef.current?.click()}
+          >
+            <Paperclip className="h-3.5 w-3.5" />
+          </ToolbarButton>
+        )}
 
         <Divider />
 
@@ -328,6 +429,29 @@ export function RichTextEditor({ content = "", placeholder, onChange, className 
       <div className="px-5 py-4">
         <EditorContent editor={editor} />
       </div>
+
+      <input
+        ref={imageUploadInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(event) => void handleImageUpload(event.target.files?.[0] ?? null)}
+      />
+      <input
+        ref={fileUploadInputRef}
+        type="file"
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.webp,.gif"
+        className="hidden"
+        onChange={(event) => void handleFileUpload(event.target.files?.[0] ?? null)}
+      />
+
+      {(uploadingImage || uploadingFile || uploadError) && (
+        <div className="border-t border-zinc-200 px-5 py-2 text-[11px]">
+          {uploadingImage && <p className="text-zinc-500">Uploading image…</p>}
+          {uploadingFile && <p className="text-zinc-500">Uploading attachment…</p>}
+          {uploadError && <p className="text-red-600">{uploadError}</p>}
+        </div>
+      )}
 
       {/* Link dialog */}
       {linkDialogOpen && (
