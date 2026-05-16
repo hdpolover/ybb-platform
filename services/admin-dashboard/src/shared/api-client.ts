@@ -524,13 +524,14 @@ export type ProgramAnnouncement = {
   programId: string;
   title: string;
   content: string;
-  type: string;
-  priority: string;
-  target: string;
-  expiresAt: string | null;
-  showBanner: boolean;
+  category: string | null;
+  targetAudience: string;
+  sendEmail: boolean;
+  isPinned: boolean;
+  imageUrl: string | null;
+  tags: string[];
+  publishDate?: string | null;
   isActive: boolean;
-  createdBy: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -1650,16 +1651,20 @@ export function reviewApplication(
 
 export function listProgramAnnouncements(
   programId: string,
-  params?: { page?: number; limit?: number; type?: string; priority?: string },
+  params?: { page?: number; limit?: number; category?: string; targetAudience?: string },
 ): Promise<Paginated<ProgramAnnouncement>> {
   const q = new URLSearchParams();
   if (params?.page) q.set("page", String(params.page));
   if (params?.limit) q.set("limit", String(params.limit));
-  if (params?.type) q.set("type", params.type);
-  if (params?.priority) q.set("priority", params.priority);
+  if (params?.category) q.set("category", params.category);
+  if (params?.targetAudience) q.set("targetAudience", params.targetAudience);
   return requestPaginated<ProgramAnnouncement>(
     `/programs/${programId}/announcements?${q}`,
   );
+}
+
+export function getProgramAnnouncement(id: string): Promise<ProgramAnnouncement> {
+  return request<ProgramAnnouncement>(`/programs/announcements/${id}`);
 }
 
 export function createProgramAnnouncement(
@@ -1667,11 +1672,12 @@ export function createProgramAnnouncement(
   input: {
     title: string;
     content: string;
-    type?: string;
-    priority?: string;
-    target?: string;
-    expiresAt?: string;
-    showBanner?: boolean;
+    category?: string;
+    targetAudience?: string;
+    tags?: string[];
+    sendEmail?: boolean;
+    isPinned?: boolean;
+    imageUrl?: string;
   },
 ): Promise<ProgramAnnouncement> {
   return request<ProgramAnnouncement>(`/programs/${programId}/announcements`, {
@@ -1682,7 +1688,17 @@ export function createProgramAnnouncement(
 
 export function updateProgramAnnouncement(
   id: string,
-  input: Partial<ProgramAnnouncement>,
+  input: {
+    title?: string;
+    content?: string;
+    category?: string | null;
+    targetAudience?: string;
+    tags?: string[];
+    sendEmail?: boolean;
+    isPinned?: boolean;
+    imageUrl?: string | null;
+    isActive?: boolean;
+  },
 ): Promise<ProgramAnnouncement> {
   return request<ProgramAnnouncement>(`/programs/announcements/${id}`, {
     method: "PUT",
@@ -2236,6 +2252,29 @@ export async function uploadFileViaPresignedUrl(
     storagePath: url.storage_path,
     bucket: url.bucket,
   };
+}
+
+export function uploadProgramAnnouncementAsset(input: {
+  programId: string;
+  brandId: string;
+  userId: string;
+  file: File;
+  kind: "image" | "attachment";
+  title?: string;
+  altText?: string;
+}): Promise<UploadResult> {
+  return uploadFileViaPresignedUrl(input.file, {
+    userId: input.userId,
+    brandId: input.brandId,
+    programId: input.programId,
+    bucket: "documents",
+    assetType:
+      input.kind === "image"
+        ? "announcement-image"
+        : "announcement-attachment",
+    title: input.title,
+    altText: input.altText,
+  });
 }
 
 // ─── Program Resources (Guidelines) ──────────────────────────────────────────

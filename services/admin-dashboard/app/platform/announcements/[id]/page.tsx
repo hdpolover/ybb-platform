@@ -16,6 +16,7 @@ import {
   type SystemAnnouncement,
 } from "@/src/shared/api-client";
 import { formatDate, formatDateTime } from "@/lib/utils";
+import { formatAnnouncementLabel } from "../_components/system-announcement-utils";
 
 const TYPE_BADGE: Record<string, string> = {
   general: "bg-zinc-100 text-zinc-700",
@@ -88,6 +89,9 @@ export default function AnnouncementDetailPage() {
   const isPublished = ann.isPublished;
   const imageUrl = ann.metadata?.imageUrl as string | undefined;
   const author = ann.metadata?.author as string | undefined;
+  const tags = Array.isArray(ann.metadata?.tags)
+    ? (ann.metadata.tags as string[]).filter((tag) => tag.trim().length > 0)
+    : [];
 
   return (
     <div className="-mx-4 -my-6 flex flex-col sm:-mx-6 lg:-mx-8">
@@ -158,6 +162,19 @@ export default function AnnouncementDetailPage() {
             <p className="mb-6 text-[11px] text-zinc-400">By {author}</p>
           )}
 
+          {tags.length > 0 && (
+            <div className="mb-6 flex flex-wrap gap-2">
+              {tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="rounded-full bg-zinc-100 px-2.5 py-1 text-[10px] font-medium text-zinc-600"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+
           {ann.summary && (
             <p className="mb-6 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm italic text-zinc-600">
               {ann.summary}
@@ -198,7 +215,24 @@ export default function AnnouncementDetailPage() {
           </Field>
 
           <Field label="Target Audience">
-            {ann.targetAudience ?? "all"}
+            {formatAnnouncementLabel(ann.targetAudience) || "All"}
+          </Field>
+
+          <Field label="Tags">
+            {tags.length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-600"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              "—"
+            )}
           </Field>
 
           <div className="border-t border-zinc-200" />

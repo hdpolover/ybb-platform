@@ -15,6 +15,7 @@ import {
     PortalApplicationSummaryDto
 } from '../../../presentation/dto/portal-dashboard.dto';
 import { resolveMaskedFileUrl } from '@shared/utils/masked-file-url';
+import { buildRichTextPreview } from '@shared/utils/rich-text';
 
 @Injectable()
 @QueryHandler(GetPortalDashboardQuery)
@@ -242,7 +243,7 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                 id: a.id,
                 title: a.title,
                 date: a.createdAt,
-                preview: a.content.substring(0, 100) + '...',
+                preview: buildRichTextPreview(a.content),
                 isRead: a.reads.length > 0
             }));
 

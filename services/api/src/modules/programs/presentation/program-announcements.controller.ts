@@ -21,6 +21,7 @@ import {
 
 import {
   ListProgramAnnouncementsCommand,
+  GetProgramAnnouncementCommand,
   CreateProgramAnnouncementCommand,
   UpdateProgramAnnouncementCommand,
   DeleteProgramAnnouncementCommand,
@@ -28,6 +29,7 @@ import {
 
 import {
   ListProgramAnnouncementsHandler,
+  GetProgramAnnouncementHandler,
   CreateProgramAnnouncementHandler,
   UpdateProgramAnnouncementHandler,
   DeleteProgramAnnouncementHandler,
@@ -42,6 +44,7 @@ interface AuthenticatedRequest extends ExpressRequest {
 export class ProgramAnnouncementsController {
   constructor(
     private readonly listHandler: ListProgramAnnouncementsHandler,
+    private readonly getHandler: GetProgramAnnouncementHandler,
     private readonly createHandler: CreateProgramAnnouncementHandler,
     private readonly updateHandler: UpdateProgramAnnouncementHandler,
     private readonly deleteHandler: DeleteProgramAnnouncementHandler,
@@ -52,8 +55,8 @@ export class ProgramAnnouncementsController {
   @ApiOperation({ summary: 'List program announcements' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiQuery({ name: 'type', required: false })
-  @ApiQuery({ name: 'priority', required: false })
+  @ApiQuery({ name: 'category', required: false })
+  @ApiQuery({ name: 'targetAudience', required: false })
   @ApiResponse({ status: 200, description: 'Paginated list of announcements' })
   async list(
     @Param('id') programId: string,
@@ -68,6 +71,15 @@ export class ProgramAnnouncementsController {
         query.limit ?? 20,
       ),
     );
+  }
+
+  @Get('announcements/:itemId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get a single program announcement' })
+  @ApiResponse({ status: 200, type: ProgramAnnouncementResponseDto })
+  async getOne(@Param('itemId') itemId: string) {
+    return this.getHandler.execute(new GetProgramAnnouncementCommand(itemId));
   }
 
   @Post(':id/announcements')

@@ -10,6 +10,10 @@ export class ListProgramAnnouncementsCommand {
   ) {}
 }
 
+export class GetProgramAnnouncementCommand {
+  constructor(public readonly id: string) {}
+}
+
 export class CreateProgramAnnouncementCommand {
   constructor(
     public readonly programId: string,

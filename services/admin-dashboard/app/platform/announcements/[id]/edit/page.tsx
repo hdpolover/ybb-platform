@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 import { toast } from "sonner";
@@ -12,11 +12,12 @@ import {
 } from "@/src/shared/api-client";
 import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
 import { formatDateTime } from "@/lib/utils";
+import { SystemAnnouncementPreview } from "../../_components/SystemAnnouncementPreview";
+import { parseTagInput } from "../../_components/system-announcement-utils";
 
 type Status = "draft" | "published";
 
 export default function EditAnnouncementPage() {
-  const router = useRouter();
   const { id } = useParams<{ id: string }>();
 
   const [loaded, setLoaded] = useState(false);
@@ -30,6 +31,7 @@ export default function EditAnnouncementPage() {
   const [targetAudience, setTargetAudience] = useState("all");
   const [imageUrl, setImageUrl] = useState("");
   const [author, setAuthor] = useState("");
+  const [tagsInput, setTagsInput] = useState("");
   const [actionLabel, setActionLabel] = useState("");
   const [actionUrl, setActionUrl] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -53,6 +55,11 @@ export default function EditAnnouncementPage() {
         setTargetAudience(data.targetAudience);
         setImageUrl((data.metadata?.imageUrl as string) ?? "");
         setAuthor((data.metadata?.author as string) ?? "");
+        setTagsInput(
+          Array.isArray(data.metadata?.tags)
+            ? (data.metadata?.tags as string[]).join(", ")
+            : "",
+        );
         setActionLabel(data.actionLabel ?? "");
         setActionUrl(data.actionUrl ?? "");
         setStartDate(data.startDate ? data.startDate.slice(0, 10) : "");
@@ -97,6 +104,7 @@ export default function EditAnnouncementPage() {
           ...(originalData?.metadata ?? {}),
           imageUrl: imageUrl.trim() || undefined,
           author: author.trim() || undefined,
+          tags: parseTagInput(tagsInput),
         },
       });
       setIsPublished(targetPublished);
@@ -198,6 +206,19 @@ export default function EditAnnouncementPage() {
               onChange={handleContentChange}
             />
           )}
+
+          <SystemAnnouncementPreview
+            title={title}
+            summary={summary}
+            content={content}
+            type={type}
+            priority={priority}
+            imageUrl={imageUrl}
+            author={author}
+            tags={parseTagInput(tagsInput)}
+            actionLabel={actionLabel}
+            actionUrl={actionUrl}
+          />
         </main>
 
         {/* Sidebar */}
@@ -256,6 +277,18 @@ export default function EditAnnouncementPage() {
             <div>
               <label className="mb-1 block text-[11px] font-medium text-zinc-700">Author</label>
               <input type="text" value={author} onChange={(e) => setAuthor(e.target.value)} placeholder="YBB Team" className={inputCls} />
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-zinc-700">
+                Tags <span className="text-zinc-400">(comma separated)</span>
+              </label>
+              <input
+                type="text"
+                value={tagsInput}
+                onChange={(e) => setTagsInput(e.target.value)}
+                placeholder="announcement, update, deadline"
+                className={inputCls}
+              />
             </div>
           </section>
 

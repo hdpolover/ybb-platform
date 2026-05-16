@@ -104,6 +104,9 @@ export class ProgramAnnouncementResponseDto {
   @ApiProperty()
   isPinned: boolean;
 
+  @ApiProperty()
+  publishDate: Date;
+
   @ApiPropertyOptional()
   imageUrl?: string;
 
