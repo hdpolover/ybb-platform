@@ -67,12 +67,6 @@ function DualPricingBlock({
   const [usdPrice, setUsdPrice] = useState<number>(initialUsdPrice);
   const [idrPrice, setIdrPrice] = useState<number>(initialIdrPrice);
 
-  // Re-sync when initial values change (drawer reopens for a different row).
-  useEffect(() => {
-    setUsdPrice(initialUsdPrice);
-    setIdrPrice(initialIdrPrice);
-  }, [initialUsdPrice, initialIdrPrice]);
-
   const expectedIdr =
     programUsdInIdr && usdPrice > 0 ? convertUsdToIdr(usdPrice, programUsdInIdr) : 0;
   const divergencePct =
@@ -119,7 +113,7 @@ function DualPricingBlock({
               <input
                 name="idrPrice"
                 type="number"
-                step="1000"
+                step="1"
                 min="1"
                 value={Number.isFinite(idrPrice) && idrPrice > 0 ? idrPrice : ""}
                 onChange={(e) => setIdrPrice(parseInt(e.target.value, 10) || 0)}
@@ -209,6 +203,7 @@ function PaymentOptionDrawer({
     if (initialData.fundingType === "Fully Funded") return "fully_funded";
     return "self_funded,fully_funded";
   })();
+  const pricingBlockKey = initialData?._id ?? `new-${isOpen ? "open" : "closed"}`;
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -325,6 +320,7 @@ function PaymentOptionDrawer({
         </div>
 
         <DualPricingBlock
+          key={pricingBlockKey}
           initialUsdPrice={initialData?.usdPrice ?? 0}
           initialIdrPrice={initialData?.idrPrice ?? 0}
           programUsdInIdr={programUsdInIdr}
