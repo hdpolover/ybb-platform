@@ -3895,7 +3895,7 @@ function AssignAdminSheet({
     if (!open) return;
     setLoadingOptions(true);
     listAllAdmins(search || undefined)
-      .then((res) => setAllOptions(res.data))
+      .then(setAllOptions)
       .catch(() => setAllOptions([]))
       .finally(() => setLoadingOptions(false));
   }, [open, search]);
