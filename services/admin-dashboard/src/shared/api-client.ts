@@ -7,6 +7,10 @@
  */
 
 import { redirectToLogin } from "@/src/shared/login-redirect";
+import {
+  requestAdminProfileRefresh,
+  shouldRefreshAdminProfileForMutation,
+} from "@/src/shared/admin-profile-refresh";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -38,6 +42,7 @@ async function readErrorMessage(res: Response): Promise<string> {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method ?? "GET").toUpperCase();
   const headers = new Headers(init?.headers);
   headers.set("Authorization", `Bearer ${getAccessToken()}`);
 
@@ -58,14 +63,25 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!res.ok) throw new Error(await readErrorMessage(res));
-  if (res.status === 204) return undefined as T;
+  if (res.status === 204) {
+    if (shouldRefreshAdminProfileForMutation(path, method)) {
+      requestAdminProfileRefresh();
+    }
+    return undefined as T;
+  }
 
   const payload = await res.json();
   // Unwrap `{ data: ... }` envelope if present
-  if (payload && typeof payload === "object" && "data" in payload) {
-    return payload.data as T;
+  const result =
+    payload && typeof payload === "object" && "data" in payload
+      ? (payload.data as T)
+      : (payload as T);
+
+  if (shouldRefreshAdminProfileForMutation(path, method)) {
+    requestAdminProfileRefresh();
   }
-  return payload as T;
+
+  return result;
 }
 
 async function requestText(path: string, init?: RequestInit): Promise<string> {

@@ -28,7 +28,7 @@ import { Public } from '../../../shared/decorators/public.decorator';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
 import { AuditTrail } from '../../../shared/decorators/audit-trail.decorator';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
-import { LANDING_BRAND_PATTERNS, PROGRAM_CONTENT_PATTERNS } from '../../../shared/constants/cache-patterns';
+import { PROGRAM_CONTENT_PATTERNS } from '../../../shared/constants/cache-patterns';
 import { ChangeType } from '@prisma/client';
 import { UpdateProgramPaymentInfoDto } from './dto/create-update-program-content.dto';
 import { UpdateProgramPaymentInfoCommand } from '../application/commands/program-content.commands';
@@ -132,7 +132,7 @@ export class ProgramsController {
   @ApiResponse({ status: 201, description: 'Program created successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @AuditTrail({ entityType: 'Program', action: ChangeType.create })
-  @CacheInvalidate(LANDING_BRAND_PATTERNS)
+  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
   async create(
     @Body() dto: CreateProgramDto,
     @Request() req: AuthenticatedRequest,
@@ -154,7 +154,7 @@ export class ProgramsController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Program not found' })
   @AuditTrail({ entityType: 'Program', action: ChangeType.update })
-  @CacheInvalidate(['landing:programs:*', 'landing:program:*', 'landing:home:*', 'landing:settings:*', 'program:detail:*'])
+  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateProgramDto,
@@ -230,7 +230,7 @@ export class ProgramsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update program branding (logo, banner, thumbnail)' })
   @ApiConsumes('multipart/form-data')
-  @CacheInvalidate(['landing:programs:*', 'landing:program:*', 'landing:home:*', 'landing:settings:*', 'program:detail:*'])
+  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
   @UseInterceptors(FileFieldsInterceptor([
     { name: 'logo', maxCount: 1 },
     { name: 'banner', maxCount: 1 },
@@ -263,7 +263,7 @@ export class ProgramsController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Program not found' })
   @AuditTrail({ entityType: 'Program', action: ChangeType.delete })
-  @CacheInvalidate(LANDING_BRAND_PATTERNS)
+  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
   async delete(
     @Param('id') id: string,
     @Request() req: AuthenticatedRequest,

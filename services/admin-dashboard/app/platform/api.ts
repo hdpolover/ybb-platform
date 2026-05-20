@@ -1,4 +1,8 @@
 import { redirectToLogin } from "@/src/shared/login-redirect";
+import {
+  requestAdminProfileRefresh,
+  shouldRefreshAdminProfileForMutation,
+} from "@/src/shared/admin-profile-refresh";
 
 export type PlatformBrand = {
   id: string;
@@ -208,20 +212,28 @@ async function request<T>(
   }
 
   if (response.status === 204) {
+    if (shouldRefreshAdminProfileForMutation(path, method)) {
+      requestAdminProfileRefresh();
+    }
     return undefined as T;
   }
 
   const payload = (await response.json()) as ApiEnvelope<unknown> | T;
+  let result: T;
 
   if (options?.unwrapData === false) {
-    return payload as T;
+    result = payload as T;
+  } else if (payload && typeof payload === "object" && "data" in (payload as ApiEnvelope<unknown>)) {
+    result = (payload as ApiEnvelope<T>).data;
+  } else {
+    result = payload as T;
   }
 
-  if (payload && typeof payload === "object" && "data" in (payload as ApiEnvelope<unknown>)) {
-    return (payload as ApiEnvelope<T>).data;
+  if (shouldRefreshAdminProfileForMutation(path, method)) {
+    requestAdminProfileRefresh();
   }
 
-  return payload as T;
+  return result;
 }
 
 export type PlatformBrandDetail = PlatformBrand & {
