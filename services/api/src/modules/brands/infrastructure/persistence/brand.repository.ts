@@ -4,6 +4,7 @@ import { Brand } from '@core/entities/brand.entity';
 import { BrandSetting } from '@core/entities/brand-setting.entity';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { Prisma } from '@prisma/client';
+import { buildDeletedBrandName, buildDeletedBrandSlug } from '../../shared/brand-identity.utils';
 
 @Injectable()
 export class BrandRepository implements IBrandRepository {
@@ -31,6 +32,17 @@ export class BrandRepository implements IBrandRepository {
                 settings: true,
                 // programs id-only select is used by mapToEntity to compute programCount.
                 // Without it, detail views always report 0.
+                programs: { where: { deletedAt: null }, select: { id: true } },
+            },
+        });
+        return category ? this.mapToEntity(category) : null;
+    }
+
+    async findByName(name: string): Promise<Brand | null> {
+        const category = await this.prisma.brand.findUnique({
+            where: { name },
+            include: {
+                settings: true,
                 programs: { where: { deletedAt: null }, select: { id: true } },
             },
         });
@@ -155,10 +167,16 @@ export class BrandRepository implements IBrandRepository {
     }
 
     async delete(id: string): Promise<void> {
-        // Soft delete
+        const brand = await this.prisma.brand.findUnique({
+            where: { id },
+            select: { name: true, slug: true },
+        });
+
         await this.prisma.brand.update({
             where: { id },
             data: {
+                name: buildDeletedBrandName(brand?.name ?? id, id),
+                slug: buildDeletedBrandSlug(brand?.slug ?? id, id),
                 deletedAt: new Date(),
                 isActive: false,
             },
