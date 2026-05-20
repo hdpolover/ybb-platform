@@ -1,5 +1,7 @@
 "use client";
 
+export type ProgramAnnouncementStatus = "draft" | "scheduled" | "published";
+
 export function richTextToPlainText(value: string): string {
   return value
     .replace(/<br\s*\/?>/gi, "\n")
@@ -51,4 +53,72 @@ export function parseTagInput(value: string): string[] {
 export function normalizeOptionalString(value: string): string | undefined {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function parseAnnouncementDate(value?: string | Date | null): Date | null {
+  if (!value) return null;
+  const parsed = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+export function getProgramAnnouncementStatus(input: {
+  isActive: boolean;
+  publishDate?: string | Date | null;
+}): ProgramAnnouncementStatus {
+  if (!input.isActive) {
+    return "draft";
+  }
+
+  const publishDate = parseAnnouncementDate(input.publishDate);
+  if (publishDate && publishDate.getTime() > Date.now()) {
+    return "scheduled";
+  }
+
+  return "published";
+}
+
+export function getProgramAnnouncementStatusLabel(status: ProgramAnnouncementStatus): string {
+  switch (status) {
+    case "draft":
+      return "Draft";
+    case "scheduled":
+      return "Scheduled";
+    default:
+      return "Published";
+  }
+}
+
+export function getProgramAnnouncementStatusClasses(status: ProgramAnnouncementStatus): string {
+  switch (status) {
+    case "draft":
+      return "bg-zinc-100 text-zinc-600";
+    case "scheduled":
+      return "bg-amber-50 text-amber-700";
+    default:
+      return "bg-emerald-50 text-emerald-700";
+  }
+}
+
+export function toDateTimeLocalValue(value?: string | Date | null): string {
+  const parsed = parseAnnouncementDate(value);
+  if (!parsed) return "";
+
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return [
+    parsed.getFullYear(),
+    pad(parsed.getMonth() + 1),
+    pad(parsed.getDate()),
+  ].join("-") + `T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
+}
+
+export function dateTimeLocalToIsoString(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) {
+    return undefined;
+  }
+
+  return parsed.toISOString();
 }

@@ -20,6 +20,9 @@ import { formatDateTime } from "@/lib/utils";
 import {
   buildAnnouncementExcerpt,
   formatAnnouncementLabel,
+  getProgramAnnouncementStatus,
+  getProgramAnnouncementStatusClasses,
+  getProgramAnnouncementStatusLabel,
 } from "./_components/program-announcement-utils";
 
 export default function ProgramAnnouncementsPage() {
@@ -88,8 +91,8 @@ export default function ProgramAnnouncementsPage() {
         </div>
         <h1 className="mt-1 text-lg font-bold text-zinc-900">{programName} Announcements</h1>
         <p className="text-sm text-zinc-500">
-          Publish program updates on dedicated rich-content pages with one-off media and attachment
-          uploads directly from the editor.
+          Publish program updates to the public announcements page and participant dashboard feeds
+          with one-off media and attachment uploads directly from the editor.
         </p>
       </section>
 
@@ -190,15 +193,16 @@ export default function ProgramAnnouncementsPage() {
                         {formatAnnouncementLabel(item.targetAudience)}
                       </td>
                       <td className="px-3 py-2">
-                        {item.isActive ? (
-                          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                            Active
+                        <div className="space-y-1">
+                          <span
+                            className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${getProgramAnnouncementStatusClasses(getProgramAnnouncementStatus(item))}`}
+                          >
+                            {getProgramAnnouncementStatusLabel(getProgramAnnouncementStatus(item))}
                           </span>
-                        ) : (
-                          <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-500">
-                            Hidden
-                          </span>
-                        )}
+                          <p className="text-[10px] text-zinc-400">
+                            Publish at {formatDateTime(item.publishDate)}
+                          </p>
+                        </div>
                       </td>
                       <td className="px-3 py-2 text-zinc-500">
                         {formatDateTime(item.updatedAt)}

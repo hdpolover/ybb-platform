@@ -20,9 +20,14 @@ import {
 } from "@/src/shared/api-client";
 import { formatDateTime } from "@/lib/utils";
 import {
+  dateTimeLocalToIsoString,
+  getProgramAnnouncementStatus,
+  getProgramAnnouncementStatusClasses,
+  getProgramAnnouncementStatusLabel,
   normalizeOptionalString,
   parseTagInput,
   richTextToPlainText,
+  toDateTimeLocalValue,
 } from "./program-announcement-utils";
 
 type EditorMode = "create" | "edit";
@@ -59,6 +64,7 @@ export function ProgramAnnouncementEditor({ mode }: { mode: EditorMode }) {
   const [targetAudience, setTargetAudience] = useState("all");
   const [tagsInput, setTagsInput] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [publishDate, setPublishDate] = useState(() => toDateTimeLocalValue(new Date()));
   const [sendEmail, setSendEmail] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
   const [isActive, setIsActive] = useState(true);
@@ -73,6 +79,10 @@ export function ProgramAnnouncementEditor({ mode }: { mode: EditorMode }) {
 
   const inputCls =
     "block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
+  const announcementStatus = useMemo(
+    () => getProgramAnnouncementStatus({ isActive, publishDate }),
+    [isActive, publishDate],
+  );
 
   useEffect(() => {
     if (mode !== "edit" || !params.id) {
@@ -95,6 +105,7 @@ export function ProgramAnnouncementEditor({ mode }: { mode: EditorMode }) {
         setTargetAudience(data.targetAudience);
         setTagsInput((data.tags ?? []).join(", "));
         setImageUrl(data.imageUrl ?? "");
+        setPublishDate(toDateTimeLocalValue(data.publishDate));
         setSendEmail(data.sendEmail);
         setIsPinned(data.isPinned);
         setIsActive(data.isActive);
@@ -169,7 +180,7 @@ export function ProgramAnnouncementEditor({ mode }: { mode: EditorMode }) {
     setSaving(true);
 
     try {
-      const trimmedImageUrl = imageUrl.trim();
+      const normalizedImageUrl = normalizeOptionalString(imageUrl);
       const payload = {
         title: title.trim(),
         content,
@@ -178,8 +189,9 @@ export function ProgramAnnouncementEditor({ mode }: { mode: EditorMode }) {
         tags: parseTagInput(tagsInput),
         sendEmail,
         isPinned,
-        imageUrl: mode === "edit" ? trimmedImageUrl : normalizeOptionalString(imageUrl),
-        ...(mode === "edit" ? { isActive } : {}),
+        imageUrl: mode === "edit" ? normalizedImageUrl ?? null : normalizedImageUrl,
+        publishDate: dateTimeLocalToIsoString(publishDate) ?? new Date().toISOString(),
+        isActive,
       };
 
       const saved =
@@ -198,6 +210,7 @@ export function ProgramAnnouncementEditor({ mode }: { mode: EditorMode }) {
     category,
     content,
     imageUrl,
+    publishDate,
     isActive,
     isPinned,
     mode,
@@ -247,11 +260,9 @@ export function ProgramAnnouncementEditor({ mode }: { mode: EditorMode }) {
         </div>
 
         <span
-          className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-            isActive ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-600"
-          }`}
+          className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${getProgramAnnouncementStatusClasses(announcementStatus)}`}
         >
-          {isActive ? "Active" : "Inactive"}
+          {getProgramAnnouncementStatusLabel(announcementStatus)}
         </span>
 
         <div className="ml-auto flex items-center gap-2">
@@ -347,6 +358,43 @@ export function ProgramAnnouncementEditor({ mode }: { mode: EditorMode }) {
 
           <section className="space-y-3">
             <h2 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+              Publication
+            </h2>
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Status</label>
+              <select
+                value={isActive ? "published" : "draft"}
+                onChange={(event) => setIsActive(event.target.value === "published")}
+                className={inputCls}
+              >
+                <option value="draft">Draft</option>
+                <option value="published">Published</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-zinc-700">
+                Publish At
+              </label>
+              <input
+                type="datetime-local"
+                value={publishDate}
+                onChange={(event) => setPublishDate(event.target.value)}
+                className={inputCls}
+              />
+            </div>
+            <p className="text-[10px] leading-5 text-zinc-500">
+              {!isActive
+                ? "Draft announcements stay hidden until you publish them."
+                : announcementStatus === "scheduled"
+                  ? "This announcement is scheduled and will appear on the public site at the selected time."
+                  : "Published announcements appear on the public site and participant dashboard feeds immediately."}
+            </p>
+          </section>
+
+          <div className="my-4 border-t border-zinc-100" />
+
+          <section className="space-y-3">
+            <h2 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
               Featured Image
             </h2>
             <div>
@@ -415,21 +463,13 @@ export function ProgramAnnouncementEditor({ mode }: { mode: EditorMode }) {
               />
               <span className="text-[11px] font-medium text-zinc-700">Send email notification</span>
             </label>
-            <label className="flex cursor-pointer items-center gap-2.5">
-              <input
-                type="checkbox"
-                checked={isActive}
-                onChange={(event) => setIsActive(event.target.checked)}
-                className="h-3.5 w-3.5 rounded border-zinc-300"
-              />
-              <span className="text-[11px] font-medium text-zinc-700">Visible to users</span>
-            </label>
           </section>
 
           {announcement && (
             <>
               <div className="my-4 border-t border-zinc-100" />
               <section className="space-y-1 text-[10px] text-zinc-400">
+                <p>Publish at: {formatDateTime(announcement.publishDate)}</p>
                 <p>Created: {formatDateTime(announcement.createdAt)}</p>
                 <p>Updated: {formatDateTime(announcement.updatedAt)}</p>
               </section>
