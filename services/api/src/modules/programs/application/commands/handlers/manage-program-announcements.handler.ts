@@ -23,7 +23,7 @@ export class ListProgramAnnouncementsHandler {
     const [data, total] = await Promise.all([
       this.prisma.programAnnouncement.findMany({
         where,
-        orderBy: [{ isPinned: 'desc' }, { createdAt: 'desc' }],
+        orderBy: [{ isPinned: 'desc' }, { publishDate: 'desc' }],
         skip,
         take: limit,
       }),
@@ -77,7 +77,8 @@ export class CreateProgramAnnouncementHandler {
         sendEmail: dto.sendEmail ?? false,
         isPinned: dto.isPinned ?? false,
         imageUrl: dto.imageUrl ?? null,
-        isActive: true,
+        publishDate: dto.publishDate ? new Date(dto.publishDate) : new Date(),
+        isActive: dto.isActive ?? true,
       },
     });
   }
@@ -104,6 +105,7 @@ export class UpdateProgramAnnouncementHandler {
         ...(dto.sendEmail !== undefined && { sendEmail: dto.sendEmail }),
         ...(dto.isPinned !== undefined && { isPinned: dto.isPinned }),
         ...(dto.imageUrl !== undefined && { imageUrl: dto.imageUrl }),
+        ...(dto.publishDate !== undefined && { publishDate: new Date(dto.publishDate) }),
         ...(dto.isActive !== undefined && { isActive: dto.isActive }),
       },
     });

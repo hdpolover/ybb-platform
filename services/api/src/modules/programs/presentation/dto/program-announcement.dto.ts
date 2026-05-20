@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsArray, IsNumber, Min, Max } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsArray, IsNumber, Min, Max, IsDateString } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateProgramAnnouncementDto {
@@ -43,14 +43,19 @@ export class CreateProgramAnnouncementDto {
   @IsOptional()
   @IsString()
   imageUrl?: string;
-}
 
-export class UpdateProgramAnnouncementDto extends PartialType(CreateProgramAnnouncementDto) {
-  @ApiPropertyOptional({ description: 'Active/inactive status' })
+  @ApiPropertyOptional({ description: 'When the announcement should become publicly visible' })
+  @IsOptional()
+  @IsDateString()
+  publishDate?: string;
+
+  @ApiPropertyOptional({ description: 'Whether the announcement should be visible to users' })
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
 }
+
+export class UpdateProgramAnnouncementDto extends PartialType(CreateProgramAnnouncementDto) {}
 
 export class ListProgramAnnouncementsQueryDto {
   @ApiPropertyOptional({ description: 'Filter by category' })

@@ -195,6 +195,7 @@ export class GetProgramDetailHandler {
       includes.programAnnouncements = {
         where: {
           isActive: true,
+          targetAudience: 'all',
           publishDate: { lte: now },
         },
         orderBy: [{ isPinned: 'desc' }, { publishDate: 'desc' }],

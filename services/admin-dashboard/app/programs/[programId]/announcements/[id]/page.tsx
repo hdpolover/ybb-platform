@@ -13,7 +13,12 @@ import {
   type ProgramAnnouncement,
 } from "@/src/shared/api-client";
 import { formatDateTime } from "@/lib/utils";
-import { formatAnnouncementLabel } from "../_components/program-announcement-utils";
+import {
+  formatAnnouncementLabel,
+  getProgramAnnouncementStatus,
+  getProgramAnnouncementStatusClasses,
+  getProgramAnnouncementStatusLabel,
+} from "../_components/program-announcement-utils";
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -70,6 +75,7 @@ export default function ProgramAnnouncementDetailPage() {
   }
 
   const announcement = data!;
+  const status = getProgramAnnouncementStatus(announcement);
 
   return (
     <div className="-mx-4 -my-6 flex flex-col sm:-mx-6 lg:-mx-8">
@@ -90,13 +96,9 @@ export default function ProgramAnnouncementDetailPage() {
         </div>
 
         <span
-          className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-            announcement.isActive
-              ? "bg-emerald-50 text-emerald-700"
-              : "bg-zinc-100 text-zinc-600"
-          }`}
+          className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${getProgramAnnouncementStatusClasses(status)}`}
         >
-          {announcement.isActive ? "Active" : "Hidden"}
+          {getProgramAnnouncementStatusLabel(status)}
         </span>
 
         <div className="ml-auto flex items-center gap-2">
@@ -138,7 +140,11 @@ export default function ProgramAnnouncementDetailPage() {
           </Field>
 
           <Field label="Status">
-            {announcement.isActive ? "Visible" : "Hidden"}
+            {getProgramAnnouncementStatusLabel(status)}
+          </Field>
+
+          <Field label="Publish At">
+            {formatDateTime(announcement.publishDate)}
           </Field>
 
           <Field label="Pinned">

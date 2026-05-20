@@ -530,7 +530,7 @@ export type ProgramAnnouncement = {
   isPinned: boolean;
   imageUrl: string | null;
   tags: string[];
-  publishDate?: string | null;
+  publishDate: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -1678,6 +1678,8 @@ export function createProgramAnnouncement(
     sendEmail?: boolean;
     isPinned?: boolean;
     imageUrl?: string;
+    publishDate?: string;
+    isActive?: boolean;
   },
 ): Promise<ProgramAnnouncement> {
   return request<ProgramAnnouncement>(`/programs/${programId}/announcements`, {
@@ -1697,6 +1699,7 @@ export function updateProgramAnnouncement(
     sendEmail?: boolean;
     isPinned?: boolean;
     imageUrl?: string | null;
+    publishDate?: string;
     isActive?: boolean;
   },
 ): Promise<ProgramAnnouncement> {

@@ -39,18 +39,85 @@ export class AnnouncementsStrategy implements ILandingPageStrategy {
   }
 
   private async buildAnnouncementsPayload(category: Brand | null) {
+    const now = new Date();
+    const programWhere = {
+      ...(category?.id ? { brandId: category.id } : {}),
+      isActive: true,
+      isPublished: true,
+      isVisibleToUsers: true,
+    };
 
-    const announcements = await this.prisma.systemAnnouncement.findMany({
-      where: {
-        isPublished: true,
-        OR: [
-          { brandId: category?.id ?? undefined },
-          { brandId: null },
-        ],
-      },
-      orderBy: { publishedAt: 'desc' },
-      take: 10,
-    });
+    const [systemAnnouncements, programAnnouncements] = await Promise.all([
+      this.prisma.systemAnnouncement.findMany({
+        where: {
+          isPublished: true,
+          OR: [
+            { brandId: category?.id ?? undefined },
+            { brandId: null },
+          ],
+        },
+        orderBy: { publishedAt: 'desc' },
+        take: 10,
+      }),
+      this.prisma.programAnnouncement.findMany({
+        where: {
+          isActive: true,
+          publishDate: { lte: now },
+          targetAudience: 'all',
+          program: programWhere,
+        },
+        orderBy: [{ isPinned: 'desc' }, { publishDate: 'desc' }],
+        take: 10,
+        include: {
+          program: {
+            select: {
+              name: true,
+              slug: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    const announcements = [
+      ...systemAnnouncements.map((announcement) => {
+        const meta = (announcement.metadata as Record<string, unknown>) ?? {};
+        const tags = Array.isArray(meta.tags)
+          ? meta.tags.filter((tag): tag is string => typeof tag === 'string' && tag.trim().length > 0)
+          : [];
+
+        return {
+          id: announcement.id,
+          title: announcement.title,
+          excerpt: announcement.summary ?? buildRichTextPreview(announcement.content, 160),
+          content: announcement.content,
+          image: (meta.imageUrl as string) ?? null,
+          author: (meta.author as string) ?? null,
+          date: announcement.publishedAt,
+          href: announcement.actionUrl ?? null,
+          category: announcement.type,
+          tags,
+        };
+      }),
+      ...programAnnouncements.map((announcement) => ({
+        id: announcement.id,
+        title: announcement.title,
+        excerpt: buildRichTextPreview(announcement.content, 160),
+        content: announcement.content,
+        image: announcement.imageUrl,
+        author: announcement.program.name,
+        date: announcement.publishDate,
+        href: announcement.program.slug ? `/programs/${announcement.program.slug}` : null,
+        category: announcement.category ?? 'general',
+        tags: announcement.tags,
+      })),
+    ]
+      .sort((left, right) => {
+        const leftTime = left.date ? new Date(left.date).getTime() : 0;
+        const rightTime = right.date ? new Date(right.date).getTime() : 0;
+        return rightTime - leftTime;
+      })
+      .slice(0, 10);
 
     const result = {
       slug: 'announcements',
@@ -65,24 +132,7 @@ export class AnnouncementsStrategy implements ILandingPageStrategy {
         },
         {
           type: 'announcement_list',
-          data: announcements.map(a => {
-            const meta = (a.metadata as Record<string, unknown>) ?? {};
-            const tags = Array.isArray(meta.tags)
-              ? meta.tags.filter((tag): tag is string => typeof tag === 'string' && tag.trim().length > 0)
-              : [];
-            return {
-              id: a.id,
-              title: a.title,
-              excerpt: a.summary ?? buildRichTextPreview(a.content, 160),
-              content: a.content,
-              image: (meta.imageUrl as string) ?? null,
-              author: (meta.author as string) ?? null,
-              date: a.publishedAt,
-              href: a.actionUrl ?? null,
-              category: a.type,
-              tags,
-            };
-          }),
+          data: announcements,
         },
       ],
     };
