@@ -737,10 +737,23 @@ export function listBrandAdmins(brandId: string): Promise<BrandAdmin[]> {
 
 export type AdminOption = { id: string; fullName: string; email: string };
 
-export function listAllAdmins(search?: string): Promise<{ data: AdminOption[] }> {
+type RawAdminOption = {
+  id: string;
+  fullName: string;
+  email?: string | null;
+  user?: { email?: string | null } | null;
+};
+
+export function listAllAdmins(search?: string): Promise<AdminOption[]> {
   const qs = new URLSearchParams({ limit: "100", page: "1" });
   if (search) qs.set("search", search);
-  return request<{ data: AdminOption[] }>(`/admins?${qs.toString()}`);
+  return request<RawAdminOption[]>(`/admins?${qs.toString()}`).then((admins) =>
+    admins.map((admin) => ({
+      id: admin.id,
+      fullName: admin.fullName,
+      email: admin.email ?? admin.user?.email ?? "",
+    })),
+  );
 }
 
 export function assignBrandAdmin(

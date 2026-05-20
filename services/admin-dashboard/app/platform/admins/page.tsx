@@ -19,7 +19,6 @@ import {
   type Admin,
   type CreateAdminInput,
 } from "../../../src/shared/api-client";
-import { useAuth } from "../../contexts/AuthContext";
 import { formatDate } from "@/lib/utils";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -223,7 +222,6 @@ function EditAdminModal({
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function AdminsPage() {
-  const { adminProfile } = useAuth();
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -236,14 +234,11 @@ export default function AdminsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Admin | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  const brandId =
-    adminProfile?.assignedBrands?.[0]?.brandId ?? undefined;
-
   const fetchAdmins = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await listAdmins({ page, limit: 20, search: search || undefined, brandId });
+      const res = await listAdmins({ page, limit: 20, search: search || undefined });
       setAdmins(res.data ?? []);
       setTotal(res.meta.total);
       setTotalPages(res.meta.totalPages);
@@ -252,7 +247,7 @@ export default function AdminsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, brandId]);
+  }, [page, search]);
 
   useEffect(() => {
     fetchAdmins();
