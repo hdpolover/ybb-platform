@@ -9,6 +9,7 @@ import { LandingRevalidationService } from '../../services/landing-revalidation.
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { BrandLogoAssetsService } from '../../services/brand-logo-assets.service';
 import { Prisma } from '@prisma/client';
+import { ensureBrandIdentityAvailable } from '../../../shared/brand-identity.utils';
 
 @CommandHandler(UpdateBrandCommand)
 export class UpdateBrandHandler implements ICommandHandler<UpdateBrandCommand> {
@@ -28,6 +29,12 @@ export class UpdateBrandHandler implements ICommandHandler<UpdateBrandCommand> {
         if (!brand) {
             throw new NotFoundException(`Brand with ID ${id} not found`);
         }
+
+        await ensureBrandIdentityAvailable(this.brandRepository, {
+            currentBrandId: brand.id,
+            name: dto.name ?? brand.name,
+            slug: dto.slug ?? brand.slug,
+        });
 
         if (files) {
             if (files.logo) {

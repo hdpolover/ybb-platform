@@ -1,23 +1,21 @@
 
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConflictException } from '@nestjs/common';
 import { CreateBrandHandler } from './create-brand.handler';
 import { CreateBrandCommand } from '../create-brand.command';
-import { IBrandRepository } from '@core/interfaces/repositories/brand.repository.interface';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
 import { StorageService } from '../../../../files/application/storage.service';
 import { BrandLogoAssetsService } from '../../services/brand-logo-assets.service';
 import { LandingRevalidationService } from '../../services/landing-revalidation.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CreateBrandDto } from '../../../presentation/dto/create-brand.dto';
-import { Brand } from '@core/entities/brand.entity';
 
 describe('CreateBrandHandler', () => {
     let handler: CreateBrandHandler;
-    let brandRepository: any;
-    let activityLogRepository: any;
-    let storageService: any;
 
     const mockBrandRepository = {
+        findByName: jest.fn().mockResolvedValue(null),
+        findBySlug: jest.fn().mockResolvedValue(null),
         create: jest.fn(),
         update: jest.fn(),
         getMetadata: jest.fn().mockResolvedValue(null),
@@ -59,11 +57,13 @@ describe('CreateBrandHandler', () => {
         }).compile();
 
         handler = module.get<CreateBrandHandler>(CreateBrandHandler);
-        brandRepository = module.get('IBrandRepository');
-        activityLogRepository = module.get(IUserActivityLogRepository);
-        storageService = module.get<StorageService>(StorageService);
-        
+
         jest.clearAllMocks();
+        mockBrandRepository.findByName.mockResolvedValue(null);
+        mockBrandRepository.findBySlug.mockResolvedValue(null);
+        mockBrandRepository.getMetadata.mockResolvedValue(null);
+        mockLandingRevalidationService.revalidateForBrand.mockResolvedValue(undefined);
+        mockPrismaService.brand.update.mockResolvedValue(undefined);
     });
 
     it('should be defined', () => {
@@ -82,6 +82,48 @@ describe('CreateBrandHandler', () => {
         expect(mockBrandRepository.update).not.toHaveBeenCalled();
         expect(mockActivityLogRepository.create).toHaveBeenCalled();
         expect(result.id).toBe('brand-1');
+    });
+
+    it('releases soft-deleted brand name and slug conflicts before creating a replacement', async () => {
+        const dto: CreateBrandDto = { name: 'New Brand', slug: 'new-brand' };
+        const command = new CreateBrandCommand(dto, 'user-1', {});
+        const deletedBrand = {
+            id: 'brand-deleted-1',
+            name: dto.name,
+            slug: dto.slug,
+            deletedAt: new Date(),
+        };
+
+        mockBrandRepository.findByName.mockResolvedValue(deletedBrand);
+        mockBrandRepository.findBySlug.mockResolvedValue(deletedBrand);
+        mockBrandRepository.update.mockResolvedValue(deletedBrand);
+        mockBrandRepository.create.mockResolvedValue({ id: 'brand-1', ...dto });
+
+        await handler.execute(command);
+
+        expect(mockBrandRepository.update).toHaveBeenCalledWith(
+            deletedBrand.id,
+            expect.objectContaining({
+                name: expect.stringContaining('[deleted'),
+                slug: expect.stringContaining('-deleted-'),
+            }),
+        );
+        expect(mockBrandRepository.create).toHaveBeenCalledWith(dto);
+    });
+
+    it('throws a conflict when an active brand already uses the requested name', async () => {
+        const dto: CreateBrandDto = { name: 'Existing Brand', slug: 'existing-brand-copy' };
+        const command = new CreateBrandCommand(dto, 'user-1', {});
+
+        mockBrandRepository.findByName.mockResolvedValue({
+            id: 'brand-1',
+            name: 'Existing Brand',
+            slug: 'existing-brand',
+            deletedAt: null,
+        });
+
+        await expect(handler.execute(command)).rejects.toBeInstanceOf(ConflictException);
+        expect(mockBrandRepository.create).not.toHaveBeenCalled();
     });
 
     it('should auto-generate slug if missing', async () => {

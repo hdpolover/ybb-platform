@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   MoreHorizontal,
   Pencil,
+  Trash2,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
@@ -51,9 +52,10 @@ const PAGE_SIZE = 10;
 type BrandsTableProps = {
   brands: Brand[];
   onEdit: (brand: Brand) => void;
+  onDelete: (brand: Brand) => void;
 };
 
-export function BrandsTable({ brands, onEdit }: BrandsTableProps) {
+export function BrandsTable({ brands, onEdit, onDelete }: BrandsTableProps) {
   const router = useRouter();
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -186,6 +188,16 @@ export function BrandsTable({ brands, onEdit }: BrandsTableProps) {
                     >
                       <Pencil className="mr-2 h-4 w-4" />
                       Edit
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="text-red-600 focus:text-red-600"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDelete(brand);
+                      }}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
