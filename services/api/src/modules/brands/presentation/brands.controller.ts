@@ -7,7 +7,7 @@ import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { CacheInvalidate } from '@shared/decorators/cache-invalidate.decorator';
-import { LANDING_BRAND_PATTERNS } from '@shared/constants/cache-patterns';
+import { LANDING_BRAND_PATTERNS, PROGRAM_CONTENT_PATTERNS } from '@shared/constants/cache-patterns';
 import { ListBrandsQuery } from '../application/queries/list-brands.query';
 import { GetBrandDetailQuery } from '../application/queries/get-brand-detail.query';
 import { ListBrandSponsorsQuery } from '../application/queries/list-brand-sponsors.query';
@@ -201,11 +201,11 @@ export class BrandsController {
         return this.commandBus.execute(new DeleteSocialFeedCommand(id, socialFeedId));
     }
 
-    // no cache bust: a new brand isn't yet linked to landing routes
     @Post()
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'Brand', action: ChangeType.create })
+    @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
     @ApiOperation({ summary: 'Create a new brand' })
     @ApiConsumes('multipart/form-data')
     @UseInterceptors(FileFieldsInterceptor([
@@ -229,7 +229,7 @@ export class BrandsController {
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'Brand', action: ChangeType.update })
-    @CacheInvalidate(['landing:home:*', 'landing:programs:*', 'landing:program:*', 'landing:settings:*'])
+    @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
     @ApiOperation({ summary: 'Update a brand' })
     @ApiConsumes('multipart/form-data')
     @UseInterceptors(FileFieldsInterceptor([
@@ -255,7 +255,7 @@ export class BrandsController {
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'Brand', action: ChangeType.update })
-    @CacheInvalidate(['landing:home:*', 'landing:programs:*', 'landing:program:*', 'landing:settings:*'])
+    @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
     @ApiOperation({ summary: 'Update brand details' })
     @ApiConsumes('multipart/form-data')
     @UseInterceptors(FileFieldsInterceptor([
@@ -281,7 +281,7 @@ export class BrandsController {
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'Brand', action: ChangeType.update })
-    @CacheInvalidate(LANDING_BRAND_PATTERNS)
+    @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
     @ApiOperation({ summary: 'Update brand settings' })
     @ApiResponse({ status: 200, description: 'Brand settings updated successfully', type: BrandResponseDto })
     @ApiResponse({ status: 404, description: 'Brand not found' })
@@ -308,7 +308,7 @@ export class BrandsController {
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'Brand', action: ChangeType.update })
-    @CacheInvalidate(LANDING_BRAND_PATTERNS)
+    @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
     @ApiOperation({ summary: 'Update brand landing page metadata (partial merge)' })
     @ApiResponse({ status: 200, description: 'Updated metadata object' })
     async updateBrandMetadata(
@@ -323,7 +323,7 @@ export class BrandsController {
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'Brand', action: ChangeType.delete })
-    @CacheInvalidate(LANDING_BRAND_PATTERNS)
+    @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
     @ApiOperation({ summary: 'Delete a brand' })
     @ApiResponse({ status: 200, description: 'Brand deleted successfully' })
     @ApiResponse({ status: 404, description: 'Brand not found' })

@@ -1,7 +1,11 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { redirectToLogin } from "@/src/shared/login-redirect";
+import {
+  ADMIN_PROFILE_REFRESH_EVENT,
+  isAdminProfileRefreshStorageKey,
+} from "@/src/shared/admin-profile-refresh";
 
 export type AdminAccessLevel = "super_admin" | "platform_admin" | "program_admin" | "no_access";
 
@@ -68,6 +72,7 @@ type AuthContextType = {
   isPlatformAdmin: boolean;
   assignedPrograms: AdminProgram[];
   accessiblePrograms: AdminProgram[];
+  refreshAdminProfile: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
 };
@@ -404,6 +409,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [adminProfile, setAdminProfile] = useState<AdminProfile | null>(null);
+  const refreshInFlightRef = useRef<Promise<void> | null>(null);
+
+  const refreshAdminProfile = useCallback(async () => {
+    const storedSession = readStoredSession();
+    if (!storedSession) {
+      return;
+    }
+
+    if (refreshInFlightRef.current) {
+      return refreshInFlightRef.current;
+    }
+
+    const refreshTask = (async () => {
+      try {
+        const refreshedAuthResponse = await refreshAdminTokens(storedSession.refreshToken);
+        const hydratedSession = await hydrateSession(refreshedAuthResponse);
+        persistSession(hydratedSession);
+        setAdminProfile(hydratedSession.adminProfile);
+        setIsAuthenticated(true);
+      } catch {
+        clearStoredSession();
+        setAdminProfile(null);
+        setIsAuthenticated(false);
+        redirectToLogin("session_expired");
+      } finally {
+        refreshInFlightRef.current = null;
+      }
+    })();
+
+    refreshInFlightRef.current = refreshTask;
+    return refreshTask;
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -514,6 +551,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const triggerRefresh = () => {
+      if (!readStoredSession()) {
+        return;
+      }
+
+      void refreshAdminProfile();
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (isAdminProfileRefreshStorageKey(event.key)) {
+        triggerRefresh();
+      }
+    };
+
+    window.addEventListener(ADMIN_PROFILE_REFRESH_EVENT, triggerRefresh);
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      window.removeEventListener(ADMIN_PROFILE_REFRESH_EVENT, triggerRefresh);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, [refreshAdminProfile]);
+
+  useEffect(() => {
     if (!isAuthenticated) {
       return;
     }
@@ -526,26 +591,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const refreshDelay = getRefreshDelay(storedSession.accessToken);
 
     const timeoutId = window.setTimeout(() => {
-      void (async () => {
-        try {
-          const refreshedAuthResponse = await refreshAdminTokens(storedSession.refreshToken);
-          const hydratedSession = await hydrateSession(refreshedAuthResponse);
-          persistSession(hydratedSession);
-          setAdminProfile(hydratedSession.adminProfile);
-          setIsAuthenticated(true);
-        } catch {
-          clearStoredSession();
-          setAdminProfile(null);
-          setIsAuthenticated(false);
-          redirectToLogin("session_expired");
-        }
-      })();
+      void refreshAdminProfile();
     }, Math.max(refreshDelay, 0));
 
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [isAuthenticated, adminProfile?.id]);
+  }, [isAuthenticated, adminProfile?.id, refreshAdminProfile]);
 
   const accessConfig = computeAccessConfig(adminProfile);
 
@@ -629,6 +681,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isPlatformAdmin,
         assignedPrograms,
         accessiblePrograms,
+        refreshAdminProfile,
         login,
         logout,
       }}
