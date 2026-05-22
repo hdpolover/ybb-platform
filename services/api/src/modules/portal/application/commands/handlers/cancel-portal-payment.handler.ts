@@ -25,8 +25,11 @@ export class CancelPortalPaymentHandler {
         const invoice = await this.prisma.applicationInvoice.findUnique({
             where: { id: command.invoiceId },
             include: {
+                pricingTier: {
+                    select: { feeType: true },
+                },
                 application: {
-                    select: { participantId: true, programId: true },
+                    select: { id: true, participantId: true, programId: true },
                 },
             },
         });
@@ -45,24 +48,34 @@ export class CancelPortalPaymentHandler {
             throw new BadRequestException('No pending transaction found for this invoice');
         }
 
+        const cancellationReason = command.reason?.trim() || 'Cancelled by participant';
         const internalKey = this.configService.get<string>('PAYMENT_SERVICE_INTERNAL_KEY', '').trim();
         const headers = internalKey ? { 'X-Internal-Service-Key': internalKey } : {};
 
         await this.paymentServiceClient.post(
             `/api/v1/payments/${invoice.externalTransactionId}/cancel`,
-            { reason: command.reason ?? 'Cancelled by participant' },
+            { reason: cancellationReason },
             { headers },
         );
 
-        await this.prisma.applicationInvoice.update({
-            where: { id: command.invoiceId },
-            data: {
-                status: 'unpaid',
-                paymentMethod: null,
-                externalIntentId: null,
-                externalTransactionId: null,
-            },
-        });
+        const paymentStatusPatch =
+            invoice.pricingTier?.feeType === 'registration_fee'
+                ? { registrationPaymentStatus: 'cancelled' as const }
+                : { programPaymentStatus: 'cancelled' as const };
+
+        await this.prisma.$transaction([
+            this.prisma.applicationInvoice.update({
+                where: { id: command.invoiceId },
+                data: {
+                    status: 'cancelled',
+                    rejectionReason: cancellationReason,
+                },
+            }),
+            this.prisma.participantApplication.update({
+                where: { id: invoice.application.id },
+                data: paymentStatusPatch,
+            }),
+        ]);
 
         await Promise.all([
             this.cacheService.invalidateInvoiceCache(command.invoiceId, command.userId),

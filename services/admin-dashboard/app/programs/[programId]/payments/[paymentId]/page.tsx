@@ -28,6 +28,7 @@ const STATUS_CLASS: Record<string, string> = {
   unpaid: "bg-amber-50 text-amber-700 border-amber-200",
   processing: "bg-blue-50 text-blue-700 border-blue-200",
   failed: "bg-red-50 text-red-700 border-red-200",
+  cancelled: "bg-zinc-100 text-zinc-700 border-zinc-300",
   refunded: "bg-purple-50 text-purple-700 border-purple-200",
   pending: "bg-blue-50 text-blue-700 border-blue-200",
   needs_review: "bg-orange-50 text-orange-700 border-orange-200",
@@ -36,12 +37,28 @@ const STATUS_CLASS: Record<string, string> = {
   void: "bg-zinc-100 text-zinc-700 border-zinc-300",
 };
 
+const FOLLOW_UP_CLASS: Record<string, string> = {
+  participant_cancelled: "bg-zinc-100 text-zinc-700 border-zinc-300",
+  payment_failed: "bg-red-50 text-red-700 border-red-200",
+  manual_proof_rejected: "bg-orange-50 text-orange-700 border-orange-200",
+};
+
 function StatusPill({ status }: { status: string }) {
   const normalizedStatus = status.trim().toLowerCase();
   const cls = STATUS_CLASS[normalizedStatus] ?? "bg-zinc-50 text-zinc-600 border-zinc-200";
   return (
     <span className={`inline-flex items-center rounded border px-2.5 py-0.5 text-xs font-medium capitalize ${cls}`}>
       {formatKeyLabel(normalizedStatus)}
+    </span>
+  );
+}
+
+function FollowUpPill({ status }: { status: InvoiceDetail["followUpStatus"] }) {
+  if (!status) return null;
+  const cls = FOLLOW_UP_CLASS[status] ?? "bg-zinc-50 text-zinc-600 border-zinc-200";
+  return (
+    <span className={`inline-flex items-center rounded border px-2.5 py-0.5 text-xs font-medium ${cls}`}>
+      {formatKeyLabel(status)}
     </span>
   );
 }
@@ -587,6 +604,7 @@ export default function PaymentDetailPage({
                       <option value="paid">Paid</option>
                       <option value="failed">Failed</option>
                       <option value="unpaid">Unpaid</option>
+                      <option value="cancelled">Cancelled</option>
                       <option value="refunded">Refunded</option>
                     </select>
                   </div>
@@ -647,6 +665,12 @@ export default function PaymentDetailPage({
                   <span className="text-zinc-500">Status</span>
                   <StatusPill status={invoice.status} />
                 </div>
+                {invoice.followUpStatus && (
+                  <div className="flex justify-between gap-3">
+                    <span className="text-zinc-500">Follow-up</span>
+                    <FollowUpPill status={invoice.followUpStatus} />
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-zinc-500">Amount</span>
                   <span className="font-medium">{formatCurrency(invoice.amount, invoice.currency)}</span>
@@ -655,6 +679,18 @@ export default function PaymentDetailPage({
                   <span className="text-zinc-500">Tier</span>
                   <span className="text-zinc-700">{invoice.pricingTier.name}</span>
                 </div>
+                {invoice.application.ticketStatus && (
+                  <div className="flex justify-between gap-3">
+                    <span className="text-zinc-500">Ticket Type</span>
+                    <span className="text-zinc-700">{formatKeyLabel(invoice.application.ticketStatus)}</span>
+                  </div>
+                )}
+                {invoice.rejectionReason && (
+                  <div className="space-y-1">
+                    <span className="text-zinc-500">Reason</span>
+                    <p className="text-zinc-700">{invoice.rejectionReason}</p>
+                  </div>
+                )}
                 {txnStatus && (
                   <div className="flex justify-between">
                     <span className="text-zinc-500">Txn Status</span>

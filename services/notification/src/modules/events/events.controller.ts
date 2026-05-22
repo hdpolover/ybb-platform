@@ -124,7 +124,24 @@ export class EventsController {
           currency,
           orderId,
           description,
-          invoiceUrl: '#',
+          invoiceUrl:
+            getString(payload, 'invoiceUrl') ||
+            getString(payload, 'invoice_url') ||
+            getString(metadata, 'invoice_url') ||
+            getString(payload, 'paymentsPageUrl') ||
+            getString(payload, 'payments_page_url') ||
+            getString(metadata, 'payments_page_url') ||
+            '#',
+          paymentsPageUrl:
+            getString(payload, 'paymentsPageUrl') ||
+            getString(payload, 'payments_page_url') ||
+            getString(metadata, 'payments_page_url') ||
+            undefined,
+          submissionPageUrl:
+            getString(payload, 'submissionPageUrl') ||
+            getString(payload, 'submission_page_url') ||
+            getString(metadata, 'submission_page_url') ||
+            undefined,
           items,
         },
         receiptBuffer,

@@ -512,7 +512,9 @@ export class EmailService {
       loginUrl: `${baseUrl}/login`,
       brand,
     };
-    const fallbackSubject = brand ? `Email Verified - ${brand.name}` : 'Email Verified';
+    const fallbackSubject = brand
+      ? `Email Verified - ${brand.name}`
+      : 'Email Verified';
     const { subject, html } = await this.resolveEmailContent({
       type: 'email_verified',
       fallbackTemplateName: 'email-verified',
@@ -535,6 +537,9 @@ export class EmailService {
       date: new Date().toLocaleDateString(),
       description: paymentData.description,
       invoiceUrl: paymentData.invoiceUrl || '#',
+      paymentsPageUrl:
+        paymentData.paymentsPageUrl || paymentData.invoiceUrl || '#',
+      submissionPageUrl: paymentData.submissionPageUrl || '',
       brand: paymentData.brand,
       program: paymentData.program,
       brandId: paymentData.brandId,
@@ -756,11 +761,7 @@ export class EmailService {
       fallbackSubject: `Support Ticket Received (${payload.ticketNumber})`,
       data: templateData,
     });
-    return this.sendRawEmail(
-      to,
-      subject,
-      html,
-    );
+    return this.sendRawEmail(to, subject, html);
   }
 
   async sendSupportTicketReplyEmail(to: string, payload: any) {
@@ -784,11 +785,7 @@ export class EmailService {
       fallbackSubject: `New Support Reply (${payload.ticketNumber})`,
       data: templateData,
     });
-    return this.sendRawEmail(
-      to,
-      subject,
-      html,
-    );
+    return this.sendRawEmail(to, subject, html);
   }
 
   async sendSupportTicketStatusUpdatedEmail(to: string, payload: any) {
@@ -810,11 +807,7 @@ export class EmailService {
       fallbackSubject: `Support Ticket Status Updated (${payload.ticketNumber})`,
       data: templateData,
     });
-    return this.sendRawEmail(
-      to,
-      subject,
-      html,
-    );
+    return this.sendRawEmail(to, subject, html);
   }
 
   private resolveSupportUrl(brand?: any): string {

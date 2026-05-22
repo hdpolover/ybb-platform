@@ -478,6 +478,7 @@ export class ApplicationsController {
       dto.scoreTotal,
       dto.scoreBreakdown,
       dto.scoreStatus,
+      dto.approvalMode,
     );
 
     return this.reviewApplicationHandler.execute(command);

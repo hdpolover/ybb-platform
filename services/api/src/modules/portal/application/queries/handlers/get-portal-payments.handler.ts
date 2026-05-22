@@ -317,7 +317,11 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                         startDate: startDate || undefined,
                         sequenceOrder,
                         canPay:
-                            (normalizedStatus === 'unpaid' || normalizedStatus === 'failed')
+                            (
+                                normalizedStatus === 'unpaid'
+                                || normalizedStatus === 'failed'
+                                || normalizedStatus === 'cancelled'
+                            )
                             && Number(invoice.amount) > 0,
                     };
 

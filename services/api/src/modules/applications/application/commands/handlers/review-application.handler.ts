@@ -8,6 +8,7 @@ import { APPLICATION_REPOSITORY } from '@modules/applications/infrastructure/tok
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
 import { ReferralFunnelService } from '@modules/participants/application/services/referral-funnel.service';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 
 /**
  * Review Application Handler
@@ -23,6 +24,7 @@ export class ReviewApplicationHandler {
     private readonly applicationMapper: ApplicationMapper,
     private readonly cacheService: CacheService,
     private readonly referralFunnel: ReferralFunnelService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async execute(command: ReviewApplicationCommand): Promise<ApplicationResponseDto> {
@@ -40,28 +42,33 @@ export class ReviewApplicationHandler {
       );
     }
 
+    const reviewerNotes = this.buildReviewerNotes(command);
+    if (command.status === ApplicationStatus.ACCEPTED && command.approvalMode === 'ambassador') {
+      await this.assertAmbassadorAcceptanceAllowed(command.applicationId);
+    }
+
     // Apply review based on status
     switch (command.status) {
       case ApplicationStatus.ACCEPTED:
-        application.accept(command.reviewerId, command.reviewerNotes);
+        application.accept(command.reviewerId, reviewerNotes);
         break;
 
       case ApplicationStatus.REJECTED:
-        application.reject(command.reviewerId, command.reviewerNotes);
+        application.reject(command.reviewerId, reviewerNotes);
         break;
 
       case ApplicationStatus.WAITLISTED:
         application.waitlist();
         application.reviewedBy = command.reviewerId;
         application.reviewedAt = new Date();
-        application.reviewerNotes = command.reviewerNotes;
+        application.reviewerNotes = reviewerNotes;
         break;
 
       case ApplicationStatus.INTERVIEW_SCHEDULED:
         application.scheduleInterview();
         application.reviewedBy = command.reviewerId;
         application.reviewedAt = new Date();
-        application.reviewerNotes = command.reviewerNotes;
+        application.reviewerNotes = reviewerNotes;
         break;
 
       case ApplicationStatus.UNDER_REVIEW:
@@ -81,7 +88,7 @@ export class ReviewApplicationHandler {
     application.addStatusToHistory(
       command.status,
       command.reviewerId,
-      command.reviewerNotes || 'Application reviewed',
+      reviewerNotes || 'Application reviewed',
     );
 
     // ========================================
@@ -89,6 +96,10 @@ export class ReviewApplicationHandler {
     // Application update and related operations must succeed together
     // ========================================
     const updated = await this.applicationRepository.update(application);
+
+    if (command.status === ApplicationStatus.ACCEPTED && command.approvalMode) {
+      await this.applyAcceptanceMode(command.applicationId, command.approvalMode);
+    }
     // Note: Repository should implement transaction support internally
     // For multi-repository operations, wrap in controller or use application service
 
@@ -105,13 +116,82 @@ export class ReviewApplicationHandler {
     return this.applicationMapper.toDto(updated);
   }
 
+  private buildReviewerNotes(command: ReviewApplicationCommand): string | undefined {
+    if (command.status !== ApplicationStatus.ACCEPTED || !command.approvalMode) {
+      return command.reviewerNotes;
+    }
+
+    const suffix =
+      command.approvalMode === 'ambassador'
+        ? 'Accepted as ambassador'
+        : 'Accepted as participant';
+
+    if (!command.reviewerNotes?.trim()) {
+      return suffix;
+    }
+
+    return `${command.reviewerNotes.trim()} (${suffix})`;
+  }
+
+  private async assertAmbassadorAcceptanceAllowed(applicationId: string): Promise<void> {
+    const lockedInvoiceCount = await this.prisma.applicationInvoice.count({
+      where: {
+        applicationId,
+        status: {
+          in: ['processing', 'paid'],
+        },
+      },
+    });
+
+    if (lockedInvoiceCount > 0) {
+      throw new BadRequestException(
+        'Cannot accept this application as ambassador while a payment is processing or already paid.',
+      );
+    }
+  }
+
+  private async applyAcceptanceMode(
+    applicationId: string,
+    approvalMode: 'participant' | 'ambassador',
+  ): Promise<void> {
+    if (approvalMode === 'participant') {
+      await this.prisma.participantApplication.update({
+        where: { id: applicationId },
+        data: { ticketStatus: 'regular' },
+      });
+      return;
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.participantApplication.update({
+        where: { id: applicationId },
+        data: {
+          ticketStatus: 'ambassador',
+          registrationPaymentStatus: 'cancelled',
+        },
+      }),
+      this.prisma.applicationInvoice.updateMany({
+        where: {
+          applicationId,
+          status: {
+            in: ['unpaid', 'failed', 'cancelled'],
+          },
+        },
+        data: {
+          status: 'cancelled',
+          rejectionReason: 'Accepted as ambassador',
+        },
+      }),
+    ]);
+  }
+
   /**
    * Invalidate portal cache for participant when their application is reviewed
    */
   private async invalidateParticipantCache(participantId: string): Promise<void> {
     try {
       // Fetch participant to get userId for cache invalidation
-      const participant = await this.applicationRepository['prisma'].participant.findUnique({
+      const participant = await this.prisma.participant.findUnique({
         where: { id: participantId },
         select: { userId: true }
       });

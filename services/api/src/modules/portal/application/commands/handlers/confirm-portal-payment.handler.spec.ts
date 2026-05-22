@@ -246,4 +246,74 @@ describe('ConfirmPortalPaymentHandler', () => {
         expect(updateCall.data.amount).toBeUndefined();
         expect(updateCall.data.currency).toBeUndefined();
     });
+
+    it('includes participant dashboard links in payment intent metadata for success emails', async () => {
+        mockPortalCacheService.getParticipantProfile.mockResolvedValue({
+            id: 'participant-1',
+            userId: 'user-1',
+        });
+        mockPrisma.applicationInvoice.findUnique.mockResolvedValue({
+            id: 'invoice-1',
+            applicationId: 'app-1',
+            amount: '15',
+            currency: 'USD',
+            status: 'unpaid',
+            exchangeRateSnapshot: '17580',
+            paymentMethod: null,
+            externalIntentId: null,
+            externalTransactionId: null,
+            pricingTier: {
+                name: 'Registration Fee',
+                isActive: true,
+                deletedAt: null,
+            },
+            application: {
+                participantId: 'participant-1',
+                programId: 'program-1',
+                program: {
+                    name: 'China Youth Summit 2026',
+                    currency: 'USD',
+                    usdInIdr: '17580',
+                    brandId: 'brand-1',
+                    brand: {
+                        landingUrl: 'https://program.example.com',
+                        websiteUrl: null,
+                    },
+                },
+                participant: {
+                    fullName: 'Hendra',
+                    user: {
+                        email: 'hendra@example.com',
+                    },
+                },
+            },
+        });
+        mockPaymentClient.createIntent.mockResolvedValue({
+            intent_id: 'intent-1',
+        });
+        mockPaymentClient.processPayment.mockResolvedValue({
+            status: 'PENDING',
+            transaction_id: 'tx-1',
+            action: {
+                type: 'redirect',
+                url: 'https://checkout.xendit.co/invoice/test',
+            },
+        });
+        mockPrisma.applicationInvoice.update.mockResolvedValue(undefined);
+
+        await handler.execute(
+            new ConfirmPortalPaymentCommand('user-1', 'invoice-1', 'gateway', 'xendit_credit_card'),
+        );
+
+        expect(mockPaymentClient.createIntent).toHaveBeenCalledWith(
+            expect.objectContaining({
+                metadata: expect.objectContaining({
+                    payments_page_url: 'https://program.example.com/dashboard/payments',
+                    submission_page_url: 'https://program.example.com/dashboard/submission',
+                    invoice_url: 'https://program.example.com/dashboard/payments/invoice-1',
+                    email: 'hendra@example.com',
+                }),
+            }),
+        );
+    });
 });

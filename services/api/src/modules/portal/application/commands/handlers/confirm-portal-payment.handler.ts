@@ -6,6 +6,11 @@ import { PortalCacheService } from '../../services/portal-cache.service';
 import { ConfirmPortalPaymentCommand } from '../../queries/portal-queries';
 import { ConfirmPortalPaymentResponseDto } from '../../../presentation/dto/portal-payment.dto';
 import { PaymentGrpcClient } from '@modules/payments/infrastructure/services/payment-grpc.client';
+import {
+    buildParticipantInvoiceUrl,
+    buildParticipantPaymentsUrl,
+    buildParticipantSubmissionUrl,
+} from '@modules/payments/application/utils/participant-dashboard-url.util';
 import { resolveUsdInIdrRate } from '../../utils/resolve-usd-in-idr-rate';
 
 @Injectable()
@@ -52,6 +57,12 @@ export class ConfirmPortalPaymentHandler {
                                 currency: true,
                                 usdInIdr: true,
                                 brandId: true,
+                                brand: {
+                                    select: {
+                                        landingUrl: true,
+                                        websiteUrl: true,
+                                    },
+                                },
                             },
                         },
                         participant: {
@@ -94,6 +105,10 @@ export class ConfirmPortalPaymentHandler {
         // notification consumer because it short-circuits when `data.email` is empty.
         const customerEmail = invoice.application.participant?.user?.email ?? '';
         const customerName = invoice.application.participant?.fullName ?? customerEmail;
+        const participantBrand = invoice.application.program.brand;
+        const paymentsPageUrl = buildParticipantPaymentsUrl(participantBrand);
+        const submissionPageUrl = buildParticipantSubmissionUrl(participantBrand);
+        const invoiceUrl = buildParticipantInvoiceUrl(participantBrand, invoice.id);
 
         // Manual transfers settle in IDR — flip the canonical amount/currency to
         // the IDR snapshot taken at invoice creation. Gateway flows stay USD.
@@ -150,6 +165,9 @@ export class ConfirmPortalPaymentHandler {
                 customer_email: customerEmail,
                 customer_name: customerName,
                 payment_category: 'registration',
+                payments_page_url: paymentsPageUrl,
+                submission_page_url: submissionPageUrl,
+                invoice_url: invoiceUrl,
                 ...(exchangeRate !== undefined ? { exchange_rate_value: String(exchangeRate) } : {}),
             },
             exchange_rate: exchangeRate,

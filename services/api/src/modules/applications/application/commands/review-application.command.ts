@@ -14,5 +14,6 @@ export class ReviewApplicationCommand {
     public readonly scoreTotal?: number,
     public readonly scoreBreakdown?: Record<string, number>,
     public readonly scoreStatus?: ScoreStatus,
+    public readonly approvalMode?: 'participant' | 'ambassador',
   ) {}
 }
