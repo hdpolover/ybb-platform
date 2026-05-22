@@ -12,6 +12,7 @@ export class ProgramAnalyticsResponseDto {
             processingCount: number;
             unpaidCount: number;
             failedCount: number;
+            cancelledCount: number;
             totalRevenueIdr: number;
             totalRevenueUsd: number;
             conversionRate: number;
@@ -19,6 +20,6 @@ export class ProgramAnalyticsResponseDto {
         revenueByMonth: Array<{ label: string; idr: number; usd: number }>;
         byTier: Array<{ name: string; paidCount: number; totalAmount: number; currency: string }>;
         byPaymentMethod: Array<{ method: string; count: number }>;
-        countriesByStatus: Array<{ country: string; paid: number; processing: number; unpaid: number; failed: number; total: number }>;
+        countriesByStatus: Array<{ country: string; paid: number; processing: number; unpaid: number; failed: number; cancelled: number; total: number }>;
     };
 }

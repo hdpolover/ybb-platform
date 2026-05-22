@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -13,16 +13,11 @@ import {
   Pie,
   Cell,
   Legend,
-  LineChart,
-  Line,
 } from "recharts";
 import {
   Users,
   CreditCard,
   TrendingUp,
-  Globe,
-  GraduationCap,
-  Building2,
   Loader2,
   AlertCircle,
 } from "lucide-react";
@@ -70,7 +65,7 @@ const APP_STATUSES = [
   { value: "waitlisted", label: "Waitlisted" },
   { value: "withdrawn", label: "Withdrawn" },
 ];
-const PAY_STATUSES = ["paid", "processing", "unpaid", "failed"] as const;
+const PAY_STATUSES = ["paid", "processing", "unpaid", "failed", "cancelled"] as const;
 const APP_CATEGORIES = [
   { value: "fully_funded", label: "Fully Funded" },
   { value: "self_funded", label: "Self Funded" },
@@ -209,15 +204,6 @@ function ChartCard({
       <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{title}</p>
       {sub && <p className="mt-0.5 text-[11px] text-zinc-400">{sub}</p>}
       <div className="mt-4">{children}</div>
-    </div>
-  );
-}
-
-function SectionHeading({ icon, label }: { icon: React.ReactNode; label: string }) {
-  return (
-    <div className="flex items-center gap-2 text-sm font-semibold text-zinc-700">
-      {icon}
-      {label}
     </div>
   );
 }
@@ -483,7 +469,7 @@ function PaymentsTab({ analytics }: { analytics: ProgramAnalytics }) {
   return (
     <div className="space-y-6">
       {/* KPI row */}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <StatCard
           label="Total Revenue (IDR)"
           value={fmtIDR(kpis.totalRevenueIdr)}
@@ -508,19 +494,31 @@ function PaymentsTab({ analytics }: { analytics: ProgramAnalytics }) {
         <StatCard
           label="Processing / Unpaid"
           value={`${kpis.processingCount} / ${kpis.unpaidCount}`}
-          sub={kpis.failedCount > 0 ? `${kpis.failedCount} failed` : "No failed payments"}
+          sub={
+            kpis.failedCount > 0 || kpis.cancelledCount > 0
+              ? `${kpis.failedCount} failed, ${kpis.cancelledCount} cancelled`
+              : "No failed or cancelled payments"
+          }
           accent="bg-amber-50 text-amber-500"
+          icon={<CreditCard className="h-4 w-4" />}
+        />
+        <StatCard
+          label="Cancelled Invoices"
+          value={kpis.cancelledCount.toLocaleString()}
+          sub="Participant-cancelled or ambassador-converted"
+          accent="bg-zinc-100 text-zinc-500"
           icon={<CreditCard className="h-4 w-4" />}
         />
       </div>
 
       {/* Invoice status breakdown */}
-      <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-5">
         {[
           { label: "Paid", count: kpis.paidCount, color: "text-emerald-600", bg: "bg-emerald-50" },
           { label: "Processing", count: kpis.processingCount, color: "text-blue-600", bg: "bg-blue-50" },
           { label: "Unpaid", count: kpis.unpaidCount, color: "text-zinc-600", bg: "bg-zinc-50" },
           { label: "Failed", count: kpis.failedCount, color: "text-red-600", bg: "bg-red-50" },
+          { label: "Cancelled", count: kpis.cancelledCount, color: "text-zinc-700", bg: "bg-zinc-100" },
         ].map((s) => (
           <div key={s.label} className={`rounded-lg border border-zinc-200 ${s.bg} px-4 py-3`}>
             <p className="text-xs text-zinc-500">{s.label}</p>
@@ -573,7 +571,8 @@ function PaymentsTab({ analytics }: { analytics: ProgramAnalytics }) {
                 <Bar dataKey="paid" stackId="a" fill="#10b981" name="Paid" />
                 <Bar dataKey="processing" stackId="a" fill="#3b82f6" name="Processing" />
                 <Bar dataKey="unpaid" stackId="a" fill="#a1a1aa" name="Unpaid" />
-                <Bar dataKey="failed" stackId="a" fill="#ef4444" name="Failed" radius={[0, 3, 3, 0]} />
+                <Bar dataKey="failed" stackId="a" fill="#ef4444" name="Failed" />
+                <Bar dataKey="cancelled" stackId="a" fill="#52525b" name="Cancelled" radius={[0, 3, 3, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -667,32 +666,38 @@ export default function AnalyticsPage({
   const [pendingFilters, setPendingFilters] = useState<AnalyticsFilters>({});
   const [appliedFilters, setAppliedFilters] = useState<AnalyticsFilters>({});
 
-  useEffect(() => {
+  const loadAnalytics = useCallback(() => {
     let mounted = true;
-    setLoading(true);
-    setError(null);
+    const run = async () => {
+      setLoading(true);
+      setError(null);
 
-    Promise.all([
-      getProgramAnalytics(programId, appliedFilters),
-      getProgramDashboardAnalytics(programId),
-    ])
-      .then(([a, d]) => {
+      try {
+        const [a, d] = await Promise.all([
+          getProgramAnalytics(programId, appliedFilters),
+          getProgramDashboardAnalytics(programId),
+        ]);
         if (!mounted) return;
         setAnalytics(a);
         setDashboard(d);
-      })
-      .catch((err) => {
+      } catch (err) {
         if (!mounted) return;
         setError(err instanceof Error ? err.message : "Failed to load analytics.");
-      })
-      .finally(() => {
+      } finally {
         if (mounted) setLoading(false);
-      });
+      }
+    };
+
+    void run();
 
     return () => {
       mounted = false;
     };
-  }, [programId, appliedFilters]);
+  }, [appliedFilters, programId]);
+
+  useEffect(() => {
+    return loadAnalytics();
+  }, [loadAnalytics]);
 
   return (
     <div className="space-y-6">

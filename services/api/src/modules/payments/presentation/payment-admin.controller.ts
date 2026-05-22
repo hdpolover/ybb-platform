@@ -29,6 +29,7 @@ import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { PaymentServiceHttpClient } from '../infrastructure/services/payment-service-http.client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
+import { buildParticipantPaymentsUrl as buildParticipantPaymentsDashboardUrl } from '@modules/payments/application/utils/participant-dashboard-url.util';
 
 @ApiTags('Admin Payments')
 @Controller('admin/payments')
@@ -64,6 +65,11 @@ export class PaymentAdminController {
     @ApiQuery({ name: 'tierId', required: false })
     @ApiQuery({ name: 'feeType', required: false })
     @ApiQuery({ name: 'applicationStatus', required: false })
+    @ApiQuery({
+        name: 'followUpStatus',
+        required: false,
+        description: 'participant_cancelled | payment_failed | manual_proof_rejected',
+    })
     @ApiQuery({ name: 'currency', required: false })
     @ApiQuery({ name: 'dateFrom', required: false, description: 'Invoice createdAt start (ISO date)' })
     @ApiQuery({ name: 'dateTo', required: false, description: 'Invoice createdAt end (ISO date)' })
@@ -85,6 +91,7 @@ export class PaymentAdminController {
             tierId,
             feeType,
             applicationStatus,
+            followUpStatus,
             currency,
             dateFrom,
             dateTo,
@@ -120,6 +127,15 @@ export class PaymentAdminController {
         }
 
         const where: Prisma.ApplicationInvoiceWhereInput = { application: applicationFilter };
+        const followUpWhere = this.buildFollowUpStatusWhere(followUpStatus);
+        if (followUpWhere) {
+            const andFilters = Array.isArray(where.AND)
+                ? where.AND
+                : where.AND
+                    ? [where.AND]
+                    : [];
+            where.AND = [...andFilters, followUpWhere];
+        }
         if (searchKeyword) {
             const participantSearch: Prisma.ParticipantWhereInput = {
                 OR: [
@@ -185,7 +201,21 @@ export class PaymentAdminController {
             : where;
         const summaryWhere: Prisma.ApplicationInvoiceWhereInput = { application: { programId } };
 
-        const [invoices, total, summaryRows, overallSummaryRows, paidAggregate, totalsAggregate, tiers, paymentMethodOptionsRows, currencyOptionsRows, applicationStatusRows] = await Promise.all([
+        const [
+            invoices,
+            total,
+            summaryRows,
+            overallSummaryRows,
+            paidAggregate,
+            totalsAggregate,
+            tiers,
+            paymentMethodOptionsRows,
+            currencyOptionsRows,
+            applicationStatusRows,
+            participantCancelledCount,
+            paymentFailedCount,
+            manualProofRejectedCount,
+        ] = await Promise.all([
             this.prisma.applicationInvoice.findMany({
                 where: listWhere,
                 include: {
@@ -248,6 +278,26 @@ export class PaymentAdminController {
                 by: ['status'],
                 where: { programId, deletedAt: null },
                 _count: { id: true },
+            }),
+            this.prisma.applicationInvoice.count({
+                where: {
+                    application: { programId },
+                    status: PaymentStatus.cancelled,
+                },
+            }),
+            this.prisma.applicationInvoice.count({
+                where: {
+                    application: { programId },
+                    status: PaymentStatus.failed,
+                    rejectionReason: null,
+                },
+            }),
+            this.prisma.applicationInvoice.count({
+                where: {
+                    application: { programId },
+                    status: PaymentStatus.failed,
+                    rejectionReason: { not: null },
+                },
             }),
         ]);
         const paymentMethodCatalog = await this.getPaymentMethodCatalog();
@@ -340,6 +390,11 @@ export class PaymentAdminController {
                     value: row.status,
                     count: row._count.id,
                 })),
+                followUpStatuses: [
+                    { value: 'participant_cancelled', count: participantCancelledCount },
+                    { value: 'payment_failed', count: paymentFailedCount },
+                    { value: 'manual_proof_rejected', count: manualProofRejectedCount },
+                ].filter((row) => row.count > 0),
                 feeTypes: Array.from(
                     tiers.reduce<Map<string, number>>((acc, tier) => {
                         const existing = acc.get(tier.feeType) ?? 0;
@@ -357,8 +412,30 @@ export class PaymentAdminController {
             unpaid: { count: 0, amount: 0 },
             processing: { count: 0, amount: 0 },
             failed: { count: 0, amount: 0 },
+            cancelled: { count: 0, amount: 0 },
             refunded: { count: 0, amount: 0 },
         };
+    }
+
+    private buildFollowUpStatusWhere(
+        followUpStatus?: string,
+    ): Prisma.ApplicationInvoiceWhereInput | null {
+        switch ((followUpStatus ?? '').trim()) {
+            case 'participant_cancelled':
+                return { status: PaymentStatus.cancelled };
+            case 'payment_failed':
+                return {
+                    status: PaymentStatus.failed,
+                    rejectionReason: null,
+                };
+            case 'manual_proof_rejected':
+                return {
+                    status: PaymentStatus.failed,
+                    rejectionReason: { not: null },
+                };
+            default:
+                return null;
+        }
     }
 
     private parseSortOrder(sortOrder: string): Prisma.SortOrder {
@@ -516,7 +593,7 @@ export class PaymentAdminController {
     async verifyInvoice(
         @Param('id') id: string,
         @Body() body: { action: 'approve' | 'reject'; reason?: string },
-        @CurrentUser() user: CurrentUserData,
+            @CurrentUser() user: CurrentUserData,
     ) {
         if (body.action !== 'approve' && body.action !== 'reject') {
             throw new HttpException("Invalid action. Use 'approve' or 'reject'", 400);
@@ -535,6 +612,7 @@ export class PaymentAdminController {
                 externalTransactionId: true,
                 application: {
                     select: {
+                        id: true,
                         participant: {
                             select: {
                                 fullName: true,
@@ -550,6 +628,9 @@ export class PaymentAdminController {
                             },
                         },
                     },
+                },
+                pricingTier: {
+                    select: { feeType: true },
                 },
             },
         });
@@ -569,14 +650,38 @@ export class PaymentAdminController {
             // Persist verifier audit trail on the local invoice. Source of truth for
             // who/when/why; the payment service stores the same in PaymentTransaction.
             const now = new Date();
-            await this.prisma.applicationInvoice.update({
-                where: { id },
-                data: {
-                    verifiedBy: user.userId,
-                    verifiedAt: now,
-                    rejectionReason: body.action === 'reject' ? (body.reason ?? null) : null,
-                },
-            });
+            if (body.action === 'reject') {
+                const paymentStatusPatch =
+                    invoice.pricingTier?.feeType === 'registration_fee'
+                        ? { registrationPaymentStatus: PaymentStatus.failed }
+                        : { programPaymentStatus: PaymentStatus.failed };
+
+                await this.prisma.$transaction([
+                    this.prisma.applicationInvoice.update({
+                        where: { id },
+                        data: {
+                            status: PaymentStatus.failed,
+                            paidAt: null,
+                            verifiedBy: user.userId,
+                            verifiedAt: now,
+                            rejectionReason: body.reason ?? null,
+                        },
+                    }),
+                    this.prisma.participantApplication.update({
+                        where: { id: invoice.application.id },
+                        data: paymentStatusPatch,
+                    }),
+                ]);
+            } else {
+                await this.prisma.applicationInvoice.update({
+                    where: { id },
+                    data: {
+                        verifiedBy: user.userId,
+                        verifiedAt: now,
+                        rejectionReason: null,
+                    },
+                });
+            }
 
             const participantUserId = invoice.application?.participant?.userId;
             if (participantUserId) {
@@ -638,9 +743,7 @@ export class PaymentAdminController {
     private buildParticipantPaymentsUrl(
         brand: { landingUrl?: string | null; websiteUrl?: string | null } | null | undefined,
     ): string {
-        const base = (brand?.landingUrl ?? brand?.websiteUrl ?? '').trim().replace(/\/$/, '');
-        if (!base) return '';
-        return `${base}/dashboard/payments`;
+        return buildParticipantPaymentsDashboardUrl(brand);
     }
 
     @Patch('invoices/:id/status')
@@ -1144,6 +1247,12 @@ export class PaymentAdminController {
             verifiedBy: (invoice.verifiedBy ?? null) as string | null,
             verifiedAt: invoice.verifiedAt ? (invoice.verifiedAt as Date).toISOString() : null,
             rejectionReason: (invoice.rejectionReason ?? null) as string | null,
+            followUpStatus:
+                invoice.status === PaymentStatus.cancelled
+                    ? 'participant_cancelled'
+                    : invoice.status === PaymentStatus.failed
+                        ? (invoice.rejectionReason ? 'manual_proof_rejected' : 'payment_failed')
+                        : null,
             application: {
                 status: invoice.application.status as string,
                 applicationCategory: invoice.application.applicationCategory as string | null,

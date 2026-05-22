@@ -488,6 +488,7 @@ export type Application = {
   participantId: string;
   status: string;
   applicationCategory: string;
+  ticketStatus?: string | null;
   scoreTotal: number | null;
   scoreStatus: string | null;
   registrationPaymentStatus: string;
@@ -935,6 +936,7 @@ export type ProgramAnalytics = {
       processingCount: number;
       unpaidCount: number;
       failedCount: number;
+      cancelledCount: number;
       totalRevenueIdr: number;
       totalRevenueUsd: number;
       conversionRate: number;
@@ -942,7 +944,7 @@ export type ProgramAnalytics = {
     revenueByMonth: Array<{ label: string; idr: number; usd: number }>;
     byTier: Array<{ name: string; paidCount: number; totalAmount: number; currency: string }>;
     byPaymentMethod: Array<{ method: string; count: number }>;
-    countriesByStatus: Array<{ country: string; paid: number; processing: number; unpaid: number; failed: number; total: number }>;
+    countriesByStatus: Array<{ country: string; paid: number; processing: number; unpaid: number; failed: number; cancelled: number; total: number }>;
   };
 };
 
@@ -1557,8 +1559,8 @@ export async function listApplications(params?: {
   category?: "fully_funded" | "self_funded";
   search?: string;
   country?: string;
-  registrationPaymentStatus?: "unpaid" | "paid" | "processing" | "failed" | "refunded";
-  programPaymentStatus?: "unpaid" | "paid" | "processing" | "failed" | "refunded";
+  registrationPaymentStatus?: "unpaid" | "paid" | "processing" | "failed" | "cancelled" | "refunded";
+  programPaymentStatus?: "unpaid" | "paid" | "processing" | "failed" | "cancelled" | "refunded";
   sortBy?:
     | "updatedAt"
     | "createdAt"
@@ -1655,7 +1657,12 @@ export function getApplication(id: string): Promise<Application> {
 
 export function reviewApplication(
   id: string,
-  input: { status: string; reviewerNote?: string; reviewerId: string },
+  input: {
+    status: string;
+    reviewerNote?: string;
+    reviewerId: string;
+    approvalMode?: "participant" | "ambassador";
+  },
 ): Promise<Application> {
   return request<Application>(`/applications/${id}/review`, {
     method: "POST",
@@ -2577,7 +2584,7 @@ export function deleteDocumentTemplate(id: string): Promise<void> {
 
 // ─── Program Invoices ────────────────────────────────────────────────────────
 
-export type InvoiceStatus = "unpaid" | "paid" | "processing" | "failed" | "refunded";
+export type InvoiceStatus = "unpaid" | "paid" | "processing" | "failed" | "cancelled" | "refunded";
 
 export type InvoiceListItem = {
   id: string;
@@ -2616,6 +2623,7 @@ export type InvoiceListItem = {
   verifiedBy: string | null;
   verifiedAt: string | null;
   rejectionReason: string | null;
+  followUpStatus: "participant_cancelled" | "payment_failed" | "manual_proof_rejected" | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -2642,6 +2650,7 @@ export type InvoiceFilterOptions = {
   currencies: Array<{ value: string; count: number }>;
   applicationStatuses: Array<{ value: string; count: number }>;
   invoiceStatuses: Array<{ value: string; count: number }>;
+  followUpStatuses: Array<{ value: string; count: number }>;
   feeTypes: Array<{ value: string; count: number }>;
 };
 
@@ -2655,6 +2664,7 @@ export async function listProgramInvoices(params: {
   tierId?: string;
   feeType?: string;
   applicationStatus?: string;
+  followUpStatus?: "participant_cancelled" | "payment_failed" | "manual_proof_rejected";
   currency?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -2681,6 +2691,7 @@ export async function listProgramInvoices(params: {
   if (params.tierId) q.set("tierId", params.tierId);
   if (params.feeType) q.set("feeType", params.feeType);
   if (params.applicationStatus) q.set("applicationStatus", params.applicationStatus);
+  if (params.followUpStatus) q.set("followUpStatus", params.followUpStatus);
   if (params.currency) q.set("currency", params.currency);
   if (params.dateFrom) q.set("dateFrom", params.dateFrom);
   if (params.dateTo) q.set("dateTo", params.dateTo);
@@ -2724,6 +2735,7 @@ export async function listProgramInvoices(params: {
     unpaid: { count: 0, amount: 0 },
     processing: { count: 0, amount: 0 },
     failed: { count: 0, amount: 0 },
+    cancelled: { count: 0, amount: 0 },
     refunded: { count: 0, amount: 0 },
   };
   const summary = (rawMeta.summary ?? defaultSummary) as InvoiceSummary;
@@ -2742,6 +2754,7 @@ export async function listProgramInvoices(params: {
     currencies: [],
     applicationStatuses: [],
     invoiceStatuses: [],
+    followUpStatuses: [],
     feeTypes: [],
   }) as InvoiceFilterOptions;
 
@@ -2765,7 +2778,7 @@ export function verifyInvoice(
 
 export function updateProgramInvoiceStatus(
   id: string,
-  status: "unpaid" | "paid" | "processing" | "failed" | "refunded",
+  status: "unpaid" | "paid" | "processing" | "failed" | "cancelled" | "refunded",
   reason?: string,
 ): Promise<InvoiceListItem> {
   return request<InvoiceListItem>(`/admin/payments/invoices/${id}/status`, {

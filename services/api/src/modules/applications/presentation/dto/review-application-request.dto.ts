@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional, IsNumber, IsObject, IsString } from 'class-validator';
+import { IsEnum, IsOptional, IsNumber, IsObject, IsString, IsIn } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ApplicationStatus, ScoreStatus } from '@core/entities/participant-application.entity';
 
@@ -31,4 +31,13 @@ export class ReviewApplicationRequestDto {
   @IsOptional()
   @IsEnum(ScoreStatus)
   scoreStatus?: ScoreStatus;
+
+  @ApiPropertyOptional({
+    enum: ['participant', 'ambassador'],
+    description: 'Acceptance mode when the application is approved',
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['participant', 'ambassador'])
+  approvalMode?: 'participant' | 'ambassador';
 }

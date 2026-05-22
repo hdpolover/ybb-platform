@@ -50,7 +50,14 @@ const STATUS_CLASS: Record<InvoiceStatus, string> = {
   unpaid: "bg-amber-50 text-amber-700 border-amber-200",
   processing: "bg-blue-50 text-blue-700 border-blue-200",
   failed: "bg-red-50 text-red-700 border-red-200",
+  cancelled: "bg-zinc-100 text-zinc-700 border-zinc-300",
   refunded: "bg-purple-50 text-purple-700 border-purple-200",
+};
+
+const FOLLOW_UP_CLASS: Record<string, string> = {
+  participant_cancelled: "bg-zinc-100 text-zinc-700 border-zinc-300",
+  payment_failed: "bg-red-50 text-red-700 border-red-200",
+  manual_proof_rejected: "bg-orange-50 text-orange-700 border-orange-200",
 };
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
@@ -96,6 +103,16 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
+function FollowUpPill({ status }: { status: InvoiceListItem["followUpStatus"] }) {
+  if (!status) return null;
+  const cls = FOLLOW_UP_CLASS[status] ?? "bg-zinc-50 text-zinc-600 border-zinc-200";
+  return (
+    <span className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium ${cls}`}>
+      {formatLabel(status)}
+    </span>
+  );
+}
+
 export default function PaymentsPage({
   params,
 }: {
@@ -121,6 +138,7 @@ export default function PaymentsPage({
     currencies: [],
     applicationStatuses: [],
     invoiceStatuses: [],
+    followUpStatuses: [],
     feeTypes: [],
   });
 
@@ -135,6 +153,7 @@ export default function PaymentsPage({
   const [tierFilter, setTierFilter] = useState("");
   const [feeTypeFilter, setFeeTypeFilter] = useState("");
   const [applicationStatusFilter, setApplicationStatusFilter] = useState("");
+  const [followUpStatusFilter, setFollowUpStatusFilter] = useState("");
   const [currencyFilter, setCurrencyFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -153,6 +172,7 @@ export default function PaymentsPage({
     tierFilter ||
     feeTypeFilter ||
     applicationStatusFilter ||
+    followUpStatusFilter ||
     currencyFilter ||
     dateFrom ||
     dateTo ||
@@ -180,6 +200,7 @@ export default function PaymentsPage({
         tierId: tierFilter || undefined,
         feeType: feeTypeFilter || undefined,
         applicationStatus: applicationStatusFilter || undefined,
+        followUpStatus: followUpStatusFilter || undefined,
         currency: currencyFilter || undefined,
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
@@ -211,6 +232,7 @@ export default function PaymentsPage({
     tierFilter,
     feeTypeFilter,
     applicationStatusFilter,
+    followUpStatusFilter,
     currencyFilter,
     dateFrom,
     dateTo,
@@ -233,6 +255,7 @@ export default function PaymentsPage({
     setTierFilter("");
     setFeeTypeFilter("");
     setApplicationStatusFilter("");
+    setFollowUpStatusFilter("");
     setCurrencyFilter("");
     setDateFrom("");
     setDateTo("");
@@ -267,9 +290,21 @@ export default function PaymentsPage({
     ],
     [filterOptions.feeTypes],
   );
+  const followUpOptions = useMemo(
+    () => [
+      { value: "", label: "All Follow-up Statuses" },
+      ...filterOptions.followUpStatuses.map((option) => ({
+        value: option.value,
+        label: `${formatLabel(option.value)} (${option.count})`,
+      })),
+    ],
+    [filterOptions.followUpStatuses],
+  );
   const paidCount = summary?.paid?.count ?? 0;
   const pendingCount = (summary?.unpaid?.count ?? 0) + (summary?.processing?.count ?? 0);
   const failedCount = summary?.failed?.count ?? 0;
+  const cancelledCount = summary?.cancelled?.count ?? 0;
+  const followUpCount = failedCount + cancelledCount;
   const collectionRate = metrics?.collectionRate ?? 0;
   const totalInvoices = metrics?.totalInvoices ?? 0;
   const totalAmount = metrics?.totalAmount ?? 0;
@@ -338,9 +373,9 @@ export default function PaymentsPage({
         />
         <StatCard
           icon={<XCircle className="h-4 w-4 text-red-600" />}
-          label="Failed"
-          value={String(failedCount)}
-          sub={`${overallSummary?.failed?.count ?? failedCount} total in program`}
+          label="Follow-up Needed"
+          value={String(followUpCount)}
+          sub={`${overallSummary?.failed?.count ?? failedCount} failed, ${overallSummary?.cancelled?.count ?? cancelledCount} cancelled program-wide`}
           color="red"
         />
       </div>
@@ -380,7 +415,7 @@ export default function PaymentsPage({
             </select>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
             <select
               value={tierFilter}
               onChange={(e) => { setTierFilter(e.target.value); setPage(1); }}
@@ -412,6 +447,15 @@ export default function PaymentsPage({
                 <option key={option.value} value={option.value}>
                   {formatLabel(option.value)} ({option.count})
                 </option>
+              ))}
+            </select>
+            <select
+              value={followUpStatusFilter}
+              onChange={(e) => { setFollowUpStatusFilter(e.target.value); setPage(1); }}
+              className={FILTER_SELECT_CLASS}
+            >
+              {followUpOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>
             <select
@@ -631,9 +675,17 @@ export default function PaymentsPage({
                   <div className="text-xs text-zinc-400">
                     {formatLabel(inv.application.applicationCategory)}
                   </div>
+                  {inv.application.ticketStatus ? (
+                    <div className="text-xs text-zinc-400">
+                      Ticket: {formatLabel(inv.application.ticketStatus)}
+                    </div>
+                  ) : null}
                 </TableCell>
                 <TableCell>
-                  <StatusPill status={inv.status} />
+                  <div className="space-y-1">
+                    <StatusPill status={inv.status} />
+                    <FollowUpPill status={inv.followUpStatus} />
+                  </div>
                 </TableCell>
                 <TableCell className="text-right">
                   <Link

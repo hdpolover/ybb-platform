@@ -654,7 +654,10 @@ export class StatsService {
       }),
       this.prisma.applicationInvoice.findMany({
         where: {
-          application: { programId },
+          application: {
+            programId,
+            ticketStatus: { not: 'ambassador' },
+          },
           ...(payDateFrom || payDateTo
             ? { paidAt: { ...(payDateFrom && { gte: payDateFrom }), ...(payDateTo && { lte: payDateTo }) } }
             : {}),
@@ -796,22 +799,27 @@ export class StatsService {
       .map(([method, count]) => ({ method, count }));
 
     // ── Countries by payment status ───────────────────────────────────────────
-    const csMap = new Map<string, { paid: number; processing: number; unpaid: number; failed: number }>();
+    const csMap = new Map<string, { paid: number; processing: number; unpaid: number; failed: number; cancelled: number }>();
     for (const inv of invoiceRows) {
       const country = this.resolveCountryName(
         inv.application.participant?.originCountry ?? '',
         inv.application.participant?.nationality ?? '',
       ) ?? 'Unknown';
-      const entry = csMap.get(country) ?? { paid: 0, processing: 0, unpaid: 0, failed: 0 };
+      const entry = csMap.get(country) ?? { paid: 0, processing: 0, unpaid: 0, failed: 0, cancelled: 0 };
       const s = inv.status.toLowerCase();
       if (s === 'paid') entry.paid += 1;
       else if (s === 'processing') entry.processing += 1;
       else if (s === 'failed') entry.failed += 1;
+      else if (s === 'cancelled') entry.cancelled += 1;
       else entry.unpaid += 1;
       csMap.set(country, entry);
     }
     const countriesByStatus = Array.from(csMap.entries())
-      .map(([country, s]) => ({ country, ...s, total: s.paid + s.processing + s.unpaid + s.failed }))
+      .map(([country, s]) => ({
+        country,
+        ...s,
+        total: s.paid + s.processing + s.unpaid + s.failed + s.cancelled,
+      }))
       .sort((a, b) => b.total - a.total)
       .slice(0, 15);
 
@@ -824,6 +832,7 @@ export class StatsService {
           processingCount: invoiceRows.filter((i) => i.status === 'processing').length,
           unpaidCount: invoiceRows.filter((i) => i.status === 'unpaid').length,
           failedCount: invoiceRows.filter((i) => i.status === 'failed').length,
+          cancelledCount: invoiceRows.filter((i) => i.status === 'cancelled').length,
           totalRevenueIdr: Math.round(totalIdr),
           totalRevenueUsd: Number(totalUsd.toFixed(2)),
           conversionRate,

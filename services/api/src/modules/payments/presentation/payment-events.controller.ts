@@ -308,11 +308,33 @@ export class PaymentEventsController {
                 status: 'failed'
             });
 
-            // Also invalidate cache on failure so user sees the failed status
             const metadata = (data.metadata as Record<string, unknown>) || {};
             const applicationId = (metadata.application_id as string) || (data.application_id as string);
+            const invoiceId = (metadata.invoice_id as string) || (data.invoice_id as string);
+            const intentId = (data.intent_id as string) || (metadata.intent_id as string);
+            const transactionId =
+                (data.transaction_id as string)
+                || (data.payment_id as string)
+                || (metadata.transaction_id as string);
+            const failureReason =
+                (metadata.failure_reason as string)
+                || (metadata.reason as string)
+                || (data.reason as string)
+                || (data.message as string)
+                || undefined;
+
+            const failedInvoice = await this.markInvoiceFailed({
+                applicationId,
+                invoiceId,
+                intentId,
+                transactionId,
+                failureReason,
+                paymentMethod: method,
+            });
             
-            if (applicationId) {
+            if (failedInvoice?.userId) {
+                await this.invalidateUserPortalCache(failedInvoice.userId, 'payment failed', failedInvoice.invoiceId);
+            } else if (applicationId) {
                 const application = await this.prisma.participantApplication.findUnique({
                     where: { id: applicationId },
                     include: {
@@ -341,6 +363,112 @@ export class PaymentEventsController {
         }
 
         acknowledgeRmqMessage(context, this.logger, 'payment.failed', 'processed');
+    }
+
+    private async markInvoiceFailed(input: {
+        applicationId?: string;
+        invoiceId?: string;
+        intentId?: string;
+        transactionId?: string;
+        failureReason?: string;
+        paymentMethod?: string;
+    }): Promise<{ userId: string; invoiceId: string } | null> {
+        const invoice = await this.resolveFailureInvoice(input);
+        if (!invoice) {
+            return null;
+        }
+
+        const userId = invoice.application.participant.userId;
+        if (invoice.status === PaymentStatus.paid) {
+            return { userId, invoiceId: invoice.id };
+        }
+
+        const rejectionReason =
+            invoice.rejectionReason
+            ?? input.failureReason
+            ?? null;
+        const paymentStatusPatch =
+            invoice.pricingTier?.feeType === 'registration_fee'
+                ? { registrationPaymentStatus: PaymentStatus.failed }
+                : { programPaymentStatus: PaymentStatus.failed };
+
+        await this.prisma.$transaction([
+            this.prisma.applicationInvoice.update({
+                where: { id: invoice.id },
+                data: {
+                    status: PaymentStatus.failed,
+                    paidAt: null,
+                    paymentMethod: invoice.paymentMethod ?? input.paymentMethod ?? null,
+                    externalIntentId: invoice.externalIntentId ?? input.intentId ?? null,
+                    externalTransactionId:
+                        invoice.externalTransactionId
+                        ?? input.transactionId
+                        ?? null,
+                    rejectionReason,
+                },
+            }),
+            this.prisma.participantApplication.update({
+                where: { id: invoice.applicationId },
+                data: paymentStatusPatch,
+            }),
+        ]);
+
+        return { userId, invoiceId: invoice.id };
+    }
+
+    private async resolveFailureInvoice(input: {
+        applicationId?: string;
+        invoiceId?: string;
+        intentId?: string;
+        transactionId?: string;
+    }) {
+        const include = {
+            pricingTier: {
+                select: { feeType: true },
+            },
+            application: {
+                select: {
+                    participant: {
+                        select: { userId: true },
+                    },
+                },
+            },
+        } satisfies Prisma.ApplicationInvoiceInclude;
+
+        if (input.invoiceId) {
+            return this.prisma.applicationInvoice.findUnique({
+                where: { id: input.invoiceId },
+                include,
+            });
+        }
+
+        if (input.intentId) {
+            const byIntent = await this.prisma.applicationInvoice.findFirst({
+                where: { externalIntentId: input.intentId },
+                include,
+                orderBy: { updatedAt: 'desc' },
+            });
+            if (byIntent) return byIntent;
+        }
+
+        if (input.transactionId) {
+            const byTransaction = await this.prisma.applicationInvoice.findFirst({
+                where: { externalTransactionId: input.transactionId },
+                include,
+                orderBy: { updatedAt: 'desc' },
+            });
+            if (byTransaction) return byTransaction;
+        }
+
+        if (!input.applicationId) {
+            return null;
+        }
+
+        return this.prisma.applicationInvoice.findFirst({
+            where: { applicationId: input.applicationId },
+            include,
+            orderBy: { updatedAt: 'desc' },
+        });
     }
 
     private async moveToDlqWhenRetryExhausted(
