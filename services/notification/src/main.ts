@@ -113,18 +113,20 @@ async function ensureRetryTopology(
   try {
     channel = await connection.createChannel();
     if (options.binding) {
-      await (channel as AmqpChannel & {
-        assertExchange: (
-          exchange: string,
-          type: 'topic' | 'direct' | 'fanout' | 'headers',
-          options?: { durable?: boolean },
-        ) => Promise<unknown>;
-        bindQueue: (
-          queue: string,
-          exchange: string,
-          routingKey: string,
-        ) => Promise<unknown>;
-      }).assertExchange(options.binding.exchange, options.binding.exchangeType, {
+      await (
+        channel as AmqpChannel & {
+          assertExchange: (
+            exchange: string,
+            type: 'topic' | 'direct' | 'fanout' | 'headers',
+            options?: { durable?: boolean },
+          ) => Promise<unknown>;
+          bindQueue: (
+            queue: string,
+            exchange: string,
+            routingKey: string,
+          ) => Promise<unknown>;
+        }
+      ).assertExchange(options.binding.exchange, options.binding.exchangeType, {
         durable: true,
       });
     }
@@ -142,13 +144,19 @@ async function ensureRetryTopology(
     });
     await channel.assertQueue(`${queueName}.dlq`, { durable: true });
     if (options.binding) {
-      await (channel as AmqpChannel & {
-        bindQueue: (
-          queue: string,
-          exchange: string,
-          routingKey: string,
-        ) => Promise<unknown>;
-      }).bindQueue(queueName, options.binding.exchange, options.binding.routingKey);
+      await (
+        channel as AmqpChannel & {
+          bindQueue: (
+            queue: string,
+            exchange: string,
+            routingKey: string,
+          ) => Promise<unknown>;
+        }
+      ).bindQueue(
+        queueName,
+        options.binding.exchange,
+        options.binding.routingKey,
+      );
     }
   } finally {
     await closeAmqpChannel(channel);
@@ -167,9 +175,7 @@ function parsePositiveInt(
     : defaultValue;
 }
 
-function buildPrimaryQueueOptions(
-  queueName: string,
-): PrimaryQueueOptions {
+function buildPrimaryQueueOptions(queueName: string): PrimaryQueueOptions {
   return {
     arguments: {
       'x-dead-letter-exchange': '',
