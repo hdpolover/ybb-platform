@@ -36,7 +36,9 @@ if (process.env.ENABLE_TRACING === 'true') {
   sdk.start();
   console.log('OpenTelemetry tracing initialized.');
 } else {
-  console.log('OpenTelemetry tracing disabled. Set ENABLE_TRACING=true to enable.');
+  console.log(
+    'OpenTelemetry tracing disabled. Set ENABLE_TRACING=true to enable.',
+  );
 }
 
 // gracefully shut down the SDK on process exit
