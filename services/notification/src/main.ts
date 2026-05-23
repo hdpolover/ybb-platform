@@ -32,6 +32,12 @@ type PrimaryQueueOptions = {
   arguments?: Record<string, string>;
 };
 
+type QueueBinding = {
+  exchange: string;
+  exchangeType: 'topic' | 'direct' | 'fanout' | 'headers';
+  routingKey: string;
+};
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));
@@ -49,11 +55,18 @@ async function bootstrap() {
       process.env.NOTIFICATION_QUEUE_RETRY_DELAY_MS,
       15000,
     ),
-    binding: {
-      exchange: 'ybb.events',
-      exchangeType: 'topic',
-      routingKey: '#',
-    },
+    bindings: [
+      {
+        exchange: 'ybb.events',
+        exchangeType: 'topic',
+        routingKey: '#',
+      },
+      {
+        exchange: 'payment-events',
+        exchangeType: 'topic',
+        routingKey: 'payment.#',
+      },
+    ],
   });
 
   app.connectMicroservice<MicroserviceOptions>({
@@ -100,11 +113,7 @@ async function ensureRetryTopology(
   options: {
     retryDelayMs: number;
     primaryQueueOptions: PrimaryQueueOptions;
-    binding?: {
-      exchange: string;
-      exchangeType: 'topic' | 'direct' | 'fanout' | 'headers';
-      routingKey: string;
-    };
+    bindings?: QueueBinding[];
   },
 ) {
   const connection = await amqp.connect(rabbitMqUrl);
@@ -112,23 +121,27 @@ async function ensureRetryTopology(
 
   try {
     channel = await connection.createChannel();
-    if (options.binding) {
-      await (
-        channel as AmqpChannel & {
-          assertExchange: (
-            exchange: string,
-            type: 'topic' | 'direct' | 'fanout' | 'headers',
-            options?: { durable?: boolean },
-          ) => Promise<unknown>;
-          bindQueue: (
-            queue: string,
-            exchange: string,
-            routingKey: string,
-          ) => Promise<unknown>;
-        }
-      ).assertExchange(options.binding.exchange, options.binding.exchangeType, {
-        durable: true,
-      });
+    const exchangeChannel = channel as AmqpChannel & {
+      assertExchange: (
+        exchange: string,
+        type: 'topic' | 'direct' | 'fanout' | 'headers',
+        options?: { durable?: boolean },
+      ) => Promise<unknown>;
+      bindQueue: (
+        queue: string,
+        exchange: string,
+        routingKey: string,
+      ) => Promise<unknown>;
+    };
+
+    for (const binding of options.bindings ?? []) {
+      await exchangeChannel.assertExchange(
+        binding.exchange,
+        binding.exchangeType,
+        {
+          durable: true,
+        },
+      );
     }
     await channel.assertQueue(queueName, {
       durable: true,
@@ -143,19 +156,11 @@ async function ensureRetryTopology(
       },
     });
     await channel.assertQueue(`${queueName}.dlq`, { durable: true });
-    if (options.binding) {
-      await (
-        channel as AmqpChannel & {
-          bindQueue: (
-            queue: string,
-            exchange: string,
-            routingKey: string,
-          ) => Promise<unknown>;
-        }
-      ).bindQueue(
+    for (const binding of options.bindings ?? []) {
+      await exchangeChannel.bindQueue(
         queueName,
-        options.binding.exchange,
-        options.binding.routingKey,
+        binding.exchange,
+        binding.routingKey,
       );
     }
   } finally {

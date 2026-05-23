@@ -108,6 +108,12 @@ async handlePaymentSuccess(data: PaymentSuccessDto) {
 }
 ```
 
+The production bootstrap binds `notification_queue` to both exchanges used in
+this workspace:
+
+- `payment-events` with `payment.#` for events published by the Go payment service
+- `ybb.events` with `#` for events published by NestJS services like the API
+
 ## Health Check
 
 ```bash
