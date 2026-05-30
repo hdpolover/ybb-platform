@@ -366,6 +366,7 @@ export type ProgramTestimonial = {
   thumbnailUrl: string | null;
   avatarUrl: string | null;
   rating: number | null;
+  alumniYear?: number | null;
   isFeatured: boolean | null;
   isActive: boolean;
   order: number;
@@ -1164,6 +1165,7 @@ export function createProgramTestimonial(
     order?: number;
     brandId?: string;
     category?: string;
+    alumniYear?: number | null;
   },
 ): Promise<ProgramTestimonial> {
   return request<ProgramTestimonial>(`/programs/${programId}/testimonials`, {
@@ -1185,6 +1187,7 @@ export function updateProgramTestimonial(
     isActive?: boolean;
     brandId?: string;
     category?: string;
+    alumniYear?: number | null;
   },
 ): Promise<ProgramTestimonial> {
   return request<ProgramTestimonial>(`/programs/testimonials/${id}`, {
