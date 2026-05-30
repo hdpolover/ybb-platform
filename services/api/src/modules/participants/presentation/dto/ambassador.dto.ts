@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsUUID, IsString, IsPhoneNumber, IsOptional } from 'class-validator';
+import { IsEnglishName, IsEnglishText } from '@shared/validators/english-text.validator';
 
 export class ApplyAmbassadorDto {
     @ApiProperty({ description: 'Program ID to apply for', example: 'uuid' })
@@ -8,6 +9,7 @@ export class ApplyAmbassadorDto {
 
     @ApiProperty({ description: 'Full Name', example: 'John Doe' })
     @IsString()
+    @IsEnglishName()
     fullName: string;
 
     @ApiPropertyOptional({ description: 'Phone Number', example: '+123456789' })
@@ -18,6 +20,7 @@ export class ApplyAmbassadorDto {
     @ApiPropertyOptional({ description: 'Institution/University', example: 'Harvard' })
     @IsOptional()
     @IsString()
+    @IsEnglishText()
     institution?: string;
 }
 
