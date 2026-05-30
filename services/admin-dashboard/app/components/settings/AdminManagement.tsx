@@ -10,6 +10,7 @@ import {
 } from "@heroicons/react/24/solid";
 import { toast } from "sonner";
 import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
+import { EnglishInput } from "@/src/ui/english-input";
 import { useAuth } from "@/app/contexts/AuthContext";
 import {
   createAdmin,
@@ -520,8 +521,9 @@ export function AdminManagement({ programId, programName }: AdminManagementProps
         <div className="grid gap-4 md:grid-cols-2">
           <div>
             <label className="mb-1 block text-sm font-medium text-zinc-700">Full name</label>
-            <input
+            <EnglishInput
               type="text"
+              restrictMode="name"
               value={form.fullName}
               onChange={(event) => setForm((current) => ({ ...current, fullName: event.target.value }))}
               className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
