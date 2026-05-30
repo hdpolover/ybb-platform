@@ -35,7 +35,8 @@
     "landing:snapshots:backfill": "ts-node -r tsconfig-paths/register src/scripts/backfill-landing-snapshots.ts",
     "migrate:form-field-catalog": "ts-node -r tsconfig-paths/register prisma/migration-scripts/migrate-form-field-catalog.ts",
     "migrate:submission-form-normalization": "ts-node -r tsconfig-paths/register prisma/migration-scripts/migrate-submission-form-normalization.ts",
-    "migrate:remove-cys-2026-legacy-essays": "node prisma/migration-scripts/remove-cys-2026-legacy-essays.js"
+    "migrate:remove-cys-2026-legacy-essays": "node prisma/migration-scripts/remove-cys-2026-legacy-essays.js",
+    "report:non-english-names": "ts-node -r tsconfig-paths/register prisma/migration-scripts/report-non-english-names.ts"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.14.3",
