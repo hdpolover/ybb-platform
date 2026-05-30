@@ -19,6 +19,10 @@ RUN apt-get update && apt-get install -y \
     libpango-1.0-0 \
     libpangoft2-1.0-0 \
     libcairo2 \
+    # Unicode fonts: Latin+diacritics, Arabic, Bengali via NotoSans;
+    # CJK (Chinese/Japanese/Korean) via fonts-noto-cjk
+    fonts-noto-core \
+    fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

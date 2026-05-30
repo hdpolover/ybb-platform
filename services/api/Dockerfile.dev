@@ -3,8 +3,9 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install OpenSSL for Prisma
-RUN apk add --no-cache openssl
+# Install OpenSSL for Prisma, and Noto Sans fonts for Unicode PDF rendering
+# font-noto provides NotoSans-Regular.ttf at /usr/share/fonts/noto/
+RUN apk add --no-cache openssl font-noto
 
 # Install dependencies first (for better caching)
 COPY package*.json ./
