@@ -15,6 +15,9 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
+import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
+import { Roles } from '@modules/auth/application/decorators/roles.decorator';
+import { UserRole } from '@core/entities/user.entity';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
@@ -455,13 +458,15 @@ export class ApplicationsController {
    * can correct typos (e.g. names) that would otherwise propagate to ID cards,
    * certificates, and LoA documents.
    *
-   * Auth: same guard pattern as POST /applications/:id/review (JwtAuthGuard,
-   * no additional role decorator — access is enforced at the API gateway / BFF
-   * layer which routes admin tokens to this service).
+   * Auth: requires an admin/super-admin role (RolesGuard) on top of a valid JWT.
+   * This mutation bypasses the submission lock, so it must never be reachable by
+   * a participant token.
    *
    * Every edit is recorded in application_edit_history with a required `reason`.
    */
   @Patch(':id/submission-data')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Admin: edit submission data of a locked application' })
   @ApiResponse({
