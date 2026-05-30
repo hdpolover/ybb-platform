@@ -28,5 +28,13 @@ export class AdminUpdateSubmissionCommand {
       nickName?: string;
       displayName?: string;
     },
+
+    /** Patch for ParticipantApplication text columns. */
+    public readonly application?: {
+      motivationLetter?: string;
+      achievements?: string;
+      experiences?: string;
+      twibbonLink?: string;
+    },
   ) {}
 }

@@ -52,6 +52,10 @@ export class AdminUpdateSubmissionHandler {
         participantId: true,
         personalData: true,
         essayAnswers: true,
+        motivationLetter: true,
+        achievements: true,
+        experiences: true,
+        twibbonLink: true,
         participant: {
           select: {
             id: true,
@@ -84,6 +88,15 @@ export class AdminUpdateSubmissionHandler {
 
     if (command.essayAnswers) {
       nextEssayAnswers = { ...nextEssayAnswers, ...command.essayAnswers };
+    }
+
+    // ── 3b. Application text-column patch (stored on the application row) ─────
+    const appPatch = command.application ?? {};
+    const APP_COLS = ['motivationLetter', 'achievements', 'experiences', 'twibbonLink'] as const;
+    const appColumnUpdates: Partial<Record<(typeof APP_COLS)[number], string>> = {};
+    for (const col of APP_COLS) {
+      const v = appPatch[col];
+      if (v !== undefined) appColumnUpdates[col] = v;
     }
 
     // ── 4. Name sync logic ───────────────────────────────────────────────────
@@ -158,6 +171,14 @@ export class AdminUpdateSubmissionHandler {
       changes['participant.displayName'] = { old: existing.displayName, new: nextDisplayName };
     }
 
+    // Application column diffs
+    for (const col of APP_COLS) {
+      const newVal = appColumnUpdates[col];
+      if (newVal !== undefined && newVal !== application[col]) {
+        changes[`application.${col}`] = { old: application[col], new: newVal };
+      }
+    }
+
     // Snapshot of prior state for the audit row
     const snapshot = {
       personalData: prevPersonalData,
@@ -166,6 +187,12 @@ export class AdminUpdateSubmissionHandler {
         fullName: existing.fullName,
         nickName: existing.nickName,
         displayName: existing.displayName,
+      },
+      application: {
+        motivationLetter: application.motivationLetter,
+        achievements: application.achievements,
+        experiences: application.experiences,
+        twibbonLink: application.twibbonLink,
       },
     };
 
@@ -176,6 +203,7 @@ export class AdminUpdateSubmissionHandler {
         data: {
           personalData: nextPersonalData as Prisma.InputJsonValue,
           essayAnswers: nextEssayAnswers as Prisma.InputJsonValue,
+          ...appColumnUpdates,
           lastEditedAt: new Date(),
           updatedAt: new Date(),
         },

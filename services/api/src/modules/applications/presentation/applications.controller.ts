@@ -499,6 +499,7 @@ export class ApplicationsController {
       dto.personalData,
       dto.essayAnswers,
       dto.participant,
+      dto.application,
     );
 
     return this.adminUpdateSubmissionHandler.execute(command);
