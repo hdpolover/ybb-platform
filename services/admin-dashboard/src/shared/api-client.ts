@@ -1658,6 +1658,36 @@ export function getApplication(id: string): Promise<Application> {
   return request<Application>(`/applications/${id}?includeRelations=true`);
 }
 
+export type AdminUpdateSubmissionPayload = {
+  personalData?: Record<string, unknown>;
+  essayAnswers?: Record<string, unknown>;
+  participant?: {
+    fullName?: string;
+    nickName?: string;
+    displayName?: string;
+  };
+  reason: string;
+};
+
+export type AdminUpdateSubmissionResult = {
+  success: boolean;
+  applicationId: string;
+  editHistoryId: string;
+};
+
+export function adminUpdateSubmissionData(
+  id: string,
+  payload: AdminUpdateSubmissionPayload,
+): Promise<AdminUpdateSubmissionResult> {
+  return request<AdminUpdateSubmissionResult>(
+    `/applications/${id}/submission-data`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
 export function reviewApplication(
   id: string,
   input: {
