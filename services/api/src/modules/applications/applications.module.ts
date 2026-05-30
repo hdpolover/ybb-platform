@@ -13,6 +13,7 @@ import { WithdrawApplicationHandler } from './application/commands/handlers/with
 import { SwitchApplicationCategoryHandler } from './application/commands/handlers/switch-application-category.handler';
 
 import { CreateRegistrationPaymentIntentHandler } from './application/commands/handlers/create-registration-payment-intent.handler';
+import { AdminUpdateSubmissionHandler } from './application/commands/handlers/admin-update-submission.handler';
 
 // Query Handlers
 import { GetApplicationHandler } from './application/queries/handlers/get-application.handler';
@@ -40,6 +41,7 @@ import { CacheModule } from '@shared/infrastructure/cache/cache.module';
     WithdrawApplicationHandler,
     SwitchApplicationCategoryHandler,
     CreateRegistrationPaymentIntentHandler,
+    AdminUpdateSubmissionHandler,
 
     // Query Handlers
     GetApplicationHandler,

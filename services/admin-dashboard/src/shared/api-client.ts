@@ -483,6 +483,36 @@ export type PaymentMethod = {
   config?: PaymentMethodFeeConfig;
 };
 
+/**
+ * A single editable field in the admin Edit-Submission drawer.
+ * Mirrors SubmissionFormFieldAdminDto from the API.
+ */
+export type SubmissionFormFieldAdmin = {
+  /** Field machine name (key in personalData or essayAnswers). */
+  name: string;
+  /** Human-readable label. */
+  label: string;
+  /** Raw field type: 'text' | 'textarea' | 'select' | 'date' | 'file' | … */
+  type: string;
+  /** Which JSON blob this value should be written to on save. */
+  store: "personalData" | "essayAnswers";
+  /** Section the field belongs to. */
+  section: string;
+  isRequired: boolean;
+  /** Current persisted value (always a string; objects/arrays are JSON-serialised). */
+  value: string;
+  /** True for file/upload fields — display only, no edit control. */
+  readonly: boolean;
+  options?: Array<{ label: string; value: string }>;
+  order: number;
+};
+
+export type SubmissionSectionAdmin = {
+  section: string;
+  label: string;
+  fields: SubmissionFormFieldAdmin[];
+};
+
 export type Application = {
   id: string;
   programId: string;
@@ -535,6 +565,13 @@ export type Application = {
     resumeUrl?: string | null;
   };
   program?: { id: string; name: string };
+  /**
+   * Structured submission form for the admin Edit-Submission feature.
+   * Present only when the program has active form field definitions.
+   */
+  submissionForm?: {
+    sections: SubmissionSectionAdmin[];
+  };
 };
 
 export type ProgramAnnouncement = {
@@ -1656,6 +1693,42 @@ export async function exportApplicationsCsv(params: {
 
 export function getApplication(id: string): Promise<Application> {
   return request<Application>(`/applications/${id}?includeRelations=true`);
+}
+
+export type AdminUpdateSubmissionPayload = {
+  personalData?: Record<string, unknown>;
+  essayAnswers?: Record<string, unknown>;
+  participant?: {
+    fullName?: string;
+    nickName?: string;
+    displayName?: string;
+  };
+  application?: {
+    motivationLetter?: string;
+    achievements?: string;
+    experiences?: string;
+    twibbonLink?: string;
+  };
+  reason: string;
+};
+
+export type AdminUpdateSubmissionResult = {
+  success: boolean;
+  applicationId: string;
+  editHistoryId: string;
+};
+
+export function adminUpdateSubmissionData(
+  id: string,
+  payload: AdminUpdateSubmissionPayload,
+): Promise<AdminUpdateSubmissionResult> {
+  return request<AdminUpdateSubmissionResult>(
+    `/applications/${id}/submission-data`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export function reviewApplication(
