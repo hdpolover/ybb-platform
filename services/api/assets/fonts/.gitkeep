@@ -1,0 +1,4 @@
+# Place NotoSans-Regular.ttf here for local dev without container fonts.
+# The API service looks for this file at runtime and registers it with pdfkit
+# so participant names in non-Latin scripts render correctly on receipts.
+# In Docker the font is installed via `apk add font-noto` instead.

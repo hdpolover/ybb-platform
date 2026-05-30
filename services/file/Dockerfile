@@ -20,6 +20,10 @@ RUN apt-get update && apt-get install -y \
     liblcms2-dev \
     libwebp-dev \
     libopenjp2-7-dev \
+    # Unicode fonts: Latin+diacritics, Arabic, Bengali via NotoSans;
+    # CJK (Chinese/Japanese/Korean) via fonts-noto-cjk
+    fonts-noto-core \
+    fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies
