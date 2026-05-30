@@ -9,6 +9,43 @@ export class ApplicationStepDto {
 }
 
 /**
+ * A single editable field descriptor returned to the admin for the
+ * Edit-Submission feature.  File-type fields are included but flagged
+ * readonly so the UI can render them as read-only displays.
+ */
+export class SubmissionFormFieldAdminDto {
+  /** Field machine name (key in personalData or essayAnswers). */
+  name: string;
+  /** Human-readable label from the form definition. */
+  label: string;
+  /** Raw field type as configured in the program form (e.g. 'text', 'textarea', 'select', 'date', 'file'). */
+  type: string;
+  /** Which JSON blob this field's value should be written to when patching. */
+  store: 'personalData' | 'essayAnswers';
+  /** Section identifier the field belongs to (e.g. 'personal_info', 'essay'). */
+  section: string;
+  /** Whether the field was marked required in the form definition. */
+  isRequired: boolean;
+  /** Current persisted value (string representation; empty string if absent). */
+  value: string;
+  /** File and upload fields should not be edited through this tool. */
+  readonly: boolean;
+  /** Configured selectable options, if any. */
+  options?: Array<{ label: string; value: string }>;
+  /** Display order within the section. */
+  order: number;
+}
+
+export class SubmissionSectionAdminDto {
+  /** Section machine name (e.g. 'personal_info', 'essay'). */
+  section: string;
+  /** Human-readable section label. */
+  label: string;
+  /** Ordered list of field descriptors for this section. */
+  fields: SubmissionFormFieldAdminDto[];
+}
+
+/**
  * Application Response DTO
  * 
  * Application Layer - Response Data Transfer Object
@@ -48,6 +85,17 @@ export class ApplicationResponseDto {
 
   // Progress Steps for UI
   steps?: ApplicationStepDto[];
+
+  /**
+   * Structured submission form for the admin Edit-Submission feature.
+   * Only present when the program has form field definitions.
+   * Fields are grouped by section and include current persisted values.
+   * File-type fields are included with `readonly: true` so the UI can display
+   * them without offering an edit control.
+   */
+  submissionForm?: {
+    sections: SubmissionSectionAdminDto[];
+  };
 
   // Relations (populated when requested)
   participant?: {
