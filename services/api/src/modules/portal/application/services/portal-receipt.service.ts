@@ -1,5 +1,45 @@
 import { Injectable, Logger } from '@nestjs/common';
+import * as fs from 'fs';
+import * as path from 'path';
 type PdfDocumentInstance = any;
+
+// ---------------------------------------------------------------------------
+// Unicode font resolution for pdfkit
+// ---------------------------------------------------------------------------
+// pdfkit's built-in fonts (Helvetica, Times-Roman, etc.) are AFM-only and
+// cannot render non-Latin glyphs.  A TTF must be registered explicitly.
+//
+// Search order for NotoSans-Regular.ttf at process start:
+//   1. services/api/assets/fonts/NotoSans-Regular.ttf  (repo-bundled, highest priority)
+//   2. /usr/share/fonts/noto/NotoSans-Regular.ttf      (alpine: apk add font-noto)
+//   3. /usr/share/fonts/truetype/noto/NotoSans-Regular.ttf  (debian: apt fonts-noto-core)
+//
+// If none is found the service falls back to Helvetica — Latin renders fine;
+// non-Latin glyphs will appear as tofu boxes.  To fix: place a NotoSans-Regular.ttf
+// in services/api/assets/fonts/ (gitignored binary) or install font-noto in the
+// container image (see Dockerfile.dev / Dockerfile.prod).
+
+const NOTO_SANS_SEARCH_PATHS: readonly string[] = [
+    path.resolve(__dirname, '../../../../../assets/fonts/NotoSans-Regular.ttf'),
+    '/usr/share/fonts/noto/NotoSans-Regular.ttf',
+    '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf',
+];
+
+function resolveNotoSansPath(): string | null {
+    for (const candidate of NOTO_SANS_SEARCH_PATHS) {
+        try {
+            if (fs.existsSync(candidate)) {
+                return candidate;
+            }
+        } catch {
+            // continue
+        }
+    }
+    return null;
+}
+
+const NOTO_SANS_TTF_PATH = resolveNotoSansPath();
+const UNICODE_FONT = NOTO_SANS_TTF_PATH ? 'NotoSans' : 'Helvetica';
 
 export interface ReceiptData {
     receiptNumber: string;
@@ -31,6 +71,17 @@ export class PortalReceiptService {
                 const PDFDocument = this.getPdfDocumentConstructor();
                 const doc = new PDFDocument({ size: 'A4', margin: 50 });
                 const buffers: Buffer[] = [];
+
+                // Register NotoSans once per document if the TTF is available.
+                // This is idempotent — pdfkit silently ignores duplicate registrations
+                // for the same alias within the same document instance.
+                if (NOTO_SANS_TTF_PATH) {
+                    try {
+                        doc.registerFont('NotoSans', NOTO_SANS_TTF_PATH);
+                    } catch (fontErr) {
+                        this.logger.warn('NotoSans font registration failed; falling back to Helvetica', fontErr);
+                    }
+                }
 
                 doc.on('data', (chunk: Buffer) => buffers.push(chunk));
                 doc.on('end', () => resolve(Buffer.concat(buffers)));
@@ -80,7 +131,11 @@ export class PortalReceiptService {
 
     private renderBilledTo(doc: PdfDocumentInstance, data: ReceiptData): void {
         doc.fontSize(11).text('Billed To:', { underline: true });
-        doc.text(data.customerName);
+        // Switch to the Unicode-capable font for the participant name so non-Latin
+        // scripts (Arabic, Bengali, diacritics) render instead of tofu boxes.
+        doc.font(UNICODE_FONT).text(data.customerName);
+        // Restore default Helvetica for the remaining fields which are Latin-only.
+        doc.font('Helvetica');
         if (data.customerEmail) doc.text(data.customerEmail);
         doc.moveDown();
     }
