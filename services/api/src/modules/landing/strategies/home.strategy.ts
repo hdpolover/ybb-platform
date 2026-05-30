@@ -554,7 +554,8 @@ export class HomeStrategy implements ILandingPageStrategy {
               video_url: t.videoUrl,
               thumbnail_url: t.thumbnailUrl,
               avatar_url: t.avatarUrl,
-              is_featured: t.isFeatured
+              is_featured: t.isFeatured,
+              alumni_year: t.alumniYear ?? null,
             }))
           }
         },
@@ -568,7 +569,7 @@ export class HomeStrategy implements ILandingPageStrategy {
               quote: t.testimonial,
               country: t.company || '',
               photo: t.avatarUrl || '',
-              year: new Date(t.createdAt).getFullYear(),
+              year: t.alumniYear ?? null,
             })),
           },
         },
