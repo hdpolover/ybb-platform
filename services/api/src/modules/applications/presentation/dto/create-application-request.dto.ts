@@ -2,6 +2,7 @@ import { IsString, IsOptional, IsEnum, IsObject, IsArray, IsUUID } from 'class-v
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ApplicationCategory } from '@core/entities/participant-application.entity';
 import { DocumentFile } from '@core/entities/participant-application.entity';
+import { IsEnglishText } from '@shared/validators/english-text.validator';
 
 /**
  * Create Application Request DTO
@@ -25,16 +26,19 @@ export class CreateApplicationRequestDto {
   @ApiPropertyOptional({ description: 'Motivation letter' })
   @IsOptional()
   @IsString()
+  @IsEnglishText()
   motivationLetter?: string;
 
   @ApiPropertyOptional({ description: 'Achievements' })
   @IsOptional()
   @IsString()
+  @IsEnglishText()
   achievements?: string;
 
   @ApiPropertyOptional({ description: 'Experiences' })
   @IsOptional()
   @IsString()
+  @IsEnglishText()
   experiences?: string;
 
   @ApiPropertyOptional({ description: 'Documents metadata' })

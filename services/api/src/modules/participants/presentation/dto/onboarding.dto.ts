@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsDateString, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsEnglishName, IsEnglishText } from '@shared/validators/english-text.validator';
 
 export enum Gender {
   male = 'male',
@@ -10,6 +11,7 @@ export class OnboardingDto {
     @ApiProperty({ example: 'John Doe', description: 'Full name of the participant' })
     @IsString()
     @IsNotEmpty()
+    @IsEnglishName()
     fullName: string;
 
     @ApiProperty({ example: 'male', enum: Gender, description: 'Gender of the participant' })
@@ -20,11 +22,13 @@ export class OnboardingDto {
     @ApiProperty({ example: 'ID', description: 'Origin country ISO Code (e.g. ID, US)' })
     @IsString()
     @IsNotEmpty()
+    @IsEnglishText()
     originCountry: string;
 
     @ApiProperty({ example: 'Jakarta', description: 'Origin city' })
     @IsString()
     @IsNotEmpty()
+    @IsEnglishText()
     originCity: string;
 
     @ApiProperty({ example: '2000-01-01', description: 'Date of birth (YYYY-MM-DD)' })
@@ -35,6 +39,7 @@ export class OnboardingDto {
     @ApiProperty({ example: 'Instagram', description: 'Where did you hear about us?' })
     @IsString()
     @IsNotEmpty()
+    @IsEnglishText()
     knowledgeSource: string;
 
     @ApiPropertyOptional({ example: 'K9X2M4P1', description: 'Referral code from an ambassador' })

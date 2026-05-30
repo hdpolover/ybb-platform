@@ -1,5 +1,6 @@
 import { IsString, IsObject, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { IsSubmissionDataEnglish } from '@shared/validators/submission-data-english.validator';
 
 /**
  * Valid submission sections that can be saved independently
@@ -26,5 +27,6 @@ export class SaveSubmissionSectionDto {
         example: { full_name: 'John Doe', email: 'john@example.com' },
     })
     @IsObject()
+    @IsSubmissionDataEnglish()
     data: Record<string, unknown>;
 }
