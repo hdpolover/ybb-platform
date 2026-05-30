@@ -20,7 +20,8 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-RUN apk add --no-cache openssl curl
+# font-noto provides NotoSans-Regular.ttf at /usr/share/fonts/noto/ for Unicode PDF rendering
+RUN apk add --no-cache openssl curl font-noto
 
 COPY package*.json ./
 
