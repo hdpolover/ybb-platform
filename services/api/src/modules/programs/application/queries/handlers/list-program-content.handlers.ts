@@ -154,6 +154,7 @@ export class ListProgramTestimonialsHandler {
             company: item.company ?? undefined,
             avatarUrl: item.avatarUrl ?? undefined,
             rating: item.rating ?? undefined,
+            alumniYear: item.alumniYear ?? undefined,
         }));
     }
 }

@@ -122,6 +122,9 @@ export class ProgramTestimonialResponseDto {
 
     @ApiProperty({ required: false })
     rating?: number;
+
+    @ApiProperty({ required: false })
+    alumniYear?: number;
 }
 
 export class ProgramFaqResponseDto {
