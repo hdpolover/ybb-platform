@@ -1,21 +1,25 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsDateString, IsEmail, IsEnum, IsOptional, IsString, IsBoolean, IsUrl } from 'class-validator';
 import { Type } from 'class-transformer';
+import { IsEnglishName, IsEnglishText } from '@shared/validators/english-text.validator';
 
 export class UpdateParticipantProfileDto {
     @ApiPropertyOptional({ example: 'John Doe' })
     @IsOptional()
     @IsString()
+    @IsEnglishName()
     fullName?: string;
 
     @ApiPropertyOptional({ example: 'Johnny' })
     @IsOptional()
     @IsString()
+    @IsEnglishName()
     nickName?: string;
 
     @ApiPropertyOptional({ example: 'John' })
     @IsOptional()
     @IsString()
+    @IsEnglishName()
     displayName?: string;
 
     @ApiPropertyOptional({ example: '1995-05-20' })
@@ -41,31 +45,37 @@ export class UpdateParticipantProfileDto {
     @ApiPropertyOptional({ example: 'Vietnam' })
     @IsOptional()
     @IsString()
+    @IsEnglishText()
     nationality?: string;
 
     @ApiPropertyOptional({ example: 'City' })
     @IsOptional()
     @IsString()
+    @IsEnglishText()
     currentCity?: string;
 
     @ApiPropertyOptional({ example: 'Country' })
     @IsOptional()
     @IsString()
+    @IsEnglishText()
     currentCountry?: string;
 
     @ApiPropertyOptional({ example: 'University of Technology' })
     @IsOptional()
     @IsString()
+    @IsEnglishText()
     institution?: string;
 
     @ApiPropertyOptional({ example: 'Computer Science' })
     @IsOptional()
     @IsString()
+    @IsEnglishText()
     major?: string;
 
     @ApiPropertyOptional({ example: 'Software Engineer' })
     @IsOptional()
     @IsString()
+    @IsEnglishText()
     occupation?: string;
 
     @ApiPropertyOptional({ example: 'john_doe_insta' })
@@ -86,21 +96,25 @@ export class UpdateParticipantProfileDto {
     @ApiPropertyOptional({ example: 'None' })
     @IsOptional()
     @IsString()
+    @IsEnglishText()
     dietaryRestrictions?: string;
 
     @ApiPropertyOptional({ example: 'None' })
     @IsOptional()
     @IsString()
+    @IsEnglishText()
     medicalConditions?: string;
 
     @ApiPropertyOptional({ example: 'Jane Doe', description: 'Emergency contact name' })
     @IsOptional()
     @IsString()
+    @IsEnglishName()
     emergencyContactName?: string;
 
     @ApiPropertyOptional({ example: 'Mother', description: 'Relation to emergency contact' })
     @IsOptional()
     @IsString()
+    @IsEnglishText()
     emergencyContactRelation?: string;
 
     @ApiPropertyOptional({ example: '62', description: 'Country code for emergency contact phone' })

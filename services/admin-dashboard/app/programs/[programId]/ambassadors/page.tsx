@@ -19,6 +19,7 @@ import { StatusBadge } from "@/src/admin/status-badge";
 import { ConfirmDialog } from "@/src/admin/confirm-dialog";
 import { Button } from "@/src/ui/button";
 import { Input } from "@/src/ui/input";
+import { EnglishInput } from "@/src/ui/english-input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/src/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/src/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/src/ui/sheet";
@@ -363,8 +364,9 @@ export default function AmbassadorsPage() {
               <label className="mb-1 block text-[11px] font-medium text-zinc-700">
                 Full Name <span className="text-red-500">*</span>
               </label>
-              <Input
+              <EnglishInput
                 type="text"
+                restrictMode="name"
                 value={form.fullName}
                 onChange={(e) => setForm((current) => ({ ...current, fullName: e.target.value }))}
               />
