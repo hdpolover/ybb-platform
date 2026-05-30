@@ -270,7 +270,7 @@ export default function ParticipantDetailPage() {
         </div>
         <div className="flex items-center gap-2.5">
           {participant && <GenerateLoaButton programId={programId} participantId={accountId} />}
-          {accessConfig.isSuperAdmin && rawApplication ? (
+          {accessConfig.canAccessPrograms && rawApplication ? (
             <Button
               variant="outline"
               size="sm"
