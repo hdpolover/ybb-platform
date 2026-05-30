@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { UserPlusIcon, EyeIcon, PencilSquareIcon, TrashIcon } from "@heroicons/react/24/solid";
 import { XMarkIcon } from "@heroicons/react/24/outline";
+import { EnglishInput } from "@/src/ui/english-input";
 
 interface AmbassadorRow {
   id: number;
@@ -417,8 +418,9 @@ function EditAmbassadorModal({ isOpen, onClose, ambassador }: EditAmbassadorModa
                 <label className="mb-1 block text-[11px] font-medium text-zinc-700">
                   Full Name <span className="text-red-500">*</span>
                 </label>
-                <input
+                <EnglishInput
                   type="text"
+                  restrictMode="name"
                   value={formData.fullName}
                   onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
                   className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
