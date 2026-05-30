@@ -83,31 +83,32 @@ function buildPayload(
     participantChanges.nickName = edited.nickName.trim();
   }
 
-  // personalData fields that are stored directly on the Application row
-  // (the API merges these under personalData when syncing)
-  const personalData: Record<string, unknown> = {};
-  if (edited.twibbonLink.trim() !== original.twibbonLink.trim()) {
-    personalData["twibbon_link"] = edited.twibbonLink.trim();
+  // ParticipantApplication text columns (read back by the views + document
+  // generation — these live on the application row, NOT in personalData JSON).
+  const application: {
+    motivationLetter?: string;
+    achievements?: string;
+    experiences?: string;
+    twibbonLink?: string;
+  } = {};
+  if (edited.motivationLetter.trim() !== original.motivationLetter.trim()) {
+    application.motivationLetter = edited.motivationLetter.trim();
   }
   if (edited.achievements.trim() !== original.achievements.trim()) {
-    personalData["achievements"] = edited.achievements.trim();
+    application.achievements = edited.achievements.trim();
   }
   if (edited.experiences.trim() !== original.experiences.trim()) {
-    personalData["experiences"] = edited.experiences.trim();
+    application.experiences = edited.experiences.trim();
   }
-
-  // Essay answers
-  const essayAnswers: Record<string, unknown> = {};
-  if (edited.motivationLetter.trim() !== original.motivationLetter.trim()) {
-    essayAnswers["motivation_letter"] = edited.motivationLetter.trim();
+  if (edited.twibbonLink.trim() !== original.twibbonLink.trim()) {
+    application.twibbonLink = edited.twibbonLink.trim();
   }
 
   return {
     ...(Object.keys(participantChanges).length > 0
       ? { participant: participantChanges }
       : {}),
-    ...(Object.keys(personalData).length > 0 ? { personalData } : {}),
-    ...(Object.keys(essayAnswers).length > 0 ? { essayAnswers } : {}),
+    ...(Object.keys(application).length > 0 ? { application } : {}),
     reason,
   };
 }
@@ -159,11 +160,10 @@ export function EditSubmissionDrawer({
 
     const payload = buildPayload(original, fields, reason.trim());
 
-    // Nothing changed + no participant changes → inform admin.
+    // Nothing changed → inform admin.
     const hasChanges =
       payload.participant !== undefined ||
-      payload.personalData !== undefined ||
-      payload.essayAnswers !== undefined;
+      payload.application !== undefined;
     if (!hasChanges) {
       setApiError("No changes detected. Update at least one field before saving.");
       return;

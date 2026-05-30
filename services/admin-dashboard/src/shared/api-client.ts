@@ -1666,6 +1666,12 @@ export type AdminUpdateSubmissionPayload = {
     nickName?: string;
     displayName?: string;
   };
+  application?: {
+    motivationLetter?: string;
+    achievements?: string;
+    experiences?: string;
+    twibbonLink?: string;
+  };
   reason: string;
 };
 
