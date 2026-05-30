@@ -340,6 +340,7 @@ function TestimonialSheet({
   const [company, setCompany] = useState(item?.company ?? "");
   const [testimonial, setTestimonial] = useState(item?.testimonial ?? "");
   const [category, setCategory] = useState<"delegate" | "alumni">("delegate");
+  const [alumniYear, setAlumniYear] = useState<number | "">(item?.alumniYear ?? "");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(item?.avatarUrl ?? null);
   const [saving, setSaving] = useState(false);
@@ -353,6 +354,7 @@ function TestimonialSheet({
       setCompany(item?.company ?? "");
       setTestimonial(item?.testimonial ?? "");
       setCategory("delegate");
+      setAlumniYear(item?.alumniYear ?? "");
       setSelectedFile(null);
       setPreviewUrl(item?.avatarUrl ?? null);
       setError(null);
@@ -390,10 +392,11 @@ function TestimonialSheet({
         if (!upload.publicUrl) throw new Error("Upload succeeded but no public URL returned.");
         avatarUrl = upload.publicUrl;
       }
+      const resolvedAlumniYear = alumniYear === "" ? null : alumniYear;
       if (isEdit && item) {
-        await updateProgramTestimonial(item.id, { name, role, company, testimonial, brandId, category, ...(avatarUrl ? { avatarUrl } : {}) });
+        await updateProgramTestimonial(item.id, { name, role, company, testimonial, brandId, category, alumniYear: resolvedAlumniYear, ...(avatarUrl ? { avatarUrl } : {}) });
       } else {
-        await createProgramTestimonial(programId, { name, role, company, testimonial, brandId, category, ...(avatarUrl ? { avatarUrl } : {}) });
+        await createProgramTestimonial(programId, { name, role, company, testimonial, brandId, category, alumniYear: resolvedAlumniYear, ...(avatarUrl ? { avatarUrl } : {}) });
       }
       onSaved();
       onClose();
@@ -527,6 +530,24 @@ function TestimonialSheet({
               <option value="delegate">Delegate — shown in Testimonials section</option>
               <option value="alumni">Alumni — shown in Alumni Stories section</option>
             </select>
+          </div>
+
+          {/* Batch / Alumni Year */}
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-zinc-600">
+              Batch / Alumni Year <span className="text-zinc-400">(optional)</span>
+            </label>
+            <input
+              type="number"
+              min={1900}
+              max={2100}
+              value={alumniYear}
+              onChange={(e) =>
+                setAlumniYear(e.target.value === "" ? "" : Number(e.target.value))
+              }
+              placeholder="e.g., 2024"
+              className={inputCls}
+            />
           </div>
 
           {/* Testimonial */}

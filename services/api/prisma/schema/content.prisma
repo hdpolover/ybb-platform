@@ -161,6 +161,7 @@ model ProgramTestimonial {
   thumbnailUrl String?   @map("thumbnail_url") @db.VarChar(500) // Video thumbnail
   avatarUrl    String?   @map("avatar_url") @db.VarChar(500)
   rating       Int?      @db.SmallInt // Optional 1-5 rating
+  alumniYear   Int?      @map("alumni_year")
   isFeatured   Boolean   @default(false) @map("is_featured") // Highlight on homepage
   isActive     Boolean   @default(true) @map("is_active")
   order        Int       @default(0)

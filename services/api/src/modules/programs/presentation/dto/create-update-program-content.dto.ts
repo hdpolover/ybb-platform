@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsDateString, IsNumber, IsInt, Min, IsBoolean, IsUUID, IsArray, IsEnum, IsIn, IsUrl } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsDateString, IsNumber, IsInt, Min, Max, IsBoolean, IsUUID, IsArray, IsEnum, IsIn, IsUrl } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { FaqCategory } from '@prisma/client';
@@ -441,6 +441,13 @@ export class CreateProgramTestimonialDto {
     @IsString()
     @IsOptional()
     category?: string;
+
+    @ApiProperty({ required: false, minimum: 1900, maximum: 2100 })
+    @IsOptional()
+    @IsInt()
+    @Min(1900)
+    @Max(2100)
+    alumniYear?: number;
 }
 
 export class UpdateProgramTestimonialDto {
@@ -513,6 +520,13 @@ export class UpdateProgramTestimonialDto {
     @IsBoolean()
     @IsOptional()
     isActive?: boolean;
+
+    @ApiProperty({ required: false, minimum: 1900, maximum: 2100 })
+    @IsOptional()
+    @IsInt()
+    @Min(1900)
+    @Max(2100)
+    alumniYear?: number;
 }
 
 // FAQ DTOs
