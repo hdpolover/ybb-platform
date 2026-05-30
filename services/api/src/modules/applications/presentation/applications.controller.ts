@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Patch,
   Param,
   Body,
   Query,
@@ -14,6 +15,9 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
+import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
+import { Roles } from '@modules/auth/application/decorators/roles.decorator';
+import { UserRole } from '@core/entities/user.entity';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
@@ -29,6 +33,8 @@ import { ReviewApplicationHandler } from '../application/commands/handlers/revie
 import { WithdrawApplicationHandler } from '../application/commands/handlers/withdraw-application.handler';
 import { SwitchApplicationCategoryHandler } from '../application/commands/handlers/switch-application-category.handler';
 import { CreateRegistrationPaymentIntentHandler } from '../application/commands/handlers/create-registration-payment-intent.handler';
+import { AdminUpdateSubmissionHandler } from '../application/commands/handlers/admin-update-submission.handler';
+import { AdminUpdateSubmissionCommand } from '../application/commands/admin-update-submission.command';
 
 import { CreateApplicationCommand } from '../application/commands/create-application.command';
 import { UpdateApplicationCommand } from '../application/commands/update-application.command';
@@ -57,6 +63,7 @@ import { CreateApplicationRequestDto } from './dto/create-application-request.dt
 import { UpdateApplicationRequestDto } from './dto/update-application-request.dto';
 import { ReviewApplicationRequestDto } from './dto/review-application-request.dto';
 import { SwitchApplicationCategoryRequestDto } from './dto/switch-application-category-request.dto';
+import { AdminUpdateSubmissionDto } from './dto/admin-update-submission.dto';
 import { ApplicationResponseDto, ApplicationListResponseDto } from '../application/dto/application-response.dto';
 import { ApplicationCategory, ApplicationStatus } from '@core/entities/participant-application.entity';
 
@@ -103,6 +110,7 @@ export class ApplicationsController {
     private readonly withdrawApplicationHandler: WithdrawApplicationHandler,
     private readonly switchApplicationCategoryHandler: SwitchApplicationCategoryHandler,
     private readonly createRegistrationPaymentIntentHandler: CreateRegistrationPaymentIntentHandler,
+    private readonly adminUpdateSubmissionHandler: AdminUpdateSubmissionHandler,
     private readonly getApplicationHandler: GetApplicationHandler,
     private readonly listApplicationsHandler: ListApplicationsHandler,
     private readonly exportApplicationsHandler: ExportApplicationsHandler,
@@ -440,6 +448,61 @@ export class ApplicationsController {
 
     const command = new SubmitApplicationCommand(id, participantId);
     return this.submitApplicationHandler.execute(command);
+  }
+
+  /**
+   * PATCH /applications/:id/submission-data
+   *
+   * ADMIN ONLY — edits a participant's submission data after it has been locked
+   * (post-submit).  Bypasses the draft-only edit guard intentionally so admins
+   * can correct typos (e.g. names) that would otherwise propagate to ID cards,
+   * certificates, and LoA documents.
+   *
+   * Auth: requires an admin/super-admin role (RolesGuard) on top of a valid JWT.
+   * This mutation bypasses the submission lock, so it must never be reachable by
+   * a participant token.
+   *
+   * Every edit is recorded in application_edit_history with a required `reason`.
+   */
+  @Patch(':id/submission-data')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Admin: edit submission data of a locked application' })
+  @ApiResponse({
+    status: 200,
+    description: 'Submission data updated and audit record created',
+    schema: {
+      properties: {
+        success: { type: 'boolean' },
+        applicationId: { type: 'string' },
+        editHistoryId: { type: 'string' },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Application not found' })
+  @ApiResponse({ status: 400, description: 'Validation error in payload' })
+  @AuditTrail({ entityType: 'ParticipantApplication', action: ChangeType.update })
+  async adminUpdateSubmission(
+    @Param('id') id: string,
+    @Body() dto: AdminUpdateSubmissionDto,
+    @CurrentUser() user: CurrentUserData,
+  ): Promise<{ success: boolean; applicationId: string; editHistoryId: string }> {
+    this.logger.log(
+      `Admin ${user.userId} editing submission data for application ${id}: ${dto.reason}`,
+    );
+
+    const command = new AdminUpdateSubmissionCommand(
+      id,
+      user.userId,
+      dto.reason,
+      dto.personalData,
+      dto.essayAnswers,
+      dto.participant,
+      dto.application,
+    );
+
+    return this.adminUpdateSubmissionHandler.execute(command);
   }
 
   @Post(':id/payment-intent')

@@ -3,7 +3,12 @@ import { Prisma } from '@prisma/client';
 import { ParticipantApplication } from '@core/entities/participant-application.entity';
 import { IApplicationRepository } from '@core/interfaces/repositories/application.repository.interface';
 import { GetApplicationQuery } from '../get-application.query';
-import { ApplicationResponseDto, ApplicationStepDto } from '../../dto/application-response.dto';
+import {
+  ApplicationResponseDto,
+  ApplicationStepDto,
+  SubmissionFormFieldAdminDto,
+  SubmissionSectionAdminDto,
+} from '../../dto/application-response.dto';
 import { ApplicationMapper } from '@modules/applications/infrastructure/mappers/application.mapper';
 import { APPLICATION_REPOSITORY } from '@modules/applications/infrastructure/tokens';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
@@ -149,6 +154,7 @@ export class GetApplicationHandler {
 
       if (fields.length > 0) {
         dto.steps = this.calculateSteps(application, fields);
+        dto.submissionForm = this.buildSubmissionForm(application, fields);
       } else {
         dto.steps = [
             { section: 'personal_info', label: 'Personal Details', status: 'completed', flag: 'completed', progress: 100 },
@@ -167,6 +173,191 @@ export class GetApplicationHandler {
     }
 
     return dto;
+  }
+
+  /**
+   * Build the structured submission form descriptor for admin use.
+   *
+   * Design decisions:
+   * - Fields in the 'essay' section, or that look like essay prompts
+   *   (textarea + word-limit rules), are stored in essayAnswers → store: 'essayAnswers'.
+   * - All other fields → store: 'personalData'.
+   * - File/upload fields are included but flagged readonly: true so the UI
+   *   renders a read-only display rather than an edit control.
+   * - The 'preview' section is excluded (it's a UI-only confirmation step,
+   *   not a data store).
+   * - Full-name / nick-name fields are included in the generic list. The
+   *   endpoint's name-sync logic means editing them via personalData is
+   *   equivalent to editing via the participant patch — the server keeps them
+   *   in sync. The admin UI should therefore NOT render a separate identity
+   *   section when submissionForm is present to avoid double-editing.
+   */
+  private buildSubmissionForm(
+    app: ParticipantApplication,
+    fields: Prisma.ApplicationFormFieldGetPayload<Record<string, never>>[],
+  ): { sections: SubmissionSectionAdminDto[] } {
+    const FILE_TYPES = new Set(['file', 'upload', 'document', 'image', 'photo', 'avatar', 'resume']);
+
+    const personalData = (app.personalData ?? {}) as Record<string, unknown>;
+    const essayAnswers = (app.essayAnswers ?? {}) as Record<string, unknown>;
+    const uploadedFiles = (app.uploadedFiles ?? {}) as Record<string, unknown>;
+
+    const sectionLabels: Record<string, string> = {
+      personal_info: 'Personal Information',
+      personal_details: 'Personal Details',
+      contact_information: 'Contact Information',
+      professional_profile: 'Professional Profile',
+      entry_information: 'Entry Information',
+      essay: 'Essays / Entry Information',
+      miscellaneous: 'Miscellaneous',
+      additional_info: 'Additional Information',
+      documents: 'Documents',
+    };
+
+    // Group fields by section, preserving order
+    const sectionMap = new Map<string, SubmissionFormFieldAdminDto[]>();
+
+    for (const field of fields) {
+      const section = field.section ?? 'personal_info';
+
+      // Skip the preview section — it holds UI-only checklist flags, not data
+      if (section === 'preview') continue;
+
+      const isFileField = FILE_TYPES.has(field.type.toLowerCase());
+      const isEssayField = this.isEssaySectionField(field);
+
+      // Determine which store this field writes to
+      const store: 'personalData' | 'essayAnswers' = isEssayField ? 'essayAnswers' : 'personalData';
+
+      // Resolve current value: check the appropriate store first, then fallback
+      const rawValue = isEssayField
+        ? (essayAnswers[field.name] ?? personalData[field.name] ?? uploadedFiles[field.name])
+        : (personalData[field.name] ?? essayAnswers[field.name] ?? uploadedFiles[field.name]);
+
+      const value = this.coerceToString(rawValue);
+
+      // Parse options from the field definition
+      const options = this.parseFieldOptions(field.options);
+
+      const fieldDto: SubmissionFormFieldAdminDto = {
+        name: field.name,
+        label: field.label,
+        type: field.type,
+        store,
+        section,
+        isRequired: field.isRequired,
+        value,
+        readonly: isFileField,
+        ...(options ? { options } : {}),
+        order: field.order,
+      };
+
+      if (!sectionMap.has(section)) {
+        sectionMap.set(section, []);
+      }
+      sectionMap.get(section)!.push(fieldDto);
+    }
+
+    const sections: SubmissionSectionAdminDto[] = [];
+    for (const [sectionId, sectionFields] of sectionMap) {
+      sections.push({
+        section: sectionId,
+        label: sectionLabels[sectionId] ?? sectionId.replace(/_/g, ' '),
+        fields: sectionFields,
+      });
+    }
+
+    return { sections };
+  }
+
+  /**
+   * Returns true if a field is stored in essayAnswers rather than personalData.
+   * Mirrors the portal handler's isLegacyEssayFormField heuristic.
+   */
+  private isEssaySectionField(field: Prisma.ApplicationFormFieldGetPayload<Record<string, never>>): boolean {
+    const section = field.section ?? '';
+    if (section === 'essay') return true;
+
+    const normalizedName = field.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (
+      normalizedName.includes('essay')
+      || normalizedName.includes('keyword')
+      || normalizedName.includes('reference')
+    ) {
+      return true;
+    }
+
+    if (field.type !== 'textarea') return false;
+
+    const normalizedLabel = field.label.trim().toLowerCase().replace(/\s+/g, ' ');
+    const normalizedPlaceholder = (field.placeholder ?? '').trim().toLowerCase();
+    const rules = field.validationRules;
+    const hasWordLimitRule = Boolean(
+      rules
+      && typeof rules === 'object'
+      && ['wordLimit', 'maxWords', 'minWords'].some((key) =>
+        Object.prototype.hasOwnProperty.call(rules, key),
+      ),
+    );
+    const looksLikeEssayPrompt =
+      normalizedLabel.endsWith('?')
+      || normalizedLabel.includes('word limit')
+      || normalizedPlaceholder.includes('word limit');
+
+    return hasWordLimitRule || looksLikeEssayPrompt;
+  }
+
+  /**
+   * Converts an unknown JSON value to a string suitable for display / editing
+   * in a text input.  Objects and arrays are JSON-serialised.
+   */
+  private coerceToString(value: unknown): string {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return '';
+    }
+  }
+
+  /**
+   * Normalises the field `options` JSON blob into a flat label/value array.
+   * Returns undefined when there are no usable options (non-select fields).
+   */
+  private parseFieldOptions(raw: unknown): Array<{ label: string; value: string }> | undefined {
+    if (!raw) return undefined;
+
+    let source = raw;
+
+    if (typeof source === 'string') {
+      const trimmed = source.trim();
+      if (!trimmed) return undefined;
+      try {
+        source = JSON.parse(trimmed);
+      } catch {
+        const split = trimmed.split(',').map((s) => s.trim()).filter(Boolean);
+        return split.length > 0 ? split.map((s) => ({ label: s, value: s })) : undefined;
+      }
+    }
+
+    if (Array.isArray(source)) {
+      const result: Array<{ label: string; value: string }> = [];
+      for (const item of source) {
+        if (typeof item === 'string' && item.trim()) {
+          result.push({ label: item.trim(), value: item.trim() });
+        } else if (item && typeof item === 'object') {
+          const rec = item as Record<string, unknown>;
+          const label = String(rec.label ?? rec.text ?? rec.name ?? rec.value ?? '').trim();
+          const value = String(rec.value ?? rec.id ?? rec.label ?? rec.name ?? '').trim();
+          if (label || value) result.push({ label: label || value, value: value || label });
+        }
+      }
+      return result.length > 0 ? result : undefined;
+    }
+
+    return undefined;
   }
 
   private calculateSteps(app: ParticipantApplication, fields: Prisma.ApplicationFormFieldGetPayload<Record<string, never>>[]): ApplicationStepDto[] {

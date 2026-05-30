@@ -5,10 +5,11 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { toast } from "sonner";
-import { ShieldCheck } from "lucide-react";
+import { ShieldCheck, Pencil } from "lucide-react";
 import { ProfileHeader, type ProfileHeaderData } from "@/app/components/participants/ProfileHeader";
 import { ParticipantProfileTabs } from "@/app/components/participants/ParticipantProfileTabs";
 import { GenerateLoaButton } from "@/app/components/participants/GenerateLoaButton";
+import { EditSubmissionDrawer } from "@/app/components/participants/EditSubmissionDrawer";
 import type { PersonalDetails } from "@/app/components/participants/tabs/PersonalDetailsTab";
 import type { ProfessionalProfile } from "@/app/components/participants/tabs/ProfessionalProfileTab";
 import type { EntryInformation } from "@/app/components/participants/tabs/EntryInformationTab";
@@ -122,9 +123,11 @@ export default function ParticipantDetailPage() {
   }, [accessiblePrograms, programIdParam]);
 
   const [participant, setParticipant] = useState<ParticipantData | null>(null);
+  const [rawApplication, setRawApplication] = useState<Application | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [impersonationOpen, setImpersonationOpen] = useState(false);
+  const [editSubmissionOpen, setEditSubmissionOpen] = useState(false);
   const [supportSecret, setSupportSecret] = useState("");
   const [reason, setReason] = useState("");
   const [startingImpersonation, setStartingImpersonation] = useState(false);
@@ -141,7 +144,10 @@ export default function ParticipantDetailPage() {
         const apps = list.data;
         if (!apps.length) throw new Error("No application found for this participant in this program.");
         const full = await getApplication(apps[0].id);
-        if (!cancelled) setParticipant(mapToParticipantData(full));
+        if (!cancelled) {
+          setParticipant(mapToParticipantData(full));
+          setRawApplication(full);
+        }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load participant.");
       } finally {
@@ -152,6 +158,22 @@ export default function ParticipantDetailPage() {
     load();
     return () => { cancelled = true; };
   }, [programId, accountId]);
+
+  async function handleEditSaved() {
+    // Reload participant data after a successful submission edit.
+    if (!programId || !accountId) return;
+    try {
+      const list = await listApplications({ programId, participantId: accountId, limit: 1 });
+      const apps = list.data;
+      if (!apps.length) return;
+      const full = await getApplication(apps[0].id);
+      setParticipant(mapToParticipantData(full));
+      setRawApplication(full);
+      toast.success("Submission updated successfully.");
+    } catch {
+      toast.error("Failed to reload participant data.");
+    }
+  }
 
   async function handleStartImpersonation() {
     if (!participant) return;
@@ -187,6 +209,15 @@ export default function ParticipantDetailPage() {
 
   return (
     <div className="mx-auto w-full space-y-6">
+      {rawApplication && (
+        <EditSubmissionDrawer
+          open={editSubmissionOpen}
+          onClose={() => setEditSubmissionOpen(false)}
+          application={rawApplication}
+          onSaved={() => void handleEditSaved()}
+        />
+      )}
+
       <Dialog open={impersonationOpen} onOpenChange={setImpersonationOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -239,6 +270,17 @@ export default function ParticipantDetailPage() {
         </div>
         <div className="flex items-center gap-2.5">
           {participant && <GenerateLoaButton programId={programId} participantId={accountId} />}
+          {accessConfig.canAccessPrograms && rawApplication ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEditSubmissionOpen(true)}
+              className="inline-flex items-center gap-2"
+            >
+              <Pencil className="h-4 w-4" />
+              Edit Submission
+            </Button>
+          ) : null}
           {accessConfig.isSuperAdmin ? (
             <Button
               variant="outline"
