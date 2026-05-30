@@ -7,11 +7,41 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle  # type: ig
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT  # type: ignore
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image  # type: ignore
 from reportlab.lib import colors  # type: ignore
+from reportlab.pdfbase import pdfmetrics  # type: ignore
+from reportlab.pdfbase.ttfonts import TTFont  # type: ignore
 from io import BytesIO
 from datetime import datetime
 from jinja2 import Template  # type: ignore
 from app.utils.concurrency import run_in_threadpool
 from app.utils.process_concurrency import run_in_processpool
+
+# ---------------------------------------------------------------------------
+# Unicode font registration for ReportLab
+# ---------------------------------------------------------------------------
+# NotoSans TTFs are installed via fonts-noto-core in the Docker image.
+# Registration is guarded so the service still starts if fonts are absent
+# (e.g. local dev without the packages), falling back to built-in Helvetica.
+# NOTE: CJK characters in ReportLab require a separate CJK font (e.g.
+# NotoSansCJK-Regular.ttc) registered as a CIDFont.  That path varies by
+# package version and is left as a follow-up; Latin, Arabic, Bengali and most
+# diacritic-extended Latin are covered by NotoSans-Regular below.
+
+_NOTO_SANS_PATH = "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf"
+_NOTO_SANS_BOLD_PATH = "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf"
+_UNICODE_FONT = "Helvetica"       # default fallback
+_UNICODE_FONT_BOLD = "Helvetica-Bold"
+
+try:
+    import os as _os
+    if _os.path.exists(_NOTO_SANS_PATH):
+        pdfmetrics.registerFont(TTFont("NotoSans", _NOTO_SANS_PATH))
+        _UNICODE_FONT = "NotoSans"
+    if _os.path.exists(_NOTO_SANS_BOLD_PATH):
+        pdfmetrics.registerFont(TTFont("NotoSans-Bold", _NOTO_SANS_BOLD_PATH))
+        _UNICODE_FONT_BOLD = "NotoSans-Bold"
+except Exception:
+    pass  # Non-fatal: renders with Helvetica, tofu for non-Latin glyphs
+
 
 # Helper to get styles in the worker process
 def _get_styles():
@@ -31,6 +61,13 @@ def _get_styles():
         fontSize=16,
         textColor=colors.HexColor('#366092'),
         spaceAfter=12,
+    ))
+    # Unicode-safe style for participant names (Arabic, Bengali, diacritics)
+    styles.add(ParagraphStyle(
+        name='UnicodeName',
+        parent=styles['Normal'],
+        fontName=_UNICODE_FONT,
+        fontSize=11,
     ))
     return styles
 
@@ -72,6 +109,9 @@ def generate_receipt_sync(
         ('FONTSIZE', (0, 0), (-1, -1), 11),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
         ('TOPPADDING', (0, 0), (-1, -1), 8),
+        # Use Unicode-capable font for the name value cell (row 4, col 1)
+        # so non-Latin participant names (Arabic, Bengali, diacritics) render.
+        ('FONTNAME', (1, 4), (1, 4), _UNICODE_FONT),
     ]))
     
     story.append(table)
@@ -102,7 +142,7 @@ def generate_offer_letter_sync(
     story.append(Paragraph(date_text, styles['Normal']))
     story.append(Spacer(1, 0.3 * inch))
     
-    # Recipient
+    # Recipient — use UnicodeName style so non-Latin names render correctly
     recipient_lines = [
         participant_data.get('name', ''),
         participant_data.get('address', ''),
@@ -110,18 +150,18 @@ def generate_offer_letter_sync(
     ]
     for line in recipient_lines:
         if line:
-            story.append(Paragraph(line, styles['Normal']))
-    
+            story.append(Paragraph(line, styles['UnicodeName']))
+
     story.append(Spacer(1, 0.3 * inch))
-    
+
     # Subject
     subject = f"<b>Subject: Offer of Admission - {program_data.get('name', '')}</b>"
     story.append(Paragraph(subject, styles['Normal']))
     story.append(Spacer(1, 0.2 * inch))
-    
-    # Salutation
+
+    # Salutation — name may contain non-Latin characters
     salutation = f"Dear {participant_data.get('name', '')},"
-    story.append(Paragraph(salutation, styles['Normal']))
+    story.append(Paragraph(salutation, styles['UnicodeName']))
     story.append(Spacer(1, 0.2 * inch))
     
     # Body
@@ -217,7 +257,7 @@ def generate_loa_sync(
     margin: {top}pt {right}pt {bottom}pt {left}pt;
   }}
   body {{
-    font-family: Arial, sans-serif;
+    font-family: "Noto Sans", "Noto Sans Arabic", "Noto Sans CJK SC", "Noto Sans Bengali", "DejaVu Sans", sans-serif;
     font-size: 11pt;
     line-height: 1.6;
     color: #000;
