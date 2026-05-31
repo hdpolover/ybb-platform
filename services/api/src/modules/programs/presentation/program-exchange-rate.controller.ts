@@ -2,6 +2,9 @@ import { Controller, Get, Put, Param, Body, Query, UseGuards, Request } from '@n
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { Request as ExpressRequest } from 'express';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
+import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
+import { Roles } from '@modules/auth/application/decorators/roles.decorator';
+import { UserRole } from '@core/entities/user.entity';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { CacheInvalidate } from '@shared/decorators/cache-invalidate.decorator';
 import { PROGRAM_CONTENT_PATTERNS } from '@shared/constants/cache-patterns';
@@ -36,7 +39,8 @@ export class ProgramExchangeRateController {
     }
 
     @Put()
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
     @ApiBearerAuth()
     @ApiOperation({ summary: 'Update exchange rate for a program (Admin only)' })
     @ApiResponse({ status: 200, type: ExchangeRateResponseDto })
@@ -56,7 +60,8 @@ export class ProgramExchangeRateController {
     }
 
     @Get('history')
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
     @ApiBearerAuth()
     @ApiOperation({ summary: 'Get exchange rate change history for a program' })
     @ApiResponse({ status: 200, type: ExchangeRateHistoryResponseDto })

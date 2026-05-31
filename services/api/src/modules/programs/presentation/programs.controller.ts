@@ -26,6 +26,9 @@ import { GetParticipantProgressQuery } from '../application/queries/get-particip
 import { ProgressStepDto } from './dto/participant-progress-response.dto';
 import { Public } from '../../../shared/decorators/public.decorator';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
+import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
+import { Roles } from '@modules/auth/application/decorators/roles.decorator';
+import { UserRole } from '@core/entities/user.entity';
 import { AuditTrail } from '../../../shared/decorators/audit-trail.decorator';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
 import { PROGRAM_CONTENT_PATTERNS } from '../../../shared/constants/cache-patterns';
@@ -126,7 +129,8 @@ export class ProgramsController {
   }
 
   @Post()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create program (Admin only)' })
   @ApiResponse({ status: 201, description: 'Program created successfully' })
@@ -147,7 +151,8 @@ export class ProgramsController {
   }
 
   @Put(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update program (Admin only)' })
   @ApiResponse({ status: 200, description: 'Program updated successfully' })
@@ -170,7 +175,8 @@ export class ProgramsController {
   }
 
   @Put(':id/payment-info')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Update program payment-info HTML',
@@ -226,7 +232,8 @@ export class ProgramsController {
   }
 
   @Post(':id/branding')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update program branding (logo, banner, thumbnail)' })
   @ApiConsumes('multipart/form-data')
@@ -256,7 +263,8 @@ export class ProgramsController {
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete program (Admin only)' })
   @ApiResponse({ status: 200, description: 'Program deleted successfully' })

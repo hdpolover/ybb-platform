@@ -3,6 +3,9 @@ import { Request as ExpressRequest } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
+import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
+import { Roles } from '@modules/auth/application/decorators/roles.decorator';
+import { UserRole } from '@core/entities/user.entity';
 import { Public } from '../../../shared/decorators/public.decorator';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
 import { PROGRAM_CONTENT_PATTERNS } from '../../../shared/constants/cache-patterns';
@@ -93,7 +96,8 @@ export class ProgramContentController {
   }
 
   @Post(':id/gallery')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add gallery item' })
   @ApiConsumes('multipart/form-data')
@@ -109,7 +113,8 @@ export class ProgramContentController {
   }
 
   @Put('gallery/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update gallery item' })
   @ApiConsumes('multipart/form-data')
@@ -125,7 +130,8 @@ export class ProgramContentController {
   }
 
   @Delete('gallery/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete gallery item' })
   @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
@@ -143,7 +149,8 @@ export class ProgramContentController {
   }
 
   @Post(':id/testimonials')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add testimonial' })
   @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
@@ -152,7 +159,8 @@ export class ProgramContentController {
   }
 
   @Put('testimonials/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update testimonial' })
   @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
@@ -161,7 +169,8 @@ export class ProgramContentController {
   }
 
   @Delete('testimonials/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete testimonial' })
   @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
@@ -179,7 +188,8 @@ export class ProgramContentController {
   }
 
   @Post(':id/faqs')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add FAQ' })
   @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
@@ -188,7 +198,8 @@ export class ProgramContentController {
   }
 
   @Put('faqs/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update FAQ' })
   @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
@@ -197,7 +208,8 @@ export class ProgramContentController {
   }
 
   @Delete('faqs/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete FAQ' })
   @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
@@ -215,7 +227,8 @@ export class ProgramContentController {
   }
 
   @Post(':id/resources')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add resource' })
   @ApiConsumes('multipart/form-data')
@@ -231,7 +244,8 @@ export class ProgramContentController {
   }
 
   @Put('resources/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update resource' })
   @ApiConsumes('multipart/form-data')
@@ -247,7 +261,8 @@ export class ProgramContentController {
   }
 
   @Delete('resources/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete resource' })
   @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
@@ -267,7 +282,8 @@ export class ProgramContentController {
   }
 
   @Post(':id/document-templates')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data', 'application/json')
@@ -284,7 +300,8 @@ export class ProgramContentController {
   }
 
   @Put('document-templates/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data', 'application/json')
@@ -300,7 +317,8 @@ export class ProgramContentController {
   }
 
   @Delete('document-templates/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a document template' })
   @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
@@ -312,7 +330,8 @@ export class ProgramContentController {
   }
 
   @Post(':programId/document-templates/:templateId/generate')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Generate LOA PDF(s) for one participant or all eligible participants' })
   async generateLOA(
