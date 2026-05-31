@@ -169,7 +169,9 @@ export class ApplicationsController {
   }
 
   @Post()
-  @ApiOperation({ summary: 'Create a new application' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Create a new application (admin)' })
   @ApiResponse({ status: 201, description: 'Application created successfully', type: ApplicationResponseDto })
   @ApiResponse({ status: 409, description: 'Application already exists' })
   @CacheInvalidate(['portal:*:${userId}'])
@@ -402,7 +404,9 @@ export class ApplicationsController {
   }
 
   @Put(':id')
-  @ApiOperation({ summary: 'Update application (draft only)' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Update application (draft only, admin)' })
   @ApiResponse({ status: 200, description: 'Application updated successfully', type: ApplicationResponseDto })
   @ApiResponse({ status: 400, description: 'Cannot edit non-draft application' })
   @ApiResponse({ status: 404, description: 'Application not found' })
@@ -438,8 +442,10 @@ export class ApplicationsController {
   }
 
   @Post(':id/submit')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Submit application' })
+  @ApiOperation({ summary: 'Submit application (admin; participants use /portal/submissions/submit)' })
   @ApiResponse({ status: 200, description: 'Application submitted successfully', type: ApplicationResponseDto })
   @ApiResponse({ status: 400, description: 'Application cannot be submitted' })
   @ApiResponse({ status: 404, description: 'Application not found' })
@@ -511,8 +517,10 @@ export class ApplicationsController {
   }
 
   @Post(':id/payment-intent')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Create Registration Payment Intent' })
+  @ApiOperation({ summary: 'Create Registration Payment Intent (admin; participants use /portal/payments)' })
   @ApiResponse({ status: 201, description: 'Payment Intent created' })
   @CacheInvalidate(['portal:*:${userId}'])
   async createPaymentIntent(
@@ -555,8 +563,10 @@ export class ApplicationsController {
   }
 
   @Post(':id/withdraw')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Withdraw application' })
+  @ApiOperation({ summary: 'Withdraw application (admin)' })
   @ApiResponse({ status: 200, description: 'Application withdrawn successfully', type: ApplicationResponseDto })
   @ApiResponse({ status: 400, description: 'Application cannot be withdrawn' })
   @ApiResponse({ status: 404, description: 'Application not found' })
