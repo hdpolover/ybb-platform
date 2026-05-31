@@ -1,5 +1,5 @@
 
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Header, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags, ApiHeader, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { StatsService } from './stats.service';
 import { GetStatsQueryDto } from './dto/get-stats.dto';
@@ -23,6 +23,8 @@ export class StatsController {
   constructor(private readonly statsService: StatsService) {}
 
   @Get()
+  @Header('Cache-Control', 'public, max-age=30, s-maxage=60, stale-while-revalidate=300')
+  @Header('Vary', 'x-brand-domain')
   @ApiOperation({ summary: 'Get unified statistics (Impact, Geography)' })
   @ApiResponse({ status: 200, type: StatsResponseDto })
   async getStats(
