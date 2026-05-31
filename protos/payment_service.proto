@@ -168,6 +168,7 @@ message ProcessPaymentRequest {
   string payment_method_id = 2;
   string gateway_token = 3; // Token from Midtrans/Xendit JS SDK
   PaymentDetails payment_details = 4;
+  string user_id = 5; // Caller's user ID for ownership verification
 }
 
 message ProcessPaymentAction {
