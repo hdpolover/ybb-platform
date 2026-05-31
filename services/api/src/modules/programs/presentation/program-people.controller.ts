@@ -3,6 +3,9 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { Request as ExpressRequest } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
+import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
+import { Roles } from '@modules/auth/application/decorators/roles.decorator';
+import { UserRole } from '@core/entities/user.entity';
 import { Public } from '../../../shared/decorators/public.decorator';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
 import { PROGRAM_CONTENT_PATTERNS as MUTABLE_CONTENT_CACHE_PATTERNS } from '@shared/constants/cache-patterns';
@@ -75,7 +78,8 @@ export class ProgramPeopleController {
   }
 
   @Post(':id/speakers')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add speaker' })
   @ApiConsumes('multipart/form-data')
@@ -91,7 +95,8 @@ export class ProgramPeopleController {
   }
 
   @Put('speakers/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update speaker' })
   @ApiConsumes('multipart/form-data')
@@ -107,7 +112,8 @@ export class ProgramPeopleController {
   }
 
   @Delete('speakers/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete speaker' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -125,7 +131,8 @@ export class ProgramPeopleController {
   }
 
   @Post(':id/team')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add team member' })
   @ApiConsumes('multipart/form-data')
@@ -141,7 +148,8 @@ export class ProgramPeopleController {
   }
 
   @Put('team/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update team member' })
   @ApiConsumes('multipart/form-data')
@@ -157,7 +165,8 @@ export class ProgramPeopleController {
   }
 
   @Delete('team/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete team member' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -175,7 +184,8 @@ export class ProgramPeopleController {
   }
 
   @Post(':id/partners')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add partner' })
   @ApiConsumes('multipart/form-data')
@@ -191,7 +201,8 @@ export class ProgramPeopleController {
   }
 
   @Put('partners/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update partner' })
   @ApiConsumes('multipart/form-data')
@@ -207,7 +218,8 @@ export class ProgramPeopleController {
   }
 
   @Delete('partners/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete partner' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
