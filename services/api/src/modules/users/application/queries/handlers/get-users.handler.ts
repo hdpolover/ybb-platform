@@ -3,14 +3,14 @@ import { GetUsersQuery } from '../get-users.query';
 import { UserResponseDto, UserRoleEnriched } from '@modules/users/presentation/dto/user-response.dto';
 import { IUserRepository } from '@core/interfaces/repositories/user.repository.interface';
 import { User } from '@core/entities/user.entity';
-import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 
 @Injectable()
 export class GetUsersHandler {
   constructor(
     @Inject(IUserRepository)
     private readonly userRepository: IUserRepository,
-    private readonly prisma: PrismaService,
+    private readonly readPrisma: PrismaReadService,
   ) {}
 
   async execute(query: GetUsersQuery): Promise<UserResponseDto[]> {
@@ -26,7 +26,7 @@ export class GetUsersHandler {
 
     const ids = users.map((u) => u.id);
 
-    const rows = await this.prisma.user.findMany({
+    const rows = await this.readPrisma.user.findMany({
       where: { id: { in: ids }, deletedAt: null },
       select: {
         id: true,

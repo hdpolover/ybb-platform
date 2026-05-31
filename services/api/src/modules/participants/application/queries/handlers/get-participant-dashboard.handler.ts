@@ -1,6 +1,6 @@
 import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
-import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { GetParticipantDashboardQuery } from '../get-participant-dashboard.query';
 import { 
     ParticipantDashboardResponseDto, 
@@ -8,14 +8,13 @@ import {
     ParticipantDashboardApplicationSummaryDto,
     ParticipantDashboardAnnouncementDto
 } from '../../../presentation/dto/participant-dashboard.dto';
-import { ApplicationStatus } from '@core/entities/participant-application.entity';
 import { buildRichTextPreview } from '@shared/utils/rich-text';
 
 @Injectable()
 @QueryHandler(GetParticipantDashboardQuery)
 export class GetParticipantDashboardHandler implements IQueryHandler<GetParticipantDashboardQuery> {
     constructor(
-        private readonly prisma: PrismaService,
+        private readonly readPrisma: PrismaReadService,
     ) {}
 
     async execute(query: GetParticipantDashboardQuery): Promise<ParticipantDashboardResponseDto> {
@@ -25,7 +24,7 @@ export class GetParticipantDashboardHandler implements IQueryHandler<GetParticip
         // 1. Fetch Participant Profile
         // If participantId is provided, look it up by ID and verify ownership
         if (participantId) {
-            participant = await this.prisma.participant.findUnique({
+            participant = await this.readPrisma.participant.findUnique({
                 where: { id: participantId },
                 include: {
                     user: true
@@ -41,7 +40,7 @@ export class GetParticipantDashboardHandler implements IQueryHandler<GetParticip
             }
         } else {
             // No participantId provided, try to find the one associated with the user
-            participant = await this.prisma.participant.findUnique({
+            participant = await this.readPrisma.participant.findUnique({
                 where: { userId },
                 include: {
                     user: true
@@ -50,13 +49,13 @@ export class GetParticipantDashboardHandler implements IQueryHandler<GetParticip
 
             if (!participant) {
                // If no participant profile yet, return basic dashboard asking for onboarding
-               return this.buildOnboardingDashboard(userId);
+               return this.buildOnboardingDashboard();
             }
         }
 
         // 2. Fetch Active Application (Latest)
         // Including Program for name and timeline
-        const latestApplication = await this.prisma.participantApplication.findFirst({
+        const latestApplication = await this.readPrisma.participantApplication.findFirst({
             where: { participantId: participant.id },
             orderBy: { updatedAt: 'desc' },
             include: {
@@ -158,7 +157,7 @@ export class GetParticipantDashboardHandler implements IQueryHandler<GetParticip
         };
     }
 
-    private buildOnboardingDashboard(userId: string): ParticipantDashboardResponseDto {
+    private buildOnboardingDashboard(): ParticipantDashboardResponseDto {
          return {
             greeting: 'Welcome!',
             activeApplication: null,
@@ -180,7 +179,7 @@ export class GetParticipantDashboardHandler implements IQueryHandler<GetParticip
     }
 
     private async getStats(participantId: string) {
-        const appCount = await this.prisma.participantApplication.count({
+        const appCount = await this.readPrisma.participantApplication.count({
             where: { participantId }
         });
         
@@ -188,7 +187,7 @@ export class GetParticipantDashboardHandler implements IQueryHandler<GetParticip
         // Adjust based on your Status Enum
         const completedCount = 0; 
         
-        const certCount = await this.prisma.participantDocument.count({
+        const certCount = await this.readPrisma.participantDocument.count({
             where: { 
                 application: { participantId },
                 type: 'certificate'
