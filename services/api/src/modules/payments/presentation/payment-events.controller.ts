@@ -547,7 +547,7 @@ export class PaymentEventsController {
             ];
 
             if (invoiceId) {
-                patterns.push(CACHE_KEYS.PORTAL_PAYMENT_DETAIL(invoiceId));
+                patterns.push(CACHE_KEYS.PORTAL_PAYMENT_DETAIL(userId, invoiceId));
             }
 
             // Use Pub/Sub if available (multi-instance), otherwise fall back to local invalidation.

@@ -130,7 +130,7 @@ export class CacheService {
   async invalidateInvoiceCache(invoiceId: string | undefined, userId: string): Promise<void> {
     try {
       const keys: string[] = [CACHE_KEYS.PORTAL_DASHBOARD(userId)];
-      if (invoiceId) keys.push(CACHE_KEYS.PORTAL_PAYMENT_DETAIL(invoiceId));
+      if (invoiceId) keys.push(CACHE_KEYS.PORTAL_PAYMENT_DETAIL(userId, invoiceId));
       await Promise.all([
         this.invalidateKeys(keys),
         this.invalidateByPattern(`portal:payments:${userId}:*`),

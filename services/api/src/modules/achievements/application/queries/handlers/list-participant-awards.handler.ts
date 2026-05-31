@@ -1,9 +1,10 @@
 import { QueryHandler, IQueryHandler } from '@nestjs/cqrs';
-import { Inject, NotFoundException } from '@nestjs/common';
+import { Inject, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { ListParticipantAwardsQuery } from '../list-participant-awards.query';
 import { IAchievementsRepository } from '@core/interfaces/repositories/achievements.repository.interface';
 import { IParticipantRepository } from '@core/interfaces/repositories/participant.repository.interface';
 import { ParticipantAwardResponseDto } from '@modules/achievements/presentation/dto/achievements.dto';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 
 @QueryHandler(ListParticipantAwardsQuery)
 export class ListParticipantAwardsHandler implements IQueryHandler<ListParticipantAwardsQuery> {
@@ -12,6 +13,7 @@ export class ListParticipantAwardsHandler implements IQueryHandler<ListParticipa
         private readonly repository: IAchievementsRepository,
         @Inject('IParticipantRepository')
         private readonly participantRepository: IParticipantRepository,
+        private readonly prisma: PrismaService,
     ) { }
 
     async execute(query: ListParticipantAwardsQuery): Promise<ParticipantAwardResponseDto[]> {
@@ -20,6 +22,15 @@ export class ListParticipantAwardsHandler implements IQueryHandler<ListParticipa
         const participant = await this.participantRepository.findByUserId(userId);
         if (!participant) {
             throw new NotFoundException('Participant profile not found');
+        }
+
+        // Ownership check: verify this application belongs to the calling participant.
+        const application = await this.prisma.participantApplication.findUnique({
+            where: { id: applicationId },
+            select: { participant: { select: { userId: true } } },
+        });
+        if (!application || application.participant.userId !== userId) {
+            throw new ForbiddenException('Access denied');
         }
 
         const awards = await this.repository.findAwardsByApplicationId(applicationId);
