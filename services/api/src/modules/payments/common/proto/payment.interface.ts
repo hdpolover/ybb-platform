@@ -59,6 +59,7 @@ export interface ProcessPaymentRequest {
   payment_method_id: string;
   gateway_token?: string;
   payment_details?: { details_json?: string };
+  user_id?: string; // Caller's user ID for ownership verification in the Go service
 }
 
 export interface ProcessPaymentAction {
