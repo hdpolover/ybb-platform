@@ -165,7 +165,7 @@ export class EnsurePortalPaymentInvoiceHandler {
         await Promise.all([
             this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_PAYMENTS(userId, programId)),
             this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_PAYMENTS(userId)),
-            this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_PAYMENT_DETAIL(invoiceId)),
+            this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_PAYMENT_DETAIL(userId, invoiceId)),
         ]);
     }
 }

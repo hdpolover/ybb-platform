@@ -10,6 +10,11 @@ export class CreateIntentHandler implements ICommandHandler<CreateIntentCommand>
     async execute(command: CreateIntentCommand): Promise<CreateIntentResponse> {
         const { userId, dto } = command;
 
+        // SECURITY: user_id is always sourced from the authenticated JWT (never from the
+        // caller's DTO). participant_id is caller-supplied and optional; the Go payment
+        // service MUST verify that dto.participant_id (if present) belongs to user_id
+        // before creating the intent, to prevent a caller from creating an intent on
+        // behalf of another participant.
         return this.paymentClient.createIntent({
             user_id: userId,
             amount: dto.amount,
