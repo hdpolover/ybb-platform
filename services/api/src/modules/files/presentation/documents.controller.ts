@@ -8,6 +8,7 @@ import {
   UseGuards,
   HttpStatus,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { Response } from 'express';
@@ -20,7 +21,7 @@ import { FileServiceClient } from '../infrastructure/clients/file-service.client
 import { FileGrpcClient } from '../infrastructure/clients/file-grpc-client.service';
 
 function safeFilename(name: string): string {
-  return name.replace(/[^a-zA-Z0-9_.\-]/g, '_');
+  return name.replace(/[^a-zA-Z0-9_.-]/g, '_');
 }
 
 function errMsg(error: unknown): string {
@@ -256,8 +257,22 @@ export class DocumentsController {
         Object.entries(dto.program_data.metadata).forEach(([k, v]) => { combinedMetadata[`program_${k}`] = String(v); });
       }
       if (dto.template_path) {
-        // TODO(security): validate template_path against an allowlist before forwarding to the file service
-        combinedMetadata['template_path'] = dto.template_path;
+        // The file service uses template_path to locate a template file, so guard
+        // against path traversal / injection: reject absolute paths, `..`, schemes,
+        // backslashes, null bytes, and anything outside a safe relative-path charset.
+        const tp = dto.template_path.trim();
+        const SAFE_TEMPLATE_PATH = /^[A-Za-z0-9](?:[A-Za-z0-9._/-]*[A-Za-z0-9])?$/;
+        if (
+          tp.includes('..') ||
+          tp.startsWith('/') ||
+          tp.includes('\\') ||
+          tp.includes('\0') ||
+          tp.includes('://') ||
+          !SAFE_TEMPLATE_PATH.test(tp)
+        ) {
+          throw new BadRequestException('Invalid template_path');
+        }
+        combinedMetadata['template_path'] = tp;
       }
 
       const response = await this.fileGrpcClient.generateCertificate({
