@@ -4,6 +4,13 @@ import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { MetricsService } from '../monitoring/metrics.service';
 
+type PrismaServiceOptions = {
+  connectionString?: string;
+  poolEnvPrefix?: string;
+  enablePoolMetrics?: boolean;
+  clientRole?: 'primary' | 'replica' | 'primary_fallback';
+};
+
 /**
  * Prisma Service
  * 
@@ -24,14 +31,26 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     connectionTimeoutMillis: number;
   };
   private readonly slowQueryThresholdMs: number;
+  private readonly enablePoolMetrics: boolean;
+  private readonly clientRole: 'primary' | 'replica' | 'primary_fallback';
   private poolMetricsInterval?: NodeJS.Timeout;
 
-  constructor(private readonly metricsService: MetricsService) {
-    const connectionString = process.env.DATABASE_URL;
-    const poolMax = parseNumberEnv('DATABASE_POOL_MAX', 20);
-    const poolMin = parseNumberEnv('DATABASE_POOL_MIN', 2);
-    const poolIdleTimeoutMs = parseNumberEnv('DATABASE_POOL_IDLE_TIMEOUT_MS', 30_000);
-    const poolConnectionTimeoutMs = parseNumberEnv('DATABASE_POOL_CONNECTION_TIMEOUT_MS', 10_000);
+  constructor(
+    private readonly metricsService: MetricsService,
+    options: PrismaServiceOptions = {},
+  ) {
+    const poolEnvPrefix = options.poolEnvPrefix?.trim() || 'DATABASE';
+    const connectionString = options.connectionString || process.env.DATABASE_URL;
+    const poolMax = parseNumberEnv(`${poolEnvPrefix}_POOL_MAX`, parseNumberEnv('DATABASE_POOL_MAX', 20));
+    const poolMin = parseNumberEnv(`${poolEnvPrefix}_POOL_MIN`, parseNumberEnv('DATABASE_POOL_MIN', 2));
+    const poolIdleTimeoutMs = parseNumberEnv(
+      `${poolEnvPrefix}_POOL_IDLE_TIMEOUT_MS`,
+      parseNumberEnv('DATABASE_POOL_IDLE_TIMEOUT_MS', 30_000),
+    );
+    const poolConnectionTimeoutMs = parseNumberEnv(
+      `${poolEnvPrefix}_POOL_CONNECTION_TIMEOUT_MS`,
+      parseNumberEnv('DATABASE_POOL_CONNECTION_TIMEOUT_MS', 10_000),
+    );
 
     const poolConfig = {
       max: poolMax,
@@ -59,6 +78,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     this.pool = pool;
     this.poolConfig = poolConfig;
     this.slowQueryThresholdMs = parseNumberEnv('PRISMA_SLOW_QUERY_MS', 250);
+    this.enablePoolMetrics = options.enablePoolMetrics ?? true;
+    this.clientRole = options.clientRole ?? 'primary';
   }
 
 
@@ -69,15 +90,17 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     await this.$connect();
 
     this.logger.log(
-      `Prisma pool configured (max=${this.poolConfig.max}, min=${this.poolConfig.min}, idleTimeoutMs=${this.poolConfig.idleTimeoutMillis}, connectionTimeoutMs=${this.poolConfig.connectionTimeoutMillis}, slowQueryMs=${this.slowQueryThresholdMs})`,
+      `Prisma pool configured (role=${this.clientRole}, max=${this.poolConfig.max}, min=${this.poolConfig.min}, idleTimeoutMs=${this.poolConfig.idleTimeoutMillis}, connectionTimeoutMs=${this.poolConfig.connectionTimeoutMillis}, slowQueryMs=${this.slowQueryThresholdMs})`,
     );
 
-    // Monitoring: update pool gauges every 5s
-    this.poolMetricsInterval = setInterval(() => {
+    if (this.enablePoolMetrics) {
+      // Monitoring: update pool gauges every 5s
+      this.poolMetricsInterval = setInterval(() => {
+        this.metricsService.updatePrismaPoolStats(this.pool.totalCount, this.pool.idleCount, this.pool.waitingCount);
+      }, 5000);
+      this.poolMetricsInterval.unref();
       this.metricsService.updatePrismaPoolStats(this.pool.totalCount, this.pool.idleCount, this.pool.waitingCount);
-    }, 5000);
-    this.poolMetricsInterval.unref();
-    this.metricsService.updatePrismaPoolStats(this.pool.totalCount, this.pool.idleCount, this.pool.waitingCount);
+    }
 
     const metricsService = this.metricsService;
     const logger = this.logger;

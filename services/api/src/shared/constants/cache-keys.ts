@@ -49,6 +49,8 @@ export const CACHE_KEYS = {
 
   // Admin cache keys
   STATS_DASHBOARD: (brandId: string, params: string) => `stats:dashboard:${brandId}:${params}`,
+  STATS_ADMIN_ANALYTICS: (brandId?: string) => `stats:admin:analytics:${brandId || 'all'}`,
+  STATS_ADMIN_PROGRAM_DASHBOARD: (programId: string) => `stats:admin:program:${programId}:dashboard`,
   PARTICIPANT_LIST: (programId: string) => `participants:program:${programId}`,
   PAYMENT_METHODS: (params: string) => `payment:methods:${params}`,
 

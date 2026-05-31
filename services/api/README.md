@@ -62,6 +62,8 @@ JWT_SECRET="your-secret-key"
 
 # Optional: Advanced Features for Production
 READ_REPLICA_URL="postgresql://user:password@replica:5432/ybb_platform"
+DATABASE_READ_POOL_MAX=20
+DATABASE_READ_POOL_MIN=2
 CIRCUIT_BREAKER_FAILURE_THRESHOLD=5
 CIRCUIT_BREAKER_SUCCESS_THRESHOLD=3
 CIRCUIT_BREAKER_TIMEOUT=60000
@@ -69,6 +71,7 @@ CIRCUIT_BREAKER_TIMEOUT=60000
 
 **Advanced Features:**
 - `READ_REPLICA_URL` - Optional read replica database for improved read performance
+- `DATABASE_READ_POOL_*` - Optional dedicated connection pool sizing for read replica clients
 - `CIRCUIT_BREAKER_*` - Circuit breaker configuration for database reliability (defaults shown above)
 
 See [ADVANCED_FEATURES_SETUP.md](./docs/ADVANCED_FEATURES_SETUP.md) for detailed configuration.
