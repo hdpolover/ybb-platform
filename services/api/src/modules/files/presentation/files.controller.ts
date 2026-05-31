@@ -340,7 +340,13 @@ export class FilesController {
       const userId = user.userId;
       const brandId = user.brandId;
       this.logger.log(`Retrieving file: ${fileId} for user ${userId}, brand ${brandId}`);
-      
+
+      // SECURITY: ownership is not verifiable in this API layer because FileResponse
+      // does not include owner fields. The caller's userId and brandId are forwarded
+      // to the file service on every request; the file service MUST enforce that
+      // the requested file's owner matches the caller (userId or brandId) and return
+      // a 403/404 if not. No additional check is possible here without changing the
+      // file service's response contract.
       let result: FileResponse;
       // Try gRPC first
       try {
@@ -412,6 +418,10 @@ export class FilesController {
     this.logger.log(`Marking file ready: ${fileId} (brand ${user.brandId}, user ${user.userId})`);
     const parsed = actualSize ? Number(actualSize) : NaN;
     const size = !isNaN(parsed) ? parsed : undefined;
+    // SECURITY: ownership is not verifiable in this API layer because the file service
+    // does not return owner fields in its response. The caller's userId and brandId are
+    // forwarded to the file service; the file service MUST verify that the file was
+    // originally created by this caller before transitioning to READY.
     return this.fileServiceClient.markFileReady(fileId, user.userId, user.brandId, size);
   }
 
@@ -422,22 +432,24 @@ export class FilesController {
     @Body() dto: {
       filename: string;
       content_type: string;
-      user_id: string;
-      brand_id: string;
+      user_id?: string;
+      brand_id?: string;
       bucket?: string;
       program_id?: string;
       participant_id?: string;
       size?: number;
-    }
+    },
+    @CurrentUser() user: CurrentUserData,
   ) {
     try {
-      this.logger.log(`Generating presigned upload URL for: ${dto.filename}`);
-      
+      this.logger.log(`Generating presigned upload URL for: ${dto.filename} (user ${user.userId}, brand ${user.brandId})`);
+
       const result = await this.fileGrpcClient.getPresignedUploadUrl({
           filename: dto.filename,
           content_type: dto.content_type,
-          user_id: dto.user_id,
-          brand_id: dto.brand_id,
+          // Always use JWT-sourced identity — never trust caller-supplied user_id/brand_id.
+          user_id: user.userId,
+          brand_id: user.brandId,
           bucket: dto.bucket || 'uploads',
           program_id: dto.program_id,
           participant_id: dto.participant_id,
