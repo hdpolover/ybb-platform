@@ -16,6 +16,9 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
+import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
+import { Roles } from '@modules/auth/application/decorators/roles.decorator';
+import { UserRole } from '@core/entities/user.entity';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import {
   GetAmbassadorsListQuery,
@@ -29,7 +32,8 @@ import { createAmbassadorShareToken } from '../application/utils/ambassador-shar
 
 @ApiTags('Ambassadors')
 @Controller('admin/ambassadors')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 @ApiBearerAuth()
 export class AmbassadorAdminController {
   constructor(
