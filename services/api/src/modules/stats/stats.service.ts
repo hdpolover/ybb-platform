@@ -1,6 +1,6 @@
 
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../../shared/infrastructure/prisma/prisma.service';
+import { PrismaReadService } from '../../shared/infrastructure/prisma/prisma-read.service';
 import { GetStatsQueryDto, StatSection } from './dto/get-stats.dto';
 import { ApplicationStatus, Brand } from '@prisma/client';
 import { StatsResponseDto, ParticipantGeographyItemDto } from './dto/stats-response.dto';
@@ -28,7 +28,7 @@ type ProgramDashboardApplication = {
 @Injectable()
 export class StatsService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly readPrisma: PrismaReadService,
     private readonly cacheService: CacheService,
   ) { }
 
@@ -73,17 +73,17 @@ export class StatsService {
 
   private async resolveContext(query: GetStatsQueryDto): Promise<Brand | null> {
     if (query.brandId) {
-      return this.prisma.brand.findUnique({ where: { id: query.brandId } });
+      return this.readPrisma.brand.findUnique({ where: { id: query.brandId } });
     }
 
     if (query.url) {
       // Reusing logic from landing service strategy - find by url
-      let category = await this.prisma.brand.findFirst({
+      let category = await this.readPrisma.brand.findFirst({
         where: { websiteUrl: query.url, isActive: true },
       });
 
       if (!category) {
-        category = await this.prisma.brand.findFirst({
+        category = await this.readPrisma.brand.findFirst({
           where: { websiteUrl: { contains: query.url, mode: 'insensitive' }, isActive: true },
         });
       }
@@ -91,7 +91,7 @@ export class StatsService {
     }
 
     // Default fallbacks if needed, or return null
-    return this.prisma.brand.findFirst({
+    return this.readPrisma.brand.findFirst({
       where: { isActive: true },
       orderBy: { createdAt: 'asc' }
     });
@@ -99,10 +99,10 @@ export class StatsService {
 
   private async getImpactStats(categoryId: string) {
     const [totalParticipants, alumni, totalCountries] = await Promise.all([
-      this.prisma.participant.count({
+      this.readPrisma.participant.count({
         where: { user: { brandId: categoryId, deletedAt: null }, deletedAt: null },
       }),
-      this.prisma.participantApplication.count({
+      this.readPrisma.participantApplication.count({
         where: {
           program: { brandId: categoryId, deletedAt: null },
           status: { in: ['accepted', 'interview_scheduled'] },
@@ -123,7 +123,7 @@ export class StatsService {
     const skip = (page - 1) * limit;
 
     // 1. Get Totals first for percentage calculation
-    const totalParticipants = await this.prisma.participant.count({
+    const totalParticipants = await this.readPrisma.participant.count({
       where: { user: { brandId: categoryId, deletedAt: null }, deletedAt: null },
     });
 
@@ -133,7 +133,7 @@ export class StatsService {
     // Prisma groupBy doesn't support pagination (skip/take) directly efficiently with aggregating *all* to sort by count first.
     // However, it does support take/orderBy.
     // But to get the correct "top countries" page 2, we need strict ordering.
-    const grouped = await this.prisma.participant.groupBy({
+    const grouped = await this.readPrisma.participant.groupBy({
       by: ['originCountry'],
       where: {
         user: { brandId: categoryId, deletedAt: null },
@@ -175,7 +175,7 @@ export class StatsService {
   }
 
   private async getDistinctCountryCount(categoryId: string): Promise<number> {
-    const grouped = await this.prisma.participant.groupBy({
+    const grouped = await this.readPrisma.participant.groupBy({
       by: ['originCountry'],
       where: {
         user: { brandId: categoryId, deletedAt: null },
@@ -191,6 +191,12 @@ export class StatsService {
   }
 
   async getAdminAnalytics(brandId?: string) {
+    const cacheKey = CACHE_KEYS.STATS_ADMIN_ANALYTICS(brandId);
+    const cached = await this.cacheService.get<Record<string, unknown>>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const brandFilter = brandId ? { brandId } : {};
     const userBrandFilter = brandId ? { brandId } : {};
 
@@ -206,24 +212,24 @@ export class StatsService {
       totalParticipants,
       topPrograms,
     ] = await Promise.all([
-      this.prisma.program.count({ where: { ...brandFilter, deletedAt: null } }),
-      this.prisma.program.count({ where: { ...brandFilter, isPublished: true, deletedAt: null } }),
-      this.prisma.program.count({ where: { ...brandFilter, isActive: true, deletedAt: null } }),
-      this.prisma.program.count({ where: { ...brandFilter, isPublished: false, deletedAt: null } }),
-      this.prisma.user.count({ where: { ...userBrandFilter, deletedAt: null } }),
-      this.prisma.user.count({ where: { ...userBrandFilter, isActive: true, deletedAt: null } }),
-      this.prisma.participantApplication.count({
+      this.readPrisma.program.count({ where: { ...brandFilter, deletedAt: null } }),
+      this.readPrisma.program.count({ where: { ...brandFilter, isPublished: true, deletedAt: null } }),
+      this.readPrisma.program.count({ where: { ...brandFilter, isActive: true, deletedAt: null } }),
+      this.readPrisma.program.count({ where: { ...brandFilter, isPublished: false, deletedAt: null } }),
+      this.readPrisma.user.count({ where: { ...userBrandFilter, deletedAt: null } }),
+      this.readPrisma.user.count({ where: { ...userBrandFilter, isActive: true, deletedAt: null } }),
+      this.readPrisma.participantApplication.count({
         where: { program: { ...brandFilter, deletedAt: null } },
       }),
-      this.prisma.participantApplication.groupBy({
+      this.readPrisma.participantApplication.groupBy({
         by: ['status'],
         where: { program: { ...brandFilter, deletedAt: null } },
         _count: { id: true },
       }),
-      this.prisma.participant.count({
+      this.readPrisma.participant.count({
         where: { user: { ...userBrandFilter, deletedAt: null } },
       }),
-      this.prisma.program.findMany({
+      this.readPrisma.program.findMany({
         where: { ...brandFilter, deletedAt: null },
         select: {
           id: true,
@@ -239,7 +245,7 @@ export class StatsService {
     const startOfMonth = new Date();
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
-    const newUsersThisMonth = await this.prisma.user.count({
+    const newUsersThisMonth = await this.readPrisma.user.count({
       where: { ...userBrandFilter, createdAt: { gte: startOfMonth }, deletedAt: null },
     });
 
@@ -248,7 +254,7 @@ export class StatsService {
       return acc;
     }, {});
 
-    return {
+    const response = {
       programs: {
         total: totalPrograms,
         published: publishedPrograms,
@@ -273,10 +279,19 @@ export class StatsService {
         applicants: p._count.applications,
       })),
     };
+
+    await this.cacheService.set(cacheKey, response, CACHE_TTL.SHORT);
+    return response;
   }
 
   async getAdminProgramDashboard(programId: string): Promise<ProgramDashboardResponseDto> {
-    const program = await this.prisma.program.findUnique({
+    const cacheKey = CACHE_KEYS.STATS_ADMIN_PROGRAM_DASHBOARD(programId);
+    const cached = await this.cacheService.get<ProgramDashboardResponseDto>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const program = await this.readPrisma.program.findUnique({
       where: { id: programId },
       select: {
         id: true,
@@ -292,7 +307,7 @@ export class StatsService {
     }
 
     const [applications, totalAmbassadors, activeAmbassadors, referredParticipants, ambassadorRows] = await Promise.all([
-      this.prisma.participantApplication.findMany({
+      this.readPrisma.participantApplication.findMany({
         where: { programId, deletedAt: null },
         select: {
           createdAt: true,
@@ -310,13 +325,13 @@ export class StatsService {
           },
         },
       }),
-      this.prisma.ambassador.count({
+      this.readPrisma.ambassador.count({
         where: { programId, deletedAt: null },
       }),
-      this.prisma.ambassador.count({
+      this.readPrisma.ambassador.count({
         where: { programId, isActive: true, deletedAt: null },
       }),
-      this.prisma.ambassadorReferral.count({
+      this.readPrisma.ambassadorReferral.count({
         where: {
           deletedAt: null,
           ambassador: {
@@ -325,7 +340,7 @@ export class StatsService {
           },
         },
       }),
-      this.prisma.ambassador.findMany({
+      this.readPrisma.ambassador.findMany({
         where: { programId, deletedAt: null },
         select: {
           fullName: true,
@@ -380,7 +395,7 @@ export class StatsService {
       referrals: item.successfulReferrals > 0 ? item.successfulReferrals : Math.max(item.totalReferrals, item._count.referrals),
     }));
 
-    return {
+    const response: ProgramDashboardResponseDto = {
       kpis: {
         registeredUsers,
         registrationsToday,
@@ -404,6 +419,9 @@ export class StatsService {
       nationalities,
       topAmbassadors,
     };
+
+    await this.cacheService.set(cacheKey, response, CACHE_TTL.SHORT);
+    return response;
   }
 
   private hasStartedApplication(application: ProgramDashboardApplication): boolean {
@@ -615,7 +633,7 @@ export class StatsService {
       currency?: string;
     } = {},
   ): Promise<ProgramAnalyticsResponseDto> {
-    const program = await this.prisma.program.findUnique({ where: { id: programId }, select: { id: true } });
+    const program = await this.readPrisma.program.findUnique({ where: { id: programId }, select: { id: true } });
     if (!program) throw new NotFoundException(`Program ${programId} not found`);
 
     const MS_DAY = 86399999;
@@ -625,7 +643,7 @@ export class StatsService {
     const payDateTo = filters.payDateTo ? new Date(new Date(filters.payDateTo).getTime() + MS_DAY) : undefined;
 
     const [appRows, invoiceRows] = await Promise.all([
-      this.prisma.participantApplication.findMany({
+      this.readPrisma.participantApplication.findMany({
         where: {
           programId,
           deletedAt: null,
@@ -652,7 +670,7 @@ export class StatsService {
           },
         },
       }),
-      this.prisma.applicationInvoice.findMany({
+      this.readPrisma.applicationInvoice.findMany({
         where: {
           application: {
             programId,
