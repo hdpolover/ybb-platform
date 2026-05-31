@@ -40,9 +40,12 @@ export class AnnouncementsStrategy implements ILandingPageStrategy {
 
   private async buildAnnouncementsPayload(category: Brand | null) {
     const now = new Date();
+    // News is brand-level: show announcements from every program in the brand that is
+    // published and visible on the website, including completed/past editions. We gate on
+    // isVisibleToUsers (NOT isActive) so past programs — which stop accepting applications
+    // and therefore have isActive=false — still surface their news.
     const programWhere = {
       ...(category?.id ? { brandId: category.id } : {}),
-      isActive: true,
       isPublished: true,
       isVisibleToUsers: true,
     };
@@ -67,7 +70,7 @@ export class AnnouncementsStrategy implements ILandingPageStrategy {
           program: programWhere,
         },
         orderBy: [{ isPinned: 'desc' }, { publishDate: 'desc' }],
-        take: 10,
+        take: 50,
         include: {
           program: {
             select: {
@@ -117,7 +120,7 @@ export class AnnouncementsStrategy implements ILandingPageStrategy {
         const rightTime = right.date ? new Date(right.date).getTime() : 0;
         return rightTime - leftTime;
       })
-      .slice(0, 10);
+      .slice(0, 50);
 
     const result = {
       slug: 'announcements',
