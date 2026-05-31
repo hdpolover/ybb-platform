@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { IUserRepository } from '@core/interfaces/repositories/user.repository.interface';
-import { User, UserRole } from '@core/entities/user.entity';
+import { User } from '@core/entities/user.entity';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { UserMapper } from '../mappers/user.mapper';
 import { Prisma } from '@prisma/client';
 
@@ -20,10 +21,17 @@ import { Prisma } from '@prisma/client';
  */
 @Injectable()
 export class UserRepository implements IUserRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly readClient: PrismaService | PrismaReadService;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    readPrisma?: PrismaReadService,
+  ) {
+    this.readClient = readPrisma ?? prisma;
+  }
 
   async findById(id: string, brandId: string): Promise<User | null> {
-    const user = await this.prisma.user.findFirst({
+    const user = await this.readClient.user.findFirst({
       where: { 
         id,
         brandId: brandId,
@@ -35,7 +43,7 @@ export class UserRepository implements IUserRepository {
   }
 
   async findByEmail(email: string, brandId: string): Promise<User | null> {
-    const user = await this.prisma.user.findFirst({
+    const user = await this.readClient.user.findFirst({
       where: { 
         email,
         brandId: brandId,
@@ -60,7 +68,7 @@ export class UserRepository implements IUserRepository {
       where.ambassador = { isNot: null };
     }
 
-    const users = await this.prisma.user.findMany({
+    const users = await this.readClient.user.findMany({
       where,
       skip,
       take,
@@ -123,7 +131,7 @@ export class UserRepository implements IUserRepository {
   }
 
   async count(brandId: string): Promise<number> {
-    return this.prisma.user.count({
+    return this.readClient.user.count({
       where: {
         brandId: brandId,
         deletedAt: null,

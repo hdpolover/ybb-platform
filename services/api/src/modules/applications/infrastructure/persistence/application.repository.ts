@@ -5,6 +5,7 @@ import {
   ApplicationStatus,
 } from '@core/entities/participant-application.entity';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { ApplicationMapper } from '../mappers/application.mapper';
 import {
   ApplicationCategory as PrismaApplicationCategory,
@@ -20,10 +21,15 @@ import {
  */
 @Injectable()
 export class ApplicationRepository implements IApplicationRepository {
+  private readonly readClient: PrismaService | PrismaReadService;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly mapper: ApplicationMapper,
-  ) {}
+    readPrisma?: PrismaReadService,
+  ) {
+    this.readClient = readPrisma ?? prisma;
+  }
 
   private buildCreatedAtFilter(startDate?: string, endDate?: string): Prisma.DateTimeFilter | undefined {
     if (!startDate && !endDate) {
@@ -83,7 +89,7 @@ export class ApplicationRepository implements IApplicationRepository {
   }
 
   async findById(id: string): Promise<ParticipantApplication | null> {
-    const application = await this.prisma.participantApplication.findUnique({
+    const application = await this.readClient.participantApplication.findUnique({
       where: { id },
     });
 
@@ -107,7 +113,7 @@ export class ApplicationRepository implements IApplicationRepository {
   }
 
   async findByParticipant(participantId: string): Promise<ParticipantApplication[]> {
-    const applications = await this.prisma.participantApplication.findMany({
+    const applications = await this.readClient.participantApplication.findMany({
       where: { participantId },
       orderBy: { createdAt: 'desc' },
     });
@@ -191,13 +197,13 @@ export class ApplicationRepository implements IApplicationRepository {
     }
 
     const [applications, total] = await Promise.all([
-      this.prisma.participantApplication.findMany({
+      this.readClient.participantApplication.findMany({
         where,
         take: filters?.limit,
         skip: filters?.offset,
         orderBy: this.buildOrderBy(filters),
       }),
-      this.prisma.participantApplication.count({ where }),
+      this.readClient.participantApplication.count({ where }),
     ]);
 
     return {
@@ -293,13 +299,13 @@ export class ApplicationRepository implements IApplicationRepository {
     }
 
     const [applications, total] = await Promise.all([
-      this.prisma.participantApplication.findMany({
+      this.readClient.participantApplication.findMany({
         where,
         take: filters?.limit,
         skip: filters?.offset,
         orderBy: this.buildOrderBy(filters),
       }),
-      this.prisma.participantApplication.count({ where }),
+      this.readClient.participantApplication.count({ where }),
     ]);
 
     return {
@@ -340,7 +346,7 @@ export class ApplicationRepository implements IApplicationRepository {
   }
 
   async countByStatus(programId: string): Promise<Record<ApplicationStatus, number>> {
-    const counts = await this.prisma.participantApplication.groupBy({
+    const counts = await this.readClient.participantApplication.groupBy({
       by: ['status'],
       where: { programId },
       _count: true,

@@ -20,7 +20,7 @@ import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { UserRole } from '@core/entities/user.entity';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
-import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { CacheInvalidate } from '@shared/decorators/cache-invalidate.decorator';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { ChangeType, PaymentStatus } from '@prisma/client';
@@ -115,7 +115,7 @@ export class ApplicationsController {
     private readonly listApplicationsHandler: ListApplicationsHandler,
     private readonly exportApplicationsHandler: ExportApplicationsHandler,
     private readonly cacheService: CacheService,
-    private readonly prisma: PrismaService,
+    private readonly readPrisma: PrismaReadService,
   ) { }
 
   private validateDateRange(startDate?: string, endDate?: string): void {
@@ -339,7 +339,7 @@ export class ApplicationsController {
     // Enrich applications with participant data and payment statuses via single batch lookup
     if (result.applications.length > 0) {
       const appIds = result.applications.map(a => a.id);
-      const enriched = await this.prisma.participantApplication.findMany({
+      const enriched = await this.readPrisma.participantApplication.findMany({
         where: { id: { in: appIds } },
         select: {
           id: true,

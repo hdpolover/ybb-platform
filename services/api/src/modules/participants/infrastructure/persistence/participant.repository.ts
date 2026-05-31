@@ -1,15 +1,23 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service';
+import { PrismaReadService } from '../../../../shared/infrastructure/prisma/prisma-read.service';
 import { IParticipantRepository } from '../../../../core/interfaces/repositories/participant.repository.interface';
 import { Participant } from '../../../../core/entities/participant.entity';
 import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class ParticipantRepository implements IParticipantRepository {
-    constructor(private readonly prisma: PrismaService) { }
+    private readonly readClient: PrismaService | PrismaReadService;
+
+    constructor(
+        private readonly prisma: PrismaService,
+        readPrisma?: PrismaReadService,
+    ) {
+        this.readClient = readPrisma ?? prisma;
+    }
 
     async findByUserId(userId: string): Promise<Participant | null> {
-        const participant = await this.prisma.participant.findUnique({
+        const participant = await this.readClient.participant.findUnique({
             where: { userId },
         });
 
