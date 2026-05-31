@@ -5,6 +5,9 @@ import {
 import { Request as ExpressRequest } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/infrastructure/guards/jwt-auth.guard';
+import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
+import { Roles } from '@modules/auth/application/decorators/roles.decorator';
+import { UserRole } from '@core/entities/user.entity';
 import { Public } from '../../../shared/decorators/public.decorator';
 import { AuditTrail } from '../../../shared/decorators/audit-trail.decorator';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
@@ -74,7 +77,8 @@ export class ProgramAnnouncementsController {
   }
 
   @Get('announcements/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get a single program announcement' })
   @ApiResponse({ status: 200, type: ProgramAnnouncementResponseDto })
@@ -83,7 +87,8 @@ export class ProgramAnnouncementsController {
   }
 
   @Post(':id/announcements')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create program announcement' })
   @ApiResponse({ status: 201, type: ProgramAnnouncementResponseDto })
@@ -100,7 +105,8 @@ export class ProgramAnnouncementsController {
   }
 
   @Put('announcements/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update program announcement' })
   @ApiResponse({ status: 200, type: ProgramAnnouncementResponseDto })
@@ -117,7 +123,8 @@ export class ProgramAnnouncementsController {
   }
 
   @Delete('announcements/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete program announcement' })
   @AuditTrail({ entityType: 'ProgramAnnouncement', action: ChangeType.delete })

@@ -2,6 +2,9 @@ import { Controller, Get, Param, Put, Post, Delete, Body, UseGuards, Request } f
 import { Request as ExpressRequest } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
+import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
+import { Roles } from '@modules/auth/application/decorators/roles.decorator';
+import { UserRole } from '@core/entities/user.entity';
 import { Public } from '../../../shared/decorators/public.decorator';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
 import { PROGRAM_CONTENT_PATTERNS as MUTABLE_CONTENT_CACHE_PATTERNS } from '@shared/constants/cache-patterns';
@@ -64,7 +67,8 @@ export class ProgramScheduleController {
   }
 
   @Post(':id/timeline')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add timeline item' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -73,7 +77,8 @@ export class ProgramScheduleController {
   }
 
   @Put('timeline/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update timeline item' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -82,7 +87,8 @@ export class ProgramScheduleController {
   }
 
   @Delete('timeline/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete timeline item' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -100,7 +106,8 @@ export class ProgramScheduleController {
   }
 
   @Post(':id/schedules')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add schedule item' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -109,7 +116,8 @@ export class ProgramScheduleController {
   }
 
   @Put('schedules/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update schedule item' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -118,7 +126,8 @@ export class ProgramScheduleController {
   }
 
   @Delete('schedules/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete schedule item' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)

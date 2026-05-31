@@ -2,6 +2,9 @@ import { Controller, Get, Param, Put, Post, Delete, Body, UseGuards, Request, Qu
 import { Request as ExpressRequest } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
+import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
+import { Roles } from '@modules/auth/application/decorators/roles.decorator';
+import { UserRole } from '@core/entities/user.entity';
 import { Public } from '../../../shared/decorators/public.decorator';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
 import { IProgramRepository } from '@core/interfaces/repositories/program.repository.interface';
@@ -133,7 +136,8 @@ export class ProgramApplicationConfigController {
   }
 
   @Post(':id/pricing-tiers')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add pricing tier' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -142,7 +146,8 @@ export class ProgramApplicationConfigController {
   }
 
   @Put('pricing-tiers/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update pricing tier' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -151,7 +156,8 @@ export class ProgramApplicationConfigController {
   }
 
   @Delete('pricing-tiers/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete pricing tier' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -161,7 +167,8 @@ export class ProgramApplicationConfigController {
 
   // --- Validity Period Endpoints ---
   @Post('pricing-tiers/:tierId/periods')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add validity period to a pricing tier' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -170,7 +177,8 @@ export class ProgramApplicationConfigController {
   }
 
   @Put('validity-periods/:periodId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a validity period' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -179,7 +187,8 @@ export class ProgramApplicationConfigController {
   }
 
   @Delete('validity-periods/:periodId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a validity period' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -197,7 +206,8 @@ export class ProgramApplicationConfigController {
   }
 
   @Post(':id/requirements')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add requirement' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -206,7 +216,8 @@ export class ProgramApplicationConfigController {
   }
 
   @Put('requirements/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update requirement' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -215,7 +226,8 @@ export class ProgramApplicationConfigController {
   }
 
   @Delete('requirements/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete requirement' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -255,7 +267,8 @@ export class ProgramApplicationConfigController {
   }
 
   @Post(':id/essays')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add essay' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -264,7 +277,8 @@ export class ProgramApplicationConfigController {
   }
 
   @Put('essays/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update essay' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -273,7 +287,8 @@ export class ProgramApplicationConfigController {
   }
 
   @Delete('essays/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete essay' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -282,7 +297,8 @@ export class ProgramApplicationConfigController {
   }
 
   @Put(':id/essay-guidelines')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update shared essay guidelines for a program' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -311,7 +327,8 @@ export class ProgramApplicationConfigController {
   }
 
   @Post(':id/participation-categories')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add participation category' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -320,7 +337,8 @@ export class ProgramApplicationConfigController {
   }
 
   @Put('participation-categories/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update participation category' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -329,7 +347,8 @@ export class ProgramApplicationConfigController {
   }
 
   @Delete('participation-categories/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete participation category' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -352,7 +371,8 @@ export class ProgramApplicationConfigController {
   }
 
   @Post(':id/subthemes')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add subtheme' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -361,7 +381,8 @@ export class ProgramApplicationConfigController {
   }
 
   @Put('subthemes/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update subtheme' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -370,7 +391,8 @@ export class ProgramApplicationConfigController {
   }
 
   @Delete('subthemes/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete subtheme (soft)' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -388,7 +410,8 @@ export class ProgramApplicationConfigController {
   }
 
   @Post(':id/form-fields')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add application form field' })
   @ApiResponse({ status: 201, type: ApplicationFormFieldResponseDto })
@@ -398,7 +421,8 @@ export class ProgramApplicationConfigController {
   }
 
   @Put('form-fields/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update application form field' })
   @ApiResponse({ status: 200, type: ApplicationFormFieldResponseDto })
@@ -408,7 +432,8 @@ export class ProgramApplicationConfigController {
   }
 
   @Delete('form-fields/:itemId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete application form field' })
   @ApiResponse({ status: 200, description: 'Application form field deleted successfully' })

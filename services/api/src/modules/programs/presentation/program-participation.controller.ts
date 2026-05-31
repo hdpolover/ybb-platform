@@ -2,6 +2,9 @@ import { Controller, Get, Post, Delete, Body, Param, UseGuards, Query, NotFoundE
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
+import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
+import { Roles } from '@modules/auth/application/decorators/roles.decorator';
+import { UserRole } from '@core/entities/user.entity';
 import { ApplicationCategory } from '@prisma/client';
 import { CreateParticipationInfoDto, ParticipationInfoResponseDto } from './dto/participation-info.dto';
 import { UpsertParticipationInfoCommand, DeleteParticipationInfoCommand } from '../application/commands/participation-info.commands';
@@ -19,7 +22,8 @@ export class ProgramParticipationController {
   ) {}
 
   @Post()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Upsert participation info for a category' })
   @ApiResponse({ status: 201, type: ParticipationInfoResponseDto })
@@ -54,7 +58,8 @@ export class ProgramParticipationController {
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete participation info' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)

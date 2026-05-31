@@ -1,20 +1,16 @@
 import {
   Controller,
-  ForbiddenException,
   Get,
   NotFoundException,
   Param,
-  Request,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { Request as ExpressRequest } from 'express';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
+import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
+import { Roles } from '@modules/auth/application/decorators/roles.decorator';
+import { UserRole } from '@core/entities/user.entity';
 import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
-
-interface AdminRequest extends ExpressRequest {
-  user: { id: string; adminId?: string };
-}
 
 /**
  * Admin-only program lookup.
@@ -24,7 +20,8 @@ interface AdminRequest extends ExpressRequest {
  */
 @ApiTags('admin/programs')
 @Controller('admin/programs')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 @ApiBearerAuth()
 export class AdminProgramsController {
   constructor(private readonly prisma: PrismaService) {}
@@ -36,12 +33,7 @@ export class AdminProgramsController {
   @ApiResponse({ status: 404, description: 'Program not found' })
   async findOneForAdmin(
     @Param('id') id: string,
-    @Request() req: AdminRequest,
   ) {
-    if (!req.user.adminId) {
-      throw new ForbiddenException('Admin access required');
-    }
-
     // Passing `deletedAt: undefined` explicitly causes the soft-delete
     // middleware to be bypassed: the middleware does
     //   `args.where = { deletedAt: null, ...args.where }`
