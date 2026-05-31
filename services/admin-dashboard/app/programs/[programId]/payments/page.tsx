@@ -56,6 +56,7 @@ const STATUS_CLASS: Record<InvoiceStatus, string> = {
 
 const FOLLOW_UP_CLASS: Record<string, string> = {
   participant_cancelled: "bg-zinc-100 text-zinc-700 border-zinc-300",
+  payment_cancelled_issue: "bg-rose-50 text-rose-700 border-rose-200",
   payment_failed: "bg-red-50 text-red-700 border-red-200",
   manual_proof_rejected: "bg-orange-50 text-orange-700 border-orange-200",
 };

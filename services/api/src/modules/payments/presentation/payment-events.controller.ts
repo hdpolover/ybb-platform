@@ -41,8 +41,80 @@ export class PaymentEventsController {
     }
 
     @EventPattern('payment.cancelled')
-    handlePaymentCancelled(@Ctx() context: RmqContext) {
-        this.ackIgnoredPaymentEvent(context);
+    async handlePaymentCancelled(
+        @Payload() data: RmqEventPayload,
+        @Ctx() context: RmqContext,
+    ) {
+        const start = Date.now();
+        let status: 'success' | 'failed' = 'success';
+        if (await this.moveToDlqWhenRetryExhausted('payment.cancelled', context)) {
+            return;
+        }
+
+        try {
+            const metadata = (data.metadata as Record<string, unknown>) || {};
+            const applicationId = (metadata.application_id as string) || (data.application_id as string);
+            const invoiceId = (metadata.invoice_id as string) || (data.invoice_id as string);
+            const intentId = (data.intent_id as string) || (metadata.intent_id as string);
+            const transactionId =
+                (data.transaction_id as string)
+                || (data.payment_id as string)
+                || (metadata.transaction_id as string);
+            const cancellationReason =
+                (metadata.cancellation_reason as string)
+                || (metadata.reason as string)
+                || (data.reason as string)
+                || (data.message as string)
+                || 'Payment cancelled';
+            const method = (data.payment_method as string) || (data.method as string) || undefined;
+
+            const cancelledInvoice = await this.markInvoiceCancelled({
+                applicationId,
+                invoiceId,
+                intentId,
+                transactionId,
+                cancellationReason,
+                paymentMethod: method,
+            });
+
+            if (cancelledInvoice?.userId) {
+                await this.invalidateUserPortalCache(
+                    cancelledInvoice.userId,
+                    'payment cancelled',
+                    cancelledInvoice.invoiceId,
+                );
+            } else if (applicationId) {
+                const application = await this.prisma.participantApplication.findUnique({
+                    where: { id: applicationId },
+                    include: {
+                        participant: {
+                            select: { userId: true },
+                        },
+                    },
+                });
+
+                if (application?.participant?.userId) {
+                    await this.invalidateUserPortalCache(application.participant.userId, 'payment cancelled');
+                }
+            }
+        } catch (error) {
+            const err = error instanceof Error ? error : new Error(String(error));
+            this.logger.error(`Failed to handle payment.cancelled: ${err.message}`, err.stack);
+            status = 'failed';
+            rejectRmqMessageForRetry(context, this.logger, 'payment.cancelled');
+            return;
+        } finally {
+            const duration = (Date.now() - start) / 1000;
+            this.metricsService.jobProcessingDuration.observe(
+                {
+                    queue_name: 'payment.cancelled',
+                    status,
+                },
+                duration,
+            );
+        }
+
+        acknowledgeRmqMessage(context, this.logger, 'payment.cancelled', 'processed');
     }
 
     @EventPattern('payment.refunded')
@@ -405,6 +477,57 @@ export class PaymentEventsController {
                         ?? input.transactionId
                         ?? null,
                     rejectionReason,
+                },
+            }),
+            this.prisma.participantApplication.update({
+                where: { id: invoice.applicationId },
+                data: paymentStatusPatch,
+            }),
+        ]);
+
+        return { userId, invoiceId: invoice.id };
+    }
+
+    private async markInvoiceCancelled(input: {
+        applicationId?: string;
+        invoiceId?: string;
+        intentId?: string;
+        transactionId?: string;
+        cancellationReason?: string;
+        paymentMethod?: string;
+    }): Promise<{ userId: string; invoiceId: string } | null> {
+        const invoice = await this.resolveFailureInvoice(input);
+        if (!invoice) {
+            return null;
+        }
+
+        const userId = invoice.application.participant.userId;
+        if (invoice.status === PaymentStatus.paid || invoice.status === PaymentStatus.cancelled) {
+            return { userId, invoiceId: invoice.id };
+        }
+
+        const cancellationReason =
+            invoice.rejectionReason
+            ?? input.cancellationReason
+            ?? 'Payment cancelled';
+        const paymentStatusPatch =
+            invoice.pricingTier?.feeType === 'registration_fee'
+                ? { registrationPaymentStatus: PaymentStatus.cancelled }
+                : { programPaymentStatus: PaymentStatus.cancelled };
+
+        await this.prisma.$transaction([
+            this.prisma.applicationInvoice.update({
+                where: { id: invoice.id },
+                data: {
+                    status: PaymentStatus.cancelled,
+                    paidAt: null,
+                    paymentMethod: invoice.paymentMethod ?? input.paymentMethod ?? null,
+                    externalIntentId: invoice.externalIntentId ?? input.intentId ?? null,
+                    externalTransactionId:
+                        invoice.externalTransactionId
+                        ?? input.transactionId
+                        ?? null,
+                    rejectionReason: cancellationReason,
                 },
             }),
             this.prisma.participantApplication.update({

@@ -2699,7 +2699,12 @@ export type InvoiceListItem = {
   verifiedBy: string | null;
   verifiedAt: string | null;
   rejectionReason: string | null;
-  followUpStatus: "participant_cancelled" | "payment_failed" | "manual_proof_rejected" | null;
+  followUpStatus:
+    | "participant_cancelled"
+    | "payment_cancelled_issue"
+    | "payment_failed"
+    | "manual_proof_rejected"
+    | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -2740,7 +2745,11 @@ export async function listProgramInvoices(params: {
   tierId?: string;
   feeType?: string;
   applicationStatus?: string;
-  followUpStatus?: "participant_cancelled" | "payment_failed" | "manual_proof_rejected";
+  followUpStatus?:
+    | "participant_cancelled"
+    | "payment_cancelled_issue"
+    | "payment_failed"
+    | "manual_proof_rejected";
   currency?: string;
   dateFrom?: string;
   dateTo?: string;
