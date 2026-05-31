@@ -37,7 +37,9 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
     async execute(query: GetPortalPaymentDetailQuery): Promise<PortalPaymentDetailResponseDto> {
         const { userId, invoiceId } = query;
 
-        const cacheKey = CACHE_KEYS.PORTAL_PAYMENT_DETAIL(invoiceId);
+        // Cache key includes userId to prevent cross-participant IDOR on a cache hit.
+        // Participant B cannot read Participant A's invoice by guessing the invoiceId.
+        const cacheKey = CACHE_KEYS.PORTAL_PAYMENT_DETAIL(userId, invoiceId);
         const cached = await this.cacheService.get<PortalPaymentDetailResponseDto>(cacheKey);
         if (cached) return cached;
 
