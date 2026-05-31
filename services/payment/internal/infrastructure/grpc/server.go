@@ -202,6 +202,14 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 		return nil, status.Errorf(codes.NotFound, "intent not found")
 	}
 
+	// 1a. Ownership check: verify the caller owns this intent.
+	// req.UserId is non-empty when called from NestJS (always set after the proto extension).
+	// The guard is lenient for legacy/internal callers that predate the field.
+	if req.UserId != "" && intent.UserID != req.UserId {
+		s.failIdempotency(ctx, idempotencyRecord, fmt.Errorf("intent ownership mismatch"))
+		return nil, status.Error(codes.PermissionDenied, "payment intent does not belong to the caller")
+	}
+
 	// 2. Fetch Payment Method for Fee Calculation
 	method, err := s.methodRepo.FindByCode(ctx, req.PaymentMethodId)
 	if err != nil {

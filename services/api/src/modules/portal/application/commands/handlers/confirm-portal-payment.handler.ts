@@ -226,6 +226,7 @@ export class ConfirmPortalPaymentHandler {
             intent_id: intentResponse.intent_id,
             payment_method_id: paymentMethodId,
             gateway_token: details?.gatewayToken,
+            user_id: userId,
         });
 
         // Update invoice with intent reference
