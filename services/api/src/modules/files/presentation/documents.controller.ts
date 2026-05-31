@@ -12,6 +12,10 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { Response } from 'express';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
+import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
+import { Roles } from '@modules/auth/application/decorators/roles.decorator';
+import { UserRole } from '@core/entities/user.entity';
+import { Public } from '@shared/decorators/public.decorator';
 import { FileServiceClient } from '../infrastructure/clients/file-service.client';
 import { FileGrpcClient } from '../infrastructure/clients/file-grpc-client.service';
 
@@ -30,8 +34,6 @@ function errMsg(error: unknown): string {
  */
 @ApiTags('Documents')
 @Controller('documents')
-@UseGuards(JwtAuthGuard)
-@ApiBearerAuth()
 export class DocumentsController {
   private readonly logger = new Logger(DocumentsController.name);
 
@@ -41,6 +43,9 @@ export class DocumentsController {
   ) {}
 
   @Post('export/participants')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Export participant report to Excel' })
   @ApiResponse({ status: 200, description: 'Excel file generated successfully' })
   async exportParticipantReport(
@@ -70,6 +75,9 @@ export class DocumentsController {
   }
 
   @Post('export/payments')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Export payment report to Excel' })
   @ApiResponse({ status: 200, description: 'Excel file generated successfully' })
   async exportPaymentReport(
@@ -103,6 +111,9 @@ export class DocumentsController {
   }
 
   @Post('export/custom')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Export custom report to Excel' })
   @ApiResponse({ status: 200, description: 'Excel file generated successfully' })
   async exportCustomReport(
@@ -129,6 +140,9 @@ export class DocumentsController {
   }
 
   @Post('generate/receipt')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Generate payment receipt PDF' })
   @ApiResponse({ status: 200, description: 'PDF generated successfully' })
   async generateReceipt(
@@ -170,6 +184,9 @@ export class DocumentsController {
   }
 
   @Post('generate/offer-letter')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Generate offer letter PDF' })
   @ApiResponse({ status: 200, description: 'PDF generated successfully' })
   async generateOfferLetter(
@@ -205,6 +222,9 @@ export class DocumentsController {
   }
 
   @Post('generate/certificate')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Generate certificate (completion or participation)' })
   @ApiResponse({ status: 200, description: 'Certificate generated successfully' })
   async generateCertificate(
@@ -236,6 +256,7 @@ export class DocumentsController {
         Object.entries(dto.program_data.metadata).forEach(([k, v]) => { combinedMetadata[`program_${k}`] = String(v); });
       }
       if (dto.template_path) {
+        // TODO(security): validate template_path against an allowlist before forwarding to the file service
         combinedMetadata['template_path'] = dto.template_path;
       }
 
@@ -258,6 +279,7 @@ export class DocumentsController {
   }
 
   @Get('verify/:hash')
+  @Public()
   @ApiOperation({ summary: 'Verify certificate authenticity' })
   @ApiResponse({ status: 200, description: 'Certificate verification result' })
   async verifyCertificate(@Param('hash') hash: string) {

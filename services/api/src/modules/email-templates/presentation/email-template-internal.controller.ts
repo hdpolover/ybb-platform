@@ -28,7 +28,7 @@ export class EmailTemplateInternalController {
             .get<string>('NOTIFICATION_SERVICE_INTERNAL_KEY', '')
             .trim();
 
-        if (internalKey && authorization !== `Bearer ${internalKey}`) {
+        if (!internalKey || authorization !== `Bearer ${internalKey}`) {
             throw new UnauthorizedException('Invalid internal service key');
         }
 
