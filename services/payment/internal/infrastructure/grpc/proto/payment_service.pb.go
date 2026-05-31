@@ -532,8 +532,8 @@ type CreateIntentRequest struct {
 	CustomerEmail string `protobuf:"bytes,9,opt,name=customer_email,json=customerEmail,proto3" json:"customer_email,omitempty"`
 	CustomerPhone string `protobuf:"bytes,10,opt,name=customer_phone,json=customerPhone,proto3" json:"customer_phone,omitempty"`
 	// Item Details
-	Description  string        `protobuf:"bytes,11,opt,name=description,proto3" json:"description,omitempty"`
-	ItemDetails  []*ItemDetail `protobuf:"bytes,12,rep,name=item_details,json=itemDetails,proto3" json:"item_details,omitempty"`
+	Description string        `protobuf:"bytes,11,opt,name=description,proto3" json:"description,omitempty"`
+	ItemDetails []*ItemDetail `protobuf:"bytes,12,rep,name=item_details,json=itemDetails,proto3" json:"item_details,omitempty"`
 	// Exchange rate snapshot (USD to IDR at the time of intent creation)
 	ExchangeRate  float64 `protobuf:"fixed64,13,opt,name=exchange_rate,json=exchangeRate,proto3" json:"exchange_rate,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -1185,6 +1185,7 @@ type ProcessPaymentRequest struct {
 	PaymentMethodId string                 `protobuf:"bytes,2,opt,name=payment_method_id,json=paymentMethodId,proto3" json:"payment_method_id,omitempty"`
 	GatewayToken    string                 `protobuf:"bytes,3,opt,name=gateway_token,json=gatewayToken,proto3" json:"gateway_token,omitempty"` // Token from Midtrans/Xendit JS SDK
 	PaymentDetails  *PaymentDetails        `protobuf:"bytes,4,opt,name=payment_details,json=paymentDetails,proto3" json:"payment_details,omitempty"`
+	UserId          string                 `protobuf:"bytes,5,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"` // Caller's user ID for ownership verification
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -1245,6 +1246,13 @@ func (x *ProcessPaymentRequest) GetPaymentDetails() *PaymentDetails {
 		return x.PaymentDetails
 	}
 	return nil
+}
+
+func (x *ProcessPaymentRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
 }
 
 type ProcessPaymentAction struct {
@@ -2381,7 +2389,7 @@ const file_payment_service_proto_rawDesc = "" +
 	"\bcategory\x18\x06 \x01(\tR\bcategory\x12#\n" +
 	"\rmerchant_name\x18\a \x01(\tR\fmerchantName\"Q\n" +
 	"\x1dGetIntentsByReferenceResponse\x120\n" +
-	"\aintents\x18\x01 \x03(\v2\x16.payment.PaymentIntentR\aintents\"\xa5\x04\n" +
+	"\aintents\x18\x01 \x03(\v2\x16.payment.PaymentIntentR\aintents\"\xca\x04\n" +
 	"\x13CreateIntentRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12%\n" +
 	"\x0eparticipant_id\x18\x02 \x01(\tR\rparticipantId\x12\x16\n" +
@@ -2395,7 +2403,8 @@ const file_payment_service_proto_rawDesc = "" +
 	"\x0ecustomer_phone\x18\n" +
 	" \x01(\tR\rcustomerPhone\x12 \n" +
 	"\vdescription\x18\v \x01(\tR\vdescription\x126\n" +
-	"\fitem_details\x18\f \x03(\v2\x13.payment.ItemDetailR\vitemDetails\x1a;\n" +
+	"\fitem_details\x18\f \x03(\v2\x13.payment.ItemDetailR\vitemDetails\x12#\n" +
+	"\rexchange_rate\x18\r \x01(\x01R\fexchangeRate\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"p\n" +
@@ -2431,12 +2440,13 @@ const file_payment_service_proto_rawDesc = "" +
 	"\x19GetPaymentMethodsResponse\x120\n" +
 	"\amethods\x18\x01 \x03(\v2\x16.payment.PaymentMethodR\amethods\"3\n" +
 	"\x0ePaymentDetails\x12!\n" +
-	"\fdetails_json\x18\x01 \x01(\tR\vdetailsJson\"\xc7\x01\n" +
+	"\fdetails_json\x18\x01 \x01(\tR\vdetailsJson\"\xe0\x01\n" +
 	"\x15ProcessPaymentRequest\x12\x1b\n" +
 	"\tintent_id\x18\x01 \x01(\tR\bintentId\x12*\n" +
 	"\x11payment_method_id\x18\x02 \x01(\tR\x0fpaymentMethodId\x12#\n" +
 	"\rgateway_token\x18\x03 \x01(\tR\fgatewayToken\x12@\n" +
-	"\x0fpayment_details\x18\x04 \x01(\v2\x17.payment.PaymentDetailsR\x0epaymentDetails\"Y\n" +
+	"\x0fpayment_details\x18\x04 \x01(\v2\x17.payment.PaymentDetailsR\x0epaymentDetails\x12\x17\n" +
+	"\auser_id\x18\x05 \x01(\tR\x06userId\"Y\n" +
 	"\x14ProcessPaymentAction\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x10\n" +
 	"\x03url\x18\x02 \x01(\tR\x03url\x12\x1b\n" +
