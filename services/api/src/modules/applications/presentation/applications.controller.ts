@@ -194,9 +194,10 @@ export class ApplicationsController {
   }
 
   @Get('export')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Export applications to CSV' })
+  @ApiOperation({ summary: 'Export applications to CSV (admin)' })
   @ApiQuery({ name: 'brandId', required: true })
   @ApiQuery({ name: 'programId', required: false })
   @ApiQuery({ name: 'status', enum: ApplicationStatus, required: false })
@@ -233,7 +234,9 @@ export class ApplicationsController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'List applications with filters' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'List applications with filters (admin)' })
   @ApiQuery({ name: 'brandId', required: false })
   @ApiQuery({ name: 'programId', required: false })
   @ApiQuery({ name: 'participantId', required: false })
@@ -383,7 +386,9 @@ export class ApplicationsController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get application by ID' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Get application by ID (admin)' })
   @ApiResponse({ status: 200, description: 'Application retrieved successfully', type: ApplicationResponseDto })
   @ApiResponse({ status: 404, description: 'Application not found' })
   async findOne(
@@ -520,6 +525,8 @@ export class ApplicationsController {
   }
 
   @Post(':id/review')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Review application (admin only)' })
   @ApiResponse({ status: 200, description: 'Application reviewed successfully', type: ApplicationResponseDto })

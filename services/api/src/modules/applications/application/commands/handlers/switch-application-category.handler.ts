@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
@@ -35,12 +35,22 @@ export class SwitchApplicationCategoryHandler {
           include: {
             pricingTiers: true,
           }
-        }
+        },
+        participant: {
+          select: { userId: true },
+        },
       }
     });
 
     if (!application) {
       throw new NotFoundException(`Application ${applicationId} not found`);
+    }
+
+    // Ownership: a participant may only switch the category of their OWN
+    // application. Without this, any authenticated user could switch another
+    // participant's category by guessing the application id (IDOR).
+    if (!command.userId || application.participant?.userId !== command.userId) {
+      throw new ForbiddenException('You can only switch the category of your own application.');
     }
 
     // 2. Validate Status
