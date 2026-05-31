@@ -37,6 +37,7 @@ import { buildParticipantPaymentsUrl as buildParticipantPaymentsDashboardUrl } f
 @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 @ApiBearerAuth()
 export class PaymentAdminController {
+    private static readonly PARTICIPANT_CANCELLATION_REASON = 'Cancelled by participant';
     private readonly paymentServiceInternalKey: string;
     private readonly logger = new Logger(PaymentAdminController.name);
 
@@ -68,7 +69,8 @@ export class PaymentAdminController {
     @ApiQuery({
         name: 'followUpStatus',
         required: false,
-        description: 'participant_cancelled | payment_failed | manual_proof_rejected',
+        description:
+            'participant_cancelled | payment_cancelled_issue | payment_failed | manual_proof_rejected',
     })
     @ApiQuery({ name: 'currency', required: false })
     @ApiQuery({ name: 'dateFrom', required: false, description: 'Invoice createdAt start (ISO date)' })
@@ -213,6 +215,7 @@ export class PaymentAdminController {
             currencyOptionsRows,
             applicationStatusRows,
             participantCancelledCount,
+            paymentCancelledIssueCount,
             paymentFailedCount,
             manualProofRejectedCount,
         ] = await Promise.all([
@@ -283,20 +286,36 @@ export class PaymentAdminController {
                 where: {
                     application: { programId },
                     status: PaymentStatus.cancelled,
+                    rejectionReason: {
+                        equals: PaymentAdminController.PARTICIPANT_CANCELLATION_REASON,
+                        mode: 'insensitive',
+                    },
+                },
+            }),
+            this.prisma.applicationInvoice.count({
+                where: {
+                    application: { programId },
+                    status: PaymentStatus.cancelled,
+                    NOT: {
+                        rejectionReason: {
+                            equals: PaymentAdminController.PARTICIPANT_CANCELLATION_REASON,
+                            mode: 'insensitive',
+                        },
+                    },
                 },
             }),
             this.prisma.applicationInvoice.count({
                 where: {
                     application: { programId },
                     status: PaymentStatus.failed,
-                    rejectionReason: null,
+                    verifiedBy: null,
                 },
             }),
             this.prisma.applicationInvoice.count({
                 where: {
                     application: { programId },
                     status: PaymentStatus.failed,
-                    rejectionReason: { not: null },
+                    verifiedBy: { not: null },
                 },
             }),
         ]);
@@ -392,6 +411,7 @@ export class PaymentAdminController {
                 })),
                 followUpStatuses: [
                     { value: 'participant_cancelled', count: participantCancelledCount },
+                    { value: 'payment_cancelled_issue', count: paymentCancelledIssueCount },
                     { value: 'payment_failed', count: paymentFailedCount },
                     { value: 'manual_proof_rejected', count: manualProofRejectedCount },
                 ].filter((row) => row.count > 0),
@@ -422,20 +442,41 @@ export class PaymentAdminController {
     ): Prisma.ApplicationInvoiceWhereInput | null {
         switch ((followUpStatus ?? '').trim()) {
             case 'participant_cancelled':
-                return { status: PaymentStatus.cancelled };
+                return {
+                    status: PaymentStatus.cancelled,
+                    rejectionReason: {
+                        equals: PaymentAdminController.PARTICIPANT_CANCELLATION_REASON,
+                        mode: 'insensitive',
+                    },
+                };
+            case 'payment_cancelled_issue':
+                return {
+                    status: PaymentStatus.cancelled,
+                    NOT: {
+                        rejectionReason: {
+                            equals: PaymentAdminController.PARTICIPANT_CANCELLATION_REASON,
+                            mode: 'insensitive',
+                        },
+                    },
+                };
             case 'payment_failed':
                 return {
                     status: PaymentStatus.failed,
-                    rejectionReason: null,
+                    verifiedBy: null,
                 };
             case 'manual_proof_rejected':
                 return {
                     status: PaymentStatus.failed,
-                    rejectionReason: { not: null },
+                    verifiedBy: { not: null },
                 };
             default:
                 return null;
         }
+    }
+
+    private isParticipantInitiatedCancellationReason(reason?: string | null): boolean {
+        if (!reason) return false;
+        return reason.trim().toLowerCase() === PaymentAdminController.PARTICIPANT_CANCELLATION_REASON.toLowerCase();
     }
 
     private parseSortOrder(sortOrder: string): Prisma.SortOrder {
@@ -1249,9 +1290,13 @@ export class PaymentAdminController {
             rejectionReason: (invoice.rejectionReason ?? null) as string | null,
             followUpStatus:
                 invoice.status === PaymentStatus.cancelled
-                    ? 'participant_cancelled'
+                    ? (
+                        this.isParticipantInitiatedCancellationReason(invoice.rejectionReason)
+                            ? 'participant_cancelled'
+                            : 'payment_cancelled_issue'
+                    )
                     : invoice.status === PaymentStatus.failed
-                        ? (invoice.rejectionReason ? 'manual_proof_rejected' : 'payment_failed')
+                        ? (invoice.verifiedBy ? 'manual_proof_rejected' : 'payment_failed')
                         : null,
             application: {
                 status: invoice.application.status as string,
