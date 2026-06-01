@@ -2,6 +2,7 @@ import { Program } from '../../entities/program.entity';
 
 export interface FindAllProgramsParams {
     brandId?: string;
+    url?: string;
     year?: number;
     isPublished?: boolean;
     isActive?: boolean;

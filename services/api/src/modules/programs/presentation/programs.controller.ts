@@ -2,7 +2,7 @@ import { Controller, Get, Query, Param, Put, Post, Delete, Body, UseGuards, Requ
 import { CommandBus } from '@nestjs/cqrs';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { Request as ExpressRequest } from 'express';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery, ApiConsumes } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery, ApiConsumes, ApiHeader } from '@nestjs/swagger';
 import { ListProgramsDto } from './dto/list-programs.dto';
 import { ProgramListResponseDto, ProgramResponseDto } from './dto/program-response.dto';
 import { ListProgramsQuery } from '../application/queries/list-programs.query';
@@ -25,6 +25,7 @@ import { GetParticipantProgressHandler } from '../application/queries/handlers/g
 import { GetParticipantProgressQuery } from '../application/queries/get-participant-progress.query';
 import { ProgressStepDto } from './dto/participant-progress-response.dto';
 import { Public } from '../../../shared/decorators/public.decorator';
+import { BrandDomain } from '../../../shared/decorators/brand-domain.decorator';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 import { Roles } from '@modules/auth/application/decorators/roles.decorator';
@@ -72,6 +73,11 @@ interface ProgramLike {
 
 @ApiTags('Programs')
 @Controller('programs')
+@ApiHeader({
+  name: 'x-brand-domain',
+  description: 'Domain of the brand/program category (alternative to url query param)',
+  required: false,
+})
 export class ProgramsController {
   constructor(
     private readonly listProgramsHandler: ListProgramsHandler,
@@ -88,7 +94,14 @@ export class ProgramsController {
   @Public()
   @ApiOperation({ summary: 'Get all programs' })
   @ApiResponse({ status: 200, type: ProgramListResponseDto })
-  async findAll(@Query() dto: ListProgramsDto): Promise<ProgramListResponseDto> {
+  async findAll(
+    @Query() dto: ListProgramsDto,
+    @BrandDomain() brandDomain?: string,
+  ): Promise<ProgramListResponseDto> {
+    if (!dto.url && brandDomain) {
+      dto.url = brandDomain;
+    }
+
     const query = new ListProgramsQuery(
       dto.brandId,
       dto.year,
@@ -98,6 +111,7 @@ export class ProgramsController {
       dto.isActive,
       dto.isVisibleToUsers,
       dto.status,
+      dto.url,
     );
     return this.listProgramsHandler.execute(query);
   }

@@ -19,6 +19,9 @@ export class ProgramResponseDto {
   @ApiProperty({ example: 'A comprehensive program for young entrepreneurs' })
   description: string | null;
 
+  @ApiProperty({ example: 'Build leadership skills through global collaboration.', required: false, nullable: true })
+  shortDescription?: string | null;
+
   @ApiProperty({ example: 2025 })
   year: number;
 
