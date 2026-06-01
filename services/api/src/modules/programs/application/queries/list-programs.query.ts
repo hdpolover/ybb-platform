@@ -8,5 +8,6 @@ export class ListProgramsQuery {
     public readonly isActive?: boolean,
     public readonly isVisibleToUsers?: boolean,
     public readonly status?: string,
+    public readonly url?: string,
   ) { }
 }
