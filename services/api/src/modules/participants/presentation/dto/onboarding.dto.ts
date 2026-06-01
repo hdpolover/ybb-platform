@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsEnum, IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { IsEnglishName, IsEnglishText } from '@shared/validators/english-text.validator';
+import { KNOWLEDGE_SOURCES } from '../../../metadata/metadata.constants';
 
 export enum Gender {
   male = 'male',
@@ -40,6 +41,7 @@ export class OnboardingDto {
     @IsString()
     @IsNotEmpty()
     @IsEnglishText()
+    @IsIn(KNOWLEDGE_SOURCES)
     knowledgeSource: string;
 
     @ApiPropertyOptional({ example: 'K9X2M4P1', description: 'Referral code from an ambassador' })
