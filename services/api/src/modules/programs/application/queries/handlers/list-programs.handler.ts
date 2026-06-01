@@ -12,10 +12,11 @@ export class ListProgramsHandler implements IQueryHandler<ListProgramsQuery> {
     ) { }
 
     async execute(query: ListProgramsQuery): Promise<ProgramListResponseDto> {
-        const { brandId, year, isPublished, page, limit, isActive, isVisibleToUsers, status } = query;
+        const { brandId, year, isPublished, page, limit, isActive, isVisibleToUsers, status, url } = query;
 
         const { programs, total } = await this.programRepository.findAll({
             brandId: brandId,
+            url,
             year,
             isPublished,
             isActive,
@@ -32,7 +33,9 @@ export class ListProgramsHandler implements IQueryHandler<ListProgramsQuery> {
             name: program.name,
             slug: program.slug,
             description: program.description,
+            shortDescription: program.shortDescription,
             year: program.year,
+            theme: program.theme ?? null,
             startDate: program.startDate,
             endDate: program.endDate,
             applicationDeadline: program.applicationDeadline,
@@ -46,6 +49,9 @@ export class ListProgramsHandler implements IQueryHandler<ListProgramsQuery> {
             isPublished: program.isPublished,
             isActive: program.isActive,
             status: program.status,
+            logoUrl: program.logoUrl ?? null,
+            bannerUrl: program.bannerUrl ?? null,
+            thumbnailUrl: program.thumbnailUrl ?? null,
             createdAt: program.createdAt,
             updatedAt: program.updatedAt,
         }));

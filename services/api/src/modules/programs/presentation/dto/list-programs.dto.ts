@@ -4,6 +4,14 @@ import { Type } from 'class-transformer';
 
 export class ListProgramsDto {
   @ApiPropertyOptional({
+    description: 'Filter by brand website URL or domain',
+    example: 'chinayouthsummit.com',
+  })
+  @IsOptional()
+  @IsString()
+  url?: string;
+
+  @ApiPropertyOptional({
     description: 'Filter by Brand ID',
     example: '005b17ba-b481-45f5-a945-7723248b6415',
   })

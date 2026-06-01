@@ -161,6 +161,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                 description: true,
                 shortDescription: true,
                 thumbnailUrl: true,
+                bannerUrl: true,
                 startDate: true,
                 endDate: true,
                 location: true,
@@ -474,9 +475,10 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                         id: p.id,
                         name: p.name,
                         slug: p.slug,
-                        thumbnail: p.thumbnailUrl,
+                        thumbnail: p.thumbnailUrl ?? p.bannerUrl,
                         year: p.startDate.getFullYear(),
-                        location: p.location
+                        location: p.location,
+                        summary: p.shortDescription ?? null,
                     }))
                 }
             });
@@ -775,7 +777,9 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                 startDate: true,
                 endDate: true,
                 thumbnailUrl: true,
+                bannerUrl: true,
                 location: true,
+                shortDescription: true,
             }
         });
 
