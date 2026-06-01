@@ -9,12 +9,22 @@ export class ProgramRepository implements IProgramRepository {
     constructor(private readonly prisma: PrismaService) { }
 
     async findAll(params: FindAllProgramsParams): Promise<FindAllProgramsResult> {
-        const { brandId, year, isPublished, isActive, isVisibleToUsers, status, page = 1, limit = 10 } = params;
+        const { brandId, url, year, isPublished, isActive, isVisibleToUsers, status, page = 1, limit = 10 } = params;
 
         const where: Prisma.ProgramWhereInput = {
             brandId,
             deletedAt: null,
         };
+
+        if (url) {
+            where.brand = {
+                isActive: true,
+                OR: [
+                    { websiteUrl: url },
+                    { websiteUrl: { contains: url, mode: 'insensitive' } },
+                ],
+            };
+        }
 
         if (year !== undefined) {
             where.year = year;
