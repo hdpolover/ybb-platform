@@ -195,6 +195,16 @@ async function resolvePrimaryQueueOptions(
 ): Promise<PrimaryQueueOptions> {
   const retryTopologyOptions = buildPrimaryQueueOptions(queueName);
 
+  // One-time migration: delete the legacy queue so it can be recreated with
+  // the retry DLX topology. Set NOTIFICATION_QUEUE_CLEANUP_ON_DEPLOY=true,
+  // deploy once, then remove the env var. Any messages in the queue are lost.
+  if (process.env.NOTIFICATION_QUEUE_CLEANUP_ON_DEPLOY === 'true') {
+    console.log(
+      `[rabbitmq] NOTIFICATION_QUEUE_CLEANUP_ON_DEPLOY=true: deleting queue ${queueName} for retry topology migration`,
+    );
+    await deleteQueue(rabbitMqUrl, queueName);
+  }
+
   try {
     await probePrimaryQueue(rabbitMqUrl, queueName, retryTopologyOptions);
     return retryTopologyOptions;
@@ -209,6 +219,27 @@ async function resolvePrimaryQueueOptions(
     `[rabbitmq] queue ${queueName} is using legacy arguments; keeping current shape to avoid 406 PRECONDITION_FAILED. Run one deploy with NOTIFICATION_QUEUE_CLEANUP_ON_DEPLOY=true to migrate it to retry topology.`,
   );
   return {};
+}
+
+async function deleteQueue(rabbitMqUrl: string, queueName: string): Promise<void> {
+  const connection = await amqp.connect(rabbitMqUrl);
+  let channel: AmqpChannel | undefined;
+  try {
+    channel = await connection.createChannel();
+    const ch = channel as AmqpChannel & {
+      deleteQueue: (queue: string) => Promise<{ messageCount: number }>;
+    };
+    const result = await ch.deleteQueue(queueName);
+    console.log(`[rabbitmq] deleted queue ${queueName} (had ${result.messageCount} messages)`);
+  } catch (error) {
+    // Queue may not exist yet — safe to ignore
+    console.warn(
+      `[rabbitmq] could not delete queue ${queueName}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  } finally {
+    await closeAmqpChannel(channel);
+    await closeAmqpConnection(connection);
+  }
 }
 
 async function probePrimaryQueue(
