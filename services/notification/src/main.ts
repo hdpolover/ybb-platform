@@ -117,6 +117,7 @@ async function ensureRetryTopology(
   },
 ) {
   const connection = await amqp.connect(rabbitMqUrl);
+  (connection as unknown as { on: (event: string, fn: (err: unknown) => void) => void }).on('error', () => {});
   let channel: AmqpChannel | undefined;
 
   try {
@@ -223,6 +224,7 @@ async function resolvePrimaryQueueOptions(
 
 async function deleteQueue(rabbitMqUrl: string, queueName: string): Promise<void> {
   const connection = await amqp.connect(rabbitMqUrl);
+  (connection as unknown as { on: (event: string, fn: (err: unknown) => void) => void }).on('error', () => {});
   let channel: AmqpChannel | undefined;
   try {
     channel = await connection.createChannel();
@@ -248,6 +250,11 @@ async function probePrimaryQueue(
   queueOptions: PrimaryQueueOptions,
 ): Promise<void> {
   const connection = await amqp.connect(rabbitMqUrl);
+  // Suppress unhandled 'error' events emitted by amqplib when a channel-level
+  // broker error (e.g. 406 PRECONDITION_FAILED) closes the channel. Without
+  // this listener Node.js throws the event before the try/catch can intercept
+  // the rejected assertQueue() promise.
+  (connection as unknown as { on: (event: string, fn: (err: unknown) => void) => void }).on('error', () => {});
   let channel: AmqpChannel | undefined;
 
   try {
