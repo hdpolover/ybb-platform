@@ -11,6 +11,7 @@ import { AppModule } from './app.module';
 import { setupSwagger } from './config/swagger.config';
 import { TransformInterceptor } from './shared/interceptors/transform.interceptor';
 import { CdnMaskInterceptor } from './shared/interceptors/cdn-mask.interceptor';
+import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { PrismaService } from './shared/infrastructure/prisma/prisma.service';
 import * as amqp from 'amqplib';
@@ -131,6 +132,9 @@ async function bootstrap() {
 
   // Use Winston Logger
   app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));
+
+  // Global exception filter — sanitizes 500 messages in production
+  app.useGlobalFilters(new HttpExceptionFilter());
 
   // Global validation pipe
   app.useGlobalPipes(

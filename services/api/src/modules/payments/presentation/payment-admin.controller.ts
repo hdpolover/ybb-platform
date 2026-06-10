@@ -1369,14 +1369,23 @@ export class PaymentAdminController {
         return match?.[0] ?? null;
     }
 
-    private handleError(error: unknown) {
+    private handleError(error: unknown): never {
         const err = error as { response?: { status: number; data: unknown }; message?: string };
         if (err.response) {
             this.logger.error(`Payment Service Error: ${err.response.status} - ${JSON.stringify(err.response.data)}`);
-            throw new HttpException(err.response.data as string | Record<string, unknown>, err.response.status);
+            const status = err.response.status;
+            // Forward 4xx user-facing errors from payment service; mask 5xx
+            if (status >= 400 && status < 500) {
+                const data = err.response.data;
+                const userMsg = (typeof data === 'object' && data !== null && 'message' in data)
+                    ? String((data as { message: unknown }).message)
+                    : 'Payment request failed';
+                throw new HttpException(userMsg, status);
+            }
+            throw new HttpException('Payment service unavailable. Please try again later.', 503);
         }
         this.logger.error(`Internal Error: ${err.message}`);
-        throw new HttpException(err.message ?? 'Internal server error', 500);
+        throw new HttpException('Something went wrong. Please try again later.', 500);
     }
 
     private buildInternalHeaders(): Record<string, string> {
