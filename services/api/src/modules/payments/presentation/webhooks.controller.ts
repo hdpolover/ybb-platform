@@ -62,12 +62,7 @@ export class WebhooksController {
 
         } catch (error: unknown) {
             const err = error as { message?: string; response?: { status: number; data: unknown } };
-            this.logger.error(`Failed to forward webhook to ${targetPath}`, err.message);
-            
-            if (err.response) {
-                return res.status(err.response.status).json(err.response.data);
-            }
-            
+            this.logger.error(`Failed to forward webhook to ${targetPath}: ${err.message}`);
             return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
                 error: 'Failed to forward webhook',
             });

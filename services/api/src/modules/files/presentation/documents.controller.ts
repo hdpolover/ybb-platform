@@ -69,9 +69,8 @@ export class DocumentsController {
       res.setHeader('Content-Disposition', `attachment; filename="${safeFilename(`participants_${dto.program_name}`)}.xlsx"`);
       res.send(buffer);
     } catch (error: unknown) {
-      const msg = errMsg(error);
-      this.logger.error(`Failed to generate participant report: ${msg}`);
-      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ message: 'Failed to generate participant report', error: msg });
+      this.logger.error(`Failed to generate participant report: ${errMsg(error)}`);
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ message: 'Failed to generate participant report' });
     }
   }
 
@@ -105,9 +104,8 @@ export class DocumentsController {
       res.setHeader('Content-Disposition', `attachment; filename="${safeFilename(`payments_${dto.program_name}`)}.xlsx"`);
       res.send(buffer);
     } catch (error: unknown) {
-      const msg = errMsg(error);
-      this.logger.error(`Failed to generate payment report: ${msg}`);
-      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ message: 'Failed to generate payment report', error: msg });
+      this.logger.error(`Failed to generate payment report: ${errMsg(error)}`);
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ message: 'Failed to generate payment report' });
     }
   }
 
@@ -134,9 +132,8 @@ export class DocumentsController {
       res.setHeader('Content-Disposition', `attachment; filename="${sheetName}.xlsx"`);
       res.send(buffer);
     } catch (error: unknown) {
-      const msg = errMsg(error);
-      this.logger.error(`Failed to generate custom report: ${msg}`);
-      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ message: 'Failed to generate custom report', error: msg });
+      this.logger.error(`Failed to generate custom report: ${errMsg(error)}`);
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ message: 'Failed to generate custom report' });
     }
   }
 
@@ -178,9 +175,8 @@ export class DocumentsController {
       res.setHeader('Content-Disposition', `attachment; filename="${safeFilename(response.filename)}"`);
       res.send(response.file_data);
     } catch (error: unknown) {
-      const msg = errMsg(error);
-      this.logger.error(`Failed to generate receipt: ${msg}`);
-      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ message: 'Failed to generate receipt', error: msg });
+      this.logger.error(`Failed to generate receipt: ${errMsg(error)}`);
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ message: 'Failed to generate receipt' });
     }
   }
 
@@ -216,9 +212,8 @@ export class DocumentsController {
       res.setHeader('Content-Disposition', `attachment; filename="offer_letter_${participantName}.pdf"`);
       res.send(buffer);
     } catch (error: unknown) {
-      const msg = errMsg(error);
-      this.logger.error(`Failed to generate offer letter: ${msg}`);
-      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ message: 'Failed to generate offer letter', error: msg });
+      this.logger.error(`Failed to generate offer letter: ${errMsg(error)}`);
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ message: 'Failed to generate offer letter' });
     }
   }
 
@@ -287,9 +282,8 @@ export class DocumentsController {
       res.setHeader('Content-Disposition', `attachment; filename="${safeFilename(response.filename)}"`);
       res.send(response.file_data);
     } catch (error: unknown) {
-      const msg = errMsg(error);
-      this.logger.error(`Failed to generate certificate: ${msg}`);
-      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ message: 'Failed to generate certificate', error: msg });
+      this.logger.error(`Failed to generate certificate: ${errMsg(error)}`);
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ message: 'Failed to generate certificate' });
     }
   }
 
@@ -302,9 +296,8 @@ export class DocumentsController {
       this.logger.log(`Verifying certificate: ${hash}`);
       return await this.fileServiceClient.verifyCertificate(hash);
     } catch (error: unknown) {
-      const msg = errMsg(error);
-      this.logger.error(`Failed to verify certificate: ${msg}`);
-      return { success: false, message: 'Certificate verification failed', error: msg };
+      this.logger.error(`Failed to verify certificate: ${errMsg(error)}`);
+      return { success: false, message: 'Certificate verification failed' };
     }
   }
 }
