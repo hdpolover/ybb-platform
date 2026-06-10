@@ -30,6 +30,10 @@ services:
       LOKI_URL: ${LOKI_URL}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
       OTEL_LOG_LEVEL: ${OTEL_LOG_LEVEL:-info}
+      # Redis — used for notification idempotency deduplication
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
     networks:
       - dokploy-network
     # Notification might not need a public domain if it only consumes events
