@@ -62,23 +62,18 @@ export class QueueMonitoringService implements OnModuleInit, OnModuleDestroy {
             } catch (error) {
                 const err = error as { code?: number; message?: string };
                 const isNotFound = err.code === 404 || (err.message ?? '').includes('NOT_FOUND');
-                if (!isNotFound) {
-                    this.logger.warn(`Failed to check queue depth for ${queue}: ${err.message ?? String(error)}`);
-                }
-                // checkQueue on a missing queue closes the channel; reconnect lazily on next interval.
                 if (isNotFound) {
-                    this.dropMissingQueueFamily(queue);
+                    // checkQueue on a missing queue closes the channel; the queue may not
+                    // exist yet (e.g. retry topology created on first notification service deploy).
+                    // Reconnect lazily on next interval — do NOT permanently drop so monitoring
+                    // resumes automatically once the queue is created.
+                    this.logger.debug(`Queue ${queue} not found — will retry on next interval`);
                     this.channel = null;
                     break;
                 }
+                this.logger.warn(`Failed to check queue depth for ${queue}: ${err.message ?? String(error)}`);
             }
         }
-    }
-
-    private dropMissingQueueFamily(queue: string) {
-        const base = queue.replace(/(\.retry|\.dlq)$/, '');
-        this.queues = this.queues.filter((q) => q !== base && !q.startsWith(`${base}.`));
-        this.logger.warn(`Queue ${base} is missing in RabbitMQ; removed from monitoring targets`);
     }
 
     private async ensureMonitoringChannel() {
