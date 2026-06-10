@@ -9,8 +9,8 @@ services:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${PORT:-4000}
       DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres-api:5432/${DATABASE_NAME}
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis-api:6379
-      REDIS_HOST: redis-api
+      REDIS_URL: redis://default:${REDIS_PASSWORD}@${REDIS_HOST:-ybb-platform-redis-service-omv9vw}:6379
+      REDIS_HOST: ${REDIS_HOST:-ybb-platform-redis-service-omv9vw}
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       # Links to other services (on same dokploy-network)
@@ -65,8 +65,6 @@ services:
     depends_on:
       postgres-api:
         condition: service_healthy
-      redis-api:
-        condition: service_healthy
     networks:
       - dokploy-network
     # Dokploy handles Traefik labels and SSL termination automatically via the UI
@@ -91,24 +89,9 @@ services:
       timeout: 5s
       retries: 5
 
-  redis-api:
-    image: redis:7-alpine
-    restart: always
-    command: redis-server --requirepass ${REDIS_PASSWORD}
-    volumes:
-      - redis_api_data_prod:/data
-    networks:
-      - dokploy-network
-    healthcheck:
-      test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
 networks:
   dokploy-network:
     external: true
 
 volumes:
   postgres_api_data_prod:
-  redis_api_data_prod:
