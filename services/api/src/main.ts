@@ -206,6 +206,8 @@ async function ensureRetryTopology(
   },
 ) {
   const connection = await amqp.connect(rabbitMqUrl);
+  // Suppress unhandled 'error' events emitted by amqplib on channel-level broker errors.
+  (connection as unknown as { on: (event: string, fn: (err: unknown) => void) => void }).on('error', () => {});
   const channel = await connection.createChannel();
 
   try {
@@ -292,6 +294,8 @@ async function probePrimaryQueue(
   queueOptions: PrimaryQueueOptions,
 ): Promise<void> {
   const connection = await amqp.connect(rabbitMqUrl);
+  // Suppress unhandled 'error' events emitted by amqplib on channel-level broker errors.
+  (connection as unknown as { on: (event: string, fn: (err: unknown) => void) => void }).on('error', () => {});
   let channel: AmqpChannel | undefined;
 
   try {
