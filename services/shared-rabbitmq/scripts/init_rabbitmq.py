@@ -78,6 +78,26 @@ def wait_for_rabbitmq():
     log("Could not connect to RabbitMQ after multiple attempts.")
     sys.exit(1)
 
+def ensure_queue(connection: pika.BlockingConnection, q_name: str) -> pika.channel.Channel:
+    """Declare queue if absent; skip if it already exists (possibly with different args)."""
+    ch = connection.channel()
+    try:
+        # passive=True checks existence without modifying args
+        ch.queue_declare(queue=q_name, durable=True, passive=True)
+        log(f"Queue '{q_name}' already exists — skipping declare")
+        return ch
+    except pika.exceptions.ChannelClosedByBroker as e:
+        new_ch = connection.channel()
+        if e.reply_code == 404:
+            # Queue absent — create it
+            new_ch.queue_declare(queue=q_name, durable=True)
+        # 406 PRECONDITION_FAILED = exists with different args (e.g. dead-letter set by
+        # a service). Queue is functional; skip re-declare and proceed to bindings.
+        elif e.reply_code != 406:
+            raise
+        return new_ch
+
+
 def main():
     connection = wait_for_rabbitmq()
     channel = connection.channel()
@@ -90,7 +110,7 @@ def main():
         q_name = q['name']
         ex_name = q.get('exchange', EXCHANGE_NAME)
         log(f"Declaring Queue: {q_name}")
-        channel.queue_declare(queue=q_name, durable=True)
+        channel = ensure_queue(connection, q_name)
 
         for binding_key in q['bindings']:
             log(f"  -> Binding {q_name} to {ex_name} with key: {binding_key}")
