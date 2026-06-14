@@ -1,10 +1,11 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
 import { PortalCacheService } from '../../services/portal-cache.service';
 import { PortalSubmitApplicationCommand } from '../../queries/portal-queries';
 import { RegistrationFeeGateService } from '@modules/payments/application/services/registration-fee-gate.service';
+import { ReferralFunnelService } from '@modules/participants/application/services/referral-funnel.service';
 
 /**
  * Portal Submit Application Handler
@@ -18,11 +19,14 @@ import { RegistrationFeeGateService } from '@modules/payments/application/servic
  */
 @Injectable()
 export class PortalSubmitApplicationHandler {
+    private readonly logger = new Logger(PortalSubmitApplicationHandler.name);
+
     constructor(
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
         private readonly portalCacheService: PortalCacheService,
         private readonly registrationFeeGate: RegistrationFeeGateService,
+        private readonly referralFunnel: ReferralFunnelService,
     ) { }
 
     async execute(command: PortalSubmitApplicationCommand): Promise<{ success: boolean; applicationId: string; status: string }> {
@@ -43,6 +47,18 @@ export class PortalSubmitApplicationHandler {
                 status: true,
                 personalData: true,
                 participantId: true,
+                programId: true,
+                program: {
+                    select: {
+                        formFields: {
+                            select: {
+                                name: true,
+                                label: true,
+                                validationRules: true,
+                            },
+                        },
+                    },
+                },
             },
         });
 
@@ -71,6 +87,84 @@ export class PortalSubmitApplicationHandler {
         });
 
         await this.invalidateCaches(userId, participant.id, programId);
+
+        // Non-blocking referral linking
+        const resolvedProgramId = application.programId;
+        try {
+            // Detect referral field robustly
+            const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const referralKeywords = ['referral', 'refcode', 'ambassadorcode', 'ambassadorreferral'];
+            const formFields = application.program?.formFields ?? [];
+            const referralField = formFields.find((f) => {
+                const normName = normalize(f.name ?? '');
+                const normLabel = normalize(f.label ?? '');
+                if (referralKeywords.some((kw) => normName.includes(kw) || normLabel.includes(kw))) {
+                    return true;
+                }
+                const fieldKind = (f.validationRules as any)?.fieldKind as string | undefined;
+                if (fieldKind && /referral|ambassador/i.test(fieldKind)) {
+                    return true;
+                }
+                return false;
+            });
+
+            const rawCode = referralField
+                ? (application.personalData as Record<string, unknown>)?.[referralField.name]
+                : undefined;
+            const referralCode = typeof rawCode === 'string' ? rawCode.trim() : '';
+
+            if (referralCode) {
+                await this.prisma.$transaction(async (tx) => {
+                    const participantId = application.participantId;
+
+                    // Dedup: first referral wins
+                    const existing = await tx.ambassadorReferral.findFirst({
+                        where: { participantId },
+                    });
+                    if (existing) return;
+
+                    const ambassador = await tx.ambassador.findUnique({
+                        where: { referralCode: referralCode, isActive: true },
+                    });
+                    if (!ambassador) return;
+
+                    await tx.ambassadorReferral.create({
+                        data: {
+                            ambassadorId: ambassador.id,
+                            participantId,
+                            status: 'referred',
+                        },
+                    });
+
+                    await tx.ambassador.update({
+                        where: { id: ambassador.id },
+                        data: {
+                            totalReferrals: { increment: 1 },
+                            lastReferralAt: new Date(),
+                        },
+                    });
+
+                    const participant = await tx.participant.findUnique({
+                        where: { id: participantId },
+                        select: { referralCode: true },
+                    });
+                    if (participant && participant.referralCode !== referralCode) {
+                        await tx.participant.update({
+                            where: { id: participantId },
+                            data: { referralCode: referralCode },
+                        });
+                    }
+                });
+            }
+
+            // Advance referral funnel (no-op if no referral; call unconditionally when programId available)
+            if (resolvedProgramId) {
+                await this.referralFunnel.advanceToApplied(application.participantId, resolvedProgramId);
+            }
+        } catch (err) {
+            // Referral linking must never block submit
+            this.logger.warn('Referral linking failed (non-blocking)', { err });
+        }
 
         return {
             success: true,

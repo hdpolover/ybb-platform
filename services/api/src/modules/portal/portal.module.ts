@@ -3,6 +3,7 @@ import { CqrsModule } from '@nestjs/cqrs';
 import { AuthModule } from '../auth/auth.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { FilesModule } from '../files/files.module';
+import { ParticipantsModule } from '../participants/participants.module';
 
 // Existing
 import { PortalController } from './presentation/portal.controller';
@@ -32,7 +33,7 @@ import { DownloadCertificateHandler } from './application/commands/handlers/down
 import { UploadSignedCopyHandler } from './application/commands/handlers/upload-signed-copy.handler';
 
 @Module({
-    imports: [CqrsModule, AuthModule, PaymentsModule, FilesModule],
+    imports: [CqrsModule, AuthModule, PaymentsModule, FilesModule, ParticipantsModule],
     controllers: [
         PortalController,
         PortalSubmissionsController,

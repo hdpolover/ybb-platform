@@ -5,6 +5,7 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { PortalCacheService } from '../../services/portal-cache.service';
 import { RegistrationFeeGateService } from '@modules/payments/application/services/registration-fee-gate.service';
+import { ReferralFunnelService } from '@modules/participants/application/services/referral-funnel.service';
 import { PortalSubmitApplicationCommand } from '../../queries/portal-queries';
 
 describe('PortalSubmitApplicationHandler', () => {
@@ -18,6 +19,19 @@ describe('PortalSubmitApplicationHandler', () => {
         applicationInvoice: {
             findFirst: jest.fn(),
         },
+        ambassador: {
+            findUnique: jest.fn(),
+            update: jest.fn(),
+        },
+        ambassadorReferral: {
+            findFirst: jest.fn(),
+            create: jest.fn(),
+        },
+        participant: {
+            findUnique: jest.fn(),
+            update: jest.fn(),
+        },
+        $transaction: jest.fn(),
     };
 
     const mockCacheService = {
@@ -36,6 +50,10 @@ describe('PortalSubmitApplicationHandler', () => {
         assertRegistrationFeePaid: jest.fn(),
     };
 
+    const mockReferralFunnel = {
+        advanceToApplied: jest.fn().mockResolvedValue(undefined),
+    };
+
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
             providers: [
@@ -44,6 +62,7 @@ describe('PortalSubmitApplicationHandler', () => {
                 { provide: CacheService, useValue: mockCacheService },
                 { provide: PortalCacheService, useValue: mockPortalCacheService },
                 { provide: RegistrationFeeGateService, useValue: mockGateService },
+                { provide: ReferralFunnelService, useValue: mockReferralFunnel },
             ],
         }).compile();
 
@@ -51,6 +70,10 @@ describe('PortalSubmitApplicationHandler', () => {
         jest.clearAllMocks();
         // Default: gate allows
         mockGateService.assertRegistrationFeePaid.mockResolvedValue(undefined);
+        // Default: $transaction calls the callback with prisma mock itself
+        mockPrisma.$transaction.mockImplementation((cb: (tx: typeof mockPrisma) => Promise<unknown>) => cb(mockPrisma));
+        // Default: advanceToApplied succeeds
+        mockReferralFunnel.advanceToApplied.mockResolvedValue(undefined);
     });
 
     /**
@@ -60,11 +83,17 @@ describe('PortalSubmitApplicationHandler', () => {
     const makeApp = (overrides: {
         status?: string;
         personalData?: Record<string, unknown>;
+        programId?: string;
+        formFields?: Array<{ name: string; label: string; validationRules: unknown }>;
     } = {}) => ({
         id: 'app-1',
         status: overrides.status ?? 'draft',
         personalData: overrides.personalData ?? {},
         participantId: 'participant-1',
+        programId: overrides.programId ?? null,
+        program: {
+            formFields: overrides.formFields ?? [],
+        },
     });
 
     beforeEach(() => {
@@ -212,6 +241,140 @@ describe('PortalSubmitApplicationHandler', () => {
 
             // Expect 4 cache key invalidations
             expect(mockCacheService.invalidateKey).toHaveBeenCalledTimes(4);
+        });
+    });
+
+    // ── referral linking ──────────────────────────────────────────────────────
+
+    describe('referral linking', () => {
+        const referralFormFields = [
+            { name: 'referralCode', label: 'Referral Code', validationRules: {} },
+        ];
+
+        it('creates referral and advances funnel when valid referral code is submitted', async () => {
+            const command: PortalSubmitApplicationCommand = { userId: 'user-1', programId: 'program-123' };
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(
+                makeApp({
+                    personalData: { referralCode: 'ABC123' },
+                    programId: 'program-123',
+                    formFields: referralFormFields,
+                }),
+            );
+            mockPrisma.participantApplication.update.mockResolvedValue({});
+            mockPrisma.ambassadorReferral.findFirst.mockResolvedValue(null);
+            mockPrisma.ambassador.findUnique.mockResolvedValue({ id: 'amb-1', referralCode: 'ABC123', isActive: true });
+            mockPrisma.ambassadorReferral.create.mockResolvedValue({});
+            mockPrisma.ambassador.update.mockResolvedValue({});
+            mockPrisma.participant.findUnique.mockResolvedValue({ referralCode: null });
+            mockPrisma.participant.update.mockResolvedValue({});
+
+            const result = await handler.execute(command);
+
+            expect(result.success).toBe(true);
+            expect(mockPrisma.ambassadorReferral.create).toHaveBeenCalledWith({
+                data: {
+                    ambassadorId: 'amb-1',
+                    participantId: 'participant-1',
+                    status: 'referred',
+                },
+            });
+            expect(mockPrisma.ambassador.update).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    data: expect.objectContaining({ totalReferrals: { increment: 1 } }),
+                }),
+            );
+            expect(mockReferralFunnel.advanceToApplied).toHaveBeenCalledWith('participant-1', 'program-123');
+        });
+
+        it('skips referral creation when participant already has a referral (dedup)', async () => {
+            const command: PortalSubmitApplicationCommand = { userId: 'user-1', programId: 'program-123' };
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(
+                makeApp({
+                    personalData: { referralCode: 'ABC123' },
+                    programId: 'program-123',
+                    formFields: referralFormFields,
+                }),
+            );
+            mockPrisma.participantApplication.update.mockResolvedValue({});
+            // Existing referral present
+            mockPrisma.ambassadorReferral.findFirst.mockResolvedValue({ id: 'ref-existing' });
+
+            const result = await handler.execute(command);
+
+            expect(result.success).toBe(true);
+            expect(mockPrisma.ambassadorReferral.create).not.toHaveBeenCalled();
+        });
+
+        it('skips referral creation when ambassador is not found', async () => {
+            const command: PortalSubmitApplicationCommand = { userId: 'user-1', programId: 'program-123' };
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(
+                makeApp({
+                    personalData: { referralCode: 'INVALID' },
+                    programId: 'program-123',
+                    formFields: referralFormFields,
+                }),
+            );
+            mockPrisma.participantApplication.update.mockResolvedValue({});
+            mockPrisma.ambassadorReferral.findFirst.mockResolvedValue(null);
+            // Ambassador not found
+            mockPrisma.ambassador.findUnique.mockResolvedValue(null);
+
+            const result = await handler.execute(command);
+
+            expect(result.success).toBe(true);
+            expect(mockPrisma.ambassadorReferral.create).not.toHaveBeenCalled();
+        });
+
+        it('skips referral block when no referral field is present in form fields', async () => {
+            const command: PortalSubmitApplicationCommand = { userId: 'user-1', programId: 'program-123' };
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(
+                makeApp({
+                    personalData: { fullName: 'Jane Doe' },
+                    programId: 'program-123',
+                    formFields: [{ name: 'fullName', label: 'Full Name', validationRules: {} }],
+                }),
+            );
+            mockPrisma.participantApplication.update.mockResolvedValue({});
+
+            const result = await handler.execute(command);
+
+            expect(result.success).toBe(true);
+            expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+        });
+
+        it('skips referral block when personalData has empty referral code', async () => {
+            const command: PortalSubmitApplicationCommand = { userId: 'user-1', programId: 'program-123' };
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(
+                makeApp({
+                    personalData: { referralCode: '' },
+                    programId: 'program-123',
+                    formFields: referralFormFields,
+                }),
+            );
+            mockPrisma.participantApplication.update.mockResolvedValue({});
+
+            const result = await handler.execute(command);
+
+            expect(result.success).toBe(true);
+            expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+        });
+
+        it('does not block submit when referral linking throws', async () => {
+            const command: PortalSubmitApplicationCommand = { userId: 'user-1', programId: 'program-123' };
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(
+                makeApp({
+                    personalData: { referralCode: 'ABC123' },
+                    programId: 'program-123',
+                    formFields: referralFormFields,
+                }),
+            );
+            mockPrisma.participantApplication.update.mockResolvedValue({});
+            // Make $transaction reject to simulate referral linking failure
+            mockPrisma.$transaction.mockRejectedValue(new Error('DB error'));
+
+            const result = await handler.execute(command);
+
+            expect(result.success).toBe(true);
         });
     });
 });
