@@ -14,6 +14,10 @@
  *     AND registrationPaymentStatus !== 'paid'
  *     AND no PAID registration_fee ApplicationInvoice exists for the app
  *
+ * Soft-delete: ParticipantApplication and ProgramPricingTier carry deletedAt,
+ * so we filter deletedAt:null to match what the app's PrismaService extension
+ * applies at runtime. ApplicationInvoice has no deletedAt column.
+ *
  * Action on affected rows: status -> 'draft', submittedAt -> null.
  *
  * SAFETY:
@@ -28,11 +32,25 @@
  *
  * ALWAYS run the dry run first, eyeball the count + backup file, then --apply.
  */
-import { PrismaClient } from '@prisma/client';
-import { writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
+import { config as loadEnv } from 'dotenv';
+import { writeFileSync, mkdirSync } from 'fs';
+import { Pool } from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+// Load services/api/.env regardless of the directory the script is invoked from.
+loadEnv({ path: join(__dirname, '..', '.env') });
+
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+    throw new Error('DATABASE_URL is not set (checked process.env and services/api/.env).');
+}
+
+// Mirror PrismaService: Prisma 7 uses the pg driver adapter.
+const pool = new Pool({ connectionString });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
 const APPLY = process.argv.includes('--apply');
 
@@ -45,16 +63,16 @@ interface AffectedRow {
 }
 
 async function findAffected(): Promise<AffectedRow[]> {
-    // 1. Programs that actually charge a registration fee (active tier).
+    // 1. Programs that actually charge a registration fee (active, non-deleted tier).
     const regFeeTiers = await prisma.programPricingTier.findMany({
-        where: { isActive: true, feeType: 'registration_fee' },
+        where: { isActive: true, feeType: 'registration_fee', deletedAt: null },
         select: { programId: true },
     });
     const programsWithRegFee = new Set(regFeeTiers.map((t) => t.programId));
 
-    // 2. All currently-submitted applications.
+    // 2. All currently-submitted, non-deleted applications.
     const submitted = await prisma.participantApplication.findMany({
-        where: { status: 'submitted' },
+        where: { status: 'submitted', deletedAt: null },
         select: {
             id: true,
             participantId: true,
@@ -102,7 +120,7 @@ async function main(): Promise<void> {
     }
 
     // Always write a full backup of the affected rows before doing anything.
-    const backupDir = join(process.cwd(), 'backups');
+    const backupDir = join(__dirname, 'backups');
     mkdirSync(backupDir, { recursive: true });
     // Timestamp comes from the OS at runtime; this is a one-off operational script.
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -132,7 +150,7 @@ async function main(): Promise<void> {
     const ids = affected.map((a) => a.id);
     const result = await prisma.$transaction(async (tx) => {
         return tx.participantApplication.updateMany({
-            where: { id: { in: ids }, status: 'submitted' },
+            where: { id: { in: ids }, status: 'submitted', deletedAt: null },
             data: { status: 'draft', submittedAt: null },
         });
     });
@@ -144,4 +162,7 @@ main()
         console.error('[revert-unpaid-submissions] FAILED:', err);
         process.exitCode = 1;
     })
-    .finally(() => prisma.$disconnect());
+    .finally(async () => {
+        await prisma.$disconnect();
+        await pool.end();
+    });
