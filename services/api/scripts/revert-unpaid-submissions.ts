@@ -7,18 +7,32 @@
  * (fully_funded auto-bypass + historical fail-open gate). This reverts those
  * applications back to 'draft' so they must pay before re-submitting.
  *
- * The "should have paid but didn't" criterion mirrors RegistrationFeeGateService
- * EXACTLY so this cleanup cannot drift from the live gate:
- *   affected = status === 'submitted'
+ * The "should have paid but didn't" criterion mirrors RegistrationFeeGateService,
+ * then adds a SAFETY net so we never revert someone who actually paid:
+ *
+ *   base = status === 'submitted'
  *     AND the program has an ACTIVE registration_fee pricing tier   (fee required)
- *     AND registrationPaymentStatus !== 'paid'
- *     AND no PAID registration_fee ApplicationInvoice exists for the app
+ *     AND registrationPaymentStatus NOT IN ('paid','refunded')
+ *
+ *   Of the base set, classify each application by its registration_fee invoices:
+ *     - PAID:  any reg_fee invoice status IN ('paid','refunded')  -> excluded (they paid)
+ *     - HOLD:  any reg_fee invoice status='processing' with an external intent/txn id
+ *              -> AMBIGUOUS. Payment may have succeeded at the gateway but the
+ *                 payment.succeeded event never synced to our DB. NOT reverted.
+ *                 Verify against the Go payment service before deciding.
+ *     - REVERT: everything else (no payment evidence at all) -> safe to revert.
+ *
+ * Only the REVERT bucket is mutated by --apply. HOLD + PAID are reported, not touched.
+ *
+ * NOTE: the api Postgres has NO payment/transaction table — PaymentIntents live
+ * only in the Go payment service. So 'processing'+external-id is the strongest
+ * "maybe paid" signal available here; confirming it requires the Go service.
  *
  * Soft-delete: ParticipantApplication and ProgramPricingTier carry deletedAt,
  * so we filter deletedAt:null to match what the app's PrismaService extension
  * applies at runtime. ApplicationInvoice has no deletedAt column.
  *
- * Action on affected rows: status -> 'draft', submittedAt -> null.
+ * Action on REVERT rows: status -> 'draft', submittedAt -> null.
  *
  * SAFETY:
  *   - DRY RUN by default. Prints the count + a sample and writes a FULL backup
@@ -62,7 +76,22 @@ interface AffectedRow {
     submittedAt: Date | null;
 }
 
-async function findAffected(): Promise<AffectedRow[]> {
+interface HoldRow extends AffectedRow {
+    invoiceId: string;
+    invoiceStatus: string;
+    externalIntentId: string | null;
+    externalTransactionId: string | null;
+}
+
+interface Buckets {
+    revert: AffectedRow[]; // safe to revert: no payment evidence at all
+    hold: HoldRow[];       // ambiguous: processing + external id -> verify vs Go service
+    paidExcluded: number;  // had a paid/refunded reg_fee invoice -> they paid
+}
+
+const PAID_STATUSES = new Set(['paid', 'refunded']);
+
+async function classify(): Promise<Buckets> {
     // 1. Programs that actually charge a registration fee (active, non-deleted tier).
     const regFeeTiers = await prisma.programPricingTier.findMany({
         where: { isActive: true, feeType: 'registration_fee', deletedAt: null },
@@ -82,55 +111,127 @@ async function findAffected(): Promise<AffectedRow[]> {
         },
     });
 
-    // 3. Of those, the ones whose program requires a fee and who are not paid
-    //    by the denormalised status field. (Cheap pre-filter before the invoice
-    //    lookup.)
+    // 3. Base set: program requires a fee AND the denormalised status is not a
+    //    paid/refunded state. (Cheap pre-filter before the invoice lookup.)
     const candidates = submitted.filter(
         (a) =>
             a.programId != null &&
             programsWithRegFee.has(a.programId) &&
-            a.registrationPaymentStatus !== 'paid',
+            !PAID_STATUSES.has(a.registrationPaymentStatus),
     );
-    if (candidates.length === 0) return [];
+    if (candidates.length === 0) return { revert: [], hold: [], paidExcluded: 0 };
 
-    // 4. Race-condition guard: exclude any candidate that DOES have a paid
-    //    registration_fee invoice (status field may simply lag the invoice).
-    const paidInvoices = await prisma.applicationInvoice.findMany({
+    // 4. Pull every registration_fee invoice for the candidates so we can detect
+    //    paid/refunded (they paid) and processing+external-id (ambiguous, hold).
+    const invoices = await prisma.applicationInvoice.findMany({
         where: {
             applicationId: { in: candidates.map((c) => c.id) },
-            status: 'paid',
             pricingTier: { feeType: 'registration_fee' },
         },
-        select: { applicationId: true },
+        select: {
+            applicationId: true,
+            id: true,
+            status: true,
+            externalIntentId: true,
+            externalTransactionId: true,
+        },
     });
-    const paidAppIds = new Set(paidInvoices.map((i) => i.applicationId));
 
-    return candidates.filter((c) => !paidAppIds.has(c.id));
+    const byApp = new Map<string, typeof invoices>();
+    for (const inv of invoices) {
+        const list = byApp.get(inv.applicationId) ?? [];
+        list.push(inv);
+        byApp.set(inv.applicationId, list);
+    }
+
+    const buckets: Buckets = { revert: [], hold: [], paidExcluded: 0 };
+
+    for (const c of candidates) {
+        const invs = byApp.get(c.id) ?? [];
+
+        // PAID: any reg_fee invoice already settled (paid or refunded) -> they paid.
+        if (invs.some((i) => PAID_STATUSES.has(i.status))) {
+            buckets.paidExcluded += 1;
+            continue;
+        }
+
+        // HOLD: a processing invoice that has a gateway intent/txn id may have
+        // actually succeeded without the success event reaching our DB.
+        const ambiguous = invs.find(
+            (i) =>
+                i.status === 'processing' &&
+                ((i.externalIntentId != null && i.externalIntentId.trim().length > 0) ||
+                    (i.externalTransactionId != null && i.externalTransactionId.trim().length > 0)),
+        );
+        if (ambiguous) {
+            buckets.hold.push({
+                id: c.id,
+                participantId: c.participantId,
+                programId: c.programId,
+                registrationPaymentStatus: c.registrationPaymentStatus,
+                submittedAt: c.submittedAt,
+                invoiceId: ambiguous.id,
+                invoiceStatus: ambiguous.status,
+                externalIntentId: ambiguous.externalIntentId,
+                externalTransactionId: ambiguous.externalTransactionId,
+            });
+            continue;
+        }
+
+        // REVERT: no payment evidence at all.
+        buckets.revert.push({
+            id: c.id,
+            participantId: c.participantId,
+            programId: c.programId,
+            registrationPaymentStatus: c.registrationPaymentStatus,
+            submittedAt: c.submittedAt,
+        });
+    }
+
+    return buckets;
 }
 
 async function main(): Promise<void> {
-    console.log(`[revert-unpaid-submissions] mode: ${APPLY ? 'APPLY (will mutate)' : 'DRY RUN (no changes)'}`);
+    console.log(`[revert-unpaid-submissions] mode: ${APPLY ? 'APPLY (will mutate REVERT bucket)' : 'DRY RUN (no changes)'}`);
 
-    const affected = await findAffected();
-    console.log(`[revert-unpaid-submissions] affected applications: ${affected.length}`);
+    const { revert, hold, paidExcluded } = await classify();
+    console.log(
+        `[revert-unpaid-submissions] buckets -> REVERT(safe): ${revert.length}  |  ` +
+        `HOLD(ambiguous, verify vs Go service): ${hold.length}  |  ` +
+        `PAID/REFUNDED(excluded): ${paidExcluded}`,
+    );
 
-    if (affected.length === 0) {
+    if (revert.length === 0 && hold.length === 0) {
         console.log('[revert-unpaid-submissions] nothing to do.');
         return;
     }
 
-    // Always write a full backup of the affected rows before doing anything.
+    // Always write a full backup of both buckets before doing anything.
     const backupDir = join(__dirname, 'backups');
     mkdirSync(backupDir, { recursive: true });
     // Timestamp comes from the OS at runtime; this is a one-off operational script.
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const backupPath = join(backupDir, `revert-unpaid-submissions-${stamp}.json`);
-    writeFileSync(backupPath, JSON.stringify(affected, null, 2));
+    writeFileSync(backupPath, JSON.stringify({ revert, hold, paidExcluded }, null, 2));
     console.log(`[revert-unpaid-submissions] backup written: ${backupPath}`);
 
-    // Show a sample for eyeballing.
+    if (hold.length > 0) {
+        console.log(`[revert-unpaid-submissions] HOLD sample (NOT reverted — verify these actually paid at the gateway):`);
+        console.table(
+            hold.slice(0, 20).map((h) => ({
+                id: h.id,
+                participantId: h.participantId,
+                invoiceStatus: h.invoiceStatus,
+                intentId: h.externalIntentId,
+                txnId: h.externalTransactionId,
+            })),
+        );
+        if (hold.length > 20) console.log(`[revert-unpaid-submissions] ...and ${hold.length - 20} more HOLD (see backup).`);
+    }
+
+    console.log(`[revert-unpaid-submissions] REVERT sample (safe to revert — no payment evidence):`);
     console.table(
-        affected.slice(0, 20).map((a) => ({
+        revert.slice(0, 20).map((a) => ({
             id: a.id,
             participantId: a.participantId,
             programId: a.programId,
@@ -138,23 +239,27 @@ async function main(): Promise<void> {
             submittedAt: a.submittedAt?.toISOString() ?? null,
         })),
     );
-    if (affected.length > 20) {
-        console.log(`[revert-unpaid-submissions] ...and ${affected.length - 20} more (see backup file).`);
+    if (revert.length > 20) {
+        console.log(`[revert-unpaid-submissions] ...and ${revert.length - 20} more REVERT (see backup).`);
     }
 
     if (!APPLY) {
-        console.log('[revert-unpaid-submissions] DRY RUN complete. Re-run with --apply to revert these to draft.');
+        console.log('[revert-unpaid-submissions] DRY RUN complete. Re-run with --apply to revert ONLY the REVERT bucket to draft.');
         return;
     }
 
-    const ids = affected.map((a) => a.id);
+    const ids = revert.map((a) => a.id);
+    if (ids.length === 0) {
+        console.log('[revert-unpaid-submissions] REVERT bucket empty — nothing mutated.');
+        return;
+    }
     const result = await prisma.$transaction(async (tx) => {
         return tx.participantApplication.updateMany({
             where: { id: { in: ids }, status: 'submitted', deletedAt: null },
             data: { status: 'draft', submittedAt: null },
         });
     });
-    console.log(`[revert-unpaid-submissions] reverted ${result.count} application(s) to draft.`);
+    console.log(`[revert-unpaid-submissions] reverted ${result.count} application(s) to draft. (HOLD bucket of ${hold.length} left untouched.)`);
 }
 
 main()
