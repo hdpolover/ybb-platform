@@ -226,7 +226,15 @@ export class PaymentAdminController {
                     application: {
                         include: {
                             participant: {
-                                include: { user: { select: { id: true, email: true } } },
+                                include: {
+                                    user: {
+                                        select: {
+                                            id: true,
+                                            email: true,
+                                            ambassador: { select: { id: true, referralCode: true, isActive: true, programId: true } },
+                                        },
+                                    },
+                                },
                             },
                         },
                     },
@@ -562,7 +570,15 @@ export class PaymentAdminController {
                 application: {
                     include: {
                         participant: {
-                            include: { user: { select: { id: true, email: true } } },
+                            include: {
+                                user: {
+                                    select: {
+                                        id: true,
+                                        email: true,
+                                        ambassador: { select: { id: true, referralCode: true, isActive: true, programId: true } },
+                                    },
+                                },
+                            },
                         },
                     },
                 },
@@ -906,7 +922,15 @@ export class PaymentAdminController {
                     application: {
                         include: {
                             participant: {
-                                include: { user: { select: { id: true, email: true } } },
+                                include: {
+                                    user: {
+                                        select: {
+                                            id: true,
+                                            email: true,
+                                            ambassador: { select: { id: true, referralCode: true, isActive: true, programId: true } },
+                                        },
+                                    },
+                                },
                             },
                         },
                     },
@@ -1361,6 +1385,13 @@ export class PaymentAdminController {
                 email: (invoice.application.participant.user?.email ?? null) as string | null,
                 nationality: (invoice.application.participant.nationality ?? null) as string | null,
                 originCountry: (invoice.application.participant.originCountry ?? null) as string | null,
+                ambassador: invoice.application.participant.user?.ambassador
+                    ? {
+                        referralCode: invoice.application.participant.user.ambassador.referralCode as string,
+                        isActive: invoice.application.participant.user.ambassador.isActive as boolean,
+                        isSameProgram: invoice.application.participant.user.ambassador.programId === (invoice.application.programId as string | undefined),
+                    }
+                    : null,
             },
             createdAt: (invoice.createdAt as Date).toISOString(),
             updatedAt: (invoice.updatedAt as Date).toISOString(),
