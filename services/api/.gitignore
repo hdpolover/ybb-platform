@@ -47,3 +47,6 @@ temp/
 service-account.json
 *-service-acc.json
 ybb-service-acc.json
+
+# one-off remediation script backups (contain participant PII)
+scripts/backups/
