@@ -17,8 +17,10 @@ const nextConfig: NextConfig = {
   ],
 
   // TypeScript configuration
+  // Type errors fail the build so regressions are caught at build time
+  // instead of shipping silently.
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
 
   // Enable compression to reduce bandwidth and improve performance
