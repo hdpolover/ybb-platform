@@ -1776,7 +1776,7 @@ export function createProgramAnnouncement(
     tags?: string[];
     sendEmail?: boolean;
     isPinned?: boolean;
-    imageUrl?: string;
+    imageUrl?: string | null;
     publishDate?: string;
     isActive?: boolean;
   },

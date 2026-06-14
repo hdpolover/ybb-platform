@@ -122,10 +122,10 @@ export default function ParticipantsPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<"" | "fully_funded" | "self_funded">("");
   const [countryFilter, setCountryFilter] = useState("");
-  const [registrationPaymentStatusFilter, setRegistrationPaymentStatusFilter] = useState("");
-  const [programPaymentStatusFilter, setProgramPaymentStatusFilter] = useState("");
+  const [registrationPaymentStatusFilter, setRegistrationPaymentStatusFilter] = useState<"" | "unpaid" | "paid" | "processing" | "failed" | "cancelled" | "refunded">("");
+  const [programPaymentStatusFilter, setProgramPaymentStatusFilter] = useState<"" | "unpaid" | "paid" | "processing" | "failed" | "cancelled" | "refunded">("");
   const [sortBy, setSortBy] = useState<(typeof SORT_BY_OPTIONS)[number]["value"]>("updatedAt");
   const [sortOrder, setSortOrder] = useState<(typeof SORT_ORDER_OPTIONS)[number]["value"]>("desc");
   const [startDate, setStartDate] = useState("");
@@ -384,7 +384,7 @@ export default function ParticipantsPage() {
             <select
               value={categoryFilter}
               onChange={(e) => {
-                setCategoryFilter(e.target.value);
+                setCategoryFilter(e.target.value as "" | "fully_funded" | "self_funded");
                 setPage(1);
               }}
               className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs text-zinc-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
@@ -416,7 +416,7 @@ export default function ParticipantsPage() {
             <select
               value={registrationPaymentStatusFilter}
               onChange={(e) => {
-                setRegistrationPaymentStatusFilter(e.target.value);
+                setRegistrationPaymentStatusFilter(e.target.value as "" | "unpaid" | "paid" | "processing" | "failed" | "cancelled" | "refunded");
                 setPage(1);
               }}
               className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs text-zinc-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
@@ -434,7 +434,7 @@ export default function ParticipantsPage() {
             <select
               value={programPaymentStatusFilter}
               onChange={(e) => {
-                setProgramPaymentStatusFilter(e.target.value);
+                setProgramPaymentStatusFilter(e.target.value as "" | "unpaid" | "paid" | "processing" | "failed" | "cancelled" | "refunded");
                 setPage(1);
               }}
               className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs text-zinc-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
