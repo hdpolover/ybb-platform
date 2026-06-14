@@ -8,7 +8,7 @@ export class GetAmbassadorsListHandler implements IQueryHandler<GetAmbassadorsLi
     constructor(private readonly prisma: PrismaService) {}
 
     async execute(query: GetAmbassadorsListQuery): Promise<any> {
-        const { programId, search, page, limit } = query;
+        const { programId, search, page, limit, sortBy, sortOrder } = query;
         const skip = (page - 1) * limit;
 
         const where: Prisma.AmbassadorWhereInput = { deletedAt: null };
@@ -32,12 +32,24 @@ export class GetAmbassadorsListHandler implements IQueryHandler<GetAmbassadorsLi
              ];
         }
 
+        const dir: Prisma.SortOrder = sortOrder === 'asc' ? Prisma.SortOrder.asc : Prisma.SortOrder.desc;
+        const orderBy =
+            sortBy === 'totalReferrals' ? { totalReferrals: dir }
+            : sortBy === 'successfulReferrals' ? { successfulReferrals: dir }
+            : sortBy === 'lastReferralAt' ? { lastReferralAt: dir }
+            : sortBy === 'fullName' ? { fullName: dir }
+            : sortBy === 'referralCode' ? { referralCode: dir }
+            : sortBy === 'institution' ? { institution: dir }
+            : sortBy === 'isActive' ? { isActive: dir }
+            : sortBy === 'createdAt' ? { createdAt: dir }
+            : { createdAt: Prisma.SortOrder.desc };
+
         const [data, total] = await Promise.all([
             this.prisma.ambassador.findMany({
                 where,
                 skip,
                 take: limit,
-                orderBy: { createdAt: 'desc' },
+                orderBy,
                 include: {
                     user: { select: { email: true } },
                     program: { select: { name: true, slug: true } }

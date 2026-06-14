@@ -48,13 +48,17 @@ export class AmbassadorAdminController {
   @ApiQuery({ name: 'search', required: false })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
+  @ApiQuery({ name: 'sortBy', required: false })
+  @ApiQuery({ name: 'sortOrder', required: false })
   async findAll(
     @Query('programId') programId?: string,
     @Query('search') search?: string,
     @Query('page') page: number = 1,
     @Query('limit') limit: number = 20,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: string,
   ) {
-    return this.queryBus.execute(new GetAmbassadorsListQuery(programId, search, Number(page), Number(limit)));
+    return this.queryBus.execute(new GetAmbassadorsListQuery(programId, search, Number(page), Number(limit), sortBy, sortOrder));
   }
 
   @Get(':id')
