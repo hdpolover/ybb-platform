@@ -9,6 +9,7 @@ import { CreateRegistrationPaymentIntentCommand } from '../create-registration-p
 import { APPLICATION_REPOSITORY } from '@modules/applications/infrastructure/tokens';
 import { PaymentGrpcClient } from '@modules/payments/infrastructure/services/payment-grpc.client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { RegistrationFeeGateService } from '@modules/payments/application/services/registration-fee-gate.service';
 
 /** Minimal application stub returned by the repository. */
 const makeApp = (overrides: Record<string, unknown> = {}) => ({
@@ -29,6 +30,7 @@ describe('CreateRegistrationPaymentIntentHandler (admin path)', () => {
     program: { findUnique: jest.fn() },
     brandSetting: { findFirst: jest.fn() },
   };
+  const mockRegistrationFeeGate = { isRegistrationFeePaid: jest.fn() };
 
   const command = new CreateRegistrationPaymentIntentCommand('app-1', 'participant-1');
 
@@ -39,13 +41,14 @@ describe('CreateRegistrationPaymentIntentHandler (admin path)', () => {
         { provide: APPLICATION_REPOSITORY, useValue: mockAppRepository },
         { provide: PaymentGrpcClient, useValue: mockPaymentClient },
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: RegistrationFeeGateService, useValue: mockRegistrationFeeGate },
       ],
     }).compile();
 
     handler = module.get(CreateRegistrationPaymentIntentHandler);
     jest.clearAllMocks();
 
-    // Happy-path defaults: dual-priced registration tier + configured rate.
+    // Happy-path defaults: dual-priced registration tier + configured rate + not yet paid.
     mockAppRepository.findById.mockResolvedValue(makeApp());
     mockPrisma.programPricingTier.findFirst.mockResolvedValue({
       price: 10,
@@ -55,6 +58,7 @@ describe('CreateRegistrationPaymentIntentHandler (admin path)', () => {
     mockPrisma.program.findUnique.mockResolvedValue({ usdInIdr: 16000, brandId: 'brand-1' });
     mockPrisma.brandSetting.findFirst.mockResolvedValue({ usdInIdr: 16000 });
     mockPaymentClient.createIntent.mockResolvedValue({ intent_id: 'pi-1', status: 'REQUIRES_PAYMENT_METHOD' });
+    mockRegistrationFeeGate.isRegistrationFeePaid.mockResolvedValue(false);
   });
 
   // ── guard rails ───────────────────────────────────────────────────────────
@@ -81,6 +85,24 @@ describe('CreateRegistrationPaymentIntentHandler (admin path)', () => {
     mockPrisma.programPricingTier.findFirst.mockResolvedValue(null);
     await expect(handler.execute(command)).rejects.toThrow(/No active registration fee tier/);
     expect(mockPaymentClient.createIntent).not.toHaveBeenCalled();
+  });
+
+  // ── duplicate-payment guard ────────────────────────────────────────────────
+
+  it('throws BadRequestException when the registration fee has already been paid', async () => {
+    mockRegistrationFeeGate.isRegistrationFeePaid.mockResolvedValue(true);
+    await expect(handler.execute(command)).rejects.toThrow(
+      new BadRequestException('Registration fee has already been paid.'),
+    );
+    expect(mockPaymentClient.createIntent).not.toHaveBeenCalled();
+  });
+
+  it('proceeds to create intent when the registration fee has not been paid', async () => {
+    mockRegistrationFeeGate.isRegistrationFeePaid.mockResolvedValue(false);
+    await expect(handler.execute(command)).resolves.toEqual(
+      expect.objectContaining({ intent_id: 'pi-1' }),
+    );
+    expect(mockPaymentClient.createIntent).toHaveBeenCalledTimes(1);
   });
 
   it('scopes the tier lookup to the program + active registration_fee tier', async () => {

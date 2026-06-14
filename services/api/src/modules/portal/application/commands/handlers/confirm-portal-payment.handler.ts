@@ -12,6 +12,7 @@ import {
     buildParticipantSubmissionUrl,
 } from '@modules/payments/application/utils/participant-dashboard-url.util';
 import { resolveUsdInIdrRate } from '../../utils/resolve-usd-in-idr-rate';
+import { RegistrationFeeGateService } from '@modules/payments/application/services/registration-fee-gate.service';
 
 @Injectable()
 export class ConfirmPortalPaymentHandler {
@@ -22,6 +23,7 @@ export class ConfirmPortalPaymentHandler {
         private readonly cacheService: CacheService,
         private readonly portalCacheService: PortalCacheService,
         private readonly paymentClient: PaymentGrpcClient,
+        private readonly registrationFeeGate: RegistrationFeeGateService,
     ) {}
 
     async execute(command: ConfirmPortalPaymentCommand): Promise<ConfirmPortalPaymentResponseDto> {
@@ -80,6 +82,7 @@ export class ConfirmPortalPaymentHandler {
                         name: true,
                         isActive: true,
                         deletedAt: true,
+                        feeType: true,
                     },
                 },
             },
@@ -97,6 +100,19 @@ export class ConfirmPortalPaymentHandler {
         }
         if (!invoice.pricingTier.isActive || invoice.pricingTier.deletedAt) {
             throw new BadRequestException('This payment option is no longer available for new payments.');
+        }
+
+        // Duplicate registration-fee guard: if this invoice is for a registration_fee
+        // tier but the application already has a paid registration invoice (or the
+        // registrationPaymentStatus is 'paid'), block the new payment intent.
+        // The invoice.status === 'paid' check above already prevents re-paying a
+        // paid invoice; this check catches the cross-invoice case where a different
+        // registration_fee invoice was paid (the scenario that caused the 3x overpay).
+        if (invoice.pricingTier.feeType === 'registration_fee') {
+            const alreadyPaid = await this.registrationFeeGate.isRegistrationFeePaid(invoice.applicationId);
+            if (alreadyPaid) {
+                throw new BadRequestException('Registration fee has already been paid.');
+            }
         }
 
         // Build customer identity for downstream events (notification service uses

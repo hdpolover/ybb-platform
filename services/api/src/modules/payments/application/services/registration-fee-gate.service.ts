@@ -5,7 +5,8 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
  * RegistrationFeeGateService
  *
  * Single authoritative check for whether a participant application has
- * satisfied the program's registration fee requirement before submission.
+ * satisfied the program's registration fee requirement before submission,
+ * and whether the registration fee has already been paid (duplicate-payment guard).
  *
  * Business rules enforced here:
  * - Gate signal is the PROGRAM's active registration_fee pricing tier, NOT
@@ -23,6 +24,50 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 @Injectable()
 export class RegistrationFeeGateService {
     constructor(private readonly prisma: PrismaService) {}
+
+    /**
+     * Checks whether the registration fee has already been paid for the given
+     * application. Fails safe (returns false) when the application cannot be
+     * found or any lookup throws.
+     *
+     * This is the duplicate-payment guard — used before creating a new payment
+     * intent to prevent a participant from paying the registration fee twice.
+     */
+    async isRegistrationFeePaid(applicationId: string): Promise<boolean> {
+        try {
+            const application = await this.prisma.participantApplication.findUnique({
+                where: { id: applicationId },
+                select: {
+                    registrationPaymentStatus: true,
+                },
+            });
+
+            if (!application) {
+                return false;
+            }
+
+            // Fast path: canonical status already reflects payment.
+            if (application.registrationPaymentStatus === 'paid') {
+                return true;
+            }
+
+            // Race-condition fallback: check for a paid registration_fee invoice
+            // in case registrationPaymentStatus has not been updated yet.
+            const paidInvoice = await this.prisma.applicationInvoice.findFirst({
+                where: {
+                    applicationId,
+                    pricingTier: { feeType: 'registration_fee' },
+                    status: 'paid',
+                },
+                select: { id: true },
+            });
+
+            return paidInvoice !== null;
+        } catch {
+            // Fail safe: if we cannot determine paid status, do not block the caller.
+            return false;
+        }
+    }
 
     /**
      * Asserts that the registration fee requirement is satisfied for the given

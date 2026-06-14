@@ -1,10 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { BadRequestException } from '@nestjs/common';
 import { ConfirmPortalPaymentHandler } from './confirm-portal-payment.handler';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { PortalCacheService } from '../../services/portal-cache.service';
 import { PaymentGrpcClient } from '@modules/payments/infrastructure/services/payment-grpc.client';
 import { ConfirmPortalPaymentCommand } from '../../queries/portal-queries';
+import { RegistrationFeeGateService } from '@modules/payments/application/services/registration-fee-gate.service';
 
 describe('ConfirmPortalPaymentHandler', () => {
     let handler: ConfirmPortalPaymentHandler;
@@ -30,6 +32,10 @@ describe('ConfirmPortalPaymentHandler', () => {
         processPayment: jest.fn(),
     };
 
+    const mockRegistrationFeeGate = {
+        isRegistrationFeePaid: jest.fn(),
+    };
+
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
             providers: [
@@ -38,11 +44,14 @@ describe('ConfirmPortalPaymentHandler', () => {
                 { provide: CacheService, useValue: mockCacheService },
                 { provide: PortalCacheService, useValue: mockPortalCacheService },
                 { provide: PaymentGrpcClient, useValue: mockPaymentClient },
+                { provide: RegistrationFeeGateService, useValue: mockRegistrationFeeGate },
             ],
         }).compile();
 
         handler = module.get<ConfirmPortalPaymentHandler>(ConfirmPortalPaymentHandler);
         jest.clearAllMocks();
+        // Default: registration fee not yet paid (allow through).
+        mockRegistrationFeeGate.isRegistrationFeePaid.mockResolvedValue(false);
     });
 
     it('passes the program exchange rate to the payment service when older portal invoices have no snapshot', async () => {
@@ -315,5 +324,115 @@ describe('ConfirmPortalPaymentHandler', () => {
                 }),
             }),
         );
+    });
+
+    // ── duplicate registration-fee guard ──────────────────────────────────────
+
+    const makeRegistrationInvoice = () => ({
+        id: 'invoice-reg',
+        applicationId: 'app-1',
+        amount: '15',
+        currency: 'USD',
+        amountIdr: null,
+        status: 'unpaid',
+        exchangeRateSnapshot: '16000',
+        paymentMethod: null,
+        externalIntentId: null,
+        externalTransactionId: null,
+        pricingTier: {
+            name: 'Registration Fee',
+            isActive: true,
+            deletedAt: null,
+            feeType: 'registration_fee',
+        },
+        application: {
+            participantId: 'participant-1',
+            programId: 'program-1',
+            program: {
+                name: 'China Youth Summit 2026',
+                currency: 'USD',
+                usdInIdr: '16000',
+                brandId: 'brand-1',
+                brand: { landingUrl: null, websiteUrl: null },
+            },
+            participant: {
+                fullName: 'Hendra',
+                user: { email: 'hendra@example.com' },
+            },
+        },
+    });
+
+    it('throws BadRequestException when the registration fee was already paid on a different invoice', async () => {
+        mockPortalCacheService.getParticipantProfile.mockResolvedValue({
+            id: 'participant-1',
+            userId: 'user-1',
+        });
+        mockPrisma.applicationInvoice.findUnique.mockResolvedValue(makeRegistrationInvoice());
+        // Gate reports fee already paid (e.g. via a previously paid invoice).
+        mockRegistrationFeeGate.isRegistrationFeePaid.mockResolvedValue(true);
+
+        await expect(
+            handler.execute(
+                new ConfirmPortalPaymentCommand('user-1', 'invoice-reg', 'gateway', 'xendit_credit_card'),
+            ),
+        ).rejects.toThrow(new BadRequestException('Registration fee has already been paid.'));
+
+        expect(mockPaymentClient.createIntent).not.toHaveBeenCalled();
+    });
+
+    it('proceeds normally when the registration fee has not been paid yet', async () => {
+        mockPortalCacheService.getParticipantProfile.mockResolvedValue({
+            id: 'participant-1',
+            userId: 'user-1',
+        });
+        mockPrisma.applicationInvoice.findUnique.mockResolvedValue(makeRegistrationInvoice());
+        mockRegistrationFeeGate.isRegistrationFeePaid.mockResolvedValue(false);
+        mockPaymentClient.createIntent.mockResolvedValue({ intent_id: 'intent-1' });
+        mockPaymentClient.processPayment.mockResolvedValue({
+            status: 'PENDING',
+            transaction_id: 'tx-1',
+            action: { type: 'redirect', url: 'https://checkout.xendit.co/invoice/test' },
+        });
+        mockPrisma.applicationInvoice.update.mockResolvedValue(undefined);
+
+        const result = await handler.execute(
+            new ConfirmPortalPaymentCommand('user-1', 'invoice-reg', 'gateway', 'xendit_credit_card'),
+        );
+
+        expect(result).toEqual(
+            expect.objectContaining({ invoice_id: 'invoice-reg', intent_id: 'intent-1' }),
+        );
+        expect(mockPaymentClient.createIntent).toHaveBeenCalledTimes(1);
+    });
+
+    it('does NOT call the registration gate for non-registration_fee invoice types', async () => {
+        mockPortalCacheService.getParticipantProfile.mockResolvedValue({
+            id: 'participant-1',
+            userId: 'user-1',
+        });
+        mockPrisma.applicationInvoice.findUnique.mockResolvedValue({
+            ...makeRegistrationInvoice(),
+            id: 'invoice-prog',
+            pricingTier: {
+                name: 'Program Fee',
+                isActive: true,
+                deletedAt: null,
+                feeType: 'program_fee',
+            },
+        });
+        mockPaymentClient.createIntent.mockResolvedValue({ intent_id: 'intent-2' });
+        mockPaymentClient.processPayment.mockResolvedValue({
+            status: 'PENDING',
+            transaction_id: 'tx-2',
+            action: { type: 'redirect', url: 'https://checkout.xendit.co/invoice/test2' },
+        });
+        mockPrisma.applicationInvoice.update.mockResolvedValue(undefined);
+
+        await handler.execute(
+            new ConfirmPortalPaymentCommand('user-1', 'invoice-prog', 'gateway', 'xendit_credit_card'),
+        );
+
+        expect(mockRegistrationFeeGate.isRegistrationFeePaid).not.toHaveBeenCalled();
+        expect(mockPaymentClient.createIntent).toHaveBeenCalledTimes(1);
     });
 });
