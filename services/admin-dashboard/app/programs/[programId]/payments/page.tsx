@@ -154,7 +154,7 @@ export default function PaymentsPage({
   const [tierFilter, setTierFilter] = useState("");
   const [feeTypeFilter, setFeeTypeFilter] = useState("");
   const [applicationStatusFilter, setApplicationStatusFilter] = useState("");
-  const [followUpStatusFilter, setFollowUpStatusFilter] = useState("");
+  const [followUpStatusFilter, setFollowUpStatusFilter] = useState<"" | "participant_cancelled" | "payment_cancelled_issue" | "payment_failed" | "manual_proof_rejected">("");
   const [currencyFilter, setCurrencyFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -452,7 +452,7 @@ export default function PaymentsPage({
             </select>
             <select
               value={followUpStatusFilter}
-              onChange={(e) => { setFollowUpStatusFilter(e.target.value); setPage(1); }}
+              onChange={(e) => { setFollowUpStatusFilter(e.target.value as "" | "participant_cancelled" | "payment_cancelled_issue" | "payment_failed" | "manual_proof_rejected"); setPage(1); }}
               className={FILTER_SELECT_CLASS}
             >
               {followUpOptions.map((opt) => (

@@ -7,7 +7,7 @@ export type MenuManagementTableProps = {
   items: MenuItemRow[];
   onAddItem: () => void;
   onEditItem: (item: MenuItemRow) => void;
-  onDeleteItem: (id: number) => void;
+  onDeleteItem: (id: string) => void;
 };
 
 export function MenuManagementTable({
