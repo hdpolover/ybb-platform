@@ -41,12 +41,17 @@ const prisma = new PrismaClient({ adapter });
 
 const APPLY = process.argv.includes('--apply');
 
-// Intents verified SUCCEEDED at the gateway but not synced to the api DB.
-const INTENT_IDS = [
+// Intent ids may be passed as positional UUID args; otherwise the default set
+// (the first batch verified SUCCEEDED on 2026-06-14) is used. Discover the full
+// drift set by cross-checking processing api invoices against
+// ybb_payments_db.payment_intents (status='SUCCEEDED').
+const ARG_INTENTS = process.argv.slice(2).filter((a) => /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(a));
+const DEFAULT_INTENT_IDS = [
     'b3f5292d-74f0-4e6a-83aa-c5debdf98879',
     'e1eea5ab-2d3f-4a75-a20c-51a3468f7793',
     'e475d08b-ed10-4290-bcee-9485ee05a09d',
 ];
+const INTENT_IDS = ARG_INTENTS.length > 0 ? ARG_INTENTS : DEFAULT_INTENT_IDS;
 
 async function main(): Promise<void> {
     console.log(`[reconcile-paid-intents] mode: ${APPLY ? 'APPLY (will mutate)' : 'DRY RUN (no changes)'}`);
@@ -54,16 +59,22 @@ async function main(): Promise<void> {
     const invoices = await prisma.applicationInvoice.findMany({
         where: {
             externalIntentId: { in: INTENT_IDS },
-            pricingTier: { feeType: 'registration_fee' },
         },
-        select: { id: true, applicationId: true, status: true, externalIntentId: true, paidAt: true },
+        select: {
+            id: true,
+            applicationId: true,
+            status: true,
+            externalIntentId: true,
+            paidAt: true,
+            pricingTier: { select: { feeType: true } },
+        },
     });
 
     console.log(`[reconcile-paid-intents] matched ${invoices.length} registration_fee invoice(s) for ${INTENT_IDS.length} intent id(s).`);
     for (const inv of invoices) {
         console.log(
-            `  intent=${inv.externalIntentId} invoice=${inv.id} application=${inv.applicationId} ` +
-            `currentStatus=${inv.status} -> paid`,
+            `  intent=${inv.externalIntentId} feeType=${inv.pricingTier?.feeType} invoice=${inv.id} ` +
+            `application=${inv.applicationId} currentStatus=${inv.status} -> paid`,
         );
     }
 
@@ -87,9 +98,16 @@ async function main(): Promise<void> {
                 where: { id: inv.id },
                 data: { status: 'paid', paidAt: inv.paidAt ?? now },
             });
+            // Repair the correct denormalised field for the invoice's fee type.
+            // registration_fee -> registrationPaymentStatus; all other fee types
+            // (program_fee_1/2, full_fee, custom_fee) -> programPaymentStatus.
+            const field =
+                inv.pricingTier?.feeType === 'registration_fee'
+                    ? 'registrationPaymentStatus'
+                    : 'programPaymentStatus';
             await tx.participantApplication.update({
                 where: { id: inv.applicationId },
-                data: { registrationPaymentStatus: 'paid' },
+                data: { [field]: 'paid' },
             });
         }
     });
