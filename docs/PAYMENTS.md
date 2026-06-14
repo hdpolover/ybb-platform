@@ -26,7 +26,7 @@ Priority is determined by `getFeeTypePriority` in `get-portal-payments.handler.t
 
 Each tier carries an `allowedCategories` array (e.g., `['self_funded']`, `['fully_funded']`, or empty for all). A tier is **applicable** to a participant only if `allowedCategories` is empty OR it includes the participant's `applicationCategory`.
 
-This means the visible payment sequence is participant-specific. A `fully_funded` participant will skip any `program_fee_1` tier restricted to `self_funded`, resulting in a sequence of: registration fee, then program fee 2 (if applicable). This is by design, not a bug.
+This means the visible payment sequence is participant-specific: a tier only appears for the categories listed in its `allowedCategories`. In CYS and MEYS the program fee installments allow both `self_funded` and `fully_funded`, so fully_funded participants pay the full sequence (registration fee, program fee 1, program fee 2). If a program were to restrict an installment to a single category, the other category would not see that installment.
 
 ---
 
@@ -44,7 +44,7 @@ The participant payments list shows applicable tiers in fee-stage order and enfo
 
 - Paid stages remain visible in history regardless of whether their tier is still active.
 - A participant cannot see (or pay) a later fee stage before all earlier stages are paid.
-- If a `fully_funded` participant has no applicable `program_fee_1` tier, the system skips directly from registration to `program_fee_2`. No action is required.
+- If a participant's category is excluded from a stage's tier (`allowedCategories` does not include it), that stage is skipped and the sequence continues to the next applicable tier.
 
 ### Orphan Invoices
 
