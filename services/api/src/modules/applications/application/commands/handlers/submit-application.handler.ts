@@ -1,32 +1,38 @@
-import { Injectable, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Inject, Logger } from '@nestjs/common';
 import { IApplicationRepository } from '@core/interfaces/repositories/application.repository.interface';
 import { SubmitApplicationCommand } from '../submit-application.command';
 import { ApplicationResponseDto } from '../../dto/application-response.dto';
 import { ApplicationMapper } from '@modules/applications/infrastructure/mappers/application.mapper';
 import { APPLICATION_REPOSITORY } from '@modules/applications/infrastructure/tokens';
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
-import { PaymentGrpcClient } from '@modules/payments/infrastructure/services/payment-grpc.client';
-import { ApplicationCategory } from '@core/entities/participant-application.entity';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
 import { ReferralFunnelService } from '@modules/participants/application/services/referral-funnel.service';
+import { RegistrationFeeGateService } from '@modules/payments/application/services/registration-fee-gate.service';
 
 /**
  * Submit Application Handler
- * 
+ *
  * Application Layer - Command Handler
- * Handles business logic for submitting applications
+ * Handles business logic for submitting applications (admin/internal path).
+ *
+ * Registration fee applies to ALL participants regardless of application
+ * category (fully_funded AND self_funded — reimbursement model). The gate
+ * is enforced via the shared RegistrationFeeGateService so this path and
+ * the portal submit path cannot diverge.
  */
 @Injectable()
 export class SubmitApplicationHandler {
+  private readonly logger = new Logger(SubmitApplicationHandler.name);
+
   constructor(
     @Inject(APPLICATION_REPOSITORY)
     private readonly applicationRepository: IApplicationRepository,
     private readonly applicationMapper: ApplicationMapper,
     private readonly metricsService: MetricsService,
-    private readonly paymentClient: PaymentGrpcClient,
     private readonly cacheService: CacheService,
     private readonly referralFunnel: ReferralFunnelService,
+    private readonly registrationFeeGate: RegistrationFeeGateService,
   ) {}
 
   async execute(command: SubmitApplicationCommand): Promise<ApplicationResponseDto> {
@@ -49,28 +55,9 @@ export class SubmitApplicationHandler {
       );
     }
 
-    // --- CHECK PAYMENT STATUS ---
-    // Rule: Participant must have successfully PAID the 'registration' fee for this application
-    // Exception: 'fully_funded' applicants do not pay registration fees.
-    
-    const isFullyFunded = application.applicationCategory === ApplicationCategory.FULLY_FUNDED;
-
-    if (!isFullyFunded) {
-      const payments = await this.paymentClient.getIntentsByReference({
-        reference_type: 'application',
-        reference_id: application.id,
-      });
-
-      // Check for any SUCCEEDED registration payment
-      const hasPaidRegistration = payments.intents.some(intent => 
-        intent.status === 'SUCCEEDED'
-        && intent.metadata?.['payment_category'] === 'registration'
-      );
-
-      if (!hasPaidRegistration) {
-         throw new BadRequestException('Registration fee must be paid (or verified) before submission.');
-      }
-    }
+    // Registration fee gate: applies to ALL categories (no fully_funded bypass).
+    // Uses the shared service so portal and admin paths enforce identical rules.
+    await this.registrationFeeGate.assertRegistrationFeePaid(application.id);
 
     // Submit application
     application.submit();
@@ -100,7 +87,7 @@ export class SubmitApplicationHandler {
     try {
       await this.cacheService.invalidateKey(CACHE_KEYS.PARTICIPANT_LATEST_APP(participantId));
     } catch (error) {
-      console.error(`Failed to invalidate cache for participant ${participantId}:`, error);
+      this.logger.error(`Failed to invalidate cache for participant ${participantId}:`, error);
     }
   }
 }

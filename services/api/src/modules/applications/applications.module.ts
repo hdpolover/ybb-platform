@@ -3,6 +3,7 @@ import { AuthModule } from '@modules/auth/auth.module';
 import { ParticipantsModule } from '@modules/participants/participants.module';
 import { ApplicationsController } from './presentation/applications.controller';
 import { PaymentModule } from '@modules/payments/payment.module';
+import { PaymentsModule } from '@modules/payments/payments.module';
 
 // Command Handlers
 import { CreateApplicationHandler } from './application/commands/handlers/create-application.handler';
@@ -30,7 +31,7 @@ import { APPLICATION_REPOSITORY } from './infrastructure/tokens';
 import { CacheModule } from '@shared/infrastructure/cache/cache.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, ParticipantsModule, MonitoringModule, PaymentModule, CacheModule],
+  imports: [PrismaModule, AuthModule, ParticipantsModule, MonitoringModule, PaymentModule, PaymentsModule, CacheModule],
   controllers: [ApplicationsController],
   providers: [
     // Command Handlers
