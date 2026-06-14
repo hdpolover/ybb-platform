@@ -138,4 +138,51 @@ describe('RegistrationFeeGateService', () => {
             );
         });
     });
+
+    // ── isRegistrationFeePaid ─────────────────────────────────────────────────
+
+    describe('isRegistrationFeePaid', () => {
+        it('returns true when registrationPaymentStatus is paid (fast path)', async () => {
+            mockPrisma.participantApplication.findUnique.mockResolvedValue({
+                registrationPaymentStatus: 'paid',
+                programId: 'prog-1',
+            });
+
+            await expect(service.isRegistrationFeePaid('app-1')).resolves.toBe(true);
+            // Fast path exits before invoice query.
+            expect(mockPrisma.applicationInvoice.findFirst).not.toHaveBeenCalled();
+        });
+
+        it('returns true when a paid registration_fee invoice exists (race-condition fallback)', async () => {
+            mockPrisma.participantApplication.findUnique.mockResolvedValue({
+                registrationPaymentStatus: 'unpaid',
+                programId: 'prog-1',
+            });
+            mockPrisma.applicationInvoice.findFirst.mockResolvedValue({ id: 'invoice-1' });
+
+            await expect(service.isRegistrationFeePaid('app-1')).resolves.toBe(true);
+        });
+
+        it('returns false when registrationPaymentStatus is unpaid and no paid invoice exists', async () => {
+            mockPrisma.participantApplication.findUnique.mockResolvedValue({
+                registrationPaymentStatus: 'unpaid',
+                programId: 'prog-1',
+            });
+            mockPrisma.applicationInvoice.findFirst.mockResolvedValue(null);
+
+            await expect(service.isRegistrationFeePaid('app-1')).resolves.toBe(false);
+        });
+
+        it('returns false when application is not found (fail-safe)', async () => {
+            mockPrisma.participantApplication.findUnique.mockResolvedValue(null);
+
+            await expect(service.isRegistrationFeePaid('app-missing')).resolves.toBe(false);
+        });
+
+        it('returns false (fail-safe) when DB lookup throws', async () => {
+            mockPrisma.participantApplication.findUnique.mockRejectedValue(new Error('DB error'));
+
+            await expect(service.isRegistrationFeePaid('app-1')).resolves.toBe(false);
+        });
+    });
 });

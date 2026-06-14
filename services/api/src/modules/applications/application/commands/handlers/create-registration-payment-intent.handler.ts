@@ -11,6 +11,7 @@ import { APPLICATION_REPOSITORY } from '@modules/applications/infrastructure/tok
 import { PaymentGrpcClient } from '@modules/payments/infrastructure/services/payment-grpc.client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { resolveUsdInIdrRate } from '@modules/portal/application/utils/resolve-usd-in-idr-rate';
+import { RegistrationFeeGateService } from '@modules/payments/application/services/registration-fee-gate.service';
 
 type CreateIntentResponse = Awaited<ReturnType<PaymentGrpcClient['createIntent']>>;
 
@@ -34,6 +35,7 @@ export class CreateRegistrationPaymentIntentHandler {
     private readonly applicationRepository: IApplicationRepository,
     private readonly paymentClient: PaymentGrpcClient,
     private readonly prisma: PrismaService,
+    private readonly registrationFeeGate: RegistrationFeeGateService,
   ) {}
 
   async execute(command: CreateRegistrationPaymentIntentCommand): Promise<CreateIntentResponse> {
@@ -51,6 +53,12 @@ export class CreateRegistrationPaymentIntentHandler {
 
     if (!application.pricingTierId) {
       throw new BadRequestException('No pricing tier selected for this application.');
+    }
+
+    // Duplicate-payment guard: reject if registration fee was already paid.
+    const alreadyPaid = await this.registrationFeeGate.isRegistrationFeePaid(applicationId);
+    if (alreadyPaid) {
+      throw new BadRequestException('Registration fee has already been paid.');
     }
 
     // 2. Resolve the registration fee. The selected tier MUST be an active
