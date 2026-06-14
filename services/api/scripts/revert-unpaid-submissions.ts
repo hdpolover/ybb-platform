@@ -91,6 +91,37 @@ interface Buckets {
 
 const PAID_STATUSES = new Set(['paid', 'refunded']);
 
+// Intent ids whose 'processing' api invoice was VERIFIED at the gateway
+// (ybb_payments_db.payment_intents on 2026-06-14) to be NOT paid — gateway
+// status REQUIRES_PAYMENT_METHOD with an abandoned PENDING transaction. These
+// are safe to revert despite looking ambiguous. Intentionally EXCLUDED:
+//   - 3 SUCCEEDED intents -> already reconciled to paid (see reconcile-paid-intents.ts)
+//   - 3 NEEDS_REVIEW intents (manual transfer proof awaiting admin) -> stay HOLD
+// Any processing+id invoice NOT in this set still defaults to HOLD (fail-safe).
+const VERIFIED_UNPAID_INTENT_IDS = new Set([
+    '05837565-8519-4628-bab4-dc6048338029',
+    '07ddab6b-5ee0-4c0a-887f-d75b3b1d4284',
+    '1b5b5ded-92e7-40a9-b085-b74b817959b4',
+    '21a9b362-61a6-4feb-a8d8-d94c689000cc',
+    '41bc5e02-5533-4f4c-b8d4-d9b4dc58f1a4',
+    '771aed05-b399-4951-a90a-49df38b8167a',
+    '82bdb397-e005-482a-8534-180025c6eb85',
+    '9dad9c41-dcf8-4bce-8776-0bc6b2a76896',
+    'a977e83d-4b78-4626-96a6-de8f8f8f2c64',
+    'baa1b68c-abae-44cc-9f67-8d996dc7e20d',
+    'bb0341fe-9e1f-4682-9e9d-ff3e4a75a670',
+    'c2576e67-8133-40ad-bcf1-149afdf916b3',
+    'c8e8dc19-7816-45da-aded-b41381b150cb',
+    'ca5ac3e0-a97e-40ac-8265-206ed5f8693a',
+    'd8a89250-4f99-474d-8efe-8caecc8faf18',
+    'eebf04ae-bb81-4fb9-805c-7316ed6519a4',
+    'eef4df0b-e355-4206-8007-73ecb80536a7',
+    'f1787d1b-9ddb-42e5-8a45-d4dd2d456fb5',
+    'f8fc1373-5f65-497e-b7f9-641b91a42535',
+    'fd9393ca-5297-4003-936f-bb636f5622f0',
+    'ff536e6c-a554-4824-9717-0f904a6e4671',
+]);
+
 async function classify(): Promise<Buckets> {
     // 1. Programs that actually charge a registration fee (active, non-deleted tier).
     const regFeeTiers = await prisma.programPricingTier.findMany({
@@ -157,6 +188,8 @@ async function classify(): Promise<Buckets> {
 
         // HOLD: a processing invoice that has a gateway intent/txn id may have
         // actually succeeded without the success event reaching our DB.
+        // Exception: if its intent id was VERIFIED at the gateway to be unpaid,
+        // it is safe to revert (fall through). Anything else stays HOLD.
         const ambiguous = invs.find(
             (i) =>
                 i.status === 'processing' &&
@@ -164,18 +197,24 @@ async function classify(): Promise<Buckets> {
                     (i.externalTransactionId != null && i.externalTransactionId.trim().length > 0)),
         );
         if (ambiguous) {
-            buckets.hold.push({
-                id: c.id,
-                participantId: c.participantId,
-                programId: c.programId,
-                registrationPaymentStatus: c.registrationPaymentStatus,
-                submittedAt: c.submittedAt,
-                invoiceId: ambiguous.id,
-                invoiceStatus: ambiguous.status,
-                externalIntentId: ambiguous.externalIntentId,
-                externalTransactionId: ambiguous.externalTransactionId,
-            });
-            continue;
+            const verifiedUnpaid =
+                ambiguous.externalIntentId != null &&
+                VERIFIED_UNPAID_INTENT_IDS.has(ambiguous.externalIntentId);
+            if (!verifiedUnpaid) {
+                buckets.hold.push({
+                    id: c.id,
+                    participantId: c.participantId,
+                    programId: c.programId,
+                    registrationPaymentStatus: c.registrationPaymentStatus,
+                    submittedAt: c.submittedAt,
+                    invoiceId: ambiguous.id,
+                    invoiceStatus: ambiguous.status,
+                    externalIntentId: ambiguous.externalIntentId,
+                    externalTransactionId: ambiguous.externalTransactionId,
+                });
+                continue;
+            }
+            // verified unpaid at gateway -> safe to revert; fall through.
         }
 
         // REVERT: no payment evidence at all.
