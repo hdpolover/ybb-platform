@@ -117,7 +117,7 @@ export class HomeStrategy implements ILandingPageStrategy {
 
     const brandMeta = (brand as Brand & { metadata?: Record<string, unknown> }).metadata || {};
 
-    const [program, brandImageGallery, brandSponsors, socialFeeds, videoPrograms, alumniTestimonials, delegateTestimonials, latestProgramWithAwards, submittedApplications] = await Promise.all([
+    const [program, brandImageGallery, brandSponsors, socialFeeds, videoPrograms, alumniTestimonials, delegateTestimonials, latestProgramWithAwards, registeredApplications] = await Promise.all([
       this.prisma.program.findFirst({
         where: {
           brandId: brand.id, // Scoped to brand
@@ -253,7 +253,9 @@ export class HomeStrategy implements ILandingPageStrategy {
       }),
       this.prisma.participantApplication.findMany({
         where: {
-          submittedAt: { not: null },
+          // Count ALL registered participants for the program (any application
+          // status), not only submitted — drives the public participant
+          // distribution stat. deletedAt:null still excludes removed rows.
           deletedAt: null,
           program: {
             brandId: brand.id,
@@ -342,7 +344,7 @@ export class HomeStrategy implements ILandingPageStrategy {
       }));
 
     const participantCountryGroups = normalizeCountryGroups(
-      submittedApplications.map((application) => ({
+      registeredApplications.map((application) => ({
         country: resolveCountryName(
           application.participant.originCountry,
           application.participant.nationality,
