@@ -660,6 +660,9 @@ export default function PaymentsPage({
                       onClick={() => void handleCopy(`participant-${inv.id}`, inv.participant.id)}
                     />
                   </div>
+                  {inv.participant.ambassador && (
+                    <AmbassadorBadge ambassador={inv.participant.ambassador} />
+                  )}
                 </TableCell>
                 <TableCell className="text-sm">
                   <div className="font-medium text-zinc-700">{inv.pricingTier.name}</div>
@@ -779,5 +782,36 @@ function CopyCellButton({
     >
       <Copy className="h-3 w-3" />
     </button>
+  );
+}
+
+function AmbassadorBadge({
+  ambassador,
+}: {
+  ambassador: { referralCode: string; isActive: boolean; isSameProgram: boolean };
+}) {
+  const activeClass = ambassador.isActive
+    ? ambassador.isSameProgram
+      ? "bg-violet-50 text-violet-700 border-violet-200"
+      : "bg-indigo-50 text-indigo-700 border-indigo-200"
+    : "bg-zinc-100 text-zinc-500 border-zinc-200";
+
+  const label = ambassador.isSameProgram ? "Ambassador" : "Amb. (other prog.)";
+  const title = ambassador.isActive
+    ? ambassador.isSameProgram
+      ? `Ambassador for this program (code: ${ambassador.referralCode})`
+      : `Ambassador for a different program (code: ${ambassador.referralCode})`
+    : `Inactive ambassador (code: ${ambassador.referralCode})`;
+
+  return (
+    <span
+      className={`mt-1 inline-flex items-center rounded border px-1.5 py-0.5 text-[11px] font-medium ${activeClass}`}
+      title={title}
+    >
+      {label}
+      {!ambassador.isActive && " (inactive)"}
+      {" "}
+      <span className="ml-1 font-mono">{ambassador.referralCode}</span>
+    </span>
   );
 }

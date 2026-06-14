@@ -2693,6 +2693,11 @@ export type InvoiceListItem = {
     email: string | null;
     nationality: string | null;
     originCountry: string | null;
+    ambassador: {
+      referralCode: string;
+      isActive: boolean;
+      isSameProgram: boolean;
+    } | null;
   };
   // Verifier audit trail — populated when an admin approves, rejects, or
   // manually overrides the invoice. Null on auto-progressed invoices.

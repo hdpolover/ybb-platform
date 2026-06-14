@@ -304,6 +304,32 @@ export default function PaymentDetailPage({
                         <dt className="text-zinc-500">Participant ID</dt>
                         <dd className="font-mono text-xs text-zinc-700 break-all">{invoice.participant.id}</dd>
                       </div>
+                      {invoice.participant.ambassador && (
+                        <div>
+                          <dt className="text-zinc-500">Ambassador</dt>
+                          <dd className="mt-1 flex flex-wrap items-center gap-2">
+                            <span
+                              className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium ${
+                                invoice.participant.ambassador.isActive
+                                  ? invoice.participant.ambassador.isSameProgram
+                                    ? "bg-violet-50 text-violet-700 border-violet-200"
+                                    : "bg-indigo-50 text-indigo-700 border-indigo-200"
+                                  : "bg-zinc-100 text-zinc-500 border-zinc-200"
+                              }`}
+                            >
+                              {invoice.participant.ambassador.isSameProgram
+                                ? "This program"
+                                : "Other program"}
+                            </span>
+                            <span className="font-mono text-xs text-zinc-700">
+                              {invoice.participant.ambassador.referralCode}
+                            </span>
+                            {!invoice.participant.ambassador.isActive && (
+                              <span className="text-xs text-zinc-400">(inactive)</span>
+                            )}
+                          </dd>
+                        </div>
+                      )}
                     </dl>
                     <div className="pt-4">
                       <Link
