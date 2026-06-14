@@ -46,6 +46,7 @@ type ApplicationDetail = {
     status: string;
     applicationCategory: string | null;
     registrationPaymentStatus: string;
+    invoices: { id: string; status: string }[];
     participationCategoryId: string | null;
     participationCategory: {
         name: string;
@@ -60,6 +61,7 @@ type ApplicationDetail = {
         essayGuidelineText: string | null;
         essayGuidelineUrl: string | null;
         previewChecklistItems: string[];
+        pricingTiers: { id: string }[];
         participationCategories: {
             id: string;
             name: string;
@@ -195,6 +197,21 @@ export class GetPortalSubmissionDetailHandler
                 personalData: true,
                 essayAnswers: true,
                 uploadedFiles: true,
+                invoices: {
+                    where: {
+                        pricingTier: { feeType: 'registration_fee' },
+                        // Only pre-fetch PAID invoices so invoices[0] is always a
+                        // paid invoice or absent — eliminates cancelled/failed invoices
+                        // from incorrectly driving paymentPaid to true via the
+                        // regInvoice?.status === 'paid' fallback path.
+                        status: 'paid',
+                    },
+                    select: {
+                        id: true,
+                        status: true,
+                    },
+                    take: 1,
+                },
                 program: {
                     select: {
                         id: true,
@@ -203,6 +220,11 @@ export class GetPortalSubmissionDetailHandler
                         essayGuidelineText: true,
                         essayGuidelineUrl: true,
                         previewChecklistItems: true,
+                        pricingTiers: {
+                            where: { isActive: true, feeType: 'registration_fee' },
+                            select: { id: true },
+                            take: 1,
+                        },
                         participationCategories: {
                             where: { isActive: true },
                             select: {
@@ -597,11 +619,12 @@ export class GetPortalSubmissionDetailHandler
         const participationCategories = application.program.participationCategories || [];
         if (participationCategories.length === 0) return helpText;
 
-        const hasCustomCategory = participationCategories.some(
-            (category) => this.mapCategoryNameToApplicationCategory(category.name) === null,
-        );
-        if (!hasCustomCategory) return helpText;
-
+        // ProgramParticipationCategory has no funding-type enum field — only a free-text
+        // name. We previously inferred funding type from the name, but that inference has
+        // been removed to make the payment gate fail-closed. Suppress legacy funding hints
+        // whenever the program has any participation categories defined, since the actual
+        // funding type is now determined exclusively from applicationCategory on the
+        // application record, not from category names.
         return undefined;
     }
 
@@ -967,8 +990,15 @@ export class GetPortalSubmissionDetailHandler
     ): SubmissionPreviewDto {
         const personalData = (application.personalData as Record<string, unknown>) || {};
         const checklists = this.buildPreviewChecklists(personalData, application.program.previewChecklistItems ?? []);
-        const paymentRequired = !this.isApplicationFullyFunded(application);
-        const paymentPaid = application.registrationPaymentStatus === 'paid';
+        // paymentRequired is derived from the PROGRAM's pricing-tier configuration,
+        // not from the existence of a participant-initiated invoice. This is fail-closed:
+        // a participant who has never started payment has no invoice but is still
+        // shown a payment requirement when the program has an active registration_fee tier.
+        const paymentRequired = application.program.pricingTiers.length > 0;
+        // paymentPaid: registrationPaymentStatus is the canonical signal; fall back to
+        // a paid invoice as a race-condition guard when the status hasn't propagated yet.
+        const regInvoice = application.invoices[0] ?? null;
+        const paymentPaid = application.registrationPaymentStatus === 'paid' || regInvoice?.status === 'paid';
 
         const pendingItems: string[] = [];
 
@@ -1138,43 +1168,6 @@ export class GetPortalSubmissionDetailHandler
         }
 
         return false;
-    }
-
-    private isApplicationFullyFunded(application: ApplicationDetail): boolean {
-        if (application.applicationCategory === 'fully_funded') {
-            return true;
-        }
-
-        const inferredCategory = this.mapCategoryNameToApplicationCategory(
-            application.participationCategory?.name,
-        );
-
-        return inferredCategory === 'fully_funded';
-    }
-
-    private mapCategoryNameToApplicationCategory(name: string | null | undefined): 'fully_funded' | 'self_funded' | null {
-        if (!name) return null;
-
-        const normalized = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-
-        if (
-            normalized === 'fullyfunded'
-            || normalized === 'fullyfund'
-            || normalized === 'fullfunded'
-            || normalized === 'fullscholarship'
-        ) {
-            return 'fully_funded';
-        }
-
-        if (
-            normalized === 'selffunded'
-            || normalized === 'selffund'
-            || normalized === 'selfsponsored'
-        ) {
-            return 'self_funded';
-        }
-
-        return null;
     }
 
     private calculateProgress(

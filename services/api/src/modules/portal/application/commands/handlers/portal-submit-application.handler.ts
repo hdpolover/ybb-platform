@@ -4,13 +4,17 @@ import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
 import { PortalCacheService } from '../../services/portal-cache.service';
 import { PortalSubmitApplicationCommand } from '../../queries/portal-queries';
-import { PaymentGrpcClient } from '@modules/payments/infrastructure/services/payment-grpc.client';
+import { RegistrationFeeGateService } from '@modules/payments/application/services/registration-fee-gate.service';
 
 /**
  * Portal Submit Application Handler
  *
  * Portal-facing submit that resolves participant from JWT user ID,
- * validates payment status, and transitions the application to submitted.
+ * validates payment status via the shared RegistrationFeeGateService, and
+ * transitions the application to submitted.
+ *
+ * Registration fee applies to ALL participants (fully_funded AND self_funded)
+ * under the reimbursement model — pay first, reimburse later.
  */
 @Injectable()
 export class PortalSubmitApplicationHandler {
@@ -18,29 +22,26 @@ export class PortalSubmitApplicationHandler {
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
         private readonly portalCacheService: PortalCacheService,
-        private readonly paymentClient: PaymentGrpcClient,
+        private readonly registrationFeeGate: RegistrationFeeGateService,
     ) { }
 
     async execute(command: PortalSubmitApplicationCommand): Promise<{ success: boolean; applicationId: string; status: string }> {
-        const { userId } = command;
+        const { userId, programId } = command;
 
         const participant = await this.portalCacheService.getParticipantProfile(userId);
         if (!participant) throw new NotFoundException('Participant not found');
 
+        const whereClause = programId
+            ? { participantId: participant.id, programId }
+            : { participantId: participant.id };
+
         const application = await this.prisma.participantApplication.findFirst({
-            where: { participantId: participant.id },
+            where: whereClause,
             orderBy: { updatedAt: 'desc' },
             select: {
                 id: true,
                 status: true,
-                applicationCategory: true,
-                registrationPaymentStatus: true,
                 personalData: true,
-                participationCategory: {
-                    select: {
-                        name: true,
-                    },
-                },
                 participantId: true,
             },
         });
@@ -57,8 +58,8 @@ export class PortalSubmitApplicationHandler {
             (application.personalData as Record<string, unknown>) || {},
         );
 
-        // Check payment for non-fully-funded applicants
-        await this.validatePaymentStatus(application);
+        // Validate registration fee via shared gate (applies to all categories).
+        await this.registrationFeeGate.assertRegistrationFeePaid(application.id);
 
         // Submit the application
         await this.prisma.participantApplication.update({
@@ -69,53 +70,13 @@ export class PortalSubmitApplicationHandler {
             },
         });
 
-        await this.invalidateCaches(userId, participant.id);
+        await this.invalidateCaches(userId, participant.id, programId);
 
         return {
             success: true,
             applicationId: application.id,
             status: 'submitted',
         };
-    }
-
-    private async validatePaymentStatus(application: {
-        id: string;
-        applicationCategory: string | null;
-        registrationPaymentStatus: string;
-        participationCategory: { name: string } | null;
-    }): Promise<void> {
-        const isFullyFunded = this.isFullyFundedApplication(application);
-        if (isFullyFunded) return;
-
-        if (application.registrationPaymentStatus === 'paid') {
-            return;
-        }
-
-        // Fallback: look up a successful payment for an invoice on a registration_fee
-        // pricing tier directly. We get here when registrationPaymentStatus is still
-        // 'unpaid' — most often because the payment.succeeded event hasn't propagated
-        // yet (race), but the invoice + intent records have already landed.
-        const paidRegInvoice = await this.prisma.applicationInvoice.findFirst({
-            where: {
-                applicationId: application.id,
-                status: 'paid',
-                pricingTier: { feeType: 'registration_fee' },
-            },
-            select: { id: true },
-        });
-        if (paidRegInvoice) {
-            return;
-        }
-
-        // No paid registration invoice found in our DB. Block.
-        // Note: previous implementation called paymentClient.getIntentsByReference and
-        // swallowed any thrown error as "infra issue, allow through". That made the gate
-        // fail open whenever the payment service hiccupped, letting unpaid participants
-        // submit. We now trust the API's own invoice records (kept in sync by the
-        // payment.succeeded event handler) and fail closed.
-        throw new BadRequestException(
-            'Registration fee must be paid before submission.',
-        );
     }
 
     private validatePreviewAcknowledgements(personalData: Record<string, unknown>): void {
@@ -171,49 +132,9 @@ export class PortalSubmitApplicationHandler {
         return false;
     }
 
-    private isFullyFundedApplication(application: {
-        applicationCategory: string | null;
-        participationCategory: { name: string } | null;
-    }): boolean {
-        if (application.applicationCategory === 'fully_funded') {
-            return true;
-        }
-
-        const fromCategoryName = this.mapCategoryNameToApplicationCategory(
-            application.participationCategory?.name,
-        );
-
-        return fromCategoryName === 'fully_funded';
-    }
-
-    private mapCategoryNameToApplicationCategory(name: string | null | undefined): 'fully_funded' | 'self_funded' | null {
-        if (!name) return null;
-
-        const normalized = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-
-        if (
-            normalized === 'fullyfunded'
-            || normalized === 'fullyfund'
-            || normalized === 'fullfunded'
-            || normalized === 'fullscholarship'
-        ) {
-            return 'fully_funded';
-        }
-
-        if (
-            normalized === 'selffunded'
-            || normalized === 'selffund'
-            || normalized === 'selfsponsored'
-        ) {
-            return 'self_funded';
-        }
-
-        return null;
-    }
-
-    private async invalidateCaches(userId: string, participantId: string): Promise<void> {
+    private async invalidateCaches(userId: string, participantId: string, programId?: string): Promise<void> {
         await Promise.all([
-            this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_SUBMISSION_DETAIL(userId)),
+            this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_SUBMISSION_DETAIL(userId, programId)),
             this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_SUBMISSIONS(userId)),
             this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_DASHBOARD(userId)),
             this.cacheService.invalidateKey(CACHE_KEYS.PARTICIPANT_LATEST_APP(participantId)),

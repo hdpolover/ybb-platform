@@ -108,7 +108,12 @@ export class PortalSubmissionsController {
     @Post('submit')
     @ApiOperation({
         summary: 'Submit the application (final submit)',
-        description: 'Transitions the application from draft to submitted. Validates payment status for non-fully-funded applicants. Cannot be undone — use withdraw endpoint after submission.',
+        description: 'Transitions the application from draft to submitted. Validates registration fee payment for all applicants (registration fee applies to both fully_funded and self_funded participants). Cannot be undone — use withdraw endpoint after submission.',
+    })
+    @ApiQuery({
+        name: 'programId',
+        required: false,
+        description: 'Optional program ID to submit a specific program application. Mirrors the detail endpoint — use the same programId passed to GET /portal/submissions/detail.',
     })
     @ApiResponse({ status: 201, type: SubmitApplicationResponseDto, description: 'Application submitted successfully' })
     @ApiResponse({ status: 400, description: 'Application not in draft status, or registration fee not paid' })
@@ -116,11 +121,12 @@ export class PortalSubmissionsController {
     @ApiResponse({ status: 404, description: 'Participant or active application not found' })
     async submitApplication(
         @CurrentUser() user: CurrentUserData,
+        @Query('programId') programId?: string,
     ): Promise<SubmitApplicationResponseDto> {
         const userId = user.userId;
         if (!userId) throw new UnauthorizedException();
         return this.portalSubmitHandler.execute(
-            new PortalSubmitApplicationCommand(userId),
+            new PortalSubmitApplicationCommand(userId, programId),
         );
     }
 }

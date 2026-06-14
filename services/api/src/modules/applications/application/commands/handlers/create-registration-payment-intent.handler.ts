@@ -3,7 +3,6 @@ import { IApplicationRepository } from '@core/interfaces/repositories/applicatio
 import { CreateRegistrationPaymentIntentCommand } from '../create-registration-payment-intent.command';
 import { APPLICATION_REPOSITORY } from '@modules/applications/infrastructure/tokens';
 import { PaymentGrpcClient } from '@modules/payments/infrastructure/services/payment-grpc.client';
-import { ApplicationCategory } from '@core/entities/participant-application.entity';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 
 @Injectable()
@@ -28,12 +27,7 @@ export class CreateRegistrationPaymentIntentHandler {
         throw new BadRequestException('Unauthorized to pay for this application');
     }
 
-    // 2. Check if Fully Funded (No payment needed)
-    if (application.applicationCategory === ApplicationCategory.FULLY_FUNDED) {
-         throw new BadRequestException('No registration payment required for fully funded applications.');
-    }
-
-    // 3. Determine Amount
+    // 2. Determine Amount
     let amount = 0;
     let currency = 'IDR';
 

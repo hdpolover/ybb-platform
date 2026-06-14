@@ -89,7 +89,10 @@ export class SaveSubmissionSectionCommand {
 }
 
 export class PortalSubmitApplicationCommand {
-  constructor(public readonly userId: string) { }
+  constructor(
+    public readonly userId: string,
+    public readonly programId?: string,
+  ) { }
 }
 
 export class DownloadCertificateCommand {

@@ -67,6 +67,7 @@ export class EnsurePortalPaymentInvoiceHandler {
                 currency: true,
                 usdPrice: true,
                 idrPrice: true,
+                feeType: true,
                 allowedCategories: true,
             },
         });
@@ -76,7 +77,13 @@ export class EnsurePortalPaymentInvoiceHandler {
         }
 
         const currentCategory = application.applicationCategory as ApplicationCategory | null;
+        // registration_fee is payable by all participant categories — the submit gate
+        // requires it from everyone regardless of allowedCategories, so we must not
+        // block any category here. For other fee types (full_fee, etc.) the
+        // allowedCategories restriction still applies.
+        const isRegistrationFee = tier.feeType === 'registration_fee';
         if (
+            !isRegistrationFee &&
             currentCategory &&
             tier.allowedCategories.length > 0 &&
             !tier.allowedCategories.includes(currentCategory)

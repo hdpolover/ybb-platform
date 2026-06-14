@@ -18,6 +18,7 @@ import { GetPaymentDetailHandler } from './application/queries/handlers/get-paym
 import { CreateIntentHandler } from './application/commands/handlers/create-intent.handler';
 import { ProcessPaymentHandler } from './application/commands/handlers/process-payment.handler';
 import { PaymentOutboxService } from './infrastructure/services/payment-outbox.service';
+import { RegistrationFeeGateService } from './application/services/registration-fee-gate.service';
 
 import { CacheModule } from '@shared/infrastructure/cache/cache.module';
 
@@ -45,7 +46,8 @@ import { CacheModule } from '@shared/infrastructure/cache/cache.module';
         CreateIntentHandler,
         ProcessPaymentHandler,
         PaymentOutboxService,
+        RegistrationFeeGateService,
     ],
-    exports: ['IPaymentRepository', PaymentServiceHttpClient, PaymentOutboxService],
+    exports: ['IPaymentRepository', PaymentServiceHttpClient, PaymentOutboxService, RegistrationFeeGateService],
 })
 export class PaymentsModule { }

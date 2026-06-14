@@ -10,6 +10,7 @@ import {
     UseGuards,
     Query,
     HttpException,
+    BadRequestException,
     Logger
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiQuery } from '@nestjs/swagger';
@@ -791,7 +792,14 @@ export class PaymentAdminController {
     @ApiOperation({ summary: 'Update invoice status (manual transfer/admin override)' })
     async updateInvoiceStatus(
         @Param('id') id: string,
-        @Body() body: { status: PaymentStatus; reason?: string },
+        @Body() body: {
+            status: PaymentStatus;
+            reason?: string;
+            /** Required when marking an invoice paid with no linked payment transaction. */
+            manualOverride?: boolean;
+            /** Human-readable justification — required alongside manualOverride. */
+            overrideReason?: string;
+        },
         @CurrentUser() user: CurrentUserData,
     ) {
         if (!Object.values(PaymentStatus).includes(body.status)) {
@@ -813,6 +821,49 @@ export class PaymentAdminController {
 
         if (!invoice) {
             throw new HttpException('Invoice not found', 404);
+        }
+
+        // Guard: if marking as paid, require that a successful real payment transaction
+        // is linked. Merely having an externalTransactionId / externalIntentId is
+        // insufficient — a FAILED, CANCELLED, UNPAID, or still-PROCESSING (stalled,
+        // no completion webhook) transaction can also leave those IDs populated.
+        // A "real payment" requires IDs AND that the invoice is already in a confirmed
+        // paid/refunded state; any non-confirmed state means the linked transaction
+        // has not successfully settled.
+        // When no real payment is confirmed, require manualOverride + overrideReason.
+        // NOTE: a dedicated audit column for the override reason is recommended but
+        // not yet added to the schema; the reason is durably logged here until then.
+        if (body.status === PaymentStatus.paid) {
+            const hasExternalIds =
+                (invoice.externalTransactionId != null && invoice.externalTransactionId.trim().length > 0)
+                || (invoice.externalIntentId != null && invoice.externalIntentId.trim().length > 0);
+
+            // Only an invoice already settled as paid/refunded reflects a confirmed
+            // payment. unpaid/processing/failed/cancelled are all unconfirmed — a
+            // stalled processing intent (IDs set, webhook never arrived) is NOT proof.
+            const isConfirmedSettled =
+                invoice.status === PaymentStatus.paid
+                || invoice.status === PaymentStatus.refunded;
+
+            const hasRealPayment = hasExternalIds && isConfirmedSettled;
+
+            if (!hasRealPayment) {
+                const overrideReason = body.overrideReason?.trim() ?? '';
+                if (body.manualOverride !== true || overrideReason.length === 0) {
+                    const reason = !hasExternalIds
+                        ? 'This invoice has no linked payment transaction.'
+                        : 'The linked payment transaction has not settled successfully (invoice is not in a confirmed paid state).';
+                    throw new BadRequestException(
+                        reason + ' To override, set manualOverride=true and provide a non-empty overrideReason.',
+                    );
+                }
+                this.logger.warn(
+                    `Manual payment override applied — admin: ${user.userId}, `
+                    + `invoice: ${id}, application: ${invoice.application.id}, `
+                    + `invoiceStatus: ${invoice.status}, `
+                    + `reason: "${overrideReason}"`,
+                );
+            }
         }
 
         const trimmedReason = body.reason?.trim() ?? '';
