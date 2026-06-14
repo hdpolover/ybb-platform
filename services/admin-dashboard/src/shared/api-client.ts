@@ -2936,12 +2936,16 @@ export async function listAmbassadors(params: {
   search?: string;
   page?: number;
   limit?: number;
+  sortBy?: 'fullName' | 'referralCode' | 'institution' | 'isActive' | 'totalReferrals' | 'successfulReferrals' | 'lastReferralAt' | 'createdAt';
+  sortOrder?: 'asc' | 'desc';
 }): Promise<{ data: Ambassador[]; meta: AmbassadorListMeta }> {
   const q = new URLSearchParams();
   if (params.programId) q.set("programId", params.programId);
   if (params.search) q.set("search", params.search);
   if (params.page) q.set("page", String(params.page));
   if (params.limit) q.set("limit", String(params.limit));
+  if (params.sortBy) q.set("sortBy", params.sortBy);
+  if (params.sortOrder) q.set("sortOrder", params.sortOrder);
   // Handler returns { data: array, meta } → TransformInterceptor Pattern-1 extracts array.
   // Must use raw fetch to preserve meta alongside data.
   const headers = new Headers();

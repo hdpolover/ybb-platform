@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Eye, Pencil, RefreshCw, Search, Trash2, UserPlus } from "lucide-react";
+import { ChevronDown, ChevronUp, ChevronsUpDown, Eye, Pencil, RefreshCw, Search, Trash2, UserPlus } from "lucide-react";
 import { useAuth } from "@/app/contexts/AuthContext";
 import {
   activateAmbassador,
@@ -24,6 +24,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/src/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/src/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/src/ui/sheet";
 
+type SortByType =
+  | 'fullName'
+  | 'referralCode'
+  | 'institution'
+  | 'isActive'
+  | 'totalReferrals'
+  | 'successfulReferrals'
+  | 'lastReferralAt'
+  | 'createdAt';
+
 export default function AmbassadorsPage() {
   const params = useParams<{ programId: string }>();
   const { accessiblePrograms } = useAuth();
@@ -39,6 +49,8 @@ export default function AmbassadorsPage() {
   const [meta, setMeta] = useState({ total: 0, page: 1, limit: 20, lastPage: 1 });
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState<SortByType>("createdAt");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,6 +79,8 @@ export default function AmbassadorsPage() {
         search: search || undefined,
         page,
         limit: 20,
+        sortBy,
+        sortOrder,
       });
       setItems(response.data);
       setMeta(response.meta);
@@ -75,7 +89,7 @@ export default function AmbassadorsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, resolvedProgramId, search]);
+  }, [page, resolvedProgramId, search, sortBy, sortOrder]);
 
   useEffect(() => {
     void fetchData();
@@ -155,6 +169,17 @@ export default function AmbassadorsPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update status");
     }
+  }
+
+  function handleSort(key: SortByType) {
+    if (key === sortBy) {
+      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(key);
+      const defaultDescKeys: SortByType[] = ['totalReferrals', 'successfulReferrals', 'lastReferralAt'];
+      setSortOrder(defaultDescKeys.includes(key) ? 'desc' : 'asc');
+    }
+    setPage(1);
   }
 
   async function handleDelete() {
@@ -242,11 +267,71 @@ export default function AmbassadorsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Ambassador</TableHead>
-              <TableHead>Referral Code</TableHead>
-              <TableHead>Referrals</TableHead>
-              <TableHead>Institution</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead
+                className="cursor-pointer select-none hover:bg-muted/50"
+                onClick={() => handleSort('fullName')}
+              >
+                <button type="button" className="flex items-center gap-1 w-full text-left font-medium">
+                  Ambassador
+                  {sortBy === 'fullName' ? (
+                    sortOrder === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
+                  ) : (
+                    <ChevronsUpDown className="h-4 w-4 opacity-40" />
+                  )}
+                </button>
+              </TableHead>
+              <TableHead
+                className="cursor-pointer select-none hover:bg-muted/50"
+                onClick={() => handleSort('referralCode')}
+              >
+                <button type="button" className="flex items-center gap-1 w-full text-left font-medium">
+                  Referral Code
+                  {sortBy === 'referralCode' ? (
+                    sortOrder === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
+                  ) : (
+                    <ChevronsUpDown className="h-4 w-4 opacity-40" />
+                  )}
+                </button>
+              </TableHead>
+              <TableHead
+                className="cursor-pointer select-none hover:bg-muted/50"
+                onClick={() => handleSort('totalReferrals')}
+              >
+                <button type="button" className="flex items-center gap-1 w-full text-left font-medium">
+                  Referrals
+                  {sortBy === 'totalReferrals' ? (
+                    sortOrder === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
+                  ) : (
+                    <ChevronsUpDown className="h-4 w-4 opacity-40" />
+                  )}
+                </button>
+              </TableHead>
+              <TableHead
+                className="cursor-pointer select-none hover:bg-muted/50"
+                onClick={() => handleSort('institution')}
+              >
+                <button type="button" className="flex items-center gap-1 w-full text-left font-medium">
+                  Institution
+                  {sortBy === 'institution' ? (
+                    sortOrder === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
+                  ) : (
+                    <ChevronsUpDown className="h-4 w-4 opacity-40" />
+                  )}
+                </button>
+              </TableHead>
+              <TableHead
+                className="cursor-pointer select-none hover:bg-muted/50"
+                onClick={() => handleSort('isActive')}
+              >
+                <button type="button" className="flex items-center gap-1 w-full text-left font-medium">
+                  Status
+                  {sortBy === 'isActive' ? (
+                    sortOrder === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
+                  ) : (
+                    <ChevronsUpDown className="h-4 w-4 opacity-40" />
+                  )}
+                </button>
+              </TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
