@@ -203,12 +203,20 @@ export class PaymentAdminController {
             ? this.buildCreatedAtCursorWhere(where, decodedCursor, sortDirection)
             : where;
         const summaryWhere: Prisma.ApplicationInvoiceWhereInput = { application: { programId } };
+        // Status filter facet counts must reflect the OTHER active filters
+        // (everything except the status filter itself), so each count equals
+        // what selecting that status actually yields in the list. Prevents a
+        // program-wide count (e.g. "Paid (12)") from disagreeing with the
+        // filtered table (e.g. 7 rows).
+        const statusFacetWhere: Prisma.ApplicationInvoiceWhereInput = { ...where };
+        delete statusFacetWhere.status;
 
         const [
             invoices,
             total,
             summaryRows,
             overallSummaryRows,
+            statusFacetRows,
             paidAggregate,
             totalsAggregate,
             tiers,
@@ -256,6 +264,11 @@ export class PaymentAdminController {
                 where: summaryWhere,
                 _count: { id: true },
                 _sum: { amount: true },
+            }),
+            this.prisma.applicationInvoice.groupBy({
+                by: ['status'],
+                where: statusFacetWhere,
+                _count: { id: true },
             }),
             this.prisma.applicationInvoice.aggregate({
                 where: { ...where, status: PaymentStatus.paid },
@@ -414,7 +427,7 @@ export class PaymentAdminController {
                     value: row.status,
                     count: row._count.id,
                 })),
-                invoiceStatuses: overallSummaryRows.map((row) => ({
+                invoiceStatuses: statusFacetRows.map((row) => ({
                     value: row.status,
                     count: row._count.id,
                 })),
