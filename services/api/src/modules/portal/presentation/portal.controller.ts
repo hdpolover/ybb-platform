@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards, UnauthorizedException, BadRequestException, NotFoundException, UseInterceptors, UploadedFile, StreamableFile, Header } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, UseGuards, UnauthorizedException, BadRequestException, NotFoundException, UseInterceptors, UploadedFile, StreamableFile, Header, ParseUUIDPipe } from '@nestjs/common';
 import { Readable } from 'stream';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { PortalReceiptService } from '../application/services/portal-receipt.service';
@@ -19,6 +19,7 @@ import {
     EnsurePortalPaymentInvoiceCommand,
     UploadSignedCopyCommand,
 } from '../application/queries/portal-queries';
+import { MarkDocumentViewedCommand } from '../application/commands/mark-document-viewed.command';
 import { PortalDashboardResponseDto } from './dto/portal-dashboard.dto';
 import { PortalSubmissionResponseDto } from './dto/portal-submission.dto';
 import {
@@ -260,6 +261,20 @@ export class PortalController {
         const userId = user.userId;
         if (!userId) throw new UnauthorizedException();
         return this.queryBus.execute(new GetPortalDocumentsQuery(userId));
+    }
+
+    @Post('documents/:documentId/viewed')
+    @ApiOperation({ summary: 'Mark a document as viewed by the participant (first-view-wins)' })
+    @ApiResponse({ status: 200, description: 'Returns the viewedAt timestamp' })
+    async markDocumentViewed(
+        @Param('documentId', new ParseUUIDPipe()) documentId: string,
+        @CurrentUser() user: CurrentUserData,
+    ): Promise<{ viewedAt: Date | null }> {
+        const userId = user.userId;
+        if (!userId) throw new UnauthorizedException();
+        return this.commandBus.execute(
+            new MarkDocumentViewedCommand(userId, documentId),
+        );
     }
 
     @Post('documents/:templateId/signed-copy')
