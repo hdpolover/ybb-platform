@@ -69,7 +69,7 @@ export class EventsController {
     private readonly idempotencyService: NotificationIdempotencyService,
   ) {}
 
-  @EventPattern('payment.succeeded')
+  @EventPattern('notification.payment_succeeded')
   async handlePaymentSucceeded(
     @Payload() data: unknown,
     @Ctx() context: RmqContext,
@@ -143,13 +143,14 @@ export class EventsController {
             getString(metadata, 'submission_page_url') ||
             undefined,
           items,
+          brand: payload.brand ?? undefined,
         },
         receiptBuffer,
       );
     });
   }
 
-  @EventPattern('payment.created')
+  @EventPattern('notification.payment_created')
   async handlePaymentCreated(
     @Payload() data: unknown,
     @Ctx() context: RmqContext,
@@ -176,11 +177,12 @@ export class EventsController {
           getString(payload, 'order_id') ||
           getString(payload, 'payment_id') ||
           'unknown-order',
+        brand: payload.brand ?? undefined,
       });
     });
   }
 
-  @EventPattern('payment.failed')
+  @EventPattern('notification.payment_failed')
   async handlePaymentFailed(
     @Payload() data: unknown,
     @Ctx() context: RmqContext,
@@ -207,8 +209,10 @@ export class EventsController {
           getString(payload, 'payment_id') ||
           'unknown-order',
         reason:
+          getString(payload, 'reason') ||
           getString(metadata, 'failure_reason') ||
           'Transaction could not be processed',
+        brand: payload.brand ?? undefined,
       });
     });
   }
@@ -248,6 +252,7 @@ export class EventsController {
           getString(payload, 'paymentsPageUrl') ||
           getString(payload, 'payments_page_url') ||
           undefined,
+        brand: asRecord(payload.brand) ?? undefined,
       });
     });
   }
@@ -257,7 +262,7 @@ export class EventsController {
     this.acknowledgeMessage(context, 'payment.cancelled', 'skipped');
   }
 
-  @EventPattern('payment.refunded')
+  @EventPattern('notification.payment_refunded')
   async handlePaymentRefunded(
     @Payload() data: unknown,
     @Ctx() context: RmqContext,
@@ -284,6 +289,7 @@ export class EventsController {
           getString(payload, 'payment_id') ||
           'unknown-order',
         description: 'Refund for services',
+        brand: payload.brand ?? undefined,
       });
     });
   }

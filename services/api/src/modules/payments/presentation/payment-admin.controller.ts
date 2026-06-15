@@ -694,7 +694,22 @@ export class PaymentAdminController {
                         program: {
                             select: {
                                 brand: {
-                                    select: { landingUrl: true, websiteUrl: true },
+                                    select: {
+                                        landingUrl: true,
+                                        websiteUrl: true,
+                                        name: true,
+                                        primaryColor: true,
+                                        logoUrl: true,
+                                        contactEmail: true,
+                                        contactAddress: true,
+                                        socialMediaLinks: true,
+                                        settings: {
+                                            select: {
+                                                footerNavigation: true,
+                                                supportEmail: true,
+                                            },
+                                        },
+                                    },
                                 },
                             },
                         },
@@ -764,13 +779,30 @@ export class PaymentAdminController {
             if (body.action === 'reject') {
                 const email = invoice.application?.participant?.user?.email;
                 if (email) {
-                    const brand = invoice.application?.program?.brand;
-                    const paymentsPageUrl = this.buildParticipantPaymentsUrl(brand);
+                    const rawBrand = invoice.application?.program?.brand ?? null;
+                    const paymentsPageUrl = this.buildParticipantPaymentsUrl(rawBrand);
                     if (!paymentsPageUrl) {
                         this.logger.warn(
                             `payment.rejected for invoice ${id} has no paymentsPageUrl: brand.landingUrl/websiteUrl unset`,
                         );
                     }
+                    const brandPayload = rawBrand
+                        ? {
+                            name: rawBrand.name,
+                            primaryColor: rawBrand.primaryColor,
+                            logoUrl: rawBrand.logoUrl,
+                            websiteUrl: rawBrand.websiteUrl,
+                            contactEmail: rawBrand.contactEmail,
+                            contactAddress: rawBrand.contactAddress,
+                            socialMediaLinks: rawBrand.socialMediaLinks,
+                            settings: rawBrand.settings
+                                ? {
+                                    footerNavigation: rawBrand.settings.footerNavigation,
+                                    supportEmail: rawBrand.settings.supportEmail,
+                                }
+                                : null,
+                        }
+                        : null;
                     try {
                         await this.rabbitmqProducer.emit('payment.rejected', {
                             email,
@@ -780,6 +812,7 @@ export class PaymentAdminController {
                             order_id: invoice.id,
                             reason: body.reason?.trim() || 'No reason provided',
                             paymentsPageUrl,
+                            brand: brandPayload,
                             metadata: {
                                 application_id: invoice.applicationId,
                                 invoice_id: invoice.id,
