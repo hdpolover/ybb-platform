@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { StatsService } from './stats.service';
-import { PrismaService } from '../../shared/infrastructure/prisma/prisma.service';
+import { PrismaReadService } from '../../shared/infrastructure/prisma/prisma-read.service';
 import { CacheService } from '../../shared/infrastructure/cache/cache.service';
 import { StatSection } from './dto/get-stats.dto';
 
@@ -40,7 +40,7 @@ describe('StatsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         StatsService,
-        { provide: PrismaService, useValue: mockPrismaService },
+        { provide: PrismaReadService, useValue: mockPrismaService },
         { provide: CacheService, useValue: mockCacheService },
       ],
     }).compile();

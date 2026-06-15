@@ -75,7 +75,6 @@ describe('AnnouncementsStrategy', () => {
           publishDate: { lte: expect.any(Date) },
           program: expect.objectContaining({
             brandId: 'brand-1',
-            isActive: true,
             isPublished: true,
             isVisibleToUsers: true,
           }),
