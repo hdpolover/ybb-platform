@@ -2654,6 +2654,41 @@ export async function generateLoa(
   );
 }
 
+export async function sendLoa(
+  programId: string,
+  templateId: string,
+  body:
+    | { bulk: true; audience: 'submitted' | 'accepted'; resend?: boolean }
+    | { participantId: string; resend: true },
+): Promise<{ generated: number; failed: number }> {
+  return request<{ generated: number; failed: number }>(
+    `/programs/${programId}/document-templates/${templateId}/generate`,
+    { method: 'POST', body: JSON.stringify(body) },
+  );
+}
+
+export type LoaStatusRow = {
+  documentId: string;
+  participantId: string;
+  participantName: string;
+  email: string;
+  documentNumber: string | null;
+  generatedAt: string;
+  emailedAt: string | null;
+  fileUrl: string;
+  status: 'generated' | 'emailed';
+};
+
+export async function getLoaStatus(
+  programId: string,
+  templateId: string,
+): Promise<LoaStatusRow[]> {
+  return request<LoaStatusRow[]>(
+    `/programs/${programId}/document-templates/${templateId}/loa-status`,
+    { method: 'GET' },
+  );
+}
+
 export function deleteDocumentTemplate(id: string): Promise<void> {
   return request<void>(`/programs/document-templates/${id}`, { method: 'DELETE' });
 }
