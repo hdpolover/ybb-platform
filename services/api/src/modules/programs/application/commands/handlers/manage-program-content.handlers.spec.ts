@@ -12,6 +12,7 @@ import {
     CreateProgramEssayCommand,
     CreateProgramSpeakerCommand,
     DeleteProgramEssayCommand,
+    GenerateLOACommand,
     UpdateProgramEssayCommand,
     UpdateProgramSpeakerCommand,
 } from '../program-content.commands';
@@ -271,4 +272,17 @@ describe('ManageProgramContentHandlers', () => {
             ]);
         });
     });
+});
+
+// Minimal compile-time test — real handler tests added in Task 1.3
+describe('GenerateLOACommand', () => {
+  it('accepts audience param', () => {
+    const cmd = new GenerateLOACommand('prog-1', 'tmpl-1', 'user-1', undefined, true, 'accepted');
+    expect(cmd.audience).toBe('accepted');
+  });
+
+  it('defaults audience to accepted when bulk and no audience specified', () => {
+    const cmd = new GenerateLOACommand('prog-1', 'tmpl-1', 'user-1', undefined, true);
+    expect(cmd.audience).toBeUndefined();
+  });
 });
