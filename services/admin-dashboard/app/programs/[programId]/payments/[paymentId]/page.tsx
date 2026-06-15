@@ -136,6 +136,10 @@ export default function PaymentDetailPage({
   const proofUrl = extractProofUrl(txn) ?? attempts.map((attempt) => extractProofUrl(attempt)).find(Boolean) ?? null;
   const isManualTransfer = isManualTransferPayment(invoice?.paymentMethod ?? null, txn);
   const showPaymentControls = Boolean(invoice);
+  const looksLikeInvoiceId =
+    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
+      paymentId,
+    );
 
   useEffect(() => {
     if (invoice?.status) {
@@ -167,7 +171,19 @@ export default function PaymentDetailPage({
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
+          <div className="font-medium">{error}</div>
+          <div className="mt-1 text-xs text-red-600/80">
+            Invoice id: <code className="font-mono">{paymentId}</code>
+            {!looksLikeInvoiceId &&
+              " — this link looks malformed (not a valid invoice id)."}
+          </div>
+          <Link
+            href={`/programs/${programId}/payments`}
+            className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-red-700 underline hover:text-red-800"
+          >
+            <ArrowLeft className="h-3 w-3" />
+            Back to Payments
+          </Link>
         </div>
       )}
 
