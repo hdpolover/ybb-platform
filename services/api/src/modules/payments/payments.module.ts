@@ -10,6 +10,7 @@ import { PaymentsController } from './presentation/payments.controller';
 import { PaymentAdminController } from './presentation/payment-admin.controller';
 import { GatewayAdminController } from './presentation/gateway-admin.controller';
 import { PaymentEventsController } from './presentation/payment-events.controller';
+import { PaymentReconciliationController } from './presentation/payment-reconciliation.controller';
 import { WebhooksController } from './presentation/webhooks.controller';
 import { PaymentRepository } from './infrastructure/persistence/payment.repository';
 import { PaymentServiceHttpClient } from './infrastructure/services/payment-service-http.client';
@@ -18,6 +19,7 @@ import { GetPaymentDetailHandler } from './application/queries/handlers/get-paym
 import { CreateIntentHandler } from './application/commands/handlers/create-intent.handler';
 import { ProcessPaymentHandler } from './application/commands/handlers/process-payment.handler';
 import { PaymentOutboxService } from './infrastructure/services/payment-outbox.service';
+import { PaymentReconciliationService } from './infrastructure/services/payment-reconciliation.service';
 import { RegistrationFeeGateService } from './application/services/registration-fee-gate.service';
 
 import { CacheModule } from '@shared/infrastructure/cache/cache.module';
@@ -33,7 +35,7 @@ import { CacheModule } from '@shared/infrastructure/cache/cache.module';
         ConfigModule,
         CacheModule,
     ],
-    controllers: [PaymentsController, PaymentAdminController, GatewayAdminController, PaymentEventsController, WebhooksController],
+    controllers: [PaymentsController, PaymentAdminController, GatewayAdminController, PaymentEventsController, PaymentReconciliationController, WebhooksController],
     providers: [
         {
             provide: 'IPaymentRepository',
@@ -46,6 +48,7 @@ import { CacheModule } from '@shared/infrastructure/cache/cache.module';
         CreateIntentHandler,
         ProcessPaymentHandler,
         PaymentOutboxService,
+        PaymentReconciliationService,
         RegistrationFeeGateService,
     ],
     exports: ['IPaymentRepository', PaymentServiceHttpClient, PaymentOutboxService, RegistrationFeeGateService],

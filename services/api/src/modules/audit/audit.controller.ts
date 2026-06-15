@@ -24,8 +24,9 @@ const AUDITED_EVENTS = [
   'payment.failed',
   'payment.cancelled',
   'payment.refunded',
-  // payment.* — emitted from API service (admin reject, outbox application update)
+  // payment.* — emitted from API service (admin reject, outbox application update, reconciliation reminder)
   'payment.rejected',
+  'payment.reminder',
   'payment.application-status-updated',
   // support.* — emitted from support ticket workflows
   'support.ticket.created',
@@ -77,6 +78,9 @@ export class AuditController {
 
   @EventPattern('payment.rejected')
   paymentRejected(@Payload() d: RmqEventPayload, @Ctx() c: RmqContext) { return this.log(d, c); }
+
+  @EventPattern('payment.reminder')
+  paymentReminder(@Payload() d: RmqEventPayload, @Ctx() c: RmqContext) { return this.log(d, c); }
 
   @EventPattern('payment.application-status-updated')
   paymentApplicationStatusUpdated(@Payload() d: RmqEventPayload, @Ctx() c: RmqContext) { return this.log(d, c); }

@@ -728,6 +728,32 @@ export class EmailService {
     return this.sendRawEmail(to, subject, html);
   }
 
+  async sendPaymentReminderEmail(to: string, paymentData: any) {
+    const fallbackPaymentsUrl = this.configService.get('FRONTEND_URL')
+      ? `${this.configService.get('FRONTEND_URL')}/dashboard/payments`
+      : '#';
+
+    const templateData = {
+      name: paymentData.name,
+      amount: paymentData.amount,
+      currency: paymentData.currency || 'IDR',
+      orderId: paymentData.orderId,
+      date: new Date().toLocaleDateString(),
+      paymentsPageUrl: paymentData.paymentsPageUrl || fallbackPaymentsUrl,
+      brand: paymentData.brand,
+      program: paymentData.program,
+      brandId: paymentData.brandId,
+      programId: paymentData.programId,
+    };
+    const { subject, html } = await this.resolveEmailContent({
+      type: 'payment_reminder',
+      fallbackTemplateName: 'payment-reminder',
+      fallbackSubject: 'Continue Your Payment',
+      data: templateData,
+    });
+    return this.sendRawEmail(to, subject, html);
+  }
+
   async sendPaymentRefundedEmail(to: string, paymentData: any) {
     const templateData = {
       name: paymentData.name,

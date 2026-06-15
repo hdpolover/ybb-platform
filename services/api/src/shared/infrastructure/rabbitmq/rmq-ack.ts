@@ -6,7 +6,7 @@ type RmqAckChannel = {
   nack(message: unknown, allUpTo?: boolean, requeue?: boolean): void;
 };
 
-type AckLogger = Pick<Logger, 'error'>;
+type AckLogger = Pick<Logger, 'error' | 'warn'>;
 
 export function acknowledgeRmqMessage(
   context: RmqContext,
@@ -22,7 +22,16 @@ export function acknowledgeRmqMessage(
     return false;
   }
 
-  channel.ack(message);
+  try {
+    channel.ack(message);
+  } catch (err: unknown) {
+    const code = (err as { code?: string })?.code ?? 'UNKNOWN';
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn(
+      `[rabbitmq-ack] ack failed (swallowed) event=${eventType} code=${code} message="${msg}" — broker will redeliver`,
+    );
+    return false;
+  }
   return true;
 }
 
@@ -39,6 +48,15 @@ export function rejectRmqMessageForRetry(
     return false;
   }
 
-  channel.nack(message, false, false);
+  try {
+    channel.nack(message, false, false);
+  } catch (err: unknown) {
+    const code = (err as { code?: string })?.code ?? 'UNKNOWN';
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn(
+      `[rabbitmq-retry] nack failed (swallowed) event=${eventType} code=${code} message="${msg}" — broker will redeliver`,
+    );
+    return false;
+  }
   return true;
 }
