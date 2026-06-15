@@ -499,6 +499,7 @@ export class EventsController {
         documents_page_url: getString(payload, 'documents_page_url') ?? '',
         brand_id: getString(payload, 'brand_id') ?? undefined,
         program_id: getString(payload, 'program_id') ?? undefined,
+        brand: typeof payload.brand === 'object' && payload.brand !== null ? payload.brand : undefined,
       });
 
       this.logger.log(`LoA-ready email sent to ${maskEmail(email)}`);

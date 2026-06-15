@@ -1431,7 +1431,26 @@ export class GenerateLOAHandler implements ICommandHandler<GenerateLOACommand> {
 
         const program = await this.prisma.program.findUnique({
             where: { id: command.programId },
-            include: { brand: { select: { landingUrl: true, websiteUrl: true } } },
+            include: {
+                brand: {
+                    select: {
+                        name: true,
+                        primaryColor: true,
+                        logoUrl: true,
+                        websiteUrl: true,
+                        landingUrl: true,
+                        contactEmail: true,
+                        contactAddress: true,
+                        socialMediaLinks: true,
+                        settings: {
+                            select: {
+                                footerNavigation: true,
+                                supportEmail: true,
+                            },
+                        },
+                    },
+                },
+            },
         });
         if (!program) throw new NotFoundException('Program not found');
 
@@ -1450,7 +1469,13 @@ export class GenerateLOAHandler implements ICommandHandler<GenerateLOACommand> {
         const applications = await this.prisma.participantApplication.findMany({
             where: whereClause as Prisma.ParticipantApplicationWhereInput,
             include: {
-                participant: { include: { user: true } },
+                participant: {
+                    include: {
+                        user: {
+                            select: { email: true },
+                        },
+                    },
+                },
                 participationCategory: true,
             },
         });
@@ -1559,17 +1584,33 @@ export class GenerateLOAHandler implements ICommandHandler<GenerateLOACommand> {
                 const shouldSend = !alreadyEmailed || command.resend === true;
                 if (shouldSend) {
                     try {
-                        const brandBase = (program.brand?.landingUrl ?? program.brand?.websiteUrl ?? '').trim().replace(/\/$/, '');
+                        const brandData = program.brand ?? null;
+                        const brandBase = (brandData?.landingUrl ?? brandData?.websiteUrl ?? '').trim().replace(/\/$/, '');
                         const portalDocumentsUrl = brandBase ? `${brandBase}/dashboard/documents` : '';
                         if (!portalDocumentsUrl) {
                             this.logger.warn(`LoA email for application ${app.id}: brand ${program.brandId} has no landingUrl/websiteUrl, documents_page_url will be empty`);
                         }
+                        const brandPayload = brandData ? {
+                            name: brandData.name,
+                            primaryColor: brandData.primaryColor,
+                            logoUrl: brandData.logoUrl,
+                            websiteUrl: brandData.websiteUrl,
+                            contactEmail: brandData.contactEmail,
+                            contactAddress: brandData.contactAddress,
+                            socialMediaLinks: brandData.socialMediaLinks,
+                            website: brandData.websiteUrl,
+                            settings: brandData.settings ? {
+                                footerNavigation: brandData.settings.footerNavigation,
+                                supportEmail: brandData.settings.supportEmail,
+                            } : null,
+                        } : null;
                         await this.rabbitmqProducer.emit('application.loa_ready', {
-                            email: app.participant.user.email,
+                            email: app.participant.user?.email,
                             participant_name: app.participant.fullName,
                             program_name: program.name,
                             program_id: program.id,
                             brand_id: program.brandId,
+                            brand: brandPayload,
                             application_id: app.id,
                             document_id: savedDocId,
                             document_number: documentNumber,

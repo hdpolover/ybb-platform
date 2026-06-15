@@ -24,6 +24,7 @@ export interface LoaReadyPayload {
   documents_page_url: string;
   brand_id?: string;
   program_id?: string;
+  brand?: any;
 }
 
 @Injectable()
@@ -821,17 +822,22 @@ export class EmailService {
 
   async sendLoaReadyEmail(to: string, payload: LoaReadyPayload): Promise<void> {
     const templateData = {
+      name: payload.participant_name || 'Participant',
       participant_name: payload.participant_name,
       program_name: payload.program_name,
       document_number: payload.document_number,
       documents_page_url: payload.documents_page_url,
-      brandId: payload.brand_id,
+      brand: payload.brand,
+      brandId: payload.brand_id ?? payload.brand?.id,
       programId: payload.program_id,
     };
+    const fallbackSubject = payload.brand?.name
+      ? `Your Letter of Acceptance is Ready – ${payload.brand.name}`
+      : 'Your Letter of Acceptance is Ready';
     const { subject, html } = await this.resolveEmailContent({
       type: 'loa_ready',
       fallbackTemplateName: 'loa-ready',
-      fallbackSubject: 'Your Letter of Acceptance is Ready',
+      fallbackSubject,
       data: templateData,
     });
     await this.sendRawEmail(to, subject, html);
