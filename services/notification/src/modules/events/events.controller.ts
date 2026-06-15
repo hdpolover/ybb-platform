@@ -248,6 +248,7 @@ export class EventsController {
           getString(payload, 'paymentsPageUrl') ||
           getString(payload, 'payments_page_url') ||
           undefined,
+        brand: asRecord(payload.brand) ?? undefined,
       });
     });
   }
