@@ -136,7 +136,12 @@ export class ApplicationMapper {
   toPrismaUpdate(entity: ParticipantApplication): Record<string, unknown> {
     return {
       status: entity.status,
-      applicationCategory: entity.applicationCategory,
+      // Only write applicationCategory when the entity actually carries one.
+      // Spreading it unconditionally let a null/undefined entity value overwrite
+      // a real category in the DB with NULL (e.g. via the admin update path).
+      ...(entity.applicationCategory != null
+        ? { applicationCategory: entity.applicationCategory }
+        : {}),
       motivationLetter: entity.motivationLetter,
       achievements: entity.achievements,
       experiences: entity.experiences,
