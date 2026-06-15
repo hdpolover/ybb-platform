@@ -59,6 +59,8 @@ import {
   GenerateLOAHandler,
 } from '../application/commands/handlers/manage-program-content.handlers';
 
+import { GetLoaStatusQuery, GetLoaStatusHandler } from '../application/queries/get-loa-status.handler';
+
 @ApiTags('Program Content')
 @Controller('programs')
 export class ProgramContentController {
@@ -84,6 +86,7 @@ export class ProgramContentController {
     private readonly updateDocumentTemplateHandler: UpdateDocumentTemplateHandler,
     private readonly deleteDocumentTemplateHandler: DeleteDocumentTemplateHandler,
     private readonly generateLOAHandler: GenerateLOAHandler,
+    private readonly getLoaStatusHandler: GetLoaStatusHandler,
   ) {}
 
   // --- Gallery Endpoints ---
@@ -337,11 +340,36 @@ export class ProgramContentController {
   async generateLOA(
     @Param('programId') programId: string,
     @Param('templateId') templateId: string,
-    @Body() body: { participantId?: string; bulk?: boolean },
+    @Body() body: {
+      participantId?: string;
+      bulk?: boolean;
+      audience?: 'submitted' | 'accepted';
+      resend?: boolean;
+    },
     @Request() req: ExpressRequest & { user: { id: string } },
   ) {
     return this.generateLOAHandler.execute(
-      new GenerateLOACommand(programId, templateId, req.user.id, body.participantId, body.bulk),
+      new GenerateLOACommand(
+        programId,
+        templateId,
+        req.user.id,
+        body.participantId,
+        body.bulk,
+        body.audience,
+        body.resend,
+      ),
     );
+  }
+
+  @Get(':programId/document-templates/:templateId/loa-status')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List per-participant LoA generation and email status' })
+  async getLoaStatus(
+    @Param('programId') programId: string,
+    @Param('templateId') templateId: string,
+  ) {
+    return this.getLoaStatusHandler.execute(new GetLoaStatusQuery(templateId, programId));
   }
 }
