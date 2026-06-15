@@ -11,7 +11,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import {
   Bold, Italic, Underline as UnderlineIcon, AlignLeft, AlignCenter,
   AlignRight, List, ListOrdered, Undo, Redo, RemoveFormatting,
-  Heading1, Heading2, Loader2, CheckCircle2, Zap, Upload, ImageIcon, X, Eye, EyeOff, Send,
+  Heading1, Heading2, Loader2, CheckCircle2, Upload, ImageIcon, X, Eye, EyeOff, Send,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
@@ -25,7 +25,6 @@ import {
   listDocumentTemplates,
   createDocumentTemplate,
   updateDocumentTemplate,
-  generateLoa,
   sendLoa,
   listProgramMedia,
   uploadFileViaPresignedUrl,
@@ -297,7 +296,6 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
   const [template, setTemplate] = useState<DocumentTemplate | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [generating, setGenerating] = useState(false);
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
   const [sendAudience, setSendAudience] = useState<'submitted' | 'accepted'>('accepted');
   const [sending, setSending] = useState(false);
@@ -413,19 +411,6 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
       toast.error(err instanceof Error ? err.message : "Save failed");
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function handleGenerateAll() {
-    if (!template) { toast.error("Save the template first"); return; }
-    setGenerating(true);
-    try {
-      const result = await generateLoa(programId, template.id, { bulk: true });
-      toast.success(`Generated ${result.generated} LOA(s)${result.failed ? `, ${result.failed} failed` : ""}`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Generation failed");
-    } finally {
-      setGenerating(false);
     }
   }
 
