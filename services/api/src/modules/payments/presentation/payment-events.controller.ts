@@ -669,6 +669,10 @@ export class PaymentEventsController {
                         metadata: { application_id: applicationId, invoice_id: failedInvoice.invoiceId },
                         brand: brandPayload,
                     });
+                } else {
+                    this.logger.warn(
+                        `notification.payment_failed not emitted: no resolved invoice for payment.failed event (applicationId=${applicationId ?? 'unknown'} intentId=${intentId ?? 'unknown'})`,
+                    );
                 }
             } catch (emitErr) {
                 this.logger.error('Failed to emit notification.payment_failed', emitErr);
