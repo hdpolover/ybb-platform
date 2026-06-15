@@ -21,6 +21,7 @@ export interface LoaStatusRow {
   generatedAt: string | null;
   emailedAt: string | null;
   viewedAt: string | null;
+  submittedAt: string | null;
 }
 
 @Injectable()
@@ -94,6 +95,7 @@ export class GetLoaStatusHandler implements IQueryHandler<GetLoaStatusQuery, Loa
         generatedAt: doc?.generatedAt?.toISOString() ?? null,
         emailedAt: doc?.emailedAt?.toISOString() ?? null,
         viewedAt: doc?.viewedAt?.toISOString() ?? null,
+        submittedAt: app.submittedAt?.toISOString() ?? null,
       };
     });
   }
