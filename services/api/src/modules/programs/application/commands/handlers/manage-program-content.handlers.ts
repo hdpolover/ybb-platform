@@ -1429,7 +1429,10 @@ export class GenerateLOAHandler implements ICommandHandler<GenerateLOACommand> {
             throw new BadRequestException('Template has no HTML content');
         }
 
-        const program = await this.prisma.program.findUnique({ where: { id: command.programId } });
+        const program = await this.prisma.program.findUnique({
+            where: { id: command.programId },
+            include: { brand: { select: { landingUrl: true, websiteUrl: true } } },
+        });
         if (!program) throw new NotFoundException('Program not found');
 
         // Resolve applications to generate for
@@ -1437,7 +1440,9 @@ export class GenerateLOAHandler implements ICommandHandler<GenerateLOACommand> {
         if (command.participantId) {
             whereClause.participantId = command.participantId;
         } else if (command.bulk) {
-            whereClause.status = 'accepted';
+            // audience param introduced in LoA-send flow; default to 'accepted' for backwards compat
+            const audience: 'submitted' | 'accepted' = command.audience ?? 'accepted';
+            whereClause.status = audience;
         } else {
             throw new BadRequestException('Provide participantId or bulk: true');
         }
@@ -1445,7 +1450,7 @@ export class GenerateLOAHandler implements ICommandHandler<GenerateLOACommand> {
         const applications = await this.prisma.participantApplication.findMany({
             where: whereClause as Prisma.ParticipantApplicationWhereInput,
             include: {
-                participant: true,
+                participant: { include: { user: true } },
                 participationCategory: true,
             },
         });
@@ -1520,6 +1525,7 @@ export class GenerateLOAHandler implements ICommandHandler<GenerateLOACommand> {
                     where: { applicationId: app.id, templateId: template.id },
                 });
 
+                let savedDocId: string;
                 if (existingDoc) {
                     await this.prisma.participantDocument.update({
                         where: { id: existingDoc.id },
@@ -1530,8 +1536,9 @@ export class GenerateLOAHandler implements ICommandHandler<GenerateLOACommand> {
                             isPublic: false,
                         },
                     });
+                    savedDocId = existingDoc.id;
                 } else {
-                    await this.prisma.participantDocument.create({
+                    const created = await this.prisma.participantDocument.create({
                         data: {
                             applicationId: app.id,
                             templateId: template.id,
@@ -1544,6 +1551,41 @@ export class GenerateLOAHandler implements ICommandHandler<GenerateLOACommand> {
                             isPublic: false,
                         },
                     });
+                    savedDocId = created.id;
+                }
+
+                // Emit LoA-ready notification — non-blocking
+                const alreadyEmailed = existingDoc?.emailedAt != null;
+                const shouldSend = !alreadyEmailed || command.resend === true;
+                if (shouldSend) {
+                    try {
+                        const brandBase = (program.brand?.landingUrl ?? program.brand?.websiteUrl ?? '').trim().replace(/\/$/, '');
+                        const portalDocumentsUrl = brandBase ? `${brandBase}/dashboard/documents` : '';
+                        await this.rabbitmqProducer.emit('application.loa_ready', {
+                            email: app.participant.user.email,
+                            participant_name: app.participant.fullName,
+                            program_name: program.name,
+                            program_id: program.id,
+                            brand_id: program.brandId,
+                            application_id: app.id,
+                            document_id: savedDocId,
+                            document_number: documentNumber,
+                            documents_page_url: portalDocumentsUrl,
+                            metadata: {
+                                emitted_at: new Date().toISOString(),
+                                sent_by: command.userId,
+                                audience: command.audience ?? 'accepted',
+                            },
+                        });
+                        await this.prisma.participantDocument.update({
+                            where: { id: savedDocId },
+                            data: { emailedAt: new Date() },
+                        });
+                    } catch (emitErr) {
+                        this.logger.warn(
+                            `LoA email event emit failed for application ${app.id}: ${emitErr instanceof Error ? emitErr.message : String(emitErr)}`,
+                        );
+                    }
                 }
 
                 generated++;
