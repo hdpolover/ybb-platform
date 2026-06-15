@@ -337,11 +337,24 @@ export class ProgramContentController {
   async generateLOA(
     @Param('programId') programId: string,
     @Param('templateId') templateId: string,
-    @Body() body: { participantId?: string; bulk?: boolean },
+    @Body() body: {
+      participantId?: string;
+      bulk?: boolean;
+      audience?: 'submitted' | 'accepted';
+      resend?: boolean;
+    },
     @Request() req: ExpressRequest & { user: { id: string } },
   ) {
     return this.generateLOAHandler.execute(
-      new GenerateLOACommand(programId, templateId, req.user.id, body.participantId, body.bulk),
+      new GenerateLOACommand(
+        programId,
+        templateId,
+        req.user.id,
+        body.participantId,
+        body.bulk,
+        body.audience,
+        body.resend,
+      ),
     );
   }
 }
