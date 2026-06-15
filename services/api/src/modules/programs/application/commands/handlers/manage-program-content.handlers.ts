@@ -8,6 +8,7 @@ import { StorageService } from '../../../../files/application/storage.service';
 import { FileServiceClient } from '../../../../files/infrastructure/clients/file-service.client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
+import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { CACHE_KEYS } from '../../../../../shared/constants/cache-keys';
 import {
     CreateProgramTimelineCommand, UpdateProgramTimelineCommand, DeleteProgramTimelineCommand,
@@ -1413,6 +1414,7 @@ export class GenerateLOAHandler implements ICommandHandler<GenerateLOACommand> {
         private readonly storageService: StorageService,
         private readonly fileServiceClient: FileServiceClient,
         private readonly cacheService: CacheService,
+        private readonly rabbitmqProducer: RabbitMQProducerService,
     ) {}
 
     async execute(command: GenerateLOACommand): Promise<{ generated: number; failed: number }> {

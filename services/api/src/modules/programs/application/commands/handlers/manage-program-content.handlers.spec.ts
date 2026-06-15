@@ -5,6 +5,7 @@ import {
     CreateProgramEssayHandler,
     CreateProgramSpeakerHandler,
     DeleteProgramEssayHandler,
+    GenerateLOAHandler,
     UpdateProgramEssayHandler,
     UpdateProgramSpeakerHandler,
 } from './manage-program-content.handlers';
@@ -13,13 +14,16 @@ import {
     CreateProgramSpeakerCommand,
     DeleteProgramEssayCommand,
     GenerateLOACommand,
+    LoaAudience,
     UpdateProgramEssayCommand,
     UpdateProgramSpeakerCommand,
 } from '../program-content.commands';
 import { IProgramContentRepository } from '@core/interfaces/repositories/program-content.repository.interface';
 import { StorageService } from '../../../../files/application/storage.service';
+import { FileServiceClient } from '../../../../files/infrastructure/clients/file-service.client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 
 describe('ManageProgramContentHandlers', () => {
     
@@ -274,15 +278,61 @@ describe('ManageProgramContentHandlers', () => {
     });
 });
 
-// Minimal compile-time test — real handler tests added in Task 1.3
-describe('GenerateLOACommand', () => {
-  it('accepts audience param', () => {
-    const cmd = new GenerateLOACommand('prog-1', 'tmpl-1', 'user-1', undefined, true, 'accepted');
-    expect(cmd.audience).toBe('accepted');
+describe('GenerateLOAHandler', () => {
+  const makePrisma = () => ({
+    documentTemplate: { findFirst: jest.fn() },
+    program: { findUnique: jest.fn() },
+    participantApplication: { findMany: jest.fn().mockResolvedValue([]) },
+    participantDocument: { count: jest.fn(), findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
   });
 
-  it('defaults audience to accepted when bulk and no audience specified', () => {
+  it('filters by submitted when audience=submitted', async () => {
+    const prisma = makePrisma() as unknown as PrismaService;
+    (prisma.documentTemplate.findFirst as jest.Mock).mockResolvedValue({
+      id: 'tmpl-1', type: 'letter_of_acceptance', htmlContent: '<p>Hi</p>', layoutConfig: {}, placeholders: [],
+    });
+    (prisma.program.findUnique as jest.Mock).mockResolvedValue({
+      id: 'prog-1', name: 'YBB 2026', year: 2026, brandId: 'brand-1',
+      brand: { landingUrl: 'https://portal.ybb.io', websiteUrl: null },
+    });
+
+    const handler = new GenerateLOAHandler(
+      prisma,
+      {} as StorageService,
+      {} as FileServiceClient,
+      {} as CacheService,
+      { emit: jest.fn().mockResolvedValue(true) } as unknown as RabbitMQProducerService,
+    );
+
+    const cmd = new GenerateLOACommand('prog-1', 'tmpl-1', 'user-1', undefined, true, 'submitted');
+    await handler.execute(cmd);
+
+    const callArgs = (prisma.participantApplication.findMany as jest.Mock).mock.calls[0][0];
+    expect(callArgs.where.status).toBe('submitted');
+  });
+
+  it('defaults to accepted when bulk=true and no audience', async () => {
+    const prisma = makePrisma() as unknown as PrismaService;
+    (prisma.documentTemplate.findFirst as jest.Mock).mockResolvedValue({
+      id: 'tmpl-1', type: 'letter_of_acceptance', htmlContent: '<p>Hi</p>', layoutConfig: {}, placeholders: [],
+    });
+    (prisma.program.findUnique as jest.Mock).mockResolvedValue({
+      id: 'prog-1', name: 'YBB 2026', year: 2026, brandId: 'brand-1',
+      brand: { landingUrl: 'https://portal.ybb.io', websiteUrl: null },
+    });
+
+    const handler = new GenerateLOAHandler(
+      prisma,
+      {} as StorageService,
+      {} as FileServiceClient,
+      {} as CacheService,
+      { emit: jest.fn().mockResolvedValue(true) } as unknown as RabbitMQProducerService,
+    );
+
     const cmd = new GenerateLOACommand('prog-1', 'tmpl-1', 'user-1', undefined, true);
-    expect(cmd.audience).toBeUndefined();
+    await handler.execute(cmd);
+
+    const callArgs = (prisma.participantApplication.findMany as jest.Mock).mock.calls[0][0];
+    expect(callArgs.where.status).toBe('accepted');
   });
 });
