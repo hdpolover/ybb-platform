@@ -148,9 +148,14 @@ async function ensureRetryTopology(
       );
     }
 
-    // Self-heal: remove the stale catch-all binding using a throwaway channel.
-    // A 406/404 from the broker closes that channel — the main channel is unaffected.
+    // Self-heal: remove stale bindings (additive in RabbitMQ, so old ones
+    // survive restarts) using a throwaway channel. A 406/404 from the broker
+    // closes that channel — the main channel is unaffected.
+    // - ybb.events '#': the old catch-all that nacked every unhandled event.
+    // - payment-events 'payment.#': obsolete — raw Go payment.* are now bridged
+    //   to notification.payment_* by the API, so this queue no longer handles them.
     await tryUnbindStaleBinding(connection, queueName, 'ybb.events', '#');
+    await tryUnbindStaleBinding(connection, queueName, 'payment-events', 'payment.#');
 
     await channel.assertQueue(queueName, {
       durable: true,
