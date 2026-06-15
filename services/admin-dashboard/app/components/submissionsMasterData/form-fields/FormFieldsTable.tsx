@@ -18,6 +18,7 @@ import { fetchSystemFormFields, type SystemFormField } from "./catalog-api";
 import { FormFieldEditor } from "./FormFieldEditor";
 import { AddFieldDialog } from "./AddFieldDialog";
 import { CopyFromTemplateDialog } from "./CopyFromTemplateDialog";
+import { CopyFromProgramDialog } from "./CopyFromProgramDialog";
 import type { HelpAssetRow } from "./HelpAssetsRepeater";
 
 export interface ApplicationFormFieldRow {
@@ -159,6 +160,7 @@ export function FormFieldsTable({ programId }: { programId: string }) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [copyTemplateOpen, setCopyTemplateOpen] = useState(false);
+  const [copyFromProgramOpen, setCopyFromProgramOpen] = useState(false);
   const [editingField, setEditingField] = useState<ApplicationFormFieldRow | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -267,6 +269,13 @@ export function FormFieldsTable({ programId }: { programId: string }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setCopyFromProgramOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+          >
+            <span>Copy from program</span>
+          </button>
           <button
             type="button"
             onClick={() => setCopyTemplateOpen(true)}
@@ -408,6 +417,15 @@ export function FormFieldsTable({ programId }: { programId: string }) {
         onClose={() => setCopyTemplateOpen(false)}
         onApplied={() => {
           setCopyTemplateOpen(false);
+          void loadFields();
+        }}
+      />
+      <CopyFromProgramDialog
+        open={copyFromProgramOpen}
+        programId={programId}
+        onClose={() => setCopyFromProgramOpen(false)}
+        onApplied={() => {
+          setCopyFromProgramOpen(false);
           void loadFields();
         }}
       />
