@@ -35,7 +35,7 @@ const MOCK_BRAND = {
 };
 
 const MOCK_INVOICE = {
-    id: 'invoice-1',
+    id: 'a1b2c3d4-e5f6-4890-abcd-ef1234567890',
     amount: 500000,
     currency: 'IDR',
     applicationId: 'app-1',
@@ -106,7 +106,7 @@ describe('PaymentAdminController — payment.rejected brand emission', () => {
     });
 
     it('should include brand payload in payment.rejected emit', async () => {
-        await controller.verifyInvoice('invoice-1', { action: 'reject', reason: 'Invalid docs' }, MOCK_ADMIN_USER);
+        await controller.verifyInvoice('a1b2c3d4-e5f6-4890-abcd-ef1234567890', { action: 'reject', reason: 'Invalid docs' }, MOCK_ADMIN_USER);
 
         expect(rabbitmqProducer.emit).toHaveBeenCalledWith(
             'payment.rejected',
@@ -132,7 +132,7 @@ describe('PaymentAdminController — payment.rejected brand emission', () => {
             },
         });
 
-        await controller.verifyInvoice('invoice-1', { action: 'reject', reason: 'Test' }, MOCK_ADMIN_USER);
+        await controller.verifyInvoice('a1b2c3d4-e5f6-4890-abcd-ef1234567890', { action: 'reject', reason: 'Test' }, MOCK_ADMIN_USER);
 
         expect(rabbitmqProducer.emit).toHaveBeenCalledWith(
             'payment.rejected',

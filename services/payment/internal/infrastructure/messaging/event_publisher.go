@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync"
 
 	amqp "github.com/rabbitmq/amqp091-go" // Driver RabbitMQ
 	"github.com/ybb-platform/payment/internal/domain/events"
@@ -17,9 +18,11 @@ type EventPublisher interface {
 
 // RabbitMQPublisher implements EventPublisher using RabbitMQ
 type RabbitMQPublisher struct {
+	mu         sync.Mutex
 	connection *amqp.Connection
 	channel    *amqp.Channel
 	exchange   string
+	url        string
 }
 
 // NewRabbitMQPublisher creates a new RabbitMQ event publisher
@@ -58,7 +61,71 @@ func NewRabbitMQPublisher(rabbitMQURL, exchange string) (*RabbitMQPublisher, err
 		connection: conn,
 		channel:    ch,
 		exchange:   exchange,
+		url:        rabbitMQURL,
 	}, nil
+}
+
+// reconnect re-establishes the connection and channel.
+// Must be called with p.mu held.
+func (p *RabbitMQPublisher) reconnect() error {
+	log.Printf("[RabbitMQ] Reconnecting to exchange '%s'", p.exchange)
+
+	// Close stale resources before re-dialing (ignore errors — they may already be closed).
+	if p.channel != nil {
+		_ = p.channel.Close()
+	}
+	if p.connection != nil {
+		_ = p.connection.Close()
+	}
+
+	conn, err := amqp.Dial(p.url)
+	if err != nil {
+		return fmt.Errorf("failed to reconnect to RabbitMQ: %w", err)
+	}
+
+	ch, err := conn.Channel()
+	if err != nil {
+		_ = conn.Close()
+		return fmt.Errorf("failed to open channel on reconnect: %w", err)
+	}
+
+	if err = ch.ExchangeDeclare(
+		p.exchange,
+		"topic",
+		true,
+		false,
+		false,
+		false,
+		nil,
+	); err != nil {
+		_ = ch.Close()
+		_ = conn.Close()
+		return fmt.Errorf("failed to declare exchange on reconnect: %w", err)
+	}
+
+	p.connection = conn
+	p.channel = ch
+	log.Printf("[RabbitMQ] Reconnected successfully to exchange '%s'", p.exchange)
+	return nil
+}
+
+// publish sends a single message on the current channel.
+// Must be called with p.mu held.
+func (p *RabbitMQPublisher) publish(ctx context.Context, routingKey string, body []byte, event *events.PaymentEvent) error {
+	return p.channel.PublishWithContext(
+		ctx,
+		p.exchange,
+		routingKey,
+		false, // mandatory
+		false, // immediate
+		amqp.Publishing{
+			ContentType:  "application/json",
+			Body:         body,
+			DeliveryMode: amqp.Persistent, // Pesan disimpan ke disk (aman)
+			Timestamp:    event.Timestamp,
+			MessageId:    event.ID,
+		},
+	)
 }
 
 // Publish publishes an event to RabbitMQ
@@ -75,24 +142,25 @@ func (p *RabbitMQPublisher) Publish(ctx context.Context, event *events.PaymentEv
 
 	log.Printf("[RabbitMQ] Publishing event to exchange '%s' with key '%s'", p.exchange, routingKey)
 
-	// 3. Publish to RabbitMQ
-	err = p.channel.PublishWithContext(
-		ctx,
-		p.exchange,
-		routingKey,
-		false, // mandatory
-		false, // immediate
-		amqp.Publishing{
-			ContentType:  "application/json",
-			Body:         body,
-			DeliveryMode: amqp.Persistent, // Pesan disimpan ke disk (aman)
-			Timestamp:    event.Timestamp,
-			MessageId:    event.ID,
-		},
-	)
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
-	if err != nil {
-		return fmt.Errorf("failed to publish event: %w", err)
+	// 3. Reconnect if channel is closed before attempting publish.
+	if p.channel == nil || p.channel.IsClosed() {
+		if reconnErr := p.reconnect(); reconnErr != nil {
+			return fmt.Errorf("failed to publish event (channel closed, reconnect failed): %w", reconnErr)
+		}
+	}
+
+	// 4. Publish to RabbitMQ; on failure, attempt one reconnect + retry.
+	if err = p.publish(ctx, routingKey, body, event); err != nil {
+		log.Printf("[RabbitMQ] Publish error, attempting reconnect: %v", err)
+		if reconnErr := p.reconnect(); reconnErr != nil {
+			return fmt.Errorf("failed to publish event (reconnect failed): %w", reconnErr)
+		}
+		if err = p.publish(ctx, routingKey, body, event); err != nil {
+			return fmt.Errorf("failed to publish event after reconnect: %w", err)
+		}
 	}
 
 	return nil
@@ -100,11 +168,13 @@ func (p *RabbitMQPublisher) Publish(ctx context.Context, event *events.PaymentEv
 
 // Close closes the RabbitMQ connection
 func (p *RabbitMQPublisher) Close() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	if p.channel != nil {
-		p.channel.Close()
+		_ = p.channel.Close()
 	}
 	if p.connection != nil {
-		p.connection.Close()
+		_ = p.connection.Close()
 	}
 	return nil
 }
