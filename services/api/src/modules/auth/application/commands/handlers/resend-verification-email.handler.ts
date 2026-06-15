@@ -49,13 +49,12 @@ export class ResendVerificationEmailHandler {
   async execute(command: ResendVerificationEmailCommand, domain?: string): Promise<{ success: boolean; message: string }> {
     const brandId = await this.resolveBrandId(command.brandId, domain);
 
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prisma.user.findFirst({
       where: {
-        email_brandId: {
-          email: command.email,
-          brandId: brandId,
-        },
+        email: { equals: command.email, mode: 'insensitive' },
+        brandId: brandId,
       },
+      orderBy: { createdAt: 'asc' },
     });
 
     if (!user) {

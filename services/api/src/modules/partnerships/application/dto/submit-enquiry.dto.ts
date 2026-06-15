@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEmail, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
+import { NormalizeEmail } from '@shared/decorators/normalize-email.decorator';
 
 export class SubmitEnquiryDto {
   @ApiProperty({ required: false })
@@ -28,6 +29,7 @@ export class SubmitEnquiryDto {
   fullName: string;
 
   @ApiProperty()
+  @NormalizeEmail()
   @IsEmail()
   email: string;
 

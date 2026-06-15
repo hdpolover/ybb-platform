@@ -135,14 +135,13 @@ export class LoginHandler {
     // Resolve brandId from command or domain
     const brandId = await this.resolveBrandId(command.brandId, domain);
     
-    // Find user by email and brandId (brand-scoped)
-    const user = await this.prisma.user.findUnique({
+    // Find user by email and brandId (brand-scoped, case-insensitive)
+    const user = await this.prisma.user.findFirst({
       where: {
-        email_brandId: {
-          email: command.email,
-          brandId: brandId,
-        },
+        email: { equals: command.email, mode: 'insensitive' },
+        brandId: brandId,
       },
+      orderBy: { createdAt: 'asc' },
       include: {
         brand: true,
         identities: {

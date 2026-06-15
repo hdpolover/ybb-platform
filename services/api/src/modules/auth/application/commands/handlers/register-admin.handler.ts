@@ -32,14 +32,13 @@ export class RegisterAdminHandler {
       throw new BadRequestException('Invalid program category');
     }
 
-    // 3. Check if user already exists
-    const existingUser = await this.prisma.user.findUnique({
+    // 3. Check if user already exists (case-insensitive)
+    const existingUser = await this.prisma.user.findFirst({
       where: {
-        email_brandId: {
-          email: command.email,
-          brandId: command.brandId,
-        },
+        email: { equals: command.email, mode: 'insensitive' },
+        brandId: command.brandId,
       },
+      orderBy: { createdAt: 'asc' },
     });
 
     if (existingUser) {

@@ -1,8 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEmail, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
+import { NormalizeEmail } from '@shared/decorators/normalize-email.decorator';
 
 export class AmbassadorLoginDto {
   @ApiProperty({ example: 'ambassador@example.com' })
+  @NormalizeEmail()
   @IsEmail()
   @IsNotEmpty()
   email: string;

@@ -1,9 +1,11 @@
 
 import { IsEmail, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { NormalizeEmail } from '@shared/decorators/normalize-email.decorator';
 
 export class SubscribeNewsletterDto {
   @ApiProperty({ example: 'user@example.com', description: 'User email address' })
+  @NormalizeEmail()
   @IsEmail()
   @IsNotEmpty()
   email: string;
@@ -21,6 +23,7 @@ export class SubscribeNewsletterDto {
 
 export class UnsubscribeNewsletterDto {
   @ApiProperty({ example: 'user@example.com', description: 'User email address' })
+  @NormalizeEmail()
   @IsEmail()
   @IsNotEmpty()
   email: string;

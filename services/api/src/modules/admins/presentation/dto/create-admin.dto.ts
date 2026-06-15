@@ -9,9 +9,11 @@ import {
   IsUUID,
   MinLength,
 } from 'class-validator';
+import { NormalizeEmail } from '@shared/decorators/normalize-email.decorator';
 
 export class CreateAdminDto {
   @ApiProperty()
+  @NormalizeEmail()
   @IsEmail()
   email: string;
 

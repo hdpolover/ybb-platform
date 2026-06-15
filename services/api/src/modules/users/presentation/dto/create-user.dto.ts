@@ -1,5 +1,6 @@
 import { IsEmail, IsString, MinLength, IsNotEmpty } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { NormalizeEmail } from '@shared/decorators/normalize-email.decorator';
 
 export class CreateUserDto {
   @ApiProperty({
@@ -14,6 +15,7 @@ export class CreateUserDto {
     example: 'john@example.com',
     description: 'The user\'s email address.'
   })
+  @NormalizeEmail()
   @IsEmail()
   email: string;
 

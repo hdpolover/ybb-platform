@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsOptional, IsString, IsUrl, IsEmail } from 'class-validator';
 import { Transform } from 'class-transformer';
+import { NormalizeEmail } from '@shared/decorators/normalize-email.decorator';
 
 export class UpdateBrandDetailsDto {
     @ApiProperty({ required: false, description: 'Brief description of the brand/program category.' })
@@ -58,6 +59,7 @@ export class UpdateBrandDetailsDto {
 
     @ApiProperty({ required: false, example: 'contact@example.com' })
     @IsOptional()
+    @NormalizeEmail()
     @IsEmail()
     contactEmail?: string;
 
