@@ -147,6 +147,7 @@ export class FirebaseLoginHandler {
             where: {
                 email: { equals: email, mode: 'insensitive' },
                 brandId: brandId,
+                deletedAt: null,
             },
             orderBy: { createdAt: 'asc' },
         });

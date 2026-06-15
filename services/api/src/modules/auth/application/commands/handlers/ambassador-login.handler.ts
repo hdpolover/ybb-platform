@@ -63,6 +63,7 @@ export class AmbassadorLoginHandler {
       where: {
         email: { equals: command.email, mode: 'insensitive' },
         brandId,
+        deletedAt: null,
       },
       orderBy: { createdAt: 'asc' },
       include: { brand: true },

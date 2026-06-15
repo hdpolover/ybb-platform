@@ -38,6 +38,7 @@ export class AdminLoginHandler {
                 admin: {
                     isNot: null,
                 },
+                deletedAt: null,
             },
             orderBy: { createdAt: 'asc' },
             include: {
