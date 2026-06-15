@@ -504,7 +504,6 @@ export class GetPortalSubmissionDetailHandler
             case 'currentcountrycode':
                 return currentCountry;
             case 'currentcity':
-            case 'currentstate':
                 return participant.currentCity;
             case 'currentaddress':
             case 'domicileaddress':

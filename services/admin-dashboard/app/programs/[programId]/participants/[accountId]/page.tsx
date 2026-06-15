@@ -29,11 +29,26 @@ interface ParticipantData extends ProfileHeaderData {
   misc: Miscellaneous;
 }
 
+const regionNames = typeof Intl !== "undefined" ? new Intl.DisplayNames(["en"], { type: "region" }) : null;
+
+// Render a stored country value: convert a 2-letter ISO code (e.g. "ID") to a readable name; pass names through.
+function formatCountry(raw: string | null | undefined): string {
+  if (!raw) return "";
+  if (regionNames && /^[A-Z]{2}$/.test(raw)) {
+    try {
+      return regionNames.of(raw) ?? raw;
+    } catch {
+      return raw;
+    }
+  }
+  return raw;
+}
+
 function mapToParticipantData(app: Application): ParticipantData {
   const p = app.participant;
 
   const phone = [p?.phoneCountryCode, p?.phoneNumber].filter(Boolean).join(" ") || "—";
-  const location = [p?.originCity, p?.originCountry].filter(Boolean).join(", ") || "—";
+  const location = [p?.originCity, formatCountry(p?.originCountry)].filter(Boolean).join(", ") || "—";
 
   const experiences: { role: string; company: string }[] = (() => {
     try {
