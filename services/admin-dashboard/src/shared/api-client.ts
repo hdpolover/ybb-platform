@@ -2668,15 +2668,17 @@ export async function sendLoa(
 }
 
 export type LoaStatusRow = {
-  documentId: string;
   participantId: string;
   participantName: string;
   email: string;
+  applicationStatus: 'submitted' | 'accepted';
+  status: 'pending' | 'generated' | 'emailed' | 'viewed';
+  documentId: string | null;
   documentNumber: string | null;
-  generatedAt: string;
+  fileUrl: string | null;
+  generatedAt: string | null;
   emailedAt: string | null;
-  fileUrl: string;
-  status: 'generated' | 'emailed';
+  viewedAt: string | null;
 };
 
 export async function getLoaStatus(

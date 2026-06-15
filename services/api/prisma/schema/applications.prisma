@@ -368,6 +368,7 @@ model ParticipantDocument {
   // Meta
   generatedAt DateTime  @default(now()) @map("generated_at") @db.Timestamptz(6)
   emailedAt   DateTime? @map("emailed_at") @db.Timestamptz(6)
+  viewedAt    DateTime? @map("viewed_at") @db.Timestamptz(6)
   expiresAt   DateTime? @map("expires_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   legacyId    Int?      @unique @map("legacy_id")
