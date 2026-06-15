@@ -15,6 +15,8 @@ import {
     acknowledgeRmqMessage,
     rejectRmqMessageForRetry,
 } from '@shared/infrastructure/rabbitmq/rmq-ack';
+import { buildParticipantPaymentsUrl, buildParticipantInvoiceUrl } from '@modules/payments/application/utils/participant-dashboard-url.util';
+import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 
 @Controller()
 export class PaymentEventsController {
@@ -31,13 +33,81 @@ export class PaymentEventsController {
         private readonly unitOfWork: UnitOfWork,
         private readonly cacheService: CacheService,
         private readonly paymentOutbox: PaymentOutboxService,
+        private readonly producer: RabbitMQProducerService,
         @Optional() private readonly pubSubService?: RedisPubSubService,
         @Optional() private readonly referralFunnel?: ReferralFunnelService,
     ) {}
 
     @EventPattern('payment.created')
-    handlePaymentCreated(@Ctx() context: RmqContext) {
-        this.ackIgnoredPaymentEvent(context);
+    async handlePaymentCreated(
+        @Payload() payload: unknown,
+        @Ctx() context: RmqContext,
+    ) {
+        const channel = context.getChannelRef() as RabbitChannel | undefined;
+        const msg = context.getMessage();
+        const data = asRecord(payload);
+        try {
+            const status = getString(data, 'status');
+            const applicationId = getString(asRecord(data.metadata), 'application_id');
+            if (status !== 'PENDING_REVIEW' || !applicationId) {
+                if (channel && msg) channel.ack(msg);
+                return;
+            }
+            const invoiceWithBrand = await this.prisma.applicationInvoice.findFirst({
+                where: { applicationId },
+                orderBy: { createdAt: 'desc' },
+                include: {
+                    application: {
+                        include: {
+                            participant: {
+                                include: { user: { select: { email: true } } },
+                            },
+                            program: { include: { brand: { include: { settings: true } } } },
+                        },
+                    },
+                },
+            });
+            if (!invoiceWithBrand) {
+                this.logger.warn(`handlePaymentCreated: no invoice found for applicationId=${applicationId}`);
+                if (channel && msg) channel.ack(msg);
+                return;
+            }
+            const rawBrand = invoiceWithBrand?.application?.program?.brand ?? null;
+            const brandPayload = rawBrand
+                ? {
+                      name: rawBrand.name,
+                      primaryColor: rawBrand.primaryColor,
+                      logoUrl: rawBrand.logoUrl,
+                      websiteUrl: rawBrand.websiteUrl,
+                      contactEmail: rawBrand.contactEmail,
+                      contactAddress: rawBrand.contactAddress,
+                      socialMediaLinks: rawBrand.socialMediaLinks,
+                      settings: rawBrand.settings
+                          ? {
+                                footerNavigation: rawBrand.settings.footerNavigation,
+                                supportEmail: rawBrand.settings.supportEmail,
+                            }
+                          : null,
+                  }
+                : null;
+            await this.producer.emit('notification.payment_created', {
+                email: getString(data, 'email') || invoiceWithBrand?.application?.participant?.user?.email,
+                customer_name:
+                    getString(asRecord(data.metadata), 'customer_name') ||
+                    invoiceWithBrand?.application?.participant?.fullName ||
+                    'Customer',
+                amount: Number(data.amount) || 0,
+                currency: getString(data, 'currency') || 'IDR',
+                order_id: invoiceWithBrand.id || getString(data, 'order_id') || '',
+                status,
+                metadata: { application_id: applicationId, invoice_id: invoiceWithBrand.id },
+                brand: brandPayload,
+            });
+            if (channel && msg) channel.ack(msg);
+        } catch (err) {
+            this.logger.error('handlePaymentCreated error', err);
+            if (channel && msg) channel.nack(msg, false, false);
+        }
     }
 
     @EventPattern('payment.cancelled')
@@ -118,8 +188,75 @@ export class PaymentEventsController {
     }
 
     @EventPattern('payment.refunded')
-    handlePaymentRefunded(@Ctx() context: RmqContext) {
-        this.ackIgnoredPaymentEvent(context);
+    async handlePaymentRefunded(
+        @Payload() payload: unknown,
+        @Ctx() context: RmqContext,
+    ) {
+        const channel = context.getChannelRef() as RabbitChannel | undefined;
+        const msg = context.getMessage();
+        const data = asRecord(payload);
+        try {
+            const paymentId = getString(data, 'payment_id') || getString(data, 'transaction_id');
+            const applicationId = getString(asRecord(data.metadata), 'application_id');
+            const brandInclude = {
+                application: {
+                    include: {
+                        participant: {
+                            include: { user: { select: { email: true } } },
+                        },
+                        program: { include: { brand: { include: { settings: true } } } },
+                    },
+                },
+            } as const;
+            let invoiceWithBrand: Awaited<ReturnType<typeof this.prisma.applicationInvoice.findFirst<{ include: typeof brandInclude }>>> = null;
+            if (paymentId) {
+                invoiceWithBrand = await this.prisma.applicationInvoice.findFirst({
+                    where: { externalTransactionId: paymentId },
+                    include: brandInclude,
+                });
+            }
+            if (!invoiceWithBrand && applicationId) {
+                invoiceWithBrand = await this.prisma.applicationInvoice.findFirst({
+                    where: { applicationId },
+                    orderBy: { createdAt: 'desc' },
+                    include: brandInclude,
+                });
+            }
+            const rawBrand = invoiceWithBrand?.application?.program?.brand ?? null;
+            const brandPayload = rawBrand
+                ? {
+                      name: rawBrand.name,
+                      primaryColor: rawBrand.primaryColor,
+                      logoUrl: rawBrand.logoUrl,
+                      websiteUrl: rawBrand.websiteUrl,
+                      contactEmail: rawBrand.contactEmail,
+                      contactAddress: rawBrand.contactAddress,
+                      socialMediaLinks: rawBrand.socialMediaLinks,
+                      settings: rawBrand.settings
+                          ? {
+                                footerNavigation: rawBrand.settings.footerNavigation,
+                                supportEmail: rawBrand.settings.supportEmail,
+                            }
+                          : null,
+                  }
+                : null;
+            await this.producer.emit('notification.payment_refunded', {
+                email: getString(data, 'email') || invoiceWithBrand?.application?.participant?.user?.email,
+                customer_name:
+                    getString(asRecord(data.metadata), 'customer_name') ||
+                    invoiceWithBrand?.application?.participant?.fullName ||
+                    'Customer',
+                amount: Number(data.amount) || 0,
+                currency: getString(data, 'currency') || 'IDR',
+                order_id: paymentId || getString(data, 'order_id') || '',
+                metadata: { application_id: applicationId, invoice_id: invoiceWithBrand?.id },
+                brand: brandPayload,
+            });
+            if (channel && msg) channel.ack(msg);
+        } catch (err) {
+            this.logger.error('handlePaymentRefunded error', err);
+            if (channel && msg) channel.nack(msg, false, false);
+        }
     }
 
     @EventPattern('payment.succeeded')
@@ -197,6 +334,67 @@ export class PaymentEventsController {
                             result.programId,
                         );
                     }
+                }
+
+                // Re-emit branded notification event
+                try {
+                    const invoiceWithBrand = result?.invoiceId
+                        ? await this.prisma.applicationInvoice.findUnique({
+                              where: { id: result.invoiceId },
+                              include: {
+                                  application: {
+                                      include: {
+                                          participant: {
+                                              include: { user: { select: { email: true } } },
+                                          },
+                                          program: { include: { brand: { include: { settings: true } } } },
+                                      },
+                                  },
+                              },
+                          })
+                        : null;
+                    const rawBrand = invoiceWithBrand?.application?.program?.brand ?? null;
+                    const brandPayload = rawBrand
+                        ? {
+                              name: rawBrand.name,
+                              primaryColor: rawBrand.primaryColor,
+                              logoUrl: rawBrand.logoUrl,
+                              websiteUrl: rawBrand.websiteUrl,
+                              contactEmail: rawBrand.contactEmail,
+                              contactAddress: rawBrand.contactAddress,
+                              socialMediaLinks: rawBrand.socialMediaLinks,
+                              settings: rawBrand.settings
+                                  ? {
+                                        footerNavigation: rawBrand.settings.footerNavigation,
+                                        supportEmail: rawBrand.settings.supportEmail,
+                                    }
+                                  : null,
+                          }
+                        : null;
+                    await this.producer.emit('notification.payment_succeeded', {
+                        email: getString(data, 'email') || invoiceWithBrand?.application?.participant?.user?.email,
+                        customer_name:
+                            getString(asRecord(data.metadata as Record<string, unknown>), 'customer_name') ||
+                            invoiceWithBrand?.application?.participant?.fullName ||
+                            'Customer',
+                        amount: Number(data.amount) || 0,
+                        currency: getString(data, 'currency') || 'IDR',
+                        order_id: result?.invoiceId || '',
+                        payment_id: getString(data, 'payment_id') || getString(data, 'transaction_id'),
+                        description:
+                            getString(asRecord(data.metadata as Record<string, unknown>), 'description') ||
+                            'Payment for services',
+                        invoice_url: buildParticipantInvoiceUrl(rawBrand, result?.invoiceId),
+                        payments_page_url: buildParticipantPaymentsUrl(rawBrand),
+                        metadata: {
+                            application_id: applicationId,
+                            invoice_id: result?.invoiceId,
+                            item_details: asRecord(data.metadata as Record<string, unknown>).item_details,
+                        },
+                        brand: brandPayload,
+                    });
+                } catch (emitErr) {
+                    this.logger.error('Failed to emit notification.payment_succeeded', emitErr);
                 }
             } else {
                 this.logger.warn(`Payment succeeded but no application_id found in metadata. ID: ${gatewayOrderId}`);
@@ -419,6 +617,65 @@ export class PaymentEventsController {
                 if (application?.participant?.userId) {
                     await this.invalidateUserPortalCache(application.participant.userId, 'payment failed');
                 }
+            }
+
+            // Re-emit branded notification event
+            try {
+                if (failedInvoice?.invoiceId) {
+                    const invoiceWithBrand = await this.prisma.applicationInvoice.findUnique({
+                        where: { id: failedInvoice.invoiceId },
+                        include: {
+                            application: {
+                                include: {
+                                    participant: {
+                                        include: { user: { select: { email: true } } },
+                                    },
+                                    program: { include: { brand: { include: { settings: true } } } },
+                                },
+                            },
+                        },
+                    });
+                    const rawBrand = invoiceWithBrand?.application?.program?.brand ?? null;
+                    const brandPayload = rawBrand
+                        ? {
+                              name: rawBrand.name,
+                              primaryColor: rawBrand.primaryColor,
+                              logoUrl: rawBrand.logoUrl,
+                              websiteUrl: rawBrand.websiteUrl,
+                              contactEmail: rawBrand.contactEmail,
+                              contactAddress: rawBrand.contactAddress,
+                              socialMediaLinks: rawBrand.socialMediaLinks,
+                              settings: rawBrand.settings
+                                  ? {
+                                        footerNavigation: rawBrand.settings.footerNavigation,
+                                        supportEmail: rawBrand.settings.supportEmail,
+                                    }
+                                  : null,
+                          }
+                        : null;
+                    await this.producer.emit('notification.payment_failed', {
+                        email: getString(data, 'email') || invoiceWithBrand?.application?.participant?.user?.email,
+                        customer_name:
+                            getString(asRecord(data.metadata as Record<string, unknown>), 'customer_name') ||
+                            invoiceWithBrand?.application?.participant?.fullName ||
+                            'Customer',
+                        amount: Number(data.amount) || 0,
+                        currency: getString(data, 'currency') || 'IDR',
+                        order_id: failedInvoice.invoiceId || getString(data, 'order_id') || '',
+                        reason:
+                            getString(asRecord(data.metadata as Record<string, unknown>), 'failure_reason') ||
+                            getString(data, 'reason') ||
+                            'Payment could not be processed',
+                        metadata: { application_id: applicationId, invoice_id: failedInvoice.invoiceId },
+                        brand: brandPayload,
+                    });
+                } else {
+                    this.logger.warn(
+                        `notification.payment_failed not emitted: no resolved invoice for payment.failed event (applicationId=${applicationId ?? 'unknown'} intentId=${intentId ?? 'unknown'})`,
+                    );
+                }
+            } catch (emitErr) {
+                this.logger.error('Failed to emit notification.payment_failed', emitErr);
             }
         } catch (error) {
             const err = error instanceof Error ? error : new Error(String(error));
@@ -717,6 +974,7 @@ type RmqMessage = {
 
 type RabbitChannel = {
     ack(message: unknown): void;
+    nack(message: unknown, allUpTo?: boolean, requeue?: boolean): void;
     sendToQueue: (
         queue: string,
         content: Buffer,
