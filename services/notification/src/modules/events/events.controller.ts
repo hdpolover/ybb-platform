@@ -257,6 +257,41 @@ export class EventsController {
     });
   }
 
+  @EventPattern('payment.reminder')
+  async handlePaymentReminder(
+    @Payload() data: unknown,
+    @Ctx() context: RmqContext,
+  ) {
+    const payload = asRecord(data);
+    await this.processEvent('payment.reminder', payload, context, async () => {
+      this.logger.log(
+        `Received payment.reminder event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+      );
+
+      const email = getString(payload, 'email');
+      if (!email) return;
+
+      const metadata = asRecord(payload.metadata);
+      await this.emailService.sendPaymentReminderEmail(email, {
+        name:
+          getString(payload, 'customer_name') ||
+          getString(metadata, 'customer_name') ||
+          'Participant',
+        amount: getNumber(payload, 'amount'),
+        currency: getString(payload, 'currency') || 'IDR',
+        orderId:
+          getString(payload, 'order_id') ||
+          getString(payload, 'invoice_id') ||
+          getString(metadata, 'invoice_id') ||
+          'unknown-invoice',
+        paymentsPageUrl:
+          getString(payload, 'paymentsPageUrl') ||
+          getString(payload, 'payments_page_url') ||
+          undefined,
+      });
+    });
+  }
+
   @EventPattern('payment.cancelled')
   handlePaymentCancelled(@Ctx() context: RmqContext) {
     this.acknowledgeMessage(context, 'payment.cancelled', 'skipped');
