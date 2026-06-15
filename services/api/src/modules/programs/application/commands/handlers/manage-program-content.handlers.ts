@@ -1561,6 +1561,9 @@ export class GenerateLOAHandler implements ICommandHandler<GenerateLOACommand> {
                     try {
                         const brandBase = (program.brand?.landingUrl ?? program.brand?.websiteUrl ?? '').trim().replace(/\/$/, '');
                         const portalDocumentsUrl = brandBase ? `${brandBase}/dashboard/documents` : '';
+                        if (!portalDocumentsUrl) {
+                            this.logger.warn(`LoA email for application ${app.id}: brand ${program.brandId} has no landingUrl/websiteUrl, documents_page_url will be empty`);
+                        }
                         await this.rabbitmqProducer.emit('application.loa_ready', {
                             email: app.participant.user.email,
                             participant_name: app.participant.fullName,
