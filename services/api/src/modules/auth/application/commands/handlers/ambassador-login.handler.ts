@@ -58,9 +58,13 @@ export class AmbassadorLoginHandler {
   async execute(command: AmbassadorLoginCommand, domain?: string): Promise<AuthResponseDto> {
     const brandId = await this.resolveBrandId(command.brandId, domain);
 
-    // Find user by email and brand
-    const user = await this.prisma.user.findUnique({
-      where: { email_brandId: { email: command.email, brandId } },
+    // Find user by email and brand (case-insensitive)
+    const user = await this.prisma.user.findFirst({
+      where: {
+        email: { equals: command.email, mode: 'insensitive' },
+        brandId,
+      },
+      orderBy: { createdAt: 'asc' },
       include: { brand: true },
     });
 

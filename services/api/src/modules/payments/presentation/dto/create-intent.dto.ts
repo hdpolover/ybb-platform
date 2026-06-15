@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsNumber, IsString, IsOptional, IsObject, Min, IsEmail, IsArray, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
+import { NormalizeEmail } from '@shared/decorators/normalize-email.decorator';
 
 export class ItemDetailDto {
     @ApiProperty()
@@ -49,6 +50,7 @@ export class CreateIntentDto {
     customer_name?: string;
 
     @ApiPropertyOptional()
+    @NormalizeEmail()
     @IsEmail()
     @IsOptional()
     customer_email?: string;

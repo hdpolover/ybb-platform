@@ -1,12 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEmail, IsNotEmpty, IsOptional, IsString, IsUUID, MinLength, IsIn, IsEnum, Matches } from 'class-validator';
 import { ApplicationCategory } from '@prisma/client';
+import { NormalizeEmail } from '@shared/decorators/normalize-email.decorator';
 
 export class RegisterDto {
   @ApiProperty({
     example: 'user@example.com',
     description: 'A valid email address for the new account.'
   })
+  @NormalizeEmail()
   @IsEmail()
   @IsNotEmpty()
   email: string;

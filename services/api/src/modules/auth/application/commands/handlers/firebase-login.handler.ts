@@ -145,9 +145,10 @@ export class FirebaseLoginHandler {
     if (!user) {
         const existingUser = await this.prisma.user.findFirst({
             where: {
-                email: email,
-                brandId: brandId
-            }
+                email: { equals: email, mode: 'insensitive' },
+                brandId: brandId,
+            },
+            orderBy: { createdAt: 'asc' },
         });
 
         if (existingUser) {

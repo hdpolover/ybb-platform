@@ -158,7 +158,7 @@ export class AuthLoggingService {
   }
 
   async logForgotPasswordRequest(email: string, ipAddress: string = '0.0.0.0', userAgent: string = 'unknown') {
-    const user = await this.prisma.user.findFirst({ where: { email }, select: { id: true } });
+    const user = await this.prisma.user.findFirst({ where: { email: { equals: email, mode: 'insensitive' } }, orderBy: { createdAt: 'asc' }, select: { id: true } });
     const agentInfo = this.parseUserAgent(userAgent);
 
     if (user) {

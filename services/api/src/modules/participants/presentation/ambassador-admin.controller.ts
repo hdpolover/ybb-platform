@@ -151,8 +151,8 @@ export class AmbassadorAdminController {
     const program = await this.prisma.program.findUnique({ where: { id: programId }, select: { id: true, brandId: true } });
     if (!program) throw new NotFoundException('Program not found');
 
-    // Find or create user
-    let user = await this.prisma.user.findFirst({ where: { email, brandId: program.brandId } });
+    // Find or create user (case-insensitive email match)
+    let user = await this.prisma.user.findFirst({ where: { email: { equals: email, mode: 'insensitive' }, brandId: program.brandId }, orderBy: { createdAt: 'asc' } });
     if (!user) {
       user = await this.prisma.user.create({
         data: {

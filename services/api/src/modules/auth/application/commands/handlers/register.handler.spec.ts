@@ -47,6 +47,7 @@ describe('RegisterHandler', () => {
     },
     user: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       update: jest.fn(),
       create: jest.fn(),
     },
@@ -226,7 +227,7 @@ describe('RegisterHandler', () => {
         });
 
         // Mock User (Not exists)
-        mockPrismaService.user.findUnique.mockResolvedValue(null);
+        mockPrismaService.user.findFirst.mockResolvedValue(null);
 
         // Mock Create User
         mockPrismaService.user.create.mockResolvedValue({
@@ -334,7 +335,7 @@ describe('RegisterHandler', () => {
         });
         
          // Mock User (Not exists)
-         mockPrismaService.user.findUnique.mockResolvedValue(null);
+         mockPrismaService.user.findFirst.mockResolvedValue(null);
 
         const noPassCommand = new RegisterCommand(
             'test@example.com', 'provider-id-123', '', 'category-id-123',
@@ -394,7 +395,7 @@ describe('RegisterHandler', () => {
         });
 
         // Mock User (Not exists)
-        mockPrismaService.user.findUnique.mockResolvedValue(null);
+        mockPrismaService.user.findFirst.mockResolvedValue(null);
 
         // Mock Create User
         mockPrismaService.user.create.mockResolvedValue({

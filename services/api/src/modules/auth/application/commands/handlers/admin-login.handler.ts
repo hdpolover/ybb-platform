@@ -34,11 +34,12 @@ export class AdminLoginHandler {
         // assuming the admin "persona" is tied to one primary user account.
         const user = await this.prisma.user.findFirst({
             where: {
-                email: command.email,
+                email: { equals: command.email, mode: 'insensitive' },
                 admin: {
                     isNot: null,
                 },
             },
+            orderBy: { createdAt: 'asc' },
             include: {
                 admin: {
                     include: {

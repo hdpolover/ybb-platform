@@ -23,6 +23,7 @@ describe('LoginHandler', () => {
     },
     user: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       update: jest.fn(),
     },
     participant: {
@@ -148,15 +149,21 @@ describe('LoginHandler', () => {
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
     });
     mockPrismaService.programParticipationInfo.findMany.mockResolvedValue([]);
-    mockPrismaService.user.findUnique.mockImplementation(async ({ where }: any) => {
-      if (where?.email_brandId?.brandId === 'brand-1') {
+    // findFirst handles email-based auth lookups (case-insensitive)
+    mockPrismaService.user.findFirst.mockImplementation(async ({ where }: any) => {
+      if (where?.brandId === 'brand-1') {
         return brandOneUser;
       }
 
-      if (where?.email_brandId?.brandId === 'brand-2') {
+      if (where?.brandId === 'brand-2') {
         return brandTwoUser;
       }
 
+      return null;
+    });
+
+    // findUnique handles id-based lookups (getRegisteredPrograms helper)
+    mockPrismaService.user.findUnique.mockImplementation(async ({ where }: any) => {
       if (where?.id === 'user-brand-1') {
         return {
           participant: {
@@ -212,13 +219,11 @@ describe('LoginHandler', () => {
 
     const result = await handler.execute(command);
 
-    expect(mockPrismaService.user.findUnique).toHaveBeenCalledWith(
+    expect(mockPrismaService.user.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          email_brandId: {
-            email: 'same@example.com',
-            brandId: 'brand-2',
-          },
+          email: { equals: 'same@example.com', mode: 'insensitive' },
+          brandId: 'brand-2',
         },
       }),
     );
@@ -269,13 +274,11 @@ describe('LoginHandler', () => {
       },
       select: { id: true },
     });
-    expect(mockPrismaService.user.findUnique).toHaveBeenCalledWith(
+    expect(mockPrismaService.user.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          email_brandId: {
-            email: 'same@example.com',
-            brandId: 'brand-2',
-          },
+          email: { equals: 'same@example.com', mode: 'insensitive' },
+          brandId: 'brand-2',
         },
       }),
     );
@@ -326,7 +329,7 @@ describe('LoginHandler', () => {
   });
 
   it('rejects login when the brand-scoped account does not exist', async () => {
-    mockPrismaService.user.findUnique.mockResolvedValueOnce(null);
+    mockPrismaService.user.findFirst.mockResolvedValueOnce(null);
 
     const command = new LoginCommand(
       'missing@example.com',
@@ -340,7 +343,7 @@ describe('LoginHandler', () => {
   });
 
   it('rejects unverified user when selected program requires verification even if brand does not', async () => {
-    mockPrismaService.user.findUnique.mockResolvedValueOnce({
+    mockPrismaService.user.findFirst.mockResolvedValueOnce({
       ...brandOneUser,
       emailVerified: false,
       brand: {
@@ -378,7 +381,7 @@ describe('LoginHandler', () => {
   });
 
   it('allows unverified user when selected program does not require verification even if brand does', async () => {
-    mockPrismaService.user.findUnique.mockImplementationOnce(async () => ({
+    mockPrismaService.user.findFirst.mockImplementationOnce(async () => ({
       ...brandOneUser,
       emailVerified: false,
       brand: {

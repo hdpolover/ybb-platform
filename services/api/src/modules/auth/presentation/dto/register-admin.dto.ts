@@ -1,11 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEmail, IsNotEmpty, IsString, IsUUID, MinLength, IsArray, IsOptional } from 'class-validator';
+import { NormalizeEmail } from '@shared/decorators/normalize-email.decorator';
 
 export class RegisterAdminDto {
   @ApiProperty({
     example: 'admin@example.com',
     description: 'The business email address for the admin account.'
   })
+  @NormalizeEmail()
   @IsEmail()
   @IsNotEmpty()
   email: string;

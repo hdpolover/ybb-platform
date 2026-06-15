@@ -44,11 +44,12 @@ export class UserRepository implements IUserRepository {
 
   async findByEmail(email: string, brandId: string): Promise<User | null> {
     const user = await this.readClient.user.findFirst({
-      where: { 
-        email,
+      where: {
+        email: { equals: email, mode: 'insensitive' },
         brandId: brandId,
         deletedAt: null,
       },
+      orderBy: { createdAt: 'asc' },
     });
 
     return user ? UserMapper.toDomain(user) : null;

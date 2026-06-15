@@ -165,14 +165,13 @@ export class RegisterHandler {
         }
     }
 
-    // Check if user already exists by email + brandId
-    const user = await this.prisma.user.findUnique({
+    // Check if user already exists by email + brandId (case-insensitive)
+    const user = await this.prisma.user.findFirst({
       where: {
-        email_brandId: {
-          email: command.email,
-          brandId: brandId,
-        },
+        email: { equals: command.email, mode: 'insensitive' },
+        brandId: brandId,
       },
+      orderBy: { createdAt: 'asc' },
       include: {
         identities: {
           include: {
