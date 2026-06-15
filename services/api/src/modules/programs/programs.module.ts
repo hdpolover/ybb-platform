@@ -3,6 +3,7 @@ import { CqrsModule } from '@nestjs/cqrs';
 import { AuthModule } from '@modules/auth/auth.module';
 import { UsersModule } from '@modules/users/users.module';
 import { FilesModule } from '@modules/files/files.module';
+import { RabbitMQModule } from '@shared/infrastructure/rabbitmq/rabbitmq.module';
 import { ProgramsController } from './presentation/programs.controller';
 import { AdminProgramsController } from './presentation/admin-programs.controller';
 import { ProgramScheduleController } from './presentation/program-schedule.controller';
@@ -105,7 +106,7 @@ import { CacheService } from '../../shared/infrastructure/cache/cache.service';
 import { FormFieldKeyValidator } from './application/validators/form-field-key.validator';
 
 @Module({
-  imports: [CqrsModule, AuthModule, UsersModule, FilesModule],
+  imports: [CqrsModule, AuthModule, UsersModule, FilesModule, RabbitMQModule],
   controllers: [
     ProgramsController,
     AdminProgramsController,
