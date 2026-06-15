@@ -91,6 +91,32 @@ export class EnsurePortalPaymentInvoiceHandler {
             throw new ForbiddenException('This payment option is not available for your current category');
         }
 
+        // A registration_fee is required once and is category-agnostic (the submit
+        // gate accepts a paid registration_fee invoice for ANY tier). If the
+        // participant already PAID one — possibly for a different category/tier after
+        // a switch-category — do not mint a second invoice. Minting one here created
+        // a spurious "unpaid" registration_fee invoice (e.g. on already-submitted
+        // applications), making paid participants look unpaid. Return the paid one.
+        if (isRegistrationFee) {
+            const paidRegistrationFee = await this.prisma.applicationInvoice.findFirst({
+                where: {
+                    applicationId: application.id,
+                    status: 'paid',
+                    pricingTier: { feeType: 'registration_fee' },
+                },
+                orderBy: { createdAt: 'desc' },
+                select: { id: true },
+            });
+            if (paidRegistrationFee) {
+                await this.invalidatePortalPaymentCaches(userId, application.programId, paidRegistrationFee.id);
+                return {
+                    invoice_id: paidRegistrationFee.id,
+                    source: 'existing',
+                    message: 'Registration fee already paid',
+                };
+            }
+        }
+
         const existingInvoice = await this.prisma.applicationInvoice.findFirst({
             where: {
                 applicationId: application.id,
