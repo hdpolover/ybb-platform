@@ -36,13 +36,15 @@ QUEUES = [
             'x-dead-letter-routing-key': 'notification_queue.retry',
         },
         'exchange': EXCHANGE_NAME,
-        'bindings': ['user.#', 'payment.#', 'system.announcement'],
-    },
-    # Same queue, additional bindings from payment exchange
-    {
-        'name': 'notification_queue',
-        'exchange': PAYMENT_EXCHANGE_NAME,
-        'bindings': ['payment.#'],
+        'bindings': [
+            'notification.#',
+            'user.#',
+            'support.#',
+            'application.#',
+            'payment.rejected',
+            'payment.reminder',
+            'payment.cancelled',
+        ],
     },
     {
         'name': 'notification_queue.retry',
