@@ -11,7 +11,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import {
   Bold, Italic, Underline as UnderlineIcon, AlignLeft, AlignCenter,
   AlignRight, List, ListOrdered, Undo, Redo, RemoveFormatting,
-  Heading1, Heading2, Loader2, CheckCircle2, Zap, Upload, ImageIcon, X, Eye, EyeOff,
+  Heading1, Heading2, Loader2, CheckCircle2, Zap, Upload, ImageIcon, X, Eye, EyeOff, Send,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
@@ -26,6 +26,7 @@ import {
   createDocumentTemplate,
   updateDocumentTemplate,
   generateLoa,
+  sendLoa,
   listProgramMedia,
   uploadFileViaPresignedUrl,
   type DocumentTemplate,
@@ -282,7 +283,12 @@ function MiniEditor({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function LoaTemplateEditor({ programId }: { programId: string }) {
+interface LoaTemplateEditorProps {
+  programId: string;
+  onTemplateChange?: (template: DocumentTemplate | null) => void;
+}
+
+export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEditorProps) {
   const { accessiblePrograms, adminProfile } = useAuth();
   const program = accessiblePrograms.find((p) => p.programId === programId);
   const brandId = program?.brandId ?? "";
@@ -292,6 +298,9 @@ export function LoaTemplateEditor({ programId }: { programId: string }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [sendDialogOpen, setSendDialogOpen] = useState(false);
+  const [sendAudience, setSendAudience] = useState<'submitted' | 'accepted'>('accepted');
+  const [sending, setSending] = useState(false);
   const [layout, setLayout] = useState<DocumentTemplateLayoutConfig>(DEFAULT_LAYOUT);
   const [templateName, setTemplateName] = useState("Letter of Acceptance");
   const [previewMode, setPreviewMode] = useState(false);
@@ -392,10 +401,12 @@ export function LoaTemplateEditor({ programId }: { programId: string }) {
       if (template) {
         const updated = await updateDocumentTemplate(template.id, body);
         setTemplate(updated);
+        onTemplateChange?.(updated);
         toast.success(publish ? "Template published" : "Draft saved");
       } else {
         const created = await createDocumentTemplate(programId, { ...body, userId, brandId });
         setTemplate(created);
+        onTemplateChange?.(created);
         toast.success(publish ? "Template published" : "Draft saved");
       }
     } catch (err) {
@@ -415,6 +426,25 @@ export function LoaTemplateEditor({ programId }: { programId: string }) {
       toast.error(err instanceof Error ? err.message : "Generation failed");
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function handleSendAll() {
+    if (!template) { toast.error("Save the template first"); return; }
+    setSending(true);
+    setSendDialogOpen(false);
+    try {
+      const result = await sendLoa(programId, template.id, {
+        bulk: true,
+        audience: sendAudience,
+      });
+      toast.success(
+        `Generated & sent ${result.generated} LoA(s)${result.failed ? `, ${result.failed} failed` : ""}`,
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Send failed");
+    } finally {
+      setSending(false);
     }
   }
 
@@ -513,15 +543,68 @@ export function LoaTemplateEditor({ programId }: { programId: string }) {
             <CheckCircle2 className="h-3.5 w-3.5" />
             Publish
           </button>
+          {/* Generate & Send button */}
           <button
             type="button"
-            disabled={generating || !template}
-            onClick={handleGenerateAll}
+            disabled={sending || !template}
+            onClick={() => setSendDialogOpen(true)}
             className="flex items-center gap-1.5 rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-50"
           >
-            {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
-            Generate All
+            {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+            Generate & Send
           </button>
+
+          {/* Audience confirmation dialog */}
+          {sendDialogOpen && (
+            <Dialog open={sendDialogOpen} onOpenChange={setSendDialogOpen}>
+              <DialogContent className="max-w-sm">
+                <DialogHeader>
+                  <DialogTitle>Generate & Send LoA</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 pt-2">
+                  <p className="text-sm text-zinc-600">
+                    Generate LoA PDFs and email each participant. Choose the audience:
+                  </p>
+                  <div className="space-y-2">
+                    {(["accepted", "submitted"] as const).map((opt) => (
+                      <label
+                        key={opt}
+                        className="flex cursor-pointer items-center gap-3 rounded-lg border border-zinc-200 p-3 hover:bg-zinc-50"
+                      >
+                        <input
+                          type="radio"
+                          name="audience"
+                          value={opt}
+                          checked={sendAudience === opt}
+                          onChange={() => setSendAudience(opt)}
+                          className="h-4 w-4 accent-blue-600"
+                        />
+                        <span className="text-sm font-medium capitalize text-zinc-800">
+                          {opt === "accepted" ? "Accepted applicants" : "Submitted applicants"}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="flex justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setSendDialogOpen(false)}
+                      className="rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleSendAll()}
+                      className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700"
+                    >
+                      Confirm & Send
+                    </button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
       </div>
 
