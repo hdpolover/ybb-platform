@@ -8,6 +8,7 @@ import { StorageService } from '../../../../files/application/storage.service';
 import { FileServiceClient } from '../../../../files/infrastructure/clients/file-service.client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
+import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { CACHE_KEYS } from '../../../../../shared/constants/cache-keys';
 import {
     CreateProgramTimelineCommand, UpdateProgramTimelineCommand, DeleteProgramTimelineCommand,
@@ -1413,6 +1414,7 @@ export class GenerateLOAHandler implements ICommandHandler<GenerateLOACommand> {
         private readonly storageService: StorageService,
         private readonly fileServiceClient: FileServiceClient,
         private readonly cacheService: CacheService,
+        private readonly rabbitmqProducer: RabbitMQProducerService,
     ) {}
 
     async execute(command: GenerateLOACommand): Promise<{ generated: number; failed: number }> {
@@ -1427,7 +1429,29 @@ export class GenerateLOAHandler implements ICommandHandler<GenerateLOACommand> {
             throw new BadRequestException('Template has no HTML content');
         }
 
-        const program = await this.prisma.program.findUnique({ where: { id: command.programId } });
+        const program = await this.prisma.program.findUnique({
+            where: { id: command.programId },
+            include: {
+                brand: {
+                    select: {
+                        name: true,
+                        primaryColor: true,
+                        logoUrl: true,
+                        websiteUrl: true,
+                        landingUrl: true,
+                        contactEmail: true,
+                        contactAddress: true,
+                        socialMediaLinks: true,
+                        settings: {
+                            select: {
+                                footerNavigation: true,
+                                supportEmail: true,
+                            },
+                        },
+                    },
+                },
+            },
+        });
         if (!program) throw new NotFoundException('Program not found');
 
         // Resolve applications to generate for
@@ -1435,7 +1459,9 @@ export class GenerateLOAHandler implements ICommandHandler<GenerateLOACommand> {
         if (command.participantId) {
             whereClause.participantId = command.participantId;
         } else if (command.bulk) {
-            whereClause.status = 'accepted';
+            // audience param introduced in LoA-send flow; default to 'accepted' for backwards compat
+            const audience: 'submitted' | 'accepted' = command.audience ?? 'accepted';
+            whereClause.status = audience;
         } else {
             throw new BadRequestException('Provide participantId or bulk: true');
         }
@@ -1443,7 +1469,13 @@ export class GenerateLOAHandler implements ICommandHandler<GenerateLOACommand> {
         const applications = await this.prisma.participantApplication.findMany({
             where: whereClause as Prisma.ParticipantApplicationWhereInput,
             include: {
-                participant: true,
+                participant: {
+                    include: {
+                        user: {
+                            select: { email: true },
+                        },
+                    },
+                },
                 participationCategory: true,
             },
         });
@@ -1518,6 +1550,7 @@ export class GenerateLOAHandler implements ICommandHandler<GenerateLOACommand> {
                     where: { applicationId: app.id, templateId: template.id },
                 });
 
+                let savedDocId: string;
                 if (existingDoc) {
                     await this.prisma.participantDocument.update({
                         where: { id: existingDoc.id },
@@ -1528,8 +1561,9 @@ export class GenerateLOAHandler implements ICommandHandler<GenerateLOACommand> {
                             isPublic: false,
                         },
                     });
+                    savedDocId = existingDoc.id;
                 } else {
-                    await this.prisma.participantDocument.create({
+                    const created = await this.prisma.participantDocument.create({
                         data: {
                             applicationId: app.id,
                             templateId: template.id,
@@ -1542,6 +1576,60 @@ export class GenerateLOAHandler implements ICommandHandler<GenerateLOACommand> {
                             isPublic: false,
                         },
                     });
+                    savedDocId = created.id;
+                }
+
+                // Emit LoA-ready notification — non-blocking
+                const alreadyEmailed = existingDoc?.emailedAt != null;
+                const shouldSend = !alreadyEmailed || command.resend === true;
+                if (shouldSend) {
+                    try {
+                        const brandData = program.brand ?? null;
+                        const brandBase = (brandData?.landingUrl ?? brandData?.websiteUrl ?? '').trim().replace(/\/$/, '');
+                        const portalDocumentsUrl = brandBase ? `${brandBase}/dashboard/documents` : '';
+                        if (!portalDocumentsUrl) {
+                            this.logger.warn(`LoA email for application ${app.id}: brand ${program.brandId} has no landingUrl/websiteUrl, documents_page_url will be empty`);
+                        }
+                        const brandPayload = brandData ? {
+                            name: brandData.name,
+                            primaryColor: brandData.primaryColor,
+                            logoUrl: brandData.logoUrl,
+                            websiteUrl: brandData.websiteUrl,
+                            contactEmail: brandData.contactEmail,
+                            contactAddress: brandData.contactAddress,
+                            socialMediaLinks: brandData.socialMediaLinks,
+                            website: brandData.websiteUrl,
+                            settings: brandData.settings ? {
+                                footerNavigation: brandData.settings.footerNavigation,
+                                supportEmail: brandData.settings.supportEmail,
+                            } : null,
+                        } : null;
+                        await this.rabbitmqProducer.emit('application.loa_ready', {
+                            email: app.participant.user?.email,
+                            participant_name: app.participant.fullName,
+                            program_name: program.name,
+                            program_id: program.id,
+                            brand_id: program.brandId,
+                            brand: brandPayload,
+                            application_id: app.id,
+                            document_id: savedDocId,
+                            document_number: documentNumber,
+                            documents_page_url: portalDocumentsUrl,
+                            metadata: {
+                                emitted_at: new Date().toISOString(),
+                                sent_by: command.userId,
+                                audience: command.audience ?? 'accepted',
+                            },
+                        });
+                        await this.prisma.participantDocument.update({
+                            where: { id: savedDocId },
+                            data: { emailedAt: new Date() },
+                        });
+                    } catch (emitErr) {
+                        this.logger.warn(
+                            `LoA email event emit failed for application ${app.id}: ${emitErr instanceof Error ? emitErr.message : String(emitErr)}`,
+                        );
+                    }
                 }
 
                 generated++;

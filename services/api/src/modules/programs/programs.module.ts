@@ -3,6 +3,7 @@ import { CqrsModule } from '@nestjs/cqrs';
 import { AuthModule } from '@modules/auth/auth.module';
 import { UsersModule } from '@modules/users/users.module';
 import { FilesModule } from '@modules/files/files.module';
+import { RabbitMQModule } from '@shared/infrastructure/rabbitmq/rabbitmq.module';
 import { ProgramsController } from './presentation/programs.controller';
 import { AdminProgramsController } from './presentation/admin-programs.controller';
 import { ProgramScheduleController } from './presentation/program-schedule.controller';
@@ -103,9 +104,10 @@ import { ProgramRepository } from './infrastructure/persistence/program.reposito
 import { PrismaService } from '../../shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '../../shared/infrastructure/cache/cache.service';
 import { FormFieldKeyValidator } from './application/validators/form-field-key.validator';
+import { GetLoaStatusHandler } from './application/queries/get-loa-status.handler';
 
 @Module({
-  imports: [CqrsModule, AuthModule, UsersModule, FilesModule],
+  imports: [CqrsModule, AuthModule, UsersModule, FilesModule, RabbitMQModule],
   controllers: [
     ProgramsController,
     AdminProgramsController,
@@ -166,6 +168,7 @@ import { FormFieldKeyValidator } from './application/validators/form-field-key.v
     CreateProgramSubthemeHandler, UpdateProgramSubthemeHandler, DeleteProgramSubthemeHandler,
     CreateDocumentTemplateHandler, UpdateDocumentTemplateHandler, DeleteDocumentTemplateHandler,
     GenerateLOAHandler,
+    GetLoaStatusHandler,
     UpdateProgramPaymentInfoHandler,
     // Form Field Handlers
     CreateApplicationFormFieldHandler,
