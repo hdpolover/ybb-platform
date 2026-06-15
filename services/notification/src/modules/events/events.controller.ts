@@ -475,6 +475,36 @@ export class EventsController {
     );
   }
 
+  @EventPattern('application.loa_ready')
+  async handleLoaReady(
+    @Payload() data: unknown,
+    @Ctx() context: RmqContext,
+  ): Promise<void> {
+    const payload = asRecord(data);
+    await this.processEvent('application.loa_ready', payload, context, async () => {
+      this.logger.log(
+        `Received application.loa_ready: ${JSON.stringify(summarizeEventPayload(payload))}`,
+      );
+
+      const email = getString(payload, 'email');
+      if (!email) {
+        this.logger.warn('application.loa_ready event missing email field — skipping');
+        return;
+      }
+
+      await this.emailService.sendLoaReadyEmail(email, {
+        participant_name: getString(payload, 'participant_name') ?? 'Participant',
+        program_name: getString(payload, 'program_name') ?? '',
+        document_number: getString(payload, 'document_number') ?? '',
+        documents_page_url: getString(payload, 'documents_page_url') ?? '',
+        brand_id: getString(payload, 'brand_id') ?? undefined,
+        program_id: getString(payload, 'program_id') ?? undefined,
+      });
+
+      this.logger.log(`LoA-ready email sent to ${maskEmail(email)}`);
+    });
+  }
+
   private async processEvent(
     eventType: string,
     data: EventPayload,
