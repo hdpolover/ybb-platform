@@ -577,6 +577,9 @@ export class PaymentAdminController {
     @Get('invoices/:id')
     @ApiOperation({ summary: 'Get invoice detail (Admin)' })
     async getInvoice(@Param('id') id: string) {
+        // Guard non-UUID ids (e.g. a gateway timestamp passed as :id) so Prisma's
+        // uuid cast doesn't throw an unhandled 500 — surface a clean 404 instead.
+        if (!this.isValidUUID(id)) throw new HttpException('Invoice not found', 404);
         const invoice = await this.prisma.applicationInvoice.findUnique({
             where: { id },
             include: {
@@ -672,6 +675,7 @@ export class PaymentAdminController {
         if (body.action === 'reject' && !body.reason?.trim()) {
             throw new HttpException('Reason is required for rejection', 400);
         }
+        if (!this.isValidUUID(id)) throw new HttpException('Invoice not found', 404);
 
         const invoice = await this.prisma.applicationInvoice.findUnique({
             where: { id },
@@ -759,14 +763,47 @@ export class PaymentAdminController {
                     }),
                 ]);
             } else {
-                await this.prisma.applicationInvoice.update({
-                    where: { id },
-                    data: {
-                        verifiedBy: user.userId,
-                        verifiedAt: now,
-                        rejectionReason: null,
-                    },
-                });
+                // Manual approval settles the transaction at the gateway synchronously
+                // (Go /verify returns intent_status=SUCCEEDED + transaction_status=SUCCESS).
+                // Settle the invoice to paid in the same request instead of waiting for
+                // the async payment.succeeded event, which can be dropped and leave the
+                // invoice stuck in 'processing'.
+                const verifyData = (data as { data?: { intent_status?: string; transaction_status?: string } })?.data;
+                const settled =
+                    String(verifyData?.intent_status ?? '').toUpperCase() === 'SUCCEEDED'
+                    || String(verifyData?.transaction_status ?? '').toUpperCase() === 'SUCCESS';
+
+                if (settled) {
+                    const appPaymentPatch: Prisma.ParticipantApplicationUpdateInput =
+                        invoice.pricingTier?.feeType === 'registration_fee'
+                            ? { registrationPaymentStatus: PaymentStatus.paid }
+                            : { programPaymentStatus: PaymentStatus.paid };
+                    await this.prisma.$transaction([
+                        this.prisma.applicationInvoice.update({
+                            where: { id },
+                            data: {
+                                status: PaymentStatus.paid,
+                                paidAt: now,
+                                verifiedBy: user.userId,
+                                verifiedAt: now,
+                                rejectionReason: null,
+                            },
+                        }),
+                        this.prisma.participantApplication.update({
+                            where: { id: invoice.application.id },
+                            data: appPaymentPatch,
+                        }),
+                    ]);
+                } else {
+                    await this.prisma.applicationInvoice.update({
+                        where: { id },
+                        data: {
+                            verifiedBy: user.userId,
+                            verifiedAt: now,
+                            rejectionReason: null,
+                        },
+                    });
+                }
             }
 
             const participantUserId = invoice.application?.participant?.userId;
@@ -867,6 +904,7 @@ export class PaymentAdminController {
         if (!Object.values(PaymentStatus).includes(body.status)) {
             throw new HttpException('Invalid payment status', 400);
         }
+        if (!this.isValidUUID(id)) throw new HttpException('Invoice not found', 404);
 
         const invoice = await this.prisma.applicationInvoice.findUnique({
             where: { id },
@@ -900,14 +938,19 @@ export class PaymentAdminController {
                 (invoice.externalTransactionId != null && invoice.externalTransactionId.trim().length > 0)
                 || (invoice.externalIntentId != null && invoice.externalIntentId.trim().length > 0);
 
-            // Only an invoice already settled as paid/refunded reflects a confirmed
-            // payment. unpaid/processing/failed/cancelled are all unconfirmed — a
-            // stalled processing intent (IDs set, webhook never arrived) is NOT proof.
-            const isConfirmedSettled =
+            // A confirmed payment = the invoice is already settled locally
+            // (paid/refunded), OR the gateway itself reports the linked intent/txn
+            // as settled (SUCCEEDED/SUCCESS). The gateway check repairs the common
+            // drift case: a real payment that succeeded at the gateway but whose
+            // payment.succeeded event never reached us, leaving the invoice stuck in
+            // 'processing'. Without it an admin could never confirm a genuinely paid
+            // invoice from the UI (its local status is never yet 'paid').
+            const isLocallySettled =
                 invoice.status === PaymentStatus.paid
                 || invoice.status === PaymentStatus.refunded;
 
-            const hasRealPayment = hasExternalIds && isConfirmedSettled;
+            const hasRealPayment =
+                hasExternalIds && (isLocallySettled || (await this.isGatewaySettled(invoice)));
 
             if (!hasRealPayment) {
                 const overrideReason = body.overrideReason?.trim() ?? '';
@@ -1495,6 +1538,46 @@ export class PaymentAdminController {
     private extractUuidFromString(value: string): string | null {
         const match = value.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}/i);
         return match?.[0] ?? null;
+    }
+
+    /**
+     * Source-of-truth check against the payment service: is the invoice's linked
+     * intent/transaction actually settled at the gateway? Used to confirm a real
+     * payment when the local invoice is still 'processing' (drift). Fails CLOSED
+     * (returns false) on any error so the manual-override path still guards.
+     */
+    private async isGatewaySettled(
+        invoice: { externalIntentId?: string | null; externalTransactionId?: string | null },
+    ): Promise<boolean> {
+        const ref =
+            (invoice.externalTransactionId && invoice.externalTransactionId.trim())
+            || (invoice.externalIntentId && invoice.externalIntentId.trim());
+        if (!ref) return false;
+        try {
+            const { data } = await this.paymentServiceClient.get(
+                `/api/v1/payments/${ref}`,
+                { headers: this.buildInternalHeaders() },
+            );
+            return this.isGatewayPayloadSettled(data);
+        } catch (error) {
+            this.logger.warn(`Gateway settle-check failed for ${ref}: ${(error as Error).message}`);
+            return false;
+        }
+    }
+
+    /**
+     * A payment-service GET returns either a transaction (status SUCCESS) or an
+     * intent (status SUCCEEDED, plus a transactions[] array). Treat any of those
+     * SUCCESS/SUCCEEDED signals as settled.
+     */
+    private isGatewayPayloadSettled(data: unknown): boolean {
+        const payload = (data ?? {}) as { status?: unknown; transactions?: unknown };
+        const top = String(payload.status ?? '').toUpperCase();
+        if (top === 'SUCCEEDED' || top === 'SUCCESS') return true;
+        const txns = Array.isArray(payload.transactions) ? payload.transactions : [];
+        return txns.some(
+            (t) => String((t as { status?: unknown })?.status ?? '').toUpperCase() === 'SUCCESS',
+        );
     }
 
     private handleError(error: unknown): never {
