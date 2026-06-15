@@ -1,7 +1,8 @@
 import './tracing';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { MicroserviceOptions, Transport } from '@nestjs/microservices';
+import { MicroserviceOptions } from '@nestjs/microservices';
+import { AckDropRmqServer } from './common/rmq/ack-drop-rmq.server';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { InboundMessageDeserializer } from './common/deserializers/inbound-message.deserializer';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
@@ -67,9 +68,11 @@ async function bootstrap() {
     ],
   });
 
+  // Uses AckDropRmqServer so unhandled patterns are ACKed (dropped) instead of
+  // nacked, which would otherwise create an infinite retry cycle via the
+  // notification_queue.retry dead-letter topology.
   app.connectMicroservice<MicroserviceOptions>({
-    transport: Transport.RMQ,
-    options: {
+    strategy: new AckDropRmqServer({
       urls: [rabbitMqUrl],
       queue: notificationQueue,
       queueOptions: {
@@ -79,7 +82,7 @@ async function bootstrap() {
       noAck: false,
       prefetchCount: 1,
       deserializer: new InboundMessageDeserializer(),
-    },
+    }),
   });
 
   // Swagger documentation

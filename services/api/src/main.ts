@@ -5,8 +5,9 @@ import './tracing';
   return Number.isSafeInteger(n) ? n : this.toString();
 };
 import { NestFactory } from '@nestjs/core';
-import { MicroserviceOptions, Transport } from '@nestjs/microservices';
+import { MicroserviceOptions } from '@nestjs/microservices';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
+import { AckDropRmqServer } from './shared/rmq/ack-drop-rmq.server';
 import { AppModule } from './app.module';
 import { setupSwagger } from './config/swagger.config';
 import { TransformInterceptor } from './shared/interceptors/transform.interceptor';
@@ -72,10 +73,12 @@ async function bootstrap() {
   const { RoutingKeyDeserializer } = await import('./shared/infrastructure/rabbitmq/routing-key-deserializer');
   const deserializer = new RoutingKeyDeserializer();
 
-  // Connect Microservice for Event Consumption (Audit Logging)
+  // Connect Microservice for Event Consumption (Audit Logging).
+  // Uses AckDropRmqServer so unhandled patterns are ACKed (dropped) instead of
+  // nacked, which would otherwise create an infinite retry cycle via the
+  // <queue>.retry dead-letter topology.
   app.connectMicroservice<MicroserviceOptions>({
-    transport: Transport.RMQ,
-    options: {
+    strategy: new AckDropRmqServer({
       urls: [rabbitMqUrl],
       queue: 'audit_log_queue',
       queueOptions: {
@@ -85,13 +88,13 @@ async function bootstrap() {
       noAck: false,
       prefetchCount: 1,
       deserializer,
-    },
+    }),
   });
 
-  // Connect Microservice for Reporting Queue
+  // Connect Microservice for Reporting Queue.
+  // Uses AckDropRmqServer for the same ack-and-drop hardening.
   app.connectMicroservice<MicroserviceOptions>({
-    transport: Transport.RMQ,
-    options: {
+    strategy: new AckDropRmqServer({
       urls: [rabbitMqUrl],
       queue: 'reporting_queue',
       queueOptions: {
@@ -101,7 +104,7 @@ async function bootstrap() {
       noAck: false,
       prefetchCount: 1,
       deserializer,
-    },
+    }),
   });
 
   // Connect Microservice for Payment Events (from Go payment service).
@@ -111,15 +114,14 @@ async function bootstrap() {
   // this binding, payment.succeeded / payment.failed events are dropped.
   // Custom deserializer maps the AMQP routing key to the NestJS pattern,
   // because the Go publisher emits raw payloads (no { pattern, data } envelope).
+  // Uses AckDropRmqServer for ack-and-drop hardening on unhandled patterns.
+  // Note: exchange/exchangeType/routingKey/wildcards are omitted here because
+  // ServerRMQ does not consume them — the actual queue-to-exchange binding is
+  // established by the ensureRetryTopology() call above via amqplib directly.
   app.connectMicroservice<MicroserviceOptions>({
-    transport: Transport.RMQ,
-    options: {
+    strategy: new AckDropRmqServer({
       urls: [rabbitMqUrl],
       queue: 'api-service-payment-events',
-      exchange: 'payment-events',
-      exchangeType: 'topic',
-      routingKey: 'payment.#',
-      wildcards: true,
       queueOptions: {
         durable: true,
         ...paymentEventsQueueOptions,
@@ -127,7 +129,7 @@ async function bootstrap() {
       noAck: false,
       prefetchCount: 1,
       deserializer,
-    },
+    }),
   });
 
   // Use Winston Logger
