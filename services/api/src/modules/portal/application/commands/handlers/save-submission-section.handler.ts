@@ -207,9 +207,15 @@ export class SaveSubmissionSectionHandler {
         const rawCategory = this.extractCategoryValue(data);
         if (rawCategory === null) return;
 
+        // An empty/blank category value means the section payload simply didn't
+        // carry a selection on this save (the field can be present-but-blank as the
+        // participant moves through the form) — it must NOT be treated as "clear the
+        // category". Destructively nulling here wiped applicationCategory AFTER a
+        // successful switch-category, leaving submitted participants with no category
+        // and triggering duplicate registration-fee invoices. No-op instead; the
+        // category is only ever set via an explicit valid value (below) or the
+        // dedicated switch-category endpoint.
         if (!rawCategory) {
-            updateData.applicationCategory = null;
-            updateData.participationCategoryId = null;
             return;
         }
 

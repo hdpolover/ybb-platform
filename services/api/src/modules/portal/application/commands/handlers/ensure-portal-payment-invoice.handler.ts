@@ -98,21 +98,21 @@ export class EnsurePortalPaymentInvoiceHandler {
         // a spurious "unpaid" registration_fee invoice (e.g. on already-submitted
         // applications), making paid participants look unpaid. Return the paid one.
         if (isRegistrationFee) {
-            const paidRegistrationFee = await this.prisma.applicationInvoice.findFirst({
+            const activeRegistrationFee = await this.prisma.applicationInvoice.findFirst({
                 where: {
                     applicationId: application.id,
-                    status: 'paid',
+                    status: { in: ['paid', 'processing'] },
                     pricingTier: { feeType: 'registration_fee' },
                 },
                 orderBy: { createdAt: 'desc' },
                 select: { id: true },
             });
-            if (paidRegistrationFee) {
-                await this.invalidatePortalPaymentCaches(userId, application.programId, paidRegistrationFee.id);
+            if (activeRegistrationFee) {
+                await this.invalidatePortalPaymentCaches(userId, application.programId, activeRegistrationFee.id);
                 return {
-                    invoice_id: paidRegistrationFee.id,
+                    invoice_id: activeRegistrationFee.id,
                     source: 'existing',
-                    message: 'Registration fee already paid',
+                    message: 'Registration fee already paid or in progress',
                 };
             }
         }
