@@ -85,17 +85,27 @@ export function CopyFromProgramDialog({
       setSelectedIds(new Set());
       return;
     }
+    // Guard against a stale fetch overwriting state if the admin switches
+    // source program before the previous request resolves.
+    let cancelled = false;
     setLoadingFields(true);
     setFieldsError(null);
     fetchProgramFormFields(sourceId)
       .then((rows) => {
+        if (cancelled) return;
         setFields(rows);
         setSelectedIds(new Set(rows.map((r) => r.id)));
       })
-      .catch((err) =>
-        setFieldsError(err instanceof Error ? err.message : "Failed to load fields"),
-      )
-      .finally(() => setLoadingFields(false));
+      .catch((err) => {
+        if (cancelled) return;
+        setFieldsError(err instanceof Error ? err.message : "Failed to load fields");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingFields(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [sourceId]);
 
   const allSelected = fields.length > 0 && selectedIds.size === fields.length;
@@ -276,6 +286,7 @@ export function CopyFromProgramDialog({
                   </p>
                   <input
                     type="text"
+                    aria-label="Type REPLACE to confirm replacing all fields"
                     value={confirmText}
                     onChange={(e) => setConfirmText(e.target.value)}
                     placeholder="Type REPLACE"
