@@ -23,6 +23,7 @@ import {
   DeleteFormTemplateHandler,
 } from './application/commands/handlers/form-template.handler';
 import { ApplyFormTemplateHandler } from './application/commands/handlers/apply-form-template.handler';
+import { CopyFieldsFromProgramHandler } from './application/commands/handlers/copy-fields-from-program.handler';
 import {
   GetFormTemplatesHandler,
   GetFormTemplateByIdHandler,
@@ -187,6 +188,7 @@ import { GetLoaStatusHandler } from './application/queries/get-loa-status.handle
     GetFormTemplatesHandler,
     GetFormTemplateByIdHandler,
     ApplyFormTemplateHandler,
+    CopyFieldsFromProgramHandler,
 
     // Participation Info Handlers
     UpsertParticipationInfoHandler,
