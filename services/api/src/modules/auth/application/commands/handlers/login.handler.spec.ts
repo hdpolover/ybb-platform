@@ -224,6 +224,7 @@ describe('LoginHandler', () => {
         where: {
           email: { equals: 'same@example.com', mode: 'insensitive' },
           brandId: 'brand-2',
+          deletedAt: null,
         },
       }),
     );
@@ -279,6 +280,7 @@ describe('LoginHandler', () => {
         where: {
           email: { equals: 'same@example.com', mode: 'insensitive' },
           brandId: 'brand-2',
+          deletedAt: null,
         },
       }),
     );

@@ -75,7 +75,7 @@ export class AuthLoggingService {
   async logFailedLogin(email: string, ipAddress: string, userAgent: string, reason: string) {
     // Find user ID if possible, otherwise null
     const user = await this.prisma.user.findFirst({
-        where: { email },
+        where: { email, deletedAt: null },
         select: { id: true }
     });
 
@@ -158,7 +158,7 @@ export class AuthLoggingService {
   }
 
   async logForgotPasswordRequest(email: string, ipAddress: string = '0.0.0.0', userAgent: string = 'unknown') {
-    const user = await this.prisma.user.findFirst({ where: { email: { equals: email, mode: 'insensitive' } }, orderBy: { createdAt: 'asc' }, select: { id: true } });
+    const user = await this.prisma.user.findFirst({ where: { email: { equals: email, mode: 'insensitive' }, deletedAt: null }, orderBy: { createdAt: 'asc' }, select: { id: true } });
     const agentInfo = this.parseUserAgent(userAgent);
 
     if (user) {

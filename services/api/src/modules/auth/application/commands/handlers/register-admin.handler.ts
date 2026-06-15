@@ -37,6 +37,7 @@ export class RegisterAdminHandler {
       where: {
         email: { equals: command.email, mode: 'insensitive' },
         brandId: command.brandId,
+        deletedAt: null,
       },
       orderBy: { createdAt: 'asc' },
     });

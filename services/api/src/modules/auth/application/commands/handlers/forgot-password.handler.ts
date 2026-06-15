@@ -76,6 +76,7 @@ export class ForgotPasswordHandler {
             where: {
                 email: { equals: command.email, mode: 'insensitive' },
                 brandId: brandId,
+                deletedAt: null,
             },
             orderBy: { createdAt: 'asc' },
         });
