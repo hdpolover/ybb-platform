@@ -19,6 +19,8 @@ import {
   GenerateLOAHandler,
 } from '../application/commands/handlers/manage-program-content.handlers';
 
+import { GetLoaStatusHandler } from '../application/queries/get-loa-status.handler';
+
 import { ListProgramGalleryQuery } from '../application/queries/list-program-content.queries';
 import { CreateProgramGalleryCommand } from '../application/commands/program-content.commands';
 
@@ -39,6 +41,7 @@ describe('ProgramContentController', () => {
             CreateProgramResourceHandler, UpdateProgramResourceHandler, DeleteProgramResourceHandler,
             CreateDocumentTemplateHandler, UpdateDocumentTemplateHandler, DeleteDocumentTemplateHandler,
             GenerateLOAHandler,
+            GetLoaStatusHandler,
         ];
 
         return handlers.map(handler => ({
