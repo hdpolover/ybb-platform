@@ -21,7 +21,7 @@ export class CopyFieldsFromProgramDto {
   mode?: 'append' | 'replace';
 
   @ApiPropertyOptional({
-    description: 'Required true when mode=replace to guard against accidents.',
+    description: "Must be true when mode='replace' to guard against accidental field deletion.",
   })
   @IsOptional()
   @IsBoolean()

@@ -45,6 +45,8 @@ function srcField(over: Partial<SourceField>): SourceField {
 
 // Mocks Prisma: applicationFormField.findMany branches on where.programId
 // ('src' => source fields, 'tgt' => existing target fields).
+// IMPORTANT: Tests MUST use 'src' as the source programId and 'tgt' as the
+// target programId — the mock's findMany dispatches on where.programId === 'src'.
 function mkPrisma(opts: {
   sourceFields?: SourceField[];
   existingFields?: { name: string; order: number }[];
@@ -157,6 +159,20 @@ describe('CopyFieldsFromProgramHandler', () => {
       new CopyFieldsFromProgramCommand('tgt', 'src', ['f1', 'f3'], 'append'),
     );
     expect(result.added).toEqual(['a', 'c']);
+  });
+
+  it('treats an empty fieldIds array the same as undefined (copies all)', async () => {
+    const prisma = mkPrisma({
+      sourceFields: [
+        srcField({ id: 'f1', name: 'a', order: 0 }),
+        srcField({ id: 'f2', name: 'b', order: 1 }),
+      ],
+    });
+    const h = new CopyFieldsFromProgramHandler(prisma);
+    const result = await h.execute(
+      new CopyFieldsFromProgramCommand('tgt', 'src', [], 'append'),
+    );
+    expect(result.added).toEqual(['a', 'b']);
   });
 
   it('copies media and helpAssets verbatim', async () => {

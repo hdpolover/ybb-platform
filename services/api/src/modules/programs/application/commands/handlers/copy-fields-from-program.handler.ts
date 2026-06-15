@@ -95,6 +95,8 @@ export class CopyFieldsFromProgramHandler
             order: baseOrder + placed,
             placeholder: f.placeholder,
             helpText: f.helpText,
+            // Media and help assets are copied verbatim by design; when the source is a
+            // different brand the admin UI shows a cross-brand caveat (see spec).
             mediaUrl: f.mediaUrl,
             mediaAlt: f.mediaAlt,
             helpAssets: (f.helpAssets as never) ?? [],
