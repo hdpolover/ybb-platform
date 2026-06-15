@@ -252,3 +252,56 @@ export async function deleteFormTemplate(id: string): Promise<void> {
     throw new Error(await readErrorMessage(response));
   }
 }
+
+// -------- Copy-from-program --------
+
+export type ProgramFormFieldRow = {
+  id: string;
+  fieldName: string;
+  label: string;
+  section?: string;
+  fieldType: string;
+  isRequired: boolean;
+  mediaUrl?: string;
+  helpAssets?: unknown[];
+};
+
+export async function fetchProgramFormFields(
+  programId: string,
+): Promise<ProgramFormFieldRow[]> {
+  const url = buildApiUrl(`/programs/${encodeURIComponent(programId)}/form-fields`);
+  const response = await fetch(url, { headers: authHeaders() });
+  return jsonOrThrow<ProgramFormFieldRow[]>(response);
+}
+
+export async function copyFieldsFromProgram(
+  programId: string,
+  params: {
+    sourceProgramId: string;
+    fieldIds?: string[];
+    mode: "append" | "replace";
+  },
+): Promise<{ mode: string; sourceProgramId: string; added: string[]; skipped: string[] }> {
+  const body: Record<string, unknown> = {
+    sourceProgramId: params.sourceProgramId,
+    mode: params.mode,
+  };
+  if (params.fieldIds) {
+    body.fieldIds = params.fieldIds;
+  }
+  if (params.mode === "replace") {
+    body.confirm = true;
+  }
+  const response = await fetch(
+    buildApiUrl(`/programs/${encodeURIComponent(programId)}/form-fields/copy-from-program`),
+    {
+      method: "POST",
+      headers: {
+        ...authHeaders(),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    },
+  );
+  return jsonOrThrow<{ mode: string; sourceProgramId: string; added: string[]; skipped: string[] }>(response);
+}
