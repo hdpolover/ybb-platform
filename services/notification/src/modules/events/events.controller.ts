@@ -209,6 +209,7 @@ export class EventsController {
           getString(payload, 'payment_id') ||
           'unknown-order',
         reason:
+          getString(payload, 'reason') ||
           getString(metadata, 'failure_reason') ||
           'Transaction could not be processed',
         brand: payload.brand ?? undefined,
