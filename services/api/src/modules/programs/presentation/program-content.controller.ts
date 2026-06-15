@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Put, Post, Delete, Body, UseGuards, Request, UseInterceptors, UploadedFile, Query } from '@nestjs/common';
+import { Controller, Get, Param, Put, Post, Delete, Body, UseGuards, Request, UseInterceptors, UploadedFile, Query, BadRequestException } from '@nestjs/common';
 import { Request as ExpressRequest } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
@@ -342,12 +342,24 @@ export class ProgramContentController {
     @Param('templateId') templateId: string,
     @Body() body: {
       participantId?: string;
+      participantIds?: string[];
       bulk?: boolean;
       audience?: 'submitted' | 'accepted';
       resend?: boolean;
     },
     @Request() req: ExpressRequest & { user: { id: string } },
   ) {
+    if (body.participantIds !== undefined) {
+      if (
+        !Array.isArray(body.participantIds) ||
+        body.participantIds.some((id) => typeof id !== 'string')
+      ) {
+        throw new BadRequestException('participantIds must be an array of strings');
+      }
+      if (body.participantIds.length > 1000) {
+        throw new BadRequestException('participantIds cannot exceed 1000 entries');
+      }
+    }
     return this.generateLOAHandler.execute(
       new GenerateLOACommand(
         programId,
@@ -357,6 +369,7 @@ export class ProgramContentController {
         body.bulk,
         body.audience,
         body.resend,
+        body.participantIds,
       ),
     );
   }

@@ -2659,7 +2659,8 @@ export async function sendLoa(
   templateId: string,
   body:
     | { bulk: true; audience: 'submitted' | 'accepted'; resend?: boolean }
-    | { participantId: string; resend: true },
+    | { participantId: string; resend: true }
+    | { participantIds: string[]; resend?: boolean },
 ): Promise<{ generated: number; failed: number }> {
   return request<{ generated: number; failed: number }>(
     `/programs/${programId}/document-templates/${templateId}/generate`,
@@ -2679,6 +2680,7 @@ export type LoaStatusRow = {
   generatedAt: string | null;
   emailedAt: string | null;
   viewedAt: string | null;
+  submittedAt: string | null;
 };
 
 export async function getLoaStatus(

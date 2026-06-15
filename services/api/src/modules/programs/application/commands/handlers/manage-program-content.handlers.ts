@@ -1456,14 +1456,16 @@ export class GenerateLOAHandler implements ICommandHandler<GenerateLOACommand> {
 
         // Resolve applications to generate for
         const whereClause: Record<string, unknown> = { programId: command.programId, deletedAt: null };
-        if (command.participantId) {
+        if (command.participantIds && command.participantIds.length > 0) {
+            whereClause.participantId = { in: command.participantIds };
+        } else if (command.participantId) {
             whereClause.participantId = command.participantId;
         } else if (command.bulk) {
             // audience param introduced in LoA-send flow; default to 'accepted' for backwards compat
             const audience: 'submitted' | 'accepted' = command.audience ?? 'accepted';
             whereClause.status = audience;
         } else {
-            throw new BadRequestException('Provide participantId or bulk: true');
+            throw new BadRequestException('Provide participantId, participantIds, or bulk: true');
         }
 
         const applications = await this.prisma.participantApplication.findMany({

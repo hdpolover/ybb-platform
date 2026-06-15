@@ -276,6 +276,7 @@ export class GenerateLOACommand {
         public readonly bulk?: boolean,
         public readonly audience?: LoaAudience,
         public readonly resend?: boolean,
+        public readonly participantIds?: string[],
     ) {}
 }
 
