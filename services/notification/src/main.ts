@@ -14,6 +14,7 @@ type AmqpChannel = {
       arguments?: Record<string, unknown>;
     },
   ) => Promise<unknown>;
+  deleteQueue?: (queue: string) => Promise<{ messageCount: number }>;
   close(): Promise<void>;
 };
 
@@ -56,16 +57,13 @@ async function bootstrap() {
       15000,
     ),
     bindings: [
-      {
-        exchange: 'ybb.events',
-        exchangeType: 'topic',
-        routingKey: '#',
-      },
-      {
-        exchange: 'payment-events',
-        exchangeType: 'topic',
-        routingKey: 'payment.#',
-      },
+      { exchange: 'ybb.events', exchangeType: 'topic', routingKey: 'notification.#' },
+      { exchange: 'ybb.events', exchangeType: 'topic', routingKey: 'user.#' },
+      { exchange: 'ybb.events', exchangeType: 'topic', routingKey: 'support.#' },
+      { exchange: 'ybb.events', exchangeType: 'topic', routingKey: 'application.#' },
+      { exchange: 'ybb.events', exchangeType: 'topic', routingKey: 'payment.rejected' },
+      { exchange: 'ybb.events', exchangeType: 'topic', routingKey: 'payment.reminder' },
+      { exchange: 'ybb.events', exchangeType: 'topic', routingKey: 'payment.cancelled' },
     ],
   });
 
@@ -133,6 +131,11 @@ async function ensureRetryTopology(
         exchange: string,
         routingKey: string,
       ) => Promise<unknown>;
+      unbindQueue: (
+        queue: string,
+        exchange: string,
+        routingKey: string,
+      ) => Promise<unknown>;
     };
 
     for (const binding of options.bindings ?? []) {
@@ -144,19 +147,28 @@ async function ensureRetryTopology(
         },
       );
     }
+
+    // Self-heal: remove the stale catch-all binding using a throwaway channel.
+    // A 406/404 from the broker closes that channel — the main channel is unaffected.
+    await tryUnbindStaleBinding(connection, queueName, 'ybb.events', '#');
+
     await channel.assertQueue(queueName, {
       durable: true,
       ...options.primaryQueueOptions,
     });
-    await channel.assertQueue(`${queueName}.retry`, {
-      durable: true,
-      arguments: {
+
+    await resolveAuxQueue(
+      connection,
+      `${queueName}.retry`,
+      {
         'x-message-ttl': options.retryDelayMs,
         'x-dead-letter-exchange': '',
         'x-dead-letter-routing-key': queueName,
       },
-    });
-    await channel.assertQueue(`${queueName}.dlq`, { durable: true });
+    );
+
+    await resolveAuxQueue(connection, `${queueName}.dlq`, {});
+
     for (const binding of options.bindings ?? []) {
       await exchangeChannel.bindQueue(
         queueName,
@@ -167,6 +179,78 @@ async function ensureRetryTopology(
   } finally {
     await closeAmqpChannel(channel);
     await closeAmqpConnection(connection);
+  }
+}
+
+/**
+ * Attempt to remove a stale queue binding using a throwaway channel so that a
+ * broker-level 406/404 error does not corrupt the caller's main channel.
+ */
+async function tryUnbindStaleBinding(
+  connection: AmqpConnection,
+  queue: string,
+  exchange: string,
+  routingKey: string,
+): Promise<void> {
+  let throwawayChannel: AmqpChannel | undefined;
+  try {
+    throwawayChannel = await connection.createChannel();
+    const ch = throwawayChannel as AmqpChannel & {
+      unbindQueue: (queue: string, exchange: string, routingKey: string) => Promise<unknown>;
+    };
+    await ch.unbindQueue(queue, exchange, routingKey);
+    console.log(`[rabbitmq] removed stale binding ${queue} <- ${exchange}[${routingKey}]`);
+  } catch {
+    // 404 (binding not found) or 406 (channel error) — both are safe to ignore.
+  } finally {
+    await closeAmqpChannel(throwawayChannel);
+  }
+}
+
+/**
+ * Assert an auxiliary queue (retry or dlq). If the broker returns 406
+ * PRECONDITION_FAILED (queue exists with incompatible arguments), delete the
+ * queue on a throwaway channel and re-assert it with the correct arguments.
+ */
+async function resolveAuxQueue(
+  connection: AmqpConnection,
+  queueName: string,
+  args: Record<string, unknown>,
+): Promise<void> {
+  const hasArgs = Object.keys(args).length > 0;
+  const assertOptions = hasArgs
+    ? { durable: true, arguments: args }
+    : { durable: true };
+
+  // Probe with a throwaway channel so a 406 does not close the main channel.
+  let probeChannel: AmqpChannel | undefined;
+  try {
+    probeChannel = await connection.createChannel();
+    await probeChannel.assertQueue(queueName, assertOptions);
+    return;
+  } catch (error) {
+    if (!isQueuePreconditionFailure(error)) {
+      throw error;
+    }
+    console.warn(
+      `[rabbitmq] 406 PRECONDITION_FAILED for aux queue ${queueName} — deleting and re-asserting`,
+    );
+  } finally {
+    await closeAmqpChannel(probeChannel);
+  }
+
+  // Delete and recreate with the correct args.
+  let recreateChannel: AmqpChannel | undefined;
+  try {
+    recreateChannel = await connection.createChannel();
+    const ch = recreateChannel as AmqpChannel & {
+      deleteQueue: (queue: string) => Promise<{ messageCount: number }>;
+    };
+    await ch.deleteQueue(queueName);
+    await recreateChannel.assertQueue(queueName, assertOptions);
+    console.log(`[rabbitmq] recreated aux queue ${queueName} with correct args`);
+  } finally {
+    await closeAmqpChannel(recreateChannel);
   }
 }
 
