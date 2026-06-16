@@ -14,6 +14,7 @@ import { GetPortalPaymentDetailHandler } from './application/queries/handlers/ge
 import { GetPortalDocumentsHandler } from './application/queries/handlers/get-portal-documents.handler';
 import { PortalCacheService } from './application/services/portal-cache.service';
 import { PortalReceiptService } from './application/services/portal-receipt.service';
+import { LoaEligibilityService } from './application/services/loa-eligibility.service';
 import { ConfirmPortalPaymentHandler } from './application/commands/handlers/confirm-portal-payment.handler';
 import { CancelPortalPaymentHandler } from './application/commands/handlers/cancel-portal-payment.handler';
 import { EnsurePortalPaymentInvoiceHandler } from './application/commands/handlers/ensure-portal-payment-invoice.handler';
@@ -45,6 +46,7 @@ import { MarkDocumentViewedHandler } from './application/commands/mark-document-
     providers: [
         PortalCacheService,
         PortalReceiptService,
+        LoaEligibilityService,
         // Existing query handlers
         GetPortalDashboardHandler,
         GetPortalSubmissionsHandler,
