@@ -2643,16 +2643,6 @@ export async function updateDocumentTemplate(
   });
 }
 
-export async function generateLoa(
-  programId: string,
-  templateId: string,
-  body: { participantId?: string; bulk?: boolean },
-): Promise<{ generated: number; failed: number }> {
-  return request<{ generated: number; failed: number }>(
-    `/programs/${programId}/document-templates/${templateId}/generate`,
-    { method: 'POST', body: JSON.stringify(body) },
-  );
-}
 
 export function deleteDocumentTemplate(id: string): Promise<void> {
   return request<void>(`/programs/document-templates/${id}`, { method: 'DELETE' });
