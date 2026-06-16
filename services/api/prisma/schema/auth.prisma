@@ -100,8 +100,8 @@ model User {
   newsletterSubscription   NewsletterSubscriber[]
 
   // Relations for new modular tables
-  assessments              ApplicationAssessment[]
-  exchangeRateChanges      ProgramExchangeRateHistory[] @relation("ExchangeRateChangedBy")
+  assessments         ApplicationAssessment[]
+  exchangeRateChanges ProgramExchangeRateHistory[] @relation("ExchangeRateChangedBy")
 
   @@unique([email, brandId])
   @@index([email])
