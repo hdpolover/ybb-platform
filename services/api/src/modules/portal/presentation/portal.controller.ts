@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards, UnauthorizedException, BadRequestException, NotFoundException, UseInterceptors, UploadedFile, StreamableFile, Header, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, UseGuards, UnauthorizedException, BadRequestException, NotFoundException, UseInterceptors, UploadedFile, StreamableFile, Header, ParseUUIDPipe, ForbiddenException } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Readable } from 'stream';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { PortalReceiptService } from '../application/services/portal-receipt.service';
@@ -38,6 +39,7 @@ import { CancelPortalPaymentHandler } from '../application/commands/handlers/can
 import { EnsurePortalPaymentInvoiceHandler } from '../application/commands/handlers/ensure-portal-payment-invoice.handler';
 import { PaymentServiceHttpClient } from '../../payments/infrastructure/services/payment-service-http.client';
 import type { AdminPaymentMethod } from '../../payments/common/proto/payment.interface';
+import { LoaDownloadService } from '../application/services/loa-download.service';
 
 @ApiTags('Portal')
 @Controller('portal')
@@ -54,6 +56,7 @@ export class PortalController {
         private readonly configService: ConfigService,
         private readonly prisma: PrismaService,
         private readonly receiptService: PortalReceiptService,
+        private readonly loaDownloadService: LoaDownloadService,
     ) {}
 
     @Get('dashboard')
@@ -261,6 +264,24 @@ export class PortalController {
         const userId = user.userId;
         if (!userId) throw new UnauthorizedException();
         return this.queryBus.execute(new GetPortalDocumentsQuery(userId));
+    }
+
+    @Throttle({ default: { limit: 5, ttl: 60000 } })
+    @Get('loa/download')
+    @Header('Content-Type', 'application/pdf')
+    @ApiOperation({ summary: 'Download the participant LOA PDF on-demand (gated by release batch)' })
+    @ApiResponse({ status: 200, description: 'PDF binary stream' })
+    @ApiResponse({ status: 403, description: 'Not eligible — no released batch covers this participant' })
+    async downloadLoa(@CurrentUser() user: CurrentUserData): Promise<StreamableFile> {
+        const { userId, brandId } = user;
+        if (!userId) throw new UnauthorizedException();
+
+        const { buffer, filename } = await this.loaDownloadService.downloadLoa(userId, brandId);
+
+        return new StreamableFile(buffer, {
+            type: 'application/pdf',
+            disposition: `attachment; filename="${filename}"`,
+        });
     }
 
     @Post('documents/:documentId/viewed')
