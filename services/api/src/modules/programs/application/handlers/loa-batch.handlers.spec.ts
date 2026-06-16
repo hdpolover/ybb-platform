@@ -1,5 +1,5 @@
 import { Test } from '@nestjs/testing';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import {
   CreateLoaBatchHandler,
   UpdateLoaBatchHandler,
@@ -73,6 +73,17 @@ describe('CreateLoaBatchHandler', () => {
       ),
     ).rejects.toThrow(ConflictException);
   });
+
+  it('throws BadRequestException when submissionFrom is after submissionTo', async () => {
+    mockRepo.findOverlapping.mockResolvedValue([]);
+    const { CreateLoaBatchCommand } = await import('../commands/loa-batch.commands');
+    await expect(
+      handler.execute(
+        new CreateLoaBatchCommand('prog-1', 'Bad Range', new Date('2026-06-01'), new Date('2026-01-01'), 'admin-1'),
+      ),
+    ).rejects.toThrow(BadRequestException);
+    expect(mockRepo.create).not.toHaveBeenCalled();
+  });
 });
 
 describe('UpdateLoaBatchHandler', () => {
@@ -129,6 +140,17 @@ describe('UpdateLoaBatchHandler', () => {
     await expect(
       handler.execute(new UpdateLoaBatchCommand('batch-1', 'prog-1', undefined, new Date('2026-02-01'), new Date('2026-05-31'))),
     ).rejects.toThrow(ConflictException);
+  });
+
+  it('throws BadRequestException when effective submissionFrom is after submissionTo', async () => {
+    mockRepo.findById.mockResolvedValue({ ...mockBatch });
+    mockRepo.findOverlapping.mockResolvedValue([]);
+    const { UpdateLoaBatchCommand } = await import('../commands/loa-batch.commands');
+    // Passing a new submissionFrom that is after the existing submissionTo
+    await expect(
+      handler.execute(new UpdateLoaBatchCommand('batch-1', 'prog-1', undefined, new Date('2026-12-01'), new Date('2026-01-01'))),
+    ).rejects.toThrow(BadRequestException);
+    expect(mockRepo.update).not.toHaveBeenCalled();
   });
 });
 
