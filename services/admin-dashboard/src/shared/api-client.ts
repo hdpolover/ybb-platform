@@ -2654,45 +2654,6 @@ export async function generateLoa(
   );
 }
 
-export async function sendLoa(
-  programId: string,
-  templateId: string,
-  body:
-    | { bulk: true; audience: 'submitted' | 'accepted'; resend?: boolean }
-    | { participantId: string; resend: true }
-    | { participantIds: string[]; resend?: boolean },
-): Promise<{ generated: number; failed: number }> {
-  return request<{ generated: number; failed: number }>(
-    `/programs/${programId}/document-templates/${templateId}/generate`,
-    { method: 'POST', body: JSON.stringify(body) },
-  );
-}
-
-export type LoaStatusRow = {
-  participantId: string;
-  participantName: string;
-  email: string;
-  applicationStatus: 'submitted' | 'accepted';
-  status: 'pending' | 'generated' | 'emailed' | 'viewed';
-  documentId: string | null;
-  documentNumber: string | null;
-  fileUrl: string | null;
-  generatedAt: string | null;
-  emailedAt: string | null;
-  viewedAt: string | null;
-  submittedAt: string | null;
-};
-
-export async function getLoaStatus(
-  programId: string,
-  templateId: string,
-): Promise<LoaStatusRow[]> {
-  return request<LoaStatusRow[]>(
-    `/programs/${programId}/document-templates/${templateId}/loa-status`,
-    { method: 'GET' },
-  );
-}
-
 export function deleteDocumentTemplate(id: string): Promise<void> {
   return request<void>(`/programs/document-templates/${id}`, { method: 'DELETE' });
 }
