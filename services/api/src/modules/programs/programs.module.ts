@@ -107,6 +107,15 @@ import { PrismaService } from '../../shared/infrastructure/prisma/prisma.service
 import { CacheService } from '../../shared/infrastructure/cache/cache.service';
 import { FormFieldKeyValidator } from './application/validators/form-field-key.validator';
 import { GetLoaStatusHandler } from './application/queries/get-loa-status.handler';
+import {
+  CreateLoaBatchHandler,
+  UpdateLoaBatchHandler,
+  ReleaseLoaBatchHandler,
+  UnreleaseLoaBatchHandler,
+  DeleteLoaBatchHandler,
+  GetLoaBatchesHandler,
+  GetLoaDownloadsHandler,
+} from './application/handlers/loa-batch.handlers';
 
 @Module({
   imports: [CqrsModule, AuthModule, UsersModule, FilesModule, RabbitMQModule],
@@ -203,6 +212,15 @@ import { GetLoaStatusHandler } from './application/queries/get-loa-status.handle
     CreateProgramAnnouncementHandler,
     UpdateProgramAnnouncementHandler,
     DeleteProgramAnnouncementHandler,
+
+    // LOA Batch Handlers
+    CreateLoaBatchHandler,
+    UpdateLoaBatchHandler,
+    ReleaseLoaBatchHandler,
+    UnreleaseLoaBatchHandler,
+    DeleteLoaBatchHandler,
+    GetLoaBatchesHandler,
+    GetLoaDownloadsHandler,
 
     CacheService,
     FormFieldKeyValidator,
