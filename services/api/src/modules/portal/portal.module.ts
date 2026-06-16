@@ -35,9 +35,6 @@ import { DownloadCertificateHandler } from './application/commands/handlers/down
 // New — Documents
 import { UploadSignedCopyHandler } from './application/commands/handlers/upload-signed-copy.handler';
 
-// New — Viewed Tracking
-import { MarkDocumentViewedHandler } from './application/commands/mark-document-viewed.handler';
-
 @Module({
     imports: [CqrsModule, AuthModule, PaymentsModule, FilesModule, ParticipantsModule],
     controllers: [
@@ -68,7 +65,6 @@ import { MarkDocumentViewedHandler } from './application/commands/mark-document-
         CancelPortalPaymentHandler,
         EnsurePortalPaymentInvoiceHandler,
         UploadSignedCopyHandler,
-        MarkDocumentViewedHandler,
     ],
 })
 export class PortalModule { }

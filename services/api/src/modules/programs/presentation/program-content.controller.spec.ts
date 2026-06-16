@@ -18,10 +18,7 @@ import {
   CreateProgramFaqHandler, UpdateProgramFaqHandler, DeleteProgramFaqHandler,
   CreateProgramResourceHandler, UpdateProgramResourceHandler, DeleteProgramResourceHandler,
   CreateDocumentTemplateHandler, UpdateDocumentTemplateHandler, DeleteDocumentTemplateHandler,
-  GenerateLOAHandler,
 } from '../application/commands/handlers/manage-program-content.handlers';
-
-import { GetLoaStatusHandler } from '../application/queries/get-loa-status.handler';
 
 import {
   CreateLoaBatchHandler,
@@ -63,8 +60,6 @@ describe('ProgramContentController', () => {
             CreateProgramFaqHandler, UpdateProgramFaqHandler, DeleteProgramFaqHandler,
             CreateProgramResourceHandler, UpdateProgramResourceHandler, DeleteProgramResourceHandler,
             CreateDocumentTemplateHandler, UpdateDocumentTemplateHandler, DeleteDocumentTemplateHandler,
-            GenerateLOAHandler,
-            GetLoaStatusHandler,
             CreateLoaBatchHandler,
             UpdateLoaBatchHandler,
             ReleaseLoaBatchHandler,
