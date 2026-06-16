@@ -83,7 +83,6 @@ import {
   CreateProgramParticipationCategoryHandler, UpdateProgramParticipationCategoryHandler, DeleteProgramParticipationCategoryHandler,
   CreateProgramSubthemeHandler, UpdateProgramSubthemeHandler, DeleteProgramSubthemeHandler,
   CreateDocumentTemplateHandler, UpdateDocumentTemplateHandler, DeleteDocumentTemplateHandler,
-  GenerateLOAHandler,
   UpdateProgramPaymentInfoHandler,
 } from './application/commands/handlers/manage-program-content.handlers';
 import {
@@ -106,7 +105,6 @@ import { LoaReleaseBatchRepository } from './infrastructure/persistence/loa-rele
 import { PrismaService } from '../../shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '../../shared/infrastructure/cache/cache.service';
 import { FormFieldKeyValidator } from './application/validators/form-field-key.validator';
-import { GetLoaStatusHandler } from './application/queries/get-loa-status.handler';
 import {
   CreateLoaBatchHandler,
   UpdateLoaBatchHandler,
@@ -178,8 +176,6 @@ import {
     CreateProgramParticipationCategoryHandler, UpdateProgramParticipationCategoryHandler, DeleteProgramParticipationCategoryHandler,
     CreateProgramSubthemeHandler, UpdateProgramSubthemeHandler, DeleteProgramSubthemeHandler,
     CreateDocumentTemplateHandler, UpdateDocumentTemplateHandler, DeleteDocumentTemplateHandler,
-    GenerateLOAHandler,
-    GetLoaStatusHandler,
     UpdateProgramPaymentInfoHandler,
     // Form Field Handlers
     CreateApplicationFormFieldHandler,
