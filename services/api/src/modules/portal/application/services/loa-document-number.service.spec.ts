@@ -31,7 +31,7 @@ describe('LoaDocumentNumberService', () => {
       id: 'doc-1',
       documentNumber: 'LOA-YBB2026-0001',
     });
-    const result = await service.assignOrGet('app-1', 'prog-1', 'YBB2026');
+    const result = await service.assignOrGet('app-1', 'prog-1', 'YBB2026', 'tmpl-loa-1');
     expect(result).toEqual({ docNumber: 'LOA-YBB2026-0001', isNew: false, existingDocId: 'doc-1' });
     expect(prisma.participantDocument.count).not.toHaveBeenCalled();
   });
@@ -43,9 +43,24 @@ describe('LoaDocumentNumberService', () => {
       id: 'doc-new',
       documentNumber: 'LOA-YBB2026-0001',
     });
-    const result = await service.assignOrGet('app-1', 'prog-1', 'YBB2026');
+    const result = await service.assignOrGet('app-1', 'prog-1', 'YBB2026', 'tmpl-loa-1');
     expect(result.docNumber).toBe('LOA-YBB2026-0001');
     expect(result.isNew).toBe(true);
+  });
+
+  it('sets templateId on the created ParticipantDocument row', async () => {
+    prisma.participantDocument.findFirst.mockResolvedValue(null);
+    prisma.participantDocument.count.mockResolvedValue(0);
+    prisma.participantDocument.create.mockResolvedValue({
+      id: 'doc-new',
+      documentNumber: 'LOA-YBB2026-0001',
+    });
+    await service.assignOrGet('app-1', 'prog-1', 'YBB2026', 'tmpl-loa-1');
+    expect(prisma.participantDocument.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ templateId: 'tmpl-loa-1' }),
+      }),
+    );
   });
 
   it('assigns a sequential document number when other LOAs already exist', async () => {
@@ -55,7 +70,7 @@ describe('LoaDocumentNumberService', () => {
       id: 'doc-new',
       documentNumber: 'LOA-YBB2026-0006',
     });
-    const result = await service.assignOrGet('app-1', 'prog-1', 'YBB2026');
+    const result = await service.assignOrGet('app-1', 'prog-1', 'YBB2026', 'tmpl-loa-1');
     expect(result.docNumber).toBe('LOA-YBB2026-0006');
   });
 });

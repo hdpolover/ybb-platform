@@ -25,9 +25,25 @@ export class LoaDownloadService {
     const participant = await this.portalCacheService.getParticipantProfile(userId);
     if (!participant) throw new NotFoundException('Participant not found');
 
-    // 2. Resolve active program for brand
-    const program = await this.prisma.program.findFirst({
-      where: { brandId, isActive: true },
+    // 2. Resolve the participant's application first (Bug 1 fix: invert resolution order).
+    //    A brand can have >1 active program, so resolving program by brandId alone risks
+    //    picking the wrong one. Instead we find the application and read programId from it.
+    const application = await this.prisma.participantApplication.findFirst({
+      where: { participantId: participant.id },
+      select: {
+        id: true,
+        status: true,
+        submittedAt: true,
+        programId: true,
+        participant: { select: { fullName: true } },
+        participationCategory: { select: { name: true } },
+      },
+    });
+    if (!application) throw new ForbiddenException('LOA not available');
+
+    // 3. Resolve the program deterministically from the application's own programId
+    const program = await this.prisma.program.findUnique({
+      where: { id: application.programId },
       select: {
         id: true,
         name: true,
@@ -40,39 +56,30 @@ export class LoaDownloadService {
     });
     if (!program) throw new NotFoundException('Program not found');
 
-    // 3. Resolve participant's application for this program
-    const application = await this.prisma.participantApplication.findFirst({
-      where: { participantId: participant.id, programId: program.id },
-      select: {
-        id: true,
-        status: true,
-        submittedAt: true,
-        participant: { select: { fullName: true } },
-        participationCategory: { select: { name: true } },
-      },
-    });
-    if (!application) throw new ForbiddenException('LOA not available');
-
     // 4. Eligibility gate
     const eligibility = await this.loaEligibilityService.checkEligibility(application.id, program.id);
     if (!eligibility.eligible) throw new ForbiddenException('LOA not available');
 
-    // 5. Assign or reuse stable document number
+    // 5. Fetch the active LOA document template (moved before assignOrGet so we can pass
+    //    its id to assignOrGet — Bug 2 fix: templateId must be set on the created row)
+    const template = await this.prisma.documentTemplate.findFirst({
+      where: { programId: program.id, type: 'letter_of_acceptance', isActive: true, deletedAt: null },
+      select: { id: true, htmlContent: true, placeholders: true, layoutConfig: true },
+    });
+    if (!template || !template.htmlContent) {
+      throw new NotFoundException('LOA template not configured');
+    }
+
+    // 6. Assign or reuse stable document number (Bug 2 fix: pass template.id so the
+    //    ParticipantDocument row carries templateId, enabling GetPortalDocumentsHandler
+    //    to match it by templateId and skip it in the uploaded-docs loop)
     const programCode = String(program.year);
     const { docNumber, existingDocId } = await this.loaDocumentNumberService.assignOrGet(
       application.id,
       program.id,
       programCode,
+      template.id,
     );
-
-    // 6. Fetch the active LOA document template
-    const template = await this.prisma.documentTemplate.findFirst({
-      where: { programId: program.id, type: 'letter_of_acceptance', isActive: true, deletedAt: null },
-      select: { htmlContent: true, placeholders: true, layoutConfig: true },
-    });
-    if (!template || !template.htmlContent) {
-      throw new NotFoundException('LOA template not configured');
-    }
 
     // 7. Build placeholder substitution map (mirrors GenerateLOAHandler source map)
     const now = new Date();

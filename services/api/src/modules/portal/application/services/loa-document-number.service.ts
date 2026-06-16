@@ -14,6 +14,9 @@ export class LoaDocumentNumberService {
   /**
    * Returns the stable LOA document number for an application, creating the
    * ParticipantDocument row on first call. Subsequent calls return the same number.
+   * templateId must be the active LOA DocumentTemplate id so GetPortalDocumentsHandler
+   * can match the row via d.templateId === tmpl.id (surfacing documentNumber) and
+   * the uploaded-docs loop skips it (no double emission).
    * Concurrency note: two simultaneous first-calls can race on the count → minor
    * gap/duplicate risk; acceptable since document numbers need not be gapless.
    */
@@ -21,6 +24,7 @@ export class LoaDocumentNumberService {
     applicationId: string,
     programId: string,
     programCode: string,
+    templateId: string,
   ): Promise<AssignOrGetResult> {
     const existing = await this.prisma.participantDocument.findFirst({
       where: { applicationId, type: 'letter_of_acceptance' },
@@ -44,6 +48,7 @@ export class LoaDocumentNumberService {
     const created = await this.prisma.participantDocument.create({
       data: {
         applicationId,
+        templateId,         // required: lets GetPortalDocumentsHandler match by templateId
         type: 'letter_of_acceptance',
         name: 'Letter of Acceptance',
         documentNumber: docNumber,
