@@ -126,7 +126,8 @@ describe('GetPortalDocumentsHandler — LOA eligibility branch (Task 9)', () => 
         expect(mockLoaEligibilityService.checkEligibility).toHaveBeenCalledWith(APPLICATION_ID, PROGRAM_ID);
     });
 
-    it('includes existing documentNumber in LOA entry when a participant doc row exists', async () => {
+    it('includes existing documentNumber in LOA entry when a participant doc row with templateId exists', async () => {
+        // Bug 2 regression: doc row must have templateId set so handler can match it
         const existingDoc = {
             id: 'doc-loa-1',
             name: 'Letter of Acceptance',
@@ -136,7 +137,7 @@ describe('GetPortalDocumentsHandler — LOA eligibility branch (Task 9)', () => 
             submissionStatus: null,
             submissionNote: null,
             generatedAt: new Date('2026-06-15'),
-            templateId: LOA_TEMPLATE_ID,
+            templateId: LOA_TEMPLATE_ID,   // must match template id — row must have this set
             documentNumber: 'LOA-YBB2026-0001',
             downloadCount: 2,
             firstDownloadedAt: new Date('2026-06-15'),
@@ -153,6 +154,37 @@ describe('GetPortalDocumentsHandler — LOA eligibility branch (Task 9)', () => 
         const loaDoc = result.myDocuments.find((d) => d.documentType === 'letter_of_acceptance');
         expect(loaDoc?.documentNumber).toBe('LOA-YBB2026-0001');
         expect(loaDoc?.downloadable).toBe(true);
+    });
+
+    it('LOA appears exactly ONCE in myDocuments when a download row with templateId exists (no duplicate)', async () => {
+        // Bug 2 regression: without templateId on the row, the uploaded-docs loop at step 3
+        // sees doc.templateId===null → does NOT skip → emits a second entry. This test proves
+        // that after the fix (templateId set on the row), exactly one LOA item is emitted.
+        const existingDoc = {
+            id: 'doc-loa-1',
+            name: 'Letter of Acceptance',
+            type: 'letter_of_acceptance',
+            fileUrl: null,
+            signedCopyUrl: null,
+            submissionStatus: null,
+            submissionNote: null,
+            generatedAt: new Date('2026-06-15'),
+            templateId: LOA_TEMPLATE_ID,   // fixed: row now carries templateId
+            documentNumber: 'LOA-YBB2026-0001',
+            downloadCount: 1,
+            firstDownloadedAt: new Date('2026-06-15'),
+        };
+
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(
+            makeApplication({ documents: [existingDoc] }),
+        );
+        mockPrisma.documentTemplate.findMany.mockResolvedValue([makeLOATemplate()]);
+        mockLoaEligibilityService.checkEligibility.mockResolvedValue({ eligible: true, batchId: 'batch-1' });
+
+        const result = await handler.execute(new GetPortalDocumentsQuery(USER_ID));
+
+        const loaDocs = result.myDocuments.filter((d) => d.documentType === 'letter_of_acceptance');
+        expect(loaDocs).toHaveLength(1);  // exactly one — no dup from uploaded-docs loop
     });
 
     // ─── LOA: ineligible participant ───────────────────────────────────────────

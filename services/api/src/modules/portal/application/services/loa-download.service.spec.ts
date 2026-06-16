@@ -96,9 +96,10 @@ describe('LoaDownloadService', () => {
 
   describe('downloadLoa', () => {
     it('(a) throws ForbiddenException when participant is not eligible', async () => {
+      // Bug 1 fix: application resolved first, then program via findUnique on application.programId
       (portalCacheService.getParticipantProfile as jest.Mock).mockResolvedValue(mockParticipant);
       (prisma.participantApplication.findFirst as jest.Mock).mockResolvedValue(mockApplication);
-      (prisma.program.findFirst as jest.Mock).mockResolvedValue(mockProgram);
+      (prisma.program.findUnique as jest.Mock).mockResolvedValue(mockProgram);
       (loaEligibilityService.checkEligibility as jest.Mock).mockResolvedValue({ eligible: false });
 
       await expect(service.downloadLoa('user-1', 'brand-1')).rejects.toThrow(ForbiddenException);
@@ -106,22 +107,30 @@ describe('LoaDownloadService', () => {
     });
 
     it('(b) eligible → calls generateLoa and returns buffer with doc number in filename', async () => {
+      // Bug 1 fix: application resolved first; Bug 2 fix: assignOrGet receives templateId
       (portalCacheService.getParticipantProfile as jest.Mock).mockResolvedValue(mockParticipant);
       (prisma.participantApplication.findFirst as jest.Mock).mockResolvedValue(mockApplication);
-      (prisma.program.findFirst as jest.Mock).mockResolvedValue(mockProgram);
+      (prisma.program.findUnique as jest.Mock).mockResolvedValue(mockProgram);
+      (prisma.documentTemplate.findFirst as jest.Mock).mockResolvedValue(mockTemplate);
       (loaEligibilityService.checkEligibility as jest.Mock).mockResolvedValue({ eligible: true, batchId: 'batch-1' });
       (loaDocumentNumberService.assignOrGet as jest.Mock).mockResolvedValue({
         docNumber: 'LOA-2026-0001',
         isNew: false,
         existingDocId: 'doc-1',
       });
-      (prisma.documentTemplate.findFirst as jest.Mock).mockResolvedValue(mockTemplate);
       (fileServiceClient.generateLoa as jest.Mock).mockResolvedValue(mockPdfBuffer);
       (prisma.participantDocument.update as jest.Mock).mockResolvedValue({});
       (prisma.participantDocument.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
 
       const result = await service.downloadLoa('user-1', 'brand-1');
 
+      // Bug 2 regression: assignOrGet must be called with templateId
+      expect(loaDocumentNumberService.assignOrGet).toHaveBeenCalledWith(
+        mockApplication.id,
+        mockApplication.programId,
+        String(mockProgram.year),
+        mockTemplate.id,
+      );
       expect(fileServiceClient.generateLoa).toHaveBeenCalledWith(
         expect.objectContaining({
           html_content: expect.any(String),
@@ -138,14 +147,14 @@ describe('LoaDownloadService', () => {
     it('(c) records download tracking — increments downloadCount and sets lastDownloadedAt', async () => {
       (portalCacheService.getParticipantProfile as jest.Mock).mockResolvedValue(mockParticipant);
       (prisma.participantApplication.findFirst as jest.Mock).mockResolvedValue(mockApplication);
-      (prisma.program.findFirst as jest.Mock).mockResolvedValue(mockProgram);
+      (prisma.program.findUnique as jest.Mock).mockResolvedValue(mockProgram);
+      (prisma.documentTemplate.findFirst as jest.Mock).mockResolvedValue(mockTemplate);
       (loaEligibilityService.checkEligibility as jest.Mock).mockResolvedValue({ eligible: true, batchId: 'batch-1' });
       (loaDocumentNumberService.assignOrGet as jest.Mock).mockResolvedValue({
         docNumber: 'LOA-2026-0001',
         isNew: false,
         existingDocId: 'doc-1',
       });
-      (prisma.documentTemplate.findFirst as jest.Mock).mockResolvedValue(mockTemplate);
       (fileServiceClient.generateLoa as jest.Mock).mockResolvedValue(mockPdfBuffer);
       (prisma.participantDocument.update as jest.Mock).mockResolvedValue({});
       (prisma.participantDocument.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
@@ -176,12 +185,14 @@ describe('LoaDownloadService', () => {
       await expect(service.downloadLoa('user-1', 'brand-1')).rejects.toThrow(NotFoundException);
     });
 
-    it('throws ForbiddenException when application not found', async () => {
+    it('throws ForbiddenException when application not found (inverted resolution: application first)', async () => {
+      // Bug 1 fix: no program.findFirst call; ForbiddenException comes from missing application
       (portalCacheService.getParticipantProfile as jest.Mock).mockResolvedValue(mockParticipant);
       (prisma.participantApplication.findFirst as jest.Mock).mockResolvedValue(null);
-      (prisma.program.findFirst as jest.Mock).mockResolvedValue(mockProgram);
 
       await expect(service.downloadLoa('user-1', 'brand-1')).rejects.toThrow(ForbiddenException);
+      // program.findUnique must NOT be called — application resolution gate comes first
+      expect(prisma.program.findUnique).not.toHaveBeenCalled();
     });
   });
 });
