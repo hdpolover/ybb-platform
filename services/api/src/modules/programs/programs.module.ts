@@ -83,7 +83,6 @@ import {
   CreateProgramParticipationCategoryHandler, UpdateProgramParticipationCategoryHandler, DeleteProgramParticipationCategoryHandler,
   CreateProgramSubthemeHandler, UpdateProgramSubthemeHandler, DeleteProgramSubthemeHandler,
   CreateDocumentTemplateHandler, UpdateDocumentTemplateHandler, DeleteDocumentTemplateHandler,
-  GenerateLOAHandler,
   UpdateProgramPaymentInfoHandler,
 } from './application/commands/handlers/manage-program-content.handlers';
 import {
@@ -102,10 +101,19 @@ import { GetParticipantProgressHandler } from './application/queries/handlers/ge
 import { UpdateExchangeRateHandler } from './application/commands/handlers/update-exchange-rate.handler';
 import { ProgramContentRepository } from './infrastructure/persistence/program-content.repository';
 import { ProgramRepository } from './infrastructure/persistence/program.repository';
+import { LoaReleaseBatchRepository } from './infrastructure/persistence/loa-release-batch.repository';
 import { PrismaService } from '../../shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '../../shared/infrastructure/cache/cache.service';
 import { FormFieldKeyValidator } from './application/validators/form-field-key.validator';
-import { GetLoaStatusHandler } from './application/queries/get-loa-status.handler';
+import {
+  CreateLoaBatchHandler,
+  UpdateLoaBatchHandler,
+  ReleaseLoaBatchHandler,
+  UnreleaseLoaBatchHandler,
+  DeleteLoaBatchHandler,
+  GetLoaBatchesHandler,
+  GetLoaDownloadsHandler,
+} from './application/handlers/loa-batch.handlers';
 
 @Module({
   imports: [CqrsModule, AuthModule, UsersModule, FilesModule, RabbitMQModule],
@@ -168,8 +176,6 @@ import { GetLoaStatusHandler } from './application/queries/get-loa-status.handle
     CreateProgramParticipationCategoryHandler, UpdateProgramParticipationCategoryHandler, DeleteProgramParticipationCategoryHandler,
     CreateProgramSubthemeHandler, UpdateProgramSubthemeHandler, DeleteProgramSubthemeHandler,
     CreateDocumentTemplateHandler, UpdateDocumentTemplateHandler, DeleteDocumentTemplateHandler,
-    GenerateLOAHandler,
-    GetLoaStatusHandler,
     UpdateProgramPaymentInfoHandler,
     // Form Field Handlers
     CreateApplicationFormFieldHandler,
@@ -203,8 +209,18 @@ import { GetLoaStatusHandler } from './application/queries/get-loa-status.handle
     UpdateProgramAnnouncementHandler,
     DeleteProgramAnnouncementHandler,
 
+    // LOA Batch Handlers
+    CreateLoaBatchHandler,
+    UpdateLoaBatchHandler,
+    ReleaseLoaBatchHandler,
+    UnreleaseLoaBatchHandler,
+    DeleteLoaBatchHandler,
+    GetLoaBatchesHandler,
+    GetLoaDownloadsHandler,
+
     CacheService,
     FormFieldKeyValidator,
+    LoaReleaseBatchRepository,
     {
       provide: 'IProgramContentRepository',
       useClass: ProgramContentRepository,

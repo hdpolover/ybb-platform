@@ -131,20 +131,20 @@ model BrandSocialFeed {
 }
 
 model Program {
-  id                  String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  brandId             String   @map("brand_id") @db.Uuid
-  name                String   @db.VarChar(255)
-  slug                String   @db.VarChar(255)
-  description         String?  @db.Text
-  shortDescription    String?  @map("short_description") @db.VarChar(500)
-  theme               String?  @db.VarChar(255) // Main Program Theme
-  programType         String?  @map("program_type") @db.VarChar(100) // e.g. Cohort, Conference, Workshop
+  id                  String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  brandId             String         @map("brand_id") @db.Uuid
+  name                String         @db.VarChar(255)
+  slug                String         @db.VarChar(255)
+  description         String?        @db.Text
+  shortDescription    String?        @map("short_description") @db.VarChar(500)
+  theme               String?        @db.VarChar(255) // Main Program Theme
+  programType         String?        @map("program_type") @db.VarChar(100) // e.g. Cohort, Conference, Workshop
   programFormat       ProgramFormat? @map("program_format")
   year                Int
-  startDate           DateTime @map("start_date") @db.Date
-  endDate             DateTime @map("end_date") @db.Date
-  applicationDeadline DateTime @map("application_deadline") @db.Timestamptz(6)
-  location            String?  @db.VarChar(255)
+  startDate           DateTime       @map("start_date") @db.Date
+  endDate             DateTime       @map("end_date") @db.Date
+  applicationDeadline DateTime       @map("application_deadline") @db.Timestamptz(6)
+  location            String?        @db.VarChar(255)
   capacity            Int?
 
   // Visibility & Status
@@ -159,14 +159,14 @@ model Program {
   videoUrl     String? @map("video_url") @db.VarChar(500)
 
   // Program Settings
-  requireEmailVerification Boolean @default(true) @map("require_email_verification")
-  currency                 String  @default("USD") @map("currency") @db.VarChar(3)
-  enableCurrencyConversion Boolean @default(false) @map("enable_currency_conversion")
+  requireEmailVerification Boolean  @default(true) @map("require_email_verification")
+  currency                 String   @default("USD") @map("currency") @db.VarChar(3)
+  enableCurrencyConversion Boolean  @default(false) @map("enable_currency_conversion")
   usdInIdr                 Decimal? @map("usd_in_idr") @db.Decimal(10, 2) // Program-level exchange rate; falls back to brand_settings.usd_in_idr if null
-  logoUrl                  String? @map("logo_url") @db.VarChar(500)
-  logoWhiteUrl             String? @map("logo_white_url") @db.VarChar(500)
-  logoColorUrl             String? @map("logo_color_url") @db.VarChar(500)
-  logoIconUrl              String? @map("logo_icon_url") @db.VarChar(500)
+  logoUrl                  String?  @map("logo_url") @db.VarChar(500)
+  logoWhiteUrl             String?  @map("logo_white_url") @db.VarChar(500)
+  logoColorUrl             String?  @map("logo_color_url") @db.VarChar(500)
+  logoIconUrl              String?  @map("logo_icon_url") @db.VarChar(500)
 
   // Registration Settings
   allowRegistration     Boolean   @default(true) @map("allow_registration")
@@ -176,12 +176,12 @@ model Program {
   registrationFee       Decimal?  @map("registration_fee") @db.Decimal(10, 2)
 
   // Additional Info
-  requirementsDescription String? @map("requirements_description") @db.Text
-  benefitsDescription     String? @map("benefits_description") @db.Text
-  termsAndConditions      String? @map("terms_and_conditions") @db.Text
-  paymentInfoHtml         String? @map("payment_info_html") @db.Text
-  essayGuidelineText      String? @map("essay_guideline_text") @db.Text
-  essayGuidelineUrl       String? @map("essay_guideline_url") @db.VarChar(500)
+  requirementsDescription String?  @map("requirements_description") @db.Text
+  benefitsDescription     String?  @map("benefits_description") @db.Text
+  termsAndConditions      String?  @map("terms_and_conditions") @db.Text
+  paymentInfoHtml         String?  @map("payment_info_html") @db.Text
+  essayGuidelineText      String?  @map("essay_guideline_text") @db.Text
+  essayGuidelineUrl       String?  @map("essay_guideline_url") @db.VarChar(500)
   previewChecklistItems   String[] @map("preview_checklist_items")
 
   // SEO
@@ -228,6 +228,7 @@ model Program {
   scoringSchemas           ScoringSchema[]
   participationCategories  ProgramParticipationCategory[]
   exchangeRateHistory      ProgramExchangeRateHistory[]
+  loaReleaseBatches        LoaReleaseBatch[]
 
   @@unique([brandId, slug])
   @@index([brandId])
@@ -290,14 +291,14 @@ model ProgramWaitlist {
 }
 
 model ProgramEssay {
-  id             String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId      String  @map("program_id") @db.Uuid
-  question       String  @db.Text
-  description    String? @db.Text
-  wordLimit      Int?    @map("word_limit")
-  isRequired     Boolean @default(true) @map("is_required")
-  order          Int     @default(0)
-  isActive       Boolean @default(true) @map("is_active")
+  id          String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId   String  @map("program_id") @db.Uuid
+  question    String  @db.Text
+  description String? @db.Text
+  wordLimit   Int?    @map("word_limit")
+  isRequired  Boolean @default(true) @map("is_required")
+  order       Int     @default(0)
+  isActive    Boolean @default(true) @map("is_active")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)

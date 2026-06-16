@@ -8,7 +8,6 @@ import { toast } from "sonner";
 import { ShieldCheck, Pencil } from "lucide-react";
 import { ProfileHeader, type ProfileHeaderData } from "@/app/components/participants/ProfileHeader";
 import { ParticipantProfileTabs } from "@/app/components/participants/ParticipantProfileTabs";
-import { GenerateLoaButton } from "@/app/components/participants/GenerateLoaButton";
 import { EditSubmissionDrawer } from "@/app/components/participants/EditSubmissionDrawer";
 import type { PersonalDetails } from "@/app/components/participants/tabs/PersonalDetailsTab";
 import type { ProfessionalProfile } from "@/app/components/participants/tabs/ProfessionalProfileTab";
@@ -284,7 +283,6 @@ export default function ParticipantDetailPage() {
           <span className="font-semibold text-blue-600">Detail Participant</span>
         </div>
         <div className="flex items-center gap-2.5">
-          {participant && <GenerateLoaButton programId={programId} participantId={accountId} />}
           {accessConfig.canAccessPrograms && rawApplication ? (
             <Button
               variant="outline"
