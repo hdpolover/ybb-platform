@@ -4,10 +4,11 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { PortalCacheService } from '../../services/portal-cache.service';
+import { LoaEligibilityService } from '../../services/loa-eligibility.service';
 import { GetPortalDocumentsQuery } from '../portal-queries';
-import { 
-    PortalDocumentResponseDto, 
-    DocumentItemDto 
+import {
+    PortalDocumentResponseDto,
+    DocumentItemDto
 } from '../../../presentation/dto/portal-document.dto';
 import { resolveMaskedFileUrl } from '@shared/utils/masked-file-url';
 
@@ -18,6 +19,7 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
         private readonly portalCacheService: PortalCacheService,
+        private readonly loaEligibilityService: LoaEligibilityService,
     ) {}
 
     async execute(query: GetPortalDocumentsQuery): Promise<PortalDocumentResponseDto> {
@@ -58,6 +60,8 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
                         id: true, name: true, type: true, fileUrl: true,
                         signedCopyUrl: true, submissionStatus: true, submissionNote: true,
                         generatedAt: true, templateId: true,
+                        // LOA on-demand fields (Task 9)
+                        documentNumber: true, downloadCount: true, firstDownloadedAt: true,
                     },
                 },
                 invoices: {
@@ -129,16 +133,25 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
                         documentType: 'complementary_document',
                         updatedAt: tmpl.updatedAt,
                     });
-                } else if (tmpl.type === 'letter_of_acceptance' && participantDoc?.fileUrl) {
+                } else if (tmpl.type === 'letter_of_acceptance') {
+                    // Task 9: Surface LOA based on eligibility, not on a stored fileUrl.
+                    // Eligible → downloadable=true (on-demand PDF via GET /v1/portal/loa/download).
+                    // Ineligible → downloadable=false (locked; no released batch covers them yet).
+                    const eligibility = await this.loaEligibilityService.checkEligibility(
+                        application.id,
+                        application.programId,
+                    );
                     myDocuments.push({
-                        id: participantDoc.id ?? tmpl.id,
+                        id: participantDoc?.id ?? tmpl.id,
                         title: tmpl.name,
                         description: tmpl.description ?? '',
                         category: 'document_template',
-                        fileUrl: participantDoc.fileUrl,
-                        status: 'verified',
+                        // fileUrl intentionally omitted for LOA — download via dedicated endpoint
+                        status: eligibility.eligible ? 'verified' : 'available',
                         documentType: 'letter_of_acceptance',
-                        updatedAt: participantDoc.generatedAt ?? tmpl.updatedAt,
+                        updatedAt: participantDoc?.generatedAt ?? tmpl.updatedAt,
+                        downloadable: eligibility.eligible,
+                        documentNumber: participantDoc?.documentNumber ?? undefined,
                     });
                 }
             }
