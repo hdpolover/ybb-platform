@@ -79,7 +79,7 @@ export function LoaStatusTable({ programId }: LoaStatusTableProps) {
             </TableHeader>
             <TableBody>
               {filteredRows.map((row, i) => (
-                <TableRow key={i}>
+                <TableRow key={row.documentNumber || `row-${i}`}>
                   <TableCell className="font-medium text-zinc-900">
                     {row.participantName}
                   </TableCell>

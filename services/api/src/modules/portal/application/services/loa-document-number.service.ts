@@ -4,7 +4,7 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 export interface AssignOrGetResult {
   docNumber: string;
   isNew: boolean;
-  existingDocId?: string;
+  existingDocId: string;
 }
 
 @Injectable()

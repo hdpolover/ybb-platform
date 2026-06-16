@@ -1,5 +1,5 @@
 import { CommandHandler, ICommandHandler, QueryHandler, IQueryHandler } from '@nestjs/cqrs';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { LoaReleaseBatchRepository } from '../../infrastructure/persistence/loa-release-batch.repository';
 import {
@@ -23,6 +23,10 @@ export class CreateLoaBatchHandler implements ICommandHandler<CreateLoaBatchComm
 
   async execute(command: CreateLoaBatchCommand) {
     const { programId, name, submissionFrom, submissionTo, adminUserId } = command;
+
+    if (submissionFrom > submissionTo) {
+      throw new BadRequestException('submissionFrom must be on or before submissionTo');
+    }
 
     const overlapping = await this.batchRepo.findOverlapping(programId, submissionFrom, submissionTo);
     if (overlapping.length > 0) {
@@ -50,6 +54,10 @@ export class UpdateLoaBatchHandler implements ICommandHandler<UpdateLoaBatchComm
     // Use incoming dates if provided, otherwise fall back to existing values for overlap check
     const from = submissionFrom ?? existing.submissionFrom;
     const to = submissionTo ?? existing.submissionTo;
+
+    if (from > to) {
+      throw new BadRequestException('submissionFrom must be on or before submissionTo');
+    }
 
     const overlapping = await this.batchRepo.findOverlapping(programId, from, to, batchId);
     if (overlapping.length > 0) {

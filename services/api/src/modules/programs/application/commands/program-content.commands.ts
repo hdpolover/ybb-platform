@@ -265,21 +265,6 @@ export class DeleteDocumentTemplateCommand {
         public readonly userId: string,
     ) {}
 }
-export type LoaAudience = 'submitted' | 'accepted';
-
-export class GenerateLOACommand {
-    constructor(
-        public readonly programId: string,
-        public readonly templateId: string,
-        public readonly userId: string,
-        public readonly participantId?: string,
-        public readonly bulk?: boolean,
-        public readonly audience?: LoaAudience,
-        public readonly resend?: boolean,
-        public readonly participantIds?: string[],
-    ) {}
-}
-
 // Program-level payment info
 export class UpdateProgramPaymentInfoCommand {
     constructor(

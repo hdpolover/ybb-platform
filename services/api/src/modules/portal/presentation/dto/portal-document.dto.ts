@@ -10,7 +10,7 @@ export class DocumentItemDto {
     @ApiProperty()
     description: string;
 
-    @ApiProperty({ enum: ['program_resource', 'participant_upload'] })
+    @ApiProperty({ enum: ['program_resource', 'participant_upload', 'document_template'] })
     category: string;
 
     @ApiProperty()
