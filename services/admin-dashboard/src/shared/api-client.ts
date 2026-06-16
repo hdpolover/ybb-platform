@@ -2643,58 +2643,111 @@ export async function updateDocumentTemplate(
   });
 }
 
-export async function generateLoa(
-  programId: string,
-  templateId: string,
-  body: { participantId?: string; bulk?: boolean },
-): Promise<{ generated: number; failed: number }> {
-  return request<{ generated: number; failed: number }>(
-    `/programs/${programId}/document-templates/${templateId}/generate`,
-    { method: 'POST', body: JSON.stringify(body) },
-  );
-}
-
-export async function sendLoa(
-  programId: string,
-  templateId: string,
-  body:
-    | { bulk: true; audience: 'submitted' | 'accepted'; resend?: boolean }
-    | { participantId: string; resend: true }
-    | { participantIds: string[]; resend?: boolean },
-): Promise<{ generated: number; failed: number }> {
-  return request<{ generated: number; failed: number }>(
-    `/programs/${programId}/document-templates/${templateId}/generate`,
-    { method: 'POST', body: JSON.stringify(body) },
-  );
-}
-
-export type LoaStatusRow = {
-  participantId: string;
-  participantName: string;
-  email: string;
-  applicationStatus: 'submitted' | 'accepted';
-  status: 'pending' | 'generated' | 'emailed' | 'viewed';
-  documentId: string | null;
-  documentNumber: string | null;
-  fileUrl: string | null;
-  generatedAt: string | null;
-  emailedAt: string | null;
-  viewedAt: string | null;
-  submittedAt: string | null;
-};
-
-export async function getLoaStatus(
-  programId: string,
-  templateId: string,
-): Promise<LoaStatusRow[]> {
-  return request<LoaStatusRow[]>(
-    `/programs/${programId}/document-templates/${templateId}/loa-status`,
-    { method: 'GET' },
-  );
-}
 
 export function deleteDocumentTemplate(id: string): Promise<void> {
   return request<void>(`/programs/document-templates/${id}`, { method: 'DELETE' });
+}
+
+// ─── LOA Release Batches ──────────────────────────────────────────────────────
+
+/**
+ * A release batch that gates which participants can download their LOA.
+ * Mirrors the shape returned by GetLoaBatchesHandler (services/api).
+ * Dates come as ISO strings over the wire (JSON serialisation of Date).
+ */
+export type LoaBatch = {
+  id: string;
+  programId: string;
+  name: string;
+  /** ISO datetime string — start of the submission date window */
+  submissionFrom: string;
+  /** ISO datetime string — end of the submission date window */
+  submissionTo: string;
+  /** ISO datetime string if released, null if still draft */
+  releasedAt: string | null;
+  /** Number of participants whose submissionDate falls within this batch */
+  eligibleCount: number;
+  /** Number of participants who have downloaded at least once in this batch */
+  downloadedCount: number;
+  createdAt: string;
+};
+
+export type CreateLoaBatchInput = {
+  name: string;
+  /** ISO datetime string */
+  submissionFrom: string;
+  /** ISO datetime string */
+  submissionTo: string;
+};
+
+export type UpdateLoaBatchInput = {
+  name?: string;
+  /** ISO datetime string */
+  submissionFrom?: string;
+  /** ISO datetime string */
+  submissionTo?: string;
+};
+
+/**
+ * A single row in the LOA downloads tracking table.
+ * Mirrors the shape returned by GetLoaDownloadsHandler (services/api).
+ */
+export type LoaDownloadRow = {
+  participantName: string;
+  email: string;
+  /** Null if the participant has never been assigned to a batch */
+  batchName: string | null;
+  documentNumber: string;
+  /** ISO datetime string of the first download, null if never downloaded */
+  firstDownloadedAt: string | null;
+  downloadCount: number;
+};
+
+export function getLoaBatches(programId: string): Promise<LoaBatch[]> {
+  return request<LoaBatch[]>(`/programs/${programId}/loa-batches`);
+}
+
+export function createLoaBatch(
+  programId: string,
+  data: CreateLoaBatchInput,
+): Promise<LoaBatch> {
+  return request<LoaBatch>(`/programs/${programId}/loa-batches`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateLoaBatch(
+  programId: string,
+  id: string,
+  data: UpdateLoaBatchInput,
+): Promise<LoaBatch> {
+  return request<LoaBatch>(`/programs/${programId}/loa-batches/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export function releaseLoaBatch(programId: string, id: string): Promise<LoaBatch> {
+  return request<LoaBatch>(`/programs/${programId}/loa-batches/${id}/release`, {
+    method: 'POST',
+  });
+}
+
+export function unreleaseLoaBatch(programId: string, id: string): Promise<LoaBatch> {
+  return request<LoaBatch>(`/programs/${programId}/loa-batches/${id}/unrelease`, {
+    method: 'POST',
+  });
+}
+
+export function deleteLoaBatch(programId: string, id: string): Promise<void> {
+  return request<void>(`/programs/${programId}/loa-batches/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export function getLoaDownloads(programId: string): Promise<LoaDownloadRow[]> {
+  return request<LoaDownloadRow[]>(`/programs/${programId}/loa-downloads`);
 }
 
 // ─── Program Invoices ────────────────────────────────────────────────────────

@@ -3,20 +3,20 @@
 // ============================================================================
 
 model ProgramPricingTier {
-  id           String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId    String  @map("program_id") @db.Uuid
-  name         String  @db.VarChar(255) // e.g., "Early Bird", "Regular", "Group"
-  description  String? @db.Text
-  price        Decimal @db.Decimal(10, 2)
-  currency     String  @default("IDR") @db.VarChar(3)
+  id          String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId   String  @map("program_id") @db.Uuid
+  name        String  @db.VarChar(255) // e.g., "Early Bird", "Regular", "Group"
+  description String? @db.Text
+  price       Decimal @db.Decimal(10, 2)
+  currency    String  @default("IDR") @db.VarChar(3)
 
   // Dual-pricing fields (Phase 1: nullable; promoted to NOT NULL in Phase 5).
   // `price` + `currency` remain in use until all code paths migrate.
-  usdPrice     Decimal? @map("usd_price") @db.Decimal(10, 2)
-  idrPrice     Decimal? @map("idr_price") @db.Decimal(15, 0)
+  usdPrice Decimal? @map("usd_price") @db.Decimal(10, 2)
+  idrPrice Decimal? @map("idr_price") @db.Decimal(15, 0)
 
-  capacity     Int?    @default(0) // 0 or null = unlimited
-  currentCount Int     @default(0) @map("current_count") // Track usage
+  capacity     Int? @default(0) // 0 or null = unlimited
+  currentCount Int  @default(0) @map("current_count") // Track usage
 
   // New/Restored Fields
   benefits          String[]              @default([])
@@ -260,20 +260,20 @@ model ApplicationInvoice {
 }
 
 model PaymentOutboxEvent {
-  id           String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  eventType    String   @map("event_type") @db.VarChar(120)
-  aggregateType String  @map("aggregate_type") @db.VarChar(64)
-  aggregateId  String   @map("aggregate_id") @db.VarChar(128)
-  payload      Json     @db.JsonB
-  dedupeKey    String   @unique(map: "payment_outbox_events_dedupe_key_key") @map("dedupe_key") @db.VarChar(191)
-  correlationId String? @map("correlation_id") @db.VarChar(191)
-  status       String   @default("pending") @db.VarChar(20)
-  attempts     Int      @default(0)
-  lastError    String?  @map("last_error") @db.Text
-  nextAttemptAt DateTime @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
-  publishedAt  DateTime? @map("published_at") @db.Timestamptz(6)
-  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id            String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  eventType     String    @map("event_type") @db.VarChar(120)
+  aggregateType String    @map("aggregate_type") @db.VarChar(64)
+  aggregateId   String    @map("aggregate_id") @db.VarChar(128)
+  payload       Json      @db.JsonB
+  dedupeKey     String    @unique(map: "payment_outbox_events_dedupe_key_key") @map("dedupe_key") @db.VarChar(191)
+  correlationId String?   @map("correlation_id") @db.VarChar(191)
+  status        String    @default("pending") @db.VarChar(20)
+  attempts      Int       @default(0)
+  lastError     String?   @map("last_error") @db.Text
+  nextAttemptAt DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  publishedAt   DateTime? @map("published_at") @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([status, nextAttemptAt], map: "idx_payment_outbox_status_next_attempt_at")
   @@index([aggregateType, aggregateId], map: "idx_payment_outbox_aggregate")
@@ -373,9 +373,15 @@ model ParticipantDocument {
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   legacyId    Int?      @unique @map("legacy_id")
 
+  // LOA download tracking
+  firstDownloadedAt DateTime? @map("first_downloaded_at") @db.Timestamptz(6)
+  lastDownloadedAt  DateTime? @map("last_downloaded_at") @db.Timestamptz(6)
+  loaReleaseBatchId String?   @map("loa_release_batch_id") @db.Uuid
+
   // Relations
-  application ParticipantApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  template    DocumentTemplate?      @relation(fields: [templateId], references: [id])
+  application     ParticipantApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  template        DocumentTemplate?      @relation(fields: [templateId], references: [id])
+  loaReleaseBatch LoaReleaseBatch?       @relation(fields: [loaReleaseBatchId], references: [id])
 
   @@index([applicationId])
   @@index([type])

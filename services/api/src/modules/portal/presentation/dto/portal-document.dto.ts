@@ -10,7 +10,7 @@ export class DocumentItemDto {
     @ApiProperty()
     description: string;
 
-    @ApiProperty({ enum: ['program_resource', 'participant_upload'] })
+    @ApiProperty({ enum: ['program_resource', 'participant_upload', 'document_template'] })
     category: string;
 
     @ApiProperty()
@@ -24,9 +24,21 @@ export class DocumentItemDto {
 
     @ApiProperty({ required: false }) signedCopyUrl?: string;
     @ApiProperty({ required: false }) submissionStatus?: string;
-    @ApiProperty() documentType: string; // 'agreement_letter' | 'complementary_document' | 'program_resource'
+    @ApiProperty() documentType: string; // 'agreement_letter' | 'complementary_document' | 'program_resource' | 'letter_of_acceptance'
     @ApiProperty()
     updatedAt: Date;
+
+    /**
+     * LOA-specific: true = participant is eligible and can download on demand.
+     * false = template exists but no released batch covers them yet (locked state).
+     * Absent for non-LOA document types.
+     */
+    @ApiProperty({ required: false })
+    downloadable?: boolean;
+
+    /** LOA document number if one has already been assigned (optional). */
+    @ApiProperty({ required: false })
+    documentNumber?: string;
 }
 
 export class PortalDocumentResponseDto {

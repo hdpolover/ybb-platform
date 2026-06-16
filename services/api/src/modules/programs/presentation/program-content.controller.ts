@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Put, Post, Delete, Body, UseGuards, Request, UseInterceptors, UploadedFile, Query, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Param, Put, Post, Delete, Body, UseGuards, Request, UseInterceptors, UploadedFile, Query } from '@nestjs/common';
 import { Request as ExpressRequest } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
@@ -47,7 +47,6 @@ import {
   CreateProgramFaqCommand, UpdateProgramFaqCommand, DeleteProgramFaqCommand,
   CreateProgramResourceCommand, UpdateProgramResourceCommand, DeleteProgramResourceCommand,
   CreateDocumentTemplateCommand, UpdateDocumentTemplateCommand, DeleteDocumentTemplateCommand,
-  GenerateLOACommand,
 } from '../application/commands/program-content.commands';
 
 import {
@@ -56,10 +55,26 @@ import {
   CreateProgramFaqHandler, UpdateProgramFaqHandler, DeleteProgramFaqHandler,
   CreateProgramResourceHandler, UpdateProgramResourceHandler, DeleteProgramResourceHandler,
   CreateDocumentTemplateHandler, UpdateDocumentTemplateHandler, DeleteDocumentTemplateHandler,
-  GenerateLOAHandler,
 } from '../application/commands/handlers/manage-program-content.handlers';
 
-import { GetLoaStatusQuery, GetLoaStatusHandler } from '../application/queries/get-loa-status.handler';
+import { CreateLoaBatchDto, UpdateLoaBatchDto } from '../application/dto/loa-batch.dto';
+import {
+  CreateLoaBatchCommand,
+  UpdateLoaBatchCommand,
+  ReleaseLoaBatchCommand,
+  UnreleaseLoaBatchCommand,
+  DeleteLoaBatchCommand,
+} from '../application/commands/loa-batch.commands';
+import { GetLoaBatchesQuery, GetLoaDownloadsQuery } from '../application/queries/loa-batch.queries';
+import {
+  CreateLoaBatchHandler,
+  UpdateLoaBatchHandler,
+  ReleaseLoaBatchHandler,
+  UnreleaseLoaBatchHandler,
+  DeleteLoaBatchHandler,
+  GetLoaBatchesHandler,
+  GetLoaDownloadsHandler,
+} from '../application/handlers/loa-batch.handlers';
 
 @ApiTags('Program Content')
 @Controller('programs')
@@ -85,8 +100,13 @@ export class ProgramContentController {
     private readonly createDocumentTemplateHandler: CreateDocumentTemplateHandler,
     private readonly updateDocumentTemplateHandler: UpdateDocumentTemplateHandler,
     private readonly deleteDocumentTemplateHandler: DeleteDocumentTemplateHandler,
-    private readonly generateLOAHandler: GenerateLOAHandler,
-    private readonly getLoaStatusHandler: GetLoaStatusHandler,
+    private readonly createLoaBatchHandler: CreateLoaBatchHandler,
+    private readonly updateLoaBatchHandlerSvc: UpdateLoaBatchHandler,
+    private readonly releaseLoaBatchHandlerSvc: ReleaseLoaBatchHandler,
+    private readonly unreleaseLoaBatchHandlerSvc: UnreleaseLoaBatchHandler,
+    private readonly deleteLoaBatchHandlerSvc: DeleteLoaBatchHandler,
+    private readonly getLoaBatchesHandlerSvc: GetLoaBatchesHandler,
+    private readonly getLoaDownloadsHandlerSvc: GetLoaDownloadsHandler,
   ) {}
 
   // --- Gallery Endpoints ---
@@ -332,57 +352,101 @@ export class ProgramContentController {
     return this.deleteDocumentTemplateHandler.execute(new DeleteDocumentTemplateCommand(id, req.user.id));
   }
 
-  @Post(':programId/document-templates/:templateId/generate')
+  // --- LOA Release Batch Endpoints ---
+
+  @Get(':programId/loa-batches')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Generate LOA PDF(s) for one participant or all eligible participants' })
-  async generateLOA(
+  @ApiOperation({ summary: 'List LOA release batches for a program' })
+  async getLoaBatches(@Param('programId') programId: string) {
+    return this.getLoaBatchesHandlerSvc.execute(new GetLoaBatchesQuery(programId));
+  }
+
+  @Post(':programId/loa-batches')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create a LOA release batch' })
+  async createLoaBatch(
     @Param('programId') programId: string,
-    @Param('templateId') templateId: string,
-    @Body() body: {
-      participantId?: string;
-      participantIds?: string[];
-      bulk?: boolean;
-      audience?: 'submitted' | 'accepted';
-      resend?: boolean;
-    },
+    @Body() dto: CreateLoaBatchDto,
     @Request() req: ExpressRequest & { user: { id: string } },
   ) {
-    if (body.participantIds !== undefined) {
-      if (
-        !Array.isArray(body.participantIds) ||
-        body.participantIds.some((id) => typeof id !== 'string')
-      ) {
-        throw new BadRequestException('participantIds must be an array of strings');
-      }
-      if (body.participantIds.length > 1000) {
-        throw new BadRequestException('participantIds cannot exceed 1000 entries');
-      }
-    }
-    return this.generateLOAHandler.execute(
-      new GenerateLOACommand(
+    return this.createLoaBatchHandler.execute(
+      new CreateLoaBatchCommand(
         programId,
-        templateId,
+        dto.name,
+        new Date(dto.submissionFrom),
+        new Date(dto.submissionTo),
         req.user.id,
-        body.participantId,
-        body.bulk,
-        body.audience,
-        body.resend,
-        body.participantIds,
       ),
     );
   }
 
-  @Get(':programId/document-templates/:templateId/loa-status')
+  @Put(':programId/loa-batches/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'List per-participant LoA generation and email status' })
-  async getLoaStatus(
+  @ApiOperation({ summary: 'Update a LOA release batch' })
+  async updateLoaBatch(
     @Param('programId') programId: string,
-    @Param('templateId') templateId: string,
+    @Param('id') batchId: string,
+    @Body() dto: UpdateLoaBatchDto,
   ) {
-    return this.getLoaStatusHandler.execute(new GetLoaStatusQuery(templateId, programId));
+    return this.updateLoaBatchHandlerSvc.execute(
+      new UpdateLoaBatchCommand(
+        batchId,
+        programId,
+        dto.name,
+        dto.submissionFrom ? new Date(dto.submissionFrom) : undefined,
+        dto.submissionTo ? new Date(dto.submissionTo) : undefined,
+      ),
+    );
+  }
+
+  @Post(':programId/loa-batches/:id/release')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Release a LOA batch (make it visible to participants)' })
+  async releaseLoaBatch(
+    @Param('programId') programId: string,
+    @Param('id') batchId: string,
+  ) {
+    return this.releaseLoaBatchHandlerSvc.execute(new ReleaseLoaBatchCommand(batchId, programId));
+  }
+
+  @Post(':programId/loa-batches/:id/unrelease')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Unrelease a LOA batch' })
+  async unreleaseLoaBatch(
+    @Param('programId') programId: string,
+    @Param('id') batchId: string,
+  ) {
+    return this.unreleaseLoaBatchHandlerSvc.execute(new UnreleaseLoaBatchCommand(batchId, programId));
+  }
+
+  @Delete(':programId/loa-batches/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete a LOA release batch' })
+  async deleteLoaBatch(
+    @Param('programId') programId: string,
+    @Param('id') batchId: string,
+  ) {
+    return this.deleteLoaBatchHandlerSvc.execute(new DeleteLoaBatchCommand(batchId, programId));
+  }
+
+  @Get(':programId/loa-downloads')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List LOA download records for a program' })
+  async getLoaDownloads(@Param('programId') programId: string) {
+    return this.getLoaDownloadsHandlerSvc.execute(new GetLoaDownloadsQuery(programId));
   }
 }

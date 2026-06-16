@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards, UnauthorizedException, BadRequestException, NotFoundException, UseInterceptors, UploadedFile, StreamableFile, Header, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, UseGuards, UnauthorizedException, BadRequestException, NotFoundException, UseInterceptors, UploadedFile, StreamableFile, Header, ForbiddenException } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Readable } from 'stream';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { PortalReceiptService } from '../application/services/portal-receipt.service';
@@ -19,7 +20,6 @@ import {
     EnsurePortalPaymentInvoiceCommand,
     UploadSignedCopyCommand,
 } from '../application/queries/portal-queries';
-import { MarkDocumentViewedCommand } from '../application/commands/mark-document-viewed.command';
 import { PortalDashboardResponseDto } from './dto/portal-dashboard.dto';
 import { PortalSubmissionResponseDto } from './dto/portal-submission.dto';
 import {
@@ -38,6 +38,7 @@ import { CancelPortalPaymentHandler } from '../application/commands/handlers/can
 import { EnsurePortalPaymentInvoiceHandler } from '../application/commands/handlers/ensure-portal-payment-invoice.handler';
 import { PaymentServiceHttpClient } from '../../payments/infrastructure/services/payment-service-http.client';
 import type { AdminPaymentMethod } from '../../payments/common/proto/payment.interface';
+import { LoaDownloadService } from '../application/services/loa-download.service';
 
 @ApiTags('Portal')
 @Controller('portal')
@@ -54,6 +55,7 @@ export class PortalController {
         private readonly configService: ConfigService,
         private readonly prisma: PrismaService,
         private readonly receiptService: PortalReceiptService,
+        private readonly loaDownloadService: LoaDownloadService,
     ) {}
 
     @Get('dashboard')
@@ -263,18 +265,22 @@ export class PortalController {
         return this.queryBus.execute(new GetPortalDocumentsQuery(userId));
     }
 
-    @Post('documents/:documentId/viewed')
-    @ApiOperation({ summary: 'Mark a document as viewed by the participant (first-view-wins)' })
-    @ApiResponse({ status: 200, description: 'Returns the viewedAt timestamp' })
-    async markDocumentViewed(
-        @Param('documentId', new ParseUUIDPipe()) documentId: string,
-        @CurrentUser() user: CurrentUserData,
-    ): Promise<{ viewedAt: Date | null }> {
-        const userId = user.userId;
+    @Throttle({ default: { limit: 5, ttl: 60000 } })
+    @Get('loa/download')
+    @Header('Content-Type', 'application/pdf')
+    @ApiOperation({ summary: 'Download the participant LOA PDF on-demand (gated by release batch)' })
+    @ApiResponse({ status: 200, description: 'PDF binary stream' })
+    @ApiResponse({ status: 403, description: 'Not eligible — no released batch covers this participant' })
+    async downloadLoa(@CurrentUser() user: CurrentUserData): Promise<StreamableFile> {
+        const { userId, brandId } = user;
         if (!userId) throw new UnauthorizedException();
-        return this.commandBus.execute(
-            new MarkDocumentViewedCommand(userId, documentId),
-        );
+
+        const { buffer, filename } = await this.loaDownloadService.downloadLoa(userId, brandId);
+
+        return new StreamableFile(buffer, {
+            type: 'application/pdf',
+            disposition: `attachment; filename="${filename}"`,
+        });
     }
 
     @Post('documents/:templateId/signed-copy')

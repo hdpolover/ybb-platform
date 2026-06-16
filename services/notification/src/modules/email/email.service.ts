@@ -17,16 +17,6 @@ interface ManagedEmailTemplate {
   updatedAt?: string;
 }
 
-export interface LoaReadyPayload {
-  participant_name: string;
-  program_name: string;
-  document_number: string;
-  documents_page_url: string;
-  brand_id?: string;
-  program_id?: string;
-  brand?: any;
-}
-
 @Injectable()
 export class EmailService {
   private transporter: nodemailer.Transporter;
@@ -844,29 +834,6 @@ export class EmailService {
       data: templateData,
     });
     return this.sendRawEmail(to, subject, html);
-  }
-
-  async sendLoaReadyEmail(to: string, payload: LoaReadyPayload): Promise<void> {
-    const templateData = {
-      name: payload.participant_name || 'Participant',
-      participant_name: payload.participant_name,
-      program_name: payload.program_name,
-      document_number: payload.document_number,
-      documents_page_url: payload.documents_page_url,
-      brand: payload.brand,
-      brandId: payload.brand_id ?? payload.brand?.id,
-      programId: payload.program_id,
-    };
-    const fallbackSubject = payload.brand?.name
-      ? `Your Letter of Acceptance is Ready – ${payload.brand.name}`
-      : 'Your Letter of Acceptance is Ready';
-    const { subject, html } = await this.resolveEmailContent({
-      type: 'loa_ready',
-      fallbackTemplateName: 'loa-ready',
-      fallbackSubject,
-      data: templateData,
-    });
-    await this.sendRawEmail(to, subject, html);
   }
 
   private resolveSupportUrl(brand?: any): string {

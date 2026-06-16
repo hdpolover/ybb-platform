@@ -14,6 +14,9 @@ import { GetPortalPaymentDetailHandler } from './application/queries/handlers/ge
 import { GetPortalDocumentsHandler } from './application/queries/handlers/get-portal-documents.handler';
 import { PortalCacheService } from './application/services/portal-cache.service';
 import { PortalReceiptService } from './application/services/portal-receipt.service';
+import { LoaEligibilityService } from './application/services/loa-eligibility.service';
+import { LoaDocumentNumberService } from './application/services/loa-document-number.service';
+import { LoaDownloadService } from './application/services/loa-download.service';
 import { ConfirmPortalPaymentHandler } from './application/commands/handlers/confirm-portal-payment.handler';
 import { CancelPortalPaymentHandler } from './application/commands/handlers/cancel-portal-payment.handler';
 import { EnsurePortalPaymentInvoiceHandler } from './application/commands/handlers/ensure-portal-payment-invoice.handler';
@@ -32,9 +35,6 @@ import { DownloadCertificateHandler } from './application/commands/handlers/down
 // New — Documents
 import { UploadSignedCopyHandler } from './application/commands/handlers/upload-signed-copy.handler';
 
-// New — Viewed Tracking
-import { MarkDocumentViewedHandler } from './application/commands/mark-document-viewed.handler';
-
 @Module({
     imports: [CqrsModule, AuthModule, PaymentsModule, FilesModule, ParticipantsModule],
     controllers: [
@@ -45,6 +45,9 @@ import { MarkDocumentViewedHandler } from './application/commands/mark-document-
     providers: [
         PortalCacheService,
         PortalReceiptService,
+        LoaEligibilityService,
+        LoaDocumentNumberService,
+        LoaDownloadService,
         // Existing query handlers
         GetPortalDashboardHandler,
         GetPortalSubmissionsHandler,
@@ -62,7 +65,6 @@ import { MarkDocumentViewedHandler } from './application/commands/mark-document-
         CancelPortalPaymentHandler,
         EnsurePortalPaymentInvoiceHandler,
         UploadSignedCopyHandler,
-        MarkDocumentViewedHandler,
     ],
 })
 export class PortalModule { }

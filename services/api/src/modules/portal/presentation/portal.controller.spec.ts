@@ -10,6 +10,7 @@ import { ConfirmPortalPaymentHandler } from '../application/commands/handlers/co
 import { CancelPortalPaymentHandler } from '../application/commands/handlers/cancel-portal-payment.handler';
 import { EnsurePortalPaymentInvoiceHandler } from '../application/commands/handlers/ensure-portal-payment-invoice.handler';
 import { PaymentServiceHttpClient } from '../../payments/infrastructure/services/payment-service-http.client';
+import { LoaDownloadService } from '../application/services/loa-download.service';
 import {
   GetPortalDashboardQuery,
   GetPortalSubmissionsQuery,
@@ -36,6 +37,7 @@ describe('PortalController', () => {
         { provide: ConfigService, useValue: { get: jest.fn() } },
         { provide: PrismaService, useValue: { applicationInvoice: { findUnique: jest.fn() } } },
         { provide: PortalReceiptService, useValue: { generate: jest.fn() } },
+        { provide: LoaDownloadService, useValue: { downloadLoa: jest.fn() } },
       ],
     })
     .overrideGuard(JwtAuthGuard)
