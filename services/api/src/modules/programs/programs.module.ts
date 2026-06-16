@@ -102,6 +102,7 @@ import { GetParticipantProgressHandler } from './application/queries/handlers/ge
 import { UpdateExchangeRateHandler } from './application/commands/handlers/update-exchange-rate.handler';
 import { ProgramContentRepository } from './infrastructure/persistence/program-content.repository';
 import { ProgramRepository } from './infrastructure/persistence/program.repository';
+import { LoaReleaseBatchRepository } from './infrastructure/persistence/loa-release-batch.repository';
 import { PrismaService } from '../../shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '../../shared/infrastructure/cache/cache.service';
 import { FormFieldKeyValidator } from './application/validators/form-field-key.validator';
@@ -205,6 +206,7 @@ import { GetLoaStatusHandler } from './application/queries/get-loa-status.handle
 
     CacheService,
     FormFieldKeyValidator,
+    LoaReleaseBatchRepository,
     {
       provide: 'IProgramContentRepository',
       useClass: ProgramContentRepository,
