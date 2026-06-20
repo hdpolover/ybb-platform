@@ -45,6 +45,7 @@ export function ProgramSelect({
 
   const programOptions = accessiblePrograms.map((program) => ({
     id: program.programId,
+    slug: program.programSlug,
     name: program.programName,
     shortName:
       program.programYear > 0 ? `${program.brandSlug.toUpperCase()} ${program.programYear}` : program.brandName,
@@ -55,7 +56,9 @@ export function ProgramSelect({
   const activePrograms = programOptions.filter((program) => program.status === "active");
   const inactivePrograms = programOptions.filter((program) => program.status === "inactive");
   const currentProgram =
-    programOptions.find((program) => program.id === selectedProgramId) ?? null;
+    programOptions.find(
+      (program) => program.id === selectedProgramId || program.slug === selectedProgramId,
+    ) ?? null;
 
   return (
     <div

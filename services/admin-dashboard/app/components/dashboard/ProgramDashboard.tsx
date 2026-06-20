@@ -521,14 +521,14 @@ export function ProgramDashboard({ selectedProgramId }: ProgramDashboardProps) {
     setLoading(true);
     setError(null);
     try {
-      const response = await getProgramDashboardAnalytics(selectedProgramId);
+      const response = await getProgramDashboardAnalytics(resolvedProgramId);
       setDashboardData(response);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load dashboard data.");
     } finally {
       setLoading(false);
     }
-  }, [selectedProgramId]);
+  }, [resolvedProgramId]);
 
   useEffect(() => {
     void fetchDashboard();
