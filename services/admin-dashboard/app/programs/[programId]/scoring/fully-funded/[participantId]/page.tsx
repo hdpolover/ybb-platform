@@ -2,7 +2,7 @@
 
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { getApplication, exportApplicationsCsv, type Application } from "@/src/shared/api-client";
+import { getApplication, exportApplicationsExcel, type Application } from "@/src/shared/api-client";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { FullyFundedHeaderCard } from "@/app/components/scoring/FullyFundedHeaderCard";
@@ -52,7 +52,7 @@ export default function FullyFundedParticipantDetailPage() {
     setExporting(true);
     setExportError(null);
     try {
-      await exportApplicationsCsv({
+      await exportApplicationsExcel({
         brandId: resolvedBrandId,
         programId: resolvedProgramId,
         category: "fully_funded",

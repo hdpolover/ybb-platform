@@ -1662,7 +1662,7 @@ function extractDownloadFilename(contentDisposition: string | null): string | nu
   return basicMatch?.[1] ?? null;
 }
 
-export async function exportApplicationsCsv(params: {
+export async function exportApplicationsExcel(params: {
   brandId: string;
   programId?: string;
   status?: string;
@@ -1694,7 +1694,7 @@ export async function exportApplicationsCsv(params: {
   const blob = await response.blob();
   const fileName =
     extractDownloadFilename(response.headers.get("content-disposition")) ??
-    `applications-${new Date().toISOString().slice(0, 10)}.csv`;
+    `applications-${new Date().toISOString().slice(0, 10)}.xlsx`;
 
   const objectUrl = URL.createObjectURL(blob);
   const link = document.createElement("a");

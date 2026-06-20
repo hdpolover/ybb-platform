@@ -3,7 +3,7 @@
 import { use, useMemo, useState } from "react";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
-import { exportApplicationsCsv } from "@/src/shared/api-client";
+import { exportApplicationsExcel } from "@/src/shared/api-client";
 import { InterviewParticipantsHeader } from "@/app/components/scoring/InterviewParticipantsHeader";
 import { InterviewParticipantsTable } from "@/app/components/scoring/InterviewParticipantsTable";
 
@@ -36,7 +36,7 @@ export default function InterviewScoringPage({
     setExporting(true);
     setExportError(null);
     try {
-      await exportApplicationsCsv({
+      await exportApplicationsExcel({
         brandId: resolvedBrandId,
         programId: resolvedProgramId,
         status: "interview_scheduled",
