@@ -217,6 +217,7 @@ export class ApplicationsController {
     @Query('brandId') brandId: string,
     @Query('programId') programId?: string,
     @Query('status') status?: ApplicationStatus,
+    @Query('category') category?: ApplicationCategory,
     @Query('search') search?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
@@ -224,14 +225,9 @@ export class ApplicationsController {
     this.logger.log(`Exporting applications: brandId=${brandId}, programId=${programId}`);
     this.validateDateRange(startDate, endDate);
 
-    // We do NOT use query bus for StreamableFile return types usually, 
-    // but we can if the handler returns StreamableFile. 
-    // However, QueryBus execute return type is generic. 
-    // Let's inject the handler directly or use the query bus.
-    // QueryBus is cleaner for CQRS but type inference might be tricky.
-    // Given the previous pattern uses handlers injected in constructor (which is NOT standard CQRS but practical),
-    // I will inject the handler directly.
-    const query = new ExportApplicationsQuery(brandId, programId, status, search, startDate, endDate);
+    // Handler is injected directly (practical CQRS pattern) because QueryBus
+    // generic return type doesn't carry StreamableFile cleanly.
+    const query = new ExportApplicationsQuery(brandId, programId, status, category, search, startDate, endDate);
     return this.exportApplicationsHandler.execute(query);
   }
 

@@ -1666,6 +1666,7 @@ export async function exportApplicationsCsv(params: {
   brandId: string;
   programId?: string;
   status?: string;
+  category?: string;
   search?: string;
   startDate?: string;
   endDate?: string;
@@ -1674,6 +1675,7 @@ export async function exportApplicationsCsv(params: {
   q.set("brandId", params.brandId);
   if (params.programId) q.set("programId", params.programId);
   if (params.status) q.set("status", params.status);
+  if (params.category) q.set("category", params.category);
   if (params.search) q.set("search", params.search);
   if (params.startDate) q.set("startDate", params.startDate);
   if (params.endDate) q.set("endDate", params.endDate);
