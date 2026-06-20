@@ -205,6 +205,11 @@ enum PaymentStatus {
   cancelled
 }
 
+enum ScoringStage {
+  application
+  interview
+}
+
 enum ProgramFormat {
   in_person
   hybrid
