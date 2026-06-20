@@ -18,6 +18,7 @@ import {
 import {
   listProgramInvoices,
   submitApplication,
+  exportProgramPaymentsExcel,
   type InvoiceListItem,
   type InvoiceStatus,
   type InvoiceSummary,
@@ -26,6 +27,7 @@ import {
   type InvoiceFilterOptions,
 } from "@/src/shared/api-client";
 import { toast } from "sonner";
+import { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { PageHeader } from "@/src/admin/page-header";
 import { Button } from "@/src/ui/button";
@@ -146,6 +148,7 @@ export default function PaymentsPage({
   });
 
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [page, setPage] = useState(1);
@@ -252,6 +255,22 @@ export default function PaymentsPage({
     void fetchInvoices();
   }, [fetchInvoices]);
 
+  async function handleExport() {
+    setExporting(true);
+    setError(null);
+    try {
+      await exportProgramPaymentsExcel({
+        programId: resolvedProgramId,
+        status: statusFilter || undefined,
+        search: search.trim() || undefined,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to export payments.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   function clearFilters() {
     setSearch("");
     setStatusFilter("");
@@ -348,10 +367,21 @@ export default function PaymentsPage({
         title="Payments"
         description={`Invoice records${program ? ` for ${program.programName}` : ""}`}
         actions={
-          <Button variant="outline" size="sm" onClick={() => void fetchInvoices()} disabled={loading}>
-            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void handleExport()}
+              disabled={exporting || loading}
+              className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 hover:bg-emerald-100"
+            >
+              <ArrowDownTrayIcon className="h-3.5 w-3.5" />
+              {exporting ? "Exporting..." : "Export Excel"}
+            </button>
+            <Button variant="outline" size="sm" onClick={() => void fetchInvoices()} disabled={loading}>
+              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+              Refresh
+            </Button>
+          </div>
         }
       />
 
