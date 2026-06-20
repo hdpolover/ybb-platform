@@ -20,7 +20,7 @@ export class GetSupportTicketHandler implements IQueryHandler<GetSupportTicketQu
             throw new NotFoundException('Participant profile not found');
         }
 
-        const ticket = await this.repository.findById(query.ticketId);
+        const ticket = await this.repository.findById(query.ticketId, false);
         if (!ticket) {
             throw new NotFoundException('Ticket not found');
         }

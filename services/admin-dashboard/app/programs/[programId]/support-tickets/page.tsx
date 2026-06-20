@@ -1,13 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { ArrowPathIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import {
+  deleteProgramSupportTicket,
   getProgramSupportTicket,
   listProgramSupportTickets,
   replyProgramSupportTicket,
   updateProgramSupportTicket,
+  uploadFileViaPresignedUrl,
   type ProgramSupportTicketAttachment,
   type ProgramSupportTicketDetail,
   type ProgramSupportTicketPriority,
@@ -126,7 +128,7 @@ function CompactAttachmentGrid({ attachments }: { attachments: ProgramSupportTic
 
 export default function ProgramSupportTicketsPage() {
   const params = useParams<{ programId: string }>();
-  const { accessiblePrograms, assignedPrograms, accessConfig } = useAuth();
+  const { adminProfile, accessiblePrograms, assignedPrograms, accessConfig } = useAuth();
 
   const selectedProgram = useMemo(
     () =>
@@ -148,8 +150,14 @@ export default function ProgramSupportTicketsPage() {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [savingTicket, setSavingTicket] = useState(false);
   const [sendingReply, setSendingReply] = useState(false);
+  const [uploadingAttachments, setUploadingAttachments] = useState(false);
+  const [deletingTicket, setDeletingTicket] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [replyMessage, setReplyMessage] = useState("");
+  const [isInternalNote, setIsInternalNote] = useState(false);
+  const [replyAttachments, setReplyAttachments] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -251,6 +259,9 @@ export default function ProgramSupportTicketsPage() {
       await updateProgramSupportTicket(programId, selectedTicket.id, {
         status: selectedTicket.status,
         priority: selectedTicket.priority,
+        assignedTo: selectedTicket.assignedTo,
+        resolution: selectedTicket.resolution,
+        closedReason: selectedTicket.closedReason,
       });
       await loadTickets();
       await loadTicketDetail();
@@ -266,17 +277,75 @@ export default function ProgramSupportTicketsPage() {
     const message = replyMessage.trim();
     if (!message) return;
 
-    setSendingReply(true);
     setError(null);
+
+    let uploadedAttachments: ProgramSupportTicketAttachment[] = [];
+
+    if (replyAttachments.length > 0) {
+      setUploadingAttachments(true);
+      try {
+        const results = await Promise.all(
+          replyAttachments.map((file) =>
+            uploadFileViaPresignedUrl(file, {
+              userId: adminProfile?.userId ?? "",
+              brandId: selectedProgram?.brandId ?? "",
+              programId,
+              assetType: "support-attachment",
+              bucket: "documents",
+            }),
+          ),
+        );
+        uploadedAttachments = results.map((result, index) => ({
+          fileId: result.fileId,
+          fileName: replyAttachments[index].name,
+          fileUrl: result.publicUrl ?? "",
+          mimeType: replyAttachments[index].type,
+        }));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to upload attachments.");
+        setUploadingAttachments(false);
+        return;
+      } finally {
+        setUploadingAttachments(false);
+      }
+    }
+
+    setSendingReply(true);
     try {
-      await replyProgramSupportTicket(programId, selectedTicket.id, { message });
+      await replyProgramSupportTicket(programId, selectedTicket.id, {
+        message,
+        attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
+        isInternalNote,
+      });
       setReplyMessage("");
+      setIsInternalNote(false);
+      setReplyAttachments([]);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
       await loadTickets();
       await loadTicketDetail();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send reply.");
     } finally {
       setSendingReply(false);
+    }
+  }
+
+  async function handleDeleteTicket() {
+    if (!programId || !selectedTicket) return;
+    setDeletingTicket(true);
+    setError(null);
+    try {
+      await deleteProgramSupportTicket(programId, selectedTicket.id);
+      setSelectedId(null);
+      setSelectedTicket(null);
+      setShowDeleteConfirm(false);
+      await loadTickets();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete support ticket.");
+    } finally {
+      setDeletingTicket(false);
     }
   }
 
@@ -509,7 +578,89 @@ export default function ProgramSupportTicketsPage() {
                 </label>
               </div>
 
-              <div className="flex justify-end">
+              <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium text-zinc-600">
+                    Assigned to: <span className="font-normal text-zinc-700">{selectedTicket.assignedTo ?? "Unassigned"}</span>
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSelectedTicket((current) =>
+                        current ? { ...current, assignedTo: adminProfile?.id ?? null } : current,
+                      )
+                    }
+                    className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] font-medium text-zinc-600 hover:bg-zinc-100"
+                  >
+                    Assign to me
+                  </button>
+                </div>
+              </div>
+
+              {selectedTicket.status === "resolved" ? (
+                <label className="block text-xs font-medium text-zinc-600">
+                  Resolution
+                  <textarea
+                    value={selectedTicket.resolution ?? ""}
+                    onChange={(event) =>
+                      setSelectedTicket((current) =>
+                        current ? { ...current, resolution: event.target.value } : current,
+                      )
+                    }
+                    placeholder="Describe how this ticket was resolved..."
+                    className="mt-1 min-h-[80px] w-full rounded-md border border-zinc-200 p-2.5 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+                </label>
+              ) : null}
+
+              {selectedTicket.status === "closed" ? (
+                <label className="block text-xs font-medium text-zinc-600">
+                  Close Reason
+                  <textarea
+                    value={selectedTicket.closedReason ?? ""}
+                    onChange={(event) =>
+                      setSelectedTicket((current) =>
+                        current ? { ...current, closedReason: event.target.value } : current,
+                      )
+                    }
+                    placeholder="Reason for closing this ticket..."
+                    className="mt-1 min-h-[80px] w-full rounded-md border border-zinc-200 p-2.5 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+                </label>
+              ) : null}
+
+              <div className="flex items-center justify-between">
+                <div>
+                  {showDeleteConfirm ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-zinc-600">Delete this ticket?</span>
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteTicket()}
+                        disabled={deletingTicket}
+                        className="rounded-md bg-red-600 px-2.5 py-1.5 text-[11px] font-semibold text-white disabled:opacity-60 hover:bg-red-700"
+                      >
+                        {deletingTicket ? "Deleting..." : "Confirm Delete"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowDeleteConfirm(false)}
+                        disabled={deletingTicket}
+                        className="rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 disabled:opacity-60 hover:bg-zinc-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowDeleteConfirm(true)}
+                      className="rounded-md border border-red-200 px-2.5 py-1.5 text-[11px] font-medium text-red-600 hover:bg-red-50"
+                    >
+                      Delete Ticket
+                    </button>
+                  )}
+                </div>
                 <button
                   type="button"
                   onClick={() => void handleUpdateTicket()}
@@ -543,7 +694,9 @@ export default function ProgramSupportTicketsPage() {
                     const messageTypeLabel = isMainThread
                       ? "Main thread"
                       : message.isFromAdmin
-                        ? "Admin reply"
+                        ? message.isInternalNote
+                          ? "Internal note"
+                          : "Admin reply"
                         : "Participant reply";
 
                     return (
@@ -552,9 +705,11 @@ export default function ProgramSupportTicketsPage() {
                         className={`rounded-md border p-3 ${
                           isMainThread
                             ? "border-amber-200 bg-amber-50/40"
-                            : message.isFromAdmin
-                              ? "border-blue-200 bg-blue-50/50"
-                              : "border-zinc-200 bg-white"
+                            : message.isInternalNote
+                              ? "border-purple-200 bg-purple-50/50"
+                              : message.isFromAdmin
+                                ? "border-blue-200 bg-blue-50/50"
+                                : "border-zinc-200 bg-white"
                         }`}
                       >
                         <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
@@ -564,7 +719,6 @@ export default function ProgramSupportTicketsPage() {
                             </span>
                             <p className="text-xs font-semibold text-zinc-700">
                               {message.senderName}
-                              {message.isInternalNote ? " (Internal note)" : ""}
                             </p>
                           </div>
                           <p className="text-[11px] text-zinc-500">{formatDateTime(message.createdAt)}</p>
@@ -588,15 +742,49 @@ export default function ProgramSupportTicketsPage() {
                   placeholder="Type your response here..."
                   className="min-h-[120px] w-full rounded-md border border-zinc-200 p-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                 />
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => void handleSendReply()}
-                    disabled={sendingReply || !replyMessage.trim()}
-                    className="rounded-md bg-blue-500 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60 hover:bg-blue-600"
-                  >
-                    {sendingReply ? "Sending..." : "Send Reply"}
-                  </button>
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="flex cursor-pointer items-center gap-1.5 text-xs text-zinc-600">
+                    <input
+                      type="checkbox"
+                      checked={isInternalNote}
+                      onChange={(event) => setIsInternalNote(event.target.checked)}
+                      className="h-3.5 w-3.5 rounded border-zinc-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    Internal note (not visible to participant)
+                  </label>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="cursor-pointer rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50">
+                    Attach files
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      accept="image/*,.pdf,.doc,.docx"
+                      className="sr-only"
+                      onChange={(event) => {
+                        const files = event.target.files;
+                        if (files) {
+                          setReplyAttachments(Array.from(files));
+                        }
+                      }}
+                    />
+                  </label>
+                  {replyAttachments.length > 0 ? (
+                    <span className="text-[11px] text-zinc-500">
+                      {replyAttachments.length} file(s) selected
+                    </span>
+                  ) : null}
+                  <div className="ml-auto">
+                    <button
+                      type="button"
+                      onClick={() => void handleSendReply()}
+                      disabled={sendingReply || uploadingAttachments || !replyMessage.trim()}
+                      className="rounded-md bg-blue-500 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60 hover:bg-blue-600"
+                    >
+                      {uploadingAttachments ? "Uploading..." : sendingReply ? "Sending..." : "Send Reply"}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
