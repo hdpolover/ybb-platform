@@ -45,6 +45,19 @@ function formatCountry(raw: string | null | undefined): string {
   return raw;
 }
 
+// Humanizes snake_case enum values (e.g. "fully_funded" to "Fully Funded")
+// while leaving real category names (which contain spaces or capitals) untouched.
+function formatCategory(raw: string | null | undefined): string {
+  if (!raw) return "";
+  if (/^[a-z]+(?:_[a-z]+)+$/.test(raw)) {
+    return raw
+      .split("_")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
+  }
+  return raw;
+}
+
 function mapToParticipantData(app: Application): ParticipantData {
   const p = app.participant;
 
@@ -88,7 +101,7 @@ function mapToParticipantData(app: Application): ParticipantData {
       nickname: p?.nickName ?? "—",
       gender: p?.gender ?? "—",
       birthDate: p?.birthdate ? formatDate(p.birthdate, { day: "numeric", month: "long", year: "numeric" }) : "—",
-      nationality: p?.nationality ?? "—",
+      nationality: formatCountry(p?.nationality) || "—",
       originAddress: p?.originAddress ?? "—",
       currentAddress: p?.currentAddress ?? "—",
       phone,
@@ -108,7 +121,7 @@ function mapToParticipantData(app: Application): ParticipantData {
       cvFileName: p?.resumeUrl ? p.resumeUrl.split("/").pop() ?? p.resumeUrl : "—",
     },
     entry: {
-      category: app.applicationCategory ?? "—",
+      category: formatCategory(app.applicationCategory) || "—",
       subtheme: app.subthemeName ?? app.subthemeId ?? "—",
       source: p?.knowledgeSource ?? "—",
       reference: app.referralCode ?? "—",
