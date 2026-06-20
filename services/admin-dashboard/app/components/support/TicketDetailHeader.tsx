@@ -6,6 +6,8 @@ import type {
   ProgramSupportTicketStatus,
 } from "@/src/shared/api-client";
 import { formatDateTime } from "@/lib/utils";
+import Link from "next/link";
+import { ArrowTopRightOnSquareIcon } from "@heroicons/react/24/outline";
 import { STATUS_CONFIG, STATUS_OPTIONS, PRIORITY_CONFIG, PRIORITY_OPTIONS } from "./types";
 
 interface TicketDetailHeaderProps {
@@ -25,6 +27,8 @@ interface TicketDetailHeaderProps {
   isDeletingTicket: boolean;
   localTicket: ProgramSupportTicketDetail;
   setLocalTicket: (updater: (prev: ProgramSupportTicketDetail) => ProgramSupportTicketDetail) => void;
+  /** Deep link to the participant's detail page, when available. */
+  participantHref?: string | null;
 }
 
 export function TicketDetailHeader({
@@ -38,6 +42,7 @@ export function TicketDetailHeader({
   isDeletingTicket,
   localTicket,
   setLocalTicket,
+  participantHref,
 }: TicketDetailHeaderProps) {
   const statusCfg = STATUS_CONFIG[localTicket.status];
   const priorityCfg = PRIORITY_CONFIG[localTicket.priority];
@@ -73,10 +78,21 @@ export function TicketDetailHeader({
             {ticket.subject}
           </h2>
           {ticket.participant ? (
-            <p className="mt-0.5 text-xs text-zinc-500">
-              {ticket.participant.fullName}{" "}
-              <span className="text-zinc-400">({ticket.participant.email})</span>
-            </p>
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+              <p className="text-xs text-zinc-500">
+                {ticket.participant.fullName}{" "}
+                <span className="text-zinc-400">({ticket.participant.email})</span>
+              </p>
+              {participantHref ? (
+                <Link
+                  href={participantHref}
+                  className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-0.5 text-[11px] font-medium text-blue-600 hover:bg-blue-50"
+                >
+                  View participant
+                  <ArrowTopRightOnSquareIcon className="h-3 w-3" />
+                </Link>
+              ) : null}
+            </div>
           ) : (
             <p className="mt-0.5 text-xs text-zinc-400">No participant linked</p>
           )}

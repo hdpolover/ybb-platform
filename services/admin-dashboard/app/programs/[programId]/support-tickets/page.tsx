@@ -504,6 +504,11 @@ export default function SupportTicketsPage() {
                   showDeleteConfirm={showDeleteConfirm}
                   setShowDeleteConfirm={setShowDeleteConfirm}
                   isDeletingTicket={deletingTicket}
+                  participantHref={
+                    selectedTicket.participant?.id
+                      ? `/programs/${params.programId}/participants/${selectedTicket.participant.id}`
+                      : null
+                  }
                 />
               </div>
               <div className="flex-1 overflow-y-auto p-4">
