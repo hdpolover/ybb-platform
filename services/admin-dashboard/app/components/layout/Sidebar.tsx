@@ -340,17 +340,20 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
   const [showProgramAlert, setShowProgramAlert] = useState(false);
   const [openTicketCount, setOpenTicketCount] = useState(0);
 
-  // selectedProgramId may be a program slug; the support-ticket API needs the
-  // program UUID. Resolve it via the admin's accessible programs.
+  // The badge needs the active program's UUID. selectedProgramId comes from the
+  // program switcher, which is unset when navigating directly by URL, so fall
+  // back to the program in the path. Either may be a slug, so resolve to the
+  // UUID via the admin's accessible programs.
   const { accessiblePrograms } = useAuth();
   const resolvedProgramId = useMemo(() => {
-    if (!selectedProgramId) return null;
+    const pathProgram = pathname?.match(/^\/programs\/([^/]+)/)?.[1] ?? null;
+    const key = selectedProgramId ?? pathProgram;
+    if (!key) return null;
     const match = accessiblePrograms.find(
-      (program) =>
-        program.programId === selectedProgramId || program.programSlug === selectedProgramId,
+      (program) => program.programId === key || program.programSlug === key,
     );
-    return match?.programId ?? selectedProgramId;
-  }, [accessiblePrograms, selectedProgramId]);
+    return match?.programId ?? key;
+  }, [accessiblePrograms, selectedProgramId, pathname]);
 
   useEffect(() => {
     let isMounted = true;
