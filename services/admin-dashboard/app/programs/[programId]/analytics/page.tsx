@@ -32,6 +32,12 @@ import {
 import { PageHeader } from "@/src/admin/page-header";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/src/ui/tabs";
 import { TrendSection, type TrendRange } from "@/app/components/dashboard/sections/TrendSection";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+} from "@/src/ui/dropdown-menu";
 import { TopAmbassadorsSection } from "@/app/components/dashboard/sections/TopAmbassadorsSection";
 import { AmbassadorsDetailsModal } from "@/app/components/dashboard/modals/AmbassadorsDetailsModal";
 
@@ -77,12 +83,81 @@ const APP_CATEGORIES = [
 
 // ─── Filter bar ───────────────────────────────────────────────────────────────
 
-const INP = "h-7 rounded border border-zinc-300 px-2 text-xs text-zinc-700 focus:outline-none focus:ring-1 focus:ring-blue-400";
-const SEL = "rounded border border-zinc-300 px-2 py-0.5 text-xs text-zinc-700";
+const INP = "h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-700 focus:outline-none focus:ring-2 focus:ring-blue-500";
+const SEL = "h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-700 focus:outline-none focus:ring-2 focus:ring-blue-500";
 const LBL = "text-[10px] font-medium uppercase tracking-wide text-zinc-500";
 
 function FLabel({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label className="flex flex-col gap-1"><span className={LBL}>{label}</span>{children}</label>;
+  return (
+    <label className="flex flex-col gap-1">
+      <span className={LBL}>{label}</span>
+      {children}
+    </label>
+  );
+}
+
+interface MultiSelectOption {
+  value: string;
+  label: string;
+}
+
+function MultiSelectDropdown({
+  value,
+  onChange,
+  options,
+  placeholder = "All statuses",
+}: {
+  value: string[];
+  onChange: (v: string[] | undefined) => void;
+  options: MultiSelectOption[];
+  placeholder?: string;
+}) {
+  const triggerLabel =
+    value.length === 0
+      ? placeholder
+      : value.length === 1
+        ? (options.find((o) => o.value === value[0])?.label ?? value[0])
+        : `${value.length} selected`;
+
+  function toggle(optValue: string) {
+    const next = value.includes(optValue)
+      ? value.filter((v) => v !== optValue)
+      : [...value, optValue];
+    onChange(next.length > 0 ? next : undefined);
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="flex h-9 min-w-[140px] items-center justify-between gap-2 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-700 hover:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <span className="truncate">{triggerLabel}</span>
+          <svg
+            className="h-3.5 w-3.5 shrink-0 text-zinc-400"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-[160px]">
+        {options.map((opt) => (
+          <DropdownMenuCheckboxItem
+            key={opt.value}
+            checked={value.includes(opt.value)}
+            onCheckedChange={() => toggle(opt.value)}
+          >
+            {opt.label}
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 function FilterBar({ tab, filters, onChange, onApply, onClear }: {
@@ -91,71 +166,71 @@ function FilterBar({ tab, filters, onChange, onApply, onClear }: {
 }) {
   const isP = tab === "participants";
   const set = (patch: Partial<AnalyticsFilters>) => onChange({ ...filters, ...patch });
-  const pickMulti = (e: React.ChangeEvent<HTMLSelectElement>) =>
-    Array.from(e.target.selectedOptions, (o) => o.value);
 
   return (
-    <div className="flex flex-wrap items-end gap-3 rounded-lg border border-zinc-200 bg-zinc-50/70 px-4 py-3">
-      <div className="flex items-end gap-2">
-        <FLabel label={isP ? "Reg. From" : "Pay From"}>
-          <input type="date" className={INP}
-            value={isP ? (filters.dateFrom ?? "") : (filters.payDateFrom ?? "")}
-            onChange={(e) => set(isP ? { dateFrom: e.target.value || undefined } : { payDateFrom: e.target.value || undefined })}
-          />
-        </FLabel>
-        <span className="mb-1 text-xs text-zinc-400">–</span>
-        <FLabel label="To">
-          <input type="date" className={INP}
-            value={isP ? (filters.dateTo ?? "") : (filters.payDateTo ?? "")}
-            onChange={(e) => set(isP ? { dateTo: e.target.value || undefined } : { payDateTo: e.target.value || undefined })}
-          />
-        </FLabel>
-      </div>
+    <div className="rounded-lg border border-zinc-200 bg-white p-4">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="flex items-end gap-2">
+          <FLabel label={isP ? "Reg. From" : "Pay From"}>
+            <input type="date" className={INP}
+              value={isP ? (filters.dateFrom ?? "") : (filters.payDateFrom ?? "")}
+              onChange={(e) => set(isP ? { dateFrom: e.target.value || undefined } : { payDateFrom: e.target.value || undefined })}
+            />
+          </FLabel>
+          <span className="mb-2 text-sm text-zinc-400">-</span>
+          <FLabel label="To">
+            <input type="date" className={INP}
+              value={isP ? (filters.dateTo ?? "") : (filters.payDateTo ?? "")}
+              onChange={(e) => set(isP ? { dateTo: e.target.value || undefined } : { payDateTo: e.target.value || undefined })}
+            />
+          </FLabel>
+        </div>
 
-      {isP ? (
-        <>
-          <FLabel label="Status">
-            <select multiple size={3} className={`min-w-[130px] ${SEL}`}
-              value={filters.appStatuses ?? []}
-              onChange={(e) => { const v = pickMulti(e); set({ appStatuses: v.length ? v : undefined }); }}
-            >
-              {APP_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-            </select>
-          </FLabel>
-          <FLabel label="Category">
-            <select className={`h-7 ${SEL}`} value={filters.appCategory ?? ""}
-              onChange={(e) => set({ appCategory: e.target.value || undefined })}
-            >
-              <option value="">All</option>
-              {APP_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-            </select>
-          </FLabel>
-        </>
-      ) : (
-        <>
-          <FLabel label="Pay Status">
-            <select multiple size={3} className={`min-w-[110px] ${SEL}`}
-              value={filters.paymentStatuses ?? []}
-              onChange={(e) => { const v = pickMulti(e); set({ paymentStatuses: v.length ? v : undefined }); }}
-            >
-              {PAY_STATUSES.map((s) => <option key={s} value={s}>{humanizeKey(s)}</option>)}
-            </select>
-          </FLabel>
-          <FLabel label="Currency">
-            <select className={`h-7 ${SEL}`} value={filters.currency ?? ""}
-              onChange={(e) => set({ currency: e.target.value || undefined })}
-            >
-              <option value="">All</option>
-              <option value="IDR">IDR</option>
-              <option value="USD">USD</option>
-            </select>
-          </FLabel>
-        </>
-      )}
+        {isP ? (
+          <>
+            <FLabel label="Status">
+              <MultiSelectDropdown
+                value={filters.appStatuses ?? []}
+                onChange={(v) => set({ appStatuses: v })}
+                options={APP_STATUSES}
+                placeholder="All statuses"
+              />
+            </FLabel>
+            <FLabel label="Category">
+              <select className={SEL} value={filters.appCategory ?? ""}
+                onChange={(e) => set({ appCategory: e.target.value || undefined })}
+              >
+                <option value="">All</option>
+                {APP_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </FLabel>
+          </>
+        ) : (
+          <>
+            <FLabel label="Pay Status">
+              <MultiSelectDropdown
+                value={filters.paymentStatuses ?? []}
+                onChange={(v) => set({ paymentStatuses: v })}
+                options={PAY_STATUSES.map((s) => ({ value: s, label: humanizeKey(s) }))}
+                placeholder="All statuses"
+              />
+            </FLabel>
+            <FLabel label="Currency">
+              <select className={SEL} value={filters.currency ?? ""}
+                onChange={(e) => set({ currency: e.target.value || undefined })}
+              >
+                <option value="">All</option>
+                <option value="IDR">IDR</option>
+                <option value="USD">USD</option>
+              </select>
+            </FLabel>
+          </>
+        )}
 
-      <div className="flex items-end gap-2">
-        <button onClick={onApply} className="h-7 rounded bg-blue-600 px-3 text-xs font-medium text-white hover:bg-blue-700">Apply</button>
-        <button onClick={onClear} className="h-7 rounded border border-zinc-300 px-3 text-xs text-zinc-500 hover:border-zinc-400 hover:text-zinc-700">Clear</button>
+        <div className="flex items-end gap-2">
+          <button onClick={onApply} className="h-9 rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700">Apply</button>
+          <button onClick={onClear} className="h-9 rounded-md border border-zinc-300 px-4 text-sm text-zinc-600 hover:bg-zinc-50">Clear</button>
+        </div>
       </div>
     </div>
   );

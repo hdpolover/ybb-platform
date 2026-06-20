@@ -28,7 +28,7 @@ export function TrendSection({ trendRange, onChangeTrendRange, data }: TrendSect
             Daily Registration Trend
           </div>
           <p className="text-[11px] text-zinc-500">
-            Performa pendaftaran untuk program ini.
+            Registration performance for this program.
           </p>
         </div>
         <div className="flex gap-1 rounded-full border border-zinc-200 bg-zinc-50 p-0.5 text-[11px] text-zinc-600">
