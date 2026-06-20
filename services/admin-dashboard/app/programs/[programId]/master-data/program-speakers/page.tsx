@@ -12,6 +12,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { MagnifyingGlassIcon } from "@heroicons/react/24/solid";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
 import {
   listProgramSpeakers,
@@ -237,6 +238,7 @@ function SpeakerDrawer({
 export default function ProgramSpeakersPage() {
   const params = useParams<{ programId: string }>();
   const { accessiblePrograms } = useAuth();
+  const resolvedProgramId = useResolvedProgramId(params.programId);
   const [speakers, setSpeakers] = useState<ProgramSpeaker[]>([]);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string | null>(null);
@@ -255,18 +257,18 @@ export default function ProgramSpeakersPage() {
     accessiblePrograms.find((p) => p.programId === params.programId)?.programName ?? "Selected Program";
 
   const fetchSpeakers = useCallback(async () => {
-    if (!params.programId) return;
+    if (!resolvedProgramId) return;
     setLoading(true);
     setPageError(null);
     try {
-      const data = await listProgramSpeakers(params.programId);
+      const data = await listProgramSpeakers(resolvedProgramId);
       setSpeakers(data);
     } catch (err) {
       setPageError(err instanceof Error ? err.message : "Failed to load speakers");
     } finally {
       setLoading(false);
     }
-  }, [params.programId]);
+  }, [resolvedProgramId]);
 
   useEffect(() => { void fetchSpeakers(); }, [fetchSpeakers]);
 
@@ -345,7 +347,7 @@ export default function ProgramSpeakersPage() {
       if (formState.id) {
         await updateProgramSpeaker(formState.id, payload);
       } else {
-        await createProgramSpeaker(params.programId, payload);
+        await createProgramSpeaker(resolvedProgramId, payload);
       }
       await fetchSpeakers();
       closeDrawer();
@@ -530,7 +532,7 @@ export default function ProgramSpeakersPage() {
       </section>
 
       <SpeakerDrawer
-        programId={params.programId}
+        programId={resolvedProgramId}
         isOpen={isDrawerOpen}
         formState={formState}
         onChange={(patch) => setFormState((cur) => ({ ...cur, ...patch }))}

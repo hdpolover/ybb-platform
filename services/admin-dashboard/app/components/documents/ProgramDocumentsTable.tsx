@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import {
   DocumentTextIcon,
   EyeIcon,
@@ -46,8 +47,11 @@ const inputCls =
   "block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
 
 export function ProgramDocumentsTable({ programId }: { programId: string }) {
+  const resolvedProgramId = useResolvedProgramId(programId);
   const { accessiblePrograms, adminProfile } = useAuth();
-  const program = accessiblePrograms.find((p) => p.programId === programId);
+  const program = accessiblePrograms.find(
+    (p) => p.programId === programId || p.programSlug === programId,
+  );
   const brandId = program?.brandId ?? "";
   const userId = adminProfile?.userId ?? "";
 
@@ -60,17 +64,17 @@ export function ProgramDocumentsTable({ programId }: { programId: string }) {
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   const load = useCallback(async () => {
-    if (!programId) return;
+    if (!resolvedProgramId) return;
     setLoading(true);
     setError(null);
     try {
-      setItems(await listDocumentTemplates(programId));
+      setItems(await listDocumentTemplates(resolvedProgramId));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
     } finally {
       setLoading(false);
     }
-  }, [programId]);
+  }, [resolvedProgramId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -223,7 +227,7 @@ export function ProgramDocumentsTable({ programId }: { programId: string }) {
 
       <DocumentSheet
         open={sheetOpen}
-        programId={programId}
+        programId={resolvedProgramId}
         userId={userId}
         brandId={brandId}
         item={editTarget ?? undefined}

@@ -6,6 +6,7 @@ import { MagnifyingGlassIcon } from "@heroicons/react/24/solid";
 import { PlusIcon, PencilSquareIcon, TrashIcon, ArrowPathIcon, CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/outline";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import {
   listProgramFaqs,
   createProgramFaq,
@@ -35,6 +36,7 @@ const FAQ_CATEGORIES: { value: string; label: string }[] = [
 export default function ProgramFaqsPage() {
   const params = useParams<{ programId: string }>();
   const { accessiblePrograms } = useAuth();
+  const resolvedProgramId = useResolvedProgramId(params.programId);
   const [faqs, setFaqs] = useState<ProgramFaq[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,12 +53,12 @@ export default function ProgramFaqsPage() {
     accessiblePrograms.find((p) => p.programId === params.programId)?.programName ?? "Selected Program";
 
   const load = useCallback(async () => {
-    if (!params.programId) return;
+    if (!resolvedProgramId) return;
     setLoading(true); setError(null);
-    try { setFaqs(await listProgramFaqs(params.programId)); }
+    try { setFaqs(await listProgramFaqs(resolvedProgramId)); }
     catch (err) { setError(err instanceof Error ? err.message : "Failed to load"); }
     finally { setLoading(false); }
-  }, [params.programId]);
+  }, [resolvedProgramId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -199,7 +201,7 @@ export default function ProgramFaqsPage() {
 
       <FaqSheet
         open={showCreate || editTarget !== null}
-        programId={params.programId}
+        programId={resolvedProgramId}
         item={editTarget ?? undefined}
         onClose={() => { setShowCreate(false); setEditTarget(null); }}
         onSaved={load}

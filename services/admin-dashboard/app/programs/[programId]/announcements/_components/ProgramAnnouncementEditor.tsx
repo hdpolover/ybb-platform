@@ -19,6 +19,7 @@ import {
   type ProgramAnnouncement,
 } from "@/src/shared/api-client";
 import { formatDateTime } from "@/lib/utils";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import {
   dateTimeLocalToIsoString,
   getProgramAnnouncementStatus,
@@ -54,6 +55,7 @@ export function ProgramAnnouncementEditor({ mode }: { mode: EditorMode }) {
   const router = useRouter();
   const params = useParams<{ programId: string; id?: string }>();
   const { accessiblePrograms, adminProfile } = useAuth();
+  const resolvedProgramId = useResolvedProgramId(params.programId);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [loaded, setLoaded] = useState(mode === "create");
@@ -73,7 +75,10 @@ export function ProgramAnnouncementEditor({ mode }: { mode: EditorMode }) {
   const [announcement, setAnnouncement] = useState<ProgramAnnouncement | null>(null);
 
   const program = useMemo(
-    () => accessiblePrograms.find((item) => item.programId === params.programId),
+    () =>
+      accessiblePrograms.find(
+        (item) => item.programId === params.programId || item.programSlug === params.programId,
+      ),
     [accessiblePrograms, params.programId],
   );
 
@@ -94,7 +99,7 @@ export function ProgramAnnouncementEditor({ mode }: { mode: EditorMode }) {
 
     getProgramAnnouncement(params.id)
       .then((data) => {
-        if (data.programId !== params.programId) {
+        if (data.programId !== resolvedProgramId) {
           throw new Error("This announcement does not belong to the selected program.");
         }
 
@@ -115,19 +120,19 @@ export function ProgramAnnouncementEditor({ mode }: { mode: EditorMode }) {
         setLoadError(error instanceof Error ? error.message : "Failed to load announcement.");
         setLoaded(true);
       });
-  }, [mode, params.id, params.programId]);
+  }, [mode, params.id, resolvedProgramId]);
 
   const uploadAsset = useCallback(
     async (file: File, kind: "image" | "attachment") => {
       const userId = adminProfile?.userId;
       const brandId = program?.brandId;
 
-      if (!params.programId || !userId || !brandId) {
+      if (!resolvedProgramId || !userId || !brandId) {
         throw new Error("Missing program upload context. Refresh the page and try again.");
       }
 
       const upload = await uploadProgramAnnouncementAsset({
-        programId: params.programId,
+        programId: resolvedProgramId,
         userId,
         brandId,
         file,
@@ -142,7 +147,7 @@ export function ProgramAnnouncementEditor({ mode }: { mode: EditorMode }) {
 
       return upload.publicUrl;
     },
-    [adminProfile?.userId, params.programId, program?.brandId, title],
+    [adminProfile?.userId, resolvedProgramId, program?.brandId, title],
   );
 
   const handleFeaturedImageUpload = useCallback(
@@ -197,7 +202,7 @@ export function ProgramAnnouncementEditor({ mode }: { mode: EditorMode }) {
       const saved =
         mode === "edit" && params.id
           ? await updateProgramAnnouncement(params.id, payload)
-          : await createProgramAnnouncement(params.programId, payload);
+          : await createProgramAnnouncement(resolvedProgramId, payload);
 
       toast.success(mode === "edit" ? "Announcement updated." : "Announcement created.");
       router.push(`/programs/${params.programId}/announcements/${saved.id}`);
@@ -215,7 +220,7 @@ export function ProgramAnnouncementEditor({ mode }: { mode: EditorMode }) {
     isPinned,
     mode,
     params.id,
-    params.programId,
+    resolvedProgramId,
     router,
     sendEmail,
     tagsInput,

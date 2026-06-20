@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
 import { EnglishInput } from "@/src/ui/english-input";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import {
   createAdmin,
   deleteAdmin,
@@ -89,6 +90,7 @@ function adminToRow(admin: Admin): AdminRow {
 
 export function AdminManagement({ programId, programName }: AdminManagementProps) {
   const { accessiblePrograms, accessConfig } = useAuth();
+  const resolvedProgramId = useResolvedProgramId(programId);
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [roles, setRoles] = useState<ApiAdminRole[]>([]);
   const [loading, setLoading] = useState(true);
@@ -129,8 +131,8 @@ export function AdminManagement({ programId, programName }: AdminManagementProps
 
     try {
       const [adminsResponse, roleResponse] = await Promise.all([
-        listAdmins({ page: 1, limit: 100, programId }),
-        listAdminRoles({ programId }),
+        listAdmins({ page: 1, limit: 100, programId: resolvedProgramId }),
+        listAdminRoles({ programId: resolvedProgramId }),
       ]);
 
       setAdmins(adminsResponse.data);
@@ -140,7 +142,7 @@ export function AdminManagement({ programId, programName }: AdminManagementProps
     } finally {
       setLoading(false);
     }
-  }, [canManageAdmins, programId]);
+  }, [canManageAdmins, resolvedProgramId]);
 
   useEffect(() => {
     void loadData();
@@ -174,7 +176,7 @@ export function AdminManagement({ programId, programName }: AdminManagementProps
     setForm({
       ...defaultFormState,
       roleId: roles[0]?.id ?? "",
-      programIds: programId ? [programId] : [],
+      programIds: resolvedProgramId ? [resolvedProgramId] : [],
     });
     setFormError(null);
     setDrawerOpen(true);
@@ -192,7 +194,7 @@ export function AdminManagement({ programId, programName }: AdminManagementProps
         password: "",
         roleId: detail.roleId ?? "",
         isActive: detail.user.isActive,
-        programIds: detail.programs?.map((program) => program.programId) ?? [programId],
+        programIds: detail.programs?.map((program) => program.programId) ?? [resolvedProgramId],
       });
       setDrawerOpen(true);
     } catch (loadError) {

@@ -14,6 +14,7 @@ import { getExchangeRate } from "@/src/shared/api-client";
 import { parseApiDate } from "@/lib/utils";
 import { formatInBusinessTz } from "@/lib/datetime";
 import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 
 /**
  * A tier is "likely backfilled" when its idrPrice exactly matches what the
@@ -231,6 +232,7 @@ export function ProgramPaymentsClient({
   programId: string;
   programName: string;
 }) {
+  const resolvedProgramId = useResolvedProgramId(programId);
   const [rows, setRows] = useState<PaymentOptionRow[]>([]);
   const [programUsdInIdr, setProgramUsdInIdr] = useState<number | null>(null);
   const [paymentInfoHtml, setPaymentInfoHtml] = useState<string | null>(null);
@@ -246,9 +248,9 @@ export function ProgramPaymentsClient({
       // program lookups are non-blocking — if either fails, the page still
       // renders the options table with sensible fallbacks.
       const [tiers, rate, program] = await Promise.all([
-        getPricingTiers(programId),
-        getExchangeRate(programId).catch(() => null),
-        getPlatformProgramById(programId).catch(() => null),
+        getPricingTiers(resolvedProgramId),
+        getExchangeRate(resolvedProgramId).catch(() => null),
+        getPlatformProgramById(resolvedProgramId).catch(() => null),
       ]);
       setRows(tiers.map((t, i) => tierToRow(t, i)));
       setProgramUsdInIdr(rate?.usdInIdr ?? null);
@@ -263,7 +265,7 @@ export function ProgramPaymentsClient({
     } finally {
       setLoading(false);
     }
-  }, [programId]);
+  }, [resolvedProgramId]);
 
   useEffect(() => {
     load();
@@ -304,7 +306,7 @@ export function ProgramPaymentsClient({
       </section>
 
       <PaymentInfoEditor
-        programId={programId}
+        programId={resolvedProgramId}
         initialHtml={paymentInfoHtml}
         onSaved={setPaymentInfoHtml}
       />
@@ -351,7 +353,7 @@ export function ProgramPaymentsClient({
             data={filtered}
             currentSearch={search}
             onRefresh={load}
-            programId={programId}
+            programId={resolvedProgramId}
             programUsdInIdr={programUsdInIdr}
           />
         )}
