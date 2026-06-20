@@ -130,7 +130,8 @@ describe('ScoringRubricRepository', () => {
       });
       mockPrisma.scoringCriterion.create.mockResolvedValue(created.categories[0].criteria[0]);
 
-      // Simulate a second findFirst (re-fetch after upsert)
+      // Re-fetch uses findMany({ where: { id: schemaId } }) + rows[0], which is equivalent to
+      // findFirst on a primary-key lookup (at most one row is ever returned for a given id).
       mockPrisma.scoringSchema.findMany.mockResolvedValue([created]);
 
       const payload: UpsertRubricPayload = {
@@ -152,6 +153,32 @@ describe('ScoringRubricRepository', () => {
           data: expect.objectContaining({ programId, stage: ScoringStage.application }),
         }),
       );
+
+      // The category create loop must fire once for the single id-less category.
+      expect(mockPrisma.scoringCategory.create).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.scoringCategory.create).toHaveBeenCalledWith({
+        data: {
+          schemaId,
+          name: 'Essay',
+          description: null,
+          weight: 0.6,
+          order: 0,
+        },
+      });
+
+      // The criterion create loop must fire once for the single id-less criterion.
+      expect(mockPrisma.scoringCriterion.create).toHaveBeenCalledTimes(1);
+      // categoryId comes from the id returned by scoringCategory.create mock (catId)
+      expect(mockPrisma.scoringCriterion.create).toHaveBeenCalledWith({
+        data: {
+          categoryId: catId,
+          name: 'Topic Relevance',
+          description: null,
+          weight: 1.0,
+          maxScore: 100,
+          order: 0,
+        },
+      });
     });
   });
 
@@ -186,6 +213,31 @@ describe('ScoringRubricRepository', () => {
       expect(mockPrisma.scoringSchema.update).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: schemaId } }),
       );
+
+      // The category update loop must fire once for the category that carries an id.
+      expect(mockPrisma.scoringCategory.update).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.scoringCategory.update).toHaveBeenCalledWith({
+        where: { id: catId },
+        data: {
+          name: 'Essay',
+          description: null,
+          weight: 0.6,
+          order: 0,
+        },
+      });
+
+      // The criterion update loop must fire once for the criterion that carries an id.
+      expect(mockPrisma.scoringCriterion.update).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.scoringCriterion.update).toHaveBeenCalledWith({
+        where: { id: critId },
+        data: {
+          name: 'Topic Relevance',
+          description: null,
+          weight: 1.0,
+          maxScore: 100,
+          order: 0,
+        },
+      });
     });
 
     it('deletes categories absent from payload', async () => {
@@ -202,12 +254,12 @@ describe('ScoringRubricRepository', () => {
 
       await repo.upsertRubric(programId, ScoringStage.application, payload);
 
-      // Should delete categories not in the (empty) payload id list
-      expect(mockPrisma.scoringCategory.deleteMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({ schemaId }),
-        }),
-      );
+      // When the payload category list is empty, payloadCategoryIds is [] so the implementation
+      // passes NO notIn filter -- meaning "delete all categories for this schema".
+      // Assert the exact where shape to lock in the all-delete branch (not just that schemaId is present).
+      expect(mockPrisma.scoringCategory.deleteMany).toHaveBeenCalledWith({
+        where: { schemaId },
+      });
     });
   });
 });
