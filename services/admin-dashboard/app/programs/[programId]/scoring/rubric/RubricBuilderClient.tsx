@@ -110,7 +110,7 @@ function CriterionRow({
   onDelete: (catIdx: number, critIdx: number) => void;
 }) {
   return (
-    <div className="flex items-start gap-2 rounded border bg-muted/20 p-2">
+    <div className="flex items-start gap-2 rounded border bg-zinc-50 p-2">
       <div className="flex flex-1 flex-col gap-1">
         <input
           className="w-full rounded border px-2 py-1 text-sm"
@@ -119,7 +119,7 @@ function CriterionRow({
           onChange={(e) => onChange(catIdx, critIdx, { name: e.target.value })}
         />
         <input
-          className="w-full rounded border px-2 py-1 text-xs text-muted-foreground"
+          className="w-full rounded border px-2 py-1 text-xs text-zinc-500"
           placeholder="Description (optional)"
           value={criterion.description}
           onChange={(e) => onChange(catIdx, critIdx, { description: e.target.value })}
@@ -136,7 +136,7 @@ function CriterionRow({
             step={0.01}
             onChange={(e) => onChange(catIdx, critIdx, { weightPct: parseFloat(e.target.value) || 0 })}
           />
-          <span className="text-xs text-muted-foreground">%</span>
+          <span className="text-xs text-zinc-500">%</span>
         </div>
         <div className="flex items-center gap-1">
           <input
@@ -148,12 +148,12 @@ function CriterionRow({
             step={1}
             onChange={(e) => onChange(catIdx, critIdx, { maxScore: parseFloat(e.target.value) || 100 })}
           />
-          <span className="text-xs text-muted-foreground">pts</span>
+          <span className="text-xs text-zinc-500">pts</span>
         </div>
       </div>
       <button
         type="button"
-        className="mt-1 text-xs text-destructive hover:underline"
+        className="mt-1 text-xs text-red-600 hover:underline"
         onClick={() => onDelete(catIdx, critIdx)}
       >
         Remove
@@ -185,7 +185,7 @@ function CategoryCard({
   const critSumWarning = category.criteria.length > 0 && Math.abs(critSum - 100) > 0.01;
 
   return (
-    <div className="rounded-lg border bg-card p-4 shadow-sm">
+    <div className="rounded-lg border bg-white p-4 shadow-sm">
       <div className="mb-3 flex items-start gap-2">
         <div className="flex flex-1 flex-col gap-1">
           <input
@@ -195,7 +195,7 @@ function CategoryCard({
             onChange={(e) => onCategoryChange(catIdx, { name: e.target.value })}
           />
           <input
-            className="w-full rounded border px-3 py-1 text-sm text-muted-foreground"
+            className="w-full rounded border px-3 py-1 text-sm text-zinc-500"
             placeholder="Description (optional)"
             value={category.description}
             onChange={(e) => onCategoryChange(catIdx, { description: e.target.value })}
@@ -211,11 +211,11 @@ function CategoryCard({
             step={0.01}
             onChange={(e) => onCategoryChange(catIdx, { weightPct: parseFloat(e.target.value) || 0 })}
           />
-          <span className="text-xs text-muted-foreground">%</span>
+          <span className="text-xs text-zinc-500">%</span>
         </div>
         <button
           type="button"
-          className="text-xs text-destructive hover:underline"
+          className="text-xs text-red-600 hover:underline"
           onClick={() => onDeleteCategory(catIdx)}
         >
           Remove
@@ -243,7 +243,7 @@ function CategoryCard({
 
       <button
         type="button"
-        className="text-xs text-primary hover:underline"
+        className="text-xs text-blue-600 hover:underline"
         onClick={() => onAddCriterion(catIdx)}
       >
         + Add criterion
@@ -387,8 +387,8 @@ export function RubricBuilderClient() {
   // Super-admin gate
   if (!accessConfig.isSuperAdmin) {
     return (
-      <div className="p-6">
-        <p className="text-sm text-muted-foreground">
+      <div className="space-y-6">
+        <p className="text-sm text-zinc-500">
           Rubric management is only available to super admins.
         </p>
       </div>
@@ -396,14 +396,14 @@ export function RubricBuilderClient() {
   }
 
   if (isLoading) {
-    return <div className="p-6 text-sm text-muted-foreground">Loading rubrics...</div>;
+    return <div className="text-sm text-zinc-500">Loading rubrics...</div>;
   }
 
   if (error) {
     return (
-      <div className="p-6">
-        <p className="text-sm text-destructive">{error}</p>
-        <button type="button" className="mt-2 text-sm text-primary underline" onClick={loadRubrics}>
+      <div className="space-y-6">
+        <p className="text-sm text-red-600">{error}</p>
+        <button type="button" className="mt-2 text-sm text-blue-600 underline" onClick={loadRubrics}>
           Retry
         </button>
       </div>
@@ -415,10 +415,10 @@ export function RubricBuilderClient() {
   const catSumWarning = current.categories.length > 0 && Math.abs(catSum - 100) > 0.01;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-6">
+    <div className="space-y-6">
       <div>
         <h1 className="text-xl font-semibold">Scoring Rubric</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-1 text-sm text-zinc-500">
           Define categories and criteria for scoring applicants.
         </p>
       </div>
@@ -432,8 +432,8 @@ export function RubricBuilderClient() {
             onClick={() => setActiveStage(stage)}
             className={`px-4 py-2 text-sm font-medium transition-colors ${
               activeStage === stage
-                ? "border-b-2 border-primary text-primary"
-                : "text-muted-foreground hover:text-foreground"
+                ? "border-b-2 border-blue-500 text-blue-600"
+                : "text-zinc-500 hover:text-zinc-900"
             }`}
           >
             {STAGE_LABELS[stage]}
@@ -482,7 +482,7 @@ export function RubricBuilderClient() {
 
       <button
         type="button"
-        className="w-full rounded border-2 border-dashed py-2 text-sm text-muted-foreground hover:border-primary hover:text-primary"
+        className="w-full rounded border-2 border-dashed py-2 text-sm text-zinc-500 hover:border-blue-500 hover:text-blue-600"
         onClick={addCategory}
       >
         + Add category
@@ -491,14 +491,14 @@ export function RubricBuilderClient() {
       {/* Save section */}
       <div className="flex items-center justify-between border-t pt-4">
         <div className="text-sm">
-          {saveError && <p className="text-destructive">{saveError}</p>}
+          {saveError && <p className="text-red-600">{saveError}</p>}
           {saveSuccess && <p className="text-green-600">Rubric saved.</p>}
         </div>
         <button
           type="button"
           disabled={isSaving}
           onClick={handleSave}
-          className="rounded bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
         >
           {isSaving ? "Saving..." : "Save rubric"}
         </button>
