@@ -7,6 +7,7 @@ import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-a
 import { UserActivityLog } from '@core/entities/user-activity-log.entity';
 import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
+import { LandingRevalidationService } from '../../../../brands/application/services/landing-revalidation.service';
 
 @CommandHandler(UpdateProgramCommand)
 export class UpdateProgramHandler implements ICommandHandler<UpdateProgramCommand> {
@@ -17,6 +18,7 @@ export class UpdateProgramHandler implements ICommandHandler<UpdateProgramComman
         private readonly activityLogRepository: IUserActivityLogRepository,
         private readonly cacheService: CacheService,
         private readonly prisma: PrismaService,
+        private readonly landingRevalidation: LandingRevalidationService,
     ) { }
 
     async execute(command: UpdateProgramCommand): Promise<any> {
@@ -62,6 +64,10 @@ export class UpdateProgramHandler implements ICommandHandler<UpdateProgramComman
 
         // Invalidate all landing page caches for this brand
         await this.invalidateLandingCaches(updatedProgram.brandId);
+
+        // Proactively revalidate the participant frontend's Next.js unstable_cache
+        // for this brand's home and settings pages so changes reflect immediately.
+        await this.landingRevalidation.revalidateHomeAndSettingsForBrand(updatedProgram.brandId);
 
         const { brandId, ...rest } = updatedProgram as unknown as Record<string, unknown>;
         return {
