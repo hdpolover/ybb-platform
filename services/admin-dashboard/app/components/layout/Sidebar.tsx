@@ -1,7 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { listProgramSupportTickets } from "@/src/shared/api-client";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Squares2X2Icon,
@@ -81,6 +82,7 @@ const sidebarSections: SidebarSection[] = [
         isSubmenu: true,
         parentId: "users",
       },
+      { id: "support-tickets", label: "Support Tickets" },
     ],
   },
   {
@@ -296,6 +298,10 @@ function SidebarIcon({ label }: { label: string }) {
     return <BellAlertIcon className="h-5 w-5 flex-none text-blue-100" />;
   }
 
+  if (label === "Support Tickets") {
+    return <InboxStackIcon className="h-5 w-5 flex-none text-blue-100" />;
+  }
+
   if (
     [
       "Settings",
@@ -331,6 +337,26 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [showProgramAlert, setShowProgramAlert] = useState(false);
+  const [openTicketCount, setOpenTicketCount] = useState(0);
+
+  useEffect(() => {
+    let isMounted = true;
+    void (async () => {
+      if (!selectedProgramId) {
+        if (isMounted) setOpenTicketCount(0);
+        return;
+      }
+      try {
+        const response = await listProgramSupportTickets(selectedProgramId, { status: "open", limit: 1 });
+        if (isMounted) setOpenTicketCount(response.meta?.total ?? 0);
+      } catch {
+        // Non-critical
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedProgramId]);
   const [activeId, setActiveId] = useState<string | null>(() => {
     if (!pathname) return "dashboard";
 
@@ -382,6 +408,9 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
     }
     if (pathname.includes("/ambassadors")) {
       return "ambassadors";
+    }
+    if (pathname.includes("/support-tickets")) {
+      return "support-tickets";
     }
     if (pathname.includes("/submissions/essays")) {
       return "submissions-essays";
@@ -504,6 +533,8 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
       router.push(`/programs/${selectedProgramId}/participants`);
     } else if (item.id === "ambassadors") {
       router.push(`/programs/${selectedProgramId}/ambassadors`);
+    } else if (item.id === "support-tickets") {
+      router.push(`/programs/${selectedProgramId}/support-tickets`);
     } else if (item.id === "submissions") {
       router.push(`/programs/${selectedProgramId}/submissions`);
     } else if (item.id === "submissions-essays") {
@@ -628,7 +659,14 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
                       <span className="mr-2 flex-none">
                         <SidebarIcon label={item.label} />
                       </span>
-                      <span className={collapsed ? "sr-only" : ""}>{item.label}</span>
+                      <span className={collapsed ? "sr-only" : "flex items-center gap-2"}>
+                        {item.label}
+                        {item.id === "support-tickets" && openTicketCount > 0 && !collapsed ? (
+                          <span className="ml-auto rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
+                            {openTicketCount > 99 ? "99+" : openTicketCount}
+                          </span>
+                        ) : null}
+                      </span>
                       {children.length > 0 && !collapsed && (
                         <span className="ml-auto flex-none text-blue-100">
                           {isOpen ? (

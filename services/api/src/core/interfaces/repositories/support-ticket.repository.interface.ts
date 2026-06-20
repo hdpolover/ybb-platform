@@ -2,7 +2,7 @@ import { SupportTicket, SupportTicketMessage } from '../../entities/support-tick
 
 export interface ISupportTicketRepository {
     create(ticket: SupportTicket): Promise<SupportTicket>;
-    findById(id: string): Promise<SupportTicket | null>;
+    findById(id: string, includeInternalNotes?: boolean): Promise<SupportTicket | null>;
     findByParticipantId(participantId: string): Promise<SupportTicket[]>;
     addMessage(message: SupportTicketMessage): Promise<SupportTicketMessage>;
     updateStatus(id: string, status: string, resolvedAt?: Date, closedAt?: Date): Promise<void>;

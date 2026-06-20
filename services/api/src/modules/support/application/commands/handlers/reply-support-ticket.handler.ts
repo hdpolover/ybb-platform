@@ -7,6 +7,8 @@ import { IParticipantRepository } from '@core/interfaces/repositories/participan
 import { SupportTicketMessage } from '@core/entities/support-ticket.entity';
 import { UnitOfWork } from '@shared/infrastructure/database/unit-of-work.service';
 import { SupportTicketStatus } from '@prisma/client';
+import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 
 @CommandHandler(ReplySupportTicketCommand)
 export class ReplySupportTicketHandler implements ICommandHandler<ReplySupportTicketCommand> {
@@ -16,6 +18,8 @@ export class ReplySupportTicketHandler implements ICommandHandler<ReplySupportTi
         @Inject('IParticipantRepository')
         private readonly participantRepository: IParticipantRepository,
         private readonly unitOfWork: UnitOfWork,
+        private readonly rabbitmqProducer: RabbitMQProducerService,
+        private readonly prisma: PrismaService,
     ) { }
 
     async execute(command: ReplySupportTicketCommand): Promise<void> {
@@ -76,5 +80,38 @@ export class ReplySupportTicketHandler implements ICommandHandler<ReplySupportTi
             },
             { name: 'support-ticket-reply', timeout: 3000 }
         );
+
+        const ticketOwner = await this.prisma.user.findUnique({
+            where: { id: participant.userId },
+            include: { brand: true },
+        });
+
+        if (ticketOwner?.email) {
+            const resolvedStatus = (ticket.status === 'waiting_response' || ticket.status === 'resolved')
+                ? SupportTicketStatus.open
+                : ticket.status as SupportTicketStatus;
+
+            await this.rabbitmqProducer.emit('support.ticket.replied', {
+                ticketId: ticket.id,
+                ticketNumber: ticket.ticketNumber,
+                subject: ticket.subject,
+                status: resolvedStatus,
+                actorRole: 'participant',
+                responderName: participant.fullName,
+                messagePreview: message.message.length > 200
+                    ? `${message.message.slice(0, 200)}...`
+                    : message.message,
+                email: ticketOwner.email,
+                name: participant.fullName,
+                brand: ticketOwner.brand
+                    ? {
+                        name: ticketOwner.brand.name,
+                        websiteUrl: ticketOwner.brand.websiteUrl,
+                        logoUrl: ticketOwner.brand.logoUrl,
+                        contactEmail: ticketOwner.brand.contactEmail,
+                    }
+                    : undefined,
+            });
+        }
     }
 }
