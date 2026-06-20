@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
-import { listApplications, exportApplicationsCsv, type Application } from "@/src/shared/api-client";
+import { listApplications, exportApplicationsExcel, type Application } from "@/src/shared/api-client";
 import { FullyFundedParticipantsFilters } from "./FullyFundedParticipantsFilters";
 import { FullyFundedParticipantsTable, type FullyFundedParticipantRow } from "./FullyFundedParticipantsTable";
 import { EmptyState } from "@/src/admin/empty-state";
@@ -39,6 +39,7 @@ export function FullyFundedParticipantsAll({ programId }: FullyFundedParticipant
       const res = await listApplications({
         programId: resolvedProgramId,
         category: "fully_funded",
+        status: "submitted",
         search: search || undefined,
       });
       setItems(res.data);
@@ -58,10 +59,11 @@ export function FullyFundedParticipantsAll({ programId }: FullyFundedParticipant
     setExporting(true);
     setExportError(null);
     try {
-      await exportApplicationsCsv({
+      await exportApplicationsExcel({
         brandId: resolvedBrandId,
         programId: resolvedProgramId,
         category: "fully_funded",
+        status: "submitted",
         search: search || undefined,
       });
     } catch (err) {
