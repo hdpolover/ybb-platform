@@ -3335,3 +3335,95 @@ export function exportAuditLogsExcel(): Promise<void> {
     `audit-logs-${date}.xlsx`,
   );
 }
+
+// ─── Scoring Rubrics ─────────────────────────────────────────────────────────
+
+export type RubricCriterion = {
+  id: string;
+  name: string;
+  description: string | null | undefined;
+  /** Fraction 0-1 as stored in the API response. Use fractionToPercent() to display. */
+  weight: number;
+  maxScore: number;
+  order: number;
+};
+
+export type RubricCategory = {
+  id: string;
+  name: string;
+  description: string | null | undefined;
+  /** Fraction 0-1 as stored in the API response. */
+  weight: number;
+  order: number;
+  criteria: RubricCriterion[];
+};
+
+export type Rubric = {
+  id: string;
+  programId: string;
+  stage: 'application' | 'interview';
+  name: string;
+  description: string | null | undefined;
+  isActive: boolean;
+  categories: RubricCategory[];
+};
+
+export type ScoringRubricsResponse = {
+  application: Rubric | null;
+  interview: Rubric | null;
+};
+
+export type UpsertCriterionInput = {
+  id?: string;
+  name: string;
+  description?: string;
+  /** Fraction 0-1. Use percentToFraction() before passing here. */
+  weight: number;
+  maxScore: number;
+  order: number;
+};
+
+export type UpsertCategoryInput = {
+  id?: string;
+  name: string;
+  description?: string;
+  /** Fraction 0-1. */
+  weight: number;
+  order: number;
+  criteria: UpsertCriterionInput[];
+};
+
+export type UpsertRubricInput = {
+  name?: string;
+  description?: string;
+  categories: UpsertCategoryInput[];
+};
+
+// ─── Weight conversion helpers ────────────────────────────────────────────────
+
+/** Convert a percentage (0-100) to a fraction (0-1) for the API. */
+export function percentToFraction(pct: number): number {
+  return pct / 100;
+}
+
+/** Convert a fraction (0-1) from the API to a percentage (0-100) for display. */
+export function fractionToPercent(frac: number): number {
+  return frac * 100;
+}
+
+// ─── Scoring Rubric API functions ─────────────────────────────────────────────
+
+export function getScoringRubrics(programId: string): Promise<ScoringRubricsResponse> {
+  return request<ScoringRubricsResponse>(`/programs/${programId}/scoring-rubrics`);
+}
+
+export function upsertScoringRubric(
+  programId: string,
+  stage: 'application' | 'interview',
+  payload: UpsertRubricInput,
+): Promise<Rubric> {
+  return request<Rubric>(`/programs/${programId}/scoring-rubrics/${stage}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
