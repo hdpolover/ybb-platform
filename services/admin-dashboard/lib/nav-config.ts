@@ -138,6 +138,7 @@ export const programNavSections: NavSection[] = [
         children: [
           { id: "scoring-fully-funded", label: "Fully Funded", href: "scoring/fully-funded", icon: FileBadge },
           { id: "scoring-interview", label: "Interview", href: "scoring/interview", icon: MessageSquare },
+          { id: "scoring-rubric", label: "Rubric", href: "scoring/rubric", icon: BookOpen },
         ],
       },
     ],
