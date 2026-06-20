@@ -139,6 +139,7 @@ export default function TimelinesPage() {
           <table className="min-w-full text-left text-[11px]">
             <thead className="bg-zinc-50 text-zinc-600">
               <tr>
+                <th className="px-3 py-2 font-semibold">Order</th>
                 <th className="px-3 py-2 font-semibold">Title</th>
                 <th className="px-3 py-2 font-semibold">Start Date</th>
                 <th className="px-3 py-2 font-semibold">End Date</th>
@@ -148,11 +149,12 @@ export default function TimelinesPage() {
               </tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={6} className="px-3 py-6 text-center text-zinc-400">Loading…</td></tr>}
-              {!loading && items.length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-zinc-400">No timeline items yet.</td></tr>}
-              {!loading && items.length > 0 && filteredItems.length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-zinc-400">No timeline items match the current filters.</td></tr>}
+              {loading && <tr><td colSpan={7} className="px-3 py-6 text-center text-zinc-400">Loading…</td></tr>}
+              {!loading && items.length === 0 && <tr><td colSpan={7} className="px-3 py-6 text-center text-zinc-400">No timeline items yet.</td></tr>}
+              {!loading && items.length > 0 && filteredItems.length === 0 && <tr><td colSpan={7} className="px-3 py-6 text-center text-zinc-400">No timeline items match the current filters.</td></tr>}
               {!loading && filteredItems.map((t, idx) => (
                 <tr key={t.id} className={idx % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}>
+                  <td className="px-3 py-2 text-zinc-500">{t.order}</td>
                   <td className="px-3 py-2 font-medium text-zinc-900">{t.title}</td>
                   <td className="px-3 py-2 text-zinc-600">{formatDate(t.date)}</td>
                   <td className="px-3 py-2 text-zinc-600">{formatDate(t.endDate)}</td>
@@ -175,6 +177,7 @@ export default function TimelinesPage() {
         open={showCreate || editTarget !== null}
         programId={params.programId}
         item={editTarget ?? undefined}
+        items={items}
         onClose={() => { setShowCreate(false); setEditTarget(null); }}
         onSaved={fetch}
       />
@@ -188,20 +191,25 @@ function TimelineSheet({
   open,
   programId,
   item,
+  items,
   onClose,
   onSaved,
 }: {
   open: boolean;
   programId: string;
   item?: ProgramTimeline;
+  items: ProgramTimeline[];
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const nextOrder = items.length > 0 ? Math.max(...items.map((i) => i.order)) + 1 : 0;
+
   const [title, setTitle] = useState(item?.title ?? "");
   const [date, setDate] = useState(item?.date ? item.date.split("T")[0] : "");
   const [endDate, setEndDate] = useState(item?.endDate ? item.endDate.split("T")[0] : "");
   const [description, setDescription] = useState(item?.description ?? "");
   const [isActive, setIsActive] = useState(item?.isActive ?? true);
+  const [order, setOrder] = useState<number>(item?.order ?? nextOrder);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -212,18 +220,22 @@ function TimelineSheet({
       setEndDate(item?.endDate ? item.endDate.split("T")[0] : "");
       setDescription(item?.description ?? "");
       setIsActive(item?.isActive ?? true);
+      setOrder(item?.order ?? nextOrder);
       setError(null);
     }
+  // nextOrder is derived from items length, intentionally not in deps to avoid
+  // resetting a user-typed value when items list changes mid-open.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, item]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setLoading(true); setError(null);
     try {
       if (item) {
-        await updateProgramTimelineItem(item.id, { title, date, endDate: endDate || undefined, description, isActive });
+        await updateProgramTimelineItem(item.id, { title, date, endDate: endDate || undefined, description, isActive, order });
         toast.success("Timeline item updated.");
       } else {
-        await createProgramTimelineItem(programId, { title, date, endDate: endDate || undefined, description });
+        await createProgramTimelineItem(programId, { title, date, endDate: endDate || undefined, description, order });
         toast.success("Timeline item created.");
       }
       onSaved(); onClose();
@@ -247,6 +259,15 @@ function TimelineSheet({
 
           <div className="flex-1 overflow-y-auto space-y-4 px-6 py-5">
             {error && <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+            <Field label="Order Number">
+              <input
+                type="number"
+                min={0}
+                value={order}
+                onChange={(e) => setOrder(parseInt(e.target.value, 10) || 0)}
+                className={inputCls}
+              />
+            </Field>
             <Field label="Title" required>
               <input required type="text" value={title} onChange={(e) => setTitle(e.target.value)} className={inputCls} />
             </Field>
