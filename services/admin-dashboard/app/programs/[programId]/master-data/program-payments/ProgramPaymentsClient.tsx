@@ -12,6 +12,7 @@ import {
 import type { PricingTier } from "@/app/platform/api";
 import { getExchangeRate } from "@/src/shared/api-client";
 import { parseApiDate } from "@/lib/utils";
+import { formatInBusinessTz } from "@/lib/datetime";
 import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
 
 /**
@@ -177,11 +178,14 @@ function tierToRow(tier: PricingTier, index: number): PaymentOptionRow {
     ({ start }) => Boolean(start && start > now),
   )?.period;
 
+  // Render in the canonical business timezone (WIB) so the summary range matches
+  // what the admin authored and never shifts an end-of-day date forward a day.
   const fmtRange = (start: unknown, end: unknown) => {
     const startDate = parseDateLike(start);
     const endDate = parseDateLike(end);
     if (!startDate || !endDate) return "—";
-    return `${startDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })} - ${endDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
+    const opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric" };
+    return `${formatInBusinessTz(startDate, opts)} - ${formatInBusinessTz(endDate, opts)}`;
   };
 
   const category =

@@ -50,6 +50,14 @@ function PeriodSheet({
     if (currentIndex <= 0) return "none";
     return fullOrdered[currentIndex - 1]?.id ?? "none";
   }, [isEditing, initialData, periods]);
+  // When adding a new period and other periods already exist, default the parent
+  // to the most recent one so a "Continuation" auto-fills its start from that
+  // period's end (admin can still switch to "None" to create a base period).
+  const defaultParentPeriodId = useMemo(() => {
+    if (isEditing) return initialParentPeriodId;
+    if (selectablePeriods.length === 0) return "none";
+    return selectablePeriods[selectablePeriods.length - 1].id;
+  }, [isEditing, initialParentPeriodId, selectablePeriods]);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +67,7 @@ function PeriodSheet({
   const [endDateInput, setEndDateInput] = useState(
     initialData?.endRaw ? toLocalDatetimeInputValue(initialData.endRaw) : "",
   );
-  const [parentPeriodId, setParentPeriodId] = useState(initialParentPeriodId);
+  const [parentPeriodId, setParentPeriodId] = useState(defaultParentPeriodId);
   const [extensionType, setExtensionType] = useState<"continuation" | "custom">("continuation");
   const selectedParentPeriod = useMemo(
     () => selectablePeriods.find((item) => item.id === parentPeriodId) ?? null,
@@ -70,9 +78,9 @@ function PeriodSheet({
     if (!isOpen) return;
     setStartDateInput(initialData?.startRaw ? toLocalDatetimeInputValue(initialData.startRaw) : "");
     setEndDateInput(initialData?.endRaw ? toLocalDatetimeInputValue(initialData.endRaw) : "");
-    setParentPeriodId(initialParentPeriodId);
+    setParentPeriodId(defaultParentPeriodId);
     setExtensionType("continuation");
-  }, [isOpen, initialData?.startRaw, initialData?.endRaw, initialParentPeriodId]);
+  }, [isOpen, initialData?.startRaw, initialData?.endRaw, defaultParentPeriodId]);
 
   useEffect(() => {
     if (!isOpen || parentPeriodId === "none" || extensionType !== "continuation") return;

@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { zonedInputToUtcIso, utcToZonedInput } from "./datetime";
 
 /** Merge Tailwind classes safely, resolving conflicts. */
 export function cn(...inputs: ClassValue[]) {
@@ -82,21 +83,23 @@ export function parseApiDate(date: unknown): Date {
   return new Date(normalized);
 }
 
-/** Convert local datetime-local input value to UTC ISO string for API writes. */
+/**
+ * Convert a datetime-local input value to a UTC ISO string for API writes.
+ * Input is interpreted in the canonical business timezone (WIB), NOT the admin's
+ * ambient browser timezone, so the stored instant is deterministic regardless of
+ * where the admin's machine is set. See lib/datetime.ts for the rationale.
+ */
 export function toUtcIsoFromLocalInput(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed.toISOString();
+  return zonedInputToUtcIso(value);
 }
 
-/** Convert UTC/ISO backend value to datetime-local input value in user locale. */
+/**
+ * Convert a UTC/ISO backend value to a datetime-local input value showing the
+ * wall clock in the canonical business timezone (WIB), not the admin's ambient
+ * browser timezone. See lib/datetime.ts.
+ */
 export function toLocalDatetimeInputValue(value: string | Date | null | undefined): string {
-  const parsed = parseApiDate(value);
-  if (Number.isNaN(parsed.getTime())) return "";
-
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
+  return utcToZonedInput(value);
 }
 
 /** Truncate a string to a max length, appending "…" if needed. */
