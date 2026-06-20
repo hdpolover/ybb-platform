@@ -15,9 +15,11 @@ import {
   getProgramInvoice,
   updateProgramInvoiceStatus,
   verifyInvoice,
+  submitApplication,
   type InvoiceDetail,
   type InvoiceStatus,
 } from "@/src/shared/api-client";
+import { toast as sonnerToast } from "sonner";
 import { PageHeader } from "@/src/admin/page-header";
 import { Button } from "@/src/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/src/ui/card";
@@ -109,6 +111,7 @@ export default function PaymentDetailPage({
   const [manualStatus, setManualStatus] = useState<InvoiceStatus>("processing");
   const [manualReason, setManualReason] = useState("");
   const [manualSaving, setManualSaving] = useState(false);
+  const [submittingApplication, setSubmittingApplication] = useState(false);
 
   async function fetchInvoice() {
     setLoading(true);
@@ -347,13 +350,19 @@ export default function PaymentDetailPage({
                         </div>
                       )}
                     </dl>
-                    <div className="pt-4">
+                    <div className="pt-4 flex flex-wrap gap-2">
                       <Link
                         href={`/programs/${programId}/users/${invoice.participant.userId}`}
                         className="inline-flex h-8 items-center gap-1.5 rounded border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 shadow-sm hover:bg-zinc-50 hover:text-zinc-900 transition-colors"
                       >
                         <ExternalLink className="h-3 w-3" />
                         View User Account
+                      </Link>
+                      <Link
+                        href={`/programs/${programId}/participants/${invoice.participant.id}`}
+                        className="inline-flex h-8 items-center gap-1.5 rounded border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 shadow-sm hover:bg-zinc-50 hover:text-zinc-900 transition-colors"
+                      >
+                        View participant
                       </Link>
                     </div>
                   </CardContent>
@@ -563,6 +572,44 @@ export default function PaymentDetailPage({
             </div>
 
             <div className="space-y-4 xl:col-span-4">
+            {invoice.status === "paid" && invoice.application.status === "draft" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Application</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-xs text-zinc-500">
+                    Payment is confirmed. Submit this participant&apos;s application to move it from draft to submitted.
+                  </p>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="w-full"
+                    disabled={submittingApplication}
+                    onClick={async () => {
+                      const confirmed = window.confirm("Submit this participant's application?");
+                      if (!confirmed) return;
+                      setSubmittingApplication(true);
+                      try {
+                        await submitApplication(invoice.applicationId, invoice.participant.id);
+                        sonnerToast.success("Application submitted successfully.");
+                        await fetchInvoice();
+                      } catch (err) {
+                        sonnerToast.error(err instanceof Error ? err.message : "Failed to submit application.");
+                      } finally {
+                        setSubmittingApplication(false);
+                      }
+                    }}
+                  >
+                    {submittingApplication ? (
+                      <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                    ) : null}
+                    Submit application
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
             {showPaymentControls && (
               <Card>
                 <CardHeader>

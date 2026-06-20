@@ -1759,6 +1759,13 @@ export function reviewApplication(
   });
 }
 
+export function submitApplication(applicationId: string, participantId: string): Promise<Application> {
+  return request<Application>(`/applications/${encodeURIComponent(applicationId)}/submit`, {
+    method: "POST",
+    body: JSON.stringify({ participantId }),
+  });
+}
+
 // ─── Program Announcements ────────────────────────────────────────────────────
 
 export function listProgramAnnouncements(
