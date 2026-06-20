@@ -11,8 +11,11 @@ import {
     Query,
     HttpException,
     BadRequestException,
+    NotFoundException,
+    Res,
     Logger
 } from '@nestjs/common';
+import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
@@ -660,6 +663,105 @@ export class PaymentAdminController {
         };
 
         return { ...this.toInvoiceDto(enrichedInvoice), transaction, transactions };
+    }
+
+    @Get('invoices/:id/proof')
+    @ApiOperation({ summary: 'Download payment proof file (Admin)' })
+    async downloadInvoiceProof(@Param('id') id: string, @Res() res: Response) {
+        if (!this.isValidUUID(id)) throw new HttpException('Invoice not found', 404);
+
+        const invoice = await this.prisma.applicationInvoice.findUnique({
+            where: { id },
+            select: {
+                id: true,
+                externalTransactionId: true,
+                externalIntentId: true,
+            },
+        });
+
+        if (!invoice) throw new NotFoundException('Invoice not found');
+
+        let proofUrl: string | null = null;
+
+        const proofKeys = [
+            'proof_file_url', 'proofFileUrl',
+            'proof_url', 'proofUrl',
+            'payment_proof_url', 'paymentProofUrl',
+            'receipt_url', 'receiptUrl',
+        ];
+
+        // Try fetching from the linked transaction or intent
+        const refIds = [invoice.externalTransactionId, invoice.externalIntentId].filter(Boolean) as string[];
+        for (const ref of refIds) {
+            if (proofUrl) break;
+            try {
+                const { data } = await this.paymentServiceClient.get(
+                    `/api/v1/payments/${ref}`,
+                    { headers: this.buildInternalHeaders() },
+                );
+                proofUrl = this.findProofUrlInPayload(data, proofKeys);
+            } catch (err) {
+                this.logger.warn(`Could not fetch payment payload for ${ref}: ${(err as Error).message}`);
+            }
+        }
+
+        if (!proofUrl) {
+            throw new NotFoundException('No payment proof available');
+        }
+
+        let upstream: globalThis.Response;
+        try {
+            upstream = await fetch(proofUrl);
+        } catch (err) {
+            this.logger.warn(`Failed to fetch proof URL ${proofUrl}: ${(err as Error).message}`);
+            throw new NotFoundException('Payment proof file could not be retrieved');
+        }
+
+        if (!upstream.ok) {
+            throw new NotFoundException('Payment proof file could not be retrieved');
+        }
+
+        const contentType = upstream.headers.get('content-type') ?? 'application/octet-stream';
+        const urlPath = new URL(proofUrl).pathname;
+        const rawName = urlPath.split('/').pop() ?? `payment-proof-${id}`;
+        const fileName = rawName || `payment-proof-${id}`;
+
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+        const buf = Buffer.from(await upstream.arrayBuffer());
+        res.send(buf);
+    }
+
+    private findProofUrlInPayload(payload: unknown, keys: string[], depth = 0): string | null {
+        if (depth > 6 || payload === null || payload === undefined) return null;
+        if (typeof payload === 'string') return null;
+        if (Array.isArray(payload)) {
+            for (const item of payload) {
+                const found = this.findProofUrlInPayload(item, keys, depth + 1);
+                if (found) return found;
+            }
+            return null;
+        }
+        if (typeof payload !== 'object') return null;
+        const record = payload as Record<string, unknown>;
+        for (const key of keys) {
+            const value = record[key];
+            if (typeof value === 'string' && value.trim()) return value.trim();
+        }
+        // Unwrap common envelope keys first
+        const unwrapped = record['data'] ?? record['transaction'] ?? null;
+        if (unwrapped) {
+            const found = this.findProofUrlInPayload(unwrapped, keys, depth + 1);
+            if (found) return found;
+        }
+        for (const value of Object.values(record)) {
+            if (value && typeof value === 'object') {
+                const found = this.findProofUrlInPayload(value, keys, depth + 1);
+                if (found) return found;
+            }
+        }
+        return null;
     }
 
     @Post('invoices/:id/verify')

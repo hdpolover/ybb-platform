@@ -16,6 +16,7 @@ import {
   updateProgramInvoiceStatus,
   verifyInvoice,
   submitApplication,
+  downloadInvoiceProof,
   type InvoiceDetail,
   type InvoiceStatus,
 } from "@/src/shared/api-client";
@@ -552,14 +553,16 @@ export default function PaymentDetailPage({
                         <Button type="button" variant="outline" size="sm" onClick={() => window.open(proofUrl, "_blank", "noopener,noreferrer")}>
                           Open proof
                         </Button>
-                        <a
-                          href={proofUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex h-8 items-center rounded border border-zinc-200 px-3 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
-                        >
-                          Download
-                        </a>
+                        {proofUrl && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void downloadInvoiceProof(invoice.id)}
+                          >
+                            Download
+                          </Button>
+                        )}
                       </div>
                     </>
                   ) : (

@@ -3303,6 +3303,29 @@ export function exportPaymentsExcel(): Promise<void> {
   );
 }
 
+export function exportProgramPaymentsExcel(params: {
+  programId: string;
+  status?: string;
+  search?: string;
+}): Promise<void> {
+  const date = new Date().toISOString().slice(0, 10);
+  const q = new URLSearchParams();
+  q.set("programId", params.programId);
+  if (params.status) q.set("status", params.status);
+  if (params.search) q.set("search", params.search);
+  return triggerFileDownload(
+    buildApiUrl(`/reporting/payments/export?${q.toString()}`),
+    `payments-${params.programId}-${date}.xlsx`,
+  );
+}
+
+export function downloadInvoiceProof(invoiceId: string, fileName?: string): Promise<void> {
+  return triggerFileDownload(
+    buildApiUrl(`/admin/payments/invoices/${invoiceId}/proof`),
+    fileName ?? `payment-proof-${invoiceId}`,
+  );
+}
+
 export function exportAuditLogsExcel(): Promise<void> {
   const date = new Date().toISOString().slice(0, 10);
   return triggerFileDownload(
