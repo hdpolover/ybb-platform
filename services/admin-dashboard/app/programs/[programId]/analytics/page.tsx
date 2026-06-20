@@ -30,6 +30,9 @@ import {
 } from "@/src/shared/api-client";
 import { PageHeader } from "@/src/admin/page-header";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/src/ui/tabs";
+import { TrendSection, type TrendRange } from "@/app/components/dashboard/sections/TrendSection";
+import { TopAmbassadorsSection } from "@/app/components/dashboard/sections/TopAmbassadorsSection";
+import { AmbassadorsDetailsModal } from "@/app/components/dashboard/modals/AmbassadorsDetailsModal";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -247,8 +250,20 @@ function ParticipantsTab({
   const { funnel, byCategory, byEducation, topInstitutions } = analytics.participants;
   const totalRegistered = funnel[0]?.count ?? 0;
 
+  const [trendRange, setTrendRange] = useState<TrendRange>("daily");
+  const [ambassadorsOpen, setAmbassadorsOpen] = useState(false);
+
+  const trendData = dashboard.trend[trendRange];
+
   return (
     <div className="space-y-6">
+      {/* Registration Trend line chart */}
+      <TrendSection
+        trendRange={trendRange}
+        onChangeTrendRange={setTrendRange}
+        data={trendData}
+      />
+
       {/* KPI row derived from funnel */}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {funnel.map((step, i) => (
@@ -452,6 +467,18 @@ function ParticipantsTab({
           })}
         </div>
       </ChartCard>
+
+      {/* Top Ambassadors table */}
+      <TopAmbassadorsSection
+        data={dashboard.topAmbassadors}
+        onOpenDetails={() => setAmbassadorsOpen(true)}
+      />
+
+      <AmbassadorsDetailsModal
+        open={ambassadorsOpen}
+        onClose={() => setAmbassadorsOpen(false)}
+        data={dashboard.topAmbassadors}
+      />
     </div>
   );
 }
