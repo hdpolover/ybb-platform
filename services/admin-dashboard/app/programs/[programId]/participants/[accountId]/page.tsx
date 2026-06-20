@@ -88,7 +88,7 @@ function mapToParticipantData(app: Application): ParticipantData {
       nickname: p?.nickName ?? "—",
       gender: p?.gender ?? "—",
       birthDate: p?.birthdate ? formatDate(p.birthdate, { day: "numeric", month: "long", year: "numeric" }) : "—",
-      nationality: p?.nationality ?? "—",
+      nationality: formatCountry(p?.nationality) || "—",
       originAddress: p?.originAddress ?? "—",
       currentAddress: p?.currentAddress ?? "—",
       phone,
