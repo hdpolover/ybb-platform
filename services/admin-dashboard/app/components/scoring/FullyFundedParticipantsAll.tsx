@@ -1,26 +1,137 @@
 "use client";
 
-import React from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useAuth } from "@/app/contexts/AuthContext";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
+import { listApplications, exportApplicationsCsv, type Application } from "@/src/shared/api-client";
 import { FullyFundedParticipantsFilters } from "./FullyFundedParticipantsFilters";
-import { FullyFundedParticipantsTable, FullyFundedParticipantRow } from "./FullyFundedParticipantsTable";
+import { FullyFundedParticipantsTable, type FullyFundedParticipantRow } from "./FullyFundedParticipantsTable";
+import { EmptyState } from "@/src/admin/empty-state";
+import { formatDate } from "@/lib/utils";
 
-const mockFullyFundedParticipants: FullyFundedParticipantRow[] = [
-  { id: 1, accountId: "167920692d5fa1becc2", name: "SAMYIA AZIZAHMED MAKRANI", email: "samyiaazizahmed79@gmail.com", participantId: "#17061B", nationality: "India", formStatus: "Submitted", registeredOn: "Dec 01, 2025" },
-  { id: 2, accountId: "167920692d5fa1bedd1", name: "Alya Putri Nirmala", email: "alya.putri@example.com", participantId: "#17022A", nationality: "Indonesia", formStatus: "On Progress", registeredOn: "Nov 28, 2025" },
-  { id: 3, accountId: "167920692d5fa1bef31", name: "Kenji Sato", email: "kenji.sato@example.jp", participantId: "#17045J", nationality: "Japan", formStatus: "Not Started", registeredOn: "Nov 25, 2025" },
-  { id: 4, accountId: "167920692d5fa1beaa9", name: "Nurul Huda", email: "nurul.huda@example.my", participantId: "#17030M", nationality: "Malaysia", formStatus: "Submitted", registeredOn: "Nov 20, 2025" },
-  { id: 5, accountId: "167920692d5fa1becc3", name: "Ashwini Vaibhav Pol", email: "ash.jawale16@gmail.com", participantId: "#17070I", nationality: "India", formStatus: "Not Started", registeredOn: "Dec 01, 2025" },
-  { id: 6, accountId: "167920692d5fa1becc4", name: "Aya Gamal", email: "ayagamal453@gmail.com", participantId: "#17012E", nationality: "Egypt", formStatus: "On Progress", registeredOn: "Nov 30, 2025" },
-];
+interface FullyFundedParticipantsAllProps {
+  programId: string;
+}
 
-export function FullyFundedParticipantsAll() {
-  const rows = mockFullyFundedParticipants;
+export function FullyFundedParticipantsAll({ programId }: FullyFundedParticipantsAllProps) {
+  const { accessiblePrograms } = useAuth();
+  const resolvedProgramId = useResolvedProgramId(programId);
+  const resolvedBrandId = useMemo(
+    () =>
+      accessiblePrograms.find(
+        (p) => p.programId === resolvedProgramId || p.programSlug === programId,
+      )?.brandId ?? "",
+    [accessiblePrograms, resolvedProgramId, programId],
+  );
+
+  const [items, setItems] = useState<Application[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+
+  const fetchData = useCallback(async () => {
+    if (!resolvedProgramId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await listApplications({
+        programId: resolvedProgramId,
+        category: "fully_funded",
+        search: search || undefined,
+      });
+      setItems(res.data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load participants");
+    } finally {
+      setLoading(false);
+    }
+  }, [resolvedProgramId, search]);
+
+  useEffect(() => {
+    void fetchData();
+  }, [fetchData]);
+
+  const handleExport = async () => {
+    if (exporting) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      await exportApplicationsCsv({
+        brandId: resolvedBrandId,
+        programId: resolvedProgramId,
+      });
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const rows: FullyFundedParticipantRow[] = items.map((app, index) => ({
+    id: index + 1,
+    accountId: app.id,
+    name: app.participant?.fullName ?? "Unknown",
+    email: app.participant?.email ?? "",
+    participantId: app.participantId,
+    nationality:
+      app.participant?.nationality ?? app.participant?.originCountry ?? "",
+    formStatus: mapFormStatus(app.status),
+    registeredOn: formatDate(app.createdAt),
+  }));
+
+  if (loading) {
+    return (
+      <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center justify-center py-16 text-sm text-zinc-500">
+          Loading participants...
+        </div>
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+        <div className="py-8 text-center text-sm text-red-600">{error}</div>
+      </section>
+    );
+  }
 
   return (
     <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-      <FullyFundedParticipantsFilters />
+      <FullyFundedParticipantsFilters
+        onSearch={(value) => setSearch(value)}
+        onExport={handleExport}
+        exporting={exporting}
+      />
+      {exportError && <p className="mb-3 text-xs text-red-600">{exportError}</p>}
       <div className="my-5 border-t border-zinc-100" />
-      <FullyFundedParticipantsTable data={rows} />
+      {rows.length === 0 ? (
+        <EmptyState
+          title="No fully funded participants"
+          description="No participants with fully funded applications were found for this program."
+        />
+      ) : (
+        <FullyFundedParticipantsTable data={rows} />
+      )}
     </section>
   );
+}
+
+function mapFormStatus(status: string): FullyFundedParticipantRow["formStatus"] {
+  if (
+    status === "submitted" ||
+    status === "under_review" ||
+    status === "accepted" ||
+    status === "rejected" ||
+    status === "interview_scheduled"
+  ) {
+    return "Submitted";
+  }
+  if (status === "draft") {
+    return "Not Started";
+  }
+  return "On Progress";
 }
