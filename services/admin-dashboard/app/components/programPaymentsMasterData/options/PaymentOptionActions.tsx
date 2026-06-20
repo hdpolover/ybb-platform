@@ -370,8 +370,13 @@ function PaymentOptionDrawer({
           </div>
         )}
 
-        {/* Create: always show period dates. Edit: only if periods already exist */}
-        {(!isEditMode || initialData?.currentActivePeriodRange || initialData?.lastActivePeriodRange) && (
+        {/*
+          Only shown on create, where these seed the initial base validity period.
+          The tier UPDATE endpoint intentionally ignores validFrom/validUntil (wave
+          periods are managed on the Periods page), so rendering blank, no-op inputs
+          in edit mode made saved data look lost. See the Periods page for edits.
+        */}
+        {!isEditMode && (
           <div className="grid gap-5 md:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-xs font-medium text-zinc-500">

@@ -8,17 +8,17 @@ import type { PeriodRow } from "@/app/components/programPaymentsMasterData/perio
 import { getPricingTierById } from "@/app/platform/api";
 import type { ValidityPeriod, PricingTier } from "@/app/platform/api";
 import { parseApiDate } from "@/lib/utils";
+import { formatInBusinessTz } from "@/lib/datetime";
 
 function parseDateLike(value: string | null | undefined): Date | null {
   const parsed = parseApiDate(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+// Render period boundaries in the canonical business timezone (WIB) so an
+// end-of-day "23:59" deadline never appears to roll onto the next calendar day.
 function fmt(date: string | null | undefined) {
-  const parsed = parseDateLike(date);
-  if (!parsed) return "—";
-
-  return parsed.toLocaleDateString("en-GB", {
+  return formatInBusinessTz(date, {
     day: "numeric",
     month: "short",
     year: "numeric",
