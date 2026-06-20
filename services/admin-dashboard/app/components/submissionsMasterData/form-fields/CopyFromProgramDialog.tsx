@@ -16,6 +16,11 @@ import {
   type ProgramFormFieldRow,
 } from "./catalog-api";
 
+// The canonical reference program brand. Its programs are pinned to the top
+// of the copy-source picker and pre-selected by default, because admins treat
+// CYS as the battle-tested submission-form reference to copy from.
+const REFERENCE_BRAND_NAME = 'China Youth Summit';
+
 interface CopyFromProgramDialogProps {
   open: boolean;
   programId: string;
@@ -25,6 +30,10 @@ interface CopyFromProgramDialogProps {
 
 const INPUT_CLS =
   "block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
+
+function isReferenceProgram(brandName: string): boolean {
+  return brandName.trim().toLowerCase() === REFERENCE_BRAND_NAME.toLowerCase();
+}
 
 export function CopyFromProgramDialog({
   open,
@@ -42,41 +51,76 @@ export function CopyFromProgramDialog({
   const [mode, setMode] = useState<"append" | "replace">("append");
   const [confirmText, setConfirmText] = useState("");
   const [applying, setApplying] = useState(false);
+  const [search, setSearch] = useState("");
 
   const currentBrandId = useMemo(
     () => accessiblePrograms.find((p) => p.programId === programId)?.brandId ?? null,
     [accessiblePrograms, programId],
   );
 
-  const sourceOptions = useMemo(
-    () =>
-      accessiblePrograms
-        .filter((p) => p.programId !== programId)
-        .slice()
-        .sort((a, b) =>
-          a.brandName === b.brandName
-            ? b.programYear - a.programYear
-            : a.brandName.localeCompare(b.brandName),
-        ),
-    [accessiblePrograms, programId],
+  // All eligible source programs (excluding the current one), split into
+  // reference and non-reference groups, each sorted internally.
+  const { referenceOptions, otherOptions } = useMemo(() => {
+    const eligible = accessiblePrograms.filter((p) => p.programId !== programId);
+
+    const ref = eligible
+      .filter((p) => isReferenceProgram(p.brandName))
+      .slice()
+      .sort((a, b) => b.programYear - a.programYear); // newest first
+
+    const other = eligible
+      .filter((p) => !isReferenceProgram(p.brandName))
+      .slice()
+      .sort((a, b) =>
+        a.brandName === b.brandName
+          ? b.programYear - a.programYear
+          : a.brandName.localeCompare(b.brandName),
+      );
+
+    return { referenceOptions: ref, otherOptions: other };
+  }, [accessiblePrograms, programId]);
+
+  // Combined ordered list: reference pinned first, then others.
+  const allSourceOptions = useMemo(
+    () => [...referenceOptions, ...otherOptions],
+    [referenceOptions, otherOptions],
   );
+
+  // The newest reference program (first in the pinned group), if any.
+  const defaultReferenceId = useMemo(
+    () => referenceOptions[0]?.programId ?? null,
+    [referenceOptions],
+  );
+
+  // Filter by search query (case-insensitive substring across name, brand, year).
+  const filteredSourceOptions = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return allSourceOptions;
+    return allSourceOptions.filter((p) =>
+      [p.programName, p.brandName, String(p.programYear)].some((s) =>
+        s.toLowerCase().includes(q),
+      ),
+    );
+  }, [allSourceOptions, search]);
 
   const selectedSource = useMemo(
     () => accessiblePrograms.find((p) => p.programId === sourceId) ?? null,
     [accessiblePrograms, sourceId],
   );
 
-  // Reset everything when the dialog opens.
+  // Reset everything when the dialog opens and default-select the newest
+  // reference program if one exists.
   useEffect(() => {
     if (!open) return;
-    setSourceId(null);
+    setSourceId(defaultReferenceId);
     setFields([]);
     setSelectedIds(new Set());
     setLoadingFields(false);
     setFieldsError(null);
     setMode("append");
     setConfirmText("");
-  }, [open]);
+    setSearch("");
+  }, [open, defaultReferenceId]);
 
   // Load the source program's fields when the source changes.
   useEffect(() => {
@@ -182,17 +226,34 @@ export function CopyFromProgramDialog({
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
               Source program
             </h3>
+
+            {/* Search filter */}
+            <input
+              type="search"
+              aria-label="Search programs"
+              placeholder="Search by name, brand, or year…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className={`${INPUT_CLS} mb-2`}
+            />
+
             <select
               className={INPUT_CLS}
               value={sourceId ?? ""}
               onChange={(e) => setSourceId(e.target.value || null)}
             >
               <option value="">Select a program…</option>
-              {sourceOptions.map((p) => (
-                <option key={p.programId} value={p.programId}>
-                  {p.programName} · {p.brandName} · {p.programYear}
-                </option>
-              ))}
+              {filteredSourceOptions.map((p) => {
+                const isRef = isReferenceProgram(p.brandName);
+                const label = isRef
+                  ? `★ Reference · ${p.programName} · ${p.brandName} · ${p.programYear}`
+                  : `${p.programName} · ${p.brandName} · ${p.programYear}`;
+                return (
+                  <option key={p.programId} value={p.programId}>
+                    {label}
+                  </option>
+                );
+              })}
             </select>
           </section>
 
