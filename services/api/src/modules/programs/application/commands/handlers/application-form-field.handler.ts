@@ -93,20 +93,25 @@ export class CreateApplicationFormFieldHandler
         });
       }
 
-      const systemDto: Partial<CreateApplicationFormFieldDto> =
-        dto.options !== undefined
-          ? dto
-          : {
-              ...dto,
-              options: (
-                Array.isArray(definition.defaultOptions)
-                  ? (definition.defaultOptions as unknown[])
-                  : []
-              ) as string[] | Record<string, unknown>[],
-            };
+      const systemDto: Partial<CreateApplicationFormFieldDto> = {
+        ...dto,
+        options:
+          dto.options !== undefined
+            ? dto.options
+            : ((Array.isArray(definition.defaultOptions)
+                ? (definition.defaultOptions as unknown[])
+                : []) as string[] | Record<string, unknown>[]),
+        placeholder: dto.placeholder ?? definition.placeholder ?? undefined,
+        helpText: dto.helpText ?? definition.helpText ?? undefined,
+      };
 
       return this.repository.createFormField({
         ...mapDtoToField(systemDto, definition.key),
+        // The system catalog is the single source of truth for a system
+        // field's type. A stale or wrong client fieldType must not downgrade
+        // e.g. a phone field to text (which breaks the country-code dropdown
+        // on the participant submission form).
+        type: definition.type,
         source: 'system',
         systemFieldKey: definition.key,
         name: definition.key,
