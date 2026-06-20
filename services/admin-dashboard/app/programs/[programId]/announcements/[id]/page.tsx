@@ -13,6 +13,7 @@ import {
   type ProgramAnnouncement,
 } from "@/src/shared/api-client";
 import { formatDateTime } from "@/lib/utils";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import {
   formatAnnouncementLabel,
   getProgramAnnouncementStatus,
@@ -34,12 +35,16 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 export default function ProgramAnnouncementDetailPage() {
   const params = useParams<{ programId: string; id: string }>();
   const { accessiblePrograms } = useAuth();
+  const resolvedProgramId = useResolvedProgramId(params.programId);
 
   const [data, setData] = useState<ProgramAnnouncement | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const program = useMemo(
-    () => accessiblePrograms.find((item) => item.programId === params.programId),
+    () =>
+      accessiblePrograms.find(
+        (item) => item.programId === params.programId || item.programSlug === params.programId,
+      ),
     [accessiblePrograms, params.programId],
   );
 
@@ -48,7 +53,7 @@ export default function ProgramAnnouncementDetailPage() {
 
     getProgramAnnouncement(params.id)
       .then((announcement) => {
-        if (announcement.programId !== params.programId) {
+        if (announcement.programId !== resolvedProgramId) {
           throw new Error("This announcement does not belong to the selected program.");
         }
         setData(announcement);
@@ -56,7 +61,7 @@ export default function ProgramAnnouncementDetailPage() {
       .catch((error) => {
         setLoadError(error instanceof Error ? error.message : "Failed to load announcement.");
       });
-  }, [params.id, params.programId]);
+  }, [params.id, resolvedProgramId]);
 
   if (!data && !loadError) {
     return (

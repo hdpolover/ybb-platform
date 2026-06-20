@@ -9,6 +9,7 @@ import {
   TrashIcon,
 } from "@heroicons/react/24/solid";
 import { buildApiUrl, getAccessToken, readErrorMessage, readJsonData } from "@/app/components/submissionsMasterData/api";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
 import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
 
@@ -279,6 +280,7 @@ function EssayGuidelineModal({
 }
 
 export function SubmissionEssaysTable({ programId }: { programId: string }) {
+  const resolvedProgramId = useResolvedProgramId(programId);
   const [data, setData] = useState<SubmissionEssayRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -298,7 +300,7 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
 
     try {
       const essaysResponse = await fetch(
-        buildApiUrl(`/programs/${encodeURIComponent(programId)}/essays?includeInactive=true`),
+        buildApiUrl(`/programs/${encodeURIComponent(resolvedProgramId)}/essays?includeInactive=true`),
         {
           cache: "no-store",
         },
@@ -334,7 +336,7 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
       );
 
       const guidelinesResponse = await fetch(
-        buildApiUrl(`/programs/${encodeURIComponent(programId)}/essay-guidelines`),
+        buildApiUrl(`/programs/${encodeURIComponent(resolvedProgramId)}/essay-guidelines`),
         {
           cache: "no-store",
         },
@@ -369,7 +371,7 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
 
   useEffect(() => {
     void loadEssays();
-  }, [programId]);
+  }, [resolvedProgramId]);
 
   const openCreateModal = () => {
     setFormState(createEmptyEssayState());
@@ -415,7 +417,7 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
     const isEditing = Boolean(formState.id);
 
     const payload = {
-      ...(isEditing ? {} : { programId }),
+      ...(isEditing ? {} : { programId: resolvedProgramId }),
       question: formState.question.trim(),
       description: formState.description.trim() || undefined,
       wordLimit: parsedWordLimit,
@@ -425,7 +427,7 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
     };
     const path = isEditing
       ? `/programs/essays/${encodeURIComponent(formState.id as string)}`
-      : `/programs/${encodeURIComponent(programId)}/essays`;
+      : `/programs/${encodeURIComponent(resolvedProgramId)}/essays`;
 
     setIsSaving(true);
     setModalErrorMessage(null);
@@ -476,7 +478,7 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
 
     try {
       const response = await fetch(
-        buildApiUrl(`/programs/${encodeURIComponent(programId)}/essay-guidelines`),
+        buildApiUrl(`/programs/${encodeURIComponent(resolvedProgramId)}/essay-guidelines`),
         {
           method: "PUT",
           headers: {

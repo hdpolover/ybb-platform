@@ -14,6 +14,7 @@ import {
   readErrorMessage,
   readJsonData,
 } from "@/app/components/submissionsMasterData/api";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { fetchSystemFormFields, type SystemFormField } from "./catalog-api";
 import { FormFieldEditor } from "./FormFieldEditor";
 import { AddFieldDialog } from "./AddFieldDialog";
@@ -155,6 +156,7 @@ function formatOptions(options?: unknown): string {
 }
 
 export function FormFieldsTable({ programId }: { programId: string }) {
+  const resolvedProgramId = useResolvedProgramId(programId);
   const [fields, setFields] = useState<ApplicationFormFieldRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -169,7 +171,7 @@ export function FormFieldsTable({ programId }: { programId: string }) {
     setErrorMessage(null);
     try {
       const response = await fetch(
-        buildApiUrl(`/programs/${encodeURIComponent(programId)}/form-fields`),
+        buildApiUrl(`/programs/${encodeURIComponent(resolvedProgramId)}/form-fields`),
         { cache: "no-store" },
       );
       if (!response.ok) throw new Error(await readErrorMessage(response));
@@ -217,7 +219,7 @@ export function FormFieldsTable({ programId }: { programId: string }) {
   useEffect(() => {
     void loadFields();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [programId]);
+  }, [resolvedProgramId]);
 
   const openCreate = () => {
     setAddDialogOpen(true);
@@ -404,7 +406,7 @@ export function FormFieldsTable({ programId }: { programId: string }) {
 
       <AddFieldDialog
         open={addDialogOpen}
-        programId={programId}
+        programId={resolvedProgramId}
         onClose={() => setAddDialogOpen(false)}
         onSaved={() => {
           setAddDialogOpen(false);
@@ -413,7 +415,7 @@ export function FormFieldsTable({ programId }: { programId: string }) {
       />
       <CopyFromTemplateDialog
         open={copyTemplateOpen}
-        programId={programId}
+        programId={resolvedProgramId}
         onClose={() => setCopyTemplateOpen(false)}
         onApplied={() => {
           setCopyTemplateOpen(false);
@@ -422,7 +424,7 @@ export function FormFieldsTable({ programId }: { programId: string }) {
       />
       <CopyFromProgramDialog
         open={copyFromProgramOpen}
-        programId={programId}
+        programId={resolvedProgramId}
         onClose={() => setCopyFromProgramOpen(false)}
         onApplied={() => {
           setCopyFromProgramOpen(false);
@@ -432,7 +434,7 @@ export function FormFieldsTable({ programId }: { programId: string }) {
 
       <FormFieldEditor
         open={editingField !== null}
-        programId={programId}
+        programId={resolvedProgramId}
         initialField={editingField}
         onClose={() => setEditingField(null)}
         onSaved={() => {

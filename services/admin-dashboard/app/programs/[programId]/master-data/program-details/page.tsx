@@ -2,6 +2,7 @@
 
 import { use, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { HeaderSection } from "@/app/components/programDetailsMasterData/HeaderSection";
 import { TabNavigation } from "@/app/components/programDetailsMasterData/TabNavigation";
 import { EditSpecificsAction } from "@/app/components/programDetailsMasterData/program-specifics/EditSpecificsAction";
@@ -231,9 +232,11 @@ export default function ProgramDetailsPage({
   const { accessiblePrograms } = useAuth();
 
   const programId = resolvedParams.programId;
+  const resolvedProgramId = useResolvedProgramId(programId);
   const fallbackProgramName =
-    accessiblePrograms.find((program) => program.programId === programId)?.programName ??
-    "Selected Program";
+    accessiblePrograms.find(
+      (program) => program.programId === programId || program.programSlug === programId,
+    )?.programName ?? "Selected Program";
   const activeTab = resolvedSearchParams.tab || "general";
   const [programDetail, setProgramDetail] = useState<ProgramDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -252,7 +255,7 @@ export default function ProgramDetailsPage({
 
       try {
         const token = getAccessToken();
-        const response = await fetch(buildApiUrl(`/admin/programs/${encodeURIComponent(programId)}`), {
+        const response = await fetch(buildApiUrl(`/admin/programs/${encodeURIComponent(resolvedProgramId)}`), {
           cache: "no-store",
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
@@ -285,7 +288,7 @@ export default function ProgramDetailsPage({
     return () => {
       isMounted = false;
     };
-  }, [programId]);
+  }, [resolvedProgramId]);
 
   const generalInformationData = useMemo(() => {
     return programDetail ? toGeneralInformationData(programDetail) : null;
@@ -450,7 +453,7 @@ export default function ProgramDetailsPage({
               onSave={handleSaveGeneral}
               onBrandingUploaded={async () => {
                 const token = getAccessToken();
-                const refreshedResponse = await fetch(buildApiUrl(`/admin/programs/${encodeURIComponent(programId)}`), {
+                const refreshedResponse = await fetch(buildApiUrl(`/admin/programs/${encodeURIComponent(resolvedProgramId)}`), {
                   cache: "no-store",
                   headers: token ? { Authorization: `Bearer ${token}` } : {},
                 });
@@ -488,7 +491,7 @@ export default function ProgramDetailsPage({
           ) : activeTab === "general" && generalInformationData ? (
             <GeneralInformationTab data={generalInformationData} />
           ) : activeTab === "exchange-rate" ? (
-            <ExchangeRateTab programId={programId} />
+            <ExchangeRateTab programId={resolvedProgramId} />
           ) : programSpecificsData ? (
             <ProgramSpecificsTab data={programSpecificsData} />
           ) : (

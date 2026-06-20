@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { ArrowPathIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { listApplications, reviewApplication, type Application } from "@/src/shared/api-client";
 import { formatDate } from "@/lib/utils";
 
@@ -25,6 +26,7 @@ function formatLabel(value: string | null | undefined) {
 
 export default function SubmissionsPage() {
   const params = useParams<{ programId: string }>();
+  const resolvedProgramId = useResolvedProgramId(params.programId);
   const { adminProfile } = useAuth();
   const [items, setItems] = useState<Application[]>([]);
   const [total, setTotal] = useState(0);
@@ -37,14 +39,14 @@ export default function SubmissionsPage() {
   const limit = 20;
 
   const fetch = useCallback(async () => {
-    if (!params.programId) return;
+    if (!resolvedProgramId) return;
     setLoading(true); setError(null);
     try {
-      const res = await listApplications({ programId: params.programId, status: status || undefined, search: search || undefined, limit, offset: (page - 1) * limit });
+      const res = await listApplications({ programId: resolvedProgramId, status: status || undefined, search: search || undefined, limit, offset: (page - 1) * limit });
       setItems(res.data); setTotal(res.total);
     } catch (err) { setError(err instanceof Error ? err.message : "Failed to load"); }
     finally { setLoading(false); }
-  }, [params.programId, status, search, page]);
+  }, [resolvedProgramId, status, search, page]);
 
   useEffect(() => { fetch(); }, [fetch]);
 

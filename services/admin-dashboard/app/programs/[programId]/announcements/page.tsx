@@ -17,6 +17,7 @@ import {
   type ProgramAnnouncement,
 } from "@/src/shared/api-client";
 import { formatDateTime } from "@/lib/utils";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import {
   buildAnnouncementExcerpt,
   formatAnnouncementLabel,
@@ -29,6 +30,7 @@ export default function ProgramAnnouncementsPage() {
   const params = useParams<{ programId: string }>();
   const router = useRouter();
   const { accessiblePrograms } = useAuth();
+  const resolvedProgramId = useResolvedProgramId(params.programId);
 
   const [items, setItems] = useState<ProgramAnnouncement[]>([]);
   const [total, setTotal] = useState(0);
@@ -40,19 +42,22 @@ export default function ProgramAnnouncementsPage() {
 
   const limit = 20;
   const program = useMemo(
-    () => accessiblePrograms.find((item) => item.programId === params.programId),
+    () =>
+      accessiblePrograms.find(
+        (item) => item.programId === params.programId || item.programSlug === params.programId,
+      ),
     [accessiblePrograms, params.programId],
   );
   const programName = program?.programName ?? "Selected Program";
 
   const load = useCallback(async () => {
-    if (!params.programId) return;
+    if (!resolvedProgramId) return;
 
     setLoading(true);
     setError(null);
 
     try {
-      const response = await listProgramAnnouncements(params.programId, { page, limit });
+      const response = await listProgramAnnouncements(resolvedProgramId, { page, limit });
       setItems(response.data ?? []);
       setTotal(response.meta?.total ?? 0);
     } catch (err) {
@@ -60,7 +65,7 @@ export default function ProgramAnnouncementsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, params.programId]);
+  }, [page, resolvedProgramId]);
 
   useEffect(() => {
     void load();

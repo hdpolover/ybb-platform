@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import { PlusIcon, TrashIcon, ArrowPathIcon, PencilSquareIcon, PhotoIcon } from "@heroicons/react/24/outline";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import {
   listProgramGallery,
   createProgramGalleryItem,
@@ -17,6 +18,7 @@ import { MediaLibraryPicker } from "@/app/components/submissionsMasterData/form-
 export default function ProgramPhotosPage() {
   const params = useParams<{ programId: string }>();
   const { accessiblePrograms, adminProfile } = useAuth();
+  const resolvedProgramId = useResolvedProgramId(params.programId);
   const program = accessiblePrograms.find((p) => p.programId === params.programId);
   const brandId = program?.brandId ?? "";
   const userId = adminProfile?.userId ?? "";
@@ -31,12 +33,12 @@ export default function ProgramPhotosPage() {
   const programName = accessiblePrograms.find((p) => p.programId === params.programId)?.programName ?? "Selected Program";
 
   const fetchItems = useCallback(async () => {
-    if (!params.programId) return;
+    if (!resolvedProgramId) return;
     setLoading(true); setError(null);
-    try { setItems(await listProgramGallery(params.programId)); }
+    try { setItems(await listProgramGallery(resolvedProgramId)); }
     catch (err) { setError(err instanceof Error ? err.message : "Failed to load"); }
     finally { setLoading(false); }
-  }, [params.programId]);
+  }, [resolvedProgramId]);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
@@ -122,7 +124,7 @@ export default function ProgramPhotosPage() {
 
       {showCreate && (
         <PhotoModal
-          programId={params.programId}
+          programId={resolvedProgramId}
           userId={userId}
           brandId={brandId}
           onClose={() => setShowCreate(false)}
@@ -131,7 +133,7 @@ export default function ProgramPhotosPage() {
       )}
       {editTarget && (
         <PhotoModal
-          programId={params.programId}
+          programId={resolvedProgramId}
           userId={userId}
           brandId={brandId}
           item={editTarget}

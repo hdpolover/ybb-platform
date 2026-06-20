@@ -13,6 +13,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { MagnifyingGlassIcon, StarIcon as StarSolidIcon } from "@heroicons/react/24/solid";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import {
   Sheet,
   SheetContent,
@@ -32,6 +33,7 @@ import {
 export default function ProgramTestimoniesPage() {
   const params = useParams<{ programId: string }>();
   const { accessiblePrograms, adminProfile } = useAuth();
+  const resolvedProgramId = useResolvedProgramId(params.programId);
   const [items, setItems] = useState<ProgramTestimonial[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -50,18 +52,18 @@ export default function ProgramTestimoniesPage() {
   const userId = adminProfile?.userId ?? "";
 
   const load = useCallback(async () => {
-    if (!params.programId) return;
+    if (!resolvedProgramId) return;
     setLoading(true);
     setError(null);
     try {
-      const all = await listProgramTestimonials(params.programId);
+      const all = await listProgramTestimonials(resolvedProgramId);
       setItems(all.filter((t) => t.type !== "video"));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
     } finally {
       setLoading(false);
     }
-  }, [params.programId]);
+  }, [resolvedProgramId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -270,7 +272,7 @@ export default function ProgramTestimoniesPage() {
 
       {/* Create Sheet */}
       <TestimonialSheet
-        programId={params.programId}
+        programId={resolvedProgramId}
         userId={userId}
         brandId={brandId}
         open={showCreate}
@@ -280,7 +282,7 @@ export default function ProgramTestimoniesPage() {
 
       {/* Edit Sheet */}
       <TestimonialSheet
-        programId={params.programId}
+        programId={resolvedProgramId}
         userId={userId}
         brandId={brandId}
         item={editTarget ?? undefined}
