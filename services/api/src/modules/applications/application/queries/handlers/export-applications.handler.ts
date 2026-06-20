@@ -2,7 +2,16 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 type ApplicationExportPayload = Prisma.ParticipantApplicationGetPayload<{
-    include: {
+    select: {
+        id: true;
+        status: true;
+        applicationCategory: true;
+        scoreTotal: true;
+        scoreStatus: true;
+        submittedAt: true;
+        createdAt: true;
+        registrationPaymentStatus: true;
+        programPaymentStatus: true;
         participant: {
             select: {
                 fullName: true;
@@ -60,6 +69,7 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
         };
         if (query.programId) where.programId = query.programId;
         if (query.status) where.status = query.status;
+        if (query.category) where.applicationCategory = query.category;
         if (query.search) {
             where.OR = [
                 { motivationLetter: { contains: query.search, mode: 'insensitive' } },
@@ -83,24 +93,25 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
                     take: BATCH_SIZE,
                     skip: offset,
                     orderBy: { submittedAt: 'desc' },
-                    include: {
+                    select: {
+                        id: true,
+                        status: true,
+                        applicationCategory: true,
+                        scoreTotal: true,
+                        scoreStatus: true,
+                        submittedAt: true,
+                        createdAt: true,
+                        registrationPaymentStatus: true,
+                        programPaymentStatus: true,
                         participant: {
                             select: {
                                 fullName: true,
                                 phoneNumber: true,
                                 originCountry: true,
-                                user: {
-                                    select: {
-                                        email: true
-                                    }
-                                }
-                            }
+                                user: { select: { email: true } },
+                            },
                         },
-                        program: {
-                            select: {
-                                name: true,
-                            }
-                        }
+                        program: { select: { name: true } },
                     }
                 });
 
@@ -123,6 +134,8 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
                         submittedAt: app.submittedAt ? new Date(app.submittedAt).toISOString() : '',
                         registrationPaymentStatus: app.registrationPaymentStatus,
                         programPaymentStatus: app.programPaymentStatus,
+                        scoreTotal: app.scoreTotal ?? '',
+                        scoreStatus: app.scoreStatus ?? '',
                     };
                 }
 
@@ -151,6 +164,8 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
                 { key: 'submittedAt', header: 'Submitted At' },
                 { key: 'registrationPaymentStatus', header: 'Reg. Payment' },
                 { key: 'programPaymentStatus', header: 'Prog. Payment' },
+                { key: 'scoreTotal', header: 'Score Total' },
+                { key: 'scoreStatus', header: 'Score Status' },
             ]
         }));
 
