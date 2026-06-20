@@ -25,11 +25,12 @@ export class SupportTicketRepository implements ISupportTicketRepository {
         return this.mapToEntity(created);
     }
 
-    async findById(id: string): Promise<SupportTicket | null> {
+    async findById(id: string, includeInternalNotes = true): Promise<SupportTicket | null> {
         const ticket = await this.prisma.supportTicket.findUnique({
             where: { id },
             include: {
                 messages: {
+                    where: includeInternalNotes ? undefined : { isInternalNote: false },
                     orderBy: { createdAt: 'asc' },
                 },
             },
