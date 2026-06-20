@@ -195,6 +195,7 @@ export class FilesController {
     const resourceUrl =
       resourceCandidates
         .map((candidate) => candidate.fileUrl)
+        .filter((url): url is string => url !== null)
         .find((url) => !this.isSelfDownloadProxyUrl(url, normalizedFileId)) ?? null;
     if (resourceUrl) {
       return resourceUrl;

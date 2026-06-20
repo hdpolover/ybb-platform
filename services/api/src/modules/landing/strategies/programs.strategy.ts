@@ -241,10 +241,13 @@ export class ProgramsStrategy implements ILandingPageStrategy {
             });
 
             const guidebookResources = await Promise.all(
-                currentProgram.resources.map(async (resource) => ({
-                    id: resource.id,
-                    resolvedUrl: await resolveMaskedFileUrl(this.prisma, resource.fileUrl),
-                })),
+                currentProgram.resources.map(async (resource) => {
+                    const activeUrl = resource.sourceType === 'link' ? resource.linkUrl : resource.fileUrl;
+                    return {
+                        id: resource.id,
+                        resolvedUrl: activeUrl ? await resolveMaskedFileUrl(this.prisma, activeUrl) : null,
+                    };
+                }),
             );
             const guidebookUrlById = new Map(guidebookResources.map((resource) => [resource.id, resource.resolvedUrl]));
 

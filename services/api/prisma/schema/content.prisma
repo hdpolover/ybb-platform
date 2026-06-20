@@ -302,7 +302,9 @@ model ProgramResource {
   programId   String    @map("program_id") @db.Uuid
   title       String    @db.VarChar(255)
   description String?   @db.Text
-  fileUrl     String    @map("file_url") @db.VarChar(500)
+  fileUrl     String?   @map("file_url") @db.VarChar(500)
+  sourceType  String    @default("upload") @map("source_type") @db.VarChar(20)
+  linkUrl     String?   @map("link_url") @db.VarChar(500)
   fileSize    BigInt?   @map("file_size") // In bytes
   fileType    String?   @map("file_type") @db.VarChar(50) // pdf, docx, pptx
   type        String    @db.VarChar(50) // brochure, guide, presentation, handbook, media_kit
