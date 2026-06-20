@@ -7,6 +7,7 @@ import {
   Query,
   UseGuards,
   BadRequestException,
+  ParseEnumPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ScoringStage } from '@prisma/client';
@@ -39,7 +40,7 @@ export class ProgramScoringController {
   @ApiOperation({ summary: 'Get scoring rubrics for a program (application and interview stages)' })
   async getScoringRubrics(
     @Param('programId') programId: string,
-    @Query('stage') stage?: ScoringStage,
+    @Query('stage', new ParseEnumPipe(ScoringStage, { optional: true })) stage?: ScoringStage,
   ): Promise<ScoringRubricsResponseDto> {
     return this.getScoringRubricsHandler.execute(new GetScoringRubricsQuery(programId, stage));
   }
