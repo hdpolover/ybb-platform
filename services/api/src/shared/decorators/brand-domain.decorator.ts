@@ -1,10 +1,15 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 
-function cleanDomain(domain: string | undefined): string | undefined {
+export function cleanDomain(domain: string | undefined): string | undefined {
   if (!domain) return domain;
   
+  // Normalize: lowercase, trim whitespace, and strip any trailing dots or
+  // slashes. A fully-qualified host can arrive with a trailing dot
+  // (e.g. "example.com." per RFC 2181) or a stray trailing slash, neither of
+  // which matches the stored domain and would otherwise 404 the brand lookup.
+  let cleaned = domain.toLowerCase().trim().replace(/[./]+$/, '');
+
   // Remove known subdomains used for testing/environments
-  let cleaned = domain.toLowerCase().trim();
   const prefixesToRemove = ['staging.', 'dev.', 'test.', 'www.'];
   
   for (const prefix of prefixesToRemove) {
