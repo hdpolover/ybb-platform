@@ -14,6 +14,7 @@ interface FullyFundedHeaderCardProps {
   institution: string;
   onEditProfile?: () => void;
   onExportData?: () => void;
+  exporting?: boolean;
 }
 
 export function FullyFundedHeaderCard({
@@ -27,6 +28,7 @@ export function FullyFundedHeaderCard({
   institution,
   onEditProfile,
   onExportData,
+  exporting,
 }: FullyFundedHeaderCardProps) {
   return (
     <section className="flex flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm md:flex-row">
@@ -58,10 +60,11 @@ export function FullyFundedHeaderCard({
           <button
             type="button"
             onClick={onExportData}
-            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-md border border-blue-500 bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-all hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+            disabled={exporting}
+            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-md border border-blue-500 bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-all hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <ArrowDownTrayIcon className="h-3.5 w-3.5" />
-            Export Data
+            {exporting ? "Exporting..." : "Export Data"}
           </button>
         </div>
       </div>

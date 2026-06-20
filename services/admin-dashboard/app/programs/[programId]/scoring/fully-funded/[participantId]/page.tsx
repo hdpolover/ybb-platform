@@ -1,36 +1,111 @@
 "use client";
 
 import { useParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { getApplication, exportApplicationsCsv, type Application } from "@/src/shared/api-client";
+import { useAuth } from "@/app/contexts/AuthContext";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { FullyFundedHeaderCard } from "@/app/components/scoring/FullyFundedHeaderCard";
 import { FullyFundedDetailsTabsCard } from "@/app/components/scoring/FullyFundedDetailsTabsCard";
 
-const MOCK_PARTICIPANT_HEADER = {
-  fullName: "AFRAH FATIMA MIAH",
-  fundingPath: "Fully Funded",
-  email: "afrah.fathima2507@gmail.com",
-  phone: "66345979",
-  nationality: "Bangladesh",
-  gender: "female",
-  institution: "India International School (Graduated)",
-};
-
 export default function FullyFundedParticipantDetailPage() {
   const params = useParams();
-  
-  const participantId = (params?.participantId as string) || "14047068a37eec1cef0";
+  const participantId = (params?.participantId as string) || "";
+  const programId = (params?.programId as string) || "";
 
-  const headerData = MOCK_PARTICIPANT_HEADER;
+  const { accessiblePrograms } = useAuth();
+  const resolvedProgramId = useResolvedProgramId(programId);
+  const resolvedBrandId = useMemo(() => {
+    return (
+      accessiblePrograms.find(
+        (p) => p.programId === resolvedProgramId || p.programSlug === programId
+      )?.brandId ?? ""
+    );
+  }, [accessiblePrograms, resolvedProgramId, programId]);
+
+  const [application, setApplication] = useState<Application | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!participantId) return;
+    setLoading(true);
+    setNotFound(false);
+    getApplication(participantId)
+      .then((data) => {
+        setApplication(data);
+      })
+      .catch((err) => {
+        if (err instanceof Error && err.message.includes("404")) {
+          setNotFound(true);
+        }
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [participantId]);
+
+  const handleExport = async () => {
+    if (exporting || !resolvedBrandId) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      await exportApplicationsCsv({
+        brandId: resolvedBrandId,
+        programId: resolvedProgramId,
+        category: "fully_funded",
+        search: application?.participant?.fullName,
+      });
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20 text-sm text-zinc-500">
+        Loading participant data...
+      </div>
+    );
+  }
+
+  if (notFound || !application) {
+    return (
+      <div className="flex items-center justify-center py-20 text-sm text-zinc-500">
+        Participant not found.
+      </div>
+    );
+  }
+
+  const p = application.participant;
+  const phone = [p?.phoneCountryCode, p?.phoneNumber].filter(Boolean).join(" ");
 
   return (
     <div className="space-y-6">
       <FullyFundedHeaderCard
         participantId={participantId}
-        {...headerData}
-        onEditProfile={() => console.info("Edit")}
-        onExportData={() => console.info("Export")}
+        fullName={p?.fullName ?? "Unknown"}
+        fundingPath={
+          application.applicationCategory === "fully_funded"
+            ? "Fully Funded"
+            : application.applicationCategory
+        }
+        email={p?.email ?? ""}
+        phone={phone || "Not provided"}
+        nationality={p?.nationality ?? ""}
+        gender={p?.gender ?? ""}
+        institution={p?.institution ?? ""}
+        onExportData={handleExport}
+        exporting={exporting}
       />
-      
-      <FullyFundedDetailsTabsCard />
+      {exportError && (
+        <p className="text-xs text-red-600">{exportError}</p>
+      )}
+      <FullyFundedDetailsTabsCard application={application} />
     </div>
   );
 }

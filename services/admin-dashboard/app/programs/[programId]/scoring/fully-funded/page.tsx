@@ -1,3 +1,5 @@
+"use client";
+
 import { use } from "react";
 import { FullyFundedParticipantsAll } from "@/app/components/scoring/FullyFundedParticipantsAll";
 
@@ -17,7 +19,7 @@ export default function FullyFundedScoringPage({
         </p>
       </div>
 
-      <FullyFundedParticipantsAll />
+      <FullyFundedParticipantsAll programId={programId} />
     </div>
   );
 }
