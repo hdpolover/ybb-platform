@@ -61,6 +61,8 @@ export function FullyFundedParticipantsAll({ programId }: FullyFundedParticipant
       await exportApplicationsCsv({
         brandId: resolvedBrandId,
         programId: resolvedProgramId,
+        category: "fully_funded",
+        search: search || undefined,
       });
     } catch (err) {
       setExportError(err instanceof Error ? err.message : "Export failed");
