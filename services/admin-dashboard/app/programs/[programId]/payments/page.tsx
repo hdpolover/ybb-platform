@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import {
   listProgramInvoices,
+  submitApplication,
   type InvoiceListItem,
   type InvoiceStatus,
   type InvoiceSummary,
@@ -24,6 +25,7 @@ import {
   type InvoiceMetrics,
   type InvoiceFilterOptions,
 } from "@/src/shared/api-client";
+import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { PageHeader } from "@/src/admin/page-header";
 import { Button } from "@/src/ui/button";
@@ -165,6 +167,7 @@ export default function PaymentsPage({
   const [sortBy, setSortBy] = useState<"createdAt" | "paidAt" | "amount" | "updatedAt">("updatedAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [submittingId, setSubmittingId] = useState<string | null>(null);
 
   const hasActiveFilters = Boolean(
     search.trim() ||
@@ -312,6 +315,21 @@ export default function PaymentsPage({
   const paidAmount = metrics?.paidAmount ?? 0;
   const outstandingAmount = metrics?.outstandingAmount ?? 0;
   const averagePaidAmount = metrics?.averagePaidAmount ?? 0;
+
+  async function handleSubmitApplication(inv: InvoiceListItem) {
+    const confirmed = window.confirm("Submit this participant's application?");
+    if (!confirmed) return;
+    setSubmittingId(inv.id);
+    try {
+      await submitApplication(inv.applicationId, inv.participant.id);
+      toast.success("Application submitted successfully.");
+      void fetchInvoices();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to submit application.");
+    } finally {
+      setSubmittingId(null);
+    }
+  }
 
   async function handleCopy(key: string, value: string | null | undefined) {
     if (!value) return;
@@ -692,13 +710,34 @@ export default function PaymentsPage({
                   </div>
                 </TableCell>
                 <TableCell className="text-right">
-                  <Link
-                    href={`/programs/${programId}/payments/${inv.id}`}
-                    className="inline-flex h-8 items-center gap-1 rounded px-3 text-xs font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 transition-colors"
-                  >
-                    <Eye className="h-3.5 w-3.5" />
-                    View
-                  </Link>
+                  <div className="flex flex-col items-end gap-1">
+                    <Link
+                      href={`/programs/${programId}/payments/${inv.id}`}
+                      className="inline-flex h-8 items-center gap-1 rounded px-3 text-xs font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 transition-colors"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      View
+                    </Link>
+                    <Link
+                      href={`/programs/${programId}/participants/${inv.participant.id}`}
+                      className="inline-flex h-8 items-center gap-1 rounded px-3 text-xs font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 transition-colors"
+                    >
+                      View participant
+                    </Link>
+                    {inv.status === "paid" && inv.application.status === "draft" && (
+                      <button
+                        type="button"
+                        disabled={submittingId === inv.id}
+                        onClick={() => void handleSubmitApplication(inv)}
+                        className="inline-flex h-8 items-center gap-1 rounded px-3 text-xs font-medium text-blue-700 hover:bg-blue-50 hover:text-blue-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {submittingId === inv.id ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : null}
+                        Submit application
+                      </button>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
