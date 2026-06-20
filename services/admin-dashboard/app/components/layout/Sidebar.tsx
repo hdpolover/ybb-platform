@@ -1,8 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { listProgramSupportTickets } from "@/src/shared/api-client";
+import { useAuth } from "@/app/contexts/AuthContext";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Squares2X2Icon,
@@ -339,15 +340,27 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
   const [showProgramAlert, setShowProgramAlert] = useState(false);
   const [openTicketCount, setOpenTicketCount] = useState(0);
 
+  // selectedProgramId may be a program slug; the support-ticket API needs the
+  // program UUID. Resolve it via the admin's accessible programs.
+  const { accessiblePrograms } = useAuth();
+  const resolvedProgramId = useMemo(() => {
+    if (!selectedProgramId) return null;
+    const match = accessiblePrograms.find(
+      (program) =>
+        program.programId === selectedProgramId || program.programSlug === selectedProgramId,
+    );
+    return match?.programId ?? selectedProgramId;
+  }, [accessiblePrograms, selectedProgramId]);
+
   useEffect(() => {
     let isMounted = true;
     void (async () => {
-      if (!selectedProgramId) {
+      if (!resolvedProgramId) {
         if (isMounted) setOpenTicketCount(0);
         return;
       }
       try {
-        const response = await listProgramSupportTickets(selectedProgramId, { status: "open", limit: 1 });
+        const response = await listProgramSupportTickets(resolvedProgramId, { status: "open", limit: 1 });
         if (isMounted) setOpenTicketCount(response.meta?.total ?? 0);
       } catch {
         // Non-critical
@@ -356,7 +369,7 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
     return () => {
       isMounted = false;
     };
-  }, [selectedProgramId]);
+  }, [resolvedProgramId]);
   const [activeId, setActiveId] = useState<string | null>(() => {
     if (!pathname) return "dashboard";
 
