@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useMemo } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../../contexts/AuthContext";
 import { AdminShell } from "@/src/admin/admin-shell";
@@ -8,6 +8,7 @@ import { ProgramSelect } from "../../components/navbar/ProgramSelect";
 import { AccountMenu } from "../../components/navbar/AccountMenu";
 import { programNavSections } from "@/lib/nav-config";
 import { buildPermissionSet, filterProgramNavSectionsByPermissions } from "@/lib/admin-access";
+import { listProgramSupportTickets } from "@/src/shared/api-client";
 
 export default function ProgramLayout({
   params,
@@ -36,6 +37,41 @@ export default function ProgramLayout({
     return filterProgramNavSectionsByPermissions(programNavSections, permissionSet);
   }, [accessConfig.isSuperAdmin, permissionSet]);
 
+  // programId from the route may be a slug; the support-ticket API needs the UUID.
+  const resolvedProgramId = useMemo(() => {
+    const match = accessiblePrograms.find(
+      (p) => p.programId === programId || p.programSlug === programId,
+    );
+    return match?.programId ?? programId;
+  }, [accessiblePrograms, programId]);
+
+  // Open support ticket count for the nav badge.
+  const [openTicketCount, setOpenTicketCount] = useState(0);
+  useEffect(() => {
+    let isMounted = true;
+    if (!resolvedProgramId) return;
+    listProgramSupportTickets(resolvedProgramId, { status: "open", limit: 1 })
+      .then((res) => {
+        if (isMounted) setOpenTicketCount(res.meta?.total ?? 0);
+      })
+      .catch(() => {
+        // Non-critical
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [resolvedProgramId]);
+
+  const navSectionsWithBadges = useMemo(() => {
+    if (!openTicketCount) return scopedProgramNavSections;
+    return scopedProgramNavSections.map((section) => ({
+      ...section,
+      items: section.items.map((item) =>
+        item.id === "support-tickets" ? { ...item, badgeCount: openTicketCount } : item,
+      ),
+    }));
+  }, [scopedProgramNavSections, openTicketCount]);
+
   useEffect(() => {
     if (isLoading) return;
     if (!adminProfile) { router.replace("/login"); return; }
@@ -52,7 +88,7 @@ export default function ProgramLayout({
 
   return (
     <AdminShell
-      navSections={scopedProgramNavSections}
+      navSections={navSectionsWithBadges}
       hrefBase={`/programs/${programId}`}
       context="program"
       homeHref="/"
