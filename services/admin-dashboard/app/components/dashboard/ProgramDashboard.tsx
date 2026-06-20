@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { KPISection } from "./sections/KPISection";
 import { TrendSection, TrendRange } from "./sections/TrendSection";
 import { GenderSection } from "./sections/GenderSection";
@@ -17,6 +17,7 @@ import {
   type ProgramDashboardAnalytics,
   type ProgramSupportTicketSummary,
 } from "@/src/shared/api-client";
+import { useAuth } from "@/app/contexts/AuthContext";
 import Link from "next/link";
 
 type ProgramDashboardProps = {
@@ -35,6 +36,17 @@ export function ProgramDashboard({ selectedProgramId }: ProgramDashboardProps) {
   const [openTickets, setOpenTickets] = useState<ProgramSupportTicketSummary[]>([]);
   const [openTicketCount, setOpenTicketCount] = useState(0);
   const [loadingTickets, setLoadingTickets] = useState(true);
+
+  // selectedProgramId may be a program slug; the support-ticket API needs the
+  // program UUID. Resolve it the same way the support tickets page does.
+  const { accessiblePrograms } = useAuth();
+  const resolvedProgramId = useMemo(() => {
+    const match = accessiblePrograms.find(
+      (program) =>
+        program.programId === selectedProgramId || program.programSlug === selectedProgramId,
+    );
+    return match?.programId ?? selectedProgramId;
+  }, [accessiblePrograms, selectedProgramId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -66,12 +78,12 @@ export function ProgramDashboard({ selectedProgramId }: ProgramDashboardProps) {
     async function fetchOpenTickets() {
       setLoadingTickets(true);
       try {
-        const response = await listProgramSupportTickets(selectedProgramId, { status: "open", limit: 5 });
+        const response = await listProgramSupportTickets(resolvedProgramId, { status: "open", limit: 5 });
         if (!isMounted) return;
         setOpenTickets(response.data ?? []);
         setOpenTicketCount(response.meta?.total ?? 0);
       } catch {
-        // Non-critical — silently ignore
+        // Non-critical, silently ignore
       } finally {
         if (isMounted) setLoadingTickets(false);
       }
@@ -80,7 +92,7 @@ export function ProgramDashboard({ selectedProgramId }: ProgramDashboardProps) {
     return () => {
       isMounted = false;
     };
-  }, [selectedProgramId]);
+  }, [resolvedProgramId]);
 
   const trendDataByRange: Record<TrendRange, { label: string; registrations: number }[]> = {
     daily: dashboardData?.trend.daily ?? [],
