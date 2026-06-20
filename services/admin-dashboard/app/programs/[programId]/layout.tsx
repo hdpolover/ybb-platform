@@ -10,6 +10,9 @@ import { programNavSections } from "@/lib/nav-config";
 import { buildPermissionSet, filterProgramNavSectionsByPermissions } from "@/lib/admin-access";
 import { listProgramSupportTickets } from "@/src/shared/api-client";
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export default function ProgramLayout({
   params,
   children,
@@ -37,20 +40,25 @@ export default function ProgramLayout({
     return filterProgramNavSectionsByPermissions(programNavSections, permissionSet);
   }, [accessConfig.isSuperAdmin, permissionSet]);
 
-  // programId from the route may be a slug; the support-ticket API needs the UUID.
-  const resolvedProgramId = useMemo(() => {
+  // The route param may be a slug, but the support-ticket API needs the program
+  // UUID and returns 500 on a slug. Resolve it from accessiblePrograms, and only
+  // use a value we know is a UUID (resolved match, or a route param that already
+  // is one). This avoids the badge fetch firing with the slug before
+  // accessiblePrograms has loaded.
+  const ticketProgramId = useMemo(() => {
     const match = accessiblePrograms.find(
       (p) => p.programId === programId || p.programSlug === programId,
     );
-    return match?.programId ?? programId;
+    if (match?.programId) return match.programId;
+    return UUID_PATTERN.test(programId) ? programId : null;
   }, [accessiblePrograms, programId]);
 
   // Open support ticket count for the nav badge.
   const [openTicketCount, setOpenTicketCount] = useState(0);
   useEffect(() => {
+    if (!ticketProgramId) return;
     let isMounted = true;
-    if (!resolvedProgramId) return;
-    listProgramSupportTickets(resolvedProgramId, { status: "open", limit: 1 })
+    listProgramSupportTickets(ticketProgramId, { status: "open", limit: 1 })
       .then((res) => {
         if (isMounted) setOpenTicketCount(res.meta?.total ?? 0);
       })
@@ -60,7 +68,7 @@ export default function ProgramLayout({
     return () => {
       isMounted = false;
     };
-  }, [resolvedProgramId]);
+  }, [ticketProgramId]);
 
   const navSectionsWithBadges = useMemo(() => {
     if (!openTicketCount) return scopedProgramNavSections;
