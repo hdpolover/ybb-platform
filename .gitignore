@@ -109,3 +109,6 @@ migration_temp_data/
 *.sql.gz
 !**/prisma/migrations/*/migration.sql
 services/api/ybb-platform-firebase-adminsdk-*.json
+
+# Playwright MCP browser artifacts (downloads, snapshots)
+.playwright-mcp/
