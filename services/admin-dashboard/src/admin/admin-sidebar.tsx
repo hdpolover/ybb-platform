@@ -119,6 +119,11 @@ function NavItemRow({ item, hrefBase, collapsed, depth = 0 }: NavItemRowProps) {
     <Link href={resolved} className={rowBase}>
       {iconEl}
       {!collapsed && <span className="truncate">{item.label}</span>}
+      {!collapsed && item.badgeCount ? (
+        <span className="ml-auto shrink-0 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
+          {item.badgeCount > 99 ? "99+" : item.badgeCount}
+        </span>
+      ) : null}
     </Link>
   );
 

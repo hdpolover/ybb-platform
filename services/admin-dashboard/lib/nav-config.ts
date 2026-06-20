@@ -44,6 +44,8 @@ export type NavItem = {
   href: string;
   icon: LucideIcon;
   children?: NavItem[];
+  /** Optional count badge rendered next to the label (e.g. open support tickets). */
+  badgeCount?: number;
 };
 
 export type NavSection = {

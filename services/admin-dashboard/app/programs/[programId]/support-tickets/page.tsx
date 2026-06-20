@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { ArrowPathIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import {
   deleteProgramSupportTicket,
@@ -128,6 +128,8 @@ function CompactAttachmentGrid({ attachments }: { attachments: ProgramSupportTic
 
 export default function ProgramSupportTicketsPage() {
   const params = useParams<{ programId: string }>();
+  const searchParams = useSearchParams();
+  const ticketParam = searchParams.get("ticket");
   const { adminProfile, accessiblePrograms, assignedPrograms, accessConfig } = useAuth();
 
   const selectedProgram = useMemo(
@@ -144,8 +146,14 @@ export default function ProgramSupportTicketsPage() {
   const canManageSupportTickets = accessConfig.isSuperAdmin || isAssignedProgramAdmin;
 
   const [tickets, setTickets] = useState<ProgramSupportTicketSummary[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(ticketParam);
   const [selectedTicket, setSelectedTicket] = useState<ProgramSupportTicketDetail | null>(null);
+
+  // Deep link: when arriving with ?ticket=<id> (e.g. from the dashboard card),
+  // open that ticket instead of defaulting to the first one.
+  useEffect(() => {
+    if (ticketParam) setSelectedId(ticketParam);
+  }, [ticketParam]);
   const [loadingList, setLoadingList] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [savingTicket, setSavingTicket] = useState(false);

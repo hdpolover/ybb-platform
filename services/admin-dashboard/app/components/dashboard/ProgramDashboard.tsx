@@ -184,7 +184,7 @@ export function ProgramDashboard({ selectedProgramId }: ProgramDashboardProps) {
         {openTickets.map((ticket) => (
           <Link
             key={ticket.id}
-            href={`/programs/${selectedProgramId}/support-tickets`}
+            href={`/programs/${selectedProgramId}/support-tickets?ticket=${ticket.id}`}
             className="flex items-center justify-between rounded-md border border-zinc-200 px-3 py-2 text-xs hover:bg-zinc-50 mb-2 last:mb-0"
           >
             <div className="min-w-0">
