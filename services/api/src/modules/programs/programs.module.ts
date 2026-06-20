@@ -19,6 +19,10 @@ import { ProgramAnnouncementsController } from './presentation/program-announcem
 import { SystemFormFieldsController } from './presentation/system-form-fields.controller';
 import { FormTemplatesController } from './presentation/form-templates.controller';
 import { ProgramFormFieldsController } from './presentation/program-form-fields.controller';
+import { ProgramScoringController } from './presentation/program-scoring.controller';
+import { GetScoringRubricsHandler } from './application/queries/handlers/get-scoring-rubrics.handler';
+import { UpsertScoringRubricHandler } from './application/commands/handlers/upsert-scoring-rubric.handler';
+import { ScoringRubricRepository } from './infrastructure/persistence/scoring-rubric.repository';
 import {
   CreateFormTemplateHandler,
   UpdateFormTemplateHandler,
@@ -133,6 +137,7 @@ import {
     SystemFormFieldsController,
     FormTemplatesController,
     ProgramFormFieldsController,
+    ProgramScoringController,
   ],
   providers: [
     ListProgramsHandler,
@@ -232,6 +237,13 @@ import {
       provide: 'IProgramRepository',
       useClass: ProgramRepository,
     },
+    {
+      provide: 'IScoringRubricRepository',
+      useClass: ScoringRubricRepository,
+    },
+    // Scoring Rubric Handlers
+    GetScoringRubricsHandler,
+    UpsertScoringRubricHandler,
   ],
   exports: ['IProgramContentRepository', 'IProgramRepository', ListProgramsHandler],
 })
