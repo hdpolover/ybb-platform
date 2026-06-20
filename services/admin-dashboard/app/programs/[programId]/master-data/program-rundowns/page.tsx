@@ -207,6 +207,7 @@ export default function ProgramRundownsPage() {
           <table className="min-w-full text-left text-[11px]">
             <thead className="bg-zinc-50 text-zinc-600">
               <tr>
+                <th className="px-3 py-2 font-semibold">Order</th>
                 <th className="px-3 py-2 font-semibold">Session</th>
                 <th className="px-3 py-2 font-semibold">Date</th>
                 <th className="px-3 py-2 font-semibold">Time</th>
@@ -215,11 +216,12 @@ export default function ProgramRundownsPage() {
               </tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={5} className="px-3 py-6 text-center text-zinc-400">Loading…</td></tr>}
-              {!loading && items.length === 0 && <tr><td colSpan={5} className="px-3 py-6 text-center text-zinc-400">No sessions yet.</td></tr>}
-              {!loading && items.length > 0 && filteredItems.length === 0 && <tr><td colSpan={5} className="px-3 py-6 text-center text-zinc-400">No sessions match the current filters.</td></tr>}
+              {loading && <tr><td colSpan={6} className="px-3 py-6 text-center text-zinc-400">Loading…</td></tr>}
+              {!loading && items.length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-zinc-400">No sessions yet.</td></tr>}
+              {!loading && items.length > 0 && filteredItems.length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-zinc-400">No sessions match the current filters.</td></tr>}
               {!loading && filteredItems.map((s, idx) => (
                 <tr key={s.id} className={idx % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}>
+                  <td className="px-3 py-2 text-zinc-500">{s.order}</td>
                   <td className="px-3 py-2 font-medium text-zinc-900">{s.activity}</td>
                   <td className="px-3 py-2 text-zinc-600">{formatDay(s.day)}</td>
                   <td className="px-3 py-2 text-zinc-600">{s.startTime ? s.startTime + (s.endTime ? " – " + s.endTime : "") : "—"}</td>
@@ -241,6 +243,7 @@ export default function ProgramRundownsPage() {
         open={showCreate || editTarget !== null}
         programId={params.programId}
         item={editTarget ?? undefined}
+        items={items}
         onClose={() => { setShowCreate(false); setEditTarget(null); }}
         onSaved={fetch}
       />
@@ -254,21 +257,26 @@ function ScheduleSheet({
   open,
   programId,
   item,
+  items,
   onClose,
   onSaved,
 }: {
   open: boolean;
   programId: string;
   item?: ProgramSchedule;
+  items: ProgramSchedule[];
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const nextOrder = items.length > 0 ? Math.max(...items.map((i) => i.order)) + 1 : 0;
+
   const [activity, setActivity] = useState(item?.activity ?? "");
   const [day, setDay] = useState(toDateInputValue(item?.day));
   const [startTime, setStartTime] = useState(item?.startTime ?? "");
   const [endTime, setEndTime] = useState(item?.endTime ?? "");
   const [location, setLocation] = useState(item?.location ?? "");
   const [description, setDescription] = useState(item?.description ?? "");
+  const [order, setOrder] = useState<number>(item?.order ?? nextOrder);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -280,8 +288,12 @@ function ScheduleSheet({
       setEndTime(item?.endTime ?? "");
       setLocation(item?.location ?? "");
       setDescription(item?.description ?? "");
+      setOrder(item?.order ?? nextOrder);
       setError(null);
     }
+  // nextOrder is derived from items length, intentionally not in deps to avoid
+  // resetting a user-typed value when items list changes mid-open.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, item]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -294,6 +306,7 @@ function ScheduleSheet({
         endTime: endTime || undefined,
         location: location || undefined,
         description: description || undefined,
+        order,
       };
       if (item) {
         await updateProgramSchedule(item.id, payload);
@@ -323,6 +336,15 @@ function ScheduleSheet({
 
           <div className="flex-1 overflow-y-auto space-y-4 px-6 py-5">
             {error && <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+            <Field label="Order Number">
+              <input
+                type="number"
+                min={0}
+                value={order}
+                onChange={(e) => setOrder(parseInt(e.target.value, 10) || 0)}
+                className={inputCls}
+              />
+            </Field>
             <Field label="Activity" required>
               <input required type="text" value={activity} onChange={(e) => setActivity(e.target.value)} className={inputCls} />
             </Field>
