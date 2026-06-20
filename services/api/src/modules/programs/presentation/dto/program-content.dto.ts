@@ -194,16 +194,22 @@ export class ProgramResourceResponseDto {
     @ApiProperty()
     title: string;
 
-    @ApiProperty({ required: false })
+    @ApiPropertyOptional()
     description?: string;
 
-    @ApiProperty()
-    fileUrl: string;
+    @ApiPropertyOptional()
+    fileUrl?: string | null;
 
-    @ApiProperty({ required: false })
+    @ApiPropertyOptional()
+    sourceType?: string;
+
+    @ApiPropertyOptional()
+    linkUrl?: string | null;
+
+    @ApiPropertyOptional()
     fileSize?: number;
 
-    @ApiProperty({ required: false })
+    @ApiPropertyOptional()
     fileType?: string;
 
     @ApiProperty()

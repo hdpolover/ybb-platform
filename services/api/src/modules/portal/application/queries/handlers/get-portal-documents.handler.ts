@@ -48,7 +48,8 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
                             where: { isActive: true },
                             select: {
                                 id: true, title: true, description: true,
-                                type: true, fileUrl: true, isPublic: true, updatedAt: true,
+                                type: true, fileUrl: true, sourceType: true, linkUrl: true,
+                                isPublic: true, updatedAt: true,
                             },
                             orderBy: { order: 'asc' },
                         },
@@ -93,7 +94,7 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
                     title: res.title,
                     description: res.description ?? '',
                     category: 'program_resource',
-                    fileUrl: res.fileUrl,
+                    fileUrl: (res.sourceType === 'link' ? res.linkUrl : res.fileUrl) ?? undefined,
                     status: 'available',
                     documentType: 'program_resource',
                     updatedAt: res.updatedAt,

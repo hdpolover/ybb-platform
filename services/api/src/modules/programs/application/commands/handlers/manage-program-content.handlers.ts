@@ -762,6 +762,7 @@ export class CreateProgramResourceHandler implements ICommandHandler<CreateProgr
         private readonly cacheService: CacheService,
     ) {}
     async execute(command: CreateProgramResourceCommand) {
+        const sourceType = command.dto.sourceType ?? 'upload';
         let fileUrl = command.dto.fileUrl;
         let fileSize: number | undefined = command.dto.fileSize;
         let fileType = command.dto.fileType;
@@ -771,9 +772,9 @@ export class CreateProgramResourceHandler implements ICommandHandler<CreateProgr
             if (!program) {
                 throw new NotFoundException('Program not found');
             }
-            
-            const brandId = program.brandId; 
-            
+
+            const brandId = program.brandId;
+
             const result = await this.storageService.uploadFile(
                 command.file,
                 command.userId,
@@ -781,17 +782,29 @@ export class CreateProgramResourceHandler implements ICommandHandler<CreateProgr
                 'resources',
                 program.id
             );
-            
+
             fileUrl = result.url;
             fileSize = command.file.size;
             fileType = command.file.mimetype;
         }
 
+        if (sourceType === 'link') {
+            if (!command.dto.linkUrl) {
+                throw new BadRequestException('linkUrl is required when sourceType is "link"');
+            }
+        } else {
+            if (!fileUrl) {
+                throw new BadRequestException('fileUrl is required when sourceType is "upload"');
+            }
+        }
+
         const dto = {
             ...command.dto,
-            fileUrl: fileUrl,
-            fileSize: fileSize ? BigInt(fileSize) : undefined,
-            fileType: fileType
+            sourceType,
+            fileUrl: sourceType === 'link' ? null : fileUrl,
+            fileSize: sourceType === 'link' ? null : (fileSize ? BigInt(fileSize) : undefined),
+            fileType: sourceType === 'link' ? null : fileType,
+            linkUrl: sourceType === 'link' ? command.dto.linkUrl : null,
         };
         const result = await this.repository.createResource(dto);
         await invalidateResourceCaches(command.dto.programId, this.prisma, this.cacheService);
@@ -808,10 +821,6 @@ export class UpdateProgramResourceHandler implements ICommandHandler<UpdateProgr
     ) {}
 
     async execute(command: UpdateProgramResourceCommand) {
-        let fileUrl = command.dto.fileUrl;
-        let fileSize: number | undefined = command.dto.fileSize;
-        let fileType = command.dto.fileType;
-
         const resource = await this.repository.findResourceById(command.id);
         if (!resource) {
             throw new NotFoundException('Resource not found');
@@ -820,12 +829,17 @@ export class UpdateProgramResourceHandler implements ICommandHandler<UpdateProgr
             throw new NotFoundException('Program ID missing on resource');
         }
 
+        const sourceType = command.dto.sourceType ?? resource.sourceType ?? 'upload';
+        let fileUrl = command.dto.fileUrl;
+        let fileSize: number | undefined = command.dto.fileSize;
+        let fileType = command.dto.fileType;
+
         if (command.file) {
             const program = await this.prisma.program.findUnique({ where: { id: resource.programId } });
             if (!program) {
                 throw new NotFoundException('Program not found');
             }
-            
+
             const result = await this.storageService.uploadFile(
                 command.file,
                 command.userId,
@@ -833,17 +847,42 @@ export class UpdateProgramResourceHandler implements ICommandHandler<UpdateProgr
                 'resources',
                 program.id
             );
-            
+
             fileUrl = result.url;
             fileSize = command.file.size;
             fileType = command.file.mimetype;
         }
 
+        if (sourceType === 'link') {
+            const resolvedLinkUrl = command.dto.linkUrl ?? resource.linkUrl;
+            if (!resolvedLinkUrl) {
+                throw new BadRequestException('linkUrl is required when sourceType is "link"');
+            }
+            const dto = {
+                ...command.dto,
+                sourceType,
+                linkUrl: resolvedLinkUrl,
+                fileUrl: resource.fileUrl,
+                fileSize: null,
+                fileType: null,
+            };
+            const result = await this.repository.updateResource(command.id, dto);
+            await invalidateResourceCaches(resource.programId, this.prisma, this.cacheService);
+            return result;
+        }
+
+        // upload mode
+        const resolvedFileUrl = fileUrl ?? resource.fileUrl;
+        if (!resolvedFileUrl) {
+            throw new BadRequestException('fileUrl is required when sourceType is "upload"');
+        }
         const dto = {
             ...command.dto,
-            fileUrl: fileUrl,
-            fileType: fileType,
-            fileSize: fileSize ? BigInt(fileSize) : undefined
+            sourceType,
+            fileUrl: resolvedFileUrl,
+            fileType: fileType ?? resource.fileType,
+            fileSize: fileSize ? BigInt(fileSize) : resource.fileSize,
+            linkUrl: resource.linkUrl,
         };
         const result = await this.repository.updateResource(command.id, dto);
         await invalidateResourceCaches(resource.programId, this.prisma, this.cacheService);
