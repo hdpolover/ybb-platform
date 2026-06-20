@@ -17,143 +17,55 @@ import {
   type ProgramSupportTicketSummary,
 } from "@/src/shared/api-client";
 import { useAuth } from "@/app/contexts/AuthContext";
-import { formatDateTime } from "@/lib/utils";
+import { Skeleton } from "@/src/ui/skeleton";
+import { TicketStatusTabs } from "@/app/components/support/TicketStatusTabs";
+import { TicketListItem } from "@/app/components/support/TicketListItem";
+import { TicketDetailHeader } from "@/app/components/support/TicketDetailHeader";
+import { TicketConversation } from "@/app/components/support/TicketConversation";
+import { ReplyComposer } from "@/app/components/support/ReplyComposer";
+import {
+  extractScreenshotAttachments,
+  guessMimeTypeFromUrl,
+  sanitizeRichHtml,
+  stripUploadedScreenshotsSection,
+  PRIORITY_OPTIONS,
+  toTitleCase,
+} from "@/app/components/support/types";
 
-const STATUS_OPTIONS: ProgramSupportTicketStatus[] = [
-  "open",
-  "in_progress",
-  "waiting_response",
-  "resolved",
-  "closed",
-];
-
-const PRIORITY_OPTIONS: ProgramSupportTicketPriority[] = ["low", "normal", "high", "urgent"];
-
-function toTitleCase(value: string): string {
-  return value
-    .replace(/[_-]+/g, " ")
-    .trim()
-    .split(/\s+/)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
-    .join(" ");
-}
-
-function sanitizeRichHtml(value: string): string {
-  if (!value.trim()) return "";
-  return value
-    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, "")
-    .replace(/<iframe[\s\S]*?>[\s\S]*?<\/iframe>/gi, "")
-    .replace(/\son\w+="[^"]*"/gi, "")
-    .replace(/\son\w+='[^']*'/gi, "")
-    .replace(/<(?!\/?(p|br|strong|b|em|i|u|ul|ol|li|blockquote|code|pre)\b)[^>]*>/gi, "");
-}
-
-function stripUploadedScreenshotsSection(value: string): string {
-  return value
-    .replace(/<p>\s*<strong>\s*Uploaded screenshots\s*<\/strong>\s*<\/p>\s*<ul>[\s\S]*?<\/ul>/i, "")
-    .trim();
-}
-
-function guessMimeTypeFromUrl(url: string): string | undefined {
-  return /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/i.test(url) ? "image/*" : undefined;
-}
-
-function extractScreenshotAttachments(value: string): ProgramSupportTicketAttachment[] {
-  if (!value.trim()) return [];
-  const normalized = value.replace(/&amp;/gi, "&");
-  const matches = normalized.match(/https?:\/\/[^\s<>"')]+/gi) ?? [];
-  const urls = Array.from(new Set(matches.map((url) => url.replace(/[),.;]+$/, ""))));
-
-  return urls.map((fileUrl, index) => {
-    let fileName = `Screenshot ${index + 1}`;
-    try {
-      const pathName = decodeURIComponent(new URL(fileUrl).pathname);
-      const lastSegment = pathName.split("/").filter(Boolean).pop();
-      if (lastSegment) fileName = lastSegment;
-    } catch {
-      // Keep default for malformed URL.
-    }
-
-    return {
-      fileId: `external-${index}`,
-      fileName,
-      fileUrl,
-      mimeType: guessMimeTypeFromUrl(fileUrl),
-    };
-  });
-}
-
-function CompactAttachmentGrid({ attachments }: { attachments: ProgramSupportTicketAttachment[] }) {
-  if (attachments.length === 0) return null;
-
-  return (
-    <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-5">
-      {attachments.map((attachment) => {
-        const isImage =
-          (attachment.mimeType ?? "").startsWith("image/") ||
-          /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/i.test(attachment.fileUrl);
-
-        if (!isImage) {
-          return (
-            <a
-              key={attachment.fileId}
-              href={attachment.fileUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="line-clamp-2 rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-zinc-50"
-            >
-              {attachment.fileName}
-            </a>
-          );
-        }
-
-        return (
-          <a
-            key={attachment.fileId}
-            href={attachment.fileUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="overflow-hidden rounded-md border border-zinc-200 bg-zinc-100 hover:border-zinc-300"
-            title={attachment.fileName}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={attachment.fileUrl} alt={attachment.fileName} className="h-16 w-full object-cover" />
-          </a>
-        );
-      })}
-    </div>
-  );
-}
-
-export default function ProgramSupportTicketsPage() {
+export default function SupportTicketsPage() {
   const params = useParams<{ programId: string }>();
   const searchParams = useSearchParams();
   const ticketParam = searchParams.get("ticket");
+
   const { adminProfile, accessiblePrograms, assignedPrograms, accessConfig } = useAuth();
 
   const selectedProgram = useMemo(
     () =>
       accessiblePrograms.find(
-        (program) => program.programId === params.programId || program.programSlug === params.programId,
+        (program) =>
+          program.programId === params.programId || program.programSlug === params.programId,
       ),
     [accessiblePrograms, params.programId],
   );
-
   const programId = selectedProgram?.programId ?? params.programId;
   const programName = selectedProgram?.programName ?? "Selected Program";
-  const isAssignedProgramAdmin = assignedPrograms.some((program) => program.programId === programId);
+  const isAssignedProgramAdmin = assignedPrograms.some(
+    (program) => program.programId === programId,
+  );
   const canManageSupportTickets = accessConfig.isSuperAdmin || isAssignedProgramAdmin;
 
   const [tickets, setTickets] = useState<ProgramSupportTicketSummary[]>([]);
+  const [tabCounts, setTabCounts] = useState<Record<ProgramSupportTicketStatus | "all", number>>({
+    all: 0,
+    open: 0,
+    in_progress: 0,
+    waiting_response: 0,
+    resolved: 0,
+    closed: 0,
+  });
   const [selectedId, setSelectedId] = useState<string | null>(ticketParam);
   const [selectedTicket, setSelectedTicket] = useState<ProgramSupportTicketDetail | null>(null);
-
-  // Deep link: when arriving with ?ticket=<id> (e.g. from the dashboard card),
-  // open that ticket instead of defaulting to the first one.
-  useEffect(() => {
-    if (ticketParam) setSelectedId(ticketParam);
-  }, [ticketParam]);
+  const [localTicket, setLocalTicket] = useState<ProgramSupportTicketDetail | null>(null);
   const [loadingList, setLoadingList] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [savingTicket, setSavingTicket] = useState(false);
@@ -162,11 +74,6 @@ export default function ProgramSupportTicketsPage() {
   const [deletingTicket, setDeletingTicket] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [replyMessage, setReplyMessage] = useState("");
-  const [isInternalNote, setIsInternalNote] = useState(false);
-  const [replyAttachments, setReplyAttachments] = useState<File[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<ProgramSupportTicketStatus | "">("");
@@ -175,22 +82,30 @@ export default function ProgramSupportTicketsPage() {
   const [total, setTotal] = useState(0);
   const limit = 20;
 
-  const totalPages = Math.max(1, Math.ceil(total / limit));
+  // Ref to avoid stale closure in loadTickets callback.
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
+
+  useEffect(() => {
+    if (ticketParam) setSelectedId(ticketParam);
+  }, [ticketParam]);
+
   const originalMessage = useMemo(
     () => selectedTicket?.messages.find((message) => !message.isFromAdmin),
     [selectedTicket],
   );
   const originalContent =
-    selectedTicket?.description?.trim() ? selectedTicket.description : (originalMessage?.message ?? "");
+    selectedTicket?.description?.trim()
+      ? selectedTicket.description
+      : (originalMessage?.message ?? "");
   const originalDescription = useMemo(
     () => sanitizeRichHtml(stripUploadedScreenshotsSection(originalContent)),
     [originalContent],
   );
-  const originalAttachments = useMemo(() => {
+  const originalAttachments = useMemo<ProgramSupportTicketAttachment[]>(() => {
     const extracted = extractScreenshotAttachments(originalContent);
     const merged = new Map<string, ProgramSupportTicketAttachment>();
     const combined = [...(originalMessage?.attachments ?? []), ...extracted];
-
     combined.forEach((attachment, index) => {
       if (!attachment.fileUrl || merged.has(attachment.fileUrl)) return;
       merged.set(attachment.fileUrl, {
@@ -200,9 +115,35 @@ export default function ProgramSupportTicketsPage() {
         mimeType: attachment.mimeType ?? guessMimeTypeFromUrl(attachment.fileUrl),
       });
     });
-
     return Array.from(merged.values());
   }, [originalContent, originalMessage?.attachments]);
+
+  const loadCounts = useCallback(async () => {
+    if (!programId) return;
+    const [
+      allResult,
+      openResult,
+      inProgressResult,
+      waitingResult,
+      resolvedResult,
+      closedResult,
+    ] = await Promise.all([
+      listProgramSupportTickets(programId, { limit: 1 }),
+      listProgramSupportTickets(programId, { limit: 1, status: "open" }),
+      listProgramSupportTickets(programId, { limit: 1, status: "in_progress" }),
+      listProgramSupportTickets(programId, { limit: 1, status: "waiting_response" }),
+      listProgramSupportTickets(programId, { limit: 1, status: "resolved" }),
+      listProgramSupportTickets(programId, { limit: 1, status: "closed" }),
+    ]);
+    setTabCounts({
+      all: allResult.meta?.total ?? 0,
+      open: openResult.meta?.total ?? 0,
+      in_progress: inProgressResult.meta?.total ?? 0,
+      waiting_response: waitingResult.meta?.total ?? 0,
+      resolved: resolvedResult.meta?.total ?? 0,
+      closed: closedResult.meta?.total ?? 0,
+    });
+  }, [programId]);
 
   const loadTickets = useCallback(async () => {
     if (!programId) return;
@@ -218,82 +159,85 @@ export default function ProgramSupportTicketsPage() {
       });
       setTickets(response.data ?? []);
       setTotal(response.meta?.total ?? 0);
-      if (!selectedId && response.data.length > 0) {
+      if (!selectedIdRef.current && response.data.length > 0) {
         setSelectedId(response.data[0].id);
       }
       if (response.data.length === 0) {
         setSelectedId(null);
         setSelectedTicket(null);
+        setLocalTicket(null);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load support tickets.");
     } finally {
       setLoadingList(false);
     }
-  }, [limit, page, priorityFilter, programId, searchQuery, selectedId, statusFilter]);
+  }, [limit, page, priorityFilter, programId, searchQuery, statusFilter]);
 
   const loadTicketDetail = useCallback(async () => {
     if (!programId || !selectedId) {
       setSelectedTicket(null);
+      setLocalTicket(null);
       return;
     }
-
     setLoadingDetail(true);
     setError(null);
     try {
       const detail = await getProgramSupportTicket(programId, selectedId);
       setSelectedTicket(detail);
+      setLocalTicket(detail);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load ticket detail.");
       setSelectedTicket(null);
+      setLocalTicket(null);
     } finally {
       setLoadingDetail(false);
     }
   }, [programId, selectedId]);
 
-  useEffect(() => {
-    void loadTickets();
-  }, [loadTickets]);
-
-  useEffect(() => {
-    void loadTicketDetail();
-  }, [loadTicketDetail]);
-
-  async function handleUpdateTicket() {
-    if (!programId || !selectedTicket) return;
+  async function handleUpdateTicket(patch?: {
+    status?: ProgramSupportTicketStatus;
+    priority?: ProgramSupportTicketPriority;
+    assignedTo?: string | null;
+    resolution?: string | null;
+    closedReason?: string | null;
+  }) {
+    if (!programId || !selectedTicket || !localTicket) return;
     setSavingTicket(true);
     setError(null);
+    const update = {
+      status: patch?.status ?? localTicket.status,
+      priority: patch?.priority ?? localTicket.priority,
+      assignedTo: patch?.assignedTo !== undefined ? patch.assignedTo : localTicket.assignedTo,
+      resolution: patch?.resolution !== undefined ? patch.resolution : localTicket.resolution,
+      closedReason:
+        patch?.closedReason !== undefined ? patch.closedReason : localTicket.closedReason,
+    };
+    setLocalTicket((prev) => (prev ? { ...prev, ...update } : prev));
     try {
-      await updateProgramSupportTicket(programId, selectedTicket.id, {
-        status: selectedTicket.status,
-        priority: selectedTicket.priority,
-        assignedTo: selectedTicket.assignedTo,
-        resolution: selectedTicket.resolution,
-        closedReason: selectedTicket.closedReason,
-      });
+      await updateProgramSupportTicket(programId, selectedTicket.id, update);
       await loadTickets();
       await loadTicketDetail();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update support ticket.");
+      setError(err instanceof Error ? err.message : "Failed to update ticket.");
     } finally {
       setSavingTicket(false);
     }
   }
 
-  async function handleSendReply() {
+  async function handleSendReply(
+    message: string,
+    isInternalNote: boolean,
+    attachmentFiles: File[],
+  ) {
     if (!programId || !selectedTicket) return;
-    const message = replyMessage.trim();
-    if (!message) return;
-
     setError(null);
-
     let uploadedAttachments: ProgramSupportTicketAttachment[] = [];
-
-    if (replyAttachments.length > 0) {
+    if (attachmentFiles.length > 0) {
       setUploadingAttachments(true);
       try {
         const results = await Promise.all(
-          replyAttachments.map((file) =>
+          attachmentFiles.map((file) =>
             uploadFileViaPresignedUrl(file, {
               userId: adminProfile?.userId ?? "",
               brandId: selectedProgram?.brandId ?? "",
@@ -305,9 +249,9 @@ export default function ProgramSupportTicketsPage() {
         );
         uploadedAttachments = results.map((result, index) => ({
           fileId: result.fileId,
-          fileName: replyAttachments[index].name,
+          fileName: attachmentFiles[index].name,
           fileUrl: result.publicUrl ?? "",
-          mimeType: replyAttachments[index].type,
+          mimeType: attachmentFiles[index].type,
         }));
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to upload attachments.");
@@ -317,7 +261,6 @@ export default function ProgramSupportTicketsPage() {
         setUploadingAttachments(false);
       }
     }
-
     setSendingReply(true);
     try {
       await replyProgramSupportTicket(programId, selectedTicket.id, {
@@ -325,12 +268,6 @@ export default function ProgramSupportTicketsPage() {
         attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
         isInternalNote,
       });
-      setReplyMessage("");
-      setIsInternalNote(false);
-      setReplyAttachments([]);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
       await loadTickets();
       await loadTicketDetail();
     } catch (err) {
@@ -348,6 +285,7 @@ export default function ProgramSupportTicketsPage() {
       await deleteProgramSupportTicket(programId, selectedTicket.id);
       setSelectedId(null);
       setSelectedTicket(null);
+      setLocalTicket(null);
       setShowDeleteConfirm(false);
       await loadTickets();
     } catch (err) {
@@ -356,6 +294,18 @@ export default function ProgramSupportTicketsPage() {
       setDeletingTicket(false);
     }
   }
+
+  useEffect(() => {
+    void loadCounts();
+  }, [loadCounts]);
+
+  useEffect(() => {
+    void loadTickets();
+  }, [loadTickets]);
+
+  useEffect(() => {
+    void loadTicketDetail();
+  }, [loadTicketDetail]);
 
   if (!canManageSupportTickets) {
     return (
@@ -369,6 +319,7 @@ export default function ProgramSupportTicketsPage() {
 
   return (
     <main className="space-y-4">
+      {/* Header */}
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
         <div className="inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-blue-700">
           Support Tickets
@@ -379,10 +330,25 @@ export default function ProgramSupportTicketsPage() {
         </p>
       </section>
 
-      {error ? <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p> : null}
+      {error ? (
+        <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>
+      ) : null}
 
-      <section className="grid gap-4 lg:grid-cols-[430px_minmax(0,1fr)]">
-        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+      {/* Status tabs */}
+      <TicketStatusTabs
+        counts={tabCounts}
+        activeStatus={statusFilter}
+        onStatusChange={(status) => {
+          setStatusFilter(status);
+          setPage(1);
+        }}
+      />
+
+      {/* Two-pane layout */}
+      <section className="grid gap-4 lg:grid-cols-[400px_minmax(0,1fr)]">
+        {/* LEFT: list panel */}
+        <div className="flex flex-col rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+          {/* Toolbar */}
           <div className="mb-3 flex items-center justify-between">
             <p className="text-[11px] text-zinc-500">{total} ticket(s)</p>
             <button
@@ -395,47 +361,33 @@ export default function ProgramSupportTicketsPage() {
             </button>
           </div>
 
+          {/* Search */}
           <div className="mb-3 grid gap-2">
             <div className="relative">
               <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />
               <input
                 type="text"
                 value={searchInput}
-                onChange={(event) => setSearchInput(event.target.value)}
-                placeholder="Search by ticket number, subject, or participant"
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Search tickets..."
                 className="w-full rounded-md border border-zinc-200 py-2 pl-8 pr-3 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
                     setPage(1);
                     setSearchQuery(searchInput.trim());
                   }
                 }}
               />
             </div>
-            <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-              <select
-                value={statusFilter}
-                onChange={(event) => {
-                  setStatusFilter(event.target.value as ProgramSupportTicketStatus | "");
-                  setPage(1);
-                }}
-                className="rounded-md border border-zinc-200 px-2.5 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              >
-                <option value="">All statuses</option>
-                {STATUS_OPTIONS.map((status) => (
-                  <option key={status} value={status}>
-                    {toTitleCase(status)}
-                  </option>
-                ))}
-              </select>
+            <div className="flex items-center gap-2">
               <select
                 value={priorityFilter}
-                onChange={(event) => {
-                  setPriorityFilter(event.target.value as ProgramSupportTicketPriority | "");
+                onChange={(e) => {
+                  setPriorityFilter(e.target.value as ProgramSupportTicketPriority | "");
                   setPage(1);
                 }}
-                className="rounded-md border border-zinc-200 px-2.5 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className="flex-1 rounded-md border border-zinc-200 px-2.5 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               >
                 <option value="">All priorities</option>
                 {PRIORITY_OPTIONS.map((priority) => (
@@ -452,62 +404,68 @@ export default function ProgramSupportTicketsPage() {
                 }}
                 className="rounded-md bg-blue-500 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-600"
               >
-                Apply
+                Search
               </button>
             </div>
           </div>
 
-          <div className="max-h-[640px] space-y-2 overflow-y-auto">
-            {loadingList ? <p className="text-xs text-zinc-500">Loading tickets...</p> : null}
+          {/* Ticket list */}
+          <div className="max-h-[600px] flex-1 space-y-2 overflow-y-auto">
+            {loadingList
+              ? Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="rounded-xl border border-zinc-100 p-3 space-y-2">
+                    <Skeleton className="h-3 w-16" />
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </div>
+                ))
+              : null}
             {!loadingList && tickets.length === 0 ? (
               <p className="rounded-md border border-dashed border-zinc-300 px-3 py-6 text-center text-xs text-zinc-500">
                 No support tickets found.
               </p>
             ) : null}
             {!loadingList &&
-              tickets.map((ticket) => (
-                <button
-                  key={ticket.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedId(ticket.id);
-                    setSelectedTicket(null);
-                  }}
-                  className={`w-full rounded-md border p-3 text-left ${
-                    selectedId === ticket.id
-                      ? "border-blue-400 bg-blue-50"
-                      : "border-zinc-200 bg-white hover:bg-zinc-50"
-                  }`}
-                >
-                  <p className="text-[11px] font-semibold text-zinc-700">{ticket.ticketNumber}</p>
-                  <p className="line-clamp-1 text-sm font-semibold text-zinc-900">{ticket.subject}</p>
-                  <p className="line-clamp-1 text-xs text-zinc-500">
-                    {ticket.participant?.fullName ?? "Unknown participant"} · {ticket.participant?.email ?? "—"}
-                  </p>
-                  <p className="text-[11px] text-zinc-500">
-                    {toTitleCase(ticket.status)} · {toTitleCase(ticket.priority)} · {formatDateTime(ticket.lastMessageAt)}
-                  </p>
-                </button>
-              ))}
+              (() => {
+                const now = Date.now();
+                const staleMs = 3 * 24 * 60 * 60 * 1000;
+                return tickets.map((ticket) => (
+                  <TicketListItem
+                    key={ticket.id}
+                    ticket={ticket}
+                    isSelected={selectedId === ticket.id}
+                    isStale={
+                      ticket.status === "open" &&
+                      now - new Date(ticket.createdAt).getTime() > staleMs
+                    }
+                    onClick={() => {
+                      setSelectedId(ticket.id);
+                      setSelectedTicket(null);
+                      setLocalTicket(null);
+                    }}
+                  />
+                ));
+              })()}
           </div>
 
-          {totalPages > 1 ? (
+          {/* Pagination */}
+          {Math.ceil(total / limit) > 1 ? (
             <div className="mt-3 flex items-center justify-end gap-2">
               <button
                 type="button"
                 disabled={page <= 1}
-                onClick={() => setPage((current) => current - 1)}
+                onClick={() => setPage((p) => p - 1)}
                 className="rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 disabled:opacity-40 hover:bg-zinc-50"
               >
                 Previous
               </button>
               <span className="text-[11px] text-zinc-600">
-                Page {page} of {totalPages}
+                Page {page} of {Math.ceil(total / limit)}
               </span>
               <button
                 type="button"
-                disabled={page >= totalPages}
-                onClick={() => setPage((current) => current + 1)}
+                disabled={page >= Math.ceil(total / limit)}
+                onClick={() => setPage((p) => p + 1)}
                 className="rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 disabled:opacity-40 hover:bg-zinc-50"
               >
                 Next
@@ -516,284 +474,51 @@ export default function ProgramSupportTicketsPage() {
           ) : null}
         </div>
 
-        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
-          {!selectedId ? <p className="text-sm text-zinc-500">Select a ticket to view details.</p> : null}
-          {selectedId && loadingDetail ? <p className="text-sm text-zinc-500">Loading ticket detail...</p> : null}
-
-          {selectedTicket ? (
-            <div className="space-y-4">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
-                  {selectedTicket.ticketNumber}
-                </p>
-                <h3 className="text-base font-semibold text-zinc-900">{selectedTicket.subject}</h3>
-                <p className="text-xs text-zinc-500">
-                  {selectedTicket.participant?.fullName ?? "Unknown participant"} ·{" "}
-                  {selectedTicket.participant?.email ?? "—"}
-                </p>
-                <p className="text-[11px] text-zinc-500">
-                  Created {formatDateTime(selectedTicket.createdAt)} · Last updated{" "}
-                  {formatDateTime(selectedTicket.updatedAt)}
-                </p>
-              </div>
-
-              <div className="grid gap-2 md:grid-cols-2">
-                <label className="text-xs font-medium text-zinc-600">
-                  Status
-                  <select
-                    value={selectedTicket.status}
-                    onChange={(event) =>
-                      setSelectedTicket((current) =>
-                        current
-                          ? {
-                              ...current,
-                              status: event.target.value as ProgramSupportTicketStatus,
-                            }
-                          : current,
-                      )
-                    }
-                    className="mt-1 block w-full rounded-md border border-zinc-200 px-2.5 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                  >
-                    {STATUS_OPTIONS.map((status) => (
-                      <option key={status} value={status}>
-                        {toTitleCase(status)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="text-xs font-medium text-zinc-600">
-                  Priority
-                  <select
-                    value={selectedTicket.priority}
-                    onChange={(event) =>
-                      setSelectedTicket((current) =>
-                        current
-                          ? {
-                              ...current,
-                              priority: event.target.value as ProgramSupportTicketPriority,
-                            }
-                          : current,
-                      )
-                    }
-                    className="mt-1 block w-full rounded-md border border-zinc-200 px-2.5 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                  >
-                    {PRIORITY_OPTIONS.map((priority) => (
-                      <option key={priority} value={priority}>
-                        {toTitleCase(priority)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
-              <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-medium text-zinc-600">
-                    Assigned to: <span className="font-normal text-zinc-700">{selectedTicket.assignedTo ?? "Unassigned"}</span>
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setSelectedTicket((current) =>
-                        current ? { ...current, assignedTo: adminProfile?.id ?? null } : current,
-                      )
-                    }
-                    className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] font-medium text-zinc-600 hover:bg-zinc-100"
-                  >
-                    Assign to me
-                  </button>
-                </div>
-              </div>
-
-              {selectedTicket.status === "resolved" ? (
-                <label className="block text-xs font-medium text-zinc-600">
-                  Resolution
-                  <textarea
-                    value={selectedTicket.resolution ?? ""}
-                    onChange={(event) =>
-                      setSelectedTicket((current) =>
-                        current ? { ...current, resolution: event.target.value } : current,
-                      )
-                    }
-                    placeholder="Describe how this ticket was resolved..."
-                    className="mt-1 min-h-[80px] w-full rounded-md border border-zinc-200 p-2.5 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                  />
-                </label>
-              ) : null}
-
-              {selectedTicket.status === "closed" ? (
-                <label className="block text-xs font-medium text-zinc-600">
-                  Close Reason
-                  <textarea
-                    value={selectedTicket.closedReason ?? ""}
-                    onChange={(event) =>
-                      setSelectedTicket((current) =>
-                        current ? { ...current, closedReason: event.target.value } : current,
-                      )
-                    }
-                    placeholder="Reason for closing this ticket..."
-                    className="mt-1 min-h-[80px] w-full rounded-md border border-zinc-200 p-2.5 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                  />
-                </label>
-              ) : null}
-
-              <div className="flex items-center justify-between">
-                <div>
-                  {showDeleteConfirm ? (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-zinc-600">Delete this ticket?</span>
-                      <button
-                        type="button"
-                        onClick={() => void handleDeleteTicket()}
-                        disabled={deletingTicket}
-                        className="rounded-md bg-red-600 px-2.5 py-1.5 text-[11px] font-semibold text-white disabled:opacity-60 hover:bg-red-700"
-                      >
-                        {deletingTicket ? "Deleting..." : "Confirm Delete"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setShowDeleteConfirm(false)}
-                        disabled={deletingTicket}
-                        className="rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 disabled:opacity-60 hover:bg-zinc-50"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setShowDeleteConfirm(true)}
-                      className="rounded-md border border-red-200 px-2.5 py-1.5 text-[11px] font-medium text-red-600 hover:bg-red-50"
-                    >
-                      Delete Ticket
-                    </button>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void handleUpdateTicket()}
-                  disabled={savingTicket}
-                  className="rounded-md bg-blue-500 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60 hover:bg-blue-600"
-                >
-                  {savingTicket ? "Saving..." : "Save Ticket"}
-                </button>
-              </div>
-
-              <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3">
-                <p className="text-xs font-medium text-zinc-700">Original Description</p>
-                <div
-                  className="prose prose-sm mt-1 max-w-none text-zinc-700"
-                  dangerouslySetInnerHTML={{
-                    __html: originalDescription || "<p>No description provided.</p>",
-                  }}
+        {/* RIGHT: detail panel */}
+        <div className="flex flex-col rounded-xl border border-zinc-200 bg-white shadow-sm overflow-hidden">
+          {!selectedId && !loadingDetail ? (
+            <div className="flex flex-1 items-center justify-center p-8 text-sm text-zinc-400">
+              Select a ticket to view details.
+            </div>
+          ) : null}
+          {selectedId && loadingDetail ? (
+            <div className="p-4 space-y-3">
+              <Skeleton className="h-5 w-1/2" />
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-4 w-1/3" />
+            </div>
+          ) : null}
+          {selectedTicket && localTicket ? (
+            <div className="flex flex-col h-full min-h-0">
+              <div className="flex-shrink-0 border-b border-zinc-200 p-4">
+                <TicketDetailHeader
+                  ticket={selectedTicket}
+                  localTicket={localTicket}
+                  setLocalTicket={(updater) =>
+                    setLocalTicket((prev) => (prev ? updater(prev) : prev))
+                  }
+                  adminId={adminProfile?.id}
+                  onUpdate={handleUpdateTicket}
+                  isSaving={savingTicket}
+                  onDelete={() => void handleDeleteTicket()}
+                  showDeleteConfirm={showDeleteConfirm}
+                  setShowDeleteConfirm={setShowDeleteConfirm}
+                  isDeletingTicket={deletingTicket}
                 />
-                <CompactAttachmentGrid attachments={originalAttachments} />
               </div>
-
-              <div className="space-y-2">
-                <h4 className="text-sm font-semibold text-zinc-900">Conversation</h4>
-                {selectedTicket.messages.length === 0 ? (
-                  <p className="text-sm text-zinc-500">No messages yet.</p>
-                ) : (
-                  selectedTicket.messages.map((message, index) => {
-                    const isMainThread = originalMessage
-                      ? message.id === originalMessage.id
-                      : !message.isFromAdmin && index === 0;
-                    const messageTypeLabel = isMainThread
-                      ? "Main thread"
-                      : message.isFromAdmin
-                        ? message.isInternalNote
-                          ? "Internal note"
-                          : "Admin reply"
-                        : "Participant reply";
-
-                    return (
-                      <div
-                        key={message.id}
-                        className={`rounded-md border p-3 ${
-                          isMainThread
-                            ? "border-amber-200 bg-amber-50/40"
-                            : message.isInternalNote
-                              ? "border-purple-200 bg-purple-50/50"
-                              : message.isFromAdmin
-                                ? "border-blue-200 bg-blue-50/50"
-                                : "border-zinc-200 bg-white"
-                        }`}
-                      >
-                        <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="inline-flex items-center rounded-full border border-zinc-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-700">
-                              {messageTypeLabel}
-                            </span>
-                            <p className="text-xs font-semibold text-zinc-700">
-                              {message.senderName}
-                            </p>
-                          </div>
-                          <p className="text-[11px] text-zinc-500">{formatDateTime(message.createdAt)}</p>
-                        </div>
-                        <div
-                          className="prose prose-sm max-w-none text-zinc-700"
-                          dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(message.message) }}
-                        />
-                        <CompactAttachmentGrid attachments={message.attachments ?? []} />
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-zinc-600">Reply to participant</p>
-                <textarea
-                  value={replyMessage}
-                  onChange={(event) => setReplyMessage(event.target.value)}
-                  placeholder="Type your response here..."
-                  className="min-h-[120px] w-full rounded-md border border-zinc-200 p-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              <div className="flex-1 overflow-y-auto p-4">
+                <TicketConversation
+                  ticket={selectedTicket}
+                  originalDescription={originalDescription}
+                  originalAttachments={originalAttachments}
                 />
-                <div className="flex flex-wrap items-center gap-3">
-                  <label className="flex cursor-pointer items-center gap-1.5 text-xs text-zinc-600">
-                    <input
-                      type="checkbox"
-                      checked={isInternalNote}
-                      onChange={(event) => setIsInternalNote(event.target.checked)}
-                      className="h-3.5 w-3.5 rounded border-zinc-300 text-purple-600 focus:ring-purple-500"
-                    />
-                    Internal note (not visible to participant)
-                  </label>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <label className="cursor-pointer rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50">
-                    Attach files
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      multiple
-                      accept="image/*,.pdf,.doc,.docx"
-                      className="sr-only"
-                      onChange={(event) => {
-                        const files = event.target.files;
-                        if (files) {
-                          setReplyAttachments(Array.from(files));
-                        }
-                      }}
-                    />
-                  </label>
-                  {replyAttachments.length > 0 ? (
-                    <span className="text-[11px] text-zinc-500">
-                      {replyAttachments.length} file(s) selected
-                    </span>
-                  ) : null}
-                  <div className="ml-auto">
-                    <button
-                      type="button"
-                      onClick={() => void handleSendReply()}
-                      disabled={sendingReply || uploadingAttachments || !replyMessage.trim()}
-                      className="rounded-md bg-blue-500 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60 hover:bg-blue-600"
-                    >
-                      {uploadingAttachments ? "Uploading..." : sendingReply ? "Sending..." : "Send Reply"}
-                    </button>
-                  </div>
-                </div>
+              </div>
+              <div className="flex-shrink-0 border-t border-zinc-200 p-4">
+                <ReplyComposer
+                  onSend={handleSendReply}
+                  isSending={sendingReply}
+                  isUploading={uploadingAttachments}
+                />
               </div>
             </div>
           ) : null}
