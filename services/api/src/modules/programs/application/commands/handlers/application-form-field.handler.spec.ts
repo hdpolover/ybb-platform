@@ -126,6 +126,41 @@ describe('CreateApplicationFormFieldHandler', () => {
     );
   });
 
+  it('uses the catalog type for a system field, ignoring a conflicting client fieldType', async () => {
+    mockPrisma.systemFormFieldDefinition.findUnique.mockResolvedValue({
+      key: 'phone',
+      type: 'phone',
+      placeholder: null,
+      helpText: null,
+      defaultOptions: [],
+      isActive: true,
+      deletedAt: null,
+    });
+    mockRepo.createFormField.mockResolvedValue({ id: 'f3' });
+
+    await handler.execute(
+      new CreateApplicationFormFieldCommand(
+        'p1',
+        {
+          source: 'system',
+          systemFieldKey: 'phone',
+          label: 'Phone Number',
+          fieldType: FormFieldType.TEXT, // client sends the wrong type
+        },
+        'u1',
+      ),
+    );
+
+    expect(mockRepo.createFormField).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'system',
+        systemFieldKey: 'phone',
+        name: 'phone',
+        type: 'phone', // catalog wins
+      }),
+    );
+  });
+
   it('rejects a system field with unknown systemFieldKey', async () => {
     mockPrisma.systemFormFieldDefinition.findUnique.mockResolvedValue(null);
 
