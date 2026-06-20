@@ -798,7 +798,18 @@ export class CreateProgramResourceDto {
     @IsString()
     @IsOptional()
     fileUrl?: string;
-    
+
+    @ApiProperty({ required: false, description: 'Source type: "upload" or "link"', enum: ['upload', 'link'] })
+    @IsOptional()
+    @IsIn(['upload', 'link'])
+    sourceType?: 'upload' | 'link';
+
+    @ApiProperty({ required: false, description: 'External URL (required when sourceType is "link")' })
+    @IsOptional()
+    @IsString()
+    @IsUrl()
+    linkUrl?: string;
+
     @ApiProperty({ type: 'string', format: 'binary', required: false, description: 'File to upload' })
     @IsOptional()
     file?: Express.Multer.File;
@@ -844,6 +855,17 @@ export class UpdateProgramResourceDto {
     @IsString()
     @IsOptional()
     fileUrl?: string;
+
+    @ApiProperty({ required: false, description: 'Source type: "upload" or "link"', enum: ['upload', 'link'] })
+    @IsOptional()
+    @IsIn(['upload', 'link'])
+    sourceType?: 'upload' | 'link';
+
+    @ApiProperty({ required: false, description: 'External URL (required when sourceType is "link")' })
+    @IsOptional()
+    @IsString()
+    @IsUrl()
+    linkUrl?: string;
 
     @ApiProperty({ required: false })
     @IsNumber()

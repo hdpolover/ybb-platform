@@ -278,10 +278,13 @@ export class HomeStrategy implements ILandingPageStrategy {
     ]);
 
     const guidebookResources = await Promise.all(
-      (program?.resources ?? []).map(async (resource) => ({
-        ...resource,
-        resolvedUrl: await resolveMaskedFileUrl(this.prisma, resource.fileUrl),
-      })),
+      (program?.resources ?? []).map(async (resource) => {
+        const activeUrl = resource.sourceType === 'link' ? resource.linkUrl : resource.fileUrl;
+        return {
+          ...resource,
+          resolvedUrl: activeUrl ? await resolveMaskedFileUrl(this.prisma, activeUrl) : null,
+        };
+      }),
     );
     const guidebookUrlById = new Map(guidebookResources.map((resource) => [resource.id, resource.resolvedUrl]));
 
@@ -398,7 +401,7 @@ export class HomeStrategy implements ILandingPageStrategy {
               id: res.id,
               title: res.title,
               type: res.type,
-              url: guidebookUrlById.get(res.id) ?? res.fileUrl,
+              url: guidebookUrlById.get(res.id) ?? (res.sourceType === 'link' ? res.linkUrl : res.fileUrl),
             })) || [],
           },
         },
