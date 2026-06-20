@@ -10,6 +10,7 @@ import {
 import { toast } from "sonner";
 import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import {
   createAdminRole,
   deleteAdminRole,
@@ -79,6 +80,7 @@ function mapRole(role: ApiAdminRole): RoleRow {
 
 export function RolesPermissionsSettings({ programId, programName }: RolesPermissionsSettingsProps) {
   const { accessConfig } = useAuth();
+  const resolvedProgramId = useResolvedProgramId(programId);
   const [roles, setRoles] = useState<RoleRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -103,14 +105,14 @@ export function RolesPermissionsSettings({ programId, programName }: RolesPermis
     setError(null);
 
     try {
-      const response = await listAdminRoles({ programId });
+      const response = await listAdminRoles({ programId: resolvedProgramId });
       setRoles(response.map(mapRole));
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Failed to load roles.");
     } finally {
       setLoading(false);
     }
-  }, [canAssignRoles, programId]);
+  }, [canAssignRoles, resolvedProgramId]);
 
   useEffect(() => {
     void loadRoles();

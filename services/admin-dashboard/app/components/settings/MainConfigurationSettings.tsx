@@ -6,6 +6,7 @@ import {
   getProgramConfig,
   updateProgramConfig,
 } from "@/src/shared/api-client";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { MainConfigurationHeader } from "./mainConfiguration/MainConfigurationHeader";
 import { MainConfigurationContent } from "./mainConfiguration/MainConfigurationContent";
 
@@ -18,6 +19,7 @@ export function MainConfigurationSettings({
   programId,
   programName,
 }: MainConfigurationSettingsProps) {
+  const resolvedProgramId = useResolvedProgramId(programId);
   const [registrationOpen, setRegistrationOpen] = useState(true);
   const [emailVerification, setEmailVerification] = useState<"Optional" | "Required">("Required");
   const [programActive, setProgramActive] = useState(true);
@@ -30,7 +32,7 @@ export function MainConfigurationSettings({
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const config = await getProgramConfig(programId);
+      const config = await getProgramConfig(resolvedProgramId);
       setRegistrationOpen(config.allowRegistration ?? true);
       setEmailVerification(config.requireEmailVerification === false ? "Optional" : "Required");
       setProgramActive(config.isActive ?? true);
@@ -39,14 +41,14 @@ export function MainConfigurationSettings({
     } finally {
       setLoading(false);
     }
-  }, [programId]);
+  }, [resolvedProgramId]);
 
   useEffect(() => { load(); }, [load]);
 
   async function handleSave() {
     setSaving(true);
     try {
-      await updateProgramConfig(programId, {
+      await updateProgramConfig(resolvedProgramId, {
         isActive: programActive,
         allowRegistration: registrationOpen,
         requireEmailVerification: emailVerification === "Required",

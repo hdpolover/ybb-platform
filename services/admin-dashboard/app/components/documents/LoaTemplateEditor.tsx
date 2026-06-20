@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import TextAlign from "@tiptap/extension-text-align";
@@ -287,8 +288,11 @@ interface LoaTemplateEditorProps {
 }
 
 export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEditorProps) {
+  const resolvedProgramId = useResolvedProgramId(programId);
   const { accessiblePrograms, adminProfile } = useAuth();
-  const program = accessiblePrograms.find((p) => p.programId === programId);
+  const program = accessiblePrograms.find(
+    (p) => p.programId === programId || p.programSlug === programId,
+  );
   const brandId = program?.brandId ?? "";
   const userId = adminProfile?.userId ?? "";
 
@@ -336,9 +340,9 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
 
   // Load existing template
   useEffect(() => {
-    if (!programId) return;
+    if (!resolvedProgramId) return;
     setLoading(true);
-    listDocumentTemplates(programId, "letter_of_acceptance")
+    listDocumentTemplates(resolvedProgramId, "letter_of_acceptance")
       .then((list) => {
         const t = list[0] ?? null;
         setTemplate(t);
@@ -351,7 +355,7 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
       .catch(() => toast.error("Failed to load LOA template"))
       .finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [programId]);
+  }, [resolvedProgramId]);
 
   // Set editor content once editors + template are ready
   const contentSetRef = useRef(false);
@@ -398,7 +402,7 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
         onTemplateChange?.(updated);
         toast.success(publish ? "Template published" : "Draft saved");
       } else {
-        const created = await createDocumentTemplate(programId, { ...body, userId, brandId });
+        const created = await createDocumentTemplate(resolvedProgramId, { ...body, userId, brandId });
         setTemplate(created);
         onTemplateChange?.(created);
         toast.success(publish ? "Template published" : "Draft saved");
@@ -684,7 +688,7 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
                 label="Logo"
                 value={layout.logoUrl ?? ""}
                 onChange={(url) => setLayout((l) => ({ ...l, logoUrl: url }))}
-                programId={programId}
+                programId={resolvedProgramId}
                 brandId={brandId}
                 userId={userId}
               />
@@ -695,7 +699,7 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
                 label="Signature Image"
                 value={layout.signatureUrl ?? ""}
                 onChange={(url) => setLayout((l) => ({ ...l, signatureUrl: url }))}
-                programId={programId}
+                programId={resolvedProgramId}
                 brandId={brandId}
                 userId={userId}
               />

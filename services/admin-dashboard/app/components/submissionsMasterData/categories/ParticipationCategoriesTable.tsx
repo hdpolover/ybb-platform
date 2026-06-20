@@ -9,6 +9,7 @@ import {
   UsersIcon,
 } from "@heroicons/react/24/solid";
 import { buildApiUrl, getAccessToken, readErrorMessage, readJsonData } from "@/app/components/submissionsMasterData/api";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
 import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
 
@@ -208,6 +209,7 @@ function CategoryModal({
 }
 
 export function ParticipationCategoriesTable({ programId }: { programId: string }) {
+  const resolvedProgramId = useResolvedProgramId(programId);
   const [data, setData] = useState<ParticipationCategoryRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -222,7 +224,7 @@ export function ParticipationCategoriesTable({ programId }: { programId: string 
     setErrorMessage(null);
 
     try {
-      const response = await fetch(buildApiUrl(`/programs/${encodeURIComponent(programId)}/participation-categories?includeInactive=true`), {
+      const response = await fetch(buildApiUrl(`/programs/${encodeURIComponent(resolvedProgramId)}/participation-categories?includeInactive=true`), {
         cache: "no-store",
       });
 
@@ -264,7 +266,7 @@ export function ParticipationCategoriesTable({ programId }: { programId: string 
 
   useEffect(() => {
     void loadCategories();
-  }, [programId]);
+  }, [resolvedProgramId]);
 
   const openCreateModal = () => {
     setFormState(createEmptyCategoryState());
@@ -308,12 +310,12 @@ export function ParticipationCategoriesTable({ programId }: { programId: string 
       benefits: normalizeRichText(formState.benefits),
       eligibility: normalizeRichText(formState.eligibility),
       order,
-      ...(isEditing ? { isActive: formState.status === "Active" } : { programId, isActive: formState.status === "Active" }),
+      ...(isEditing ? { isActive: formState.status === "Active" } : { programId: resolvedProgramId, isActive: formState.status === "Active" }),
     };
 
     const path = isEditing
       ? `/programs/participation-categories/${encodeURIComponent(formState.id as string)}`
-      : `/programs/${encodeURIComponent(programId)}/participation-categories`;
+      : `/programs/${encodeURIComponent(resolvedProgramId)}/participation-categories`;
 
     setIsSaving(true);
     setModalErrorMessage(null);

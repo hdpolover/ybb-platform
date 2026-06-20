@@ -6,6 +6,7 @@ import { MagnifyingGlassIcon } from "@heroicons/react/24/solid";
 import { PlusIcon, PencilSquareIcon, TrashIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import {
   listProgramSchedules,
   createProgramSchedule,
@@ -25,6 +26,7 @@ import {
 export default function ProgramRundownsPage() {
   const params = useParams<{ programId: string }>();
   const { accessiblePrograms } = useAuth();
+  const resolvedProgramId = useResolvedProgramId(params.programId);
   const [items, setItems] = useState<ProgramSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -41,12 +43,12 @@ export default function ProgramRundownsPage() {
   const programName = accessiblePrograms.find((p) => p.programId === params.programId)?.programName ?? "Selected Program";
 
   const fetch = useCallback(async () => {
-    if (!params.programId) return;
+    if (!resolvedProgramId) return;
     setLoading(true); setError(null);
-    try { setItems(await listProgramSchedules(params.programId)); }
+    try { setItems(await listProgramSchedules(resolvedProgramId)); }
     catch (err) { setError(err instanceof Error ? err.message : "Failed to load"); }
     finally { setLoading(false); }
-  }, [params.programId]);
+  }, [resolvedProgramId]);
 
   useEffect(() => { fetch(); }, [fetch]);
 
@@ -241,7 +243,7 @@ export default function ProgramRundownsPage() {
 
       <ScheduleSheet
         open={showCreate || editTarget !== null}
-        programId={params.programId}
+        programId={resolvedProgramId}
         item={editTarget ?? undefined}
         items={items}
         onClose={() => { setShowCreate(false); setEditTarget(null); }}

@@ -27,7 +27,9 @@ export default function SubmissionFormPage({
 
   const { accessiblePrograms } = useAuth();
   const programName =
-    accessiblePrograms.find((p) => p.programId === programId)?.programName ?? "Selected Program";
+    accessiblePrograms.find(
+      (p) => p.programId === programId || p.programSlug === programId,
+    )?.programName ?? "Selected Program";
 
   return (
     <main className="space-y-4">

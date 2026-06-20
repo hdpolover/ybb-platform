@@ -24,6 +24,7 @@ import {
 import { EmptyState } from "@/src/admin/empty-state";
 import { ConfirmDialog } from "@/src/admin/confirm-dialog";
 import { LoaBatchDialog } from "./LoaBatchDialog";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -106,6 +107,7 @@ function BatchRow({
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function LoaBatchesTab({ programId }: LoaBatchesTabProps) {
+  const resolvedProgramId = useResolvedProgramId(programId);
   const [batches, setBatches] = useState<LoaBatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -126,14 +128,14 @@ export function LoaBatchesTab({ programId }: LoaBatchesTabProps) {
     setLoading(true);
     setError(null);
     try {
-      const data = await getLoaBatches(programId);
+      const data = await getLoaBatches(resolvedProgramId);
       setBatches(data);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
-  }, [programId]);
+  }, [resolvedProgramId]);
 
   useEffect(() => {
     void fetchBatches();
@@ -171,7 +173,7 @@ export function LoaBatchesTab({ programId }: LoaBatchesTabProps) {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      await deleteLoaBatch(programId, deleteTarget.id);
+      await deleteLoaBatch(resolvedProgramId, deleteTarget.id);
       toast.success(`Batch "${deleteTarget.name}" deleted.`);
       setDeleteDialogOpen(false);
       setDeleteTarget(null);
@@ -187,10 +189,10 @@ export function LoaBatchesTab({ programId }: LoaBatchesTabProps) {
     setTogglingId(batch.id);
     try {
       if (batch.releasedAt) {
-        await unreleaseLoaBatch(programId, batch.id);
+        await unreleaseLoaBatch(resolvedProgramId, batch.id);
         toast.success(`Batch "${batch.name}" is now a draft.`);
       } else {
-        await releaseLoaBatch(programId, batch.id);
+        await releaseLoaBatch(resolvedProgramId, batch.id);
         toast.success(`Batch "${batch.name}" released. Eligible participants can now download their LOA.`);
       }
       void fetchBatches();
@@ -279,7 +281,7 @@ export function LoaBatchesTab({ programId }: LoaBatchesTabProps) {
       {/* Create / Edit dialog */}
       {dialogOpen && (
         <LoaBatchDialog
-          programId={programId}
+          programId={resolvedProgramId}
           batch={editingBatch}
           onClose={handleDialogClose}
           onSaved={handleSaved}
