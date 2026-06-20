@@ -1,6 +1,7 @@
 "use client";
 
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useState } from "react";
+import { useAuth } from "@/app/contexts/AuthContext";
 import {
   BarChart,
   Bar,
@@ -685,6 +686,16 @@ export default function AnalyticsPage({
 }) {
   const { programId } = use(params);
 
+  // programId from the route may be a program slug; the stats endpoints need the
+  // program UUID. Resolve it via the admin's accessible programs.
+  const { accessiblePrograms } = useAuth();
+  const resolvedProgramId = useMemo(() => {
+    const match = accessiblePrograms.find(
+      (p) => p.programId === programId || p.programSlug === programId,
+    );
+    return match?.programId ?? programId;
+  }, [accessiblePrograms, programId]);
+
   const [analytics, setAnalytics] = useState<ProgramAnalytics | null>(null);
   const [dashboard, setDashboard] = useState<ProgramDashboardAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
@@ -701,8 +712,8 @@ export default function AnalyticsPage({
 
       try {
         const [a, d] = await Promise.all([
-          getProgramAnalytics(programId, appliedFilters),
-          getProgramDashboardAnalytics(programId),
+          getProgramAnalytics(resolvedProgramId, appliedFilters),
+          getProgramDashboardAnalytics(resolvedProgramId),
         ]);
         if (!mounted) return;
         setAnalytics(a);
@@ -720,7 +731,7 @@ export default function AnalyticsPage({
     return () => {
       mounted = false;
     };
-  }, [appliedFilters, programId]);
+  }, [appliedFilters, resolvedProgramId]);
 
   useEffect(() => {
     return loadAnalytics();
