@@ -1936,6 +1936,16 @@ export function updateProgramSupportTicket(
   );
 }
 
+export function deleteProgramSupportTicket(
+  programId: string,
+  ticketId: string,
+): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>(
+    `/admin/programs/${encodeURIComponent(programId)}/support-tickets/${encodeURIComponent(ticketId)}`,
+    { method: "DELETE" },
+  );
+}
+
 // ─── System Announcements ─────────────────────────────────────────────────────
 
 export type SystemAnnouncement = {

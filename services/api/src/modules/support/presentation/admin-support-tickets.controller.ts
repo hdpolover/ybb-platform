@@ -2,8 +2,11 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
+  HttpCode,
+  HttpStatus,
   NotFoundException,
   Param,
   Patch,
@@ -23,6 +26,7 @@ import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.de
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { ChangeType } from '@prisma/client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 
 class SupportTicketAttachmentInputDto {
   @IsString()
@@ -93,7 +97,10 @@ type SupportTicketAttachmentResponse = {
 @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 @ApiBearerAuth()
 export class AdminSupportTicketsController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly rabbitmqProducer: RabbitMQProducerService,
+  ) {}
 
   private isJsonObject(value: Prisma.JsonValue): value is Prisma.JsonObject {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -418,7 +425,11 @@ export class AdminSupportTicketsController {
       },
       select: {
         id: true,
+        ticketNumber: true,
+        subject: true,
         status: true,
+        participantId: true,
+        programId: true,
       },
     });
 
@@ -431,6 +442,7 @@ export class AdminSupportTicketsController {
       throw new BadRequestException('message is required');
     }
 
+    const isInternalNote = dto.isInternalNote === true;
     const attachments = (dto.attachments ?? []) as unknown as Prisma.InputJsonValue;
 
     await this.prisma.$transaction(async (tx) => {
@@ -439,7 +451,7 @@ export class AdminSupportTicketsController {
           ticketId: ticket.id,
           message,
           isFromAdmin: true,
-          isInternalNote: dto.isInternalNote === true,
+          isInternalNote,
           senderId: adminId,
           senderName: adminName,
           attachments,
@@ -454,6 +466,38 @@ export class AdminSupportTicketsController {
         });
       }
     });
+
+    if (!isInternalNote) {
+      const participantUser = await this.prisma.participant.findUnique({
+        where: { id: ticket.participantId },
+        select: {
+          fullName: true,
+          user: { select: { email: true, brand: true } },
+        },
+      });
+
+      if (participantUser?.user?.email) {
+        await this.rabbitmqProducer.emit('support.ticket.replied', {
+          ticketId: ticket.id,
+          ticketNumber: ticket.ticketNumber,
+          subject: ticket.subject,
+          status: SupportTicketStatus.waiting_response,
+          actorRole: 'admin',
+          responderName: adminName,
+          messagePreview: message.length > 200 ? `${message.slice(0, 200)}...` : message,
+          email: participantUser.user.email,
+          name: participantUser.fullName,
+          brand: participantUser.user.brand
+            ? {
+                name: participantUser.user.brand.name,
+                websiteUrl: participantUser.user.brand.websiteUrl,
+                logoUrl: participantUser.user.brand.logoUrl,
+                contactEmail: participantUser.user.brand.contactEmail,
+              }
+            : undefined,
+        });
+      }
+    }
 
     return { success: true };
   }
@@ -478,7 +522,13 @@ export class AdminSupportTicketsController {
         deletedAt: null,
         AND: [scopeWhere],
       },
-      select: { id: true },
+      select: {
+        id: true,
+        ticketNumber: true,
+        subject: true,
+        status: true,
+        participantId: true,
+      },
     });
 
     if (!ticket) {
@@ -495,6 +545,7 @@ export class AdminSupportTicketsController {
       throw new BadRequestException('At least one field is required.');
     }
 
+    const previousStatus = ticket.status;
     const data: Prisma.SupportTicketUpdateInput = {};
 
     if (dto.status !== undefined) {
@@ -544,6 +595,36 @@ export class AdminSupportTicketsController {
       data,
     });
 
+    if (dto.status !== undefined && dto.status !== previousStatus) {
+      const participantUser = await this.prisma.participant.findUnique({
+        where: { id: ticket.participantId },
+        select: {
+          fullName: true,
+          user: { select: { email: true, brand: true } },
+        },
+      });
+
+      if (participantUser?.user?.email) {
+        await this.rabbitmqProducer.emit('support.ticket.status-updated', {
+          ticketId: updated.id,
+          ticketNumber: updated.ticketNumber,
+          subject: updated.subject,
+          previousStatus,
+          status: updated.status,
+          email: participantUser.user.email,
+          name: participantUser.fullName,
+          brand: participantUser.user.brand
+            ? {
+                name: participantUser.user.brand.name,
+                websiteUrl: participantUser.user.brand.websiteUrl,
+                logoUrl: participantUser.user.brand.logoUrl,
+                contactEmail: participantUser.user.brand.contactEmail,
+              }
+            : undefined,
+        });
+      }
+    }
+
     return {
       id: updated.id,
       ticketNumber: updated.ticketNumber,
@@ -556,5 +637,38 @@ export class AdminSupportTicketsController {
       resolvedAt: updated.resolvedAt,
       closedAt: updated.closedAt,
     };
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Admin: soft-delete support ticket' })
+  @ApiResponse({ status: 204, description: 'Support ticket deleted' })
+  @AuditTrail({ entityType: 'SupportTicket', action: ChangeType.delete })
+  async delete(
+    @CurrentUser() user: CurrentUserData,
+    @Param('programId') programId: string,
+    @Param('id') id: string,
+  ): Promise<void> {
+    await this.assertProgramAdminAccess(user, programId);
+    const participantIdsInProgram = await this.getProgramParticipantIds(programId);
+    const scopeWhere = this.buildProgramScopeWhere(programId, participantIdsInProgram);
+
+    const ticket = await this.prisma.supportTicket.findFirst({
+      where: {
+        id,
+        deletedAt: null,
+        AND: [scopeWhere],
+      },
+      select: { id: true },
+    });
+
+    if (!ticket) {
+      throw new NotFoundException('Support ticket not found.');
+    }
+
+    await this.prisma.supportTicket.update({
+      where: { id: ticket.id },
+      data: { deletedAt: new Date() },
+    });
   }
 }
