@@ -18,6 +18,7 @@ import {
 import { CheckCircleIcon } from "@heroicons/react/24/solid";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import {
   listProgramMedia,
   deleteProgramMediaFile,
@@ -531,9 +532,12 @@ function DeleteModal({
 
 export default function MediaLibraryPage() {
   const params = useParams<{ programId: string }>();
+  const resolvedProgramId = useResolvedProgramId(params.programId);
   const { accessiblePrograms, adminProfile } = useAuth();
 
-  const program = accessiblePrograms.find((p) => p.programId === params.programId);
+  const program = accessiblePrograms.find(
+    (p) => p.programId === params.programId || p.programSlug === params.programId,
+  );
   const programName = program?.programName ?? "Selected Program";
   const brandId = program?.brandId ?? "";
   const userId = adminProfile?.userId ?? "";
@@ -555,12 +559,12 @@ export default function MediaLibraryPage() {
   const limit = 48;
 
   const fetchMedia = useCallback(async () => {
-    if (!params.programId || !brandId) return;
+    if (!resolvedProgramId || !brandId) return;
     setLoading(true);
     setError(null);
     try {
       const res = await listProgramMedia({
-        programId: params.programId,
+        programId: resolvedProgramId,
         brandId,
         assetType: assetTypeFilter === "all" ? undefined : assetTypeFilter,
         page,
@@ -574,7 +578,7 @@ export default function MediaLibraryPage() {
     } finally {
       setLoading(false);
     }
-  }, [params.programId, brandId, assetTypeFilter, page]);
+  }, [resolvedProgramId, brandId, assetTypeFilter, page]);
 
   useEffect(() => { fetchMedia(); }, [fetchMedia]);
 
@@ -582,7 +586,7 @@ export default function MediaLibraryPage() {
     if (!deleteTarget || !brandId) return;
     setDeleteLoading(true);
     try {
-      await deleteProgramMediaFile({ programId: params.programId, fileId: deleteTarget.id, brandId });
+      await deleteProgramMediaFile({ programId: resolvedProgramId, fileId: deleteTarget.id, brandId });
       setDeleteTarget(null);
       if (selectedFile?.id === deleteTarget.id) setSelectedFile(null);
       fetchMedia();
@@ -810,7 +814,7 @@ export default function MediaLibraryPage() {
       {/* Upload Sheet */}
       <UploadSheet
         open={showUpload}
-        programId={params.programId}
+        programId={resolvedProgramId}
         brandId={brandId}
         userId={userId}
         onUploaded={() => { setShowUpload(false); fetchMedia(); }}

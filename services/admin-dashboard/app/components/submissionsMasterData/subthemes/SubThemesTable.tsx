@@ -7,6 +7,7 @@ import {
   readErrorMessage,
   readJsonData,
 } from "@/app/components/submissionsMasterData/api";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { AddSubThemeAction, EditSubThemeAction, DeleteSubThemeAction } from "./SubThemeActions";
 
 export interface SubThemeRow {
@@ -28,6 +29,7 @@ type ApiSubtheme = {
 };
 
 export function SubThemesTable({ programId }: { programId: string }) {
+  const resolvedProgramId = useResolvedProgramId(programId);
   const [rows, setRows] = useState<SubThemeRow[]>([]);
   const [status, setStatus] = useState<"loading" | "idle">("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -37,7 +39,7 @@ export function SubThemesTable({ programId }: { programId: string }) {
     setErrorMessage(null);
     try {
       const response = await fetch(
-        buildApiUrl(`/programs/${encodeURIComponent(programId)}/subthemes?includeInactive=true`),
+        buildApiUrl(`/programs/${encodeURIComponent(resolvedProgramId)}/subthemes?includeInactive=true`),
         { cache: "no-store" },
       );
       if (!response.ok) throw new Error(await readErrorMessage(response));
@@ -61,7 +63,7 @@ export function SubThemesTable({ programId }: { programId: string }) {
       setStatus("idle");
       setErrorMessage(err instanceof Error ? err.message : "Failed to load sub themes.");
     }
-  }, [programId]);
+  }, [resolvedProgramId]);
 
   useEffect(() => {
     void loadSubthemes();
@@ -79,7 +81,7 @@ export function SubThemesTable({ programId }: { programId: string }) {
             <p className="text-sm text-zinc-500">Manage the sub themes used in the submission form.</p>
           </div>
         </div>
-        <AddSubThemeAction programId={programId} onChanged={loadSubthemes} />
+        <AddSubThemeAction programId={resolvedProgramId} onChanged={loadSubthemes} />
       </div>
 
       {errorMessage && (

@@ -18,6 +18,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import {
   listProgramResources,
   createProgramResource,
@@ -51,8 +52,11 @@ function formatBytes(bytes?: number): string {
 
 export default function ProgramGuidelinesPage() {
   const params = useParams<{ programId: string }>();
+  const resolvedProgramId = useResolvedProgramId(params.programId);
   const { accessiblePrograms, adminProfile } = useAuth();
-  const program = accessiblePrograms.find((p) => p.programId === params.programId);
+  const program = accessiblePrograms.find(
+    (p) => p.programId === params.programId || p.programSlug === params.programId,
+  );
   const brandId = program?.brandId ?? "";
   const userId = adminProfile?.userId ?? "";
   const programName = program?.programName ?? "Selected Program";
@@ -66,17 +70,17 @@ export default function ProgramGuidelinesPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   const load = useCallback(async () => {
-    if (!params.programId) return;
+    if (!resolvedProgramId) return;
     setLoading(true);
     setError(null);
     try {
-      setItems(await listProgramResources(params.programId));
+      setItems(await listProgramResources(resolvedProgramId));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
     } finally {
       setLoading(false);
     }
-  }, [params.programId]);
+  }, [resolvedProgramId]);
 
   useEffect(() => {
     load();
@@ -280,7 +284,7 @@ export default function ProgramGuidelinesPage() {
 
       <ResourceSheet
         open={showCreate || editTarget !== null}
-        programId={params.programId}
+        programId={resolvedProgramId}
         userId={userId}
         brandId={brandId}
         item={editTarget ?? undefined}

@@ -14,17 +14,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/src/ui/table";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 
 interface LoaStatusTableProps {
   programId: string;
 }
 
 export function LoaStatusTable({ programId }: LoaStatusTableProps) {
+  const resolvedProgramId = useResolvedProgramId(programId);
   const [searchQuery, setSearchQuery] = useState("");
 
   const { data: downloads = [], isLoading } = useQuery({
-    queryKey: ["loa-downloads", programId],
-    queryFn: () => getLoaDownloads(programId),
+    queryKey: ["loa-downloads", resolvedProgramId],
+    queryFn: () => getLoaDownloads(resolvedProgramId),
   });
 
   const filteredRows = useMemo(() => {

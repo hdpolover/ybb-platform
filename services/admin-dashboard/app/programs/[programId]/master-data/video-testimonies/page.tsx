@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import {
   VideoTestimonialsTable,
   type VideoTestimonyRow,
@@ -12,6 +13,7 @@ import { listProgramTestimonials } from "@/src/shared/api-client";
 export default function VideoTestimonialsPage() {
   const params = useParams<{ programId: string }>();
   const { accessiblePrograms } = useAuth();
+  const resolvedProgramId = useResolvedProgramId(params.programId);
   const [items, setItems] = useState<VideoTestimonyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -22,11 +24,11 @@ export default function VideoTestimonialsPage() {
   const brandId = program?.brandId ?? "";
 
   const load = useCallback(async () => {
-    if (!params.programId) return;
+    if (!resolvedProgramId) return;
     setLoading(true);
     setError(null);
     try {
-      const all = await listProgramTestimonials(params.programId);
+      const all = await listProgramTestimonials(resolvedProgramId);
       const videos = all
         .filter((t) => t.type === "video")
         .map((t) => ({
@@ -42,7 +44,7 @@ export default function VideoTestimonialsPage() {
     } finally {
       setLoading(false);
     }
-  }, [params.programId]);
+  }, [resolvedProgramId]);
 
   useEffect(() => {
     load();
@@ -82,7 +84,7 @@ export default function VideoTestimonialsPage() {
         <VideoTestimonialsTable
           data={filtered}
           loading={loading}
-          programId={params.programId}
+          programId={resolvedProgramId}
           brandId={brandId}
           search={search}
           onSearchChange={setSearch}

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { ArrowPathIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import {
   listProgramPartnershipEnquiries,
   updateProgramPartnershipEnquiryStatus,
@@ -15,6 +16,7 @@ const STATUS_OPTIONS = ["pending", "contacted", "resolved", "rejected"] as const
 
 export default function ProgramPartnershipsPage() {
   const params = useParams<{ programId: string }>();
+  const resolvedProgramId = useResolvedProgramId(params.programId);
   const { accessiblePrograms } = useAuth();
 
   const programName = useMemo(
@@ -36,11 +38,11 @@ export default function ProgramPartnershipsPage() {
   const limit = 20;
 
   const fetchPartnershipEnquiries = useCallback(async () => {
-    if (!params.programId) return;
+    if (!resolvedProgramId) return;
     setLoading(true);
     setError(null);
     try {
-      const response = await listProgramPartnershipEnquiries(params.programId, {
+      const response = await listProgramPartnershipEnquiries(resolvedProgramId, {
         page,
         limit,
         status: statusFilter || undefined,
@@ -53,7 +55,7 @@ export default function ProgramPartnershipsPage() {
     } finally {
       setLoading(false);
     }
-  }, [limit, page, params.programId, searchQuery, statusFilter]);
+  }, [limit, page, resolvedProgramId, searchQuery, statusFilter]);
 
   useEffect(() => {
     void fetchPartnershipEnquiries();
@@ -65,7 +67,7 @@ export default function ProgramPartnershipsPage() {
     setUpdatingId(enquiryId);
     setError(null);
     try {
-      const updated = await updateProgramPartnershipEnquiryStatus(params.programId, enquiryId, nextStatus);
+      const updated = await updateProgramPartnershipEnquiryStatus(resolvedProgramId, enquiryId, nextStatus);
       setItems((current) =>
         current.map((item) =>
           item.id === enquiryId

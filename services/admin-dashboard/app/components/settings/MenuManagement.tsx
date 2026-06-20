@@ -8,6 +8,7 @@ import {
 } from "@heroicons/react/24/solid";
 import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { listAdminRoles, type AdminRole as ApiAdminRole } from "@/src/shared/api-client";
 import {
   buildPermissionSet,
@@ -42,6 +43,7 @@ type MenuDetail = {
 
 export function MenuManagement({ programId, programName }: MenuManagementProps) {
   const { adminProfile, accessConfig } = useAuth();
+  const resolvedProgramId = useResolvedProgramId(programId);
   const [roles, setRoles] = useState<ApiAdminRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -60,13 +62,13 @@ export function MenuManagement({ programId, programName }: MenuManagementProps) 
     setLoading(true);
     setError(null);
     try {
-      setRoles(await listAdminRoles({ programId }));
+      setRoles(await listAdminRoles({ programId: resolvedProgramId }));
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Failed to load roles.");
     } finally {
       setLoading(false);
     }
-  }, [canManageMenuAccess, programId]);
+  }, [canManageMenuAccess, resolvedProgramId]);
 
   useEffect(() => {
     void loadRoles();
