@@ -5,12 +5,14 @@ import { PersonalDetailsTab, PersonalDetails } from "./tabs/PersonalDetailsTab";
 import { ProfessionalProfileTab, ProfessionalProfile } from "./tabs/ProfessionalProfileTab";
 import { EntryInformationTab, EntryInformation } from "./tabs/EntryInformationTab";
 import { MiscellaneousTab, Miscellaneous } from "./tabs/MiscellaneousTab";
+import { EssaysTab, Essay } from "./tabs/EssaysTab";
 
 const TABS = [
   { id: "personal", label: "Personal Details" },
   { id: "professional", label: "Professional Profile" },
   { id: "entry", label: "Entry Information" },
   { id: "misc", label: "Miscellaneous" },
+  { id: "essays", label: "Essays" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -20,6 +22,7 @@ export interface ParticipantTabsData {
   professional: ProfessionalProfile;
   entry: EntryInformation;
   misc: Miscellaneous;
+  essays: Essay[];
 }
 
 interface ParticipantProfileTabsProps {
@@ -58,6 +61,7 @@ export function ParticipantProfileTabs({ data }: ParticipantProfileTabsProps) {
         {activeTab === "professional" && <ProfessionalProfileTab data={data.professional} />}
         {activeTab === "entry" && <EntryInformationTab data={data.entry} />}
         {activeTab === "misc" && <MiscellaneousTab data={data.misc} />}
+        {activeTab === "essays" && <EssaysTab data={{ essays: data.essays }} />}
       </div>
     </div>
   );

@@ -10,6 +10,7 @@ export interface PersonalDetails {
   originAddress: string;
   currentAddress: string;
   phone: string;
+  emergencyContactName: string;
   emergencyPhone: string;
   contactRelation: string;
   shirtSize: string;
@@ -29,6 +30,7 @@ export function PersonalDetailsTab({ data }: { data: PersonalDetails }) {
         <InfoField label="Origin Address" value={data.originAddress} />
         <InfoField label="Current Address" value={data.currentAddress} />
         <InfoField label="Phone Number" value={data.phone} />
+        <InfoField label="Emergency Contact Name" value={data.emergencyContactName} />
         <InfoField label="Emergency Phone Number" value={data.emergencyPhone} />
         <InfoField label="Emergency Contact Relationship" value={data.contactRelation} />
         <InfoField label="T-Shirt Size" value={data.shirtSize} />
