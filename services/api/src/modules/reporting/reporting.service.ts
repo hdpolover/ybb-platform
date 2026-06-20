@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { ExcelService } from '@shared/infrastructure/excel/excel.service';
 import { Response } from 'express';
+import { PaymentStatus, Prisma } from '@prisma/client';
 
 @Injectable()
 export class ReportingService {
@@ -81,7 +82,7 @@ export class ReportingService {
     );
   }
 
-  async exportPayments(res: Response) {
+  async exportPayments(res: Response, filters?: { programId?: string; status?: string; search?: string }) {
     const columns = [
       { header: 'Invoice ID', key: 'id', width: 36 },
       { header: 'Status', key: 'status', width: 15 },
@@ -97,7 +98,7 @@ export class ReportingService {
 
     await this.excelService.streamExcelRows(
       res,
-      this.iteratePaymentRows(),
+      this.iteratePaymentRows(filters),
       columns,
       'payments-export',
     );
@@ -204,12 +205,55 @@ export class ReportingService {
     }
   }
 
-  private async *iteratePaymentRows() {
+  private async *iteratePaymentRows(filters?: { programId?: string; status?: string; search?: string }) {
     let cursor: { id: string; createdAt: Date } | null = null;
 
     while (true) {
+      const cursorWhere = this.buildCreatedAtCursorWhere(cursor);
+
+      const filterConditions: Prisma.ApplicationInvoiceWhereInput[] = [];
+
+      if (filters?.programId) {
+        filterConditions.push({ application: { is: { programId: filters.programId } } });
+      }
+
+      if (filters?.status) {
+        filterConditions.push({ status: filters.status as PaymentStatus });
+      }
+
+      if (filters?.search) {
+        const keyword = filters.search.trim();
+        if (keyword) {
+          filterConditions.push({
+            OR: [
+              { externalTransactionId: { contains: keyword, mode: 'insensitive' } },
+              {
+                application: {
+                  is: {
+                    participant: {
+                      is: {
+                        user: {
+                          is: {
+                            email: { contains: keyword, mode: 'insensitive' },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            ],
+          });
+        }
+      }
+
+      const where: Prisma.ApplicationInvoiceWhereInput =
+        filterConditions.length > 0
+          ? { AND: [cursorWhere ?? {}, ...filterConditions] }
+          : (cursorWhere ?? {});
+
       const invoices = await this.prisma.applicationInvoice.findMany({
-        where: this.buildCreatedAtCursorWhere(cursor),
+        where,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         include: {
           pricingTier: { select: { name: true } },

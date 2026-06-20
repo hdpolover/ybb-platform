@@ -1,4 +1,4 @@
-import { Controller, Logger, Get, Res, UseGuards } from '@nestjs/common';
+import { Controller, Logger, Get, Res, Query, UseGuards } from '@nestjs/common';
 import { Ctx, EventPattern, Payload, RmqContext } from '@nestjs/microservices';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { Response } from 'express';
@@ -60,9 +60,14 @@ export class ReportingController {
   @ApiOperation({ summary: 'Export Payments List (Admin)', operationId: 'exportPayments' })
   @ApiResponse({ status: 200, description: 'Excel file with payments' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden – admin role required' })
-  async exportPayments(@Res() res: Response) {
-    await this.reportingService.exportPayments(res);
+  @ApiResponse({ status: 403, description: 'Forbidden - admin role required' })
+  async exportPayments(
+    @Res() res: Response,
+    @Query('programId') programId?: string,
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+  ) {
+    await this.reportingService.exportPayments(res, { programId, status, search });
   }
 
   @EventPattern('payment.succeeded')
