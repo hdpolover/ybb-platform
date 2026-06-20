@@ -59,6 +59,12 @@ export class ApplicationResponseDto {
   motivationLetter?: string;
   achievements?: string;
   experiences?: string;
+  sourceAccountName?: string | null;
+  requirementLink?: string | null;
+  referralCode?: string | null;
+  subthemeId?: string | null;
+  subthemeName?: string | null;
+  essays?: Array<{ id: string; question: string; answer: string | null; wordLimit: number | null; order: number; isRequired: boolean }>;
   documents?: Record<string, DocumentFile>;
   requirementFiles?: DocumentFile[];
   twibbonLink?: string;
@@ -114,6 +120,7 @@ export class ApplicationResponseDto {
     currentCity?: string | null;
     currentCountry?: string | null;
     currentAddress?: string | null;
+    emergencyContactName?: string | null;
     emergencyContactPhone?: string | null;
     emergencyContactCountryCode?: string | null;
     emergencyContactRelation?: string | null;

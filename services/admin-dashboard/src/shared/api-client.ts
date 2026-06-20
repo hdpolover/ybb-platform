@@ -528,7 +528,19 @@ export type Application = {
   achievements?: string;
   experiences?: string;
   twibbonLink?: string;
-  referralCode?: string;
+  referralCode?: string | null;
+  sourceAccountName?: string | null;
+  requirementLink?: string | null;
+  subthemeId?: string | null;
+  subthemeName?: string | null;
+  essays?: Array<{
+    id: string;
+    question: string;
+    answer: string | null;
+    wordLimit: number | null;
+    order: number;
+    isRequired: boolean;
+  }>;
   createdAt: string;
   updatedAt: string;
   participant?: {
@@ -547,6 +559,7 @@ export type Application = {
     currentCity?: string | null;
     currentCountry?: string | null;
     currentAddress?: string | null;
+    emergencyContactName?: string | null;
     emergencyContactPhone?: string | null;
     emergencyContactCountryCode?: string | null;
     emergencyContactRelation?: string | null;

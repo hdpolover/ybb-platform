@@ -13,6 +13,7 @@ import type { PersonalDetails } from "@/app/components/participants/tabs/Persona
 import type { ProfessionalProfile } from "@/app/components/participants/tabs/ProfessionalProfileTab";
 import type { EntryInformation } from "@/app/components/participants/tabs/EntryInformationTab";
 import type { Miscellaneous } from "@/app/components/participants/tabs/MiscellaneousTab";
+import type { Essay } from "@/app/components/participants/tabs/EssaysTab";
 import { listApplications, getApplication, createSupportImpersonation, type Application } from "@/src/shared/api-client";
 import { formatDate } from "@/lib/utils";
 import { Button } from "@/src/ui/button";
@@ -26,6 +27,7 @@ interface ParticipantData extends ProfileHeaderData {
   professional: ProfessionalProfile;
   entry: EntryInformation;
   misc: Miscellaneous;
+  essays: Essay[];
 }
 
 const regionNames = typeof Intl !== "undefined" ? new Intl.DisplayNames(["en"], { type: "region" }) : null;
@@ -90,6 +92,7 @@ function mapToParticipantData(app: Application): ParticipantData {
       originAddress: p?.originAddress ?? "—",
       currentAddress: p?.currentAddress ?? "—",
       phone,
+      emergencyContactName: p?.emergencyContactName ?? "—",
       emergencyPhone: [p?.emergencyContactCountryCode, p?.emergencyContactPhone].filter(Boolean).join(" ") || "—",
       contactRelation: p?.emergencyContactRelation ?? "—",
       shirtSize: p?.tshirtSize ?? "—",
@@ -106,21 +109,19 @@ function mapToParticipantData(app: Application): ParticipantData {
     },
     entry: {
       category: app.applicationCategory ?? "—",
-      subtheme: "—",
+      subtheme: app.subthemeName ?? app.subthemeId ?? "—",
       source: p?.knowledgeSource ?? "—",
-      essayTitle: "—",
-      essayContent: app.motivationLetter ?? "—",
-      keywords: [],
-      reference: "—",
+      reference: app.referralCode ?? "—",
     },
     misc: {
       instagram: p?.instagramUsername ? `https://instagram.com/${p.instagramUsername.replace(/^@/, "")}` : "—",
       knowledgeSource: p?.knowledgeSource ?? "—",
-      sourceAccount: "—",
+      sourceAccount: app.sourceAccountName ?? "—",
       twibbon: app.twibbonLink ?? "—",
-      requirementLink: "—",
+      requirementLink: app.requirementLink ?? "—",
       referralCode: p?.referralCode ?? "—",
     },
+    essays: app.essays ?? [],
   };
 }
 

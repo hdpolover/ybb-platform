@@ -15,6 +15,7 @@ import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { PaymentGrpcClient } from '@modules/payments/infrastructure/services/payment-grpc.client';
+import { isRenderableEssayQuestion, coalesceStr } from '../../helpers/application-coalesce.helpers';
 
 /**
  * Get Application Handler
@@ -56,6 +57,18 @@ export class GetApplicationHandler {
 
     const dto = this.applicationMapper.toDto(application, query.includeRelations);
 
+    // Coalesce app-level fields from personalData for dynamic-form participants
+    const pd = (application.personalData ?? {}) as Record<string, unknown>;
+
+    dto.experiences = coalesceStr(application.experiences) ?? coalesceStr(pd['experiences']) ?? coalesceStr(pd['experience']) ?? undefined;
+    dto.achievements = coalesceStr(application.achievements) ?? coalesceStr(pd['achievements']) ?? undefined;
+
+    // New app-level fields from personalData
+    dto.sourceAccountName = coalesceStr(pd['source_account_name']) ?? null;
+    dto.requirementLink = coalesceStr(pd['requirement_link']) ?? null;
+    dto.referralCode = coalesceStr(pd['ref_code_ambassador']) ?? coalesceStr(pd['ambassador_referral_code']) ?? null;
+    dto.subthemeId = coalesceStr(pd['program_subtheme_id']) ?? null;
+
     if (query.includeRelations) {
       try {
         const participant = await this.prisma.participant.findUnique({
@@ -89,26 +102,27 @@ export class GetApplicationHandler {
             nationality: participant.nationality,
             originCity: participant.originCity,
             originCountry: participant.originCountry,
-            originAddress: participant.originAddress,
+            originAddress: participant.originAddress ?? coalesceStr(pd['origin_address']) ?? null,
             currentCity: participant.currentCity,
             currentCountry: participant.currentCountry,
-            currentAddress: participant.currentAddress,
-            emergencyContactPhone: participant.emergencyContactPhone,
-            emergencyContactCountryCode: participant.emergencyContactCountryCode,
-            emergencyContactRelation: participant.emergencyContactRelation,
-            tshirtSize: participant.tshirtSize,
-            medicalConditions: participant.medicalConditions,
-            educationLevel: participant.educationLevel,
-            institution: participant.institution,
-            major: participant.major,
-            organizations: participant.organizations,
-            instagramUsername: participant.instagramUsername,
+            currentAddress: participant.currentAddress ?? coalesceStr(pd['current_address']) ?? null,
+            emergencyContactName: coalesceStr(pd['emergency_contact_name']) ?? null,
+            emergencyContactPhone: participant.emergencyContactPhone ?? coalesceStr(pd['emergency_phone_number']) ?? null,
+            emergencyContactCountryCode: participant.emergencyContactCountryCode ?? coalesceStr(pd['emergency_country_code']) ?? null,
+            emergencyContactRelation: participant.emergencyContactRelation ?? coalesceStr(pd['contact_relation']) ?? null,
+            tshirtSize: participant.tshirtSize ?? coalesceStr(pd['tshirt_size']) ?? null,
+            medicalConditions: participant.medicalConditions ?? coalesceStr(pd['disease_history']) ?? null,
+            educationLevel: participant.educationLevel ?? coalesceStr(pd['education_level']) ?? null,
+            institution: participant.institution ?? coalesceStr(pd['institution']) ?? null,
+            major: participant.major ?? coalesceStr(pd['major']) ?? null,
+            organizations: participant.organizations ?? coalesceStr(pd['organizations']) ?? null,
+            instagramUsername: participant.instagramUsername ?? coalesceStr(pd['instagram_account']) ?? null,
             linkedinUrl: participant.linkedinUrl,
             portfolioUrl: participant.portfolioUrl,
-            knowledgeSource: participant.knowledgeSource,
+            knowledgeSource: participant.knowledgeSource ?? coalesceStr(pd['knowledge_source']) ?? null,
             referralCode: participant.referralCode,
             profilePictureUrl: participant.profilePictureUrl,
-            resumeUrl: participant.resumeUrl,
+            resumeUrl: participant.resumeUrl ?? coalesceStr(pd['resume_url']) ?? null,
           };
         }
       } catch (e) {
@@ -144,6 +158,53 @@ export class GetApplicationHandler {
         }
     } catch (error) {
         console.error(`Failed to fetch payment status for app ${application.id}`, error);
+    }
+
+    // Load essays and resolve subtheme for admin view
+    if (query.includeRelations) {
+      try {
+        const programEssays = await this.prisma.programEssay.findMany({
+          where: { programId: application.programId, isActive: true },
+          select: {
+            id: true,
+            question: true,
+            isRequired: true,
+            wordLimit: true,
+            order: true,
+          },
+          orderBy: { order: 'asc' },
+        });
+
+        const essayAnswers = (application.essayAnswers ?? {}) as Record<string, unknown>;
+
+        dto.essays = programEssays
+          .filter((essay) => isRenderableEssayQuestion(essay.question))
+          .map((essay) => ({
+            id: essay.id,
+            question: essay.question.trim().replace(/\s+/g, ' '),
+            answer: coalesceStr(essayAnswers[essay.id]) ?? null,
+            wordLimit: essay.wordLimit ?? null,
+            order: essay.order,
+            isRequired: essay.isRequired,
+          }));
+      } catch (e) {
+        console.error('Failed to load essays for application', e);
+        dto.essays = [];
+      }
+
+      // Resolve subtheme name if we have a subthemeId
+      if (dto.subthemeId) {
+        try {
+          const subtheme = await this.prisma.programSubtheme.findUnique({
+            where: { id: dto.subthemeId },
+            select: { name: true },
+          });
+          dto.subthemeName = subtheme?.name ?? null;
+        } catch (e) {
+          console.error('Failed to resolve subtheme name', e);
+          dto.subthemeName = null;
+        }
+      }
     }
 
     try {
