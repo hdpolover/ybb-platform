@@ -1038,10 +1038,6 @@ function isImageUrl(value: string): boolean {
 
 function findStringByKeysDeep(source: unknown, keys: string[], depth = 0): string | null {
   if (depth > 6 || source === null || source === undefined) return null;
-  if (typeof source === "string") {
-    const value = source.trim();
-    return value ? value : null;
-  }
   if (Array.isArray(source)) {
     for (const item of source) {
       const found = findStringByKeysDeep(item, keys, depth + 1);
@@ -1052,13 +1048,20 @@ function findStringByKeysDeep(source: unknown, keys: string[], depth = 0): strin
   if (typeof source !== "object") return null;
 
   const record = source as Record<string, unknown>;
+  // Only return a value found under one of the requested keys.
   for (const key of keys) {
     const value = record[key];
     if (typeof value === "string" && value.trim()) return value.trim();
   }
+  // Recurse into nested objects/arrays only. Do NOT treat a bare nested string
+  // as a match: doing so returned the first string field of the transaction
+  // (an id, currency, gateway URL, etc.) for every invoice, which made the proof
+  // panel and Download button appear even when no proof file was uploaded.
   for (const value of Object.values(record)) {
-    const found = findStringByKeysDeep(value, keys, depth + 1);
-    if (found) return found;
+    if (value && typeof value === "object") {
+      const found = findStringByKeysDeep(value, keys, depth + 1);
+      if (found) return found;
+    }
   }
   return null;
 }
