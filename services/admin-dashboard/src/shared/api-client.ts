@@ -2399,9 +2399,11 @@ export type ProgramResource = {
   programId: string;
   title: string;
   description?: string;
-  fileUrl: string;
-  fileSize?: number;
-  fileType?: string;
+  sourceType: "upload" | "link";
+  fileUrl: string | null;
+  linkUrl: string | null;
+  fileSize?: number | null;
+  fileType?: string | null;
   type: string;
   isPublic: boolean;
   order: number;
@@ -2409,23 +2411,70 @@ export type ProgramResource = {
   isActive: boolean;
 };
 
-export function listProgramResources(programId: string): Promise<ProgramResource[]> {
-  return request<ProgramResource[]>(`/programs/${programId}/resources`);
+function normalizeProgramResource(raw: unknown): ProgramResource {
+  const source = asRecord(raw);
+  return {
+    id: asString(source.id),
+    programId: asString(source.programId ?? source.program_id),
+    title: asString(source.title),
+    description: typeof source.description === "string" ? source.description : undefined,
+    sourceType:
+      source.sourceType === "link" || source.source_type === "link" ? "link" : "upload",
+    fileUrl: typeof source.fileUrl === "string" ? source.fileUrl :
+      typeof source.file_url === "string" ? source.file_url : null,
+    linkUrl: typeof source.linkUrl === "string" ? source.linkUrl :
+      typeof source.link_url === "string" ? source.link_url : null,
+    fileSize: typeof source.fileSize === "number" ? source.fileSize :
+      typeof source.file_size === "number" ? source.file_size : null,
+    fileType: typeof source.fileType === "string" ? source.fileType :
+      typeof source.file_type === "string" ? source.file_type : null,
+    type: asString(source.type, "guide"),
+    isPublic: asBoolean(source.isPublic ?? source.is_public, true),
+    order: asNumber(source.order),
+    downloads: asNumber(source.downloads),
+    isActive: asBoolean(source.isActive ?? source.is_active, true),
+  };
 }
+
+export function listProgramResources(programId: string): Promise<ProgramResource[]> {
+  return request<unknown[]>(`/programs/${programId}/resources`).then((items) =>
+    Array.isArray(items) ? items.map((item) => normalizeProgramResource(item)) : [],
+  );
+}
+
+export type CreateProgramResourceInput = {
+  title: string;
+  description?: string;
+  type: string;
+  isPublic?: boolean;
+  order?: number;
+  userId: string;
+  brandId: string;
+} & (
+  | { sourceType?: "upload"; file: File; linkUrl?: never }
+  | { sourceType: "link"; linkUrl: string; file?: never }
+);
 
 export async function createProgramResource(
   programId: string,
-  input: {
-    title: string;
-    description?: string;
-    type: string;
-    isPublic?: boolean;
-    order?: number;
-    file: File;
-    userId: string;
-    brandId: string;
-  },
+  input: CreateProgramResourceInput,
 ): Promise<ProgramResource> {
+  if (input.sourceType === "link") {
+    return request<unknown>(`/programs/${programId}/resources`, {
+      method: "POST",
+      body: JSON.stringify({
+        programId,
+        title: input.title,
+        description: input.description,
+        sourceType: "link",
+        linkUrl: input.linkUrl,
+        type: input.type,
+        isPublic: input.isPublic ?? true,
+        order: input.order ?? 0,
+      }),
+    }).then((raw) => normalizeProgramResource(raw));
+  }
+
   const upload = await uploadFileViaPresignedUrl(input.file, {
     userId: input.userId,
     brandId: input.brandId,
@@ -2436,12 +2485,13 @@ export async function createProgramResource(
   if (!upload.publicUrl) {
     throw new Error("Upload succeeded but no public URL was returned.");
   }
-  return request<ProgramResource>(`/programs/${programId}/resources`, {
+  return request<unknown>(`/programs/${programId}/resources`, {
     method: "POST",
     body: JSON.stringify({
       programId,
       title: input.title,
       description: input.description,
+      sourceType: "upload",
       fileUrl: upload.publicUrl,
       fileSize: input.file.size,
       fileType: input.file.type,
@@ -2449,23 +2499,48 @@ export async function createProgramResource(
       isPublic: input.isPublic ?? true,
       order: input.order ?? 0,
     }),
-  });
+  }).then((raw) => normalizeProgramResource(raw));
 }
+
+export type UpdateProgramResourceInput = {
+  title?: string;
+  description?: string;
+  type?: string;
+  isPublic?: boolean;
+  order?: number;
+  isActive?: boolean;
+  userId?: string;
+  brandId?: string;
+} & (
+  | { sourceType?: "upload"; file?: File; linkUrl?: never }
+  | { sourceType: "link"; linkUrl: string; file?: never }
+);
 
 export async function updateProgramResource(
   id: string,
-  input: {
-    title?: string;
-    description?: string;
-    type?: string;
-    isPublic?: boolean;
-    order?: number;
-    isActive?: boolean;
-    file?: File;
-    userId?: string;
-    brandId?: string;
-  },
+  input: UpdateProgramResourceInput,
 ): Promise<ProgramResource> {
+  if (input.sourceType === "link") {
+    const { file: _f, userId: _u, brandId: _b, sourceType, linkUrl, ...rest } = input as {
+      sourceType: "link";
+      linkUrl: string;
+      file?: File;
+      userId?: string;
+      brandId?: string;
+      title?: string;
+      description?: string;
+      type?: string;
+      isPublic?: boolean;
+      order?: number;
+      isActive?: boolean;
+    };
+    void _f; void _u; void _b;
+    return request<unknown>(`/programs/resources/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ ...rest, sourceType, linkUrl }),
+    }).then((raw) => normalizeProgramResource(raw));
+  }
+
   let fileUrl: string | undefined;
   let fileSize: number | undefined;
   let fileType: string | undefined;
@@ -2486,15 +2561,27 @@ export async function updateProgramResource(
     fileSize = input.file.size;
     fileType = input.file.type;
   }
-  const { file: _file, userId: _userId, brandId: _brandId, ...rest } = input;
-  void _file; void _userId; void _brandId;
-  return request<ProgramResource>(`/programs/resources/${id}`, {
+  const { file: _file, userId: _userId, brandId: _brandId, sourceType: _st, ...rest } = input as {
+    file?: File;
+    userId?: string;
+    brandId?: string;
+    sourceType?: "upload";
+    title?: string;
+    description?: string;
+    type?: string;
+    isPublic?: boolean;
+    order?: number;
+    isActive?: boolean;
+  };
+  void _file; void _userId; void _brandId; void _st;
+  return request<unknown>(`/programs/resources/${id}`, {
     method: "PUT",
     body: JSON.stringify({
       ...rest,
+      sourceType: "upload",
       ...(fileUrl ? { fileUrl, fileSize, fileType } : {}),
     }),
-  });
+  }).then((raw) => normalizeProgramResource(raw));
 }
 
 export function deleteProgramResource(id: string): Promise<void> {

@@ -13,6 +13,8 @@ import {
   XCircleIcon,
   EyeIcon,
   EyeSlashIcon,
+  LinkIcon,
+  ArrowUpTrayIcon,
 } from "@heroicons/react/24/outline";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
@@ -126,7 +128,7 @@ export default function ProgramGuidelinesPage() {
               className="inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600"
             >
               <PlusIcon className="h-3.5 w-3.5" />
-              Upload Guideline
+              Add Guideline
             </button>
           </div>
         </div>
@@ -142,7 +144,7 @@ export default function ProgramGuidelinesPage() {
             </div>
             <p className="text-xs font-semibold text-zinc-700">No guidelines yet</p>
             <p className="mt-1 text-[11px] text-zinc-500">
-              Upload the first guideline document for this program.
+              Upload a document or attach an external link as the first guideline for this program.
             </p>
             <button
               type="button"
@@ -150,7 +152,7 @@ export default function ProgramGuidelinesPage() {
               className="mt-4 inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600"
             >
               <PlusIcon className="h-3.5 w-3.5" />
-              Upload Guideline
+              Add Guideline
             </button>
           </div>
         )}
@@ -181,18 +183,24 @@ export default function ProgramGuidelinesPage() {
                   </tr>
                 )}
                 {!loading &&
-                  items.map((item, idx) => (
+                  items.map((item, idx) => {
+                    const href = item.sourceType === "link" ? item.linkUrl : item.fileUrl;
+                    return (
                     <tr key={item.id} className={idx % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}>
                       <td className="px-3 py-2 text-zinc-400">{item.order}</td>
                       <td className="px-3 py-2">
-                        <a
-                          href={item.fileUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-medium text-zinc-900 hover:text-blue-600 hover:underline"
-                        >
-                          {item.title}
-                        </a>
+                        {href ? (
+                          <a
+                            href={href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium text-zinc-900 hover:text-blue-600 hover:underline"
+                          >
+                            {item.title}
+                          </a>
+                        ) : (
+                          <span className="font-medium text-zinc-900">{item.title}</span>
+                        )}
                         {item.description && (
                           <p className="mt-0.5 line-clamp-1 text-zinc-500">{item.description}</p>
                         )}
@@ -203,8 +211,17 @@ export default function ProgramGuidelinesPage() {
                         </span>
                       </td>
                       <td className="px-3 py-2 text-zinc-500">
-                        <div>{item.fileType?.split("/")[1]?.toUpperCase() ?? "—"}</div>
-                        <div className="text-[10px] text-zinc-400">{formatBytes(item.fileSize)}</div>
+                        {item.sourceType === "link" ? (
+                          <div className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                            <LinkIcon className="h-3 w-3" />
+                            External Link
+                          </div>
+                        ) : (
+                          <>
+                            <div>{item.fileType?.split("/")[1]?.toUpperCase() ?? "—"}</div>
+                            <div className="text-[10px] text-zinc-400">{formatBytes(item.fileSize ?? undefined)}</div>
+                          </>
+                        )}
                       </td>
                       <td className="px-3 py-2">
                         {item.isPublic ? (
@@ -254,7 +271,7 @@ export default function ProgramGuidelinesPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  );})}
               </tbody>
             </table>
           </div>
@@ -308,6 +325,7 @@ function ResourceSheet({
   const isEdit = !!item;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [mode, setMode] = useState<"upload" | "link">("upload");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [type, setType] = useState("guide");
@@ -315,11 +333,14 @@ function ResourceSheet({
   const [isActive, setIsActive] = useState(true);
   const [order, setOrder] = useState("0");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [linkUrl, setLinkUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
+      const initialMode = item?.sourceType === "link" ? "link" : "upload";
+      setMode(initialMode);
       setTitle(item?.title ?? "");
       setDescription(item?.description ?? "");
       setType(item?.type ?? "guide");
@@ -327,6 +348,7 @@ function ResourceSheet({
       setIsActive(item?.isActive ?? true);
       setOrder(String(item?.order ?? 0));
       setSelectedFile(null);
+      setLinkUrl(item?.linkUrl ?? "");
       setError(null);
     }
   }, [open, item]);
@@ -338,8 +360,12 @@ function ResourceSheet({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!isEdit && !selectedFile) {
+    if (mode === "upload" && !isEdit && !selectedFile) {
       setError("Select a file to upload.");
+      return;
+    }
+    if (mode === "link" && !linkUrl.trim()) {
+      setError("Paste a URL to attach as link.");
       return;
     }
     if (!userId || !brandId) {
@@ -350,28 +376,58 @@ function ResourceSheet({
     setError(null);
     try {
       if (isEdit && item) {
-        await updateProgramResource(item.id, {
-          title,
-          description: description || undefined,
-          type,
-          isPublic,
-          isActive,
-          order: Number(order),
-          ...(selectedFile ? { file: selectedFile, userId, brandId } : {}),
-        });
+        if (mode === "link") {
+          await updateProgramResource(item.id, {
+            title,
+            description: description || undefined,
+            type,
+            isPublic,
+            isActive,
+            order: Number(order),
+            sourceType: "link",
+            linkUrl: linkUrl.trim(),
+          });
+        } else {
+          await updateProgramResource(item.id, {
+            title,
+            description: description || undefined,
+            type,
+            isPublic,
+            isActive,
+            order: Number(order),
+            sourceType: "upload",
+            ...(selectedFile ? { file: selectedFile, userId, brandId } : {}),
+          });
+        }
         toast.success("Guideline updated.");
       } else {
-        await createProgramResource(programId, {
-          title,
-          description: description || undefined,
-          type,
-          isPublic,
-          order: Number(order),
-          file: selectedFile!,
-          userId,
-          brandId,
-        });
-        toast.success("Guideline uploaded.");
+        if (mode === "link") {
+          await createProgramResource(programId, {
+            title,
+            description: description || undefined,
+            type,
+            isPublic,
+            order: Number(order),
+            sourceType: "link",
+            linkUrl: linkUrl.trim(),
+            userId,
+            brandId,
+          });
+          toast.success("Guideline link attached.");
+        } else {
+          await createProgramResource(programId, {
+            title,
+            description: description || undefined,
+            type,
+            isPublic,
+            order: Number(order),
+            sourceType: "upload",
+            file: selectedFile!,
+            userId,
+            brandId,
+          });
+          toast.success("Guideline uploaded.");
+        }
       }
       onSaved();
       onClose();
@@ -389,11 +445,11 @@ function ResourceSheet({
       <SheetContent side="right" className="flex w-full max-w-lg flex-col p-0 sm:max-w-lg">
         <form onSubmit={handleSubmit} className="flex h-full flex-col">
           <SheetHeader className="border-b border-zinc-200 px-6 py-5">
-            <SheetTitle>{isEdit ? "Edit Guideline" : "Upload Guideline"}</SheetTitle>
+            <SheetTitle>{isEdit ? "Edit Guideline" : "Add Guideline"}</SheetTitle>
             <SheetDescription>
               {isEdit
-                ? "Update the file or details for this guideline."
-                : "Upload a new program guideline document."}
+                ? "Update the source or details for this guideline."
+                : "Upload a document or attach an external link."}
             </SheetDescription>
           </SheetHeader>
 
@@ -402,46 +458,92 @@ function ResourceSheet({
               <p className="rounded-md bg-red-50 px-3 py-2 text-[11px] text-red-700">{error}</p>
             )}
 
-            {/* File upload */}
+            {/* Mode toggle */}
             <div>
-              <label className="mb-1.5 block text-[11px] font-medium text-zinc-700">
-                File{" "}
-                {!isEdit ? (
-                  <span className="text-red-500">*</span>
-                ) : (
-                  <span className="ml-1 text-zinc-400">(leave blank to keep existing)</span>
-                )}
-              </label>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex w-full flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-zinc-300 bg-zinc-50 px-4 py-6 transition hover:border-blue-400 hover:bg-blue-50/30"
-              >
-                <DocumentTextIcon className="h-8 w-8 text-zinc-400" />
-                {selectedFile ? (
-                  <span className="text-[11px] font-medium text-blue-600">{selectedFile.name}</span>
-                ) : (
-                  <>
-                    <span className="text-[11px] font-medium text-zinc-600">
-                      Click to select file
-                    </span>
-                    <span className="text-[10px] text-zinc-400">PDF, Word, PowerPoint · Max 20 MB</span>
-                  </>
-                )}
-              </button>
-              {isEdit && item && !selectedFile && (
-                <p className="mt-1 truncate text-[10px] text-zinc-400">
-                  Current: {item.fileUrl.split("/").pop()}
-                </p>
-              )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf,.doc,.docx,.ppt,.pptx"
-                className="hidden"
-                onChange={handleFileChange}
-              />
+              <p className="mb-1.5 text-[11px] font-medium text-zinc-700">Source</p>
+              <div className="inline-flex rounded-md border border-zinc-200 bg-zinc-50 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setMode("upload")}
+                  className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-[11px] font-semibold transition ${
+                    mode === "upload"
+                      ? "bg-white text-zinc-900 shadow-sm"
+                      : "text-zinc-500 hover:text-zinc-700"
+                  }`}
+                >
+                  <ArrowUpTrayIcon className="h-3.5 w-3.5" />
+                  Upload Document
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode("link")}
+                  className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-[11px] font-semibold transition ${
+                    mode === "link"
+                      ? "bg-white text-zinc-900 shadow-sm"
+                      : "text-zinc-500 hover:text-zinc-700"
+                  }`}
+                >
+                  <LinkIcon className="h-3.5 w-3.5" />
+                  Attach Link
+                </button>
+              </div>
             </div>
+
+            {/* File upload (upload mode) */}
+            {mode === "upload" && (
+              <div>
+                <label className="mb-1.5 block text-[11px] font-medium text-zinc-700">
+                  File{" "}
+                  {!isEdit ? (
+                    <span className="text-red-500">*</span>
+                  ) : (
+                    <span className="ml-1 text-zinc-400">(leave blank to keep existing)</span>
+                  )}
+                </label>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex w-full flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-zinc-300 bg-zinc-50 px-4 py-6 transition hover:border-blue-400 hover:bg-blue-50/30"
+                >
+                  <DocumentTextIcon className="h-8 w-8 text-zinc-400" />
+                  {selectedFile ? (
+                    <span className="text-[11px] font-medium text-blue-600">{selectedFile.name}</span>
+                  ) : (
+                    <>
+                      <span className="text-[11px] font-medium text-zinc-600">
+                        Click to select file
+                      </span>
+                      <span className="text-[10px] text-zinc-400">PDF, Word, PowerPoint · Max 20 MB</span>
+                    </>
+                  )}
+                </button>
+                {isEdit && item && item.sourceType !== "link" && !selectedFile && item.fileUrl && (
+                  <p className="mt-1 truncate text-[10px] text-zinc-400">
+                    Current: {item.fileUrl.split("/").pop()}
+                  </p>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx,.ppt,.pptx"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+              </div>
+            )}
+
+            {/* Link URL (link mode) */}
+            {mode === "link" && (
+              <Field label="File Link (URL)" required>
+                <input
+                  type="url"
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                  placeholder="https://drive.google.com/..."
+                  className={inputCls}
+                />
+              </Field>
+            )}
 
             <Field label="Title" required>
               <input
@@ -535,10 +637,10 @@ function ResourceSheet({
               {loading
                 ? isEdit
                   ? "Saving…"
-                  : "Uploading…"
+                  : mode === "link" ? "Attaching…" : "Uploading…"
                 : isEdit
                   ? "Save Changes"
-                  : "Upload"}
+                  : mode === "link" ? "Attach Link" : "Upload"}
             </button>
           </SheetFooter>
         </form>
@@ -565,7 +667,7 @@ function ConfirmDelete({
       <div className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-6 shadow-xl">
         <h2 className="mb-2 text-sm font-semibold text-zinc-900">Delete guideline?</h2>
         <p className="text-[11px] text-zinc-600">
-          Remove <span className="font-semibold">"{name}"</span>? This cannot be undone.
+          Remove <span className="font-semibold">&quot;{name}&quot;</span>? This cannot be undone.
         </p>
         <div className="mt-4 flex justify-end gap-2">
           <button
