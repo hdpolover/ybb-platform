@@ -27,8 +27,8 @@ import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { StreamableFile } from '@nestjs/common';
 import { ExportApplicationsQuery } from '../export-applications.query';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
-import { stringify } from 'csv-stringify';
-import { Readable } from 'stream';
+import { ExcelService } from '@shared/infrastructure/excel/excel.service';
+import type { Column } from 'exceljs';
 
 @Injectable()
 @QueryHandler(ExportApplicationsQuery)
@@ -37,6 +37,7 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
 
     constructor(
         private readonly prisma: PrismaService,
+        private readonly excelService: ExcelService,
     ) { }
 
     private buildCreatedAtFilter(startDate?: string, endDate?: string): Prisma.DateTimeFilter | undefined {
@@ -61,9 +62,7 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
         this.logger.log(`Exporting applications for brand ${query.brandId} program ${query.programId}`);
 
         const BATCH_SIZE = 1000;
-        const prisma = this.prisma;
 
-        // Build the where filter here (outside the generator) so `this` is available
         const where: Prisma.ParticipantApplicationWhereInput = {
             program: { brand: { id: query.brandId } },
         };
@@ -82,96 +81,89 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
         const createdAt = this.buildCreatedAtFilter(query.startDate, query.endDate);
         if (createdAt) where.createdAt = createdAt;
 
-        // Create an async generator to stream data from DB
-        async function* fetchData() {
-            let offset = 0;
-            let hasMore = true;
+        const rows: Record<string, string | number | null | undefined>[] = [];
+        let offset = 0;
+        let hasMore = true;
 
-            while (hasMore) {
-                const applications: ApplicationExportPayload[] = await prisma.participantApplication.findMany({
-                    where,
-                    take: BATCH_SIZE,
-                    skip: offset,
-                    orderBy: { submittedAt: 'desc' },
-                    select: {
-                        id: true,
-                        status: true,
-                        applicationCategory: true,
-                        scoreTotal: true,
-                        scoreStatus: true,
-                        submittedAt: true,
-                        createdAt: true,
-                        registrationPaymentStatus: true,
-                        programPaymentStatus: true,
-                        participant: {
-                            select: {
-                                fullName: true,
-                                phoneNumber: true,
-                                originCountry: true,
-                                user: { select: { email: true } },
-                            },
+        while (hasMore) {
+            const applications: ApplicationExportPayload[] = await this.prisma.participantApplication.findMany({
+                where,
+                take: BATCH_SIZE,
+                skip: offset,
+                orderBy: { submittedAt: 'desc' },
+                select: {
+                    id: true,
+                    status: true,
+                    applicationCategory: true,
+                    scoreTotal: true,
+                    scoreStatus: true,
+                    submittedAt: true,
+                    createdAt: true,
+                    registrationPaymentStatus: true,
+                    programPaymentStatus: true,
+                    participant: {
+                        select: {
+                            fullName: true,
+                            phoneNumber: true,
+                            originCountry: true,
+                            user: { select: { email: true } },
                         },
-                        program: { select: { name: true } },
-                    }
-                });
-
-                if (applications.length === 0) {
-                    hasMore = false;
-                    break;
+                    },
+                    program: { select: { name: true } },
                 }
+            });
 
-                for (const app of applications) {
-                    yield {
-                        id: app.id,
-                        program: app.program?.name || 'N/A',
-                        participantName: app.participant?.fullName || 'N/A',
-                        email: app.participant?.user?.email || 'N/A',
-                        country: app.participant?.originCountry || 'N/A',
-                        phone: app.participant?.phoneNumber || 'N/A',
-                        status: app.status,
-                        category: app.applicationCategory,
-                        appliedAt: new Date(app.createdAt).toISOString(),
-                        submittedAt: app.submittedAt ? new Date(app.submittedAt).toISOString() : '',
-                        registrationPaymentStatus: app.registrationPaymentStatus,
-                        programPaymentStatus: app.programPaymentStatus,
-                        scoreTotal: app.scoreTotal ?? '',
-                        scoreStatus: app.scoreStatus ?? '',
-                    };
-                }
-
-                offset += BATCH_SIZE;
-                // Safety break to prevent infinite loops in dev
-                if (offset > 100000) break;
+            if (applications.length === 0) {
+                hasMore = false;
+                break;
             }
+
+            for (const app of applications) {
+                rows.push({
+                    id: app.id,
+                    program: app.program?.name ?? 'N/A',
+                    participantName: app.participant?.fullName ?? 'N/A',
+                    email: app.participant?.user?.email ?? 'N/A',
+                    country: app.participant?.originCountry ?? 'N/A',
+                    phone: app.participant?.phoneNumber ?? 'N/A',
+                    status: app.status,
+                    category: app.applicationCategory,
+                    appliedAt: new Date(app.createdAt).toISOString(),
+                    submittedAt: app.submittedAt ? new Date(app.submittedAt).toISOString() : '',
+                    registrationPaymentStatus: app.registrationPaymentStatus,
+                    programPaymentStatus: app.programPaymentStatus,
+                    scoreTotal: app.scoreTotal != null ? Number(app.scoreTotal) : '',
+                    scoreStatus: app.scoreStatus ?? '',
+                });
+            }
+
+            offset += BATCH_SIZE;
+            // Safety break to prevent unbounded iteration
+            if (offset > 100000) break;
         }
 
-        // Create a readable stream from the generator
-        const dataStream = Readable.from(fetchData());
+        const columns: Partial<Column>[] = [
+            { header: 'Application ID', key: 'id', width: 36 },
+            { header: 'Program', key: 'program', width: 28 },
+            { header: 'Participant Name', key: 'participantName', width: 24 },
+            { header: 'Email', key: 'email', width: 28 },
+            { header: 'Country', key: 'country', width: 10 },
+            { header: 'Phone', key: 'phone', width: 16 },
+            { header: 'Status', key: 'status', width: 14 },
+            { header: 'Category', key: 'category', width: 14 },
+            { header: 'Applied At', key: 'appliedAt', width: 22 },
+            { header: 'Submitted At', key: 'submittedAt', width: 22 },
+            { header: 'Reg. Payment', key: 'registrationPaymentStatus', width: 14 },
+            { header: 'Prog. Payment', key: 'programPaymentStatus', width: 14 },
+            { header: 'Score Total', key: 'scoreTotal', width: 12 },
+            { header: 'Score Status', key: 'scoreStatus', width: 16 },
+        ];
 
-        // Pipe through simple CSV stringifier
-        const csvStream = dataStream.pipe(stringify({
-            header: true,
-            columns: [
-                { key: 'id', header: 'Application ID' },
-                { key: 'program', header: 'Program' },
-                { key: 'participantName', header: 'Participant Name' },
-                { key: 'email', header: 'Email' },
-                { key: 'country', header: 'Country' },
-                { key: 'phone', header: 'Phone' },
-                { key: 'status', header: 'Status' },
-                { key: 'category', header: 'Category' },
-                { key: 'appliedAt', header: 'Applied At' },
-                { key: 'submittedAt', header: 'Submitted At' },
-                { key: 'registrationPaymentStatus', header: 'Reg. Payment' },
-                { key: 'programPaymentStatus', header: 'Prog. Payment' },
-                { key: 'scoreTotal', header: 'Score Total' },
-                { key: 'scoreStatus', header: 'Score Status' },
-            ]
-        }));
+        const buffer = await this.excelService.generateExcel(rows, columns, 'Applications');
 
-        return new StreamableFile(csvStream, {
-            type: 'text/csv',
-            disposition: `attachment; filename="applications_${query.brandId}_${new Date().toISOString()}.csv"`,
+        return new StreamableFile(buffer, {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            disposition: `attachment; filename="applications_${query.brandId}_${new Date().toISOString()}.xlsx"`,
         });
     }
 }

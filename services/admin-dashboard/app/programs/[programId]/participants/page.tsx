@@ -11,7 +11,7 @@ import {
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import {
-  exportApplicationsCsv,
+  exportApplicationsExcel,
   listApplications,
   type Application,
 } from "@/src/shared/api-client";
@@ -248,7 +248,7 @@ export default function ParticipantsPage() {
     setExporting(true);
     setError(null);
     try {
-      await exportApplicationsCsv({
+      await exportApplicationsExcel({
         brandId: resolvedBrandId,
         programId: resolvedProgramId,
         status: statusFilter || undefined,
@@ -288,7 +288,7 @@ export default function ParticipantsPage() {
               className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 hover:bg-emerald-100"
             >
               <ArrowDownTrayIcon className="h-3.5 w-3.5" />
-              {exporting ? "Exporting..." : "Export CSV"}
+              {exporting ? "Exporting..." : "Export Excel"}
             </button>
           </div>
         </div>
