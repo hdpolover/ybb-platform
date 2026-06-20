@@ -238,6 +238,16 @@ describe('ScoringRubricRepository', () => {
           order: 0,
         },
       });
+
+      // Partial-delete branch: categories not in payload must be purged via notIn.
+      expect(mockPrisma.scoringCategory.deleteMany).toHaveBeenCalledWith({
+        where: { schemaId, id: { notIn: [catId] } },
+      });
+
+      // Partial-delete branch: criteria not in payload must be purged via notIn, keyed by categoryId.
+      expect(mockPrisma.scoringCriterion.deleteMany).toHaveBeenCalledWith({
+        where: { categoryId: catId, id: { notIn: [critId] } },
+      });
     });
 
     it('deletes categories absent from payload', async () => {
