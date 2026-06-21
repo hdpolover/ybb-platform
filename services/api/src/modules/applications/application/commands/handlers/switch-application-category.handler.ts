@@ -33,7 +33,11 @@ export class SwitchApplicationCategoryHandler {
         },
         program: {
           include: {
-            pricingTiers: true,
+            pricingTiers: {
+              include: {
+                validityPeriods: { select: { startDate: true, endDate: true } },
+              },
+            },
           }
         },
         participant: {
@@ -99,6 +103,43 @@ export class SwitchApplicationCategoryHandler {
 
     if (!hasActiveRegistrationTier(targetCategory)) {
       throw new BadRequestException(`The target category ${targetCategory} is not currently available for this program.`);
+    }
+
+    // Fully Funded "registration closed" guard.
+    //
+    // Definition (must match the dashboard flag): among the active
+    // registration_fee FF tiers, a tier exists AND every such tier is
+    // configured with validity windows AND all those windows have ended
+    // (endDate < now). A tier with no validityPeriods counts as "not closed".
+    //
+    // Only ever blocks switching INTO fully_funded — switching to
+    // self_funded must never be affected.
+    const isFullyFundedClosed = (): boolean => {
+      const now = new Date();
+      const ffTiers = application.program.pricingTiers.filter(
+        (tier) =>
+          tier.isActive &&
+          tier.deletedAt === null &&
+          tier.feeType === 'registration_fee' &&
+          tier.allowedCategories &&
+          (tier.allowedCategories as unknown as string[]).includes('fully_funded'),
+      );
+      if (ffTiers.length === 0) {
+        return false;
+      }
+      return ffTiers.every((tier) => {
+        const periods = (tier as unknown as {
+          validityPeriods?: { startDate: Date; endDate: Date }[];
+        }).validityPeriods ?? [];
+        return periods.length > 0 && periods.every((period) => period.endDate < now);
+      });
+    };
+
+    if (targetCategory === 'fully_funded' && isFullyFundedClosed()) {
+      throw new BadRequestException({
+        message: 'Fully Funded registration has closed.',
+        errorCode: 'FULLY_FUNDED_REGISTRATION_CLOSED',
+      });
     }
 
     // 5. Auto-cancel any unpaid invoices on this application.

@@ -182,4 +182,118 @@ describe('GetPortalDashboardHandler', () => {
 
         expect(result.stats?.totalRequired).toEqual({ amount: 250.5, currency: 'IDR' });
     });
+
+    const buildAppWithFfTier = (
+        validityPeriods: { startDate: Date; endDate: Date }[] | undefined,
+    ) => ({
+        id: 'app-ff',
+        status: 'draft',
+        updatedAt: new Date(),
+        applicationCategory: 'self_funded',
+        personalData: {},
+        essayAnswers: {},
+        uploadedFiles: {},
+        program: {
+            id: 'prog-ff',
+            name: 'YBB FF',
+            currency: 'USD',
+            applicationDeadline: new Date(Date.now() + 86400000),
+            formFields: [],
+            essays: [],
+            requirements: [],
+            pricingTiers: [
+                {
+                    id: 'tier-sf',
+                    allowedCategories: ['self_funded'],
+                    validityPeriods: [],
+                },
+                {
+                    id: 'tier-ff',
+                    allowedCategories: ['fully_funded'],
+                    validityPeriods,
+                },
+            ],
+            resources: [],
+            announcements: [],
+            programAnnouncements: [],
+        },
+        registrationPaymentStatus: 'unpaid',
+        invoices: [],
+    });
+
+    it('sets fullyFundedRegistrationClosed=true when all FF windows have ended', async () => {
+        mockCacheService.get.mockResolvedValue(null);
+        mockPortalCacheService.getParticipantProfile.mockResolvedValue({
+            id: 'p-1',
+            userId: 'u-1',
+            fullName: 'Test User',
+        });
+        mockPortalCacheService.getParticipantStats.mockResolvedValue({
+            applicationsCount: 1,
+            completedProgramsCount: 0,
+            certificatesCount: 0,
+        });
+
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(
+            buildAppWithFfTier([
+                {
+                    startDate: new Date(Date.now() - 2 * 86400000),
+                    endDate: new Date(Date.now() - 86400000), // ended yesterday
+                },
+            ]),
+        );
+
+        const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+        expect(result.activeApplication?.fullyFundedRegistrationClosed).toBe(true);
+    });
+
+    it('sets fullyFundedRegistrationClosed=false when an FF window is still active', async () => {
+        mockCacheService.get.mockResolvedValue(null);
+        mockPortalCacheService.getParticipantProfile.mockResolvedValue({
+            id: 'p-1',
+            userId: 'u-1',
+            fullName: 'Test User',
+        });
+        mockPortalCacheService.getParticipantStats.mockResolvedValue({
+            applicationsCount: 1,
+            completedProgramsCount: 0,
+            certificatesCount: 0,
+        });
+
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(
+            buildAppWithFfTier([
+                {
+                    startDate: new Date(Date.now() - 86400000),
+                    endDate: new Date(Date.now() + 86400000), // ends tomorrow
+                },
+            ]),
+        );
+
+        const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+        expect(result.activeApplication?.fullyFundedRegistrationClosed).toBe(false);
+    });
+
+    it('sets fullyFundedRegistrationClosed=false when the FF tier has no validity windows', async () => {
+        mockCacheService.get.mockResolvedValue(null);
+        mockPortalCacheService.getParticipantProfile.mockResolvedValue({
+            id: 'p-1',
+            userId: 'u-1',
+            fullName: 'Test User',
+        });
+        mockPortalCacheService.getParticipantStats.mockResolvedValue({
+            applicationsCount: 1,
+            completedProgramsCount: 0,
+            certificatesCount: 0,
+        });
+
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(
+            buildAppWithFfTier([]),
+        );
+
+        const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+        expect(result.activeApplication?.fullyFundedRegistrationClosed).toBe(false);
+    });
 });

@@ -38,6 +38,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     let status: number;
     let userMessage: string;
+    // Optional machine-readable error code forwarded from the exception
+    // response body (e.g. BadRequestException({ message, errorCode })). Only
+    // included in the JSON response when present, to stay backward compatible.
+    let errorCode: string | undefined;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -48,6 +52,14 @@ export class HttpExceptionFilter implements ExceptionFilter {
         userMessage = Array.isArray(raw) ? raw.join('; ') : String(raw);
       } else {
         userMessage = typeof body === 'string' ? body : exception.message;
+      }
+      if (
+        typeof body === 'object' &&
+        body !== null &&
+        'errorCode' in body &&
+        typeof (body as { errorCode: unknown }).errorCode === 'string'
+      ) {
+        errorCode = (body as { errorCode: string }).errorCode;
       }
       // Sanitize 5xx messages in production
       if (isProd && status >= 500) {
@@ -75,6 +87,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       statusCode: status,
       message: userMessage,
       path: req.url,
+      ...(errorCode ? { errorCode } : {}),
     });
   }
 }

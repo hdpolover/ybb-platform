@@ -120,7 +120,11 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                         },
                         pricingTiers: {
                             where: { isActive: true, deletedAt: null, feeType: 'registration_fee' },
-                            select: { id: true, allowedCategories: true }
+                            select: {
+                                id: true,
+                                allowedCategories: true,
+                                validityPeriods: { select: { startDate: true, endDate: true } },
+                            }
                         },
                         resources: {
                             where: { isActive: true, type: 'guide' },
@@ -169,7 +173,10 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
         if (latestApplication) {
             alerts = this.generateAlerts(latestApplication);
             
-            const tiers = (latestApplication.program.pricingTiers ?? []) as unknown as { allowedCategories: string[] }[];
+            const tiers = (latestApplication.program.pricingTiers ?? []) as unknown as {
+                allowedCategories: string[];
+                validityPeriods?: { startDate: Date; endDate: Date }[];
+            }[];
             const hasSelfFundedTier = tiers.some(
                 (tier) => Array.isArray(tier.allowedCategories) && tier.allowedCategories.includes('self_funded'),
             );
@@ -177,6 +184,22 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                 (tier) => Array.isArray(tier.allowedCategories) && tier.allowedCategories.includes('fully_funded'),
             );
             const bothTiersActive = hasSelfFundedTier && hasFullyFundedTier;
+
+            // Fully Funded registration is "closed" when at least one FF tier
+            // exists AND every FF tier is configured with validity windows that
+            // have all ended. A tier with no validityPeriods counts as "not
+            // closed" (windows are open-ended / not yet configured).
+            const now = new Date();
+            const ffTiers = tiers.filter(
+                (tier) => Array.isArray(tier.allowedCategories) && tier.allowedCategories.includes('fully_funded'),
+            );
+            const fullyFundedRegistrationClosed =
+                ffTiers.length > 0 &&
+                ffTiers.every(
+                    (tier) =>
+                        (tier.validityPeriods?.length ?? 0) > 0 &&
+                        (tier.validityPeriods ?? []).every((period) => period.endDate < now),
+                );
 
             const switchLockedStatuses = new Set(['processing', 'paid']);
             const blockingRegistrationInvoice = latestApplication.invoices.find(
@@ -225,6 +248,7 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                 canSwitchCategory,
                 switchCategoryMessage,
                 switchCategoryBlockingInvoiceId,
+                fullyFundedRegistrationClosed,
                 progress: calculateSubmissionProgress(latestApplication),
                 currentStep: determineSubmissionCurrentStep(latestApplication),
                 daysUntilDeadline: this.calculateDaysUntilDeadline(latestApplication.program.applicationDeadline),

@@ -71,6 +71,13 @@ export class PortalApplicationSummaryDto {
     })
     switchCategoryBlockingInvoiceId?: string;
 
+    @ApiProperty({
+        required: false,
+        description:
+            'True when Fully Funded registration has closed (an FF tier exists but all its validity windows have ended). The UI uses this to show an informational popup instead of switching to Fully Funded.',
+    })
+    fullyFundedRegistrationClosed?: boolean;
+
     @ApiProperty()
     progress: number;
 
