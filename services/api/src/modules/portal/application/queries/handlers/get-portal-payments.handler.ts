@@ -225,6 +225,24 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                 if (!feeType) {
                     continue;
                 }
+                // An orphan only "covers"/locks a fee stage when it reflects real
+                // paid/processing state. When a participant switches category, the
+                // previous category's unpaid invoice is auto-cancelled. Such an
+                // off-category, non-blocking invoice (unpaid/failed/cancelled) must NOT
+                // shadow or lock the new category's tier of the same feeType — otherwise
+                // the new tier (e.g. the fully_funded registration fee) never enters
+                // `visibleTierIds` and the participant has no method to pay it.
+                // This mirrors the off-category rule applied in the archived-invoice
+                // loop below (only processing/paid off-category orphans stay visible).
+                const orphanAllowedCategories = invoice.pricingTier?.allowedCategories ?? [];
+                const orphanStatus = String(invoice.status).toLowerCase();
+                const isOffCategory =
+                    currentCategory != null &&
+                    orphanAllowedCategories.length > 0 &&
+                    !orphanAllowedCategories.includes(currentCategory);
+                if (isOffCategory && orphanStatus !== 'processing' && orphanStatus !== 'paid') {
+                    continue;
+                }
                 const existing = orphanInvoicesByFeeType.get(feeType);
                 if (!existing || invoice.createdAt > existing.createdAt) {
                     orphanInvoicesByFeeType.set(feeType, invoice);
