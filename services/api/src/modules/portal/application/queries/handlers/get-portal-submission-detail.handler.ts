@@ -61,7 +61,7 @@ type ApplicationDetail = {
         essayGuidelineText: string | null;
         essayGuidelineUrl: string | null;
         previewChecklistItems: string[];
-        pricingTiers: { id: string }[];
+        pricingTiers: { id: string; allowedCategories: string[] }[];
         participationCategories: {
             id: string;
             name: string;
@@ -221,9 +221,8 @@ export class GetPortalSubmissionDetailHandler
                         essayGuidelineUrl: true,
                         previewChecklistItems: true,
                         pricingTiers: {
-                            where: { isActive: true, feeType: 'registration_fee' },
-                            select: { id: true },
-                            take: 1,
+                            where: { isActive: true, deletedAt: null, feeType: 'registration_fee' },
+                            select: { id: true, allowedCategories: true },
                         },
                         participationCategories: {
                             where: { isActive: true },
@@ -993,7 +992,17 @@ export class GetPortalSubmissionDetailHandler
         // not from the existence of a participant-initiated invoice. This is fail-closed:
         // a participant who has never started payment has no invoice but is still
         // shown a payment requirement when the program has an active registration_fee tier.
-        const paymentRequired = application.program.pricingTiers.length > 0;
+        // Scope to the participant's funding category: a tier with no allowedCategories
+        // applies to everyone; otherwise it must include the current category. This avoids
+        // requiring a payment the participant has no tier to satisfy (e.g. an off-category
+        // tier), matching the category-aware logic used by the payments handler.
+        const currentCategory = application.applicationCategory;
+        const paymentRequired = application.program.pricingTiers.some(
+            (tier) =>
+                tier.allowedCategories.length === 0
+                || currentCategory == null
+                || tier.allowedCategories.includes(currentCategory),
+        );
         // paymentPaid: registrationPaymentStatus is the canonical signal; fall back to
         // a paid invoice as a race-condition guard when the status hasn't propagated yet.
         const regInvoice = application.invoices[0] ?? null;
