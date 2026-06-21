@@ -122,6 +122,9 @@ export class CacheService {
    * Busts:
    * - portal:payment-detail:${invoiceId} (when invoiceId provided)
    * - portal:payments:${userId}:* (every program's cached payments list for this user)
+   * - portal:submission-detail:${userId}:* (the submit gate reads preview.payment.paid
+   *   from here; without busting it, a paid registration fee stays invisible to the
+   *   submit button for up to the cache TTL and the participant cannot submit)
    * - portal:dashboard:${userId}
    *
    * Pass invoiceId=undefined when no specific invoice is known (e.g. payment-failed events
@@ -134,6 +137,7 @@ export class CacheService {
       await Promise.all([
         this.invalidateKeys(keys),
         this.invalidateByPattern(`portal:payments:${userId}:*`),
+        this.invalidateByPattern(`portal:submission-detail:${userId}:*`),
       ]);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
