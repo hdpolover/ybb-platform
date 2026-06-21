@@ -921,6 +921,10 @@ export class PaymentEventsController {
                 // Use wildcards so all program-specific variants are busted:
                 // PORTAL_SUBMISSIONS keyed by (userId, programId?) → portal:submissions:${userId}:${programId|'latest'}
                 `portal:submissions:${userId}:*`,
+                // PORTAL_SUBMISSION_DETAIL keyed by (userId, programId?) → portal:submission-detail:${userId}:${programId|'latest'}
+                // The submit gate reads preview.payment.paid from here; bust it so a settled
+                // registration fee unblocks the submit button immediately.
+                `portal:submission-detail:${userId}:*`,
                 // PORTAL_PAYMENTS keyed by (userId, programId?) → portal:payments:${userId}:${programId|'latest'}
                 `portal:payments:${userId}:*`,
                 CACHE_KEYS.PORTAL_DOCUMENTS(userId),
