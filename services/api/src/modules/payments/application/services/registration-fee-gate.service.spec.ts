@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { RegistrationFeeGateService } from './registration-fee-gate.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { PaymentReconciliationService } from '../../infrastructure/services/payment-reconciliation.service';
 
 describe('RegistrationFeeGateService', () => {
     let service: RegistrationFeeGateService;
@@ -18,16 +19,23 @@ describe('RegistrationFeeGateService', () => {
         },
     };
 
+    const noopReconciliation = {
+        reconcileApplicationRegistration: jest.fn().mockResolvedValue(undefined),
+    };
+
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
             providers: [
                 RegistrationFeeGateService,
                 { provide: PrismaService, useValue: mockPrisma },
+                { provide: PaymentReconciliationService, useValue: noopReconciliation },
             ],
         }).compile();
 
         service = module.get<RegistrationFeeGateService>(RegistrationFeeGateService);
         jest.clearAllMocks();
+        // Restore no-op after clearAllMocks
+        noopReconciliation.reconcileApplicationRegistration.mockResolvedValue(undefined);
     });
 
     const stubApplication = (registrationPaymentStatus: string, programId = 'prog-1') => {
@@ -183,6 +191,60 @@ describe('RegistrationFeeGateService', () => {
             mockPrisma.participantApplication.findUnique.mockRejectedValue(new Error('DB error'));
 
             await expect(service.isRegistrationFeePaid('app-1')).resolves.toBe(false);
+        });
+    });
+
+    // ── self-heal via reconciliation ──────────────────────────────────────────
+
+    describe('self-heal via reconciliation on assertRegistrationFeePaid', () => {
+        const mockReconciliation = {
+            reconcileApplicationRegistration: jest.fn(),
+        };
+
+        let selfHealService: RegistrationFeeGateService;
+
+        beforeEach(async () => {
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    RegistrationFeeGateService,
+                    { provide: PrismaService, useValue: mockPrisma },
+                    { provide: PaymentReconciliationService, useValue: mockReconciliation },
+                ],
+            }).compile();
+
+            selfHealService = module.get<RegistrationFeeGateService>(RegistrationFeeGateService);
+            jest.clearAllMocks();
+            // Restore reconciliation mock after clearAllMocks
+            mockReconciliation.reconcileApplicationRegistration.mockResolvedValue(undefined);
+        });
+
+        it('ALLOWS when reconciliation flips payment status to paid', async () => {
+            // First call: application not yet paid
+            mockPrisma.participantApplication.findUnique
+                .mockResolvedValueOnce({ registrationPaymentStatus: 'pending', programId: 'prog-1' })
+                // Second call (re-check after reconcile)
+                .mockResolvedValueOnce({ registrationPaymentStatus: 'paid' });
+            mockPrisma.programPricingTier.findFirst.mockResolvedValue({ id: 'tier-1' });
+            mockPrisma.applicationInvoice.findFirst.mockResolvedValue(null);
+            mockReconciliation.reconcileApplicationRegistration.mockResolvedValue(undefined);
+
+            await expect(selfHealService.assertRegistrationFeePaid('app-1')).resolves.toBeUndefined();
+        });
+
+        it('BLOCKS (fail-closed) when reconciliation throws', async () => {
+            mockPrisma.participantApplication.findUnique.mockResolvedValue({
+                registrationPaymentStatus: 'unpaid',
+                programId: 'prog-1',
+            });
+            mockPrisma.programPricingTier.findFirst.mockResolvedValue({ id: 'tier-1' });
+            mockPrisma.applicationInvoice.findFirst.mockResolvedValue(null);
+            mockReconciliation.reconcileApplicationRegistration.mockRejectedValue(
+                new Error('gateway down'),
+            );
+
+            await expect(selfHealService.assertRegistrationFeePaid('app-1')).rejects.toThrow(
+                BadRequestException,
+            );
         });
     });
 });

@@ -486,26 +486,60 @@ export class PaymentEventsController {
                     });
                     createdInvoiceId = updated.id;
                 } else if (application.pricingTierId) {
-                    const exchangeRateSnapshot =
-                        application.program?.usdInIdr != null
-                            ? Number(application.program.usdInIdr)
+                    // Idempotency guard: check if an invoice with this transaction/intent already exists
+                    const lookupConditions: Array<Record<string, unknown>> = [];
+                    if (transactionId) lookupConditions.push({ externalTransactionId: transactionId });
+                    if (intentId) lookupConditions.push({ externalIntentId: intentId });
+
+                    const existingByRef =
+                        lookupConditions.length > 0
+                            ? await repos.tx.applicationInvoice.findFirst({
+                                  where: { applicationId, OR: lookupConditions },
+                                  select: { id: true, status: true },
+                              })
                             : null;
 
-                    const createdInvoice = await repos.tx.applicationInvoice.create({
-                        data: {
-                            applicationId: applicationId,
-                            pricingTierId: application.pricingTierId,
-                            amount: amount,
-                            currency: currency,
-                            status: PaymentStatus.paid,
-                            paidAt: new Date(),
-                            exchangeRateSnapshot: exchangeRateSnapshot,
-                            externalTransactionId: transactionId,
-                            externalIntentId: intentId || null,
-                            paymentMethod: method,
-                        },
-                    });
-                    createdInvoiceId = createdInvoice.id;
+                    if (existingByRef) {
+                        if ((existingByRef as { id: string; status: string }).status === PaymentStatus.paid) {
+                            // Already settled - use its id and skip re-settling
+                            createdInvoiceId = (existingByRef as { id: string }).id;
+                        } else {
+                            // In-place idempotent re-settle
+                            const updated = await repos.tx.applicationInvoice.update({
+                                where: { id: (existingByRef as { id: string }).id },
+                                data: {
+                                    status: PaymentStatus.paid,
+                                    paidAt: new Date(),
+                                    externalTransactionId: transactionId || undefined,
+                                    externalIntentId: intentId || undefined,
+                                    paymentMethod: method,
+                                },
+                                select: { id: true },
+                            });
+                            createdInvoiceId = (updated as { id: string }).id;
+                        }
+                    } else {
+                        const exchangeRateSnapshot =
+                            application.program?.usdInIdr != null
+                                ? Number(application.program.usdInIdr)
+                                : null;
+
+                        const createdInvoice = await repos.tx.applicationInvoice.create({
+                            data: {
+                                applicationId: applicationId,
+                                pricingTierId: application.pricingTierId,
+                                amount: amount,
+                                currency: currency,
+                                status: PaymentStatus.paid,
+                                paidAt: new Date(),
+                                exchangeRateSnapshot: exchangeRateSnapshot,
+                                externalTransactionId: transactionId,
+                                externalIntentId: intentId || null,
+                                paymentMethod: method,
+                            },
+                        });
+                        createdInvoiceId = createdInvoice.id;
+                    }
                 } else {
                     this.logger.warn(`Skipping invoice creation for app ${applicationId} - no pricingTierId`);
                 }

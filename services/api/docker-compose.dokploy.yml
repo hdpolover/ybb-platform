@@ -24,7 +24,10 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS}
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@ybb-prod-shared-rabbitmq:5672/
       RABBITMQ_QUEUE_CLEANUP_ON_DEPLOY: ${RABBITMQ_QUEUE_CLEANUP_ON_DEPLOY:-false}
-      RABBITMQ_QUEUE_CLEANUP_TARGETS: ${RABBITMQ_QUEUE_CLEANUP_TARGETS:-audit_log_queue,reporting_queue,api-service-payment-events}
+      # NOTE: api-service-payment-events must NOT be a cleanup target. Purging it
+      # drops in-flight payment.succeeded events, which silently leaves paid invoices
+      # stuck unpaid and blocks application submission. Reconciliation is the safety net.
+      RABBITMQ_QUEUE_CLEANUP_TARGETS: ${RABBITMQ_QUEUE_CLEANUP_TARGETS:-audit_log_queue,reporting_queue}
       RABBITMQ_QUEUE_CLEANUP_INCLUDE_RETRY_DLQ: ${RABBITMQ_QUEUE_CLEANUP_INCLUDE_RETRY_DLQ:-true}
       # Optional overrides for RabbitMQ Management API used by cleanup script
       RABBITMQ_MANAGEMENT_URL: ${RABBITMQ_MANAGEMENT_URL:-}

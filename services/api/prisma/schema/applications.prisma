@@ -249,6 +249,7 @@ model ApplicationInvoice {
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  lastReconciledAt DateTime? @map("last_reconciled_at") @db.Timestamptz(6)
 
   application ParticipantApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   pricingTier ProgramPricingTier     @relation(fields: [pricingTierId], references: [id])
@@ -256,6 +257,8 @@ model ApplicationInvoice {
   @@index([applicationId])
   @@index([status])
   @@index([externalIntentId])
+  @@index([externalTransactionId])
+  @@index([lastReconciledAt])
   @@map("application_invoices")
 }
 
