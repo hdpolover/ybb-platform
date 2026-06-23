@@ -6,8 +6,7 @@ import './tracing';
 };
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions } from '@nestjs/microservices';
-import { ValidationPipe, VersioningType, INestMicroservice } from '@nestjs/common';
-import { Type } from '@nestjs/common';
+import { ValidationPipe, VersioningType, INestMicroservice, Type } from '@nestjs/common';
 import { AckDropRmqServer } from './shared/rmq/ack-drop-rmq.server';
 import { RoutingKeyDeserializer } from './shared/infrastructure/rabbitmq/routing-key-deserializer';
 import { AuditConsumerModule } from './bootstrap/audit-consumer.module';
@@ -151,12 +150,24 @@ async function bootstrap() {
   // the previous app-wide handler fan-out (double/triple processing). The HTTP
   // `app` above intentionally has NO microservice attached.
   const deserializer = new RoutingKeyDeserializer();
-  const consumerApps = await Promise.all([
-    createConsumerApp(AuditConsumerModule, 'audit_log_queue', auditQueueOptions, rabbitMqUrl, deserializer),
-    createConsumerApp(ReportingConsumerModule, 'reporting_queue', reportingQueueOptions, rabbitMqUrl, deserializer),
-    createConsumerApp(PaymentEventsConsumerModule, 'api-service-payment-events', paymentEventsQueueOptions, rabbitMqUrl, deserializer),
-  ]);
-  await Promise.all(consumerApps.map((consumer) => consumer.listen()));
+  const consumerSpecs: Array<{ queue: string; module: Type<unknown>; queueOptions: PrimaryQueueOptions }> = [
+    { queue: 'audit_log_queue', module: AuditConsumerModule, queueOptions: auditQueueOptions },
+    { queue: 'reporting_queue', module: ReportingConsumerModule, queueOptions: reportingQueueOptions },
+    { queue: 'api-service-payment-events', module: PaymentEventsConsumerModule, queueOptions: paymentEventsQueueOptions },
+  ];
+  const consumerApps = await Promise.all(
+    consumerSpecs.map((spec) =>
+      createConsumerApp(spec.module, spec.queue, spec.queueOptions, rabbitMqUrl, deserializer),
+    ),
+  );
+  await Promise.all(
+    consumerApps.map((consumer, i) =>
+      consumer.listen().catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        throw new Error(`Consumer for queue "${consumerSpecs[i].queue}" failed to start: ${message}`);
+      }),
+    ),
+  );
 
   await app.listen(port);
 
