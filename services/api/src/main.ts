@@ -6,8 +6,13 @@ import './tracing';
 };
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions } from '@nestjs/microservices';
-import { ValidationPipe, VersioningType } from '@nestjs/common';
+import { ValidationPipe, VersioningType, INestMicroservice } from '@nestjs/common';
+import { Type } from '@nestjs/common';
 import { AckDropRmqServer } from './shared/rmq/ack-drop-rmq.server';
+import { RoutingKeyDeserializer } from './shared/infrastructure/rabbitmq/routing-key-deserializer';
+import { AuditConsumerModule } from './bootstrap/audit-consumer.module';
+import { ReportingConsumerModule } from './bootstrap/reporting-consumer.module';
+import { PaymentEventsConsumerModule } from './bootstrap/payment-events-consumer.module';
 import { AppModule } from './app.module';
 import { setupSwagger } from './config/swagger.config';
 import { TransformInterceptor } from './shared/interceptors/transform.interceptor';
@@ -22,6 +27,28 @@ type AmqpChannel = Awaited<ReturnType<AmqpConnection['createChannel']>>;
 type PrimaryQueueOptions = {
   arguments?: Record<string, string>;
 };
+
+async function createConsumerApp(
+  module: Type<unknown>,
+  queue: string,
+  queueOptions: PrimaryQueueOptions,
+  rabbitMqUrl: string,
+  deserializer: RoutingKeyDeserializer,
+): Promise<INestMicroservice> {
+  return NestFactory.createMicroservice<MicroserviceOptions>(module, {
+    strategy: new AckDropRmqServer({
+      urls: [rabbitMqUrl],
+      queue,
+      queueOptions: {
+        durable: true,
+        ...queueOptions,
+      },
+      noAck: false,
+      prefetchCount: 1,
+      deserializer,
+    }),
+  });
+}
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -64,72 +91,6 @@ async function bootstrap() {
       exchangeType: 'topic',
       routingKey: 'payment.#',
     },
-  });
-
-  // Shared deserializer: maps AMQP routing key → NestJS pattern for messages
-  // that don't carry the { pattern, data } NestJS envelope (e.g. Go service,
-  // legacy publishers, orphaned queue messages).  Safe to use on all queues —
-  // messages that already have a `pattern` field are passed through unchanged.
-  const { RoutingKeyDeserializer } = await import('./shared/infrastructure/rabbitmq/routing-key-deserializer');
-  const deserializer = new RoutingKeyDeserializer();
-
-  // Connect Microservice for Event Consumption (Audit Logging).
-  // Uses AckDropRmqServer so unhandled patterns are ACKed (dropped) instead of
-  // nacked, which would otherwise create an infinite retry cycle via the
-  // <queue>.retry dead-letter topology.
-  app.connectMicroservice<MicroserviceOptions>({
-    strategy: new AckDropRmqServer({
-      urls: [rabbitMqUrl],
-      queue: 'audit_log_queue',
-      queueOptions: {
-        durable: true,
-        ...auditQueueOptions,
-      },
-      noAck: false,
-      prefetchCount: 1,
-      deserializer,
-    }),
-  });
-
-  // Connect Microservice for Reporting Queue.
-  // Uses AckDropRmqServer for the same ack-and-drop hardening.
-  app.connectMicroservice<MicroserviceOptions>({
-    strategy: new AckDropRmqServer({
-      urls: [rabbitMqUrl],
-      queue: 'reporting_queue',
-      queueOptions: {
-        durable: true,
-        ...reportingQueueOptions,
-      },
-      noAck: false,
-      prefetchCount: 1,
-      deserializer,
-    }),
-  });
-
-  // Connect Microservice for Payment Events (from Go payment service).
-  // The Go service publishes to the `payment-events` topic exchange. We declare
-  // a dedicated durable queue and bind it via topic routing so payment-events
-  // controller's @EventPattern handlers actually receive the events. Without
-  // this binding, payment.succeeded / payment.failed events are dropped.
-  // Custom deserializer maps the AMQP routing key to the NestJS pattern,
-  // because the Go publisher emits raw payloads (no { pattern, data } envelope).
-  // Uses AckDropRmqServer for ack-and-drop hardening on unhandled patterns.
-  // Note: exchange/exchangeType/routingKey/wildcards are omitted here because
-  // ServerRMQ does not consume them — the actual queue-to-exchange binding is
-  // established by the ensureRetryTopology() call above via amqplib directly.
-  app.connectMicroservice<MicroserviceOptions>({
-    strategy: new AckDropRmqServer({
-      urls: [rabbitMqUrl],
-      queue: 'api-service-payment-events',
-      queueOptions: {
-        durable: true,
-        ...paymentEventsQueueOptions,
-      },
-      noAck: false,
-      prefetchCount: 1,
-      deserializer,
-    }),
   });
 
   // Use Winston Logger
@@ -185,7 +146,18 @@ async function bootstrap() {
 
   const port = process.env.PORT || 3000;
 
-  await app.startAllMicroservices();
+  // Each consumer runs in its own DI container so only its controller's
+  // @EventPattern handlers are registered against its queue. This is what stops
+  // the previous app-wide handler fan-out (double/triple processing). The HTTP
+  // `app` above intentionally has NO microservice attached.
+  const deserializer = new RoutingKeyDeserializer();
+  const consumerApps = await Promise.all([
+    createConsumerApp(AuditConsumerModule, 'audit_log_queue', auditQueueOptions, rabbitMqUrl, deserializer),
+    createConsumerApp(ReportingConsumerModule, 'reporting_queue', reportingQueueOptions, rabbitMqUrl, deserializer),
+    createConsumerApp(PaymentEventsConsumerModule, 'api-service-payment-events', paymentEventsQueueOptions, rabbitMqUrl, deserializer),
+  ]);
+  await Promise.all(consumerApps.map((consumer) => consumer.listen()));
+
   await app.listen(port);
 
   console.log(`\n🚀 Application is running on: http://localhost:${port}`);
