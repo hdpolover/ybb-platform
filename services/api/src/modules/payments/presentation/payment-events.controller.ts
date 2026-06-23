@@ -13,7 +13,6 @@ import { ReferralFunnelService } from '@modules/participants/application/service
 import { PaymentOutboxService } from '../infrastructure/services/payment-outbox.service';
 import {
     acknowledgeRmqMessage,
-    rejectRmqMessageForRetry,
 } from '@shared/infrastructure/rabbitmq/rmq-ack';
 import { buildParticipantPaymentsUrl, buildParticipantInvoiceUrl } from '@modules/payments/application/utils/participant-dashboard-url.util';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
@@ -21,12 +20,6 @@ import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitm
 @Controller()
 export class PaymentEventsController {
     private readonly logger = new Logger(PaymentEventsController.name);
-    private readonly queueName = 'api-service-payment-events';
-    private readonly maxRetryAttempts = parsePositiveInt(
-        process.env.API_PAYMENT_EVENTS_MAX_RETRIES,
-        3,
-    );
-
     constructor(
         private readonly metricsService: MetricsService,
         private readonly prisma: PrismaService,
@@ -43,14 +36,12 @@ export class PaymentEventsController {
         @Payload() payload: unknown,
         @Ctx() context: RmqContext,
     ) {
-        const channel = context.getChannelRef() as RabbitChannel | undefined;
-        const msg = context.getMessage();
+        acknowledgeRmqMessage(context, this.logger, 'payment.created', 'received');
         const data = asRecord(payload);
         try {
             const status = getString(data, 'status');
             const applicationId = getString(asRecord(data.metadata), 'application_id');
             if (status !== 'PENDING_REVIEW' || !applicationId) {
-                if (channel && msg) channel.ack(msg);
                 return;
             }
             const invoiceWithBrand = await this.prisma.applicationInvoice.findFirst({
@@ -69,7 +60,6 @@ export class PaymentEventsController {
             });
             if (!invoiceWithBrand) {
                 this.logger.warn(`handlePaymentCreated: no invoice found for applicationId=${applicationId}`);
-                if (channel && msg) channel.ack(msg);
                 return;
             }
             const rawBrand = invoiceWithBrand?.application?.program?.brand ?? null;
@@ -103,10 +93,8 @@ export class PaymentEventsController {
                 metadata: { application_id: applicationId, invoice_id: invoiceWithBrand.id },
                 brand: brandPayload,
             });
-            if (channel && msg) channel.ack(msg);
         } catch (err) {
             this.logger.error('handlePaymentCreated error', err);
-            if (channel && msg) channel.nack(msg, false, false);
         }
     }
 
@@ -115,11 +103,9 @@ export class PaymentEventsController {
         @Payload() data: RmqEventPayload,
         @Ctx() context: RmqContext,
     ) {
+        acknowledgeRmqMessage(context, this.logger, 'payment.cancelled', 'received');
         const start = Date.now();
         let status: 'success' | 'failed' = 'success';
-        if (await this.moveToDlqWhenRetryExhausted('payment.cancelled', context)) {
-            return;
-        }
 
         try {
             const metadata = (data.metadata as Record<string, unknown>) || {};
@@ -171,7 +157,6 @@ export class PaymentEventsController {
             const err = error instanceof Error ? error : new Error(String(error));
             this.logger.error(`Failed to handle payment.cancelled: ${err.message}`, err.stack);
             status = 'failed';
-            rejectRmqMessageForRetry(context, this.logger, 'payment.cancelled');
             return;
         } finally {
             const duration = (Date.now() - start) / 1000;
@@ -183,8 +168,6 @@ export class PaymentEventsController {
                 duration,
             );
         }
-
-        acknowledgeRmqMessage(context, this.logger, 'payment.cancelled', 'processed');
     }
 
     @EventPattern('payment.refunded')
@@ -192,8 +175,7 @@ export class PaymentEventsController {
         @Payload() payload: unknown,
         @Ctx() context: RmqContext,
     ) {
-        const channel = context.getChannelRef() as RabbitChannel | undefined;
-        const msg = context.getMessage();
+        acknowledgeRmqMessage(context, this.logger, 'payment.refunded', 'received');
         const data = asRecord(payload);
         try {
             const paymentId = getString(data, 'payment_id') || getString(data, 'transaction_id');
@@ -252,10 +234,8 @@ export class PaymentEventsController {
                 metadata: { application_id: applicationId, invoice_id: invoiceWithBrand?.id },
                 brand: brandPayload,
             });
-            if (channel && msg) channel.ack(msg);
         } catch (err) {
             this.logger.error('handlePaymentRefunded error', err);
-            if (channel && msg) channel.nack(msg, false, false);
         }
     }
 
@@ -264,11 +244,9 @@ export class PaymentEventsController {
         @Payload() data: RmqEventPayload,
         @Ctx() context: RmqContext,
     ) {
+        acknowledgeRmqMessage(context, this.logger, 'payment.succeeded', 'received');
         const start = Date.now();
         let status: 'success' | 'failed' = 'success';
-        if (await this.moveToDlqWhenRetryExhausted('payment.succeeded', context)) {
-            return;
-        }
 
         try {
             // Log basic info for debugging
@@ -404,17 +382,14 @@ export class PaymentEventsController {
             const err = error instanceof Error ? error : new Error(String(error));
             this.logger.error(`Failed to handle payment.succeeded: ${err.message}`, err.stack);
             status = 'failed';
-            rejectRmqMessageForRetry(context, this.logger, 'payment.succeeded');
             return;
         } finally {
             const duration = (Date.now() - start) / 1000;
-            this.metricsService.jobProcessingDuration.observe({ 
-                queue_name: 'payment.succeeded', 
+            this.metricsService.jobProcessingDuration.observe({
+                queue_name: 'payment.succeeded',
                 status
             }, duration);
         }
-
-        acknowledgeRmqMessage(context, this.logger, 'payment.succeeded', 'processed');
     }
 
     private async processApplicationPayment(
@@ -594,11 +569,9 @@ export class PaymentEventsController {
         @Payload() data: RmqEventPayload,
         @Ctx() context: RmqContext,
     ) {
+        acknowledgeRmqMessage(context, this.logger, 'payment.failed', 'received');
         const start = Date.now();
         let status: 'success' | 'failed' = 'success';
-        if (await this.moveToDlqWhenRetryExhausted('payment.failed', context)) {
-            return;
-        }
 
         try {
             this.logger.debug(`Metrics: payment.failed event received`);
@@ -715,17 +688,14 @@ export class PaymentEventsController {
             const err = error instanceof Error ? error : new Error(String(error));
             this.logger.error(`Failed to handle payment.failed: ${err.message}`, err.stack);
             status = 'failed';
-            rejectRmqMessageForRetry(context, this.logger, 'payment.failed');
             return;
         } finally {
             const duration = (Date.now() - start) / 1000;
-            this.metricsService.jobProcessingDuration.observe({ 
-                queue_name: 'payment.failed', 
+            this.metricsService.jobProcessingDuration.observe({
+                queue_name: 'payment.failed',
                 status
             }, duration);
         }
-
-        acknowledgeRmqMessage(context, this.logger, 'payment.failed', 'processed');
     }
 
     private async markInvoiceFailed(input: {
@@ -885,62 +855,6 @@ export class PaymentEventsController {
         });
     }
 
-    private async moveToDlqWhenRetryExhausted(
-        eventType: string,
-        context: RmqContext,
-    ): Promise<boolean> {
-        const message = context.getMessage() as RmqMessage | undefined;
-        const headers = asRecord(message?.properties?.headers);
-        const retryCount = getRejectedRetryCount(headers, this.queueName);
-        if (retryCount < this.maxRetryAttempts) {
-            return false;
-        }
-
-        const channel = context.getChannelRef() as RabbitChannel | undefined;
-        const content = message?.content;
-        if (!message || !channel || !content) {
-            this.logger.error(
-                `[payment-events-retry] max retries reached but message could not be routed to DLQ event=${eventType}`,
-            );
-            return false;
-        }
-
-        const dlqName = `${this.queueName}.dlq`;
-        const existingHeaders = asRecord(message.properties?.headers);
-        const dlqHeaders: Record<string, unknown> = {
-            ...existingHeaders,
-            'x-final-reason': 'retry-exhausted',
-            'x-final-event-type': eventType,
-            'x-final-retry-count': retryCount,
-        };
-
-        channel.sendToQueue(dlqName, content, {
-            persistent: true,
-            headers: dlqHeaders,
-            messageId: message.properties?.messageId,
-            correlationId: message.properties?.correlationId,
-            contentType: message.properties?.contentType,
-            contentEncoding: message.properties?.contentEncoding,
-            deliveryMode: message.properties?.deliveryMode,
-            priority: message.properties?.priority,
-            expiration: message.properties?.expiration,
-            timestamp: message.properties?.timestamp,
-            type: message.properties?.type,
-            userId: message.properties?.userId,
-            appId: message.properties?.appId,
-        });
-
-        this.logger.error(
-            `[payment-events-retry] moved to DLQ event=${eventType} queue=${dlqName} retries=${retryCount}`,
-        );
-        acknowledgeRmqMessage(context, this.logger, eventType, 'retry-exhausted');
-        return true;
-    }
-
-    private ackIgnoredPaymentEvent(context: RmqContext) {
-        acknowledgeRmqMessage(context, this.logger, context.getPattern(), 'ignored');
-    }
-
     /**
      * Invalidate all portal cache entries for a specific user
      * This ensures the user sees updated payment status immediately
@@ -992,48 +906,6 @@ export class PaymentEventsController {
     }
 }
 
-type RmqMessage = {
-    content?: Buffer;
-    properties?: {
-        headers?: Record<string, unknown>;
-        messageId?: string;
-        correlationId?: string;
-        contentType?: string;
-        contentEncoding?: string;
-        deliveryMode?: number;
-        priority?: number;
-        expiration?: string;
-        timestamp?: number;
-        type?: string;
-        userId?: string;
-        appId?: string;
-    };
-};
-
-type RabbitChannel = {
-    ack(message: unknown): void;
-    nack(message: unknown, allUpTo?: boolean, requeue?: boolean): void;
-    sendToQueue: (
-        queue: string,
-        content: Buffer,
-        options?: {
-            headers?: Record<string, unknown>;
-            contentType?: string;
-            contentEncoding?: string;
-            deliveryMode?: number;
-            priority?: number;
-            expiration?: string;
-            timestamp?: number;
-            type?: string;
-            userId?: string;
-            appId?: string;
-            persistent?: boolean;
-            messageId?: string;
-            correlationId?: string;
-        },
-    ) => boolean;
-};
-
 function asRecord(value: unknown): Record<string, unknown> {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
         return {};
@@ -1046,42 +918,6 @@ function getString(source: Record<string, unknown>, key: string): string | undef
     if (typeof value !== 'string') return undefined;
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : undefined;
-}
-
-function getRejectedRetryCount(headers: Record<string, unknown>, queueName: string): number {
-    const xDeathRaw = headers['x-death'];
-    if (!Array.isArray(xDeathRaw)) return 0;
-
-    let retries = 0;
-    for (const item of xDeathRaw) {
-        const death = asRecord(item);
-        const queue = getString(death, 'queue');
-        const reason = getString(death, 'reason');
-        if (queue !== queueName || reason !== 'rejected') continue;
-
-        const countRaw = death.count;
-        if (typeof countRaw === 'number' && Number.isFinite(countRaw)) {
-            retries += Math.floor(countRaw);
-            continue;
-        }
-
-        if (typeof countRaw === 'string' && countRaw.trim()) {
-            const parsed = Number(countRaw);
-            if (Number.isFinite(parsed)) {
-                retries += Math.floor(parsed);
-            }
-        }
-    }
-
-    return retries;
-}
-
-function parsePositiveInt(value: string | undefined, defaultValue: number): number {
-    if (!value) return defaultValue;
-    const parsed = Number(value);
-    return Number.isFinite(parsed) && parsed > 0
-        ? Math.floor(parsed)
-        : defaultValue;
 }
 
 function abbreviateKey(value: string | null): string {
