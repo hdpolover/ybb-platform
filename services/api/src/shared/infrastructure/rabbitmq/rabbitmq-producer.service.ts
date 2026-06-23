@@ -47,6 +47,11 @@ export class RabbitMQProducerService implements OnModuleInit, OnModuleDestroy {
   }
 
   async emit(pattern: string, data: unknown, options?: EmitOptions) {
+    if (!this.channelWrapper) {
+      throw new Error(
+        `RabbitMQ producer not initialized — cannot publish '${pattern}'. onModuleInit must complete before emit().`,
+      );
+    }
     try {
       this.logger.log(`Publishing event to exchange '${this.exchange}' with routing key '${pattern}'`);
       await this.channelWrapper.publish(
