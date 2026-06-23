@@ -218,7 +218,11 @@ export class SupportAccessService {
     if (!ticket) {
       throw new UnauthorizedException('Invalid or expired impersonation token.');
     }
-    if (ticket.revokedAt || ticket.consumedAt || ticket.expiresAt <= now) {
+    // Idempotent within TTL: an already-consumed ticket is NOT an error while it is
+    // still within its short TTL and not revoked. This makes the exchange safe against
+    // duplicate redeems (React StrictMode remount, new-tab prefetch, link/URL scanners)
+    // that would otherwise consume the single-use token and then hard-fail the real tab.
+    if (ticket.revokedAt || ticket.expiresAt <= now) {
       throw new UnauthorizedException('Invalid or expired impersonation token.');
     }
 
@@ -280,8 +284,11 @@ export class SupportAccessService {
           expiresAt,
         },
       }),
-      this.prisma.supportAccessImpersonationTicket.update({
-        where: { id: ticket.id },
+      // Record first-consume only (idempotent): updateMany no-ops on replay, so the
+      // original consumedAt / IP / UA audit is preserved across duplicate exchanges
+      // within the TTL while still allowing the session to be (re)issued.
+      this.prisma.supportAccessImpersonationTicket.updateMany({
+        where: { id: ticket.id, consumedAt: null },
         data: {
           consumedAt: now,
           consumedIpAddress: ipAddress,
