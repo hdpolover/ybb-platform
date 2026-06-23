@@ -60,7 +60,7 @@ export class RedisPubSubService implements OnModuleInit, OnModuleDestroy {
         try {
             if (client.status === 'ready') {
                 if (isSubscriber) {
-                    await this.subscriber.unsubscribe(this.channel);
+                    await client.unsubscribe(this.channel);
                 }
                 await client.quit();
             } else {
@@ -69,7 +69,7 @@ export class RedisPubSubService implements OnModuleInit, OnModuleDestroy {
                 client.disconnect();
             }
         } catch (error) {
-            this.logger.warn('Error closing redis client', error as Error);
+            this.logger.error('Error closing redis client', (error as Error).stack);
             client.disconnect();
         }
     }
