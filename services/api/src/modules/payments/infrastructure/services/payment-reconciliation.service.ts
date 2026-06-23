@@ -66,7 +66,7 @@ type ProcessingInvoice = Prisma.ApplicationInvoiceGetPayload<{
 @Injectable()
 export class PaymentReconciliationService {
     private readonly logger = new Logger(PaymentReconciliationService.name);
-    private readonly enabled = parseBool(process.env.ENABLE_PAYMENT_RECONCILIATION, false);
+    private readonly enabled = parseBool(process.env.ENABLE_PAYMENT_RECONCILIATION, true);
     private readonly batchSize = parsePositiveInt(process.env.PAYMENT_RECONCILIATION_BATCH_SIZE, 200);
     private readonly cronGraceMinutes = parsePositiveInt(
         process.env.PAYMENT_RECONCILIATION_GRACE_MINUTES,
@@ -74,6 +74,7 @@ export class PaymentReconciliationService {
     );
     private readonly paymentServiceInternalKey: string;
     private static readonly ABANDONED_CANCEL_REASON = 'Abandoned payment reverted by reconciliation';
+    private static readonly RECHECK_INTERVAL_MINUTES = 360;
 
     constructor(
         private readonly paymentServiceClient: PaymentServiceHttpClient,
@@ -89,9 +90,8 @@ export class PaymentReconciliationService {
     }
 
     /**
-     * Hourly safety net. Reconciles 'processing' invoices against the payment
-     * service. Disabled by default (ENABLE_PAYMENT_RECONCILIATION !== 'true') so
-     * it is safe to deploy to prod before being explicitly turned on.
+     * Hourly safety net. Reconciles 'processing' and 'unpaid' invoices (with
+     * external references) against the payment service. Enabled by default.
      */
     @Cron('0 * * * *')
     async runScheduledReconciliation(): Promise<void> {
@@ -116,16 +116,20 @@ export class PaymentReconciliationService {
     }
 
     /**
-     * Reconcile every 'processing' invoice against the payment service:
-     *  - settled at gateway (intent SUCCEEDED / txn SUCCESS) → settle invoice to 'paid'
+     * Reconcile 'processing' and 'unpaid' invoices that have an external
+     * payment reference against the payment service:
+     *  - settled at gateway (intent SUCCEEDED / txn SUCCESS) => settle invoice to 'paid'
      *  - abandoned (intent REQUIRES_PAYMENT_METHOD, no success txn) past the grace
-     *    window → cancel the gateway intent, revert invoice to 'unpaid', email the
+     *    window => cancel the gateway intent, revert invoice to 'unpaid', email the
      *    participant a "continue your payment" reminder
-     *  - anything else (in-flight, NEEDS_REVIEW, still within grace) → skip
+     *  - anything else (in-flight, NEEDS_REVIEW, still within grace) => skip
+     *
+     * Throttled via lastReconciledAt: invoices checked within RECHECK_INTERVAL_MINUTES
+     * are skipped unless they have never been reconciled.
      *
      * Idempotent and fail-safe: each invoice is processed in its own try/catch,
      * so one bad invoice or a failed gateway call never aborts the batch. With
-     * apply=false it is a pure dry run — no DB writes, no gateway cancels, no emails.
+     * apply=false it is a pure dry run - no DB writes, no gateway cancels, no emails.
      */
     async reconcileProcessingInvoices(opts: ReconcileOptions): Promise<ReconcileReport> {
         const graceMinutes = Math.max(0, opts.graceMinutes);
@@ -141,9 +145,31 @@ export class PaymentReconciliationService {
         };
 
         const invoices = await this.prisma.applicationInvoice.findMany({
-            where: { status: PaymentStatus.processing },
+            where: {
+                status: { in: [PaymentStatus.processing, PaymentStatus.unpaid] },
+                AND: [
+                    {
+                        OR: [
+                            { externalIntentId: { not: null } },
+                            { externalTransactionId: { not: null } },
+                        ],
+                    },
+                    {
+                        OR: [
+                            { lastReconciledAt: null },
+                            {
+                                lastReconciledAt: {
+                                    lt: new Date(
+                                        Date.now() - PaymentReconciliationService.RECHECK_INTERVAL_MINUTES * 60 * 1000,
+                                    ),
+                                },
+                            },
+                        ],
+                    },
+                ],
+            },
             include: PROCESSING_INVOICE_INCLUDE,
-            orderBy: { updatedAt: 'asc' },
+            orderBy: [{ lastReconciledAt: 'asc' }, { updatedAt: 'asc' }],
             take: this.batchSize,
         });
 
@@ -175,14 +201,44 @@ export class PaymentReconciliationService {
         return report;
     }
 
+    /**
+     * Reconcile invoices for a specific application's registration fee.
+     * Called by RegistrationFeeGateService for self-healing on submission.
+     */
+    async reconcileApplicationRegistration(applicationId: string): Promise<void> {
+        const invoices = await this.prisma.applicationInvoice.findMany({
+            where: {
+                applicationId,
+                status: { in: [PaymentStatus.processing, PaymentStatus.unpaid] },
+                pricingTier: { feeType: 'registration_fee' },
+                OR: [
+                    { externalIntentId: { not: null } },
+                    { externalTransactionId: { not: null } },
+                ],
+            },
+            include: PROCESSING_INVOICE_INCLUDE,
+        });
+
+        const graceCutoff = new Date(Date.now() - this.cronGraceMinutes * 60_000);
+        for (const invoice of invoices) {
+            try {
+                await this.reconcileOne(invoice, true, graceCutoff);
+            } catch (error) {
+                this.logger.error(
+                    `[payment-reconciliation] reconcileApplicationRegistration invoice=${invoice.id} failed: ${toErrorMessage(error)}`,
+                );
+            }
+        }
+    }
+
     private async reconcileOne(
         invoice: ProcessingInvoice,
         apply: boolean,
         graceCutoff: Date,
     ): Promise<ReconcileDetail> {
         // Prefer the intent reference: its payload carries BOTH the intent status
-        // (REQUIRES_PAYMENT_METHOD ⇒ abandoned) AND the nested transactions[] (any
-        // SUCCESS ⇒ settled). A transaction-only fetch lacks the intent status, so
+        // (REQUIRES_PAYMENT_METHOD => abandoned) AND the nested transactions[] (any
+        // SUCCESS => settled). A transaction-only fetch lacks the intent status, so
         // an abandoned intent whose txn is still PENDING would be misread as
         // in-flight and never reverted. Fall back to the txn id only if no intent.
         const ref =
@@ -201,23 +257,65 @@ export class PaymentReconciliationService {
             return { ...base, outcome: 'skipped', reason: 'payment status fetch failed' };
         }
 
+        const originalStatus = invoice.status as string;
+
         if (this.isPayloadSettled(payload)) {
+            const successTxn = this.transactions(payload).find(
+                (t) => String(t.status ?? '').toUpperCase() === 'SUCCESS',
+            );
+            const provenance = {
+                transactionId: successTxn ? (String(successTxn.id ?? '') || undefined) : undefined,
+                paymentMethod: successTxn
+                    ? (String((successTxn as Record<string, unknown>).paymentMethod ?? (successTxn as Record<string, unknown>).payment_method ?? '') || undefined)
+                    : undefined,
+            };
             if (apply) {
-                await this.settlePaid(invoice);
+                const skipResult = await this.settlePaid(invoice, provenance);
+                if (skipResult?.skipped) {
+                    return { ...base, outcome: 'skipped', reason: skipResult.reason };
+                }
             }
             return { ...base, outcome: 'settled_paid', reason: 'gateway settled' };
         }
 
+        // Not settled - behavior depends on original status
+        if (originalStatus === PaymentStatus.unpaid) {
+            if (apply) {
+                await this.prisma.applicationInvoice.update({
+                    where: { id: invoice.id },
+                    data: { lastReconciledAt: new Date() },
+                });
+            }
+            return { ...base, outcome: 'skipped', reason: 'unpaid: no successful gateway payment' };
+        }
+
+        // processing path
         if (this.isPayloadAbandoned(payload)) {
             if (invoice.updatedAt >= graceCutoff) {
+                if (apply) {
+                    await this.prisma.applicationInvoice.update({
+                        where: { id: invoice.id },
+                        data: { lastReconciledAt: new Date() },
+                    });
+                }
                 return { ...base, outcome: 'skipped', reason: 'abandoned but within grace window' };
             }
             if (apply) {
                 await this.revertAbandoned(invoice);
+                await this.prisma.applicationInvoice.update({
+                    where: { id: invoice.id },
+                    data: { lastReconciledAt: new Date() },
+                });
             }
             return { ...base, outcome: 'reverted_unpaid', reason: 'abandoned past grace window' };
         }
 
+        if (apply) {
+            await this.prisma.applicationInvoice.update({
+                where: { id: invoice.id },
+                data: { lastReconciledAt: new Date() },
+            });
+        }
         return { ...base, outcome: 'skipped', reason: 'in-flight / needs review' };
     }
 
@@ -259,7 +357,7 @@ export class PaymentReconciliationService {
     /**
      * Abandoned = the user opened the gateway but never finished: intent
      * REQUIRES_PAYMENT_METHOD with no transaction that is SUCCESS or NEEDS_REVIEW.
-     * NEEDS_REVIEW means a manual transfer whose proof is awaiting admin review —
+     * NEEDS_REVIEW means a manual transfer whose proof is awaiting admin review -
      * that is pending admin action, NOT abandonment, so we must never auto-revert
      * or cancel it. Only intents whose transactions are all incomplete/dead
      * (PENDING / FAILED / VOID / REJECTED, or none) count as abandoned.
@@ -284,10 +382,45 @@ export class PaymentReconciliationService {
     }
 
     /**
-     * Canonical "settle paid" writes — mirrors processApplicationPayment in
+     * Canonical "settle paid" writes - mirrors processApplicationPayment in
      * payment-events.controller.ts. Idempotent: paidAt keeps any existing value.
+     *
+     * Includes a supersede guard for registration_fee invoices: if another paid
+     * registration_fee invoice already exists for this application, the current
+     * invoice is a duplicate payment and must NOT be settled automatically - it
+     * needs refund review instead.
      */
-    private async settlePaid(invoice: ProcessingInvoice): Promise<void> {
+    private async settlePaid(
+        invoice: ProcessingInvoice,
+        provenance?: { transactionId?: string; paymentMethod?: string },
+    ): Promise<{ skipped: true; reason: string } | null> {
+        // Supersede guard: prevent double-settling a registration fee
+        if (invoice.pricingTier?.feeType === 'registration_fee') {
+            const existingPaid = await this.prisma.applicationInvoice.findFirst({
+                where: {
+                    applicationId: invoice.applicationId,
+                    id: { not: invoice.id },
+                    pricingTier: { feeType: 'registration_fee' },
+                    status: PaymentStatus.paid,
+                },
+                select: { id: true },
+            });
+            if (existingPaid) {
+                const reason = `Duplicate registration payment: gateway succeeded but superseded by paid invoice ${existingPaid.id}. Needs refund review.`;
+                await this.prisma.applicationInvoice.update({
+                    where: { id: invoice.id },
+                    data: {
+                        ...(invoice.rejectionReason ? {} : { rejectionReason: reason }),
+                        lastReconciledAt: new Date(),
+                    },
+                });
+                this.logger.warn(
+                    `[payment-reconciliation] SUPERSEDE invoice=${invoice.id} superseded by ${existingPaid.id} - needs refund review`,
+                );
+                return { skipped: true, reason: 'superseded duplicate (needs refund review)' };
+            }
+        }
+
         const now = new Date();
         const appPaymentPatch: Prisma.ParticipantApplicationUpdateInput =
             invoice.pricingTier?.feeType === 'registration_fee'
@@ -300,6 +433,13 @@ export class PaymentReconciliationService {
                 data: {
                     status: PaymentStatus.paid,
                     paidAt: invoice.paidAt ?? now,
+                    ...(provenance?.transactionId && !invoice.externalTransactionId
+                        ? { externalTransactionId: provenance.transactionId }
+                        : {}),
+                    ...(provenance?.paymentMethod && !invoice.paymentMethod
+                        ? { paymentMethod: provenance.paymentMethod }
+                        : {}),
+                    lastReconciledAt: now,
                 },
             }),
             this.prisma.participantApplication.update({
@@ -308,7 +448,8 @@ export class PaymentReconciliationService {
             }),
         ]);
 
-        this.logger.log(`[payment-reconciliation] settled invoice ${invoice.id} → paid`);
+        this.logger.log(`[payment-reconciliation] settled invoice ${invoice.id} -> paid`);
+        return null;
     }
 
     /**
@@ -340,13 +481,13 @@ export class PaymentReconciliationService {
             }),
         ]);
 
-        this.logger.log(`[payment-reconciliation] reverted abandoned invoice ${invoice.id} → unpaid`);
+        this.logger.log(`[payment-reconciliation] reverted abandoned invoice ${invoice.id} -> unpaid`);
         await this.emitReminder(invoice);
     }
 
     /**
      * POST cancel against the payment service. A 400 means the txn is already in a
-     * terminal state (SUCCESS/FAILED/REJECTED/VOID) — treat it as already-cancelled,
+     * terminal state (SUCCESS/FAILED/REJECTED/VOID) - treat it as already-cancelled,
      * not a hard error, so the revert still proceeds.
      */
     private async cancelGatewayTransaction(transactionId: string, invoiceId: string): Promise<void> {
@@ -360,7 +501,7 @@ export class PaymentReconciliationService {
             const status = (error as { response?: { status?: number } })?.response?.status;
             if (status === 400) {
                 this.logger.warn(
-                    `[payment-reconciliation] cancel for invoice ${invoiceId} returned 400 (already terminal) — treating as cancelled`,
+                    `[payment-reconciliation] cancel for invoice ${invoiceId} returned 400 (already terminal) - treating as cancelled`,
                 );
                 return;
             }
@@ -400,7 +541,7 @@ export class PaymentReconciliationService {
                 },
             });
         } catch (error) {
-            // A notification hiccup must not break reconciliation — the invoice is
+            // A notification hiccup must not break reconciliation - the invoice is
             // already reverted to 'unpaid', so the participant can still retry.
             this.logger.error(
                 `[payment-reconciliation] failed to publish payment.reminder for invoice ${invoice.id}: ${toErrorMessage(error)}`,

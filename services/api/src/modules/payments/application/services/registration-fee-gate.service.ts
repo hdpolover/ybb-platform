@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { PaymentReconciliationService } from '@modules/payments/infrastructure/services/payment-reconciliation.service';
 
 /**
  * RegistrationFeeGateService
@@ -23,7 +24,10 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
  */
 @Injectable()
 export class RegistrationFeeGateService {
-    constructor(private readonly prisma: PrismaService) {}
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly reconciliation: PaymentReconciliationService,
+    ) {}
 
     /**
      * Checks whether the registration fee has already been paid for the given
@@ -130,7 +134,33 @@ export class RegistrationFeeGateService {
             return;
         }
 
-        // 4. Program has a registration fee but payment is not confirmed → block.
+        // 4. Self-heal: attempt reconciliation before blocking.
+        //    If the gateway already settled the payment but the event was dropped,
+        //    reconciliation will update the invoice to 'paid' and we can allow through.
+        //    Fail-closed: any error in reconciliation must not unblock the gate.
+        try {
+            await this.reconciliation.reconcileApplicationRegistration(applicationId);
+            // Re-check canonical status after reconciliation
+            const recheck = await this.prisma.participantApplication.findUnique({
+                where: { id: applicationId },
+                select: { registrationPaymentStatus: true },
+            });
+            if (recheck?.registrationPaymentStatus === 'paid') return;
+            // Fallback: check invoice directly in case denorm update lagged
+            const recheckedInvoice = await this.prisma.applicationInvoice.findFirst({
+                where: {
+                    applicationId,
+                    status: 'paid',
+                    pricingTier: { feeType: 'registration_fee' },
+                },
+                select: { id: true },
+            });
+            if (recheckedInvoice) return;
+        } catch {
+            // fail-closed: reconciliation error must not unblock the gate
+        }
+
+        // 5. Program has a registration fee but payment is not confirmed => block.
         //    Covers "never started payment" (no invoice) and "invoice exists but unpaid".
         throw new BadRequestException(
             'Registration fee must be paid before submission.',
