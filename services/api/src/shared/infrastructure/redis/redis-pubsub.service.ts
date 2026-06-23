@@ -28,6 +28,10 @@ export class RedisPubSubService implements OnModuleInit, OnModuleDestroy {
             host,
             port,
             password: password || undefined,
+            // Defer the TCP connection until first use. Constructing this service must be
+            // side-effect free so DI containers (incl. the scoped RMQ consumer apps and
+            // module-compile tests) don't open sockets just by wiring providers.
+            lazyConnect: true,
         };
 
         this.publisher = new Redis(options);
@@ -48,9 +52,26 @@ export class RedisPubSubService implements OnModuleInit, OnModuleDestroy {
     }
 
     async onModuleDestroy() {
-        await this.subscriber.unsubscribe(this.channel);
-        await this.publisher.quit();
-        await this.subscriber.quit();
+        await this.closeClient(this.subscriber, true);
+        await this.closeClient(this.publisher, false);
+    }
+
+    private async closeClient(client: Redis, isSubscriber: boolean): Promise<void> {
+        try {
+            if (client.status === 'ready') {
+                if (isSubscriber) {
+                    await this.subscriber.unsubscribe(this.channel);
+                }
+                await client.quit();
+            } else {
+                // Never connected (lazyConnect) or already closing — drop without
+                // queueing a command that would force a connection attempt.
+                client.disconnect();
+            }
+        } catch (error) {
+            this.logger.warn('Error closing redis client', error as Error);
+            client.disconnect();
+        }
     }
 
     /**
