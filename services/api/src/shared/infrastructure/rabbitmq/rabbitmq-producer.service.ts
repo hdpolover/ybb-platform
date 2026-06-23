@@ -41,7 +41,9 @@ export class RabbitMQProducerService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleDestroy() {
-    await this.connection.close();
+    if (this.connection) {
+      await this.connection.close();
+    }
   }
 
   async emit(pattern: string, data: unknown, options?: EmitOptions) {
