@@ -9,8 +9,10 @@ import { PaymentsModule } from '@modules/payments/payments.module';
 // processApplicationPayment() executes exactly once per delivery.
 // PaymentModule provides the @Global PaymentGrpcClient (gRPC transport to Go payment
 // service) needed by CreateIntentHandler inside PaymentsModule.
-// PaymentsModule contains @Cron services (PaymentReconciliationService); because
-// ConsumerInfraModule omits ScheduleModule, those crons do NOT register here.
+// PaymentsModule contains @Cron services (PaymentReconciliationService hourly,
+// PaymentOutboxService every 10s); because ConsumerInfraModule omits ScheduleModule
+// and neither service injects SchedulerRegistry, those crons do NOT register here.
+// They run only in the HTTP app, so the reconciliation and outbox jobs fire once.
 @Module({
   imports: [ConsumerInfraModule, PaymentModule, PaymentsModule],
 })
