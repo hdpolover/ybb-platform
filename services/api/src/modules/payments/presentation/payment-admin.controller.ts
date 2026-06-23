@@ -123,6 +123,26 @@ export class PaymentAdminController {
             throw new HttpException('cursor pagination only supports sortBy=createdAt', 400);
         }
         const decodedCursor = cursorToken ? this.decodeCreatedAtCursor(cursorToken) : null;
+
+        // Fetch obsolete registration_fee invoice IDs: invoices whose pricing tier's
+        // allowed_categories does NOT include the application's current applicationCategory.
+        // These arise when a participant switches funding category (self_funded <-> fully_funded).
+        // If applicationCategory is null we skip exclusion for that application.
+        const obsoleteRows = await this.prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
+            SELECT ai.id::text AS id
+            FROM application_invoices ai
+            JOIN program_pricing_tiers pt ON pt.id = ai.pricing_tier_id
+            JOIN participant_applications pa ON pa.id = ai.application_id
+            WHERE pa.program_id = ${programId}::uuid
+              AND pa.deleted_at IS NULL
+              AND pt.fee_type = 'registration_fee'
+              AND pa.application_category IS NOT NULL
+              AND NOT (pa.application_category = ANY(pt.allowed_categories))
+        `);
+        const obsoleteInvoiceIds = obsoleteRows.map((r) => r.id);
+        const excludeObsolete: Prisma.ApplicationInvoiceWhereInput =
+            obsoleteInvoiceIds.length > 0 ? { id: { notIn: obsoleteInvoiceIds } } : {};
+
         const minAmountNum = typeof minAmount === 'string' && minAmount.trim() !== '' ? Number(minAmount) : undefined;
         const maxAmountNum = typeof maxAmount === 'string' && maxAmount.trim() !== '' ? Number(maxAmount) : undefined;
 
@@ -193,6 +213,13 @@ export class PaymentAdminController {
             };
         }
 
+        // Exclude obsolete registration_fee invoices from all queries in this method.
+        // The id field is only used inside where.OR (UUID search), never as a top-level
+        // scalar on `where`, so adding id: { notIn } at the top level is safe and ANDs correctly.
+        if (obsoleteInvoiceIds.length > 0) {
+            Object.assign(where, excludeObsolete);
+        }
+
         const allowedSortBy: Record<string, Prisma.ApplicationInvoiceOrderByWithRelationInput> = {
             createdAt: { createdAt: sortDirection },
             paidAt: { paidAt: sortDirection },
@@ -205,7 +232,7 @@ export class PaymentAdminController {
         const listWhere = useCursorMode
             ? this.buildCreatedAtCursorWhere(where, decodedCursor, sortDirection)
             : where;
-        const summaryWhere: Prisma.ApplicationInvoiceWhereInput = { application: { programId } };
+        const summaryWhere: Prisma.ApplicationInvoiceWhereInput = { application: { programId }, ...excludeObsolete };
         // Status filter facet counts must reflect the OTHER active filters
         // (everything except the status filter itself), so each count equals
         // what selecting that status actually yields in the list. Prevents a
@@ -294,12 +321,13 @@ export class PaymentAdminController {
                 where: {
                     application: { programId },
                     paymentMethod: { not: null },
+                    ...excludeObsolete,
                 },
                 _count: { id: true },
             }),
             this.prisma.applicationInvoice.groupBy({
                 by: ['currency'],
-                where: { application: { programId } },
+                where: { application: { programId }, ...excludeObsolete },
                 _count: { id: true },
             }),
             this.prisma.participantApplication.groupBy({
@@ -315,6 +343,7 @@ export class PaymentAdminController {
                         equals: PaymentAdminController.PARTICIPANT_CANCELLATION_REASON,
                         mode: 'insensitive',
                     },
+                    ...excludeObsolete,
                 },
             }),
             this.prisma.applicationInvoice.count({
@@ -327,6 +356,7 @@ export class PaymentAdminController {
                             mode: 'insensitive',
                         },
                     },
+                    ...excludeObsolete,
                 },
             }),
             this.prisma.applicationInvoice.count({
@@ -334,6 +364,7 @@ export class PaymentAdminController {
                     application: { programId },
                     status: PaymentStatus.failed,
                     verifiedBy: null,
+                    ...excludeObsolete,
                 },
             }),
             this.prisma.applicationInvoice.count({
@@ -341,6 +372,7 @@ export class PaymentAdminController {
                     application: { programId },
                     status: PaymentStatus.failed,
                     verifiedBy: { not: null },
+                    ...excludeObsolete,
                 },
             }),
         ]);
