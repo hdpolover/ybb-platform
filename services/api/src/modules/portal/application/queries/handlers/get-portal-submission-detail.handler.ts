@@ -1033,12 +1033,17 @@ export class GetPortalSubmissionDetailHandler
             );
         }
 
-        const uncheckedRequiredChecklist = checklists.filter(
-            (item) => item.required && !item.checked,
-        );
-        pendingItems.push(
-            ...uncheckedRequiredChecklist.map((item) => `Confirm: ${item.label}`),
-        );
+        // NOTE: Preview checklist acknowledgements are a CLIENT-SIDE confirmation only.
+        // The submit POST is bodyless and we never persist the ticked state (the client
+        // tracks it in local component state and gates its own submit button on it), so
+        // the server has no way to observe whether the user checked the boxes. Gating
+        // `canSubmit` on `item.checked` here was unsatisfiable from the server's point of
+        // view: the custom-checklist branch hardcodes `checked:false` and the fallback
+        // branch reads flags that are never written. That regression silently disabled the
+        // submit button for every draft application platform-wide. The checklist is still
+        // returned in `checklists` for display, and the client enforces the confirmation.
+        // Do NOT add checklist items back into `pendingItems` without first persisting the
+        // ticked state from the client and reading it back here.
 
         if (paymentRequired && !paymentPaid) {
             pendingItems.push('Complete registration payment');
