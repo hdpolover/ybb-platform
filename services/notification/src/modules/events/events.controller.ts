@@ -491,6 +491,34 @@ export class EventsController {
     );
   }
 
+  @EventPattern('notification.ambassador_created')
+  async handleAmbassadorCreated(
+    @Payload() data: unknown,
+    @Ctx() context: RmqContext,
+  ) {
+    const payload = asRecord(data);
+    await this.processEvent(
+      'notification.ambassador_created',
+      payload,
+      context,
+      async () => {
+        this.logger.log(
+          `Received notification.ambassador_created event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+        );
+
+        const email = getString(payload, 'email');
+        if (!email) return;
+
+        await this.emailService.sendAmbassadorWelcomeEmail(email, {
+          name: getString(payload, 'name') || 'Ambassador',
+          referralCode: getString(payload, 'referralCode') || '',
+          loginUrl: getString(payload, 'loginUrl') || '#',
+          brand: payload.brand ?? undefined,
+        });
+      },
+    );
+  }
+
   @EventPattern('support.ticket.status-updated')
   async handleSupportTicketStatusUpdated(
     @Payload() data: unknown,

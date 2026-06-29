@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ChevronDown, ChevronUp, ChevronsUpDown, Eye, Pencil, RefreshCw, Search, Trash2, UserPlus } from "lucide-react";
+import { ChevronDown, ChevronUp, ChevronsUpDown, Eye, Mail, Pencil, RefreshCw, Search, Trash2, UserPlus } from "lucide-react";
+import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
 import {
   activateAmbassador,
@@ -11,6 +12,7 @@ import {
   deactivateAmbassador,
   deleteAmbassador,
   listAmbassadors,
+  resendAmbassadorCredentials,
   updateAmbassador,
   type Ambassador,
 } from "@/src/shared/api-client";
@@ -59,6 +61,7 @@ export default function AmbassadorsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Ambassador | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [resendingId, setResendingId] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     email: "",
@@ -190,6 +193,18 @@ export default function AmbassadorsPage() {
       void fetchData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete ambassador");
+    }
+  }
+
+  async function handleResendCredentials(ambassador: Ambassador) {
+    setResendingId(ambassador.id);
+    try {
+      await resendAmbassadorCredentials(ambassador.id);
+      toast.success(`Credentials sent to ${ambassador.user?.email ?? ambassador.fullName}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to resend credentials");
+    } finally {
+      setResendingId(null);
     }
   }
 
@@ -394,6 +409,15 @@ export default function AmbassadorsPage() {
                       <Button variant="ghost" size="sm" onClick={() => openEdit(ambassador)}>
                         <Pencil className="h-3.5 w-3.5" />
                         Edit
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={resendingId === ambassador.id}
+                        onClick={() => void handleResendCredentials(ambassador)}
+                      >
+                        <Mail className="h-3.5 w-3.5" />
+                        {resendingId === ambassador.id ? "Sending..." : "Resend"}
                       </Button>
                       <Button variant="ghost" size="sm" className="text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => setDeleteTarget(ambassador)}>
                         <Trash2 className="h-3.5 w-3.5" />
