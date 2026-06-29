@@ -26,6 +26,9 @@ const SOURCE_CASE = `
     WHEN LOWER(p.knowledge_source) IN ('twitter','x') THEN 'Twitter'
     WHEN LOWER(p.knowledge_source) IN ('website','web') THEN 'Website'
     WHEN LOWER(p.knowledge_source) IN ('friend','friends','friends/family','family') THEN 'Friends/Family'
+    WHEN LOWER(p.knowledge_source) IN ('youtube','yt') THEN 'YouTube'
+    WHEN LOWER(p.knowledge_source) IN ('tiktok','tik tok') THEN 'TikTok'
+    WHEN LOWER(p.knowledge_source) IN ('email','e-mail','newsletter','email/newsletter','email / newsletter') THEN 'Email/Newsletter'
     WHEN LOWER(p.knowledge_source) IN ('other','others') THEN 'Others'
     ELSE p.knowledge_source
   END
