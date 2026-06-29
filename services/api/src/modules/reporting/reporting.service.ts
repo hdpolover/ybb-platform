@@ -3,6 +3,7 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { ExcelService } from '@shared/infrastructure/excel/excel.service';
 import { Response } from 'express';
 import { PaymentStatus, Prisma } from '@prisma/client';
+import { buildE164Phone } from '@shared/utils/phone-e164';
 
 @Injectable()
 export class ReportingService {
@@ -193,7 +194,7 @@ export class ReportingService {
           id: participant.id,
           fullName: participant.fullName,
           email: participant.user?.email || 'N/A',
-          phone: participant.phoneNumber,
+          phone: buildE164Phone(participant.phoneCountryCode, participant.phoneNumber),
           nationality: participant.nationality,
           institution: participant.institution,
           status: participant.deletedAt ? 'Deleted' : 'Active',
@@ -281,7 +282,11 @@ export class ReportingService {
           currency: invoice.currency,
           program: invoice.application?.program?.name ?? 'Unknown',
           payerEmail: invoice.application?.participant?.user?.email ?? 'N/A',
-          payerPhone: invoice.application?.participant?.phoneNumber ?? '-',
+          payerPhone:
+            buildE164Phone(
+              invoice.application?.participant?.phoneCountryCode,
+              invoice.application?.participant?.phoneNumber,
+            ) ?? '-',
           tier: invoice.pricingTier?.name ?? 'N/A',
           method: invoice.paymentMethod || '-',
           paidAt: invoice.paidAt ? new Date(invoice.paidAt).toISOString() : '-',

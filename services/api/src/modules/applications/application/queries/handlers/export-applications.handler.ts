@@ -15,6 +15,7 @@ type ApplicationExportPayload = Prisma.ParticipantApplicationGetPayload<{
         participant: {
             select: {
                 fullName: true;
+                phoneCountryCode: true;
                 phoneNumber: true;
                 originCountry: true;
                 user: { select: { email: true } };
@@ -29,6 +30,7 @@ import { ExportApplicationsQuery } from '../export-applications.query';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { ExcelService } from '@shared/infrastructure/excel/excel.service';
 import type { Column } from 'exceljs';
+import { buildE164Phone } from '@shared/utils/phone-e164';
 
 @Injectable()
 @QueryHandler(ExportApplicationsQuery)
@@ -104,6 +106,7 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
                     participant: {
                         select: {
                             fullName: true,
+                            phoneCountryCode: true,
                             phoneNumber: true,
                             originCountry: true,
                             user: { select: { email: true } },
@@ -125,7 +128,11 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
                     participantName: app.participant?.fullName ?? 'N/A',
                     email: app.participant?.user?.email ?? 'N/A',
                     country: app.participant?.originCountry ?? 'N/A',
-                    phone: app.participant?.phoneNumber ?? 'N/A',
+                    phone:
+                        buildE164Phone(
+                            app.participant?.phoneCountryCode,
+                            app.participant?.phoneNumber,
+                        ) ?? 'N/A',
                     status: app.status,
                     category: app.applicationCategory,
                     appliedAt: new Date(app.createdAt).toISOString(),
