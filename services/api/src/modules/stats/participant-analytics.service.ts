@@ -42,10 +42,13 @@ const GENDER_CASE = `
   END
 `;
 
+// Country lives in `nationality` for some programs and ISO-2 `origin_country`
+// (or `current_country`) for others. Prefer the first populated one.
+const NATIONALITY_EXPR = `COALESCE(NULLIF(TRIM(p.nationality), ''), NULLIF(TRIM(p.origin_country), ''), NULLIF(TRIM(p.current_country), ''))`;
 const NATIONALITY_CASE = `
   CASE
-    WHEN p.nationality IS NULL OR TRIM(p.nationality) = '' THEN 'Not Specified'
-    ELSE p.nationality
+    WHEN ${NATIONALITY_EXPR} IS NULL THEN 'Not Specified'
+    ELSE ${NATIONALITY_EXPR}
   END
 `;
 
@@ -62,6 +65,28 @@ const AGE_CASE = `
 `;
 
 const AGE_BAND_ORDER = ['Under 18', '18-24', '25-34', '35-44', '45-54', '55+', 'Unknown'];
+
+// Country values are often stored as ISO-2 codes (e.g. "PK"). Humanize 2-letter
+// codes to country names for display; pass anything else (full names, "Not
+// Specified") through untouched.
+const regionNames = new Intl.DisplayNames(['en'], { type: 'region' });
+function toCountryName(value: string): string {
+  if (/^[A-Za-z]{2}$/.test(value)) {
+    try {
+      return regionNames.of(value.toUpperCase()) ?? value;
+    } catch {
+      return value;
+    }
+  }
+  return value;
+}
+function mapAxis(
+  rows: { row_key: string; col_key: string; count: bigint }[],
+  field: 'row_key' | 'col_key',
+  fn: (v: string) => string,
+): { row_key: string; col_key: string; count: bigint }[] {
+  return rows.map(r => ({ ...r, [field]: fn(r[field]) }));
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -199,7 +224,7 @@ export class ParticipantAnalyticsService {
       pctNotSpecified: grandTotal > 0 ? Number((notSpecifiedCount / grandTotal * 100).toFixed(1)) : 0,
     };
 
-    const countryBySource = buildMatrix(crossTabRows); // rows = nationality, cols = source
+    const countryBySource = buildMatrix(mapAxis(crossTabRows, 'row_key', toCountryName)); // rows = nationality, cols = source
 
     const result: KnowledgeSourceAnalyticsResponse = { summary, distribution, countryBySource };
     await this.cacheService.set(cacheKey, result, CACHE_TTL.LONG);
@@ -259,7 +284,7 @@ export class ParticipantAnalyticsService {
       `),
     ]);
 
-    const distribution = distribRows.map(r => ({ country: r.country, count: Number(r.count) }));
+    const distribution = distribRows.map(r => ({ country: toCountryName(r.country), count: Number(r.count) }));
     const grandTotal = distribution.reduce((a, b) => a + b.count, 0);
 
     const knownRows = distribution.filter(d => d.country !== 'Not Specified');
@@ -275,8 +300,8 @@ export class ParticipantAnalyticsService {
       pctNotSpecified: grandTotal > 0 ? Number((notSpecifiedCount / grandTotal * 100).toFixed(1)) : 0,
     };
 
-    const countryBySource = buildMatrix(bySourceRows); // rows = nationality (uncapped), cols = source
-    const countryByGender = buildMatrix(byGenderRows, { colOrder: ['Male', 'Female', 'Not Specified'] });
+    const countryBySource = buildMatrix(mapAxis(bySourceRows, 'row_key', toCountryName)); // rows = nationality (uncapped), cols = source
+    const countryByGender = buildMatrix(mapAxis(byGenderRows, 'row_key', toCountryName), { colOrder: ['Male', 'Female', 'Not Specified'] });
 
     const result: NationalityAnalyticsResponse = { summary, distribution, countryBySource, countryByGender };
     await this.cacheService.set(cacheKey, result, CACHE_TTL.LONG);
@@ -351,7 +376,7 @@ export class ParticipantAnalyticsService {
     };
 
     // genderByNationality columns capped to top 10 nationalities by column total
-    const genderByNationality = buildMatrix(byNationalityRows, {
+    const genderByNationality = buildMatrix(mapAxis(byNationalityRows, 'col_key', toCountryName), {
       rowOrder: ['Male', 'Female', 'Not Specified'],
       capCols: 10,
     });
@@ -440,7 +465,7 @@ export class ParticipantAnalyticsService {
       colOrder: ['Male', 'Female', 'Not Specified'],
     });
     // ageByNationality columns capped to top 10 nationalities by column total
-    const ageByNationality = buildMatrix(byNationalityRows, {
+    const ageByNationality = buildMatrix(mapAxis(byNationalityRows, 'col_key', toCountryName), {
       rowOrder: AGE_BAND_ORDER,
       capCols: 10,
     });
@@ -543,7 +568,7 @@ export class ParticipantAnalyticsService {
     // reverse for chronological display.
     const dailyTrend = dailyRows.map(r => ({ day: r.day, count: Number(r.count) })).reverse();
     const monthlyTotals = monthlyRows.map(r => ({ month: r.month, count: Number(r.count) })).reverse();
-    const byCountry = byCountryRows.map(r => ({ country: r.country, count: Number(r.count) }));
+    const byCountry = byCountryRows.map(r => ({ country: toCountryName(r.country), count: Number(r.count) }));
     const bySource = bySourceRows.map(r => ({ source: r.source, count: Number(r.count) }));
 
     // Average per active day: total ÷ distinct days that had ≥1 registration (all-time).
