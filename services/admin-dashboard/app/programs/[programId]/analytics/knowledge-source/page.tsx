@@ -6,8 +6,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell, Legend,
 } from "recharts";
-import { AlertCircle, Loader2, Signal, Users } from "lucide-react";
-import { getKnowledgeSourceAnalytics, type KnowledgeSourceAnalyticsResponse } from "@/src/shared/api-client";
+import { AlertCircle, ChevronDown, ChevronUp, Loader2, Signal, Users } from "lucide-react";
+import { getKnowledgeSourceAnalytics, type KnowledgeSourceAnalyticsResponse, type SourceAccountBreakdown } from "@/src/shared/api-client";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { PageHeader } from "@/src/admin/page-header";
 import { EmptyState } from "@/src/admin/empty-state";
@@ -159,10 +159,115 @@ export default function KnowledgeSourceAnalyticsPage({
             </div>
           )}
 
+          {/* Accounts by Source */}
+          {data.accountsBySource.length > 0 && (
+            <AccountsBySourceSection
+              accountsBySource={data.accountsBySource}
+              distribution={data.distribution}
+            />
+          )}
+
           {/* Cross-tab */}
-          <CrossTabTable data={data.countryBySource} title="Country × Source" />
+          <CrossTabTable data={data.countryBySource} title="Country x Source" />
         </>
       )}
+    </div>
+  );
+}
+
+// ── Accounts by Source section ─────────────────────────────────────────────────
+
+function AccountsBySourceSection({
+  accountsBySource,
+  distribution,
+}: {
+  accountsBySource: SourceAccountBreakdown[];
+  distribution: { source: string; count: number }[];
+}) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const totalBySource = new Map(distribution.map((d) => [d.source, d.count]));
+
+  function toggle(source: string) {
+    setExpanded((prev) => (prev === source ? null : source));
+  }
+
+  return (
+    <div className="rounded-lg border border-zinc-200 bg-white shadow-sm">
+      <div className="border-b border-zinc-100 px-4 py-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          Accounts by Source
+        </p>
+        <p className="mt-0.5 text-[11px] text-zinc-400">
+          Account or person names participants entered, grouped by channel
+        </p>
+      </div>
+
+      <ul className="divide-y divide-zinc-100">
+        {accountsBySource.map((item) => {
+          const isOpen = expanded === item.source;
+          const total = totalBySource.get(item.source) ?? 0;
+          const namedCount = item.accounts
+            .filter((a) => a.name !== null)
+            .reduce((s, a) => s + a.count, 0);
+
+          return (
+            <li key={item.source}>
+              <button
+                type="button"
+                onClick={() => toggle(item.source)}
+                className="flex w-full cursor-pointer items-center justify-between px-4 py-3 text-left hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
+                aria-expanded={isOpen}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium text-zinc-800">{item.source}</span>
+                  <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-500">
+                    {namedCount} named / {total} total
+                  </span>
+                </div>
+                {isOpen ? (
+                  <ChevronUp className="h-4 w-4 shrink-0 text-zinc-400" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 shrink-0 text-zinc-400" />
+                )}
+              </button>
+
+              {isOpen && (
+                <div className="border-t border-zinc-100 bg-zinc-50 px-4 pb-3 pt-2">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left">
+                        <th className="pb-1.5 pr-4 text-[11px] font-medium uppercase tracking-wide text-zinc-400">
+                          Account / Person
+                        </th>
+                        <th className="pb-1.5 text-right text-[11px] font-medium uppercase tracking-wide text-zinc-400">
+                          Count
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100">
+                      {item.accounts.map((account, idx) => (
+                        <tr key={idx} className={account.name === null ? "opacity-60" : undefined}>
+                          <td className="py-1.5 pr-4">
+                            {account.name === null ? (
+                              <span className="italic text-zinc-400">(unnamed)</span>
+                            ) : (
+                              <span className="text-zinc-700">{account.name}</span>
+                            )}
+                          </td>
+                          <td className="py-1.5 text-right tabular-nums text-zinc-600">
+                            {account.count.toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
