@@ -17,10 +17,21 @@ export interface KnowledgeSourceSummary {
   pctNotSpecified: number;
 }
 
+export interface SourceAccountEntry {
+  name: string | null; // null means unnamed/blank
+  count: number;
+}
+
+export interface SourceAccountBreakdown {
+  source: string; // matches a distribution[].source key
+  accounts: SourceAccountEntry[]; // named accounts sorted by count desc, unnamed last
+}
+
 export interface KnowledgeSourceAnalyticsResponse {
   summary: KnowledgeSourceSummary;
   distribution: { source: string; count: number }[];
   countryBySource: CrossTabResult; // rows = nationality, cols = source (uncapped)
+  accountsBySource: SourceAccountBreakdown[]; // only sources with at least one named account
 }
 
 // ── Nationality ───────────────────────────────────────────────────────────────

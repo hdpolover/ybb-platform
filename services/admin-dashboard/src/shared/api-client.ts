@@ -1035,6 +1035,16 @@ export type CrossTabResult = {
   grandTotal: number;
 };
 
+export type SourceAccountEntry = {
+  name: string | null; // null = unnamed/blank
+  count: number;
+};
+
+export type SourceAccountBreakdown = {
+  source: string; // matches a distribution[].source key
+  accounts: SourceAccountEntry[]; // named accounts sorted count desc, unnamed last
+};
+
 export type KnowledgeSourceAnalyticsResponse = {
   summary: {
     total: number;
@@ -1045,6 +1055,7 @@ export type KnowledgeSourceAnalyticsResponse = {
   };
   distribution: { source: string; count: number }[];
   countryBySource: CrossTabResult;
+  accountsBySource: SourceAccountBreakdown[]; // only sources with at least one named account
 };
 
 export type NationalityAnalyticsResponse = {

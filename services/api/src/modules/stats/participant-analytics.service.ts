@@ -8,6 +8,7 @@ import { CACHE_KEYS, CACHE_TTL } from '../../shared/constants/cache-keys';
 import {
   CrossTabResult,
   KnowledgeSourceAnalyticsResponse,
+  SourceAccountBreakdown,
   NationalityAnalyticsResponse,
   GenderAnalyticsResponse,
   AgeAnalyticsResponse,
@@ -178,7 +179,7 @@ export class ParticipantAnalyticsService {
 
     await this.ensureProgramExists(programId);
 
-    const [distribRows, crossTabRows] = await Promise.all([
+    const [distribRows, crossTabRows, accountRows] = await Promise.all([
       this.readPrisma.$queryRaw<{ source: string; count: bigint }[]>(Prisma.sql`
         SELECT
           ${Prisma.raw(SOURCE_CASE)} AS source,
@@ -205,6 +206,17 @@ export class ParticipantAnalyticsService {
         FROM base
         GROUP BY row_key, col_key
       `),
+      this.readPrisma.$queryRaw<{ source: string; account_name: string | null; count: bigint }[]>(Prisma.sql`
+        SELECT
+          ${Prisma.raw(SOURCE_CASE)} AS source,
+          NULLIF(TRIM(pa.personal_data->>'source_account_name'), '') AS account_name,
+          COUNT(DISTINCT p.id)::bigint AS count
+        FROM participants p
+        JOIN participant_applications pa ON pa.participant_id = p.id
+        WHERE pa.program_id = ${programId}::uuid
+          AND pa.deleted_at IS NULL
+        GROUP BY source, account_name
+      `),
     ]);
 
     const distribution = distribRows.map(r => ({ source: r.source, count: Number(r.count) }));
@@ -226,7 +238,38 @@ export class ParticipantAnalyticsService {
 
     const countryBySource = buildMatrix(mapAxis(crossTabRows, 'row_key', toCountryName)); // rows = nationality, cols = source
 
-    const result: KnowledgeSourceAnalyticsResponse = { summary, distribution, countryBySource };
+    // Build per-source account breakdowns. Group accountRows by source, separate
+    // named vs unnamed, sort named by count desc, put unnamed last.
+    const accountsBySourceMap = new Map<string, { named: { name: string; count: number }[]; unnamed: number }>();
+    for (const row of accountRows) {
+      const src = row.source;
+      if (!accountsBySourceMap.has(src)) accountsBySourceMap.set(src, { named: [], unnamed: 0 });
+      const bucket = accountsBySourceMap.get(src)!;
+      if (row.account_name === null) {
+        bucket.unnamed += Number(row.count);
+      } else {
+        bucket.named.push({ name: row.account_name, count: Number(row.count) });
+      }
+    }
+
+    const accountsBySource: SourceAccountBreakdown[] = [];
+    for (const [source, { named, unnamed }] of accountsBySourceMap) {
+      if (named.length === 0) continue; // skip sources with no named accounts
+      named.sort((a, b) => b.count - a.count);
+      const accounts = [
+        ...named.map(n => ({ name: n.name as string | null, count: n.count })),
+        ...(unnamed > 0 ? [{ name: null, count: unnamed }] : []),
+      ];
+      accountsBySource.push({ source, accounts });
+    }
+    // Sort accountsBySource by source total desc to match distribution order
+    accountsBySource.sort((a, b) => {
+      const totalA = a.accounts.reduce((s, x) => s + x.count, 0);
+      const totalB = b.accounts.reduce((s, x) => s + x.count, 0);
+      return totalB - totalA;
+    });
+
+    const result: KnowledgeSourceAnalyticsResponse = { summary, distribution, countryBySource, accountsBySource };
     await this.cacheService.set(cacheKey, result, CACHE_TTL.LONG);
     return result;
   }
