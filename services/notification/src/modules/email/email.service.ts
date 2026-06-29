@@ -836,6 +836,22 @@ export class EmailService {
     return this.sendRawEmail(to, subject, html);
   }
 
+  async sendAmbassadorWelcomeEmail(
+    to: string,
+    data: { name: string; referralCode: string; loginUrl: string; brand?: any },
+  ) {
+    const fallbackSubject = data.brand?.name
+      ? `You're now a ${data.brand.name} Ambassador`
+      : 'Welcome to the Ambassador Program';
+    const { subject, html } = await this.resolveEmailContent({
+      type: 'ambassador_welcome',
+      fallbackTemplateName: 'ambassador-welcome',
+      fallbackSubject,
+      data,
+    });
+    return this.sendRawEmail(to, subject, html);
+  }
+
   private resolveSupportUrl(brand?: any): string {
     const baseUrl =
       brand?.websiteUrl?.replace(/\/$/, '') ||

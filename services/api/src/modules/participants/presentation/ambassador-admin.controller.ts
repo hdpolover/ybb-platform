@@ -1,3 +1,4 @@
+// services/api/src/modules/participants/presentation/ambassador-admin.controller.ts
 import {
   Controller,
   Get,
@@ -15,11 +16,13 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
+import { ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { UserRole } from '@core/entities/user.entity';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import {
   GetAmbassadorsListQuery,
   UpdateAmbassadorStatusCommand,
@@ -29,6 +32,7 @@ import { DeleteAmbassadorCommand } from '../application/commands/delete-ambassad
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { ChangeType } from '@prisma/client';
 import { createAmbassadorShareToken } from '../application/utils/ambassador-share-token.util';
+import { Logger } from '@nestjs/common';
 
 @ApiTags('Ambassadors')
 @Controller('admin/ambassadors')
@@ -36,10 +40,14 @@ import { createAmbassadorShareToken } from '../application/utils/ambassador-shar
 @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 @ApiBearerAuth()
 export class AmbassadorAdminController {
+  private readonly logger = new Logger(AmbassadorAdminController.name);
+
   constructor(
     private readonly queryBus: QueryBus,
     private readonly commandBus: CommandBus,
     private readonly prisma: PrismaService,
+    private readonly rabbitMQProducerService: RabbitMQProducerService,
+    private readonly configService: ConfigService,
   ) { }
 
   @Get()
@@ -147,8 +155,26 @@ export class AmbassadorAdminController {
       throw new BadRequestException('email, fullName, and programId are required');
     }
 
-    // Resolve program to get brandId
-    const program = await this.prisma.program.findUnique({ where: { id: programId }, select: { id: true, brandId: true } });
+    // Resolve program to get brandId and brand details for the welcome email
+    const program = await this.prisma.program.findUnique({
+      where: { id: programId },
+      select: {
+        id: true,
+        brandId: true,
+        brand: {
+          select: {
+            id: true,
+            name: true,
+            websiteUrl: true,
+            primaryColor: true,
+            logoUrl: true,
+            contactEmail: true,
+            contactAddress: true,
+            socialMediaLinks: true,
+          },
+        },
+      },
+    });
     if (!program) throw new NotFoundException('Program not found');
 
     // Find or create user (case-insensitive email match)
@@ -195,7 +221,83 @@ export class AmbassadorAdminController {
       include: { user: { select: { email: true } } },
     });
 
+    // Best-effort: emit welcome/credentials email. Never fail the create.
+    try {
+      const brand = program.brand;
+      let baseUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
+      if (brand?.websiteUrl) baseUrl = brand.websiteUrl.replace(/\/$/, '');
+      const normalizedBaseUrl = /^https?:\/\//i.test(baseUrl) ? baseUrl : `https://${baseUrl}`;
+      const loginUrl = `${normalizedBaseUrl}/login?role=ambassador`;
+
+      await this.rabbitMQProducerService.emit('notification.ambassador_created', {
+        id: ambassador.id,
+        email,
+        name: ambassador.fullName,
+        referralCode: ambassador.referralCode,
+        loginUrl,
+        brand,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to emit ambassador welcome email for ambassador ${ambassador.id}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+
     return ambassador;
+  }
+
+  @Post(':id/resend-credentials')
+  @ApiOperation({ summary: 'Resend ambassador credentials email (Admin)' })
+  async resendCredentials(@Param('id') id: string) {
+    const ambassador = await this.prisma.ambassador.findFirst({
+      where: { id, deletedAt: null },
+      include: {
+        user: { select: { email: true } },
+        program: {
+          select: {
+            id: true,
+            brand: {
+              select: {
+                id: true,
+                name: true,
+                websiteUrl: true,
+                primaryColor: true,
+                logoUrl: true,
+                contactEmail: true,
+                contactAddress: true,
+                socialMediaLinks: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!ambassador) throw new NotFoundException('Ambassador not found');
+
+    const email = ambassador.user?.email;
+    if (!email) throw new BadRequestException('Ambassador has no email address on record');
+
+    const brand = ambassador.program?.brand;
+    let baseUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
+    if (brand?.websiteUrl) baseUrl = brand.websiteUrl.replace(/\/$/, '');
+    const normalizedBaseUrl = /^https?:\/\//i.test(baseUrl) ? baseUrl : `https://${baseUrl}`;
+    const loginUrl = `${normalizedBaseUrl}/login?role=ambassador`;
+
+    await this.rabbitMQProducerService.emit(
+      'notification.ambassador_created',
+      {
+        id: ambassador.id,
+        email,
+        name: ambassador.fullName,
+        referralCode: ambassador.referralCode,
+        loginUrl,
+        brand,
+      },
+      { messageId: `ambassador-resend-${id}-${Date.now()}` },
+    );
+
+    return { message: 'Credentials email queued for delivery' };
   }
 
   @Patch(':id')

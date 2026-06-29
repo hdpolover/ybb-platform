@@ -3379,6 +3379,12 @@ export async function getAmbassadorReferrals(id: string, page = 1): Promise<{ da
   return { data, meta };
 }
 
+export function resendAmbassadorCredentials(id: string): Promise<{ message: string }> {
+  return request<{ message: string }>(`/admin/ambassadors/${id}/resend-credentials`, {
+    method: "POST",
+  });
+}
+
 // ─── Reporting Exports ────────────────────────────────────────────────────────
 
 async function triggerFileDownload(

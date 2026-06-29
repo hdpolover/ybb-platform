@@ -1,11 +1,14 @@
+// services/api/src/modules/participants/application/commands/handlers/apply-ambassador.handler.ts
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { Inject, ConflictException, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ApplyAmbassadorCommand } from '../apply-ambassador.command';
 import { IAmbassadorRepository } from '../../../../../core/interfaces/repositories/ambassador.repository.interface';
 import { Ambassador } from '../../../../../core/entities/ambassador.entity';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
+import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 // import { customAlphabet } from 'nanoid'; // If nanoid is available, else use custom function
 
 @CommandHandler(ApplyAmbassadorCommand)
@@ -17,6 +20,8 @@ export class ApplyAmbassadorHandler implements ICommandHandler<ApplyAmbassadorCo
         private readonly ambassadorRepository: IAmbassadorRepository,
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
+        private readonly rabbitMQProducerService: RabbitMQProducerService,
+        private readonly configService: ConfigService,
     ) { }
 
     async execute(command: ApplyAmbassadorCommand): Promise<Ambassador> {
@@ -43,6 +48,37 @@ export class ApplyAmbassadorHandler implements ICommandHandler<ApplyAmbassadorCo
 
         // Invalidate participant-related portal caches
         await this.invalidateParticipantCaches(userId);
+
+        // Best-effort: send ambassador welcome/credentials email. Never fail the command.
+        try {
+            const [userRecord, programRecord] = await Promise.all([
+                this.prisma.user.findUnique({ where: { id: userId }, select: { email: true } }),
+                this.prisma.program.findUnique({ where: { id: dto.programId }, include: { brand: true } }),
+            ]);
+
+            const email = userRecord?.email;
+            const brand = programRecord?.brand;
+
+            if (email) {
+                let baseUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
+                if (brand?.websiteUrl) baseUrl = brand.websiteUrl.replace(/\/$/, '');
+                const normalizedBaseUrl = /^https?:\/\//i.test(baseUrl) ? baseUrl : `https://${baseUrl}`;
+                const loginUrl = `${normalizedBaseUrl}/login?role=ambassador`;
+
+                await this.rabbitMQProducerService.emit('notification.ambassador_created', {
+                    id: ambassador.id,
+                    email,
+                    name: dto.fullName,
+                    referralCode: ambassador.referralCode,
+                    loginUrl,
+                    brand,
+                });
+            }
+        } catch (error) {
+            this.logger.warn(
+                `Failed to emit ambassador welcome email for ambassador ${ambassador.id}: ${error instanceof Error ? error.message : String(error)}`,
+            );
+        }
 
         return ambassador;
     }
