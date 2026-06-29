@@ -5,6 +5,7 @@ import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { KNOWLEDGE_SOURCES } from '../../../../metadata/metadata.constants';
 import { PortalCacheService } from '../../services/portal-cache.service';
+import { buildE164Phone } from '@shared/utils/phone-e164';
 import { GetPortalSubmissionDetailQuery } from '../portal-queries';
 import {
     PortalSubmissionDetailResponseDto,
@@ -564,17 +565,7 @@ export class GetPortalSubmissionDetailHandler
     }
 
     private buildE164Phone(countryCode: string | null, phoneNumber: string | null): string | undefined {
-        if (!phoneNumber) return undefined;
-
-        const digits = String(phoneNumber).trim();
-        if (!digits) return undefined;
-        if (digits.startsWith('+')) return digits;
-
-        if (!countryCode) return digits;
-
-        const normalizedCode = countryCode.startsWith('+') ? countryCode : `+${countryCode}`;
-        const normalizedNumber = digits.replace(/^0+/, '') || digits;
-        return `${normalizedCode}${normalizedNumber}`;
+        return buildE164Phone(countryCode, phoneNumber);
     }
 
     private resolveFieldOptions(field: SubmissionFormFieldDto, application: ApplicationDetail): SubmissionFormFieldDto['options'] {
