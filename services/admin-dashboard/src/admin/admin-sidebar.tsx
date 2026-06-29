@@ -30,11 +30,37 @@ function resolveHref(href: string, base?: string): string {
   return href === "" ? base : `${base}/${href}`;
 }
 
-function isItemActive(href: string, base: string | undefined, pathname: string): boolean {
-  const resolved = resolveHref(href, base);
+function resolvedMatches(resolved: string, base: string | undefined, pathname: string): boolean {
   if (resolved === "/platform") return pathname === resolved;
   if (base && resolved === base) return pathname === resolved || pathname === `${resolved}/`;
   return pathname === resolved || pathname.startsWith(resolved + "/");
+}
+
+/**
+ * The longest matching nav href wins, so a parent index route (e.g. ".../analytics")
+ * stops being "active" on a deeper sibling page (".../analytics/nationality").
+ */
+function findActiveHref(
+  sections: NavSection[],
+  base: string | undefined,
+  pathname: string,
+): string | null {
+  const hrefs: string[] = [];
+  const walk = (items: NavItem[]) => {
+    for (const item of items) {
+      hrefs.push(resolveHref(item.href, base));
+      if (item.children?.length) walk(item.children);
+    }
+  };
+  sections.forEach((s) => walk(s.items));
+
+  let best: string | null = null;
+  for (const resolved of hrefs) {
+    if (resolvedMatches(resolved, base, pathname) && (best === null || resolved.length > best.length)) {
+      best = resolved;
+    }
+  }
+  return best;
 }
 
 // ─── NavItemRow ───────────────────────────────────────────────────────────────
@@ -44,25 +70,25 @@ interface NavItemRowProps {
   hrefBase?: string;
   collapsed: boolean;
   depth?: number;
+  activeHref: string | null;
 }
 
-function NavItemRow({ item, hrefBase, collapsed, depth = 0 }: NavItemRowProps) {
-  const pathname = usePathname();
+function NavItemRow({ item, hrefBase, collapsed, depth = 0, activeHref }: NavItemRowProps) {
   const hasChildren = (item.children?.length ?? 0) > 0;
   const resolved = resolveHref(item.href, hrefBase);
-  const active = isItemActive(item.href, hrefBase, pathname);
 
-  // Auto-open if any child is active
-  const childActive = item.children?.some((c) =>
-    isItemActive(c.href, hrefBase, pathname),
-  ) ?? false;
+  // The active leaf is the single longest-matching href. A parent is "active"
+  // when that active leaf lives somewhere in its subtree.
+  const sectionActive =
+    activeHref != null && (activeHref === resolved || activeHref.startsWith(resolved + "/"));
+  const active = hasChildren ? sectionActive : activeHref === resolved;
 
-  const [open, setOpen] = React.useState(childActive);
+  const [open, setOpen] = React.useState(sectionActive);
 
   // Keep open state in sync when navigation happens
   React.useEffect(() => {
-    if (childActive) setOpen(true);
-  }, [childActive]);
+    if (sectionActive) setOpen(true);
+  }, [sectionActive]);
 
   const Icon = item.icon;
 
@@ -107,7 +133,7 @@ function NavItemRow({ item, hrefBase, collapsed, depth = 0 }: NavItemRowProps) {
         {open && !collapsed && (
           <div className="mt-0.5 space-y-0.5 border-l border-blue-500/40 pl-3 ml-3">
             {item.children!.map((child) => (
-              <NavItemRow key={child.id} item={child} hrefBase={hrefBase} collapsed={false} depth={depth + 1} />
+              <NavItemRow key={child.id} item={child} hrefBase={hrefBase} collapsed={false} depth={depth + 1} activeHref={activeHref} />
             ))}
           </div>
         )}
@@ -142,6 +168,8 @@ function NavItemRow({ item, hrefBase, collapsed, depth = 0 }: NavItemRowProps) {
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
 export function AdminSidebar({ sections, hrefBase, collapsed, context = "program", footer }: SidebarProps) {
+  const pathname = usePathname();
+  const activeHref = findActiveHref(sections, hrefBase, pathname);
   return (
     <aside
       className={cn(
@@ -184,7 +212,7 @@ export function AdminSidebar({ sections, hrefBase, collapsed, context = "program
                 <Separator className="mb-2 bg-blue-700/40" />
               )}
               {section.items.map((item) => (
-                <NavItemRow key={item.id} item={item} hrefBase={hrefBase} collapsed={collapsed} />
+                <NavItemRow key={item.id} item={item} hrefBase={hrefBase} collapsed={collapsed} activeHref={activeHref} />
               ))}
             </div>
           ))}
