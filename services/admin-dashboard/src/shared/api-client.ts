@@ -1026,6 +1026,134 @@ export function getProgramAnalytics(programId: string, filters?: AnalyticsFilter
   );
 }
 
+// ─── Participant Analytics — Detail Pages ─────────────────────────────────────
+
+export type CrossTabResult = {
+  columns: string[];
+  rows: { key: string; total: number; cells: Record<string, number> }[];
+  columnTotals: Record<string, number>;
+  grandTotal: number;
+};
+
+export type KnowledgeSourceAnalyticsResponse = {
+  summary: {
+    total: number;
+    withKnownSource: number;
+    topChannel: string | null;
+    topChannelPct: number | null;
+    pctNotSpecified: number;
+  };
+  distribution: { source: string; count: number }[];
+  countryBySource: CrossTabResult;
+};
+
+export type NationalityAnalyticsResponse = {
+  summary: {
+    total: number;
+    distinctCountries: number;
+    topCountry: string | null;
+    topCountryPct: number | null;
+    pctNotSpecified: number;
+  };
+  distribution: { country: string; count: number }[];
+  countryBySource: CrossTabResult;
+  countryByGender: CrossTabResult;
+};
+
+export type GenderAnalyticsResponse = {
+  summary: {
+    total: number;
+    pctMale: number;
+    pctFemale: number;
+    pctNotSpecified: number;
+  };
+  distribution: { gender: string; count: number }[];
+  genderByNationality: CrossTabResult;
+  genderByAge: CrossTabResult;
+};
+
+export type AgeAnalyticsResponse = {
+  summary: {
+    total: number;
+    dominantBand: string | null;
+    dominantBandPct: number | null;
+    activeBands: number;
+    pctUnknown: number;
+  };
+  distribution: { band: string; count: number }[];
+  ageByGender: CrossTabResult;
+  ageByNationality: CrossTabResult;
+};
+
+export type RegistrationsAnalyticsResponse = {
+  summary: {
+    total: number;
+    peakDay: string | null;
+    peakDayCount: number;
+    avgPerDay: number;
+    firstRegistration: string | null;
+    lastRegistration: string | null;
+  };
+  dailyTrend: { day: string; count: number }[];
+  monthlyTotals: { month: string; count: number }[];
+  byCountry: { country: string; count: number }[];
+  bySource: { source: string; count: number }[];
+};
+
+export type AmbassadorsAnalyticsResponse = {
+  summary: {
+    totalAmbassadors: number;
+    totalReferred: number;
+    avgReferrals: number;
+    topAmbassador: { name: string; count: number } | null;
+  };
+  leaderboard: { name: string; totalReferrals: number; successfulReferrals: number }[];
+};
+
+export function getKnowledgeSourceAnalytics(
+  programId: string,
+): Promise<KnowledgeSourceAnalyticsResponse> {
+  return request<KnowledgeSourceAnalyticsResponse>(
+    `/stats/admin/programs/${encodeURIComponent(programId)}/analytics/knowledge-source`,
+  );
+}
+
+export function getNationalityAnalytics(
+  programId: string,
+): Promise<NationalityAnalyticsResponse> {
+  return request<NationalityAnalyticsResponse>(
+    `/stats/admin/programs/${encodeURIComponent(programId)}/analytics/nationality`,
+  );
+}
+
+export function getGenderAnalytics(programId: string): Promise<GenderAnalyticsResponse> {
+  return request<GenderAnalyticsResponse>(
+    `/stats/admin/programs/${encodeURIComponent(programId)}/analytics/gender`,
+  );
+}
+
+export function getAgeAnalytics(programId: string): Promise<AgeAnalyticsResponse> {
+  return request<AgeAnalyticsResponse>(
+    `/stats/admin/programs/${encodeURIComponent(programId)}/analytics/age`,
+  );
+}
+
+export function getRegistrationsAnalytics(
+  programId: string,
+): Promise<RegistrationsAnalyticsResponse> {
+  return request<RegistrationsAnalyticsResponse>(
+    `/stats/admin/programs/${encodeURIComponent(programId)}/analytics/registrations`,
+  );
+}
+
+export function getAmbassadorsAnalytics(
+  programId: string,
+): Promise<AmbassadorsAnalyticsResponse> {
+  return request<AmbassadorsAnalyticsResponse>(
+    `/stats/admin/programs/${encodeURIComponent(programId)}/analytics/ambassadors`,
+  );
+}
+
 // ─── Program Config ───────────────────────────────────────────────────────────
 
 export type ProgramConfig = {

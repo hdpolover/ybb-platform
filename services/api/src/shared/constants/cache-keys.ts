@@ -54,6 +54,14 @@ export const CACHE_KEYS = {
   PARTICIPANT_LIST: (programId: string) => `participants:program:${programId}`,
   PAYMENT_METHODS: (params: string) => `payment:methods:${params}`,
 
+  // Participant analytics cache keys
+  ANALYTICS_KNOWLEDGE_SOURCE: (programId: string) => `analytics:knowledge-source:${programId}`,
+  ANALYTICS_NATIONALITY: (programId: string) => `analytics:nationality:${programId}`,
+  ANALYTICS_GENDER: (programId: string) => `analytics:gender:${programId}`,
+  ANALYTICS_AGE: (programId: string) => `analytics:age:${programId}`,
+  ANALYTICS_REGISTRATIONS: (programId: string) => `analytics:registrations:${programId}`,
+  ANALYTICS_AMBASSADORS: (programId: string) => `analytics:ambassadors:${programId}`,
+
   // Metadata cache keys
   METADATA_COUNTRIES: 'metadata:countries',
   METADATA_STATES: (countryCode: string) => `metadata:states:${countryCode}`,

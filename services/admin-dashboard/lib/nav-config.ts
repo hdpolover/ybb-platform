@@ -33,6 +33,12 @@ import {
   Menu,
   ChevronRight,
   Images,
+  Activity,
+  Globe,
+  Users,
+  Clock,
+  TrendingUp,
+  Star,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -116,7 +122,21 @@ export const programNavSections: NavSection[] = [
     id: "main",
     items: [
       { id: "dashboard", label: "Dashboard", href: "", icon: LayoutDashboard },
-      { id: "analytics", label: "Analytics", href: "analytics", icon: BarChart3 },
+      {
+        id: "analytics",
+        label: "Analytics",
+        href: "analytics",
+        icon: BarChart3,
+        children: [
+          { id: "analytics-overview", label: "Overview", href: "analytics", icon: BarChart3 },
+          { id: "analytics-knowledge-source", label: "Knowledge Source", href: "analytics/knowledge-source", icon: Activity },
+          { id: "analytics-nationality", label: "Nationality", href: "analytics/nationality", icon: Globe },
+          { id: "analytics-gender", label: "Gender", href: "analytics/gender", icon: Users },
+          { id: "analytics-age", label: "Age", href: "analytics/age", icon: Clock },
+          { id: "analytics-registrations", label: "Registrations", href: "analytics/registrations", icon: TrendingUp },
+          { id: "analytics-ambassadors", label: "Ambassadors", href: "analytics/ambassadors", icon: Star },
+        ],
+      },
     ],
   },
   {

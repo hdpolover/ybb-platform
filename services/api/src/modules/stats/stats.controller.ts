@@ -2,6 +2,7 @@
 import { Controller, Get, Header, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags, ApiHeader, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { StatsService } from './stats.service';
+import { ParticipantAnalyticsService } from './participant-analytics.service';
 import { GetStatsQueryDto } from './dto/get-stats.dto';
 import { StatsResponseDto } from './dto/stats-response.dto';
 import { BrandDomain } from '../../shared/decorators/brand-domain.decorator';
@@ -20,7 +21,10 @@ import { ProgramAnalyticsResponseDto } from './dto/program-analytics-response.dt
   required: false,
 })
 export class StatsController {
-  constructor(private readonly statsService: StatsService) {}
+  constructor(
+    private readonly statsService: StatsService,
+    private readonly participantAnalyticsService: ParticipantAnalyticsService,
+  ) {}
 
   @Get()
   @Header('Cache-Control', 'public, max-age=30, s-maxage=60, stale-while-revalidate=300')
@@ -97,5 +101,67 @@ export class StatsController {
       paymentStatuses: paymentStatuses ? paymentStatuses.split(',').filter(Boolean) : undefined,
       currency: currency || undefined,
     });
+  }
+
+  // ── Participant Analytics ─────────────────────────────────────────────────
+
+  @Get('admin/programs/:programId/analytics/knowledge-source')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get knowledge source (discovery channel) analytics for a program' })
+  @ApiResponse({ status: 200, description: 'Knowledge source distribution and cross-tab' })
+  async getKnowledgeSourceAnalytics(@Param('programId') programId: string) {
+    return this.participantAnalyticsService.getKnowledgeSourceAnalytics(programId);
+  }
+
+  @Get('admin/programs/:programId/analytics/nationality')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get nationality analytics for a program' })
+  @ApiResponse({ status: 200, description: 'Nationality distribution and cross-tab' })
+  async getNationalityAnalytics(@Param('programId') programId: string) {
+    return this.participantAnalyticsService.getNationalityAnalytics(programId);
+  }
+
+  @Get('admin/programs/:programId/analytics/gender')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get gender analytics for a program' })
+  @ApiResponse({ status: 200, description: 'Gender distribution and cross-tab' })
+  async getGenderAnalytics(@Param('programId') programId: string) {
+    return this.participantAnalyticsService.getGenderAnalytics(programId);
+  }
+
+  @Get('admin/programs/:programId/analytics/age')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get age band analytics for a program' })
+  @ApiResponse({ status: 200, description: 'Age distribution and cross-tab' })
+  async getAgeAnalytics(@Param('programId') programId: string) {
+    return this.participantAnalyticsService.getAgeAnalytics(programId);
+  }
+
+  @Get('admin/programs/:programId/analytics/registrations')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get registration trend analytics for a program' })
+  @ApiResponse({ status: 200, description: 'Daily/monthly trend, by country, by source' })
+  async getRegistrationsAnalytics(@Param('programId') programId: string) {
+    return this.participantAnalyticsService.getRegistrationsAnalytics(programId);
+  }
+
+  @Get('admin/programs/:programId/analytics/ambassadors')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get ambassador performance analytics for a program' })
+  @ApiResponse({ status: 200, description: 'Ambassador leaderboard and referral summary' })
+  async getAmbassadorsAnalytics(@Param('programId') programId: string) {
+    return this.participantAnalyticsService.getAmbassadorsAnalytics(programId);
   }
 }
