@@ -90,6 +90,61 @@ export class FirebaseLoginHandler {
     return { browser, os, deviceType };
   }
 
+  /**
+   * Attribute an ambassador referral to a participant that ALREADY exists.
+   * Covers returning users who click a share link, then log in via OAuth — the
+   * new-participant branch never runs for them, so without this they lose attribution.
+   *
+   * Mirrors the attribution logic in complete-onboarding.handler.ts:
+   *  - only attribute if the participant has NO ambassador referral yet (idempotent)
+   *  - validate the ambassador by referralCode + isActive
+   *  - create the link, increment totalReferrals/lastReferralAt, persist the code
+   * The create + increment + code-update run in a single $transaction, so the
+   * unique [ambassadorId, participantId] constraint rolls everything back on a
+   * race/retry — never a double-create or double-increment.
+   */
+  private async attributeExistingParticipantReferral(
+    participantId: string,
+    referralCode: string,
+  ): Promise<void> {
+    // Idempotency guard: a participant gets at most one referral, ever.
+    const existingReferral = await this.prisma.ambassadorReferral.findFirst({
+      where: { participantId },
+      select: { id: true },
+    });
+    if (existingReferral) {
+      return;
+    }
+
+    const ambassador = await this.prisma.ambassador.findUnique({
+      where: { referralCode, isActive: true },
+    });
+    if (!ambassador) {
+      return;
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.ambassadorReferral.create({
+        data: {
+          ambassadorId: ambassador.id,
+          participantId,
+          status: 'referred',
+        },
+      }),
+      this.prisma.ambassador.update({
+        where: { id: ambassador.id },
+        data: {
+          totalReferrals: { increment: 1 },
+          lastReferralAt: new Date(),
+        },
+      }),
+      this.prisma.participant.update({
+        where: { id: participantId },
+        data: { referralCode },
+      }),
+    ]);
+  }
+
   async execute(command: FirebaseLoginCommand, domain?: string): Promise<AuthResponseDto> {
     // 1. Verify Token
     const decodedToken = await this.firebaseAuthService.verifyIdToken(command.idToken);
@@ -253,6 +308,15 @@ export class FirebaseLoginHandler {
 
                 return newParticipant;
             }, { name: 'firebase-login-participant-creation', timeout: 5000 });
+        } else if (command.referralCode) {
+            // Returning user with an existing participant profile: the new-participant
+            // branch above never runs, so attribute the referral here. Idempotent +
+            // best-effort — a failure must not break login OR the program linking below.
+            try {
+                await this.attributeExistingParticipantReferral(participant.id, command.referralCode);
+            } catch (e) {
+                this.logger.warn(`Failed to attribute referral for existing participant ${participant.id}: ${e.message}`);
+            }
         }
 
         // Handle Program Auto-Registration
