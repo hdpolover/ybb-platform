@@ -164,7 +164,6 @@ export default function NationalityAnalyticsPage({
           )}
 
           {/* Cross-tabs */}
-          <CrossTabTable data={data.countryBySource} title="Country × Knowledge Source" />
           <CrossTabTable data={data.countryByGender} title="Country × Gender" />
         </>
       )}

@@ -47,7 +47,6 @@ export interface NationalitySummary {
 export interface NationalityAnalyticsResponse {
   summary: NationalitySummary;
   distribution: { country: string; count: number }[];
-  countryBySource: CrossTabResult;  // rows = nationality (uncapped), cols = source
   countryByGender: CrossTabResult;  // rows = nationality (uncapped), cols = gender
 }
 
@@ -63,7 +62,6 @@ export interface GenderSummary {
 export interface GenderAnalyticsResponse {
   summary: GenderSummary;
   distribution: { gender: string; count: number }[];
-  genderByNationality: CrossTabResult; // rows = gender, cols = nationality (capped top 10)
   genderByAge: CrossTabResult;         // rows = gender, cols = age band order
 }
 
@@ -80,7 +78,6 @@ export interface AgeSummary {
 export interface AgeAnalyticsResponse {
   summary: AgeSummary;
   distribution: { band: string; count: number }[];
-  ageByGender: CrossTabResult;      // rows = age band order, cols = gender
   ageByNationality: CrossTabResult; // rows = age band order, cols = nationality (capped top 10)
 }
 

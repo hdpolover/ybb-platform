@@ -283,7 +283,7 @@ export class ParticipantAnalyticsService {
 
     await this.ensureProgramExists(programId);
 
-    const [distribRows, bySourceRows, byGenderRows] = await Promise.all([
+    const [distribRows, byGenderRows] = await Promise.all([
       this.readPrisma.$queryRaw<{ country: string; count: bigint }[]>(Prisma.sql`
         SELECT
           ${Prisma.raw(NATIONALITY_CASE)} AS country,
@@ -294,21 +294,6 @@ export class ParticipantAnalyticsService {
           AND pa.deleted_at IS NULL
         GROUP BY country
         ORDER BY count DESC
-      `),
-      this.readPrisma.$queryRaw<{ row_key: string; col_key: string; count: bigint }[]>(Prisma.sql`
-        WITH base AS (
-          SELECT DISTINCT
-            p.id AS pid,
-            ${Prisma.raw(NATIONALITY_CASE)} AS row_key,
-            ${Prisma.raw(SOURCE_CASE)} AS col_key
-          FROM participants p
-          JOIN participant_applications pa ON pa.participant_id = p.id
-          WHERE pa.program_id = ${programId}::uuid
-            AND pa.deleted_at IS NULL
-        )
-        SELECT row_key, col_key, COUNT(*)::bigint AS count
-        FROM base
-        GROUP BY row_key, col_key
       `),
       this.readPrisma.$queryRaw<{ row_key: string; col_key: string; count: bigint }[]>(Prisma.sql`
         WITH base AS (
@@ -343,10 +328,9 @@ export class ParticipantAnalyticsService {
       pctNotSpecified: grandTotal > 0 ? Number((notSpecifiedCount / grandTotal * 100).toFixed(1)) : 0,
     };
 
-    const countryBySource = buildMatrix(mapAxis(bySourceRows, 'row_key', toCountryName)); // rows = nationality (uncapped), cols = source
     const countryByGender = buildMatrix(mapAxis(byGenderRows, 'row_key', toCountryName), { colOrder: ['Male', 'Female', 'Not Specified'] });
 
-    const result: NationalityAnalyticsResponse = { summary, distribution, countryBySource, countryByGender };
+    const result: NationalityAnalyticsResponse = { summary, distribution, countryByGender };
     await this.cacheService.set(cacheKey, result, CACHE_TTL.LONG);
     return result;
   }
@@ -360,7 +344,7 @@ export class ParticipantAnalyticsService {
 
     await this.ensureProgramExists(programId);
 
-    const [distribRows, byNationalityRows, byAgeRows] = await Promise.all([
+    const [distribRows, byAgeRows] = await Promise.all([
       this.readPrisma.$queryRaw<{ gender: string; count: bigint }[]>(Prisma.sql`
         SELECT
           ${Prisma.raw(GENDER_CASE)} AS gender,
@@ -371,21 +355,6 @@ export class ParticipantAnalyticsService {
           AND pa.deleted_at IS NULL
         GROUP BY gender
         ORDER BY count DESC
-      `),
-      this.readPrisma.$queryRaw<{ row_key: string; col_key: string; count: bigint }[]>(Prisma.sql`
-        WITH base AS (
-          SELECT DISTINCT
-            p.id AS pid,
-            ${Prisma.raw(GENDER_CASE)} AS row_key,
-            ${Prisma.raw(NATIONALITY_CASE)} AS col_key
-          FROM participants p
-          JOIN participant_applications pa ON pa.participant_id = p.id
-          WHERE pa.program_id = ${programId}::uuid
-            AND pa.deleted_at IS NULL
-        )
-        SELECT row_key, col_key, COUNT(*)::bigint AS count
-        FROM base
-        GROUP BY row_key, col_key
       `),
       this.readPrisma.$queryRaw<{ row_key: string; col_key: string; count: bigint }[]>(Prisma.sql`
         WITH base AS (
@@ -418,17 +387,12 @@ export class ParticipantAnalyticsService {
       pctNotSpecified: grandTotal > 0 ? Number((notSpecCount / grandTotal * 100).toFixed(1)) : 0,
     };
 
-    // genderByNationality columns capped to top 10 nationalities by column total
-    const genderByNationality = buildMatrix(mapAxis(byNationalityRows, 'col_key', toCountryName), {
-      rowOrder: ['Male', 'Female', 'Not Specified'],
-      capCols: 10,
-    });
     const genderByAge = buildMatrix(byAgeRows, {
       rowOrder: ['Male', 'Female', 'Not Specified'],
       colOrder: AGE_BAND_ORDER,
     });
 
-    const result: GenderAnalyticsResponse = { summary, distribution, genderByNationality, genderByAge };
+    const result: GenderAnalyticsResponse = { summary, distribution, genderByAge };
     await this.cacheService.set(cacheKey, result, CACHE_TTL.LONG);
     return result;
   }
@@ -442,7 +406,7 @@ export class ParticipantAnalyticsService {
 
     await this.ensureProgramExists(programId);
 
-    const [distribRows, byGenderRows, byNationalityRows] = await Promise.all([
+    const [distribRows, byNationalityRows] = await Promise.all([
       this.readPrisma.$queryRaw<{ band: string; count: bigint }[]>(Prisma.sql`
         SELECT
           ${Prisma.raw(AGE_CASE)} AS band,
@@ -452,21 +416,6 @@ export class ParticipantAnalyticsService {
         WHERE pa.program_id = ${programId}::uuid
           AND pa.deleted_at IS NULL
         GROUP BY band
-      `),
-      this.readPrisma.$queryRaw<{ row_key: string; col_key: string; count: bigint }[]>(Prisma.sql`
-        WITH base AS (
-          SELECT DISTINCT
-            p.id AS pid,
-            ${Prisma.raw(AGE_CASE)} AS row_key,
-            ${Prisma.raw(GENDER_CASE)} AS col_key
-          FROM participants p
-          JOIN participant_applications pa ON pa.participant_id = p.id
-          WHERE pa.program_id = ${programId}::uuid
-            AND pa.deleted_at IS NULL
-        )
-        SELECT row_key, col_key, COUNT(*)::bigint AS count
-        FROM base
-        GROUP BY row_key, col_key
       `),
       this.readPrisma.$queryRaw<{ row_key: string; col_key: string; count: bigint }[]>(Prisma.sql`
         WITH base AS (
@@ -503,17 +452,13 @@ export class ParticipantAnalyticsService {
       pctUnknown: grandTotal > 0 ? Number((unknownCount / grandTotal * 100).toFixed(1)) : 0,
     };
 
-    const ageByGender = buildMatrix(byGenderRows, {
-      rowOrder: AGE_BAND_ORDER,
-      colOrder: ['Male', 'Female', 'Not Specified'],
-    });
     // ageByNationality columns capped to top 10 nationalities by column total
     const ageByNationality = buildMatrix(mapAxis(byNationalityRows, 'col_key', toCountryName), {
       rowOrder: AGE_BAND_ORDER,
       capCols: 10,
     });
 
-    const result: AgeAnalyticsResponse = { summary, distribution, ageByGender, ageByNationality };
+    const result: AgeAnalyticsResponse = { summary, distribution, ageByNationality };
     await this.cacheService.set(cacheKey, result, CACHE_TTL.LONG);
     return result;
   }

@@ -1067,7 +1067,6 @@ export type NationalityAnalyticsResponse = {
     pctNotSpecified: number;
   };
   distribution: { country: string; count: number }[];
-  countryBySource: CrossTabResult;
   countryByGender: CrossTabResult;
 };
 
@@ -1079,7 +1078,6 @@ export type GenderAnalyticsResponse = {
     pctNotSpecified: number;
   };
   distribution: { gender: string; count: number }[];
-  genderByNationality: CrossTabResult;
   genderByAge: CrossTabResult;
 };
 
@@ -1092,7 +1090,6 @@ export type AgeAnalyticsResponse = {
     pctUnknown: number;
   };
   distribution: { band: string; count: number }[];
-  ageByGender: CrossTabResult;
   ageByNationality: CrossTabResult;
 };
 

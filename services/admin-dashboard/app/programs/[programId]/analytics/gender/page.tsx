@@ -161,7 +161,6 @@ export default function GenderAnalyticsPage({
           )}
 
           {/* Cross-tabs */}
-          <CrossTabTable data={data.genderByNationality} title="Gender × Nationality" />
           <CrossTabTable data={data.genderByAge} title="Gender × Age Band" />
         </>
       )}
