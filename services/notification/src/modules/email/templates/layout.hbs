@@ -3,6 +3,8 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <meta name="supported-color-schemes" content="light dark">
     <title>{{#if brand.name}}{{brand.name}}{{else}}YBB Platform{{/if}}</title>
     <!--[if mso]>
     <style>
@@ -186,7 +188,15 @@
             .footer { padding: 20px; border-top: 1px solid #f3f4f6; }
             .cta-button { display: block; width: 100%; box-sizing: border-box; }
         }
-    </style>
+
+        /* Dark mode: clients that render dark can darken the light header
+           background, which would hide near-black text. Force the brand name,
+           heading fallback, and header surface to hold contrast. */
+        @media (prefers-color-scheme: dark) {
+            .brand-lockup-name { color: #f9fafb !important; }
+            .brand-text { color: #f9fafb !important; }
+            .header { background: #111827 !important; }
+        }
 </head>
 <body>
     <div class="wrapper">
