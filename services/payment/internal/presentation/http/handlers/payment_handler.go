@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/ybb-platform/payment/internal/domain/entities"
 	"github.com/ybb-platform/payment/internal/domain/events"
+	domainGateways "github.com/ybb-platform/payment/internal/domain/gateways"
 	"github.com/ybb-platform/payment/internal/domain/repositories"
 	infraGateways "github.com/ybb-platform/payment/internal/infrastructure/gateways"
 	"github.com/ybb-platform/payment/internal/infrastructure/messaging"
@@ -536,16 +537,82 @@ func (h *PaymentHandler) CancelPayment(c *gin.Context) {
 			return
 		}
 		if cancelErr := gateway.CancelPayment(c.Request.Context(), gatewayOrderID); cancelErr != nil {
-			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("failed to cancel payment at gateway: %v", cancelErr)})
-			return
+			outcome := classifyCancelFailure(c.Request.Context(), gateway, gatewayOrderID, cancelErr)
+			switch outcome.action {
+			case cancelOutcomeVoid:
+				h.voidCancelledPayment(c, tx, intent, req.Reason)
+				return
+			case cancelOutcomeReconcileSuccess:
+				h.reconcileSettledPayment(c, tx, intent)
+				return
+			default: // cancelOutcomeLeavePending
+				c.JSON(http.StatusBadGateway, gin.H{"error": outcome.message})
+				return
+			}
 		}
 	}
 
+	h.voidCancelledPayment(c, tx, intent, req.Reason)
+}
+
+type cancelOutcomeAction int
+
+const (
+	cancelOutcomeLeavePending cancelOutcomeAction = iota
+	cancelOutcomeVoid
+	cancelOutcomeReconcileSuccess
+)
+
+type cancelFailureOutcome struct {
+	action  cancelOutcomeAction
+	message string
+}
+
+// classifyCancelFailure decides what to do when gateway.CancelPayment fails.
+// Decision order:
+//  1. cancelErr looks like "gateway invoice not found" (404/NOT_FOUND,
+//     mirroring the string-match idiom in xendit_gateway.go's VerifyPayment)
+//     -> the checkout is already gone, safe to void locally.
+//  2. Otherwise, ask the gateway for the real invoice status via
+//     VerifyPayment and branch on it: Success (paid) must never be voided,
+//     Failed (expired) is safe to void, Pending/error is a genuine
+//     transient failure and must leave the transaction untouched.
+func classifyCancelFailure(ctx context.Context, gateway domainGateways.PaymentGateway, gatewayOrderID string, cancelErr error) cancelFailureOutcome {
+	errStr := cancelErr.Error()
+	if strings.Contains(errStr, "404") || strings.Contains(strings.ToUpper(errStr), "NOT_FOUND") {
+		return cancelFailureOutcome{action: cancelOutcomeVoid}
+	}
+
+	payment, verifyErr := gateway.VerifyPayment(ctx, gatewayOrderID)
+	if verifyErr != nil {
+		return cancelFailureOutcome{
+			action:  cancelOutcomeLeavePending,
+			message: fmt.Sprintf("failed to cancel payment at gateway: %v", cancelErr),
+		}
+	}
+
+	switch payment.Status {
+	case entities.PaymentStatusSuccess:
+		return cancelFailureOutcome{action: cancelOutcomeReconcileSuccess}
+	case entities.PaymentStatusFailed:
+		return cancelFailureOutcome{action: cancelOutcomeVoid}
+	default: // still pending/live at the gateway - genuine transient failure
+		return cancelFailureOutcome{
+			action:  cancelOutcomeLeavePending,
+			message: fmt.Sprintf("failed to cancel payment at gateway: %v", cancelErr),
+		}
+	}
+}
+
+// voidCancelledPayment marks tx/intent as locally cancelled. Used both by
+// the happy path (gateway cancel succeeded) and by the cancel-failure
+// classification when the gateway checkout is confirmed gone/expired.
+func (h *PaymentHandler) voidCancelledPayment(c *gin.Context, tx *entities.PaymentTransaction, intent *entities.PaymentIntent, reason string) {
 	now := time.Now()
 	tx.Status = entities.TransactionStatusVoid
 	tx.UpdatedAt = now
-	if strings.TrimSpace(req.Reason) != "" {
-		tx.AdminNotes = req.Reason
+	if strings.TrimSpace(reason) != "" {
+		tx.AdminNotes = reason
 	} else {
 		tx.AdminNotes = "Cancelled by participant"
 	}
@@ -565,6 +632,38 @@ func (h *PaymentHandler) CancelPayment(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
 		"message": "Payment cancelled successfully",
+		"data": gin.H{
+			"transaction_id":     tx.ID,
+			"transaction_status": tx.Status,
+			"intent_id":          intent.ID,
+			"intent_status":      intent.Status,
+		},
+	})
+}
+
+// reconcileSettledPayment handles the case where the gateway reports the
+// checkout as actually paid: the local PENDING state was stale (a lost
+// webhook), so it must never be voided. Reconcile to SUCCESS/SUCCEEDED and
+// refuse the cancel.
+func (h *PaymentHandler) reconcileSettledPayment(c *gin.Context, tx *entities.PaymentTransaction, intent *entities.PaymentIntent) {
+	now := time.Now()
+	tx.Status = entities.TransactionStatusSuccess
+	tx.UpdatedAt = now
+
+	intent.Status = entities.PaymentIntentStatusSucceeded
+	intent.UpdatedAt = now
+
+	if err := h.txRepo.Update(c.Request.Context(), tx); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update transaction"})
+		return
+	}
+	if err := h.intentRepo.Update(c.Request.Context(), intent); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update payment intent"})
+		return
+	}
+
+	c.JSON(http.StatusConflict, gin.H{
+		"error": "payment already settled at gateway, cannot cancel",
 		"data": gin.H{
 			"transaction_id":     tx.ID,
 			"transaction_status": tx.Status,
