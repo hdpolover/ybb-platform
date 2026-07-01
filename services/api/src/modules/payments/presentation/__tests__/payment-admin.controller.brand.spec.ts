@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { PaymentAdminController } from '../payment-admin.controller';
 import { PaymentServiceHttpClient } from '../../infrastructure/services/payment-service-http.client';
+import { PaymentGatewayClient } from '../../infrastructure/services/payment-gateway.client';
 import { FileServiceClient } from '@modules/files/infrastructure/clients/file-service.client';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
@@ -85,6 +86,7 @@ describe('PaymentAdminController — payment.rejected brand emission', () => {
             controllers: [PaymentAdminController],
             providers: [
                 { provide: PaymentServiceHttpClient, useValue: mockPaymentClient },
+                { provide: PaymentGatewayClient, useValue: { voidTransaction: jest.fn().mockResolvedValue({ outcome: 'voided', detail: 'ok' }) } },
                 { provide: ConfigService, useValue: mockConfig },
                 { provide: FileServiceClient, useValue: {} },
                 { provide: CacheService, useValue: mockCache },
