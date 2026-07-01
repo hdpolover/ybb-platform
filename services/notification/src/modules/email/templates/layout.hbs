@@ -73,6 +73,15 @@
             letter-spacing: -0.025em;
         }
 
+        .brand-name-caption {
+            color: #6b7280;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            margin: 8px 0 0;
+        }
+
         .content {
             padding: 32px 40px 48px;
             color: #374151;
@@ -173,7 +182,8 @@
             <!-- Header -->
             <div class="header">
                 {{#if brand.logoUrl}}
-                    <img src="{{brand.logoUrl}}" alt="{{brand.name}}" class="brand-logo">
+                    <img src="{{brand.logoUrl}}" alt="{{#if brand.name}}{{brand.name}}{{else}}Logo{{/if}}" class="brand-logo">
+                    <p class="brand-name-caption">{{#if brand.name}}{{brand.name}}{{else}}YBB Platform{{/if}}</p>
                 {{else}}
                     <h1 class="brand-text">{{#if brand.name}}{{brand.name}}{{else}}YBB Platform{{/if}}</h1>
                 {{/if}}
