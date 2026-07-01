@@ -208,4 +208,141 @@ describe('SaveSubmissionSectionHandler', () => {
             },
         });
     });
+
+    describe('save-time phone normalization', () => {
+        it('normalizes a valid national-format phone to E.164 using nationality as the region hint', async () => {
+            mockPortalCacheService.getParticipantProfile.mockResolvedValue({
+                id: 'participant-1',
+                userId: 'user-1',
+            });
+
+            mockPrisma.participantApplication.findFirst.mockResolvedValue({
+                id: 'app-1',
+                status: 'draft',
+                personalData: { nationality: 'PK', full_name: 'Existing Name' },
+                essayAnswers: {},
+                uploadedFiles: {},
+            });
+
+            mockPrisma.participantApplication.update.mockResolvedValue({});
+
+            await handler.execute(
+                new SaveSubmissionSectionCommand('user-1', 'contact_information', {
+                    phone: '03255252525',
+                }),
+            );
+
+            expect(mockPrisma.participantApplication.update).toHaveBeenCalledWith({
+                where: { id: 'app-1' },
+                data: {
+                    personalData: {
+                        nationality: 'PK',
+                        full_name: 'Existing Name',
+                        phone: '+923255252525',
+                    },
+                },
+            });
+        });
+
+        it('stores an invalid/garbage phone exactly as entered, without throwing', async () => {
+            mockPortalCacheService.getParticipantProfile.mockResolvedValue({
+                id: 'participant-1',
+                userId: 'user-1',
+            });
+
+            mockPrisma.participantApplication.findFirst.mockResolvedValue({
+                id: 'app-1',
+                status: 'draft',
+                personalData: {},
+                essayAnswers: {},
+                uploadedFiles: {},
+            });
+
+            mockPrisma.participantApplication.update.mockResolvedValue({});
+
+            const result = await handler.execute(
+                new SaveSubmissionSectionCommand('user-1', 'contact_information', {
+                    phone: 'abc123',
+                }),
+            );
+
+            expect(result.success).toBe(true);
+            expect(mockPrisma.participantApplication.update).toHaveBeenCalledWith({
+                where: { id: 'app-1' },
+                data: {
+                    personalData: { phone: 'abc123' },
+                },
+            });
+        });
+
+        it('preserves unrelated personal_data fields untouched when normalizing the phone', async () => {
+            mockPortalCacheService.getParticipantProfile.mockResolvedValue({
+                id: 'participant-1',
+                userId: 'user-1',
+            });
+
+            mockPrisma.participantApplication.findFirst.mockResolvedValue({
+                id: 'app-1',
+                status: 'draft',
+                personalData: { nationality: 'KZ', country: 'Kazakhstan', institution: 'ABC University' },
+                essayAnswers: {},
+                uploadedFiles: {},
+            });
+
+            mockPrisma.participantApplication.update.mockResolvedValue({});
+
+            await handler.execute(
+                new SaveSubmissionSectionCommand('user-1', 'contact_information', {
+                    phone: '+77012345678',
+                    emergency_contact_name: 'Jane Doe',
+                }),
+            );
+
+            expect(mockPrisma.participantApplication.update).toHaveBeenCalledWith({
+                where: { id: 'app-1' },
+                data: {
+                    personalData: {
+                        nationality: 'KZ',
+                        country: 'Kazakhstan',
+                        institution: 'ABC University',
+                        phone: '+77012345678',
+                        emergency_contact_name: 'Jane Doe',
+                    },
+                },
+            });
+        });
+
+        it('leaves personal_data untouched when the section payload has no phone key', async () => {
+            mockPortalCacheService.getParticipantProfile.mockResolvedValue({
+                id: 'participant-1',
+                userId: 'user-1',
+            });
+
+            mockPrisma.participantApplication.findFirst.mockResolvedValue({
+                id: 'app-1',
+                status: 'draft',
+                personalData: { phone: '+77012345678' },
+                essayAnswers: {},
+                uploadedFiles: {},
+            });
+
+            mockPrisma.participantApplication.update.mockResolvedValue({});
+
+            await handler.execute(
+                new SaveSubmissionSectionCommand('user-1', 'contact_information', {
+                    institution: 'Some University',
+                }),
+            );
+
+            expect(mockPrisma.participantApplication.update).toHaveBeenCalledWith({
+                where: { id: 'app-1' },
+                data: {
+                    personalData: {
+                        phone: '+77012345678',
+                        institution: 'Some University',
+                    },
+                },
+            });
+        });
+    });
 });

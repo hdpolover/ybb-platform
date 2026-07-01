@@ -4,6 +4,7 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
 import { normalizePhoneCountryCode } from '@shared/utils/phone-country-code';
+import { extractAndSanitizePhone } from '@shared/utils/phone-e164';
 import { PortalCacheService } from '../../services/portal-cache.service';
 import { SaveSubmissionSectionCommand } from '../../queries/portal-queries';
 import { SubmissionSection } from '../../../presentation/dto/save-submission-section.dto';
@@ -88,7 +89,7 @@ export class SaveSubmissionSectionHandler {
         switch (section) {
             case SubmissionSection.PERSONAL_INFO: {
                 const existing = (application.personalData as Record<string, unknown>) || {};
-                return { personalData: { ...existing, ...normalizedData } };
+                return { personalData: this.applyPhoneNormalization(existing, normalizedData) };
             }
             case SubmissionSection.PERSONAL_DETAILS:
             case SubmissionSection.CONTACT_INFORMATION:
@@ -98,13 +99,13 @@ export class SaveSubmissionSectionHandler {
             case SubmissionSection.ADDITIONAL_INFO: {
                 const existing = (application.personalData as Record<string, unknown>) || {};
                 return {
-                    personalData: { ...existing, ...normalizedData },
+                    personalData: this.applyPhoneNormalization(existing, normalizedData),
                 };
             }
             case SubmissionSection.PREVIEW: {
                 const existing = (application.personalData as Record<string, unknown>) || {};
                 return {
-                    personalData: { ...existing, ...normalizedData },
+                    personalData: this.applyPhoneNormalization(existing, normalizedData),
                 };
             }
             case SubmissionSection.ESSAYS: {
@@ -149,6 +150,31 @@ export class SaveSubmissionSectionHandler {
         this.normalizePreviewAcknowledgements(normalized);
 
         return normalized;
+    }
+
+    /**
+     * Merge `incoming` (this save's section payload) over `existing` personal_data,
+     * then — ONLY when this save actually touched a phone key — normalize that key
+     * to E.164 using `nationality` (on the merged object) as the region hint.
+     *
+     * Non-blocking by design: an unparseable/invalid phone is left exactly as the
+     * participant entered it (never fabricated, never rejected). Other fields on
+     * the merged object are untouched either way.
+     */
+    private applyPhoneNormalization(
+        existing: Record<string, unknown>,
+        incoming: Record<string, unknown>,
+    ): Record<string, unknown> {
+        const merged = { ...existing, ...incoming };
+
+        const hasPhoneKey = typeof incoming.phone === 'string';
+        const hasPhoneNumberKey = typeof incoming.phone_number === 'string';
+        if (!hasPhoneKey && !hasPhoneNumberKey) return merged;
+
+        const { value, isValid } = extractAndSanitizePhone(merged);
+        if (!isValid) return merged;
+
+        return hasPhoneKey ? { ...merged, phone: value } : { ...merged, phone_number: value };
     }
 
     private normalizePreviewAcknowledgements(data: Record<string, unknown>): void {

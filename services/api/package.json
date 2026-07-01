@@ -38,7 +38,8 @@
     "migrate:reconcile-system-field-types": "ts-node -r tsconfig-paths/register prisma/migration-scripts/reconcile-system-field-types.ts",
     "migrate:cleanup-iys-2027-stray-phone-fields": "ts-node -r tsconfig-paths/register prisma/migration-scripts/cleanup-iys-2027-stray-phone-fields.ts",
     "migrate:remove-cys-2026-legacy-essays": "node prisma/migration-scripts/remove-cys-2026-legacy-essays.js",
-    "report:non-english-names": "ts-node -r tsconfig-paths/register prisma/migration-scripts/report-non-english-names.ts"
+    "report:non-english-names": "ts-node -r tsconfig-paths/register prisma/migration-scripts/report-non-english-names.ts",
+    "report:phone-normalization": "ts-node -r tsconfig-paths/register prisma/migration-scripts/report-phone-normalization.ts"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.14.3",
@@ -87,6 +88,7 @@
     "geoip-lite": "^1.4.10",
     "ioredis": "^5.8.2",
     "keyv": "^5.2.3",
+    "libphonenumber-js": "^1.13.7",
     "mysql2": "^3.16.3",
     "nest-winston": "^1.10.2",
     "passport": "^0.7.0",
