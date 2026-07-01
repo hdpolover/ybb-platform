@@ -58,6 +58,15 @@ export class CancelPortalPaymentHandler {
                 'This payment has already succeeded at the gateway and cannot be cancelled. Contact support.',
             );
         }
+        // Fail closed: this is a synchronous, user-facing cancel action. If we can't verify
+        // the gateway's status, proceeding could cancel an invoice whose transaction just
+        // settled to SUCCESS at the gateway (cancelled-invoice-but-paid). Failing closed lets
+        // the user simply retry instead of risking that danger case.
+        if (voidResult.outcome === 'error') {
+            throw new BadRequestException(
+                'Could not verify the payment status right now. Please try again in a moment.',
+            );
+        }
 
         const paymentStatusPatch =
             invoice.pricingTier?.feeType === 'registration_fee'
