@@ -148,7 +148,12 @@ export class RevenueService {
         take: limit,
       }),
       this.readPrisma.applicationInvoice.count({
+        // Only paid invoices are expected to carry fee/net. Unpaid/cancelled
+        // invoices legitimately have none, so counting them would falsely flag
+        // the data as incomplete (mirrors buildKpis, which counts unbackfilled
+        // among paid invoices only).
         where: this.buildTransactionsWhere(query, scope, [
+          { status: PaymentStatus.paid },
           { OR: [{ feeProvider: null }, { netAmount: null }] },
         ]),
       }),
