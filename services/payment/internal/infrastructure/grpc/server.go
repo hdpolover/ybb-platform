@@ -476,6 +476,10 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 			intent.Currency,
 			"SUCCEEDED",
 			req.PaymentMethodId,
+			tx.AmountTotal,
+			tx.FeeProvider,
+			tx.NetAmount,
+			tx.Currency,
 		)
 
 		// Populate event metadata from intent metadata
@@ -521,6 +525,10 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 			intent.Currency,
 			"FAILED",
 			req.PaymentMethodId,
+			tx.AmountTotal,
+			tx.FeeProvider,
+			tx.NetAmount,
+			tx.Currency,
 		)
 		if err := s.publisher.Publish(ctx, event); err != nil {
 			fmt.Printf("failed to publish failed event: %v\n", err)
@@ -660,6 +668,10 @@ func (s *PaymentGrpcServer) SubmitManualPayment(ctx context.Context, req *pb.Sub
 		intent.Currency,
 		"PENDING_REVIEW",
 		"manual_transfer",
+		tx.AmountTotal,
+		tx.FeeProvider,
+		tx.NetAmount,
+		tx.Currency,
 	)
 
 	// Persist Transaction
@@ -723,6 +735,10 @@ func (s *PaymentGrpcServer) VerifyManualPayment(ctx context.Context, req *pb.Ver
 			intent.Currency,
 			"SUCCEEDED",
 			"manual_transfer",
+			tx.AmountTotal,
+			tx.FeeProvider,
+			tx.NetAmount,
+			tx.Currency,
 		)
 
 		if len(intent.Metadata) > 0 {
@@ -751,6 +767,10 @@ func (s *PaymentGrpcServer) VerifyManualPayment(ctx context.Context, req *pb.Ver
 			intent.Currency,
 			"FAILED",
 			"manual_transfer",
+			tx.AmountTotal,
+			tx.FeeProvider,
+			tx.NetAmount,
+			tx.Currency,
 		)
 		s.publisher.Publish(ctx, event)
 

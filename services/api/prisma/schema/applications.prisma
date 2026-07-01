@@ -234,6 +234,13 @@ model ApplicationInvoice {
   // Exchange rate snapshot at time of payment — locked so past invoices are unaffected by future rate changes
   exchangeRateSnapshot Decimal? @map("exchange_rate_snapshot") @db.Decimal(10, 2)
 
+  // Provider fee + net settlement amount, mirrored from the Go payment service's
+  // payment_transactions (fee_provider / net_amount) via the payment.succeeded
+  // event payload. Null until that event carries the fields (older in-flight
+  // events / not-yet-backfilled rows) — see prisma/migration-scripts backfill.
+  feeProvider Decimal? @map("fee_provider") @db.Decimal(15, 2)
+  netAmount   Decimal? @map("net_amount") @db.Decimal(15, 2)
+
   // Link to external transaction ID from Payment Service for reference
   externalTransactionId String? @map("external_transaction_id") @db.VarChar(100)
   // Link to payment-service PaymentIntent (the user's obligation)
@@ -247,8 +254,8 @@ model ApplicationInvoice {
   verifiedAt      DateTime? @map("verified_at") @db.Timestamptz(6)
   rejectionReason String?   @map("rejection_reason") @db.Text
 
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   lastReconciledAt DateTime? @map("last_reconciled_at") @db.Timestamptz(6)
 
   application ParticipantApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
