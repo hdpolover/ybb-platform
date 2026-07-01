@@ -2,6 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQueryStates, parseAsString, parseAsInteger, parseAsStringEnum } from "nuqs";
 import { Loader2, Download } from "lucide-react";
 import { toast } from "sonner";
@@ -97,6 +98,7 @@ export function RevenueTransactionsTable({
     pageSize,
   } = filters;
 
+  const router = useRouter();
   const effectiveProgramId = fixedProgramId ?? (programIdFilter || undefined);
 
   const hasActiveFilters = Boolean(
@@ -344,7 +346,19 @@ export function RevenueTransactionsTable({
             </TableRow>
           )}
           {!loading && rows.map((row) => (
-            <TableRow key={row.invoiceId}>
+            <TableRow
+              key={row.invoiceId}
+              onClick={() => router.push(`/programs/${row.programId}/payments/${row.invoiceId}`)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  router.push(`/programs/${row.programId}/payments/${row.invoiceId}`);
+                }
+              }}
+              role="link"
+              tabIndex={0}
+              className="cursor-pointer hover:bg-zinc-50 focus:bg-zinc-50 focus:outline-none"
+            >
               <TableCell className="min-w-[150px]">
                 <div className="font-mono text-xs text-zinc-500">
                   {row.invoiceId.slice(0, 8)}…{row.invoiceId.slice(-4)}
@@ -364,7 +378,11 @@ export function RevenueTransactionsTable({
               <TableCell className="text-sm font-medium">{formatMoney(row.grossAmount, row.currency as "IDR" | "USD")}</TableCell>
               <TableCell className="text-sm text-zinc-600">{formatNullableIdr(row.feeIdr)}</TableCell>
               <TableCell className="text-sm text-zinc-600">{formatNullableIdr(row.netIdr)}</TableCell>
-              <TableCell className="text-sm text-zinc-500">{formatPaymentMethodLabel(row.paymentMethod)}</TableCell>
+              <TableCell className="text-sm text-zinc-500">
+                {row.paymentMethod && row.paymentMethod !== "unknown"
+                  ? formatPaymentMethodLabel(row.paymentMethod)
+                  : "—"}
+              </TableCell>
               <TableCell>
                 <span
                   className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium capitalize ${
