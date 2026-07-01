@@ -6,6 +6,7 @@ import { UnitOfWork } from '@shared/infrastructure/database/unit-of-work.service
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { PaymentOutboxService } from '../../infrastructure/services/payment-outbox.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
+import { PaymentGatewayClient } from '../../infrastructure/services/payment-gateway.client';
 import { RmqContext } from '@nestjs/microservices';
 
 function makeRmqContext(): RmqContext {
@@ -96,6 +97,7 @@ describe('PaymentEventsController — idempotency on redelivered event', () => {
                 { provide: CacheService, useValue: mockCache },
                 { provide: PaymentOutboxService, useValue: mockPaymentOutbox },
                 { provide: RabbitMQProducerService, useValue: mockProducer },
+                { provide: PaymentGatewayClient, useValue: { voidTransaction: jest.fn().mockResolvedValue({ outcome: 'voided', detail: 'ok' }) } },
             ],
         }).compile();
 

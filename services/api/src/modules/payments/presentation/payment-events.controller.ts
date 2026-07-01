@@ -16,6 +16,7 @@ import {
 } from '@shared/infrastructure/rabbitmq/rmq-ack';
 import { buildParticipantPaymentsUrl, buildParticipantInvoiceUrl } from '@modules/payments/application/utils/participant-dashboard-url.util';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
+import { PaymentGatewayClient } from '../infrastructure/services/payment-gateway.client';
 
 @Controller()
 export class PaymentEventsController {
@@ -27,6 +28,7 @@ export class PaymentEventsController {
         private readonly cacheService: CacheService,
         private readonly paymentOutbox: PaymentOutboxService,
         private readonly producer: RabbitMQProducerService,
+        private readonly paymentGatewayClient: PaymentGatewayClient,
         @Optional() private readonly pubSubService?: RedisPubSubService,
         @Optional() private readonly referralFunnel?: ReferralFunnelService,
     ) {}
@@ -786,6 +788,26 @@ export class PaymentEventsController {
             invoice.rejectionReason
             ?? input.cancellationReason
             ?? 'Payment cancelled';
+
+        const transactionId = invoice.externalTransactionId ?? input.transactionId ?? null;
+        if (transactionId) {
+            const voidResult = await this.paymentGatewayClient.voidTransaction(
+                transactionId,
+                invoice.id,
+                cancellationReason,
+            );
+            if (voidResult.outcome === 'danger_settled') {
+                this.logger.error(
+                    `markInvoiceCancelled: refusing to cancel invoice ${invoice.id} — ` +
+                    `transaction ${transactionId} is settled at the gateway (${voidResult.detail})`,
+                );
+                return { userId, invoiceId: invoice.id };
+            }
+            // 'voided' | 'already_terminal' | 'error' all proceed: a transient gateway
+            // failure must not block the invoice write — the widened reconciler
+            // (Component 2) is the backstop that will retry the void later.
+        }
+
         const paymentStatusPatch =
             invoice.pricingTier?.feeType === 'registration_fee'
                 ? { registrationPaymentStatus: PaymentStatus.cancelled }

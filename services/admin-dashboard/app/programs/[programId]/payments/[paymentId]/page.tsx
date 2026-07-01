@@ -26,6 +26,7 @@ import { Button } from "@/src/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/src/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/src/ui/dialog";
 import { formatDate, formatDateTime } from "@/lib/utils";
+import { resolveAttemptDisplayStatus, resolveAttemptRowDisplayStatus } from "@/lib/payment-attempt-status";
 import { NotifyParticipantButton } from "@/app/components/payments/details/NotifyParticipantButton";
 
 const STATUS_CLASS: Record<string, string> = {
@@ -137,6 +138,7 @@ export default function PaymentDetailPage({
 
   const txn = invoice?.transaction as Record<string, unknown> | null | undefined;
   const txnStatus = txn?.status as string | undefined;
+  const displayAttemptStatus = invoice ? resolveAttemptDisplayStatus(invoice.status, txnStatus) : txnStatus;
   const attempts = invoice?.transactions ?? [];
   const needsReview = txnStatus === "NEEDS_REVIEW";
   const paymentMethodValue = formatPaymentMethod(invoice?.paymentMethod ?? null);
@@ -400,9 +402,9 @@ export default function PaymentDetailPage({
                     <CardTitle className="text-base flex items-center gap-2">
                       <CreditCard className="h-4 w-4 text-zinc-400" />
                       Latest Payment Transaction
-                      {txnStatus && (
+                      {displayAttemptStatus && (
                         <span className="ml-auto">
-                          <StatusPill status={txnStatus} />
+                          <StatusPill status={displayAttemptStatus} />
                         </span>
                       )}
                     </CardTitle>
@@ -452,6 +454,10 @@ export default function PaymentDetailPage({
                   <CardContent className="space-y-4">
                     {attempts.map((attempt, index) => {
                       const attemptStatus = getStringValue(attempt, "status");
+                      const attemptRowDisplayStatus = resolveAttemptRowDisplayStatus(
+                        attemptStatus ?? undefined,
+                        invoice.status,
+                      );
                       const attemptMethod =
                         getStringValue(attempt, "payment_method_label") ??
                         getStringValue(attempt, "payment_method_id");
@@ -477,7 +483,7 @@ export default function PaymentDetailPage({
                                     Latest
                                   </span>
                                 )}
-                                {attemptStatus && <StatusPill status={attemptStatus} />}
+                                {attemptRowDisplayStatus && <StatusPill status={attemptRowDisplayStatus} />}
                               </div>
                               <p className="mt-1 text-xs text-zinc-500">
                                 Created {formatOptionalDateTime(getStringValue(attempt, "created_at"))}
@@ -832,10 +838,10 @@ export default function PaymentDetailPage({
                     <p className="text-zinc-700">{invoice.rejectionReason}</p>
                   </div>
                 )}
-                {txnStatus && (
+                {displayAttemptStatus && (
                   <div className="flex justify-between">
                     <span className="text-zinc-500">Txn Status</span>
-                    <StatusPill status={txnStatus} />
+                    <StatusPill status={displayAttemptStatus} />
                   </div>
                 )}
               </CardContent>
