@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useParams } from "next/navigation";
 import { useQueryStates, parseAsString, parseAsInteger, parseAsStringEnum } from "nuqs";
-import { ArrowPathIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import { ArrowPathIcon } from "@heroicons/react/24/outline";
+import { ClipboardCheck } from "lucide-react";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { listApplications, reviewApplication, type Application } from "@/src/shared/api-client";
-import { Input } from "@/src/ui/input";
 import { FilterSelect } from "@/src/ui/select";
-import { FilterGrid, FilterActions } from "@/src/ui/filter-grid";
+import { FilterPanel, type FilterPanelActiveFilter } from "@/src/ui/filter-panel";
+import { RowActions } from "@/src/ui/row-actions";
 import { formatDate } from "@/lib/utils";
 
 const STATUS_BADGE: Record<string, string> = {
@@ -93,6 +94,29 @@ export default function SubmissionsPage() {
     void setFilters({ search: null, status: null, page: null });
   }, [setFilters]);
 
+  // Chip keys that belong to the always-visible "primary" filter (Status)
+  // rather than the collapsible advanced panel — used to derive
+  // `advancedFilterCount` below without double-counting. This page has no
+  // other filterable fields, so the advanced panel is always empty/0.
+  const PRIMARY_CHIP_KEYS = useMemo(() => new Set(["status"]), []);
+
+  const activeFilters: FilterPanelActiveFilter[] = useMemo(() => {
+    const chips: FilterPanelActiveFilter[] = [];
+    if (status) {
+      chips.push({
+        key: "status",
+        label: `Status: ${formatLabel(status)}`,
+        onRemove: () => void setFilters({ status: null, page: 1 }),
+      });
+    }
+    return chips;
+  }, [status, setFilters]);
+
+  const advancedFilterCount = useMemo(
+    () => activeFilters.filter((filter) => !PRIMARY_CHIP_KEYS.has(filter.key)).length,
+    [activeFilters, PRIMARY_CHIP_KEYS],
+  );
+
   const fetch = useCallback(async () => {
     if (!resolvedProgramId) return;
     setLoading(true); setError(null);
@@ -117,35 +141,41 @@ export default function SubmissionsPage() {
 
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
         <div className="mb-3 space-y-3">
-          <FilterGrid className="lg:grid-cols-4">
-            <div className="relative lg:col-span-2">
-              <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
-              <Input
-                type="text"
-                placeholder="Search by name/email…"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                className="h-9 pl-8 text-[11px]"
-              />
-            </div>
-            <FilterSelect
-              aria-label="Status"
-              value={status}
-              onChange={(e) => {
-                void setFilters({ status: (e.target.value || null) as typeof status | null, page: 1 });
-              }}
-            >
-              <option value="">All Statuses</option>
-              <option>PENDING</option>
-              <option>SUBMITTED</option>
-              <option>UNDER_REVIEW</option>
-              <option>ACCEPTED</option>
-              <option>REJECTED</option>
-              <option>WAITLISTED</option>
-            </FilterSelect>
+          <div className="flex items-center justify-end">
             <button type="button" onClick={fetch} className="inline-flex items-center justify-center gap-1 rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50"><ArrowPathIcon className="h-3.5 w-3.5" />Refresh</button>
-          </FilterGrid>
-          <FilterActions resultCount={total} onClear={clearFilters} disabled={!hasActiveFilters} />
+          </div>
+          <FilterPanel
+            search={{
+              value: searchInput,
+              onChange: setSearchInput,
+              placeholder: "Search by name/email…",
+            }}
+            primary={
+              <div className="w-44">
+                <FilterSelect
+                  aria-label="Status"
+                  value={status}
+                  onChange={(e) => {
+                    void setFilters({ status: (e.target.value || null) as typeof status | null, page: 1 });
+                  }}
+                >
+                  <option value="">All Statuses</option>
+                  <option>PENDING</option>
+                  <option>SUBMITTED</option>
+                  <option>UNDER_REVIEW</option>
+                  <option>ACCEPTED</option>
+                  <option>REJECTED</option>
+                  <option>WAITLISTED</option>
+                </FilterSelect>
+              </div>
+            }
+            advancedCount={advancedFilterCount}
+            activeFilters={activeFilters}
+            resultCount={total}
+            onClear={clearFilters}
+            clearDisabled={!hasActiveFilters}
+            advanced={<p className="text-xs text-zinc-400">No additional filters for this view.</p>}
+          />
         </div>
 
         {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
@@ -181,7 +211,15 @@ export default function SubmissionsPage() {
                   </td>
                   <td className="px-3 py-2 text-zinc-500">{formatDate(app.createdAt)}</td>
                   <td className="px-3 py-2 text-right">
-                    <button type="button" onClick={() => setReviewTarget(app)} className="rounded-md border border-zinc-200 px-2 py-1 text-[10px] font-medium text-zinc-600 hover:bg-zinc-50">Review</button>
+                    <RowActions
+                      primary={[
+                        {
+                          label: "Review",
+                          icon: ClipboardCheck,
+                          onClick: () => setReviewTarget(app),
+                        },
+                      ]}
+                    />
                   </td>
                 </tr>
               ))}
