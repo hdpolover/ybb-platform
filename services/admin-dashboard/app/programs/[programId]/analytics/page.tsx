@@ -2,6 +2,7 @@
 
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { formatPaymentMethodLabel } from "@/app/components/revenue/revenue-format";
 import {
   BarChart,
   Bar,
@@ -690,7 +691,7 @@ function PaymentsTab({ analytics }: { analytics: ProgramAnalytics }) {
           <div className="h-56">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={byPaymentMethod.map((m) => ({ name: humanizeKey(m.method), value: m.count }))}
+                <Pie data={byPaymentMethod.map((m) => ({ name: formatPaymentMethodLabel(m.method), value: m.count }))}
                   dataKey="value" cx="50%" cy="45%" outerRadius={75} paddingAngle={2}
                   label={({ value }: { value?: number; name?: string }) => {
                     const total = byPaymentMethod.reduce((s, m) => s + m.count, 0);
