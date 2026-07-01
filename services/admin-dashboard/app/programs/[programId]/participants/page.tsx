@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useParams } from "next/navigation";
-import Link from "next/link";
 import { useQueryStates, parseAsString, parseAsInteger, parseAsStringEnum } from "nuqs";
 import { Eye } from "lucide-react";
 import {
@@ -649,49 +648,35 @@ export default function ParticipantsPage() {
               {!loading && items.map((app, idx) => (
                 <tr
                   key={app.id}
-                  className={(idx % 2 === 0 ? "bg-white" : "bg-zinc-50/60") + " cursor-pointer hover:bg-blue-50/50 transition-colors"}
+                  className={idx % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}
                 >
                   <td className="px-3 py-2">
-                    <Link href={`/programs/${params.programId}/participants/${app.participantId}`} className="block">
-                      <p className="font-medium text-zinc-900 hover:text-blue-600">{app.participant?.fullName ?? "—"}</p>
-                      <p className="text-zinc-400">{app.participant?.email ?? ""}</p>
-                    </Link>
+                    <p className="font-medium text-zinc-900">{app.participant?.fullName ?? "—"}</p>
+                    <p className="text-zinc-400">{app.participant?.email ?? ""}</p>
                   </td>
                   <td className="px-3 py-2 text-zinc-600">
-                    <Link href={`/programs/${params.programId}/participants/${app.participantId}`} className="block">
-                      {formatCountry(app.participant?.originCountry)}
-                    </Link>
+                    {formatCountry(app.participant?.originCountry)}
                   </td>
                   <td className="px-3 py-2">
-                    <Link href={`/programs/${params.programId}/participants/${app.participantId}`} className="block">
-                      <span className={"rounded-full px-2 py-0.5 text-[10px] font-semibold " + (STATUS_BADGE[app.status] ?? "bg-zinc-100 text-zinc-600")}>
-                        {STATUS_LABEL[app.status] ?? app.status}
-                      </span>
-                    </Link>
+                    <span className={"rounded-full px-2 py-0.5 text-[10px] font-semibold " + (STATUS_BADGE[app.status] ?? "bg-zinc-100 text-zinc-600")}>
+                      {STATUS_LABEL[app.status] ?? app.status}
+                    </span>
                   </td>
                   <td className="px-3 py-2">
-                    <Link href={`/programs/${params.programId}/participants/${app.participantId}`} className="block">
-                      <span className={"rounded-full px-2 py-0.5 text-[10px] font-semibold " + (PAYMENT_BADGE[app.registrationPaymentStatus] ?? "bg-zinc-100 text-zinc-600")}>
-                        {app.registrationPaymentStatus}
-                      </span>
-                    </Link>
+                    <span className={"rounded-full px-2 py-0.5 text-[10px] font-semibold " + (PAYMENT_BADGE[app.registrationPaymentStatus] ?? "bg-zinc-100 text-zinc-600")}>
+                      {app.registrationPaymentStatus}
+                    </span>
                   </td>
                   <td className="px-3 py-2">
-                    <Link href={`/programs/${params.programId}/participants/${app.participantId}`} className="block">
-                      <span className={"rounded-full px-2 py-0.5 text-[10px] font-semibold " + (PAYMENT_BADGE[app.programPaymentStatus] ?? "bg-zinc-100 text-zinc-600")}>
-                        {app.programPaymentStatus}
-                      </span>
-                    </Link>
+                    <span className={"rounded-full px-2 py-0.5 text-[10px] font-semibold " + (PAYMENT_BADGE[app.programPaymentStatus] ?? "bg-zinc-100 text-zinc-600")}>
+                      {app.programPaymentStatus}
+                    </span>
                   </td>
                   <td className="px-3 py-2 text-zinc-500">
-                    <Link href={`/programs/${params.programId}/participants/${app.participantId}`} className="block">
-                      {formatDate(app.createdAt)}
-                    </Link>
+                    {formatDate(app.createdAt)}
                   </td>
                   <td className="px-3 py-2 text-zinc-500">
-                    <Link href={`/programs/${params.programId}/participants/${app.participantId}`} className="block">
-                      {formatDate(app.updatedAt)}
-                    </Link>
+                    {formatDate(app.updatedAt)}
                   </td>
                   <td className="px-3 py-2 text-right">
                     <RowActions
