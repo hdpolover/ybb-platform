@@ -32,6 +32,7 @@ import { ChangeType, PaymentStatus, Prisma } from '@prisma/client';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { PaymentServiceHttpClient } from '../infrastructure/services/payment-service-http.client';
+import { PaymentGatewayClient } from '../infrastructure/services/payment-gateway.client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { buildParticipantPaymentsUrl as buildParticipantPaymentsDashboardUrl } from '@modules/payments/application/utils/participant-dashboard-url.util';
@@ -55,6 +56,7 @@ export class PaymentAdminController {
 
     constructor(
         private readonly paymentServiceClient: PaymentServiceHttpClient,
+        private readonly paymentGatewayClient: PaymentGatewayClient,
         private readonly configService: ConfigService,
         private readonly fileService: FileServiceClient,
         private readonly cacheService: CacheService,
@@ -1301,6 +1303,39 @@ export class PaymentAdminController {
                     + `invoice: ${id}, application: ${invoice.application.id}, `
                     + `invoiceStatus: ${invoice.status}, `
                     + `reason: "${overrideReason}"`,
+                );
+            }
+        }
+
+        // Cascade-void guard: this admin endpoint is a second, independent writer
+        // (alongside the payment.cancelled handler and the portal self-cancel
+        // handler) that can move an invoice to a terminal non-paid state. Without
+        // this, admin-driven cancelled/failed/refunded transitions leave the
+        // Go-side transaction orphaned in whatever state it was last in.
+        const isTerminalNonPaid =
+            body.status === PaymentStatus.cancelled
+            || body.status === PaymentStatus.failed
+            || body.status === PaymentStatus.refunded;
+
+        if (isTerminalNonPaid && invoice.externalTransactionId) {
+            const voidResult = await this.paymentGatewayClient.voidTransaction(
+                invoice.externalTransactionId,
+                invoice.id,
+                body.reason?.trim() || `Invoice marked ${body.status} by admin`,
+            );
+            if (voidResult.outcome === 'danger_settled') {
+                throw new BadRequestException(
+                    `Cannot mark this invoice ${body.status}: the linked transaction has already succeeded at the gateway (${voidResult.detail}).`,
+                );
+            }
+            // Fail closed: this is a synchronous, user-facing admin action. If we
+            // can't verify the gateway's status, proceeding could mark the invoice
+            // cancelled/failed/refunded while its transaction just settled to
+            // SUCCESS at the gateway (terminal-invoice-but-paid). Failing closed
+            // lets the admin simply retry instead of risking that danger case.
+            if (voidResult.outcome === 'error') {
+                throw new BadRequestException(
+                    'Could not verify the payment status right now. Please try again in a moment.',
                 );
             }
         }
