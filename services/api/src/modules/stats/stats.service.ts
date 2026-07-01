@@ -10,6 +10,7 @@ import { ProgramAnalyticsResponseDto } from './dto/program-analytics-response.dt
 import { CacheService } from '../../shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '../../shared/constants/cache-keys';
 import { normalizeCountryGroups, resolveCountryName } from '@shared/utils/country-groups';
+import { resolveUsdInIdrRate } from '../portal/application/utils/resolve-usd-in-idr-rate';
 
 type ProgramDashboardApplication = {
   createdAt: Date;
@@ -633,7 +634,10 @@ export class StatsService {
       currency?: string;
     } = {},
   ): Promise<ProgramAnalyticsResponseDto> {
-    const program = await this.readPrisma.program.findUnique({ where: { id: programId }, select: { id: true } });
+    const program = await this.readPrisma.program.findUnique({
+      where: { id: programId },
+      select: { id: true, usdInIdr: true },
+    });
     if (!program) throw new NotFoundException(`Program ${programId} not found`);
 
     const MS_DAY = 86399999;
@@ -755,15 +759,20 @@ export class StatsService {
 
     // ── Payment KPIs ──────────────────────────────────────────────────────────
     const paidInvoices = invoiceRows.filter((i) => i.status === 'paid');
-    const DEFAULT_RATE = 16000;
+    // FX rate resolution never hardcodes a constant: invoice's own exchangeRateSnapshot
+    // first, then falls back to the program's configured usdInIdr. If neither is
+    // available, the invoice is excluded from USD-derived IDR aggregation entirely
+    // rather than assuming a rate (see resolveUsdInIdrRate).
     let totalIdr = 0;
     let totalUsd = 0;
     for (const inv of paidInvoices) {
       const amt = Number(inv.amount);
       if (inv.currency.toUpperCase() === 'USD') {
         totalUsd += amt;
-        const rate = inv.exchangeRateSnapshot ? Number(inv.exchangeRateSnapshot) : DEFAULT_RATE;
-        totalIdr += amt * rate;
+        const rate = resolveUsdInIdrRate({ snapshot: inv.exchangeRateSnapshot, programRate: program.usdInIdr });
+        if (rate !== undefined) {
+          totalIdr += amt * rate;
+        }
       } else {
         totalIdr += amt;
       }
@@ -785,7 +794,10 @@ export class StatsService {
         const amt = Number(inv.amount);
         if (inv.currency.toUpperCase() === 'USD') {
           usd += amt;
-          idr += amt * (inv.exchangeRateSnapshot ? Number(inv.exchangeRateSnapshot) : DEFAULT_RATE);
+          const rate = resolveUsdInIdrRate({ snapshot: inv.exchangeRateSnapshot, programRate: program.usdInIdr });
+          if (rate !== undefined) {
+            idr += amt * rate;
+          }
         } else {
           idr += amt;
         }
