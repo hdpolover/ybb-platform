@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useQueryStates, parseAsString, parseAsInteger, parseAsStringEnum } from "nuqs";
 import { ChevronDown, ChevronUp, ChevronsUpDown, Eye, Mail, Pencil, RefreshCw, Search, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
@@ -25,6 +26,7 @@ import { EnglishInput } from "@/src/ui/english-input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/src/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/src/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/src/ui/sheet";
+import { FilterGrid, FilterActions } from "@/src/ui/filter-grid";
 
 type SortByType =
   | 'fullName'
@@ -35,6 +37,27 @@ type SortByType =
   | 'successfulReferrals'
   | 'lastReferralAt'
   | 'createdAt';
+
+const SORT_BY_VALUES = [
+  'fullName',
+  'referralCode',
+  'institution',
+  'isActive',
+  'totalReferrals',
+  'successfulReferrals',
+  'lastReferralAt',
+  'createdAt',
+] as const;
+const SORT_ORDER_VALUES = ["asc", "desc"] as const;
+
+// URL-persisted filter state (nuqs) — mirrors the pattern in
+// app/programs/[programId]/payments/page.tsx.
+const ambassadorsFilterParsers = {
+  search: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
+  sortBy: parseAsStringEnum([...SORT_BY_VALUES]).withDefault("createdAt").withOptions({ clearOnDefault: true }),
+  sortOrder: parseAsStringEnum([...SORT_ORDER_VALUES]).withDefault("desc").withOptions({ clearOnDefault: true }),
+  page: parseAsInteger.withDefault(1).withOptions({ clearOnDefault: true }),
+};
 
 export default function AmbassadorsPage() {
   const params = useParams<{ programId: string }>();
@@ -49,12 +72,38 @@ export default function AmbassadorsPage() {
 
   const [items, setItems] = useState<Ambassador[]>([]);
   const [meta, setMeta] = useState({ total: 0, page: 1, limit: 20, lastPage: 1 });
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [sortBy, setSortBy] = useState<SortByType>("createdAt");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // All filters live in the URL via nuqs (batched updates -> single history write per change).
+  const [filters, setFilters] = useQueryStates(ambassadorsFilterParsers);
+  const { search, page, sortBy, sortOrder } = filters;
+
+  // Local input state for the search box so typing feels instant; synced to
+  // the nuqs-backed `search` filter on a short debounce so we don't write to
+  // the URL (and refetch) on every keystroke.
+  const [searchInput, setSearchInput] = useState(search);
+  const lastSyncedSearch = useRef(search);
+
+  useEffect(() => {
+    if (search !== lastSyncedSearch.current) {
+      lastSyncedSearch.current = search;
+      setSearchInput(search);
+    }
+  }, [search]);
+
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      if (searchInput !== search) {
+        lastSyncedSearch.current = searchInput;
+        void setFilters({ search: searchInput || null, page: 1 });
+      }
+    }, 400);
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchInput]);
+
+  const hasActiveFilters = Boolean(search || sortBy !== "createdAt" || sortOrder !== "desc");
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Ambassador | null>(null);
@@ -176,14 +225,18 @@ export default function AmbassadorsPage() {
 
   function handleSort(key: SortByType) {
     if (key === sortBy) {
-      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+      void setFilters({ sortOrder: sortOrder === 'asc' ? 'desc' : 'asc', page: 1 });
     } else {
-      setSortBy(key);
       const defaultDescKeys: SortByType[] = ['totalReferrals', 'successfulReferrals', 'lastReferralAt'];
-      setSortOrder(defaultDescKeys.includes(key) ? 'desc' : 'asc');
+      void setFilters({ sortBy: key, sortOrder: defaultDescKeys.includes(key) ? 'desc' : 'asc', page: 1 });
     }
-    setPage(1);
   }
+
+  const clearFilters = useCallback(() => {
+    setSearchInput("");
+    lastSyncedSearch.current = "";
+    void setFilters({ search: null, sortBy: null, sortOrder: null, page: null });
+  }, [setFilters]);
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -261,22 +314,23 @@ export default function AmbassadorsPage() {
       </div>
 
       <div className="rounded-lg border border-zinc-200 bg-white">
-        <div className="flex flex-wrap items-center gap-3 border-b border-zinc-200 px-4 py-3">
-          <div className="relative min-w-56 flex-1">
-            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />
-            <Input
-              placeholder="Search by name, code, or email…"
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="h-8 pl-8 text-sm"
-            />
-          </div>
-          <span className="text-xs text-zinc-400">
-            {loading ? "Loading…" : `${items.length} result${items.length === 1 ? "" : "s"}`}
-          </span>
+        <div className="space-y-3 border-b border-zinc-200 px-4 py-3">
+          <FilterGrid className="lg:grid-cols-4">
+            <div className="relative lg:col-span-2">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />
+              <Input
+                placeholder="Search by name, code, or email…"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                className="h-10 pl-8 text-sm"
+              />
+            </div>
+          </FilterGrid>
+          <FilterActions
+            resultCount={loading ? undefined : items.length}
+            onClear={clearFilters}
+            disabled={!hasActiveFilters}
+          />
         </div>
 
         <Table>
@@ -432,13 +486,13 @@ export default function AmbassadorsPage() {
 
         {meta.lastPage > 1 && (
           <div className="flex items-center justify-end gap-2 border-t border-zinc-200 px-4 py-3">
-            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>
+            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => void setFilters({ page: page - 1 })}>
               Previous
             </Button>
             <span className="text-xs text-zinc-500">
               Page {page} of {meta.lastPage}
             </span>
-            <Button variant="outline" size="sm" disabled={page >= meta.lastPage} onClick={() => setPage((current) => current + 1)}>
+            <Button variant="outline" size="sm" disabled={page >= meta.lastPage} onClick={() => void setFilters({ page: page + 1 })}>
               Next
             </Button>
           </div>

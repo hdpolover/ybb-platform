@@ -42,6 +42,7 @@
     "jspdf-autotable": "^5.0.8",
     "lucide-react": "^1.8.0",
     "next": "16.0.5",
+    "nuqs": "^2.9.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-hook-form": "^7.72.1",
