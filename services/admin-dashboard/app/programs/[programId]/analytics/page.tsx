@@ -650,7 +650,7 @@ function PaymentsTab({ analytics }: { analytics: ProgramAnalytics }) {
               />
               <Tooltip
                 contentStyle={{ fontSize: 11 }}
-                formatter={(v: number) => [`Rp ${(v * 1_000_000).toLocaleString()}`, "Revenue"]}
+                formatter={(v) => [`Rp ${(Number(v) * 1_000_000).toLocaleString()}`, "Revenue"]}
               />
               <Bar dataKey="idrM" fill="#10b981" radius={[4, 4, 0, 0]} name="Revenue (IDR)" />
             </BarChart>

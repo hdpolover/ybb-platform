@@ -46,7 +46,7 @@ export function PaymentDetailsSection() {
                 ))}
               </Pie>
               <Tooltip 
-                formatter={(value: number) => formatIDR(value)}
+                formatter={(value) => formatIDR(Number(value))}
                 contentStyle={{ borderRadius: '8px', border: '1px solid #e4e4e7', fontSize: '12px' }}
               />
             </PieChart>
