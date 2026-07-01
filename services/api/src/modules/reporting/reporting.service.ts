@@ -6,6 +6,7 @@ import { PaymentStatus, Prisma } from '@prisma/client';
 import {
   buildE164Phone,
   extractPhoneFromPersonalData,
+  sanitizePhone,
 } from '@shared/utils/phone-e164';
 
 @Injectable()
@@ -72,6 +73,7 @@ export class ReportingService {
       { header: 'Full Name', key: 'fullName', width: 30 },
       { header: 'Email', key: 'email', width: 30 },
       { header: 'Phone', key: 'phone', width: 20 },
+      { header: 'Phone Valid', key: 'phoneValid', width: 12 },
       { header: 'Nationality', key: 'nationality', width: 20 },
       { header: 'Institution', key: 'institution', width: 30 },
       { header: 'Status', key: 'status', width: 10 },
@@ -95,6 +97,7 @@ export class ReportingService {
       { header: 'Program', key: 'program', width: 30 },
       { header: 'Payer Email', key: 'payerEmail', width: 30 },
       { header: 'Payer Phone', key: 'payerPhone', width: 20 },
+      { header: 'Phone Valid', key: 'phoneValid', width: 12 },
       { header: 'Price Tier', key: 'tier', width: 20 },
       { header: 'Method', key: 'method', width: 15 },
       { header: 'Paid At', key: 'paidAt', width: 20 },
@@ -198,23 +201,30 @@ export class ReportingService {
       if (participants.length === 0) return;
 
       for (const participant of participants) {
-        const applicationPhone = participant.applications
-          .map((application) =>
-            extractPhoneFromPersonalData(application.personalData),
-          )
-          .find(Boolean);
+        // Find the first application that actually carries a phone in its
+        // personal_data — its `nationality` key is the best region hint for
+        // sanitizing that specific phone value.
+        const applicationWithPhone = participant.applications.find((application) =>
+          extractPhoneFromPersonalData(application.personalData),
+        );
+
+        const rawPhone = applicationWithPhone
+          ? extractPhoneFromPersonalData(applicationWithPhone.personalData)
+          : buildE164Phone(participant.phoneCountryCode, participant.phoneNumber);
+
+        const regionHint =
+          this.readNationality(applicationWithPhone?.personalData) ??
+          participant.nationality ??
+          undefined;
+
+        const { value: phone, isValid: phoneValid } = sanitizePhone(rawPhone, regionHint);
 
         yield {
           id: participant.id,
           fullName: participant.fullName,
           email: participant.user?.email || 'N/A',
-          phone:
-            applicationPhone ??
-            buildE164Phone(
-              participant.phoneCountryCode,
-              participant.phoneNumber,
-            ) ??
-            '-',
+          phone,
+          phoneValid: phone === '-' ? '—' : phoneValid ? 'Yes' : 'No',
           nationality: participant.nationality,
           institution: participant.institution,
           status: participant.deletedAt ? 'Deleted' : 'Active',
@@ -295,6 +305,20 @@ export class ReportingService {
       if (invoices.length === 0) return;
 
       for (const invoice of invoices) {
+        const rawPhone =
+          extractPhoneFromPersonalData(invoice.application?.personalData) ??
+          buildE164Phone(
+            invoice.application?.participant?.phoneCountryCode,
+            invoice.application?.participant?.phoneNumber,
+          );
+
+        const regionHint =
+          this.readNationality(invoice.application?.personalData) ??
+          invoice.application?.participant?.nationality ??
+          undefined;
+
+        const { value: payerPhone, isValid: phoneValid } = sanitizePhone(rawPhone, regionHint);
+
         yield {
           id: invoice.id,
           status: invoice.status,
@@ -302,13 +326,8 @@ export class ReportingService {
           currency: invoice.currency,
           program: invoice.application?.program?.name ?? 'Unknown',
           payerEmail: invoice.application?.participant?.user?.email ?? 'N/A',
-          payerPhone:
-            extractPhoneFromPersonalData(invoice.application?.personalData) ??
-            buildE164Phone(
-              invoice.application?.participant?.phoneCountryCode,
-              invoice.application?.participant?.phoneNumber,
-            ) ??
-            '-',
+          payerPhone,
+          phoneValid: payerPhone === '-' ? '—' : phoneValid ? 'Yes' : 'No',
           tier: invoice.pricingTier?.name ?? 'N/A',
           method: invoice.paymentMethod || '-',
           paidAt: invoice.paidAt ? new Date(invoice.paidAt).toISOString() : '-',
@@ -319,6 +338,13 @@ export class ReportingService {
       const last = invoices[invoices.length - 1];
       cursor = { id: last.id, createdAt: last.createdAt };
     }
+  }
+
+  /** Read the `nationality` (ISO-3166 alpha-2) region hint out of a personal_data JSON blob. */
+  private readNationality(personalData: unknown): string | undefined {
+    if (!personalData || typeof personalData !== 'object') return undefined;
+    const nationality = (personalData as Record<string, unknown>).nationality;
+    return typeof nationality === 'string' ? nationality : undefined;
   }
 
   private buildCreatedAtCursorWhere(
