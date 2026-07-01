@@ -31,6 +31,7 @@ import { PartnershipsModule } from '@modules/partnerships/partnerships.module';
 import { PaymentsModule } from '@modules/payments/payments.module';
 import { ProgramsModule } from '@modules/programs/programs.module';
 import { StatsModule } from '@modules/stats/stats.module';
+import { RevenueModule } from '@modules/stats/revenue/revenue.module';
 import { SupportModule } from '@modules/support/support.module';
 import { SystemModule } from '@modules/system/system.module';
 import { UsersModule } from '@modules/users/users.module';
@@ -132,6 +133,7 @@ import { EmailTemplatesModule } from '@modules/email-templates/email-templates.m
     PaymentsModule,
     ProgramsModule,
     StatsModule,
+    RevenueModule,
     SupportModule,
     SystemModule,
     UsersModule,
