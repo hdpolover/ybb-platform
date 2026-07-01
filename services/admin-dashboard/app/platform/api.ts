@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { redirectToLogin } from "@/src/shared/login-redirect";
 import {
   requestAdminProfileRefresh,
@@ -563,8 +564,70 @@ export type BrandMetadata = {
   [key: string]: unknown;
 };
 
+// Legacy/malformed metadata records can reach the API with the wrong shape
+// for these array-bearing fields (e.g. `groups` missing, a group missing its
+// `items` array). The UI iterates over them directly (see LandingPageTab in
+// BrandDetailPage.tsx), so a bad shape throws a TypeError during render and
+// takes down the whole page. Sanitize defensively at the fetch boundary
+// instead of trusting the payload — never throw here, always fall back to a
+// safe default so `getBrandMetadata` itself can never reject/crash on bad data.
+const unknownArraySchema = z.array(z.unknown());
+
+function toSafeArray(value: unknown): unknown[] {
+  const result = unknownArraySchema.safeParse(value);
+  return result.success ? result.data : [];
+}
+
+function sanitizeBenefitGroup(group: unknown): BenefitGroup {
+  const record = group && typeof group === "object" ? (group as Record<string, unknown>) : {};
+  return {
+    ...record,
+    items: toSafeArray(record.items) as BenefitItem[],
+  } as BenefitGroup;
+}
+
+function sanitizeBenefits(benefits: BrandMetadata["benefits"]): BrandMetadata["benefits"] {
+  if (!benefits || typeof benefits !== "object") return benefits;
+  return {
+    ...benefits,
+    groups: toSafeArray(benefits.groups).map(sanitizeBenefitGroup),
+  };
+}
+
+function sanitizeProgramObjectives(
+  objectives: BrandMetadata["program_objectives"],
+): BrandMetadata["program_objectives"] {
+  if (!objectives || typeof objectives !== "object" || objectives.items === undefined) {
+    return objectives;
+  }
+  return {
+    ...objectives,
+    items: toSafeArray(objectives.items) as string[],
+  };
+}
+
+function sanitizeBrandMetadata(raw: unknown): BrandMetadata {
+  if (!raw || typeof raw !== "object") return raw as BrandMetadata;
+
+  try {
+    const value = raw as BrandMetadata;
+    return {
+      ...value,
+      benefits: value.benefits !== undefined ? sanitizeBenefits(value.benefits) : value.benefits,
+      features: value.features !== undefined ? (toSafeArray(value.features) as BrandFeature[]) : value.features,
+      program_objectives:
+        value.program_objectives !== undefined
+          ? sanitizeProgramObjectives(value.program_objectives)
+          : value.program_objectives,
+    };
+  } catch {
+    // Last-resort safety net — never let sanitization itself crash the fetch.
+    return raw as BrandMetadata;
+  }
+}
+
 export function getBrandMetadata(brandId: string): Promise<BrandMetadata> {
-  return request<BrandMetadata>(`/brands/${brandId}/metadata`);
+  return request<BrandMetadata>(`/brands/${brandId}/metadata`).then(sanitizeBrandMetadata);
 }
 
 export function updatePlatformBrandMetadata(
