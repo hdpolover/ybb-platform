@@ -143,5 +143,21 @@ describe('RevenueService', () => {
       expect(result.summary.unbackfilledCount).toBe(3);
       expect(result.data).toHaveLength(1);
     });
+
+    it('restricts unbackfilledCount to paid invoices so unpaid/cancelled are not counted as missing data', async () => {
+      mockPrisma.applicationInvoice.count
+        .mockResolvedValueOnce(42) // total
+        .mockResolvedValueOnce(0); // unbackfilled (paid-only)
+      mockPrisma.applicationInvoice.findMany.mockResolvedValue([invoiceRow()]);
+
+      await service.getRevenueTransactions({ page: 1, limit: 10 }, platformScope);
+
+      // The 2nd count() call is the unbackfilled query; it must filter to paid
+      // status AND missing fee/net, not every non-backfilled invoice.
+      const unbackfilledWhere = JSON.stringify(mockPrisma.applicationInvoice.count.mock.calls[1][0]);
+      expect(unbackfilledWhere).toContain('"status":"paid"');
+      expect(unbackfilledWhere).toContain('feeProvider');
+      expect(unbackfilledWhere).toContain('netAmount');
+    });
   });
 });
