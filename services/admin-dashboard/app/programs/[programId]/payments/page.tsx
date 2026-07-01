@@ -1,10 +1,8 @@
 "use client";
 
 import { use, useEffect, useState, useCallback, useMemo, useRef } from "react";
-import Link from "next/link";
 import { useQueryStates, parseAsString, parseAsInteger, parseAsStringEnum } from "nuqs";
 import {
-  Search,
   Eye,
   Copy,
   Loader2,
@@ -14,6 +12,8 @@ import {
   XCircle,
   CheckCircle2,
   CircleDollarSign,
+  User,
+  Mail,
 } from "lucide-react";
 import {
   listProgramInvoices,
@@ -34,7 +34,9 @@ import { PageHeader } from "@/src/admin/page-header";
 import { Button } from "@/src/ui/button";
 import { Input } from "@/src/ui/input";
 import { FilterSelect } from "@/src/ui/select";
-import { FilterGrid, FilterField, FilterActions } from "@/src/ui/filter-grid";
+import { FilterField } from "@/src/ui/filter-grid";
+import { FilterPanel, type FilterPanelActiveFilter } from "@/src/ui/filter-panel";
+import { RowActions } from "@/src/ui/row-actions";
 import {
   Dialog,
   DialogContent,
@@ -263,6 +265,10 @@ export default function PaymentsPage({
   const [notifySending, setNotifySending] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [submittingId, setSubmittingId] = useState<string | null>(null);
+  // Per-row "Send payment help email" in-flight state for the RowActions menu
+  // item — tracks invoice IDs currently being notified individually (distinct
+  // from the bulk `notifySending` dialog flow above).
+  const [notifyingIds, setNotifyingIds] = useState<Set<string>>(new Set());
 
   const hasActiveFilters = Boolean(
     search.trim() ||
@@ -422,6 +428,135 @@ export default function PaymentsPage({
     ],
     [filterOptions.followUpStatuses],
   );
+
+  // Chip keys that belong to the always-visible "primary" filters (Status,
+  // Method) rather than the collapsible advanced panel — used to derive
+  // `advancedFilterCount` below without double-counting.
+  const PRIMARY_CHIP_KEYS = useMemo(() => new Set(["status", "paymentMethod"]), []);
+
+  const activeFilters: FilterPanelActiveFilter[] = useMemo(() => {
+    const chips: FilterPanelActiveFilter[] = [];
+    if (statusFilter) {
+      chips.push({
+        key: "status",
+        label: `Status: ${statusOptions.find((o) => o.value === statusFilter)?.label ?? formatLabel(statusFilter)}`,
+        onRemove: () => void setFilters({ status: null, page: 1 }),
+      });
+    }
+    if (paymentMethodFilter) {
+      const opt = filterOptions.paymentMethods.find((o) => o.value === paymentMethodFilter);
+      chips.push({
+        key: "paymentMethod",
+        label: `Method: ${opt?.label ?? paymentMethodFilter}`,
+        onRemove: () => void setFilters({ paymentMethod: null, page: 1 }),
+      });
+    }
+    if (tierFilter) {
+      const tier = filterOptions.tiers.find((t) => t.id === tierFilter);
+      chips.push({
+        key: "tierId",
+        label: `Tier: ${tier?.name ?? tierFilter}`,
+        onRemove: () => void setFilters({ tierId: null, page: 1 }),
+      });
+    }
+    if (feeTypeFilter) {
+      chips.push({
+        key: "feeType",
+        label: `Fee type: ${feeTypeOptions.find((o) => o.value === feeTypeFilter)?.label ?? formatLabel(feeTypeFilter)}`,
+        onRemove: () => void setFilters({ feeType: null, page: 1 }),
+      });
+    }
+    if (applicationStatusFilter) {
+      chips.push({
+        key: "applicationStatus",
+        label: `Application: ${formatLabel(applicationStatusFilter)}`,
+        onRemove: () => void setFilters({ applicationStatus: null, page: 1 }),
+      });
+    }
+    if (followUpStatusFilter) {
+      chips.push({
+        key: "followUpStatus",
+        label: `Follow-up: ${followUpOptions.find((o) => o.value === followUpStatusFilter)?.label ?? formatFollowUpLabel(followUpStatusFilter)}`,
+        onRemove: () => void setFilters({ followUpStatus: null, page: 1 }),
+      });
+    }
+    if (currencyFilter) {
+      chips.push({
+        key: "currency",
+        label: `Currency: ${currencyFilter}`,
+        onRemove: () => void setFilters({ currency: null, page: 1 }),
+      });
+    }
+    if (minAmount) {
+      chips.push({
+        key: "minAmount",
+        label: `Min amount: ${minAmount}`,
+        onRemove: () => void setFilters({ minAmount: null, page: 1 }),
+      });
+    }
+    if (maxAmount) {
+      chips.push({
+        key: "maxAmount",
+        label: `Max amount: ${maxAmount}`,
+        onRemove: () => void setFilters({ maxAmount: null, page: 1 }),
+      });
+    }
+    if (dateFrom) {
+      chips.push({
+        key: "dateFrom",
+        label: `Invoice date from: ${formatDate(dateFrom)}`,
+        onRemove: () => void setFilters({ dateFrom: null, page: 1 }),
+      });
+    }
+    if (dateTo) {
+      chips.push({
+        key: "dateTo",
+        label: `Invoice date to: ${formatDate(dateTo)}`,
+        onRemove: () => void setFilters({ dateTo: null, page: 1 }),
+      });
+    }
+    if (paidFrom) {
+      chips.push({
+        key: "paidFrom",
+        label: `Paid date from: ${formatDate(paidFrom)}`,
+        onRemove: () => void setFilters({ paidFrom: null, page: 1 }),
+      });
+    }
+    if (paidTo) {
+      chips.push({
+        key: "paidTo",
+        label: `Paid date to: ${formatDate(paidTo)}`,
+        onRemove: () => void setFilters({ paidTo: null, page: 1 }),
+      });
+    }
+    return chips;
+  }, [
+    statusFilter,
+    paymentMethodFilter,
+    tierFilter,
+    feeTypeFilter,
+    applicationStatusFilter,
+    followUpStatusFilter,
+    currencyFilter,
+    minAmount,
+    maxAmount,
+    dateFrom,
+    dateTo,
+    paidFrom,
+    paidTo,
+    statusOptions,
+    feeTypeOptions,
+    followUpOptions,
+    filterOptions.paymentMethods,
+    filterOptions.tiers,
+    setFilters,
+  ]);
+
+  const advancedFilterCount = useMemo(
+    () => activeFilters.filter((filter) => !PRIMARY_CHIP_KEYS.has(filter.key)).length,
+    [activeFilters, PRIMARY_CHIP_KEYS],
+  );
+
   const paidCount = summary?.paid?.count ?? 0;
   const pendingCount = (summary?.unpaid?.count ?? 0) + (summary?.processing?.count ?? 0);
   const failedCount = summary?.failed?.count ?? 0;
@@ -457,6 +592,37 @@ export default function PaymentsPage({
       window.setTimeout(() => setCopiedKey(null), 1500);
     } catch {
       // no-op
+    }
+  }
+
+  function handleCopyInvoiceId(invoiceId: string) {
+    void navigator.clipboard.writeText(invoiceId).then(
+      () => toast.success("Invoice ID copied."),
+      () => toast.error("Failed to copy invoice ID."),
+    );
+  }
+
+  // Replicates NotifyParticipantButton's loading + success/error toast
+  // behavior for a single row, without depending on that component (which
+  // lives on the invoice detail page and expects to render its own button).
+  async function handleNotifyRow(invoiceId: string, email: string | null | undefined) {
+    setNotifyingIds((prev) => new Set(prev).add(invoiceId));
+    try {
+      const result = await notifyPaymentIssue([invoiceId]);
+      if (result.sent > 0) {
+        toast.success(`Payment help email sent${email ? ` to ${email}` : ""}.`);
+      } else {
+        const reason = result.skipped[0]?.reason ?? "No email was sent.";
+        toast.error(reason);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to send email");
+    } finally {
+      setNotifyingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(invoiceId);
+        return next;
+      });
     }
   }
 
@@ -584,193 +750,210 @@ export default function PaymentsPage({
 
       <div className="rounded-lg border border-zinc-200 bg-white">
         <div className="space-y-3 border-b border-zinc-200 px-4 py-3">
-          <FilterGrid className="lg:grid-cols-4">
-            <div className="relative lg:col-span-2">
-              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />
-              <Input
-                placeholder="Search name, email, invoice ID, transaction ID…"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                className="pl-8 h-10 text-sm"
-              />
-            </div>
-            <FilterSelect
-              aria-label="Status"
-              value={statusFilter}
-              onChange={(e) => { void setFilters({ status: e.target.value || null, page: 1 }); }}
-            >
-              {statusOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </FilterSelect>
-            <FilterSelect
-              aria-label="Payment method"
-              value={paymentMethodFilter}
-              onChange={(e) => { void setFilters({ paymentMethod: e.target.value || null, page: 1 }); }}
-            >
-              <option value="">All Methods</option>
-              {filterOptions.paymentMethods.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label ?? option.value} ({option.count})
-                </option>
-              ))}
-            </FilterSelect>
-          </FilterGrid>
-
-          <FilterGrid className="lg:grid-cols-7">
-            <FilterSelect
-              aria-label="Tier"
-              value={tierFilter}
-              onChange={(e) => { void setFilters({ tierId: e.target.value || null, page: 1 }); }}
-            >
-              <option value="">All Tiers</option>
-              {filterOptions.tiers.map((tier) => (
-                <option key={tier.id} value={tier.id}>
-                  {tier.name}
-                </option>
-              ))}
-            </FilterSelect>
-            <FilterSelect
-              aria-label="Fee type"
-              value={feeTypeFilter}
-              onChange={(e) => { void setFilters({ feeType: e.target.value || null, page: 1 }); }}
-            >
-              {feeTypeOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </FilterSelect>
-            <FilterSelect
-              aria-label="Application status"
-              value={applicationStatusFilter}
-              onChange={(e) => { void setFilters({ applicationStatus: e.target.value || null, page: 1 }); }}
-            >
-              <option value="">All Application Statuses</option>
-              {filterOptions.applicationStatuses.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {formatLabel(option.value)} ({option.count})
-                </option>
-              ))}
-            </FilterSelect>
-            <FilterSelect
-              aria-label="Follow-up status"
-              value={followUpStatusFilter}
-              onChange={(e) => {
-                void setFilters({
-                  followUpStatus: (e.target.value || null) as typeof followUpStatusFilter | null,
-                  page: 1,
-                });
-              }}
-            >
-              {followUpOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </FilterSelect>
-            <FilterSelect
-              aria-label="Currency"
-              value={currencyFilter}
-              onChange={(e) => { void setFilters({ currency: e.target.value || null, page: 1 }); }}
-            >
-              <option value="">All Currencies</option>
-              {filterOptions.currencies.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.value} ({option.count})
-                </option>
-              ))}
-            </FilterSelect>
-            <Input
-              type="number"
-              min="0"
-              step="1"
-              value={minAmount}
-              onChange={(e) => { void setFilters({ minAmount: e.target.value || null, page: 1 }); }}
-              className="h-10 text-sm"
-              placeholder="Min amount"
-            />
-            <Input
-              type="number"
-              min="0"
-              step="1"
-              value={maxAmount}
-              onChange={(e) => { void setFilters({ maxAmount: e.target.value || null, page: 1 }); }}
-              className="h-10 text-sm"
-              placeholder="Max amount"
-            />
-          </FilterGrid>
-
-          <FilterGrid className="lg:grid-cols-7">
-            <FilterField label="Invoice date from" htmlFor="filter-date-from">
-              <Input
-                id="filter-date-from"
-                type="date"
-                value={dateFrom}
-                onChange={(e) => { void setFilters({ dateFrom: e.target.value || null, page: 1 }); }}
-                className="h-10 text-sm"
-              />
-            </FilterField>
-            <FilterField label="Invoice date to" htmlFor="filter-date-to">
-              <Input
-                id="filter-date-to"
-                type="date"
-                value={dateTo}
-                onChange={(e) => { void setFilters({ dateTo: e.target.value || null, page: 1 }); }}
-                className="h-10 text-sm"
-              />
-            </FilterField>
-            <FilterField label="Paid date from" htmlFor="filter-paid-from">
-              <Input
-                id="filter-paid-from"
-                type="date"
-                value={paidFrom}
-                onChange={(e) => { void setFilters({ paidFrom: e.target.value || null, page: 1 }); }}
-                className="h-10 text-sm"
-              />
-            </FilterField>
-            <FilterField label="Paid date to" htmlFor="filter-paid-to">
-              <Input
-                id="filter-paid-to"
-                type="date"
-                value={paidTo}
-                onChange={(e) => { void setFilters({ paidTo: e.target.value || null, page: 1 }); }}
-                className="h-10 text-sm"
-              />
-            </FilterField>
-            <FilterSelect
-              label="Sort by"
-              value={sortBy}
-              onChange={(e) => {
-                void setFilters({
-                  sortBy: e.target.value as typeof sortBy,
-                  page: 1,
-                });
-              }}
-            >
-              {SORT_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </FilterSelect>
-            <FilterSelect
-              label="Order"
-              value={sortOrder}
-              onChange={(e) => { void setFilters({ sortOrder: e.target.value as typeof sortOrder, page: 1 }); }}
-            >
-              <option value="desc">Descending</option>
-              <option value="asc">Ascending</option>
-            </FilterSelect>
-            <FilterSelect
-              label="Page size"
-              value={pageSize}
-              onChange={(e) => { void setFilters({ pageSize: Number(e.target.value), page: 1 }); }}
-            >
-              {PAGE_SIZE_OPTIONS.map((size) => (
-                <option key={size} value={size}>{size}/page</option>
-              ))}
-            </FilterSelect>
-          </FilterGrid>
-
-          <FilterActions
+          <FilterPanel
+            search={{
+              value: searchInput,
+              onChange: setSearchInput,
+              placeholder: "Search name, email, invoice ID, transaction ID…",
+            }}
+            primary={
+              <>
+                <div className="w-40">
+                  <FilterSelect
+                    aria-label="Status"
+                    value={statusFilter}
+                    onChange={(e) => { void setFilters({ status: e.target.value || null, page: 1 }); }}
+                  >
+                    {statusOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </FilterSelect>
+                </div>
+                <div className="w-48">
+                  <FilterSelect
+                    aria-label="Payment method"
+                    value={paymentMethodFilter}
+                    onChange={(e) => { void setFilters({ paymentMethod: e.target.value || null, page: 1 }); }}
+                  >
+                    <option value="">All Methods</option>
+                    {filterOptions.paymentMethods.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label ?? option.value} ({option.count})
+                      </option>
+                    ))}
+                  </FilterSelect>
+                </div>
+              </>
+            }
+            advancedCount={advancedFilterCount}
+            activeFilters={activeFilters}
             resultCount={meta?.total}
             onClear={clearFilters}
-            disabled={!hasActiveFilters}
+            clearDisabled={!hasActiveFilters}
+            advanced={
+              <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
+                <FilterField label="Tier" htmlFor="filter-tier">
+                  <FilterSelect
+                    id="filter-tier"
+                    value={tierFilter}
+                    onChange={(e) => { void setFilters({ tierId: e.target.value || null, page: 1 }); }}
+                  >
+                    <option value="">All Tiers</option>
+                    {filterOptions.tiers.map((tier) => (
+                      <option key={tier.id} value={tier.id}>
+                        {tier.name}
+                      </option>
+                    ))}
+                  </FilterSelect>
+                </FilterField>
+                <FilterField label="Fee type" htmlFor="filter-fee-type">
+                  <FilterSelect
+                    id="filter-fee-type"
+                    value={feeTypeFilter}
+                    onChange={(e) => { void setFilters({ feeType: e.target.value || null, page: 1 }); }}
+                  >
+                    {feeTypeOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </FilterSelect>
+                </FilterField>
+                <FilterField label="Application status" htmlFor="filter-application-status">
+                  <FilterSelect
+                    id="filter-application-status"
+                    value={applicationStatusFilter}
+                    onChange={(e) => { void setFilters({ applicationStatus: e.target.value || null, page: 1 }); }}
+                  >
+                    <option value="">All Application Statuses</option>
+                    {filterOptions.applicationStatuses.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {formatLabel(option.value)} ({option.count})
+                      </option>
+                    ))}
+                  </FilterSelect>
+                </FilterField>
+                <FilterField label="Follow-up status" htmlFor="filter-followup-status">
+                  <FilterSelect
+                    id="filter-followup-status"
+                    value={followUpStatusFilter}
+                    onChange={(e) => {
+                      void setFilters({
+                        followUpStatus: (e.target.value || null) as typeof followUpStatusFilter | null,
+                        page: 1,
+                      });
+                    }}
+                  >
+                    {followUpOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </FilterSelect>
+                </FilterField>
+                <FilterField label="Currency" htmlFor="filter-currency">
+                  <FilterSelect
+                    id="filter-currency"
+                    value={currencyFilter}
+                    onChange={(e) => { void setFilters({ currency: e.target.value || null, page: 1 }); }}
+                  >
+                    <option value="">All Currencies</option>
+                    {filterOptions.currencies.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.value} ({option.count})
+                      </option>
+                    ))}
+                  </FilterSelect>
+                </FilterField>
+                <FilterField label="Min amount" htmlFor="filter-min-amount">
+                  <Input
+                    id="filter-min-amount"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={minAmount}
+                    onChange={(e) => { void setFilters({ minAmount: e.target.value || null, page: 1 }); }}
+                    className="h-10 text-sm"
+                    placeholder="Min amount"
+                  />
+                </FilterField>
+                <FilterField label="Max amount" htmlFor="filter-max-amount">
+                  <Input
+                    id="filter-max-amount"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={maxAmount}
+                    onChange={(e) => { void setFilters({ maxAmount: e.target.value || null, page: 1 }); }}
+                    className="h-10 text-sm"
+                    placeholder="Max amount"
+                  />
+                </FilterField>
+                <FilterField label="Invoice date from" htmlFor="filter-date-from">
+                  <Input
+                    id="filter-date-from"
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => { void setFilters({ dateFrom: e.target.value || null, page: 1 }); }}
+                    className="h-10 text-sm"
+                  />
+                </FilterField>
+                <FilterField label="Invoice date to" htmlFor="filter-date-to">
+                  <Input
+                    id="filter-date-to"
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => { void setFilters({ dateTo: e.target.value || null, page: 1 }); }}
+                    className="h-10 text-sm"
+                  />
+                </FilterField>
+                <FilterField label="Paid date from" htmlFor="filter-paid-from">
+                  <Input
+                    id="filter-paid-from"
+                    type="date"
+                    value={paidFrom}
+                    onChange={(e) => { void setFilters({ paidFrom: e.target.value || null, page: 1 }); }}
+                    className="h-10 text-sm"
+                  />
+                </FilterField>
+                <FilterField label="Paid date to" htmlFor="filter-paid-to">
+                  <Input
+                    id="filter-paid-to"
+                    type="date"
+                    value={paidTo}
+                    onChange={(e) => { void setFilters({ paidTo: e.target.value || null, page: 1 }); }}
+                    className="h-10 text-sm"
+                  />
+                </FilterField>
+                <FilterSelect
+                  label="Sort by"
+                  value={sortBy}
+                  onChange={(e) => {
+                    void setFilters({
+                      sortBy: e.target.value as typeof sortBy,
+                      page: 1,
+                    });
+                  }}
+                >
+                  {SORT_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </FilterSelect>
+                <FilterSelect
+                  label="Order"
+                  value={sortOrder}
+                  onChange={(e) => { void setFilters({ sortOrder: e.target.value as typeof sortOrder, page: 1 }); }}
+                >
+                  <option value="desc">Descending</option>
+                  <option value="asc">Ascending</option>
+                </FilterSelect>
+                <FilterSelect
+                  label="Page size"
+                  value={pageSize}
+                  onChange={(e) => { void setFilters({ pageSize: Number(e.target.value), page: 1 }); }}
+                >
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <option key={size} value={size}>{size}/page</option>
+                  ))}
+                </FilterSelect>
+              </div>
+            }
           />
         </div>
 
@@ -915,19 +1098,33 @@ export default function PaymentsPage({
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex flex-col items-end gap-1">
-                    <Link
-                      href={`/programs/${programId}/payments/${inv.id}`}
-                      className="inline-flex h-8 items-center gap-1 rounded px-3 text-xs font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 transition-colors"
-                    >
-                      <Eye className="h-3.5 w-3.5" />
-                      View
-                    </Link>
-                    <Link
-                      href={`/programs/${programId}/participants/${inv.participant.id}`}
-                      className="inline-flex h-8 items-center gap-1 rounded px-3 text-xs font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 transition-colors"
-                    >
-                      View participant
-                    </Link>
+                    <RowActions
+                      primary={[
+                        {
+                          label: "View invoice",
+                          icon: Eye,
+                          href: `/programs/${programId}/payments/${inv.id}`,
+                        },
+                      ]}
+                      menu={[
+                        {
+                          label: "View participant",
+                          icon: User,
+                          href: `/programs/${programId}/participants/${inv.participant.id}`,
+                        },
+                        {
+                          label: "Copy invoice ID",
+                          icon: Copy,
+                          onClick: () => handleCopyInvoiceId(inv.id),
+                        },
+                        {
+                          label: notifyingIds.has(inv.id) ? "Sending…" : "Send payment help email",
+                          icon: Mail,
+                          disabled: notifyingIds.has(inv.id),
+                          onClick: () => void handleNotifyRow(inv.id, inv.participant.email),
+                        },
+                      ]}
+                    />
                     {inv.status === "paid" && inv.application.status === "draft" && (
                       <button
                         type="button"
