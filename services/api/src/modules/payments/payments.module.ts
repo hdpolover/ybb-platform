@@ -14,6 +14,7 @@ import { PaymentReconciliationController } from './presentation/payment-reconcil
 import { WebhooksController } from './presentation/webhooks.controller';
 import { PaymentRepository } from './infrastructure/persistence/payment.repository';
 import { PaymentServiceHttpClient } from './infrastructure/services/payment-service-http.client';
+import { PaymentGatewayClient } from './infrastructure/services/payment-gateway.client';
 import { ListUserPaymentsHandler } from './application/queries/handlers/list-user-payments.handler';
 import { GetPaymentDetailHandler } from './application/queries/handlers/get-payment-detail.handler';
 import { CreateIntentHandler } from './application/commands/handlers/create-intent.handler';
@@ -43,6 +44,7 @@ import { CacheModule } from '@shared/infrastructure/cache/cache.module';
         },
         PaymentRepository,
         PaymentServiceHttpClient,
+        PaymentGatewayClient,
         ListUserPaymentsHandler,
         GetPaymentDetailHandler,
         CreateIntentHandler,
@@ -51,6 +53,6 @@ import { CacheModule } from '@shared/infrastructure/cache/cache.module';
         PaymentReconciliationService,
         RegistrationFeeGateService,
     ],
-    exports: ['IPaymentRepository', PaymentServiceHttpClient, PaymentOutboxService, RegistrationFeeGateService],
+    exports: ['IPaymentRepository', PaymentServiceHttpClient, PaymentGatewayClient, PaymentOutboxService, RegistrationFeeGateService],
 })
 export class PaymentsModule { }
