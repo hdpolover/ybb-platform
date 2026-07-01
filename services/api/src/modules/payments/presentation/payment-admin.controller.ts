@@ -32,6 +32,7 @@ import { ChangeType, PaymentStatus, Prisma } from '@prisma/client';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { PaymentServiceHttpClient } from '../infrastructure/services/payment-service-http.client';
+import { PaymentGatewayClient } from '../infrastructure/services/payment-gateway.client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { buildParticipantPaymentsUrl as buildParticipantPaymentsDashboardUrl } from '@modules/payments/application/utils/participant-dashboard-url.util';
@@ -55,6 +56,7 @@ export class PaymentAdminController {
 
     constructor(
         private readonly paymentServiceClient: PaymentServiceHttpClient,
+        private readonly paymentGatewayClient: PaymentGatewayClient,
         private readonly configService: ConfigService,
         private readonly fileService: FileServiceClient,
         private readonly cacheService: CacheService,
@@ -1305,6 +1307,39 @@ export class PaymentAdminController {
             }
         }
 
+        // Cascade-void guard: this admin endpoint is a second, independent writer
+        // (alongside the payment.cancelled handler and the portal self-cancel
+        // handler) that can move an invoice to a terminal non-paid state. Without
+        // this, admin-driven cancelled/failed/refunded transitions leave the
+        // Go-side transaction orphaned in whatever state it was last in.
+        const isTerminalNonPaid =
+            body.status === PaymentStatus.cancelled
+            || body.status === PaymentStatus.failed
+            || body.status === PaymentStatus.refunded;
+
+        if (isTerminalNonPaid && invoice.externalTransactionId) {
+            const voidResult = await this.paymentGatewayClient.voidTransaction(
+                invoice.externalTransactionId,
+                invoice.id,
+                body.reason?.trim() || `Invoice marked ${body.status} by admin`,
+            );
+            if (voidResult.outcome === 'danger_settled') {
+                throw new BadRequestException(
+                    `Cannot mark this invoice ${body.status}: the linked transaction has already succeeded at the gateway (${voidResult.detail}).`,
+                );
+            }
+            // Fail closed: this is a synchronous, user-facing admin action. If we
+            // can't verify the gateway's status, proceeding could mark the invoice
+            // cancelled/failed/refunded while its transaction just settled to
+            // SUCCESS at the gateway (terminal-invoice-but-paid). Failing closed
+            // lets the admin simply retry instead of risking that danger case.
+            if (voidResult.outcome === 'error') {
+                throw new BadRequestException(
+                    'Could not verify the payment status right now. Please try again in a moment.',
+                );
+            }
+        }
+
         const trimmedReason = body.reason?.trim() ?? '';
         const now = new Date();
         // Audit fields: capture who/when on every admin-driven status change, plus
@@ -1575,7 +1610,26 @@ export class PaymentAdminController {
 
     private extractPaymentMethodFromTransaction(transaction: Record<string, unknown>): string | null {
         const source = this.unwrapPayloadObject(transaction);
+        const providerFromGatewayResponse = this.extractGatewayResponseProvider(source);
+        if (providerFromGatewayResponse) return providerFromGatewayResponse;
         return this.findPaymentMethodDeep(source, 0);
+    }
+
+    /**
+     * The Go payment service stamps the real gateway into gateway_response.provider
+     * at charge time (e.g. "xendit"), independent of the legacy payment_method_id
+     * code (e.g. "midtrans_cc") a method was originally configured with. Preferring
+     * this field over the method-code-derived label fixes the display half of the
+     * gateway-naming drift without requiring the stored mapping to be corrected
+     * first.
+     */
+    private extractGatewayResponseProvider(transaction: Record<string, unknown>): string | null {
+        const gatewayResponse = transaction.gateway_response;
+        if (!gatewayResponse || typeof gatewayResponse !== 'object' || Array.isArray(gatewayResponse)) {
+            return null;
+        }
+        const provider = (gatewayResponse as Record<string, unknown>).provider;
+        return typeof provider === 'string' && provider.trim() ? provider.trim() : null;
     }
 
     private findPaymentMethodDeep(value: unknown, depth: number): string | null {

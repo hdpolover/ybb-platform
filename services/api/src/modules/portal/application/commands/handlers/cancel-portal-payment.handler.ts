@@ -1,10 +1,9 @@
 import { Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
 import { PortalCacheService } from '../../services/portal-cache.service';
-import { PaymentServiceHttpClient } from '@modules/payments/infrastructure/services/payment-service-http.client';
+import { PaymentGatewayClient } from '@modules/payments/infrastructure/services/payment-gateway.client';
 import { CancelPortalPaymentCommand } from '../../queries/portal-queries';
 import { CancelPortalPaymentResponseDto } from '../../../presentation/dto/portal-payment.dto';
 
@@ -14,8 +13,7 @@ export class CancelPortalPaymentHandler {
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
         private readonly portalCacheService: PortalCacheService,
-        private readonly paymentServiceClient: PaymentServiceHttpClient,
-        private readonly configService: ConfigService,
+        private readonly paymentGatewayClient: PaymentGatewayClient,
     ) {}
 
     async execute(command: CancelPortalPaymentCommand): Promise<CancelPortalPaymentResponseDto> {
@@ -49,14 +47,26 @@ export class CancelPortalPaymentHandler {
         }
 
         const cancellationReason = command.reason?.trim() || 'Cancelled by participant';
-        const internalKey = this.configService.get<string>('PAYMENT_SERVICE_INTERNAL_KEY', '').trim();
-        const headers = internalKey ? { 'X-Internal-Service-Key': internalKey } : {};
 
-        await this.paymentServiceClient.post(
-            `/api/v1/payments/${invoice.externalTransactionId}/cancel`,
-            { reason: cancellationReason },
-            { headers },
+        const voidResult = await this.paymentGatewayClient.voidTransaction(
+            invoice.externalTransactionId,
+            invoice.id,
+            cancellationReason,
         );
+        if (voidResult.outcome === 'danger_settled') {
+            throw new BadRequestException(
+                'This payment has already succeeded at the gateway and cannot be cancelled. Contact support.',
+            );
+        }
+        // Fail closed: this is a synchronous, user-facing cancel action. If we can't verify
+        // the gateway's status, proceeding could cancel an invoice whose transaction just
+        // settled to SUCCESS at the gateway (cancelled-invoice-but-paid). Failing closed lets
+        // the user simply retry instead of risking that danger case.
+        if (voidResult.outcome === 'error') {
+            throw new BadRequestException(
+                'Could not verify the payment status right now. Please try again in a moment.',
+            );
+        }
 
         const paymentStatusPatch =
             invoice.pricingTier?.feeType === 'registration_fee'
