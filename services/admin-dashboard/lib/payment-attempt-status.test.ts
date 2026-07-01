@@ -54,6 +54,18 @@ t("terminal invoice leaves a terminal SUCCESS attempt row unchanged", () => {
   assert.equal(resolveAttemptRowDisplayStatus("SUCCESS", "refunded"), "SUCCESS");
 });
 
+t("terminal invoice leaves a terminal REJECTED attempt row unchanged", () => {
+  assert.equal(resolveAttemptRowDisplayStatus("REJECTED", "cancelled"), "REJECTED");
+});
+
+t("terminal invoice overrides a live NEEDS_REVIEW attempt row", () => {
+  assert.equal(resolveAttemptRowDisplayStatus("NEEDS_REVIEW", "cancelled"), "cancelled");
+});
+
+t("terminal invoice overrides an undefined attempt row (treated as live)", () => {
+  assert.equal(resolveAttemptRowDisplayStatus(undefined, "cancelled"), "cancelled");
+});
+
 t("non-terminal invoice leaves a PENDING attempt row unchanged", () => {
   assert.equal(resolveAttemptRowDisplayStatus("PENDING", "processing"), "PENDING");
 });
