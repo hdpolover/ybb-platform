@@ -2419,13 +2419,13 @@ function LandingPageTab({ brandId }: { brandId: string }) {
                 <FieldView label="Title" value={meta.benefits.title} />
               </div>
               <div className="space-y-2">
-                {meta.benefits.groups.map((g, i) => (
+                {(meta.benefits.groups ?? []).map((g, i) => (
                   <div key={i} className="rounded-lg border border-zinc-100 bg-zinc-50 px-4 py-3">
                     <p className="text-sm font-medium text-zinc-800">{g.title || <span className="text-zinc-400">Untitled group</span>}</p>
-                    <p className="mt-0.5 text-xs text-zinc-400">{g.items.length} items{g.imageUrl ? " · has image" : ""}</p>
+                    <p className="mt-0.5 text-xs text-zinc-400">{g.items?.length ?? 0} items{g.imageUrl ? " · has image" : ""}</p>
                   </div>
                 ))}
-                {meta.benefits.groups.length === 0 && <p className="text-sm text-zinc-400">No groups defined.</p>}
+                {(meta.benefits.groups?.length ?? 0) === 0 && <p className="text-sm text-zinc-400">No groups defined.</p>}
               </div>
             </div>
           ) : (
