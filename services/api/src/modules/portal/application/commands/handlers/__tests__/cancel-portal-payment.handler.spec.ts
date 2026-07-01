@@ -64,4 +64,13 @@ describe('CancelPortalPaymentHandler', () => {
         ).rejects.toBeInstanceOf(BadRequestException);
         expect(mockPrisma.$transaction).not.toHaveBeenCalled();
     });
+
+    it('fails closed and throws when the gateway status could not be verified (outcome: error)', async () => {
+        mockGatewayClient.voidTransaction.mockResolvedValue({ outcome: 'error', detail: 'gateway timeout' });
+
+        await expect(
+            handler.execute({ userId: 'user-1', invoiceId: 'inv-1', reason: 'changed my mind' } as any),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    });
 });
