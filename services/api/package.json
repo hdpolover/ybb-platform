@@ -33,6 +33,7 @@
     "prisma:migrate:remote": "ts-node prisma/seeds/internal/run-remote-migration.ts",
     "prisma:reset": "prisma migrate reset",
     "landing:snapshots:backfill": "ts-node -r tsconfig-paths/register src/scripts/backfill-landing-snapshots.ts",
+    "backfill:orphaned-cancellations": "ts-node -r tsconfig-paths/register src/scripts/backfill-orphaned-cancellations.ts",
     "migrate:form-field-catalog": "ts-node -r tsconfig-paths/register prisma/migration-scripts/migrate-form-field-catalog.ts",
     "migrate:submission-form-normalization": "ts-node -r tsconfig-paths/register prisma/migration-scripts/migrate-submission-form-normalization.ts",
     "migrate:reconcile-system-field-types": "ts-node -r tsconfig-paths/register prisma/migration-scripts/reconcile-system-field-types.ts",
