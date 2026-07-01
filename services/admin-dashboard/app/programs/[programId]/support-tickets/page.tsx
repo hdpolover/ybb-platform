@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
+import { useQueryStates, parseAsString, parseAsInteger, parseAsStringEnum } from "nuqs";
 import { ArrowPathIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import {
   deleteProgramSupportTicket,
@@ -18,6 +19,9 @@ import {
 } from "@/src/shared/api-client";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { Skeleton } from "@/src/ui/skeleton";
+import { Input } from "@/src/ui/input";
+import { FilterSelect } from "@/src/ui/select";
+import { FilterGrid, FilterActions } from "@/src/ui/filter-grid";
 import { TicketStatusTabs } from "@/app/components/support/TicketStatusTabs";
 import { TicketListItem } from "@/app/components/support/TicketListItem";
 import { TicketDetailHeader } from "@/app/components/support/TicketDetailHeader";
@@ -28,9 +32,20 @@ import {
   guessMimeTypeFromUrl,
   sanitizeRichHtml,
   stripUploadedScreenshotsSection,
+  STATUS_OPTIONS,
   PRIORITY_OPTIONS,
   toTitleCase,
 } from "@/app/components/support/types";
+
+// URL-persisted filter state (nuqs) — mirrors the pattern in
+// app/programs/[programId]/payments/page.tsx. Keys are distinct from the
+// `ticket` param (read separately via useSearchParams below) to avoid collision.
+const supportTicketsFilterParsers = {
+  search: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
+  status: parseAsStringEnum(["", ...STATUS_OPTIONS]).withDefault("").withOptions({ clearOnDefault: true }),
+  priority: parseAsStringEnum(["", ...PRIORITY_OPTIONS]).withDefault("").withOptions({ clearOnDefault: true }),
+  page: parseAsInteger.withDefault(1).withOptions({ clearOnDefault: true }),
+};
 
 export default function SupportTicketsPage() {
   const params = useParams<{ programId: string }>();
@@ -74,11 +89,43 @@ export default function SupportTicketsPage() {
   const [deletingTicket, setDeletingTicket] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [searchInput, setSearchInput] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<ProgramSupportTicketStatus | "">("");
-  const [priorityFilter, setPriorityFilter] = useState<ProgramSupportTicketPriority | "">("");
-  const [page, setPage] = useState(1);
+
+  // All filters live in the URL via nuqs (batched updates -> single history write per change).
+  const [filters, setFilters] = useQueryStates(supportTicketsFilterParsers);
+  const { search: searchQuery, status: statusFilter, priority: priorityFilter, page } = filters;
+
+  // Local input state for the search box so typing feels instant; synced to
+  // the nuqs-backed `search` filter on a short debounce so we don't write to
+  // the URL (and refetch) on every keystroke.
+  const [searchInput, setSearchInput] = useState(searchQuery);
+  const lastSyncedSearch = useRef(searchQuery);
+
+  useEffect(() => {
+    if (searchQuery !== lastSyncedSearch.current) {
+      lastSyncedSearch.current = searchQuery;
+      setSearchInput(searchQuery);
+    }
+  }, [searchQuery]);
+
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      if (searchInput !== searchQuery) {
+        lastSyncedSearch.current = searchInput;
+        void setFilters({ search: searchInput || null, page: 1 });
+      }
+    }, 400);
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchInput]);
+
+  const hasActiveFilters = Boolean(searchQuery || statusFilter || priorityFilter);
+
+  const clearFilters = useCallback(() => {
+    setSearchInput("");
+    lastSyncedSearch.current = "";
+    void setFilters({ search: null, status: null, priority: null, page: null });
+  }, [setFilters]);
+
   const [total, setTotal] = useState(0);
   const limit = 20;
 
@@ -339,8 +386,7 @@ export default function SupportTicketsPage() {
         counts={tabCounts}
         activeStatus={statusFilter}
         onStatusChange={(status) => {
-          setStatusFilter(status);
-          setPage(1);
+          void setFilters({ status: status || null, page: 1 });
         }}
       />
 
@@ -362,32 +408,34 @@ export default function SupportTicketsPage() {
           </div>
 
           {/* Search */}
-          <div className="mb-3 grid gap-2">
-            <div className="relative">
-              <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />
-              <input
-                type="text"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Search tickets..."
-                className="w-full rounded-md border border-zinc-200 py-2 pl-8 pr-3 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    setPage(1);
-                    setSearchQuery(searchInput.trim());
-                  }
-                }}
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <select
+          <div className="mb-3 space-y-2">
+            <FilterGrid className="grid-cols-1">
+              <div className="relative">
+                <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />
+                <Input
+                  type="text"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  placeholder="Search tickets..."
+                  className="h-10 pl-8 text-xs"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      lastSyncedSearch.current = searchInput;
+                      void setFilters({ search: searchInput.trim() || null, page: 1 });
+                    }
+                  }}
+                />
+              </div>
+              <FilterSelect
+                aria-label="Priority"
                 value={priorityFilter}
                 onChange={(e) => {
-                  setPriorityFilter(e.target.value as ProgramSupportTicketPriority | "");
-                  setPage(1);
+                  void setFilters({
+                    priority: (e.target.value || null) as typeof priorityFilter | null,
+                    page: 1,
+                  });
                 }}
-                className="flex-1 rounded-md border border-zinc-200 px-2.5 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               >
                 <option value="">All priorities</option>
                 {PRIORITY_OPTIONS.map((priority) => (
@@ -395,18 +443,9 @@ export default function SupportTicketsPage() {
                     {toTitleCase(priority)}
                   </option>
                 ))}
-              </select>
-              <button
-                type="button"
-                onClick={() => {
-                  setPage(1);
-                  setSearchQuery(searchInput.trim());
-                }}
-                className="rounded-md bg-blue-500 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-600"
-              >
-                Search
-              </button>
-            </div>
+              </FilterSelect>
+            </FilterGrid>
+            <FilterActions resultCount={total} onClear={clearFilters} disabled={!hasActiveFilters} />
           </div>
 
           {/* Ticket list */}
@@ -454,7 +493,7 @@ export default function SupportTicketsPage() {
               <button
                 type="button"
                 disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
+                onClick={() => void setFilters({ page: page - 1 })}
                 className="rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 disabled:opacity-40 hover:bg-zinc-50"
               >
                 Previous
@@ -465,7 +504,7 @@ export default function SupportTicketsPage() {
               <button
                 type="button"
                 disabled={page >= Math.ceil(total / limit)}
-                onClick={() => setPage((p) => p + 1)}
+                onClick={() => void setFilters({ page: page + 1 })}
                 className="rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 disabled:opacity-40 hover:bg-zinc-50"
               >
                 Next

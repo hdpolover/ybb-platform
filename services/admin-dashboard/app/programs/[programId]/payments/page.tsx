@@ -1,7 +1,8 @@
 "use client";
 
-import { use, useEffect, useState, useCallback, useMemo } from "react";
+import { use, useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
+import { useQueryStates, parseAsString, parseAsInteger, parseAsStringEnum } from "nuqs";
 import {
   Search,
   Eye,
@@ -12,7 +13,6 @@ import {
   Clock,
   XCircle,
   CheckCircle2,
-  FilterX,
   CircleDollarSign,
 } from "lucide-react";
 import {
@@ -33,6 +33,8 @@ import { useAuth } from "@/app/contexts/AuthContext";
 import { PageHeader } from "@/src/admin/page-header";
 import { Button } from "@/src/ui/button";
 import { Input } from "@/src/ui/input";
+import { FilterSelect } from "@/src/ui/select";
+import { FilterGrid, FilterField, FilterActions } from "@/src/ui/filter-grid";
 import {
   Dialog,
   DialogContent,
@@ -83,8 +85,45 @@ const FOLLOW_UP_LABELS: Record<string, string> = {
 };
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
-const FILTER_SELECT_CLASS = "h-10 w-full rounded-md border border-zinc-200 bg-white px-3 pr-8 text-sm text-zinc-700 focus:outline-none focus:ring-2 focus:ring-blue-500";
 const REGION_NAMES = typeof Intl !== "undefined" ? new Intl.DisplayNames(["en"], { type: "region" }) : null;
+
+const FOLLOW_UP_FILTER_VALUES = [
+  "",
+  "participant_cancelled",
+  "payment_cancelled_issue",
+  "payment_failed",
+  "manual_proof_rejected",
+  "payment_processing_stuck",
+  "all_problems",
+] as const;
+const SORT_BY_VALUES = ["createdAt", "paidAt", "amount", "updatedAt"] as const;
+const SORT_ORDER_VALUES = ["asc", "desc"] as const;
+
+// URL-persisted filter state (nuqs). Every field has a `.withDefault(...)`
+// and `clearOnDefault: true` so default values never pollute the URL.
+// Reference pattern — copy this shape for the next pages to migrate.
+const paymentsFilterParsers = {
+  search: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
+  status: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
+  paymentMethod: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
+  tierId: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
+  feeType: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
+  applicationStatus: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
+  followUpStatus: parseAsStringEnum([...FOLLOW_UP_FILTER_VALUES])
+    .withDefault("")
+    .withOptions({ clearOnDefault: true }),
+  currency: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
+  dateFrom: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
+  dateTo: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
+  paidFrom: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
+  paidTo: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
+  minAmount: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
+  maxAmount: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
+  sortBy: parseAsStringEnum([...SORT_BY_VALUES]).withDefault("updatedAt").withOptions({ clearOnDefault: true }),
+  sortOrder: parseAsStringEnum([...SORT_ORDER_VALUES]).withDefault("desc").withOptions({ clearOnDefault: true }),
+  page: parseAsInteger.withDefault(1).withOptions({ clearOnDefault: true }),
+  pageSize: parseAsInteger.withDefault(20).withOptions({ clearOnDefault: true }),
+};
 
 function formatCurrency(amount: number, currency: string) {
   return new Intl.NumberFormat("en-US", {
@@ -172,29 +211,56 @@ export default function PaymentsPage({
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
-  const [statusFilter, setStatusFilter] = useState("");
-  const [search, setSearch] = useState("");
-  const [paymentMethodFilter, setPaymentMethodFilter] = useState("");
-  const [tierFilter, setTierFilter] = useState("");
-  const [feeTypeFilter, setFeeTypeFilter] = useState("");
-  const [applicationStatusFilter, setApplicationStatusFilter] = useState("");
-  const [followUpStatusFilter, setFollowUpStatusFilter] = useState<
-    "" | "participant_cancelled" | "payment_cancelled_issue" | "payment_failed" | "manual_proof_rejected" | "payment_processing_stuck" | "all_problems"
-  >("");
+  // All filters live in the URL via nuqs (batched updates -> single history write per change).
+  const [filters, setFilters] = useQueryStates(paymentsFilterParsers);
+  const {
+    page,
+    pageSize,
+    status: statusFilter,
+    search,
+    paymentMethod: paymentMethodFilter,
+    tierId: tierFilter,
+    feeType: feeTypeFilter,
+    applicationStatus: applicationStatusFilter,
+    followUpStatus: followUpStatusFilter,
+    currency: currencyFilter,
+    dateFrom,
+    dateTo,
+    paidFrom,
+    paidTo,
+    minAmount,
+    maxAmount,
+    sortBy,
+    sortOrder,
+  } = filters;
+
+  // Local input state for the search box so typing feels instant; synced to
+  // the nuqs-backed `search` filter on a short debounce so we don't write to
+  // the URL (and refetch) on every keystroke.
+  const [searchInput, setSearchInput] = useState(search);
+  const lastSyncedSearch = useRef(search);
+
+  useEffect(() => {
+    if (search !== lastSyncedSearch.current) {
+      lastSyncedSearch.current = search;
+      setSearchInput(search);
+    }
+  }, [search]);
+
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      if (searchInput !== search) {
+        lastSyncedSearch.current = searchInput;
+        void setFilters({ search: searchInput || null, page: 1 });
+      }
+    }, 400);
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchInput]);
+
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [notifyDialogOpen, setNotifyDialogOpen] = useState(false);
   const [notifySending, setNotifySending] = useState(false);
-  const [currencyFilter, setCurrencyFilter] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [paidFrom, setPaidFrom] = useState("");
-  const [paidTo, setPaidTo] = useState("");
-  const [minAmount, setMinAmount] = useState("");
-  const [maxAmount, setMaxAmount] = useState("");
-  const [sortBy, setSortBy] = useState<"createdAt" | "paidAt" | "amount" | "updatedAt">("updatedAt");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [submittingId, setSubmittingId] = useState<string | null>(null);
 
@@ -299,24 +365,30 @@ export default function PaymentsPage({
   }
 
   function clearFilters() {
-    setSearch("");
-    setStatusFilter("");
-    setPaymentMethodFilter("");
-    setTierFilter("");
-    setFeeTypeFilter("");
-    setApplicationStatusFilter("");
-    setFollowUpStatusFilter("");
-    setCurrencyFilter("");
-    setDateFrom("");
-    setDateTo("");
-    setPaidFrom("");
-    setPaidTo("");
-    setMinAmount("");
-    setMaxAmount("");
-    setSortBy("updatedAt");
-    setSortOrder("desc");
-    setPageSize(20);
-    setPage(1);
+    setSearchInput("");
+    lastSyncedSearch.current = "";
+    // Passing `null` resets every field to its parser default and drops it
+    // from the URL (clearOnDefault: true) — a single batched update.
+    void setFilters({
+      search: null,
+      status: null,
+      paymentMethod: null,
+      tierId: null,
+      feeType: null,
+      applicationStatus: null,
+      followUpStatus: null,
+      currency: null,
+      dateFrom: null,
+      dateTo: null,
+      paidFrom: null,
+      paidTo: null,
+      minAmount: null,
+      maxAmount: null,
+      sortBy: null,
+      sortOrder: null,
+      pageSize: null,
+      page: null,
+    });
   }
 
   const currency = invoices[0]?.currency ?? filterOptions.currencies[0]?.value ?? "USD";
@@ -512,29 +584,29 @@ export default function PaymentsPage({
 
       <div className="rounded-lg border border-zinc-200 bg-white">
         <div className="space-y-3 border-b border-zinc-200 px-4 py-3">
-          <div className="grid gap-3 lg:grid-cols-4">
+          <FilterGrid className="lg:grid-cols-4">
             <div className="relative lg:col-span-2">
               <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />
               <Input
                 placeholder="Search name, email, invoice ID, transaction ID…"
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 className="pl-8 h-10 text-sm"
               />
             </div>
-            <select
+            <FilterSelect
+              aria-label="Status"
               value={statusFilter}
-              onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-              className={FILTER_SELECT_CLASS}
+              onChange={(e) => { void setFilters({ status: e.target.value || null, page: 1 }); }}
             >
               {statusOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
-            </select>
-            <select
+            </FilterSelect>
+            <FilterSelect
+              aria-label="Payment method"
               value={paymentMethodFilter}
-              onChange={(e) => { setPaymentMethodFilter(e.target.value); setPage(1); }}
-              className={FILTER_SELECT_CLASS}
+              onChange={(e) => { void setFilters({ paymentMethod: e.target.value || null, page: 1 }); }}
             >
               <option value="">All Methods</option>
               {filterOptions.paymentMethods.map((option) => (
@@ -542,14 +614,14 @@ export default function PaymentsPage({
                   {option.label ?? option.value} ({option.count})
                 </option>
               ))}
-            </select>
-          </div>
+            </FilterSelect>
+          </FilterGrid>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
-            <select
+          <FilterGrid className="lg:grid-cols-7">
+            <FilterSelect
+              aria-label="Tier"
               value={tierFilter}
-              onChange={(e) => { setTierFilter(e.target.value); setPage(1); }}
-              className={FILTER_SELECT_CLASS}
+              onChange={(e) => { void setFilters({ tierId: e.target.value || null, page: 1 }); }}
             >
               <option value="">All Tiers</option>
               {filterOptions.tiers.map((tier) => (
@@ -557,20 +629,20 @@ export default function PaymentsPage({
                   {tier.name}
                 </option>
               ))}
-            </select>
-            <select
+            </FilterSelect>
+            <FilterSelect
+              aria-label="Fee type"
               value={feeTypeFilter}
-              onChange={(e) => { setFeeTypeFilter(e.target.value); setPage(1); }}
-              className={FILTER_SELECT_CLASS}
+              onChange={(e) => { void setFilters({ feeType: e.target.value || null, page: 1 }); }}
             >
               {feeTypeOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
-            </select>
-            <select
+            </FilterSelect>
+            <FilterSelect
+              aria-label="Application status"
               value={applicationStatusFilter}
-              onChange={(e) => { setApplicationStatusFilter(e.target.value); setPage(1); }}
-              className={FILTER_SELECT_CLASS}
+              onChange={(e) => { void setFilters({ applicationStatus: e.target.value || null, page: 1 }); }}
             >
               <option value="">All Application Statuses</option>
               {filterOptions.applicationStatuses.map((option) => (
@@ -578,32 +650,25 @@ export default function PaymentsPage({
                   {formatLabel(option.value)} ({option.count})
                 </option>
               ))}
-            </select>
-            <select
+            </FilterSelect>
+            <FilterSelect
+              aria-label="Follow-up status"
               value={followUpStatusFilter}
               onChange={(e) => {
-                setFollowUpStatusFilter(
-                  e.target.value as
-                    | ""
-                    | "participant_cancelled"
-                    | "payment_cancelled_issue"
-                    | "payment_failed"
-                    | "manual_proof_rejected"
-                    | "payment_processing_stuck"
-                    | "all_problems",
-                );
-                setPage(1);
+                void setFilters({
+                  followUpStatus: (e.target.value || null) as typeof followUpStatusFilter | null,
+                  page: 1,
+                });
               }}
-              className={FILTER_SELECT_CLASS}
             >
               {followUpOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
-            </select>
-            <select
+            </FilterSelect>
+            <FilterSelect
+              aria-label="Currency"
               value={currencyFilter}
-              onChange={(e) => { setCurrencyFilter(e.target.value); setPage(1); }}
-              className={FILTER_SELECT_CLASS}
+              onChange={(e) => { void setFilters({ currency: e.target.value || null, page: 1 }); }}
             >
               <option value="">All Currencies</option>
               {filterOptions.currencies.map((option) => (
@@ -611,13 +676,13 @@ export default function PaymentsPage({
                   {option.value} ({option.count})
                 </option>
               ))}
-            </select>
+            </FilterSelect>
             <Input
               type="number"
               min="0"
               step="1"
               value={minAmount}
-              onChange={(e) => { setMinAmount(e.target.value); setPage(1); }}
+              onChange={(e) => { void setFilters({ minAmount: e.target.value || null, page: 1 }); }}
               className="h-10 text-sm"
               placeholder="Min amount"
             />
@@ -626,106 +691,87 @@ export default function PaymentsPage({
               min="0"
               step="1"
               value={maxAmount}
-              onChange={(e) => { setMaxAmount(e.target.value); setPage(1); }}
+              onChange={(e) => { void setFilters({ maxAmount: e.target.value || null, page: 1 }); }}
               className="h-10 text-sm"
               placeholder="Max amount"
             />
-          </div>
+          </FilterGrid>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
-            <div className="space-y-1">
-              <label className="block text-[11px] font-medium text-zinc-500">Invoice date from</label>
+          <FilterGrid className="lg:grid-cols-7">
+            <FilterField label="Invoice date from" htmlFor="filter-date-from">
               <Input
+                id="filter-date-from"
                 type="date"
                 value={dateFrom}
-                onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
+                onChange={(e) => { void setFilters({ dateFrom: e.target.value || null, page: 1 }); }}
                 className="h-10 text-sm"
-                aria-label="Invoice date from"
               />
-            </div>
-            <div className="space-y-1">
-              <label className="block text-[11px] font-medium text-zinc-500">Invoice date to</label>
+            </FilterField>
+            <FilterField label="Invoice date to" htmlFor="filter-date-to">
               <Input
+                id="filter-date-to"
                 type="date"
                 value={dateTo}
-                onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
+                onChange={(e) => { void setFilters({ dateTo: e.target.value || null, page: 1 }); }}
                 className="h-10 text-sm"
-                aria-label="Invoice date to"
               />
-            </div>
-            <div className="space-y-1">
-              <label className="block text-[11px] font-medium text-zinc-500">Paid date from</label>
+            </FilterField>
+            <FilterField label="Paid date from" htmlFor="filter-paid-from">
               <Input
+                id="filter-paid-from"
                 type="date"
                 value={paidFrom}
-                onChange={(e) => { setPaidFrom(e.target.value); setPage(1); }}
+                onChange={(e) => { void setFilters({ paidFrom: e.target.value || null, page: 1 }); }}
                 className="h-10 text-sm"
-                aria-label="Paid date from"
               />
-            </div>
-            <div className="space-y-1">
-              <label className="block text-[11px] font-medium text-zinc-500">Paid date to</label>
+            </FilterField>
+            <FilterField label="Paid date to" htmlFor="filter-paid-to">
               <Input
+                id="filter-paid-to"
                 type="date"
                 value={paidTo}
-                onChange={(e) => { setPaidTo(e.target.value); setPage(1); }}
+                onChange={(e) => { void setFilters({ paidTo: e.target.value || null, page: 1 }); }}
                 className="h-10 text-sm"
-                aria-label="Paid date to"
               />
-            </div>
-            <div className="space-y-1">
-              <label className="block text-[11px] font-medium text-zinc-500">Sort by</label>
-              <select
-                value={sortBy}
-                onChange={(e) => { setSortBy(e.target.value as "createdAt" | "paidAt" | "amount" | "updatedAt"); setPage(1); }}
-                className={FILTER_SELECT_CLASS}
-              >
-                {SORT_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label className="block text-[11px] font-medium text-zinc-500">Order</label>
-              <select
-                value={sortOrder}
-                onChange={(e) => { setSortOrder(e.target.value as "asc" | "desc"); setPage(1); }}
-                className={FILTER_SELECT_CLASS}
-              >
-                <option value="desc">Descending</option>
-                <option value="asc">Ascending</option>
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label className="block text-[11px] font-medium text-zinc-500">Page size</label>
-              <select
-                value={pageSize}
-                onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
-                className={FILTER_SELECT_CLASS}
-              >
-                {PAGE_SIZE_OPTIONS.map((size) => (
-                  <option key={size} value={size}>{size}/page</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-zinc-400">
-              {meta ? `${meta.total} result${meta.total !== 1 ? "s" : ""}` : ""}
-            </span>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={clearFilters}
-              disabled={!hasActiveFilters}
-              className="h-8 text-xs"
+            </FilterField>
+            <FilterSelect
+              label="Sort by"
+              value={sortBy}
+              onChange={(e) => {
+                void setFilters({
+                  sortBy: e.target.value as typeof sortBy,
+                  page: 1,
+                });
+              }}
             >
-              <FilterX className="mr-1.5 h-3.5 w-3.5" />
-              Clear filters
-            </Button>
-          </div>
+              {SORT_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </FilterSelect>
+            <FilterSelect
+              label="Order"
+              value={sortOrder}
+              onChange={(e) => { void setFilters({ sortOrder: e.target.value as typeof sortOrder, page: 1 }); }}
+            >
+              <option value="desc">Descending</option>
+              <option value="asc">Ascending</option>
+            </FilterSelect>
+            <FilterSelect
+              label="Page size"
+              value={pageSize}
+              onChange={(e) => { void setFilters({ pageSize: Number(e.target.value), page: 1 }); }}
+            >
+              {PAGE_SIZE_OPTIONS.map((size) => (
+                <option key={size} value={size}>{size}/page</option>
+              ))}
+            </FilterSelect>
+          </FilterGrid>
+
+          <FilterActions
+            resultCount={meta?.total}
+            onClear={clearFilters}
+            disabled={!hasActiveFilters}
+          />
         </div>
 
         {selectedIds.size > 0 && (
@@ -910,7 +956,7 @@ export default function PaymentsPage({
                 variant="outline"
                 size="sm"
                 disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
+                onClick={() => void setFilters({ page: page - 1 })}
               >
                 Previous
               </Button>
@@ -918,7 +964,7 @@ export default function PaymentsPage({
                 variant="outline"
                 size="sm"
                 disabled={page >= (meta.totalPages ?? 1)}
-                onClick={() => setPage((p) => p + 1)}
+                onClick={() => void setFilters({ page: page + 1 })}
               >
                 Next
               </Button>

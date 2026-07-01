@@ -1,11 +1,15 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
+import { useQueryStates, parseAsString, parseAsInteger, parseAsStringEnum } from "nuqs";
 import { ArrowPathIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { listApplications, reviewApplication, type Application } from "@/src/shared/api-client";
+import { Input } from "@/src/ui/input";
+import { FilterSelect } from "@/src/ui/select";
+import { FilterGrid, FilterActions } from "@/src/ui/filter-grid";
 import { formatDate } from "@/lib/utils";
 
 const STATUS_BADGE: Record<string, string> = {
@@ -24,19 +28,70 @@ function formatLabel(value: string | null | undefined) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+const SUBMISSION_STATUS_VALUES = [
+  "",
+  "PENDING",
+  "SUBMITTED",
+  "UNDER_REVIEW",
+  "ACCEPTED",
+  "REJECTED",
+  "WAITLISTED",
+] as const;
+
+// URL-persisted filter state (nuqs) — mirrors the pattern in
+// app/programs/[programId]/payments/page.tsx.
+const submissionsFilterParsers = {
+  search: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
+  status: parseAsStringEnum([...SUBMISSION_STATUS_VALUES]).withDefault("").withOptions({ clearOnDefault: true }),
+  page: parseAsInteger.withDefault(1).withOptions({ clearOnDefault: true }),
+};
+
 export default function SubmissionsPage() {
   const params = useParams<{ programId: string }>();
   const resolvedProgramId = useResolvedProgramId(params.programId);
   const { adminProfile } = useAuth();
   const [items, setItems] = useState<Application[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reviewTarget, setReviewTarget] = useState<Application | null>(null);
   const limit = 20;
+
+  // All filters live in the URL via nuqs (batched updates -> single history write per change).
+  const [filters, setFilters] = useQueryStates(submissionsFilterParsers);
+  const { search, status, page } = filters;
+
+  // Local input state for the search box so typing feels instant; synced to
+  // the nuqs-backed `search` filter on a short debounce so we don't write to
+  // the URL (and refetch) on every keystroke.
+  const [searchInput, setSearchInput] = useState(search);
+  const lastSyncedSearch = useRef(search);
+
+  useEffect(() => {
+    if (search !== lastSyncedSearch.current) {
+      lastSyncedSearch.current = search;
+      setSearchInput(search);
+    }
+  }, [search]);
+
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      if (searchInput !== search) {
+        lastSyncedSearch.current = searchInput;
+        void setFilters({ search: searchInput || null, page: 1 });
+      }
+    }, 400);
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchInput]);
+
+  const hasActiveFilters = Boolean(search || status);
+
+  const clearFilters = useCallback(() => {
+    setSearchInput("");
+    lastSyncedSearch.current = "";
+    void setFilters({ search: null, status: null, page: null });
+  }, [setFilters]);
 
   const fetch = useCallback(async () => {
     if (!resolvedProgramId) return;
@@ -61,22 +116,36 @@ export default function SubmissionsPage() {
       </section>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[180px]">
-            <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
-            <input type="text" placeholder="Search by name/email…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="block w-full rounded-md border border-zinc-200 py-1.5 pl-8 pr-3 text-[11px] outline-none focus:border-blue-500" />
-          </div>
-          <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className="rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] outline-none focus:border-blue-500">
-            <option value="">All Statuses</option>
-            <option>PENDING</option>
-            <option>SUBMITTED</option>
-            <option>UNDER_REVIEW</option>
-            <option>ACCEPTED</option>
-            <option>REJECTED</option>
-            <option>WAITLISTED</option>
-          </select>
-          <button type="button" onClick={fetch} className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50"><ArrowPathIcon className="h-3.5 w-3.5" />Refresh</button>
-          <p className="ml-auto text-[11px] text-zinc-500">{total} total</p>
+        <div className="mb-3 space-y-3">
+          <FilterGrid className="lg:grid-cols-4">
+            <div className="relative lg:col-span-2">
+              <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+              <Input
+                type="text"
+                placeholder="Search by name/email…"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                className="h-9 pl-8 text-[11px]"
+              />
+            </div>
+            <FilterSelect
+              aria-label="Status"
+              value={status}
+              onChange={(e) => {
+                void setFilters({ status: (e.target.value || null) as typeof status | null, page: 1 });
+              }}
+            >
+              <option value="">All Statuses</option>
+              <option>PENDING</option>
+              <option>SUBMITTED</option>
+              <option>UNDER_REVIEW</option>
+              <option>ACCEPTED</option>
+              <option>REJECTED</option>
+              <option>WAITLISTED</option>
+            </FilterSelect>
+            <button type="button" onClick={fetch} className="inline-flex items-center justify-center gap-1 rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50"><ArrowPathIcon className="h-3.5 w-3.5" />Refresh</button>
+          </FilterGrid>
+          <FilterActions resultCount={total} onClear={clearFilters} disabled={!hasActiveFilters} />
         </div>
 
         {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
@@ -122,9 +191,9 @@ export default function SubmissionsPage() {
 
         {totalPages > 1 && (
           <div className="mt-3 flex items-center justify-end gap-2">
-            <button type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 disabled:opacity-40 hover:bg-zinc-50">Previous</button>
+            <button type="button" disabled={page <= 1} onClick={() => void setFilters({ page: page - 1 })} className="rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 disabled:opacity-40 hover:bg-zinc-50">Previous</button>
             <span className="text-[11px] text-zinc-600">Page {page} of {totalPages}</span>
-            <button type="button" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} className="rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 disabled:opacity-40 hover:bg-zinc-50">Next</button>
+            <button type="button" disabled={page >= totalPages} onClick={() => void setFilters({ page: page + 1 })} className="rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 disabled:opacity-40 hover:bg-zinc-50">Next</button>
           </div>
         )}
       </section>

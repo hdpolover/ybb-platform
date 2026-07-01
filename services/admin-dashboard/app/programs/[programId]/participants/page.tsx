@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { useQueryStates, parseAsString, parseAsInteger, parseAsStringEnum } from "nuqs";
 import {
   ArrowDownTrayIcon,
   ArrowPathIcon,
@@ -17,6 +18,9 @@ import {
 } from "@/src/shared/api-client";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { EmptyState } from "@/src/admin/empty-state";
+import { Input } from "@/src/ui/input";
+import { FilterSelect } from "@/src/ui/select";
+import { FilterGrid, FilterField, FilterActions } from "@/src/ui/filter-grid";
 import { formatDate } from "@/lib/utils";
 
 const regionNames = typeof Intl !== "undefined" ? new Intl.DisplayNames(["en"], { type: "region" }) : null;
@@ -105,6 +109,43 @@ const SORT_ORDER_OPTIONS = [
 const DEFAULT_PAGE_SIZE = 20;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
+const CATEGORY_VALUES = ["", "fully_funded", "self_funded"] as const;
+// Payment status filter type includes "cancelled" even though it isn't one of
+// the selectable PAYMENT_STATUS_FILTERS options, matching the original state type.
+const PAYMENT_STATUS_VALUES = ["", "unpaid", "paid", "processing", "failed", "cancelled", "refunded"] as const;
+const SORT_BY_VALUES = [
+  "updatedAt",
+  "createdAt",
+  "submittedAt",
+  "participantName",
+  "country",
+  "status",
+  "registrationPaymentStatus",
+  "programPaymentStatus",
+] as const;
+const SORT_ORDER_VALUES = ["desc", "asc"] as const;
+
+// URL-persisted filter state (nuqs) — mirrors the pattern in
+// app/programs/[programId]/payments/page.tsx.
+const participantsFilterParsers = {
+  search: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
+  status: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
+  category: parseAsStringEnum([...CATEGORY_VALUES]).withDefault("").withOptions({ clearOnDefault: true }),
+  country: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
+  registrationPaymentStatus: parseAsStringEnum([...PAYMENT_STATUS_VALUES])
+    .withDefault("")
+    .withOptions({ clearOnDefault: true }),
+  programPaymentStatus: parseAsStringEnum([...PAYMENT_STATUS_VALUES])
+    .withDefault("")
+    .withOptions({ clearOnDefault: true }),
+  sortBy: parseAsStringEnum([...SORT_BY_VALUES]).withDefault("updatedAt").withOptions({ clearOnDefault: true }),
+  sortOrder: parseAsStringEnum([...SORT_ORDER_VALUES]).withDefault("desc").withOptions({ clearOnDefault: true }),
+  startDate: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
+  endDate: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
+  page: parseAsInteger.withDefault(1).withOptions({ clearOnDefault: true }),
+  pageSize: parseAsInteger.withDefault(DEFAULT_PAGE_SIZE).withOptions({ clearOnDefault: true }),
+};
+
 export default function ParticipantsPage() {
   const params = useParams<{ programId: string }>();
   const { accessiblePrograms } = useAuth();
@@ -119,21 +160,50 @@ export default function ParticipantsPage() {
 
   const [items, setItems] = useState<Application[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<"" | "fully_funded" | "self_funded">("");
-  const [countryFilter, setCountryFilter] = useState("");
-  const [registrationPaymentStatusFilter, setRegistrationPaymentStatusFilter] = useState<"" | "unpaid" | "paid" | "processing" | "failed" | "cancelled" | "refunded">("");
-  const [programPaymentStatusFilter, setProgramPaymentStatusFilter] = useState<"" | "unpaid" | "paid" | "processing" | "failed" | "cancelled" | "refunded">("");
-  const [sortBy, setSortBy] = useState<(typeof SORT_BY_OPTIONS)[number]["value"]>("updatedAt");
-  const [sortOrder, setSortOrder] = useState<(typeof SORT_ORDER_OPTIONS)[number]["value"]>("desc");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // All filters live in the URL via nuqs (batched updates -> single history write per change).
+  const [filters, setFilters] = useQueryStates(participantsFilterParsers);
+  const {
+    page,
+    pageSize,
+    status: statusFilter,
+    search,
+    category: categoryFilter,
+    country: countryFilter,
+    registrationPaymentStatus: registrationPaymentStatusFilter,
+    programPaymentStatus: programPaymentStatusFilter,
+    sortBy,
+    sortOrder,
+    startDate,
+    endDate,
+  } = filters;
+
+  // Local input state for the search box so typing feels instant; synced to
+  // the nuqs-backed `search` filter on a short debounce so we don't write to
+  // the URL (and refetch) on every keystroke.
+  const [searchInput, setSearchInput] = useState(search);
+  const lastSyncedSearch = useRef(search);
+
+  useEffect(() => {
+    if (search !== lastSyncedSearch.current) {
+      lastSyncedSearch.current = search;
+      setSearchInput(search);
+    }
+  }, [search]);
+
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      if (searchInput !== search) {
+        lastSyncedSearch.current = searchInput;
+        void setFilters({ search: searchInput || null, page: 1 });
+      }
+    }, 400);
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchInput]);
 
   const hasInvalidDateRange = Boolean(startDate && endDate && startDate > endDate);
   const hasActiveFilters = Boolean(
@@ -212,27 +282,33 @@ export default function ParticipantsPage() {
   useEffect(() => {
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
     if (page > totalPages) {
-      setPage(totalPages);
+      void setFilters({ page: totalPages });
     }
-  }, [page, pageSize, total]);
+  }, [page, pageSize, total, setFilters]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  const resetFilters = useCallback(() => {
-    setSearch("");
-    setStatusFilter("");
-    setCategoryFilter("");
-    setCountryFilter("");
-    setRegistrationPaymentStatusFilter("");
-    setProgramPaymentStatusFilter("");
-    setSortBy("updatedAt");
-    setSortOrder("desc");
-    setStartDate("");
-    setEndDate("");
-    setPageSize(DEFAULT_PAGE_SIZE);
-    setPage(1);
+  const clearFilters = useCallback(() => {
+    setSearchInput("");
+    lastSyncedSearch.current = "";
     setError(null);
-  }, []);
+    // Passing `null` resets every field to its parser default and drops it
+    // from the URL (clearOnDefault: true) — a single batched update.
+    void setFilters({
+      search: null,
+      status: null,
+      category: null,
+      country: null,
+      registrationPaymentStatus: null,
+      programPaymentStatus: null,
+      sortBy: null,
+      sortOrder: null,
+      startDate: null,
+      endDate: null,
+      pageSize: null,
+      page: null,
+    });
+  }, [setFilters]);
 
   const handleExport = useCallback(async () => {
     if (!resolvedBrandId) {
@@ -283,6 +359,14 @@ export default function ParticipantsPage() {
             </span>
             <button
               type="button"
+              onClick={() => void fetchParticipants()}
+              className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2.5 py-1.5 font-medium text-zinc-600 hover:bg-zinc-50"
+            >
+              <ArrowPathIcon className="h-3.5 w-3.5" />
+              Refresh
+            </button>
+            <button
+              type="button"
               onClick={() => void handleExport()}
               disabled={exporting || !resolvedBrandId}
               className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 hover:bg-emerald-100"
@@ -293,206 +377,147 @@ export default function ParticipantsPage() {
           </div>
         </div>
 
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1.5fr)_180px_180px_120px_auto]">
-          <div className="space-y-1">
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-zinc-500">Search</label>
+        <FilterGrid className="lg:grid-cols-4">
+          <FilterField label="Search" htmlFor="filter-search">
             <div className="relative">
               <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
-              <input
+              <Input
+                id="filter-search"
                 type="text"
                 placeholder="Search by name or email..."
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                className="block w-full rounded-md border border-zinc-200 py-2 pl-8 pr-3 text-xs text-zinc-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                className="h-10 pl-8 text-xs"
               />
             </div>
-          </div>
+          </FilterField>
 
-          <div className="space-y-1">
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-zinc-500">Applied from</label>
-            <input
+          <FilterField label="Applied from" htmlFor="filter-start-date">
+            <Input
+              id="filter-start-date"
               type="date"
               value={startDate}
               max={endDate || undefined}
-              onChange={(e) => {
-                setStartDate(e.target.value);
-                setPage(1);
-              }}
-              className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs text-zinc-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              onChange={(e) => { void setFilters({ startDate: e.target.value || null, page: 1 }); }}
+              className="h-10 text-xs"
             />
-          </div>
+          </FilterField>
 
-          <div className="space-y-1">
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-zinc-500">Applied to</label>
-            <input
+          <FilterField label="Applied to" htmlFor="filter-end-date">
+            <Input
+              id="filter-end-date"
               type="date"
               value={endDate}
               min={startDate || undefined}
-              onChange={(e) => {
-                setEndDate(e.target.value);
-                setPage(1);
-              }}
-              className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs text-zinc-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              onChange={(e) => { void setFilters({ endDate: e.target.value || null, page: 1 }); }}
+              className="h-10 text-xs"
             />
-          </div>
+          </FilterField>
 
-          <div className="space-y-1">
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-zinc-500">Page size</label>
-            <select
-              value={pageSize}
-              onChange={(e) => {
-                setPageSize(Number(e.target.value));
-                setPage(1);
-              }}
-              className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs text-zinc-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-            >
-              {PAGE_SIZE_OPTIONS.map((size) => (
-                <option key={size} value={size}>
-                  {size} / page
-                </option>
-              ))}
-            </select>
-          </div>
+          <FilterSelect
+            label="Page size"
+            value={pageSize}
+            onChange={(e) => { void setFilters({ pageSize: Number(e.target.value), page: 1 }); }}
+          >
+            {PAGE_SIZE_OPTIONS.map((size) => (
+              <option key={size} value={size}>
+                {size} / page
+              </option>
+            ))}
+          </FilterSelect>
+        </FilterGrid>
 
-          <div className="flex flex-wrap items-end gap-2">
-            <button
-              type="button"
-              onClick={() => void fetchParticipants()}
-              className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-600 hover:bg-zinc-50"
-            >
-              <ArrowPathIcon className="h-3.5 w-3.5" />
-              Refresh
-            </button>
-            <button
-              type="button"
-              onClick={resetFilters}
-              disabled={!hasActiveFilters}
-              className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-600 disabled:cursor-not-allowed disabled:opacity-60 hover:bg-zinc-50"
-            >
-              <XMarkIcon className="h-3.5 w-3.5" />
-              Reset
-            </button>
-          </div>
-        </div>
+        <FilterGrid className="md:grid-cols-2 lg:grid-cols-6">
+          <FilterSelect
+            label="Category"
+            value={categoryFilter}
+            onChange={(e) => {
+              void setFilters({ category: (e.target.value || null) as typeof categoryFilter | null, page: 1 });
+            }}
+          >
+            {CATEGORY_FILTERS.map((option) => (
+              <option key={option.value || "all"} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </FilterSelect>
 
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-6">
-          <div className="space-y-1">
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-zinc-500">Category</label>
-            <select
-              value={categoryFilter}
-              onChange={(e) => {
-                setCategoryFilter(e.target.value as "" | "fully_funded" | "self_funded");
-                setPage(1);
-              }}
-              className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs text-zinc-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-            >
-              {CATEGORY_FILTERS.map((option) => (
-                <option key={option.value || "all"} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-1">
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-zinc-500">Country</label>
-            <input
+          <FilterField label="Country" htmlFor="filter-country">
+            <Input
+              id="filter-country"
               type="text"
               value={countryFilter}
               placeholder="e.g. Indonesia"
-              onChange={(e) => {
-                setCountryFilter(e.target.value);
-                setPage(1);
-              }}
-              className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs text-zinc-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              onChange={(e) => { void setFilters({ country: e.target.value || null, page: 1 }); }}
+              className="h-10 text-xs"
             />
-          </div>
+          </FilterField>
 
-          <div className="space-y-1">
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-zinc-500">Reg. Payment</label>
-            <select
-              value={registrationPaymentStatusFilter}
-              onChange={(e) => {
-                setRegistrationPaymentStatusFilter(e.target.value as "" | "unpaid" | "paid" | "processing" | "failed" | "cancelled" | "refunded");
-                setPage(1);
-              }}
-              className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs text-zinc-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-            >
-              {PAYMENT_STATUS_FILTERS.map((option) => (
-                <option key={`reg-${option.value || "all"}`} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <FilterSelect
+            label="Reg. Payment"
+            value={registrationPaymentStatusFilter}
+            onChange={(e) => {
+              void setFilters({
+                registrationPaymentStatus: (e.target.value || null) as typeof registrationPaymentStatusFilter | null,
+                page: 1,
+              });
+            }}
+          >
+            {PAYMENT_STATUS_FILTERS.map((option) => (
+              <option key={`reg-${option.value || "all"}`} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </FilterSelect>
 
-          <div className="space-y-1">
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-zinc-500">Prog. Payment</label>
-            <select
-              value={programPaymentStatusFilter}
-              onChange={(e) => {
-                setProgramPaymentStatusFilter(e.target.value as "" | "unpaid" | "paid" | "processing" | "failed" | "cancelled" | "refunded");
-                setPage(1);
-              }}
-              className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs text-zinc-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-            >
-              {PAYMENT_STATUS_FILTERS.map((option) => (
-                <option key={`prog-${option.value || "all"}`} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <FilterSelect
+            label="Prog. Payment"
+            value={programPaymentStatusFilter}
+            onChange={(e) => {
+              void setFilters({
+                programPaymentStatus: (e.target.value || null) as typeof programPaymentStatusFilter | null,
+                page: 1,
+              });
+            }}
+          >
+            {PAYMENT_STATUS_FILTERS.map((option) => (
+              <option key={`prog-${option.value || "all"}`} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </FilterSelect>
 
-          <div className="space-y-1">
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-zinc-500">Sort by</label>
-            <select
-              value={sortBy}
-              onChange={(e) => {
-                setSortBy(e.target.value as (typeof SORT_BY_OPTIONS)[number]["value"]);
-                setPage(1);
-              }}
-              className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs text-zinc-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-            >
-              {SORT_BY_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <FilterSelect
+            label="Sort by"
+            value={sortBy}
+            onChange={(e) => { void setFilters({ sortBy: e.target.value as typeof sortBy, page: 1 }); }}
+          >
+            {SORT_BY_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </FilterSelect>
 
-          <div className="space-y-1">
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-zinc-500">Sort order</label>
-            <select
-              value={sortOrder}
-              onChange={(e) => {
-                setSortOrder(e.target.value as (typeof SORT_ORDER_OPTIONS)[number]["value"]);
-                setPage(1);
-              }}
-              className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs text-zinc-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-            >
-              {SORT_ORDER_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
+          <FilterSelect
+            label="Sort order"
+            value={sortOrder}
+            onChange={(e) => { void setFilters({ sortOrder: e.target.value as typeof sortOrder, page: 1 }); }}
+          >
+            {SORT_ORDER_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </FilterSelect>
+        </FilterGrid>
 
         <div className="flex flex-wrap gap-1.5">
           {STATUS_FILTERS.map((f) => (
             <button
               key={f.value}
               type="button"
-              onClick={() => {
-                setStatusFilter(f.value);
-                setPage(1);
-              }}
+              onClick={() => { void setFilters({ status: f.value || null, page: 1 }); }}
               className={
                 "rounded-full border px-3 py-1 text-[11px] font-medium transition-colors " +
                 (statusFilter === f.value
@@ -504,6 +529,8 @@ export default function ParticipantsPage() {
             </button>
           ))}
         </div>
+
+        <FilterActions resultCount={total} onClear={clearFilters} disabled={!hasActiveFilters} />
       </section>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
@@ -600,7 +627,7 @@ export default function ParticipantsPage() {
             <button
               type="button"
               disabled={page <= 1}
-              onClick={() => setPage((p) => p - 1)}
+              onClick={() => void setFilters({ page: page - 1 })}
               className="rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 disabled:opacity-40 hover:bg-zinc-50"
             >
               Previous
@@ -608,7 +635,7 @@ export default function ParticipantsPage() {
             <button
               type="button"
               disabled={page >= totalPages}
-              onClick={() => setPage((p) => p + 1)}
+              onClick={() => void setFilters({ page: page + 1 })}
               className="rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 disabled:opacity-40 hover:bg-zinc-50"
             >
               Next
