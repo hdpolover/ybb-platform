@@ -3239,6 +3239,190 @@ export function updateProgramInvoiceStatus(
   });
 }
 
+// ─── Revenue / Finance ────────────────────────────────────────────────────────
+
+/**
+ * Shared KPI shape for both the per-program and platform-wide revenue
+ * endpoints. Fee/net figures are config-based ESTIMATES (not settled MDR
+ * figures from the payment gateway) — always label them as such in the UI.
+ * `unbackfilledCount` is the number of paid invoices whose fee/net could not
+ * be computed yet (legacy invoices not yet backfilled) — surface it as an
+ * informational banner, never silently treat it as zero.
+ */
+export type RevenueKpis = {
+  grossIdr: number;
+  grossUsd: number;
+  feeIdr: number;
+  netIdr: number;
+  netUsd: number;
+  paidCount: number;
+  processingCount: number;
+  unpaidCount: number;
+  failedCount: number;
+  cancelledCount: number;
+  refundedCount: number;
+  collectionRate: number;
+  unbackfilledCount: number;
+};
+
+export type RevenueMonthPoint = {
+  label: string;
+  grossIdr: number;
+  feeIdr: number;
+  netIdr: number;
+};
+
+export type RevenueByPaymentMethod = {
+  method: string;
+  grossIdr: number;
+  count: number;
+};
+
+export type RevenueByTier = {
+  tierId: string;
+  tierName: string;
+  grossIdr: number;
+  count: number;
+};
+
+export type RevenueByProgram = {
+  programId: string;
+  programName: string;
+  grossIdr: number;
+  netIdr: number;
+  paidCount: number;
+};
+
+export type RevenueByBrand = {
+  brandId: string;
+  brandName: string;
+  grossIdr: number;
+  netIdr: number;
+  paidCount: number;
+};
+
+export type ProgramRevenueStats = {
+  kpis: RevenueKpis;
+  revenueByMonth: RevenueMonthPoint[];
+  byPaymentMethod: RevenueByPaymentMethod[];
+  byTier: RevenueByTier[];
+};
+
+export type PlatformRevenueStats = {
+  kpis: RevenueKpis;
+  revenueByMonth: RevenueMonthPoint[];
+  byProgram: RevenueByProgram[];
+  byBrand: RevenueByBrand[];
+};
+
+export function getProgramRevenueStats(programId: string): Promise<ProgramRevenueStats> {
+  return request<ProgramRevenueStats>(`/stats/admin/programs/${programId}/revenue`);
+}
+
+export function getPlatformRevenueStats(params?: { brandId?: string }): Promise<PlatformRevenueStats> {
+  const q = new URLSearchParams();
+  if (params?.brandId) q.set("brandId", params.brandId);
+  const qs = q.toString();
+  return request<PlatformRevenueStats>(`/stats/admin/revenue${qs ? `?${qs}` : ""}`);
+}
+
+export type RevenueTransactionRow = {
+  invoiceId: string;
+  applicationId: string;
+  programId: string;
+  programName: string;
+  participantName: string;
+  grossAmount: number;
+  currency: string;
+  // Null when the underlying invoice hasn't been backfilled yet — render as
+  // "—" in the UI, never coerce to 0.
+  feeIdr: number | null;
+  netIdr: number | null;
+  paymentMethod: string | null;
+  status: InvoiceStatus;
+  paidAt: string | null;
+  createdAt: string;
+  externalTransactionId: string | null;
+};
+
+export type RevenueTransactionsMeta = PaginatedMeta & {
+  summary: { unbackfilledCount: number };
+};
+
+export type RevenueTransactionsFilters = {
+  page?: number;
+  limit?: number;
+  status?: InvoiceStatus;
+  currency?: string;
+  programId?: string;
+  brandId?: string;
+  paymentMethod?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  paidFrom?: string;
+  paidTo?: string;
+};
+
+function buildRevenueTransactionsQuery(params: RevenueTransactionsFilters): URLSearchParams {
+  const q = new URLSearchParams();
+  if (params.page) q.set("page", String(params.page));
+  if (params.limit) q.set("limit", String(params.limit));
+  if (params.status) q.set("status", params.status);
+  if (params.currency) q.set("currency", params.currency);
+  if (params.programId) q.set("programId", params.programId);
+  if (params.brandId) q.set("brandId", params.brandId);
+  if (params.paymentMethod) q.set("paymentMethod", params.paymentMethod);
+  if (params.dateFrom) q.set("dateFrom", params.dateFrom);
+  if (params.dateTo) q.set("dateTo", params.dateTo);
+  if (params.paidFrom) q.set("paidFrom", params.paidFrom);
+  if (params.paidTo) q.set("paidTo", params.paidTo);
+  return q;
+}
+
+// Mirrors listProgramInvoices: the TransformInterceptor nests pagination meta
+// plus a `summary` sibling under `meta`, so a raw fetch is used to preserve
+// `summary` instead of the standard requestPaginated() wrapper.
+export async function listRevenueTransactions(
+  params: RevenueTransactionsFilters,
+): Promise<{ data: RevenueTransactionRow[]; meta: RevenueTransactionsMeta }> {
+  const q = buildRevenueTransactionsQuery(params);
+  const headers = new Headers();
+  headers.set("Authorization", `Bearer ${getAccessToken()}`);
+  const res = await fetch(buildApiUrl(`/stats/admin/revenue/transactions?${q.toString()}`), { headers });
+  if (!res.ok) throw new Error(await readErrorMessage(res));
+
+  const payload = (await res.json()) as {
+    data?: RevenueTransactionRow[];
+    meta?: Record<string, unknown> & {
+      meta?: PaginatedMeta;
+      summary?: { unbackfilledCount: number };
+    };
+  };
+
+  const data = (payload.data ?? []) as RevenueTransactionRow[];
+  const rawMeta = (payload.meta ?? {}) as Record<string, unknown> & {
+    meta?: PaginatedMeta;
+    summary?: { unbackfilledCount: number };
+  };
+  const paginationMeta = (rawMeta.meta ?? rawMeta) as PaginatedMeta;
+  const summary = rawMeta.summary ?? { unbackfilledCount: 0 };
+
+  return { data, meta: { ...paginationMeta, summary } };
+}
+
+// Export ignores pagination — it exports every row matching the filters, not
+// just the current page — so `page`/`limit` are intentionally excluded here.
+export function exportRevenueTransactionsExcel(
+  params: Omit<RevenueTransactionsFilters, "page" | "limit">,
+): Promise<void> {
+  const q = buildRevenueTransactionsQuery(params);
+  const date = new Date().toISOString().slice(0, 10);
+  return triggerFileDownload(
+    buildApiUrl(`/stats/admin/revenue/transactions/export?${q.toString()}`),
+    `revenue-transactions-${date}.xlsx`,
+  );
+}
+
 // ─── Ambassadors ──────────────────────────────────────────────────────────────
 
 export type Ambassador = {
