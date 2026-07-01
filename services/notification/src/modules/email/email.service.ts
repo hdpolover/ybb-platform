@@ -183,8 +183,22 @@ export class EmailService {
           }
         : safeData.brand;
 
+    // Hide the program label when it merely restates the brand name
+    // (e.g. brand "China Youth Summit" + program "China Youth Summit 2026") —
+    // the header already shows the brand, so the program line would be redundant.
+    const brandName = typeof brand?.name === 'string' ? brand.name.trim() : '';
+    const programName =
+      typeof safeData.program === 'string' ? safeData.program.trim() : '';
+    const program =
+      programName &&
+      brandName &&
+      programName.toLowerCase().startsWith(brandName.toLowerCase())
+        ? undefined
+        : safeData.program;
+
     return {
       ...safeData,
+      program,
       brand,
       theme,
     };
