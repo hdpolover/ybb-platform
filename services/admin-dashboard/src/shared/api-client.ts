@@ -3056,6 +3056,7 @@ export type InvoiceListItem = {
     | "payment_cancelled_issue"
     | "payment_failed"
     | "manual_proof_rejected"
+    | "payment_processing_stuck"
     | null;
   createdAt: string;
   updatedAt: string;
@@ -3101,7 +3102,9 @@ export async function listProgramInvoices(params: {
     | "participant_cancelled"
     | "payment_cancelled_issue"
     | "payment_failed"
-    | "manual_proof_rejected";
+    | "manual_proof_rejected"
+    | "payment_processing_stuck"
+    | "all_problems";
   currency?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -3210,6 +3213,18 @@ export function verifyInvoice(
   return request<unknown>(`/admin/payments/invoices/${id}/verify`, {
     method: "POST",
     body: JSON.stringify({ action, reason }),
+  });
+}
+
+export interface NotifyPaymentIssueResult {
+  sent: number;
+  skipped: { invoiceId: string; reason: string }[];
+}
+
+export function notifyPaymentIssue(invoiceIds: string[]): Promise<NotifyPaymentIssueResult> {
+  return request<NotifyPaymentIssueResult>("/admin/payments/notify-payment-issue", {
+    method: "POST",
+    body: JSON.stringify({ invoiceIds }),
   });
 }
 

@@ -119,6 +119,42 @@ export const EMAIL_TEMPLATE_PRESETS: EmailTemplatePreset[] = [
     defaultBody:
       "<p>Hi {{name}},</p><p>Your support ticket for {{brand.name}} has been updated.</p><p>Ticket number: <strong>{{ticketNumber}}</strong></p><p>Status changed from <strong>{{previousStatus}}</strong> to <strong>{{status}}</strong>.</p><p><a href=\"{{supportUrl}}\">Review update</a></p>",
   },
+  {
+    type: "payment_issue_alternative",
+    label: "Payment Issue — Alternative Payment Methods",
+    description: "Sent manually by an admin to offer PayPal/bank transfer alternatives when a participant's payment has an issue.",
+    usedFor: "Manual admin action for problem payments (failed, stuck, rejected proof, etc.)",
+    variables: ["{{firstName}}", "{{programName}}", "{{paymentUrl}}"],
+    defaultSubject: "Alternative Payment Options for Your YBB Program",
+    defaultBody:
+      "<p>Hello {{firstName}},</p>" +
+      "<p>According to the information available on our website, it appears there was an issue processing your payment for {{programName}}. To make the process easier, we'd like to offer alternative payment options. You may pay via PayPal or bank transfer using the details below.</p>" +
+      "<div style=\"border:1px solid #e4e4e7;border-radius:8px;padding:16px;margin:16px 0;background:#fafafa;\">" +
+      "<p style=\"margin:0 0 8px;font-weight:600;\">PayPal</p>" +
+      "<p style=\"margin:0 0 8px;\">Option A: PayPal PT. Youth Break the Boundaries<br/>Email: info@ybbfoundation.com<br/>Username: @ybbfoundation<br/>Link: <a href=\"https://paypal.me/ybbfoundation\">https://paypal.me/ybbfoundation</a></p>" +
+      "<p style=\"margin:0;\">Option B: PayPal Meldi Latifah Saraswati<br/>Email: meldilatifahs@gmail.com<br/>Username: @meldilatifahs<br/>Link: <a href=\"https://paypal.me/meldilatifahs\">https://paypal.me/meldilatifahs</a></p>" +
+      "</div>" +
+      "<div style=\"border:1px solid #e4e4e7;border-radius:8px;padding:16px;margin:16px 0;background:#fafafa;\">" +
+      "<p style=\"margin:0 0 8px;font-weight:600;\">Bank Central Asia (Indonesia)</p>" +
+      "<p style=\"margin:0;\">Account Holder: Meldi Latifah Saraswati<br/>Account Number: 0373863758<br/>Swift Code: CENAIDJAXXX<br/>Bank Address: Jl. Jend. Sudirman No.49-51, Terban, Kec. Gondokusuman, Kota Yogyakarta, DIY 55223, Indonesia</p>" +
+      "</div>" +
+      "<div style=\"border:1px solid #e4e4e7;border-radius:8px;padding:16px;margin:16px 0;background:#fafafa;\">" +
+      "<p style=\"margin:0 0 8px;font-weight:600;\">Vakif Bankasi (Turkiye)</p>" +
+      "<p style=\"margin:0;\">Account Holder: Meldi Latifah Saraswati<br/>Account Number (IBAN): TR42 0001 5001 5800 7313 8836 73<br/>Swift Code: TVBATR2AXXX</p>" +
+      "</div>" +
+      "<p>After paying, submit your payment proof:</p>" +
+      "<ol>" +
+      "<li>Login to your account</li>" +
+      "<li>Go to Payment menu</li>" +
+      "<li>Registration Fee / Batch 1 / Batch 2 — pay now</li>" +
+      "<li>Select manual transfer and select your card</li>" +
+      "<li>Scroll up to the short payment-proof form</li>" +
+      "<li>Input your data and payment proof</li>" +
+      "<li>Submit</li>" +
+      "</ol>" +
+      "<p><a href=\"{{paymentUrl}}\">Go to payment page</a></p>" +
+      "<p>For help, contact us on WhatsApp at +6285733886622. Thank you — we look forward to welcoming you to the program.</p>",
+  },
 ];
 
 export function getEmailTemplatePreset(type?: string | null): EmailTemplatePreset | null {

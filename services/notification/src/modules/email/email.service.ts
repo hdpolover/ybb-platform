@@ -691,6 +691,33 @@ export class EmailService {
     return this.sendRawEmail(to, subject, html);
   }
 
+  async sendPaymentIssueAlternativeEmail(to: string, paymentData: any) {
+    const firstName =
+      typeof paymentData.name === 'string'
+        ? paymentData.name.trim().split(/\s+/)[0] || 'there'
+        : 'there';
+
+    const templateData = {
+      firstName,
+      programName: paymentData.programName,
+      paymentUrl: paymentData.paymentUrl,
+      brand: paymentData.brand,
+      program: paymentData.programName,
+      brandId: paymentData.brandId,
+      programId: paymentData.programId,
+      orderId: paymentData.orderId,
+      amount: paymentData.amount,
+      currency: paymentData.currency,
+    };
+    const { subject, html } = await this.resolveEmailContent({
+      type: 'payment_issue_alternative',
+      fallbackTemplateName: 'payment-issue-alternative',
+      fallbackSubject: 'Alternative Payment Options for Your YBB Program',
+      data: templateData,
+    });
+    return this.sendRawEmail(to, subject, html);
+  }
+
   async sendPaymentRejectedEmail(to: string, paymentData: any) {
     const fallbackPaymentsUrl = this.configService.get('FRONTEND_URL')
       ? `${this.configService.get('FRONTEND_URL')}/dashboard/payments`
