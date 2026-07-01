@@ -65,6 +65,7 @@ async function bootstrap() {
       { exchange: 'ybb.events', exchangeType: 'topic', routingKey: 'payment.rejected' },
       { exchange: 'ybb.events', exchangeType: 'topic', routingKey: 'payment.reminder' },
       { exchange: 'ybb.events', exchangeType: 'topic', routingKey: 'payment.cancelled' },
+      { exchange: 'ybb.events', exchangeType: 'topic', routingKey: 'payment.issue_alternative' },
     ],
   });
 
