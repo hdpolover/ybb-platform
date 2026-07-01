@@ -71,4 +71,13 @@ describe('PaymentGatewayClient.voidTransaction', () => {
         );
         void result;
     });
+
+    it('returns outcome error and does not attempt cancel when the status fetch fails', async () => {
+        mockPaymentClient.get.mockRejectedValue(new Error('ECONNRESET'));
+
+        const result = await client.voidTransaction('txn-1', 'inv-1', 'reason');
+
+        expect(result.outcome).toBe('error');
+        expect(mockPaymentClient.post).not.toHaveBeenCalled();
+    });
 });

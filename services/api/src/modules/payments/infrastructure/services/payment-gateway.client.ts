@@ -40,12 +40,22 @@ export class PaymentGatewayClient {
         reason: string,
     ): Promise<VoidTransactionResult> {
         const headers = this.buildHeaders();
-        const payload = await this.fetchTransactionPayload(transactionId, headers);
+
+        let payload: Record<string, unknown> | null;
+        try {
+            payload = await this.fetchTransactionPayload(transactionId, headers);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.error(
+                `[payment-gateway-client] status fetch failed invoice=${invoiceId} txn=${transactionId}, skipping void: ${message}`,
+            );
+            return { outcome: 'error', detail: `status fetch failed: ${message}` };
+        }
         const status = extractTopLevelStatus(payload);
 
         if (isSettledStatus(status)) {
             this.logger.error(
-                `[payment-gateway-client] DANGER invoice=${invoiceId} txn=${transactionId} is ${status} at gateway — refusing to void`,
+                `[payment-gateway-client] DANGER invoice=${invoiceId} txn=${transactionId} is ${status} at gateway, refusing to void`,
             );
             return { outcome: 'danger_settled', detail: `transaction is ${status} at gateway` };
         }
@@ -65,7 +75,7 @@ export class PaymentGatewayClient {
             const httpStatus = (error as { response?: { status?: number } })?.response?.status;
             if (httpStatus === 400) {
                 this.logger.warn(
-                    `[payment-gateway-client] cancel for invoice ${invoiceId} txn ${transactionId} returned 400 — already terminal`,
+                    `[payment-gateway-client] cancel for invoice ${invoiceId} txn ${transactionId} returned 400 (already terminal)`,
                 );
                 return { outcome: 'already_terminal', detail: 'gateway returned 400 (already terminal)' };
             }
@@ -77,31 +87,23 @@ export class PaymentGatewayClient {
         }
     }
 
+    // Deliberately does not catch: a fetch failure must be distinguishable from a
+    // successful fetch that returns an empty/unknown status. The caller treats a
+    // thrown error as "status unknown, do not attempt cancel" and a resolved null
+    // as "status genuinely empty, safe to attempt cancel" (see voidTransaction).
     private async fetchTransactionPayload(
         transactionId: string,
         headers: Record<string, string>,
     ): Promise<Record<string, unknown> | null> {
-        try {
-            const { data } = await this.paymentServiceClient.get(
-                `/api/v1/payments/${transactionId}`,
-                { headers },
-            );
-            if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
-            const record = data as Record<string, unknown>;
-            return record.data && typeof record.data === 'object' && !Array.isArray(record.data)
-                ? (record.data as Record<string, unknown>)
-                : record;
-        } catch (error) {
-            // Fetch failure => status unknown. Fall through with status '' so the
-            // switch below attempts the cancel (Go's own /cancel endpoint independently
-            // tolerates an already-terminal transaction with its 400 response).
-            this.logger.warn(
-                `[payment-gateway-client] status fetch failed for txn ${transactionId}: ${
-                    error instanceof Error ? error.message : String(error)
-                }`,
-            );
-            return null;
-        }
+        const { data } = await this.paymentServiceClient.get(
+            `/api/v1/payments/${transactionId}`,
+            { headers },
+        );
+        if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+        const record = data as Record<string, unknown>;
+        return record.data && typeof record.data === 'object' && !Array.isArray(record.data)
+            ? (record.data as Record<string, unknown>)
+            : record;
     }
 
     private buildHeaders(): Record<string, string> {
