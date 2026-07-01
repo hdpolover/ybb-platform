@@ -25,7 +25,7 @@ import {
   TableRow,
 } from "@/src/ui/table";
 import { formatDate, formatDateTime } from "@/lib/utils";
-import { formatMoney, formatNullableIdr } from "./revenue-format";
+import { formatMoney, formatNullableIdr, formatPaymentMethodLabel } from "./revenue-format";
 import { UnbackfilledBanner } from "./UnbackfilledBanner";
 
 const STATUS_VALUES = ["", "unpaid", "paid", "processing", "failed", "cancelled", "refunded"] as const;
@@ -364,7 +364,7 @@ export function RevenueTransactionsTable({
               <TableCell className="text-sm font-medium">{formatMoney(row.grossAmount, row.currency as "IDR" | "USD")}</TableCell>
               <TableCell className="text-sm text-zinc-600">{formatNullableIdr(row.feeIdr)}</TableCell>
               <TableCell className="text-sm text-zinc-600">{formatNullableIdr(row.netIdr)}</TableCell>
-              <TableCell className="text-sm text-zinc-500">{row.paymentMethod ?? "—"}</TableCell>
+              <TableCell className="text-sm text-zinc-500">{formatPaymentMethodLabel(row.paymentMethod)}</TableCell>
               <TableCell>
                 <span
                   className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium capitalize ${

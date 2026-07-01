@@ -14,7 +14,7 @@ import { RevenueTrendChart } from "@/app/components/revenue/RevenueTrendChart";
 import { RevenueBarBreakdown } from "@/app/components/revenue/RevenueBarBreakdown";
 import { RevenueTransactionsTable } from "@/app/components/revenue/RevenueTransactionsTable";
 import { UnbackfilledBanner } from "@/app/components/revenue/UnbackfilledBanner";
-import type { CurrencyMode } from "@/app/components/revenue/revenue-format";
+import { formatPaymentMethodLabel, type CurrencyMode } from "@/app/components/revenue/revenue-format";
 
 export default function ProgramRevenuePage({
   params,
@@ -96,7 +96,7 @@ export default function ProgramRevenuePage({
               title="Revenue by Payment Method"
               subtitle="Gross revenue and paid count per method."
               data={stats.byPaymentMethod.map((m) => ({
-                name: m.method,
+                name: formatPaymentMethodLabel(m.method),
                 grossIdr: m.grossIdr,
                 count: m.count,
               }))}
