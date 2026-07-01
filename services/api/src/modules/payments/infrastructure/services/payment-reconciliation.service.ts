@@ -304,6 +304,17 @@ export class PaymentReconciliationService {
                 externalIntentId: true,
                 externalTransactionId: true,
             },
+            // Same watermark strategy as reconcileProcessingInvoices: ascending
+            // lastReconciledAt (nulls first, verified against Postgres's actual
+            // default - ASC otherwise sorts NULLs LAST, which would starve
+            // never-touched rows behind already-stamped ones) means never-touched
+            // invoices surface first, and stamping a row with `new Date()` after
+            // it's handled rotates it to the back of the window. Unlike the
+            // processing/unpaid scan, this query has no recheck-interval WHERE
+            // bound, so getting the null placement right here is load-bearing:
+            // without it, this scan would recreate the exact starvation bug it's
+            // meant to fix.
+            orderBy: [{ lastReconciledAt: { sort: 'asc', nulls: 'first' } }, { updatedAt: 'asc' }],
             take: this.batchSize,
         });
 
@@ -361,12 +372,30 @@ export class PaymentReconciliationService {
                 `[payment-reconciliation] DANGER invoice=${invoice.id} txn=${transactionId} is settled at gateway ` +
                 `while invoice is terminal — needs human refund/un-cancel review`,
             );
+            // Intentionally NOT stamped: this needs persistent human-visible
+            // alerting, so it must keep resurfacing at the front of the
+            // watermark window on every run until a human resolves it.
             return { invoiceId: invoice.id, outcome: 'danger_settled', reason: result.detail };
+        }
+
+        const outcome: TerminalDriftDetail['outcome'] =
+            result.outcome === 'voided' ? 'voided' : result.outcome === 'error' ? 'error' : 'already_terminal';
+
+        if (apply && (outcome === 'voided' || outcome === 'already_terminal')) {
+            // Drift is resolved (either just voided, or was already terminal at the
+            // gateway) - stamp so this row rotates to the back of the ascending
+            // watermark window and doesn't crowd out never-touched rows next run.
+            // 'error' is deliberately excluded so it retries; 'danger_settled' is
+            // handled above and also excluded so it keeps resurfacing.
+            await this.prisma.applicationInvoice.update({
+                where: { id: invoice.id },
+                data: { lastReconciledAt: new Date() },
+            });
         }
 
         return {
             invoiceId: invoice.id,
-            outcome: result.outcome === 'voided' ? 'voided' : result.outcome === 'error' ? 'error' : 'already_terminal',
+            outcome,
             reason: result.detail,
         };
     }
