@@ -1610,7 +1610,26 @@ export class PaymentAdminController {
 
     private extractPaymentMethodFromTransaction(transaction: Record<string, unknown>): string | null {
         const source = this.unwrapPayloadObject(transaction);
+        const providerFromGatewayResponse = this.extractGatewayResponseProvider(source);
+        if (providerFromGatewayResponse) return providerFromGatewayResponse;
         return this.findPaymentMethodDeep(source, 0);
+    }
+
+    /**
+     * The Go payment service stamps the real gateway into gateway_response.provider
+     * at charge time (e.g. "xendit"), independent of the legacy payment_method_id
+     * code (e.g. "midtrans_cc") a method was originally configured with. Preferring
+     * this field over the method-code-derived label fixes the display half of the
+     * gateway-naming drift without requiring the stored mapping to be corrected
+     * first.
+     */
+    private extractGatewayResponseProvider(transaction: Record<string, unknown>): string | null {
+        const gatewayResponse = transaction.gateway_response;
+        if (!gatewayResponse || typeof gatewayResponse !== 'object' || Array.isArray(gatewayResponse)) {
+            return null;
+        }
+        const provider = (gatewayResponse as Record<string, unknown>).provider;
+        return typeof provider === 'string' && provider.trim() ? provider.trim() : null;
     }
 
     private findPaymentMethodDeep(value: unknown, depth: number): string | null {
