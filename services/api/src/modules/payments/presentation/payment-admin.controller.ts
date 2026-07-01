@@ -23,6 +23,7 @@ import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { UserRole } from '@core/entities/user.entity';
 import { CreatePaymentMethodDto, UpdatePaymentMethodDto } from './dto/admin-payment-method.dto';
+import { NotifyPaymentIssueDto } from './dto/notify-payment-issue.dto';
 import { FileServiceClient } from '@modules/files/infrastructure/clients/file-service.client';
 import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
@@ -34,6 +35,13 @@ import { PaymentServiceHttpClient } from '../infrastructure/services/payment-ser
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { buildParticipantPaymentsUrl as buildParticipantPaymentsDashboardUrl } from '@modules/payments/application/utils/participant-dashboard-url.util';
+
+// Display/filter-only threshold for surfacing invoices stuck in 'processing'
+// past a reasonable window. Not tied to the reconciliation cron's own grace
+// period (PAYMENT_RECONCILIATION_GRACE_MINUTES in payment-reconciliation.service.ts),
+// which governs when the cron itself acts — this only affects what the admin
+// invoice list flags as a "follow up" candidate.
+const STUCK_PROCESSING_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
 @ApiTags('Admin Payments')
 @Controller('admin/payments')
@@ -74,7 +82,7 @@ export class PaymentAdminController {
         name: 'followUpStatus',
         required: false,
         description:
-            'participant_cancelled | payment_cancelled_issue | payment_failed | manual_proof_rejected',
+            'participant_cancelled | payment_cancelled_issue | payment_failed | manual_proof_rejected | payment_processing_stuck | all_problems',
     })
     @ApiQuery({ name: 'currency', required: false })
     @ApiQuery({ name: 'dateFrom', required: false, description: 'Invoice createdAt start (ISO date)' })
@@ -257,6 +265,8 @@ export class PaymentAdminController {
             paymentCancelledIssueCount,
             paymentFailedCount,
             manualProofRejectedCount,
+            paymentProcessingStuckCount,
+            allProblemsCount,
         ] = await Promise.all([
             this.prisma.applicationInvoice.findMany({
                 where: listWhere,
@@ -375,6 +385,37 @@ export class PaymentAdminController {
                     ...excludeObsolete,
                 },
             }),
+            this.prisma.applicationInvoice.count({
+                where: {
+                    application: { programId },
+                    status: PaymentStatus.processing,
+                    updatedAt: { lt: new Date(Date.now() - STUCK_PROCESSING_THRESHOLD_MS) },
+                    ...excludeObsolete,
+                },
+            }),
+            this.prisma.applicationInvoice.count({
+                where: {
+                    application: { programId },
+                    OR: [
+                        { status: PaymentStatus.failed, verifiedBy: null },
+                        { status: PaymentStatus.failed, verifiedBy: { not: null } },
+                        {
+                            status: PaymentStatus.cancelled,
+                            NOT: {
+                                rejectionReason: {
+                                    equals: PaymentAdminController.PARTICIPANT_CANCELLATION_REASON,
+                                    mode: 'insensitive',
+                                },
+                            },
+                        },
+                        {
+                            status: PaymentStatus.processing,
+                            updatedAt: { lt: new Date(Date.now() - STUCK_PROCESSING_THRESHOLD_MS) },
+                        },
+                    ],
+                    ...excludeObsolete,
+                },
+            }),
         ]);
         const paymentMethodCatalog = await this.getPaymentMethodCatalog();
         const hasMore = useCursorMode ? invoices.length > limitNum : pageNum * limitNum < total;
@@ -471,6 +512,8 @@ export class PaymentAdminController {
                     { value: 'payment_cancelled_issue', count: paymentCancelledIssueCount },
                     { value: 'payment_failed', count: paymentFailedCount },
                     { value: 'manual_proof_rejected', count: manualProofRejectedCount },
+                    { value: 'payment_processing_stuck', count: paymentProcessingStuckCount },
+                    { value: 'all_problems', count: allProblemsCount },
                 ].filter((row) => row.count > 0),
                 feeTypes: Array.from(
                     tiers.reduce<Map<string, number>>((acc, tier) => {
@@ -526,6 +569,32 @@ export class PaymentAdminController {
                     status: PaymentStatus.failed,
                     verifiedBy: { not: null },
                 };
+            case 'payment_processing_stuck': {
+                const staleCutoff = new Date(Date.now() - STUCK_PROCESSING_THRESHOLD_MS);
+                return {
+                    status: PaymentStatus.processing,
+                    updatedAt: { lt: staleCutoff },
+                };
+            }
+            case 'all_problems': {
+                const staleCutoff = new Date(Date.now() - STUCK_PROCESSING_THRESHOLD_MS);
+                return {
+                    OR: [
+                        { status: PaymentStatus.failed, verifiedBy: null },
+                        { status: PaymentStatus.failed, verifiedBy: { not: null } },
+                        {
+                            status: PaymentStatus.cancelled,
+                            NOT: {
+                                rejectionReason: {
+                                    equals: PaymentAdminController.PARTICIPANT_CANCELLATION_REASON,
+                                    mode: 'insensitive',
+                                },
+                            },
+                        },
+                        { status: PaymentStatus.processing, updatedAt: { lt: staleCutoff } },
+                    ],
+                };
+            }
             default:
                 return null;
         }
@@ -1019,6 +1088,137 @@ export class PaymentAdminController {
         brand: { landingUrl?: string | null; websiteUrl?: string | null } | null | undefined,
     ): string {
         return buildParticipantPaymentsDashboardUrl(brand);
+    }
+
+    @Post('notify-payment-issue')
+    @ApiOperation({ summary: 'Notify participants of a payment issue with alternative payment methods (Admin)' })
+    @ApiBody({ type: NotifyPaymentIssueDto })
+    async notifyPaymentIssue(
+        @Body() body: NotifyPaymentIssueDto,
+        @CurrentUser() user: CurrentUserData,
+    ): Promise<{ sent: number; skipped: { invoiceId: string; reason: string }[] }> {
+        const invoices = await this.prisma.applicationInvoice.findMany({
+            where: { id: { in: body.invoiceIds } },
+            select: {
+                id: true,
+                applicationId: true,
+                amount: true,
+                currency: true,
+                pricingTier: { select: { feeType: true } },
+                application: {
+                    select: {
+                        id: true,
+                        participant: {
+                            select: {
+                                fullName: true,
+                                userId: true,
+                                user: { select: { email: true } },
+                            },
+                        },
+                        program: {
+                            select: {
+                                id: true,
+                                name: true,
+                                brand: {
+                                    select: {
+                                        id: true,
+                                        landingUrl: true,
+                                        websiteUrl: true,
+                                        name: true,
+                                        primaryColor: true,
+                                        logoUrl: true,
+                                        contactEmail: true,
+                                        contactAddress: true,
+                                        socialMediaLinks: true,
+                                        settings: {
+                                            select: {
+                                                footerNavigation: true,
+                                                supportEmail: true,
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        });
+
+        const invoiceById = new Map(invoices.map((invoice) => [invoice.id, invoice]));
+        const skipped: { invoiceId: string; reason: string }[] = [];
+        let sent = 0;
+        const triggeredAt = new Date().toISOString();
+
+        for (const invoiceId of body.invoiceIds) {
+            const invoice = invoiceById.get(invoiceId);
+            if (!invoice) {
+                skipped.push({ invoiceId, reason: 'invoice_not_found' });
+                continue;
+            }
+
+            const email = invoice.application?.participant?.user?.email;
+            if (!email) {
+                skipped.push({ invoiceId, reason: 'missing_email' });
+                continue;
+            }
+
+            const rawBrand = invoice.application?.program?.brand ?? null;
+            const paymentsPageUrl = this.buildParticipantPaymentsUrl(rawBrand);
+            if (!paymentsPageUrl) {
+                this.logger.warn(
+                    `payment.issue_alternative for invoice ${invoiceId} has no paymentsPageUrl: brand.landingUrl/websiteUrl unset`,
+                );
+            }
+            const brandPayload = rawBrand
+                ? {
+                    name: rawBrand.name,
+                    primaryColor: rawBrand.primaryColor,
+                    logoUrl: rawBrand.logoUrl,
+                    websiteUrl: rawBrand.websiteUrl,
+                    contactEmail: rawBrand.contactEmail,
+                    contactAddress: rawBrand.contactAddress,
+                    socialMediaLinks: rawBrand.socialMediaLinks,
+                    settings: rawBrand.settings
+                        ? {
+                            footerNavigation: rawBrand.settings.footerNavigation,
+                            supportEmail: rawBrand.settings.supportEmail,
+                        }
+                        : null,
+                }
+                : null;
+
+            try {
+                await this.rabbitmqProducer.emit('payment.issue_alternative', {
+                    email,
+                    customer_name: invoice.application?.participant?.fullName ?? 'Participant',
+                    amount: Number(invoice.amount),
+                    currency: invoice.currency,
+                    order_id: invoice.id,
+                    program: invoice.application?.program?.name ?? null,
+                    paymentsPageUrl,
+                    brand: brandPayload,
+                    brandId: rawBrand?.id ?? null,
+                    programId: invoice.application?.program?.id ?? null,
+                    feeType: invoice.pricingTier?.feeType,
+                    metadata: {
+                        application_id: invoice.applicationId,
+                        invoice_id: invoice.id,
+                        triggered_by: user.userId,
+                        triggered_at: triggeredAt,
+                    },
+                });
+                sent += 1;
+            } catch (emitError) {
+                const message = emitError instanceof Error ? emitError.message : String(emitError);
+                this.logger.error(
+                    `Failed to publish payment.issue_alternative for invoice ${invoiceId}: ${message}`,
+                );
+                skipped.push({ invoiceId, reason: 'emit_failed' });
+            }
+        }
+
+        return { sent, skipped };
     }
 
     @Patch('invoices/:id/status')

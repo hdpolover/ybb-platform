@@ -19,6 +19,7 @@ import {
   listProgramInvoices,
   submitApplication,
   exportProgramPaymentsExcel,
+  notifyPaymentIssue,
   type InvoiceListItem,
   type InvoiceStatus,
   type InvoiceSummary,
@@ -27,11 +28,19 @@ import {
   type InvoiceFilterOptions,
 } from "@/src/shared/api-client";
 import { toast } from "sonner";
-import { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
+import { ArrowDownTrayIcon, EnvelopeIcon } from "@heroicons/react/24/outline";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { PageHeader } from "@/src/admin/page-header";
 import { Button } from "@/src/ui/button";
 import { Input } from "@/src/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/src/ui/dialog";
 import {
   Table,
   TableBody,
@@ -63,6 +72,14 @@ const FOLLOW_UP_CLASS: Record<string, string> = {
   payment_cancelled_issue: "bg-rose-50 text-rose-700 border-rose-200",
   payment_failed: "bg-red-50 text-red-700 border-red-200",
   manual_proof_rejected: "bg-orange-50 text-orange-700 border-orange-200",
+  // `all_problems` is a filter-only bucket (matches any problem status) — it
+  // is never a real per-row `followUpStatus` value, so no pill style needed.
+  payment_processing_stuck: "bg-amber-50 text-amber-700 border-amber-200",
+};
+
+const FOLLOW_UP_LABELS: Record<string, string> = {
+  payment_processing_stuck: "Processing (stuck)",
+  all_problems: "All Problems",
 };
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
@@ -108,12 +125,16 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
+function formatFollowUpLabel(value: string): string {
+  return FOLLOW_UP_LABELS[value] ?? formatLabel(value);
+}
+
 function FollowUpPill({ status }: { status: InvoiceListItem["followUpStatus"] }) {
   if (!status) return null;
   const cls = FOLLOW_UP_CLASS[status] ?? "bg-zinc-50 text-zinc-600 border-zinc-200";
   return (
     <span className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium ${cls}`}>
-      {formatLabel(status)}
+      {formatFollowUpLabel(status)}
     </span>
   );
 }
@@ -159,7 +180,12 @@ export default function PaymentsPage({
   const [tierFilter, setTierFilter] = useState("");
   const [feeTypeFilter, setFeeTypeFilter] = useState("");
   const [applicationStatusFilter, setApplicationStatusFilter] = useState("");
-  const [followUpStatusFilter, setFollowUpStatusFilter] = useState<"" | "participant_cancelled" | "payment_cancelled_issue" | "payment_failed" | "manual_proof_rejected">("");
+  const [followUpStatusFilter, setFollowUpStatusFilter] = useState<
+    "" | "participant_cancelled" | "payment_cancelled_issue" | "payment_failed" | "manual_proof_rejected" | "payment_processing_stuck" | "all_problems"
+  >("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [notifyDialogOpen, setNotifyDialogOpen] = useState(false);
+  const [notifySending, setNotifySending] = useState(false);
   const [currencyFilter, setCurrencyFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -196,6 +222,7 @@ export default function PaymentsPage({
     if (!resolvedProgramId) return;
     setLoading(true);
     setError(null);
+    setSelectedIds(new Set());
     try {
       const res = await listProgramInvoices({
         programId: resolvedProgramId,
@@ -318,7 +345,7 @@ export default function PaymentsPage({
       { value: "", label: "All Follow-up Statuses" },
       ...filterOptions.followUpStatuses.map((option) => ({
         value: option.value,
-        label: `${formatLabel(option.value)} (${option.count})`,
+        label: `${formatFollowUpLabel(option.value)} (${option.count})`,
       })),
     ],
     [filterOptions.followUpStatuses],
@@ -358,6 +385,60 @@ export default function PaymentsPage({
       window.setTimeout(() => setCopiedKey(null), 1500);
     } catch {
       // no-op
+    }
+  }
+
+  const allOnPageSelected = invoices.length > 0 && invoices.every((inv) => selectedIds.has(inv.id));
+
+  function toggleSelectAllOnPage() {
+    setSelectedIds((prev) => {
+      if (allOnPageSelected) {
+        const next = new Set(prev);
+        invoices.forEach((inv) => next.delete(inv.id));
+        return next;
+      }
+      const next = new Set(prev);
+      invoices.forEach((inv) => next.add(inv.id));
+      return next;
+    });
+  }
+
+  function toggleSelectOne(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function handleSendPaymentIssueEmails() {
+    const invoiceIds = Array.from(selectedIds);
+    if (invoiceIds.length === 0) return;
+    setNotifySending(true);
+    try {
+      const result = await notifyPaymentIssue(invoiceIds);
+      if (result.sent > 0) {
+        toast.success(`Sent to ${result.sent} participant${result.sent !== 1 ? "s" : ""}.`);
+      }
+      if (result.skipped.length > 0) {
+        const summary = result.skipped
+          .slice(0, 3)
+          .map((s) => s.reason)
+          .join("; ");
+        toast.error(
+          `Skipped ${result.skipped.length} invoice${result.skipped.length !== 1 ? "s" : ""}: ${summary}${result.skipped.length > 3 ? "…" : ""}`,
+        );
+      }
+      if (result.sent === 0 && result.skipped.length === 0) {
+        toast.error("No emails were sent.");
+      }
+      setSelectedIds(new Set());
+      setNotifyDialogOpen(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to send emails");
+    } finally {
+      setNotifySending(false);
     }
   }
 
@@ -500,7 +581,19 @@ export default function PaymentsPage({
             </select>
             <select
               value={followUpStatusFilter}
-              onChange={(e) => { setFollowUpStatusFilter(e.target.value as "" | "participant_cancelled" | "payment_cancelled_issue" | "payment_failed" | "manual_proof_rejected"); setPage(1); }}
+              onChange={(e) => {
+                setFollowUpStatusFilter(
+                  e.target.value as
+                    | ""
+                    | "participant_cancelled"
+                    | "payment_cancelled_issue"
+                    | "payment_failed"
+                    | "manual_proof_rejected"
+                    | "payment_processing_stuck"
+                    | "all_problems",
+                );
+                setPage(1);
+              }}
               className={FILTER_SELECT_CLASS}
             >
               {followUpOptions.map((opt) => (
@@ -635,9 +728,35 @@ export default function PaymentsPage({
           </div>
         </div>
 
+        {selectedIds.size > 0 && (
+          <div className="flex items-center justify-between gap-2 border-b border-blue-100 bg-blue-50 px-4 py-2.5">
+            <span className="text-xs font-medium text-blue-800">
+              {selectedIds.size} selected
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => setNotifyDialogOpen(true)}
+              className="h-8 text-xs"
+            >
+              <EnvelopeIcon className="mr-1.5 h-3.5 w-3.5" />
+              Send payment help email
+            </Button>
+          </div>
+        )}
+
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-10">
+                <input
+                  type="checkbox"
+                  checked={allOnPageSelected}
+                  onChange={toggleSelectAllOnPage}
+                  aria-label="Select all invoices on this page"
+                  className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+                />
+              </TableHead>
               <TableHead>Invoice</TableHead>
               <TableHead>Participant</TableHead>
               <TableHead>Tier / Fee Type</TableHead>
@@ -651,20 +770,29 @@ export default function PaymentsPage({
           <TableBody>
             {loading && (
               <TableRow>
-                <TableCell colSpan={8} className="py-10 text-center text-zinc-400">
+                <TableCell colSpan={9} className="py-10 text-center text-zinc-400">
                   <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                 </TableCell>
               </TableRow>
             )}
             {!loading && invoices.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="py-10 text-center text-sm text-zinc-400">
+                <TableCell colSpan={9} className="py-10 text-center text-sm text-zinc-400">
                   No invoices found.
                 </TableCell>
               </TableRow>
             )}
             {!loading && invoices.map((inv) => (
               <TableRow key={inv.id}>
+                <TableCell>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(inv.id)}
+                    onChange={() => toggleSelectOne(inv.id)}
+                    aria-label={`Select invoice ${inv.id}`}
+                    className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+                  />
+                </TableCell>
                 <TableCell className="min-w-[170px]">
                   <div className="flex items-center gap-1.5 text-xs font-mono text-zinc-500">
                     <span>{inv.id.slice(0, 8)}…{inv.id.slice(-4)}</span>
@@ -798,6 +926,36 @@ export default function PaymentsPage({
           </div>
         )}
       </div>
+
+      <Dialog open={notifyDialogOpen} onOpenChange={(open) => { if (!notifySending) setNotifyDialogOpen(open); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Send payment help email</DialogTitle>
+            <DialogDescription>
+              Send the alternative payment instructions email to {selectedIds.size} participant{selectedIds.size !== 1 ? "s" : ""}?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setNotifyDialogOpen(false)}
+              disabled={notifySending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              loading={notifySending}
+              onClick={() => void handleSendPaymentIssueEmails()}
+            >
+              Send email
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

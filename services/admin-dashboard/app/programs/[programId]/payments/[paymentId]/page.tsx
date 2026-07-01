@@ -25,6 +25,7 @@ import { PageHeader } from "@/src/admin/page-header";
 import { Button } from "@/src/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/src/ui/card";
 import { formatDate, formatDateTime } from "@/lib/utils";
+import { NotifyParticipantButton } from "@/app/components/payments/details/NotifyParticipantButton";
 
 const STATUS_CLASS: Record<string, string> = {
   paid: "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -140,6 +141,16 @@ export default function PaymentDetailPage({
   const proofUrl = extractProofUrl(txn) ?? attempts.map((attempt) => extractProofUrl(attempt)).find(Boolean) ?? null;
   const isManualTransfer = isManualTransferPayment(invoice?.paymentMethod ?? null, txn);
   const showPaymentControls = Boolean(invoice);
+  // Gate the payment-help email on genuine payment problems: failed/processing
+  // invoices always qualify; a cancelled invoice only qualifies when the
+  // follow-up status marks it as an issue-driven cancellation, not a
+  // participant's own choice to cancel.
+  const isProblemInvoice = Boolean(
+    invoice &&
+      (invoice.status === "failed" ||
+        invoice.status === "processing" ||
+        (invoice.status === "cancelled" && invoice.followUpStatus === "payment_cancelled_issue")),
+  );
   const looksLikeInvoiceId =
     /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
       paymentId,
@@ -628,6 +639,12 @@ export default function PaymentDetailPage({
                         ? "This gateway transaction is waiting for admin review. You can verify it here or apply a manual override."
                         : "Use these controls when you need to sync or override the invoice status."}
                   </p>
+                  {isProblemInvoice && invoice && (
+                    <NotifyParticipantButton
+                      email={invoice.participant.email ?? "the participant"}
+                      invoiceId={invoice.id}
+                    />
+                  )}
                   {needsReview && invoice?.externalTransactionId ? (
                     <div className="grid gap-2 sm:grid-cols-2">
                       <Button

@@ -292,6 +292,53 @@ export class EventsController {
     });
   }
 
+  @EventPattern('payment.issue_alternative')
+  async handlePaymentIssueAlternative(
+    @Payload() data: unknown,
+    @Ctx() context: RmqContext,
+  ) {
+    const payload = asRecord(data);
+    await this.processEvent(
+      'payment.issue_alternative',
+      payload,
+      context,
+      async () => {
+        this.logger.log(
+          `Received payment.issue_alternative event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+        );
+
+        const email = getString(payload, 'email');
+        if (!email) return;
+
+        const metadata = asRecord(payload.metadata);
+        await this.emailService.sendPaymentIssueAlternativeEmail(email, {
+          name:
+            getString(payload, 'customer_name') ||
+            getString(metadata, 'customer_name') ||
+            'Participant',
+          programName:
+            getString(payload, 'program') ||
+            getString(metadata, 'program') ||
+            undefined,
+          paymentUrl:
+            getString(payload, 'paymentsPageUrl') ||
+            getString(payload, 'payments_page_url') ||
+            undefined,
+          brand: asRecord(payload.brand) ?? undefined,
+          brandId: getString(payload, 'brandId'),
+          programId: getString(payload, 'programId'),
+          orderId:
+            getString(payload, 'order_id') ||
+            getString(payload, 'invoice_id') ||
+            getString(metadata, 'invoice_id') ||
+            'unknown-invoice',
+          amount: getNumber(payload, 'amount'),
+          currency: getString(payload, 'currency') || 'IDR',
+        });
+      },
+    );
+  }
+
   @EventPattern('payment.cancelled')
   handlePaymentCancelled(@Ctx() context: RmqContext) {
     this.acknowledgeMessage(context, 'payment.cancelled', 'skipped');
