@@ -480,6 +480,7 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 			tx.FeeProvider,
 			tx.NetAmount,
 			tx.Currency,
+			tx.PaymentMethodID,
 		)
 
 		// Populate event metadata from intent metadata
@@ -529,6 +530,7 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 			tx.FeeProvider,
 			tx.NetAmount,
 			tx.Currency,
+			tx.PaymentMethodID,
 		)
 		if err := s.publisher.Publish(ctx, event); err != nil {
 			fmt.Printf("failed to publish failed event: %v\n", err)
@@ -672,6 +674,7 @@ func (s *PaymentGrpcServer) SubmitManualPayment(ctx context.Context, req *pb.Sub
 		tx.FeeProvider,
 		tx.NetAmount,
 		tx.Currency,
+		tx.PaymentMethodID,
 	)
 
 	// Persist Transaction
@@ -739,6 +742,7 @@ func (s *PaymentGrpcServer) VerifyManualPayment(ctx context.Context, req *pb.Ver
 			tx.FeeProvider,
 			tx.NetAmount,
 			tx.Currency,
+			tx.PaymentMethodID,
 		)
 
 		if len(intent.Metadata) > 0 {
@@ -771,6 +775,7 @@ func (s *PaymentGrpcServer) VerifyManualPayment(ctx context.Context, req *pb.Ver
 			tx.FeeProvider,
 			tx.NetAmount,
 			tx.Currency,
+			tx.PaymentMethodID,
 		)
 		s.publisher.Publish(ctx, event)
 

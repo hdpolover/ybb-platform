@@ -124,7 +124,11 @@ export class PaymentEventsController {
                 || (data.reason as string)
                 || (data.message as string)
                 || 'Payment cancelled';
-            const method = (data.payment_method as string) || (data.method as string) || undefined;
+            const method =
+                (data.payment_method_id as string)
+                || (data.payment_method as string)
+                || (data.method as string)
+                || undefined;
 
             const cancelledInvoice = await this.markInvoiceCancelled({
                 applicationId,
@@ -255,7 +259,16 @@ export class PaymentEventsController {
             this.logger.debug(`Metrics: payment.succeeded event received`);
             
             const currency = (data.currency as string) || 'IDR';
-            const method = (data.payment_method as string) || (data.method as string) || 'unknown';
+            // Real method, sourced from the payment service's payment_method_id
+            // (mirrors fee_provider/net_amount below). Deliberately has NO 'unknown'
+            // fallback here - that literal must never be written to the invoice.
+            // 'unknown' is only used for the Prometheus label a few lines down.
+            const rawMethod =
+                (data.payment_method_id as string)
+                || (data.payment_method as string)
+                || (data.method as string)
+                || undefined;
+            const method = rawMethod || 'unknown';
             const amount = Number(data.amount) || 0;
             const gatewayOrderId = (data.gateway_order_id as string) || (data.id as string);
             // Fee/net settlement fields sourced from payment_transactions by the payment
@@ -304,7 +317,7 @@ export class PaymentEventsController {
                     currency,
                     transactionId,
                     intentId,
-                    method,
+                    rawMethod,
                     invoiceId,
                     feeProvider,
                     netAmount,
@@ -408,7 +421,7 @@ export class PaymentEventsController {
         currency: string,
         transactionId: string,
         intentId: string,
-        method: string,
+        method: string | undefined,
         existingInvoiceId?: string,
         feeProvider?: number,
         netAmount?: number,
@@ -466,7 +479,10 @@ export class PaymentEventsController {
                             paidAt: new Date(),
                             externalTransactionId: transactionId,
                             externalIntentId: intentId || undefined,
-                            paymentMethod: method,
+                            // Undefined (not written) when the event carries no real method -
+                            // preserves whatever was already set at payment-initiation time
+                            // (e.g. confirm-portal-payment) instead of clobbering it.
+                            ...(method ? { paymentMethod: method } : {}),
                             feeProvider: feeProvider ?? undefined,
                             netAmount: netAmount ?? undefined,
                         },
@@ -500,7 +516,9 @@ export class PaymentEventsController {
                                     paidAt: new Date(),
                                     externalTransactionId: transactionId || undefined,
                                     externalIntentId: intentId || undefined,
-                                    paymentMethod: method,
+                                    // See existingInvoiceId branch above: only overwrite when a
+                                    // real method is known, otherwise preserve the current value.
+                                    ...(method ? { paymentMethod: method } : {}),
                                     feeProvider: feeProvider ?? undefined,
                                     netAmount: netAmount ?? undefined,
                                 },
@@ -525,7 +543,10 @@ export class PaymentEventsController {
                                 exchangeRateSnapshot: exchangeRateSnapshot,
                                 externalTransactionId: transactionId,
                                 externalIntentId: intentId || null,
-                                paymentMethod: method,
+                                // No prior invoice row exists here to preserve a value from, so
+                                // fall back to null (the established "no data" sentinel) rather
+                                // than the literal 'unknown' when the event carries no method.
+                                paymentMethod: method ?? null,
                                 feeProvider: feeProvider ?? null,
                                 netAmount: netAmount ?? null,
                             },
@@ -556,7 +577,7 @@ export class PaymentEventsController {
                         currency,
                         transactionId,
                         intentId: intentId || null,
-                        paymentMethod: method,
+                        paymentMethod: method ?? null,
                         processedAt: new Date().toISOString(),
                     },
                 });
@@ -594,7 +615,12 @@ export class PaymentEventsController {
             this.logger.debug(`Metrics: payment.failed event received`);
             
             const currency = (data.currency as string) || 'IDR';
-            const method = (data.payment_method as string) || (data.method as string) || 'unknown';
+            const rawMethod =
+                (data.payment_method_id as string)
+                || (data.payment_method as string)
+                || (data.method as string)
+                || undefined;
+            const method = rawMethod || 'unknown'; // Prometheus label only, never persisted
 
             this.metricsService.paymentTotal.inc({
                 currency,
@@ -623,7 +649,7 @@ export class PaymentEventsController {
                 intentId,
                 transactionId,
                 failureReason,
-                paymentMethod: method,
+                paymentMethod: rawMethod,
             });
             
             if (failedInvoice?.userId) {

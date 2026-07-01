@@ -166,4 +166,90 @@ describe('PaymentEventsController — idempotency on redelivered event', () => {
             expect(fakeTx.applicationInvoice.create).toHaveBeenCalled();
         });
     });
+
+    describe('handlePaymentSucceeded — payment method persistence', () => {
+        it('writes the real payment method onto the existing invoice when the event carries payment_method_id', async () => {
+            const payload = {
+                email: 'john@example.com',
+                amount: 500000,
+                currency: 'IDR',
+                transaction_id: 'txn-method-1',
+                payment_id: 'txn-method-1',
+                payment_method_id: 'midtrans_cc',
+                metadata: {
+                    application_id: 'app-1',
+                    invoice_id: 'inv-existing',
+                    customer_name: 'John Doe',
+                    description: 'Registration fee',
+                },
+            };
+
+            await controller.handlePaymentSucceeded(payload as any, makeRmqContext());
+
+            expect(fakeTx.applicationInvoice.update).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    where: { id: 'inv-existing' },
+                    data: expect.objectContaining({ paymentMethod: 'midtrans_cc' }),
+                }),
+            );
+        });
+
+        it('does NOT write the literal "unknown" and leaves the existing paymentMethod untouched when the event carries no method', async () => {
+            const payload = {
+                email: 'john@example.com',
+                amount: 500000,
+                currency: 'IDR',
+                transaction_id: 'txn-method-2',
+                payment_id: 'txn-method-2',
+                // No payment_method_id / payment_method / method field at all — this is
+                // the shape of an event published before the payment service carried
+                // the method (or one from an older, in-flight message).
+                metadata: {
+                    application_id: 'app-1',
+                    invoice_id: 'inv-existing',
+                    customer_name: 'John Doe',
+                    description: 'Registration fee',
+                },
+            };
+
+            await controller.handlePaymentSucceeded(payload as any, makeRmqContext());
+
+            const updateCall = fakeTx.applicationInvoice.update.mock.calls.find(
+                ([args]: [{ where: { id: string } }]) => args.where.id === 'inv-existing',
+            );
+            expect(updateCall).toBeDefined();
+            const data = updateCall![0].data as Record<string, unknown>;
+            expect(data.paymentMethod).not.toBe('unknown');
+            // Field must be omitted entirely (Prisma skips undefined keys), so the
+            // invoice keeps whatever paymentMethod it already had (e.g. set at
+            // confirm-portal-payment time), rather than being overwritten.
+            expect('paymentMethod' in data).toBe(false);
+        });
+
+        it('writes null (not "unknown") for a brand-new invoice when the event carries no method', async () => {
+            fakeTx.applicationInvoice.findFirst.mockResolvedValue(null);
+
+            const payload = {
+                email: 'john@example.com',
+                amount: 500000,
+                currency: 'IDR',
+                transaction_id: 'txn-method-3',
+                payment_id: 'txn-method-3',
+                metadata: {
+                    // No invoice_id — goes to the CREATE path
+                    application_id: 'app-1',
+                    customer_name: 'John Doe',
+                    description: 'Registration fee',
+                },
+            };
+
+            await controller.handlePaymentSucceeded(payload as any, makeRmqContext());
+
+            expect(fakeTx.applicationInvoice.create).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    data: expect.objectContaining({ paymentMethod: null }),
+                }),
+            );
+        });
+    });
 });
