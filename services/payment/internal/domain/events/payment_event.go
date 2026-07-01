@@ -43,13 +43,22 @@ type PaymentEvent struct {
 	FeeProvider         float64 `json:"fee_provider"`
 	NetAmount           float64 `json:"net_amount"`
 	TransactionCurrency string  `json:"transaction_currency"`
+
+	// PaymentMethodID is the specific method the transaction settled with
+	// (e.g. "midtrans_cc", "manual_transfer", "bca_va"), sourced from
+	// PaymentTransaction.PaymentMethodID. Distinct from GatewayName, which
+	// historically has been (mis)populated with this same value by callers -
+	// this field is the one consumers should read for the invoice's
+	// payment_method column.
+	PaymentMethodID string `json:"payment_method_id,omitempty"`
 }
 
 // NewPaymentEvent creates a new payment event. intentID and transactionID are
 // optional; callers without an intent/transaction context should pass "".
-// amountTotal, feeProvider, netAmount and transactionCurrency should be
-// sourced from the settled PaymentTransaction entity; pass zero values only
-// when a genuine settled transaction is unavailable at the call site.
+// amountTotal, feeProvider, netAmount, transactionCurrency and
+// paymentMethodID should be sourced from the settled PaymentTransaction
+// entity; pass zero/empty values only when a genuine settled transaction is
+// unavailable at the call site.
 func NewPaymentEvent(
 	eventType EventType,
 	paymentID, intentID, transactionID, applicationID, userID, email string,
@@ -57,6 +66,7 @@ func NewPaymentEvent(
 	currency, status, gatewayName string,
 	amountTotal, feeProvider, netAmount float64,
 	transactionCurrency string,
+	paymentMethodID string,
 ) *PaymentEvent {
 	return &PaymentEvent{
 		Type:                eventType,
@@ -74,6 +84,7 @@ func NewPaymentEvent(
 		FeeProvider:         feeProvider,
 		NetAmount:           netAmount,
 		TransactionCurrency: transactionCurrency,
+		PaymentMethodID:     paymentMethodID,
 		Timestamp:           time.Now(),
 		Metadata:            make(map[string]interface{}),
 	}
