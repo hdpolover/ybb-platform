@@ -492,9 +492,6 @@ export default function SupportTicketsPage() {
               resultCount={total}
               onClear={clearFilters}
               clearDisabled={!hasActiveFilters}
-              advanced={
-                <p className="text-xs text-zinc-400">No additional filters for this view.</p>
-              }
             />
           </div>
 

@@ -33,8 +33,12 @@ export interface FilterPanelProps {
   search: FilterPanelSearchProps;
   /** Always-visible primary filter controls (e.g. Status, Method selects). */
   primary: React.ReactNode;
-  /** Collapsible advanced controls — consumer supplies and lays these out. */
-  advanced: React.ReactNode;
+  /**
+   * Collapsible advanced controls — consumer supplies and lays these out.
+   * Optional: when omitted, the "Filters" toggle and panel are not rendered
+   * (for pages whose filters all fit in the primary row).
+   */
+  advanced?: React.ReactNode;
   /** Count of currently active advanced filters, shown as a badge on the toggle. */
   advancedCount?: number;
   /** Removable chips summarizing currently active filters. */
@@ -55,6 +59,7 @@ export function FilterPanel({
   clearDisabled,
 }: FilterPanelProps) {
   const searchId = React.useId();
+  const hasAdvanced = advanced != null && advanced !== false;
   // Auto-open the advanced panel on mount when it already has active filters
   // hidden inside it, so nothing active is ever invisible to the user.
   const [advancedOpen, setAdvancedOpen] = React.useState(() => advancedCount > 0);
@@ -78,22 +83,24 @@ export function FilterPanel({
 
         <div className="flex flex-wrap items-center gap-3">{primary}</div>
 
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          aria-expanded={advancedOpen}
-          onClick={() => setAdvancedOpen((open) => !open)}
-          className="h-10 shrink-0"
-        >
-          <SlidersHorizontal className="h-3.5 w-3.5" />
-          Filters
-          {advancedCount > 0 && (
-            <span className="ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-500 px-1 text-[10px] font-semibold text-white">
-              {advancedCount}
-            </span>
-          )}
-        </Button>
+        {hasAdvanced && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-expanded={advancedOpen}
+            onClick={() => setAdvancedOpen((open) => !open)}
+            className="h-10 shrink-0"
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            Filters
+            {advancedCount > 0 && (
+              <span className="ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-500 px-1 text-[10px] font-semibold text-white">
+                {advancedCount}
+              </span>
+            )}
+          </Button>
+        )}
       </div>
 
       {activeFilters.length > 0 && (
@@ -117,7 +124,7 @@ export function FilterPanel({
         </div>
       )}
 
-      {advancedOpen && (
+      {hasAdvanced && advancedOpen && (
         <div className="mt-3 border-t border-zinc-200 pt-3">{advanced}</div>
       )}
 

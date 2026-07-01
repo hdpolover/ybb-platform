@@ -24,6 +24,7 @@ import { toast as sonnerToast } from "sonner";
 import { PageHeader } from "@/src/admin/page-header";
 import { Button } from "@/src/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/src/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/src/ui/dialog";
 import { formatDate, formatDateTime } from "@/lib/utils";
 import { NotifyParticipantButton } from "@/app/components/payments/details/NotifyParticipantButton";
 
@@ -114,6 +115,7 @@ export default function PaymentDetailPage({
   const [manualReason, setManualReason] = useState("");
   const [manualSaving, setManualSaving] = useState(false);
   const [submittingApplication, setSubmittingApplication] = useState(false);
+  const [proofOpen, setProofOpen] = useState(false);
 
   async function fetchInvoice() {
     setLoading(true);
@@ -408,7 +410,10 @@ export default function PaymentDetailPage({
                   <CardContent>
                     <dl className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm md:grid-cols-2 xl:grid-cols-3">
                       {Object.entries(txn)
-                        .filter(([k]) => !["id"].includes(k))
+                        // "payment_method_label" is dropped here: it restates the
+                        // same invoice-level payment method already shown in the
+                        // top stat card, with no additional context at this layer.
+                        .filter(([k]) => !["id", "payment_method_label"].includes(k))
                         .map(([key, val]) => (
                           <div key={key}>
                             <dt className="text-zinc-500">{formatKeyLabel(key)}</dt>
@@ -453,6 +458,14 @@ export default function PaymentDetailPage({
                       const attemptProofUrl = extractProofUrl(attempt);
                       const attemptGatewayResponse = getObjectValue(attempt, "gateway_response");
                       const attemptNumber = attempts.length - index;
+                      const attemptId = getStringValue(attempt, "id");
+                      const attemptGatewayReference = getStringValue(attempt, "gateway_reference_id");
+                      // Gateway reference (external gateway's own order/txn id) and
+                      // our internal transaction id are different fields in general,
+                      // but for some gateways they end up identical per attempt —
+                      // only collapse the display when this specific row's values match.
+                      const gatewayReferenceMatchesId =
+                        attemptId !== null && attemptGatewayReference !== null && attemptId === attemptGatewayReference;
                       return (
                         <div key={getStringValue(attempt, "id") ?? `${attemptNumber}-${index}`} className="rounded-lg border border-zinc-200 p-4">
                           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -507,12 +520,14 @@ export default function PaymentDetailPage({
                               <dt className="text-zinc-500">Method</dt>
                               <dd className="text-zinc-900">{formatPaymentMethod(attemptMethod ?? null)}</dd>
                             </div>
-                            <div>
-                              <dt className="text-zinc-500">Gateway Reference</dt>
-                              <dd className="font-mono text-xs text-zinc-800 break-all">
-                                {getStringValue(attempt, "gateway_reference_id") ?? "—"}
-                              </dd>
-                            </div>
+                            {!gatewayReferenceMatchesId && (
+                              <div>
+                                <dt className="text-zinc-500">Gateway Reference</dt>
+                                <dd className="font-mono text-xs text-zinc-800 break-all">
+                                  {attemptGatewayReference ?? "—"}
+                                </dd>
+                              </div>
+                            )}
                             <div>
                               <dt className="text-zinc-500">Amount</dt>
                               <dd className="text-zinc-900">
@@ -552,17 +567,31 @@ export default function PaymentDetailPage({
                   {proofUrl ? (
                     <>
                       {isImageUrl(proofUrl) ? (
-                        <a href={proofUrl} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-md border border-zinc-200">
+                        <button
+                          type="button"
+                          onClick={() => setProofOpen(true)}
+                          aria-label="View payment proof full size"
+                          className="block w-full cursor-zoom-in overflow-hidden rounded-md border border-zinc-200 transition-colors hover:border-zinc-300"
+                        >
                           <img src={proofUrl} alt="Payment proof" className="max-h-96 w-full object-contain bg-zinc-50" />
-                        </a>
+                        </button>
                       ) : (
                         <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
                           Payment proof file is available.
                         </div>
                       )}
                       <div className="flex flex-wrap gap-2">
-                        <Button type="button" variant="outline" size="sm" onClick={() => window.open(proofUrl, "_blank", "noopener,noreferrer")}>
-                          Open proof
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            isImageUrl(proofUrl)
+                              ? setProofOpen(true)
+                              : window.open(proofUrl, "_blank", "noopener,noreferrer")
+                          }
+                        >
+                          {isImageUrl(proofUrl) ? "View proof" : "Open proof"}
                         </Button>
                         {proofUrl && (
                           <Button
@@ -575,6 +604,20 @@ export default function PaymentDetailPage({
                           </Button>
                         )}
                       </div>
+                      {isImageUrl(proofUrl) && (
+                        <Dialog open={proofOpen} onOpenChange={setProofOpen}>
+                          <DialogContent className="max-w-3xl">
+                            <DialogHeader>
+                              <DialogTitle>Payment proof</DialogTitle>
+                            </DialogHeader>
+                            <img
+                              src={proofUrl}
+                              alt="Payment proof"
+                              className="max-h-[80vh] w-full rounded-md object-contain bg-zinc-50"
+                            />
+                          </DialogContent>
+                        </Dialog>
+                      )}
                     </>
                   ) : (
                     <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-500">
@@ -771,24 +814,12 @@ export default function PaymentDetailPage({
                 <CardTitle className="text-base">Quick Info</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-zinc-500">Status</span>
-                  <StatusPill status={invoice.status} />
-                </div>
                 {invoice.followUpStatus && (
                   <div className="flex justify-between gap-3">
                     <span className="text-zinc-500">Follow-up</span>
                     <FollowUpPill status={invoice.followUpStatus} />
                   </div>
                 )}
-                <div className="flex justify-between">
-                  <span className="text-zinc-500">Amount</span>
-                  <span className="font-medium">{formatCurrency(invoice.amount, invoice.currency)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-zinc-500">Tier</span>
-                  <span className="text-zinc-700">{invoice.pricingTier.name}</span>
-                </div>
                 {invoice.application.ticketStatus && (
                   <div className="flex justify-between gap-3">
                     <span className="text-zinc-500">Ticket Type</span>
@@ -805,38 +836,6 @@ export default function PaymentDetailPage({
                   <div className="flex justify-between">
                     <span className="text-zinc-500">Txn Status</span>
                     <StatusPill status={txnStatus} />
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">References</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <div className="space-y-1">
-                  <p className="text-xs uppercase tracking-wide text-zinc-500">Invoice ID</p>
-                  <p className="font-mono text-xs text-zinc-800 break-all">{invoice.id}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs uppercase tracking-wide text-zinc-500">Created</p>
-                  <p className="text-zinc-800">{formatDateTime(invoice.createdAt)}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs uppercase tracking-wide text-zinc-500">Paid At</p>
-                  <p className="text-zinc-800">{invoice.paidAt ? formatDateTime(invoice.paidAt) : "—"}</p>
-                </div>
-                {invoice.externalTransactionId && (
-                  <div className="space-y-1">
-                    <p className="text-xs uppercase tracking-wide text-zinc-500">Transaction ID</p>
-                    <p className="font-mono text-xs text-zinc-800 break-all">{invoice.externalTransactionId}</p>
-                  </div>
-                )}
-                {invoice.externalIntentId && (
-                  <div className="space-y-1">
-                    <p className="text-xs uppercase tracking-wide text-zinc-500">Intent ID</p>
-                    <p className="font-mono text-xs text-zinc-800 break-all">{invoice.externalIntentId}</p>
                   </div>
                 )}
               </CardContent>

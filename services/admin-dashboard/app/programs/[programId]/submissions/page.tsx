@@ -174,7 +174,6 @@ export default function SubmissionsPage() {
             resultCount={total}
             onClear={clearFilters}
             clearDisabled={!hasActiveFilters}
-            advanced={<p className="text-xs text-zinc-400">No additional filters for this view.</p>}
           />
         </div>
 
