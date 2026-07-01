@@ -323,6 +323,172 @@ func TestHandleWebhookUpdatesTransactionByGatewayReference(t *testing.T) {
 	require.Equal(t, entities.PaymentIntentStatusSucceeded, intentRepo.updated.Status)
 }
 
+// newCancelTestFixture builds a handler wired with an in-memory pending
+// transaction/intent pair whose PaymentMethodID/GatewayResponse resolve to
+// the "xendit" gateway via resolveGatewayCancelTarget, and registers gw
+// under that name so h.gatewayFactory.GetGateway("xendit") finds it.
+func newCancelTestFixture(gw *stubPaymentGateway) (handler *PaymentHandler, txRepo *stubTransactionRepository, intentRepo *stubIntentRepository, tx *entities.PaymentTransaction, intent *entities.PaymentIntent) {
+	intent = &entities.PaymentIntent{
+		ID:            "intent-1",
+		UserID:        "user-1",
+		ReferenceType: "application",
+		ReferenceID:   "app-1",
+		Amount:        100000,
+		Currency:      "IDR",
+		Status:        entities.PaymentIntentStatusProcessing,
+		CreatedAt:     time.Unix(100, 0),
+		UpdatedAt:     time.Unix(200, 0),
+	}
+	tx = &entities.PaymentTransaction{
+		ID:                 "tx-1",
+		IntentID:           intent.ID,
+		PaymentMethodID:    "xendit_va",
+		GatewayReferenceID: "gw-ref-1",
+		GatewayResponse:    json.RawMessage(`{"provider":"xendit","token":"inv-123"}`),
+		Currency:           "IDR",
+		AmountTotal:        100000,
+		AmountSubtotal:     100000,
+		NetAmount:          100000,
+		Status:             entities.TransactionStatusPending,
+		CreatedAt:          time.Unix(100, 0),
+		UpdatedAt:          time.Unix(200, 0),
+	}
+
+	intentRepo = &stubIntentRepository{byID: map[string]*entities.PaymentIntent{intent.ID: intent}}
+	txRepo = &stubTransactionRepository{byID: map[string]*entities.PaymentTransaction{tx.ID: tx}}
+
+	gw.name = "xendit"
+	factory := infraGateways.NewGatewayFactory()
+	factory.Register(gw)
+
+	handler = NewPaymentHandler(intentRepo, txRepo, messaging.NewNoOpPublisher(), factory)
+	return handler, txRepo, intentRepo, tx, intent
+}
+
+func postCancel(t *testing.T, handler *PaymentHandler, txID string) *httptest.ResponseRecorder {
+	t.Helper()
+	router := gin.New()
+	router.POST("/payments/:id/cancel", handler.CancelPayment)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/payments/"+txID+"/cancel", bytes.NewBufferString(`{"reason":"test cancel"}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestCancelPaymentSucceedsVoidsTransaction(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	gw := &stubPaymentGateway{}
+	handler, txRepo, intentRepo, tx, intent := newCancelTestFixture(gw)
+
+	rec := postCancel(t, handler, tx.ID)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, entities.TransactionStatusVoid, txRepo.byID[tx.ID].Status)
+	require.Equal(t, entities.PaymentIntentStatusRequiresMethod, intentRepo.byID[intent.ID].Status)
+}
+
+func TestCancelPaymentGatewayNotFoundVoidsLocally(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	// cancelErr matches the 404/NOT_FOUND sentinel; VerifyPayment is left
+	// unconfigured (zero-value) so it returns "not implemented" if the
+	// handler mistakenly called it — the assertions below prove it wasn't.
+	gw := &stubPaymentGateway{cancelErr: errors.New("xendit expire invoice failed: 404 NOT_FOUND")}
+	handler, txRepo, intentRepo, tx, intent := newCancelTestFixture(gw)
+
+	rec := postCancel(t, handler, tx.ID)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, entities.TransactionStatusVoid, txRepo.byID[tx.ID].Status)
+	require.Equal(t, entities.PaymentIntentStatusRequiresMethod, intentRepo.byID[intent.ID].Status)
+}
+
+func TestCancelPaymentExpiredAtGatewayVoidsLocally(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	gw := &stubPaymentGateway{
+		cancelErr:     errors.New("xendit expire invoice failed: invoice already expired"),
+		verifyPayment: &entities.Payment{Status: entities.PaymentStatusFailed},
+	}
+	handler, txRepo, intentRepo, tx, intent := newCancelTestFixture(gw)
+
+	rec := postCancel(t, handler, tx.ID)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, entities.TransactionStatusVoid, txRepo.byID[tx.ID].Status)
+	require.Equal(t, entities.PaymentIntentStatusRequiresMethod, intentRepo.byID[intent.ID].Status)
+}
+
+func TestCancelPaymentAlreadyPaidReconcilesToSuccess(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	gw := &stubPaymentGateway{
+		cancelErr:     errors.New("xendit expire invoice failed: invoice already paid"),
+		verifyPayment: &entities.Payment{Status: entities.PaymentStatusSuccess},
+	}
+	handler, txRepo, intentRepo, tx, intent := newCancelTestFixture(gw)
+
+	rec := postCancel(t, handler, tx.ID)
+
+	require.Equal(t, http.StatusConflict, rec.Code)
+	require.Equal(t, entities.TransactionStatusSuccess, txRepo.byID[tx.ID].Status)
+	require.NotEqual(t, entities.TransactionStatusVoid, txRepo.byID[tx.ID].Status)
+	require.Equal(t, entities.PaymentIntentStatusSucceeded, intentRepo.byID[intent.ID].Status)
+}
+
+func TestCancelPaymentTransientFailureLeavesPending(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	gw := &stubPaymentGateway{
+		cancelErr:     errors.New("xendit expire invoice failed: gateway timeout"),
+		verifyPayment: &entities.Payment{Status: entities.PaymentStatusPending},
+	}
+	handler, txRepo, intentRepo, tx, intent := newCancelTestFixture(gw)
+
+	rec := postCancel(t, handler, tx.ID)
+
+	require.Equal(t, http.StatusBadGateway, rec.Code)
+	require.Equal(t, entities.TransactionStatusPending, txRepo.byID[tx.ID].Status)
+	require.Nil(t, txRepo.updated)
+	require.Equal(t, entities.PaymentIntentStatusProcessing, intentRepo.byID[intent.ID].Status)
+	require.Nil(t, intentRepo.updated)
+}
+
+func TestCancelPaymentVerifyErrorLeavesPending(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	gw := &stubPaymentGateway{
+		cancelErr: errors.New("xendit expire invoice failed: gateway timeout"),
+		verifyErr: errors.New("xendit get invoice failed: connection reset"),
+	}
+	handler, txRepo, intentRepo, tx, intent := newCancelTestFixture(gw)
+
+	rec := postCancel(t, handler, tx.ID)
+
+	require.Equal(t, http.StatusBadGateway, rec.Code)
+	require.Equal(t, entities.TransactionStatusPending, txRepo.byID[tx.ID].Status)
+	require.Nil(t, txRepo.updated)
+	require.Equal(t, entities.PaymentIntentStatusProcessing, intentRepo.byID[intent.ID].Status)
+	require.Nil(t, intentRepo.updated)
+}
+
+func TestCancelPaymentAlreadyTerminalReturns400(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	gw := &stubPaymentGateway{}
+	handler, txRepo, _, tx, _ := newCancelTestFixture(gw)
+	tx.Status = entities.TransactionStatusSuccess
+
+	rec := postCancel(t, handler, tx.ID)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Equal(t, entities.TransactionStatusSuccess, txRepo.byID[tx.ID].Status)
+	require.Nil(t, txRepo.updated)
+}
+
 type stubIntentRepository struct {
 	byID          map[string]*entities.PaymentIntent
 	findAllResult []*entities.PaymentIntent
@@ -411,9 +577,26 @@ func (s *stubTransactionRepository) FindByGatewayReferenceID(ctx context.Context
 
 type stubPaymentGateway struct {
 	webhookPayment *entities.Payment
+
+	// name overrides GetName(); defaults to "stub" when empty so existing
+	// callers that register without setting it keep working.
+	name string
+
+	// cancelErr controls CancelPayment's return value. Zero-value (nil)
+	// means cancel succeeds, matching normal Go zero-value semantics.
+	cancelErr error
+
+	// verifyPayment/verifyErr control VerifyPayment's return value. When
+	// both are unset (zero value), VerifyPayment behaves like before this
+	// change: it returns a "not implemented" error.
+	verifyPayment *entities.Payment
+	verifyErr     error
 }
 
 func (s *stubPaymentGateway) GetName() string {
+	if s.name != "" {
+		return s.name
+	}
 	return "stub"
 }
 
@@ -426,7 +609,10 @@ func (s *stubPaymentGateway) ChargePayment(ctx context.Context, req *gateways.Ch
 }
 
 func (s *stubPaymentGateway) VerifyPayment(ctx context.Context, gatewayOrderID string) (*entities.Payment, error) {
-	return nil, errors.New("not implemented")
+	if s.verifyPayment == nil && s.verifyErr == nil {
+		return nil, errors.New("not implemented")
+	}
+	return s.verifyPayment, s.verifyErr
 }
 
 func (s *stubPaymentGateway) HandleWebhook(ctx context.Context, payload []byte) (*entities.Payment, error) {
@@ -437,7 +623,7 @@ func (s *stubPaymentGateway) HandleWebhook(ctx context.Context, payload []byte) 
 }
 
 func (s *stubPaymentGateway) CancelPayment(ctx context.Context, gatewayOrderID string) error {
-	return errors.New("not implemented")
+	return s.cancelErr
 }
 
 func (s *stubPaymentGateway) RefundPayment(ctx context.Context, gatewayOrderID string, amount float64) error {
