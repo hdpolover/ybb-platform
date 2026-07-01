@@ -3,7 +3,10 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { ExcelService } from '@shared/infrastructure/excel/excel.service';
 import { Response } from 'express';
 import { PaymentStatus, Prisma } from '@prisma/client';
-import { buildE164Phone } from '@shared/utils/phone-e164';
+import {
+  buildE164Phone,
+  extractPhoneFromPersonalData,
+} from '@shared/utils/phone-e164';
 
 @Injectable()
 export class ReportingService {
@@ -184,17 +187,34 @@ export class ReportingService {
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         include: {
           user: { select: { email: true } },
+          applications: {
+            select: { personalData: true },
+            orderBy: { createdAt: 'desc' },
+            take: 5,
+          },
         },
         take: this.exportBatchSize,
       });
       if (participants.length === 0) return;
 
       for (const participant of participants) {
+        const applicationPhone = participant.applications
+          .map((application) =>
+            extractPhoneFromPersonalData(application.personalData),
+          )
+          .find(Boolean);
+
         yield {
           id: participant.id,
           fullName: participant.fullName,
           email: participant.user?.email || 'N/A',
-          phone: buildE164Phone(participant.phoneCountryCode, participant.phoneNumber),
+          phone:
+            applicationPhone ??
+            buildE164Phone(
+              participant.phoneCountryCode,
+              participant.phoneNumber,
+            ) ??
+            '-',
           nationality: participant.nationality,
           institution: participant.institution,
           status: participant.deletedAt ? 'Deleted' : 'Active',
@@ -283,10 +303,12 @@ export class ReportingService {
           program: invoice.application?.program?.name ?? 'Unknown',
           payerEmail: invoice.application?.participant?.user?.email ?? 'N/A',
           payerPhone:
+            extractPhoneFromPersonalData(invoice.application?.personalData) ??
             buildE164Phone(
               invoice.application?.participant?.phoneCountryCode,
               invoice.application?.participant?.phoneNumber,
-            ) ?? '-',
+            ) ??
+            '-',
           tier: invoice.pricingTier?.name ?? 'N/A',
           method: invoice.paymentMethod || '-',
           paidAt: invoice.paidAt ? new Date(invoice.paidAt).toISOString() : '-',
