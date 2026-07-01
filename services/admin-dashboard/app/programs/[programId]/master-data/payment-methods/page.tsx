@@ -347,6 +347,21 @@ function PaymentMethodModal({
   const [gateways, setGateways] = useState<GatewayConfig[]>([]);
   const [gatewaysLoading, setGatewaysLoading] = useState(true);
 
+  // Gateway fee config. `percentageFeeDisplay` is shown to admins as a PERCENT
+  // (e.g. "3.219" = 3.219%); the DB stores it as a fraction (0.03219). Convert
+  // on load (× 100) and on submit (÷ 100) — see handleSubmit.
+  const [percentageFeeDisplay, setPercentageFeeDisplay] = useState(
+    method?.config?.percentage_fee != null
+      // Round to 6dp to absorb float noise from the ×100 conversion (e.g.
+      // 0.03219 * 100 === 3.2189999999999994 without this).
+      ? String(Number((method.config.percentage_fee * 100).toFixed(6)))
+      : "0",
+  );
+  const [fixedFee, setFixedFee] = useState(String(method?.config?.fixed_fee ?? 0));
+  const [minFee, setMinFee] = useState(String(method?.config?.min_fee ?? 0));
+  const [feeCurrency, setFeeCurrency] = useState(method?.config?.currency || "IDR");
+  const [isSurcharge, setIsSurcharge] = useState(method?.config?.is_surcharge ?? false);
+
   // Icon upload
   const [iconFile, setIconFile] = useState<File | null>(null);
   const [iconPreview, setIconPreview] = useState<string | null>(null);
@@ -410,6 +425,26 @@ function PaymentMethodModal({
         setError(msg); toast.error(msg); setLoading(false); return;
       }
     }
+    // Gateway fee config — validate the admin-facing percent value (0-100) and
+    // the currency amounts (non-negative) before converting to the fraction
+    // the API expects.
+    const parsedPercent = Number(percentageFeeDisplay);
+    const parsedFixedFee = Number(fixedFee);
+    const parsedMinFee = Number(minFee);
+    if (type === "AUTOMATIC") {
+      if (!Number.isFinite(parsedPercent) || parsedPercent < 0 || parsedPercent > 100) {
+        const msg = "Percentage fee must be a number between 0 and 100.";
+        setError(msg); toast.error(msg); setLoading(false); return;
+      }
+      if (!Number.isFinite(parsedFixedFee) || parsedFixedFee < 0) {
+        const msg = "Fixed fee cannot be negative.";
+        setError(msg); toast.error(msg); setLoading(false); return;
+      }
+      if (!Number.isFinite(parsedMinFee) || parsedMinFee < 0) {
+        const msg = "Minimum fee cannot be negative.";
+        setError(msg); toast.error(msg); setLoading(false); return;
+      }
+    }
     // Build payload matching the Go entity. Empty strings are sent rather than
     // omitted so that clearing a field on edit actually removes the old value.
     const payload: Partial<PaymentMethod> & { name: string; code: string; iconFile?: File; userId?: string; brandId?: string } = {
@@ -432,6 +467,19 @@ function PaymentMethodModal({
       admin_instructions: type === "MANUAL" ? adminInstructions : "",
       gateway_name: type === "AUTOMATIC" ? gatewayName : "",
       gateway_type: type === "AUTOMATIC" ? gatewayType : "",
+      // Always send a full config object — like `icon` above, the Go update
+      // handler unconditionally overwrites Config with whatever is in the
+      // request body, so omitting it on edit would silently zero out
+      // previously-saved fee settings.
+      config: {
+        fixed_fee: Number.isFinite(parsedFixedFee) ? parsedFixedFee : 0,
+        // toFixed(6) absorbs binary float noise from the ÷100 conversion
+        // (e.g. 3.219 / 100 === 0.032189999999999996 without it).
+        percentage_fee: Number.isFinite(parsedPercent) ? Number((parsedPercent / 100).toFixed(6)) : 0,
+        min_fee: Number.isFinite(parsedMinFee) ? parsedMinFee : 0,
+        currency: feeCurrency || "IDR",
+        is_surcharge: isSurcharge,
+      },
     };
     if (iconFile) {
       if (!userId || !brandId) { setError("Cannot upload icon: missing user or brand context."); setLoading(false); return; }
@@ -552,6 +600,35 @@ function PaymentMethodModal({
                   )}
                 </>
               )}
+
+              <div className="space-y-3 rounded-md border border-zinc-200 bg-white p-3">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Gateway Fee</p>
+                  <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">
+                    Enter the effective rate including any VAT/PPN. Surcharge on: participant pays the fee on top. Surcharge off: you absorb it (net = amount minus fee).
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Percentage Fee (%)">
+                    <input type="number" step="0.001" min={0} max={100} value={percentageFeeDisplay} onChange={(e) => setPercentageFeeDisplay(e.target.value)} placeholder="e.g. 3.219" className={inputCls} />
+                  </Field>
+                  <Field label="Fixed Fee">
+                    <input type="number" step="0.01" min={0} value={fixedFee} onChange={(e) => setFixedFee(e.target.value)} placeholder="e.g. 2220" className={inputCls} />
+                  </Field>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Minimum Fee">
+                    <input type="number" step="0.01" min={0} value={minFee} onChange={(e) => setMinFee(e.target.value)} className={inputCls} />
+                  </Field>
+                  <Field label="Currency">
+                    <input type="text" value={feeCurrency} onChange={(e) => setFeeCurrency(e.target.value.toUpperCase())} placeholder="IDR" className={inputCls} />
+                  </Field>
+                </div>
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked={isSurcharge} onChange={(e) => setIsSurcharge(e.target.checked)} className="h-3.5 w-3.5" />
+                  <span className="text-[11px] font-medium text-zinc-700">Pass fee to participant (surcharge)</span>
+                </label>
+              </div>
             </div>
           )}
 

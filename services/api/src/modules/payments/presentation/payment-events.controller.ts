@@ -253,9 +253,14 @@ export class PaymentEventsController {
             this.logger.debug(`Metrics: payment.succeeded event received`);
             
             const currency = (data.currency as string) || 'IDR';
-            const method = (data.payment_method as string) || (data.method as string) || 'unknown'; 
+            const method = (data.payment_method as string) || (data.method as string) || 'unknown';
             const amount = Number(data.amount) || 0;
             const gatewayOrderId = (data.gateway_order_id as string) || (data.id as string);
+            // Fee/net settlement fields sourced from payment_transactions by the payment
+            // service. May be absent on older events still in flight — stays undefined
+            // (not 0) so the invoice column is simply left untouched/null, never zeroed.
+            const feeProvider = getNullableNumber(data, 'fee_provider');
+            const netAmount = getNullableNumber(data, 'net_amount');
 
             // Counter
             this.metricsService.paymentTotal.inc({
@@ -299,6 +304,8 @@ export class PaymentEventsController {
                     intentId,
                     method,
                     invoiceId,
+                    feeProvider,
+                    netAmount,
                 );
 
                 // Invalidate portal cache for this user to reflect payment immediately
@@ -401,6 +408,8 @@ export class PaymentEventsController {
         intentId: string,
         method: string,
         existingInvoiceId?: string,
+        feeProvider?: number,
+        netAmount?: number,
     ): Promise<{ userId: string; participantId: string; programId: string; invoiceId: string | null } | null> {
         const application = await this.prisma.participantApplication.findUnique({
             where: { id: applicationId },
@@ -456,6 +465,8 @@ export class PaymentEventsController {
                             externalTransactionId: transactionId,
                             externalIntentId: intentId || undefined,
                             paymentMethod: method,
+                            feeProvider: feeProvider ?? undefined,
+                            netAmount: netAmount ?? undefined,
                         },
                         select: { id: true },
                     });
@@ -488,6 +499,8 @@ export class PaymentEventsController {
                                     externalTransactionId: transactionId || undefined,
                                     externalIntentId: intentId || undefined,
                                     paymentMethod: method,
+                                    feeProvider: feeProvider ?? undefined,
+                                    netAmount: netAmount ?? undefined,
                                 },
                                 select: { id: true },
                             });
@@ -511,6 +524,8 @@ export class PaymentEventsController {
                                 externalTransactionId: transactionId,
                                 externalIntentId: intentId || null,
                                 paymentMethod: method,
+                                feeProvider: feeProvider ?? null,
+                                netAmount: netAmount ?? null,
                             },
                         });
                         createdInvoiceId = createdInvoice.id;
@@ -918,6 +933,22 @@ function getString(source: Record<string, unknown>, key: string): string | undef
     if (typeof value !== 'string') return undefined;
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : undefined;
+}
+
+/**
+ * Reads a nullable numeric field off the raw event payload. Returns undefined
+ * (not 0) when absent/invalid so callers can skip writing the column entirely
+ * rather than zeroing it out — needed while feeProvider/netAmount are being
+ * rolled out onto payment.succeeded and older in-flight events still lack them.
+ */
+function getNullableNumber(source: Record<string, unknown>, key: string): number | undefined {
+    const value = source[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.trim() !== '') {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed)) return parsed;
+    }
+    return undefined;
 }
 
 function abbreviateKey(value: string | null): string {
