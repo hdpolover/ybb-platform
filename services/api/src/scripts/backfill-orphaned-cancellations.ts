@@ -35,7 +35,12 @@ import {
 
 dotenv.config();
 
-export type OrphanClassification = 'void' | 'skip_already_terminal' | 'danger_settled' | 'skip_no_reference';
+export type OrphanClassification =
+    | 'void'
+    | 'skip_already_terminal'
+    | 'danger_settled'
+    | 'skip_no_reference'
+    | 'unchecked_error';
 
 export interface OrphanCandidate {
     invoiceId: string;
@@ -57,6 +62,50 @@ export function classifyOrphan(gatewayStatus: string | null): OrphanClassificati
     if (isSettledStatus(gatewayStatus)) return 'danger_settled';
     if (isTerminalNonSettledStatus(gatewayStatus)) return 'skip_already_terminal';
     return 'void'; // PENDING / NEEDS_REVIEW / unknown-but-live
+}
+
+export type FetchOutcomeKind = 'ok' | 'not_found' | 'auth_failure' | 'other_failure';
+
+/**
+ * Pure classification of an HTTP status (or a 'network_error' sentinel for thrown
+ * fetch errors) into a fetch outcome kind. Distinguishes auth failures (bad/missing
+ * PAYMENT_SERVICE_INTERNAL_KEY) from genuine not-found and other failures — a mass
+ * 401 must never be indistinguishable from "nothing to fix" (skip_no_reference).
+ */
+export function classifyFetchOutcome(status: number | 'network_error'): FetchOutcomeKind {
+    if (status === 'network_error') return 'other_failure';
+    if (status === 401 || status === 403) return 'auth_failure';
+    if (status === 404) return 'not_found';
+    if (status >= 200 && status < 300) return 'ok';
+    return 'other_failure';
+}
+
+export interface GatewayStatusResult {
+    kind: FetchOutcomeKind;
+    /** Gateway status string (e.g. PENDING/SUCCESS/VOID). Only meaningful when kind === 'ok'. */
+    status: string | null;
+    httpStatus: number | 'network_error';
+}
+
+export interface PostVoidRecheckDecision {
+    action: 'flag_danger' | 'treat_as_voided';
+}
+
+/**
+ * Pure decision for handling an ambiguous HTTP 400 from the cancel/void endpoint.
+ * The gateway returns 400 for ANY terminal state, including SUCCESS — so a bare 400
+ * can never be trusted as "already voided, safe to reconcile". The caller re-fetches
+ * gateway state and re-runs classifyOrphan on it; this decides what to do with that
+ * fresh classification. Only a confirmed terminal-non-settled re-check is safe to
+ * record as voided — everything else (danger_settled, still-live, or unchecked)
+ * defaults to the conservative flag_danger branch so a race-window settlement is
+ * never silently written over.
+ */
+export function decidePostVoidRecheck(reclassification: OrphanClassification): PostVoidRecheckDecision {
+    if (reclassification === 'skip_already_terminal') {
+        return { action: 'treat_as_voided' };
+    }
+    return { action: 'flag_danger' };
 }
 
 function createPrismaClient(): { prisma: PrismaClient; pool: Pool } {
@@ -87,29 +136,74 @@ function internalHeaders(): Record<string, string> {
     return key ? { 'X-Internal-Service-Key': key } : {};
 }
 
-async function fetchGatewayStatus(transactionId: string): Promise<string | null> {
+async function fetchGatewayStatus(transactionId: string): Promise<GatewayStatusResult> {
+    let httpStatus: number | 'network_error';
     try {
         const response = await fetch(`${paymentServiceBaseUrl()}/api/v1/payments/${transactionId}`, {
             headers: internalHeaders(),
         });
-        if (!response.ok) return null;
+        httpStatus = response.status;
+        const kind = classifyFetchOutcome(httpStatus);
+        if (kind !== 'ok') {
+            return { kind, status: null, httpStatus };
+        }
         const body = (await response.json()) as Record<string, unknown>;
         const record = (body.data && typeof body.data === 'object' ? body.data : body) as Record<string, unknown>;
-        return extractTopLevelStatus(record) || null;
+        return { kind: 'ok', status: extractTopLevelStatus(record) || null, httpStatus };
     } catch {
-        return null;
+        return { kind: 'other_failure', status: null, httpStatus: 'network_error' };
     }
 }
 
-async function voidTransaction(transactionId: string, reason: string): Promise<void> {
+export type VoidOutcome = { outcome: 'ok' } | { outcome: 'http_400' };
+
+async function voidTransaction(transactionId: string, reason: string): Promise<VoidOutcome> {
     const response = await fetch(`${paymentServiceBaseUrl()}/api/v1/payments/${transactionId}/cancel`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...internalHeaders() },
         body: JSON.stringify({ reason }),
     });
-    if (!response.ok && response.status !== 400) {
+    if (response.status === 400) {
+        // Ambiguous: the gateway returns 400 for ANY terminal state, including SUCCESS.
+        // Caller must re-fetch + re-classify before assuming this was a safe no-op.
+        return { outcome: 'http_400' };
+    }
+    if (!response.ok) {
         throw new Error(`cancel failed: HTTP ${response.status}`);
     }
+    return { outcome: 'ok' };
+}
+
+function assertNotAuthFailure(fetchResult: GatewayStatusResult): void {
+    if (fetchResult.kind === 'auth_failure') {
+        throw new Error(
+            `ABORT: PAYMENT_SERVICE_INTERNAL_KEY rejected (HTTP ${fetchResult.httpStatus}) — cannot trust results, no report written`,
+        );
+    }
+}
+
+function describeFetchResult(fetchResult: GatewayStatusResult): string {
+    if (fetchResult.kind === 'ok') return fetchResult.status ?? 'unfetchable';
+    if (fetchResult.kind === 'not_found') return 'not_found';
+    return fetchResult.httpStatus === 'network_error' ? 'network_error' : `http_${fetchResult.httpStatus}`;
+}
+
+interface GatewayCheckResult {
+    fetchResult: GatewayStatusResult;
+    classification: OrphanClassification;
+}
+
+/** Fetches gateway state and classifies it in one step. `not_found` maps to the
+ * genuine skip_no_reference path; `auth_failure`/`other_failure` are surfaced via
+ * `unchecked_error` so the caller can decide (abort, or tag+warn) rather than having
+ * them silently masquerade as "nothing to fix". */
+async function checkGateway(transactionId: string): Promise<GatewayCheckResult> {
+    const fetchResult = await fetchGatewayStatus(transactionId);
+    if (fetchResult.kind === 'ok' || fetchResult.kind === 'not_found') {
+        const status = fetchResult.kind === 'ok' ? fetchResult.status : null;
+        return { fetchResult, classification: classifyOrphan(status) };
+    }
+    return { fetchResult, classification: 'unchecked_error' };
 }
 
 async function findOrphanCandidates(prisma: PrismaClient): Promise<OrphanCandidate[]> {
@@ -140,22 +234,49 @@ async function main(): Promise<void> {
         console.log(`Found ${candidates.length} cancelled invoices with a linked transaction. Re-checking gateway state...`);
 
         for (const candidate of candidates) {
-            const gatewayStatus = await fetchGatewayStatus(candidate.transactionId);
-            const classification = classifyOrphan(gatewayStatus);
+            const initial = await checkGateway(candidate.transactionId);
+            assertNotAuthFailure(initial.fetchResult);
+
+            let classification = initial.classification;
+            let detail = describeFetchResult(initial.fetchResult);
 
             if (classification === 'void' && apply) {
-                await voidTransaction(candidate.transactionId, 'Backfill: orphaned cancelled invoice (2026-07-01 audit)');
-                await prisma.applicationInvoice.update({
-                    where: { id: candidate.invoiceId },
-                    data: { lastReconciledAt: new Date() },
-                });
+                const voidResult = await voidTransaction(
+                    candidate.transactionId,
+                    'Backfill: orphaned cancelled invoice (2026-07-01 audit)',
+                );
+
+                if (voidResult.outcome === 'http_400') {
+                    // 400 is ambiguous (returned for ANY terminal state, including SUCCESS) —
+                    // never assume success. Re-fetch + re-classify before writing anything.
+                    const recheck = await checkGateway(candidate.transactionId);
+                    assertNotAuthFailure(recheck.fetchResult);
+
+                    const decision = decidePostVoidRecheck(recheck.classification);
+                    detail = `post-400 recheck: ${describeFetchResult(recheck.fetchResult)}`;
+
+                    if (decision.action === 'flag_danger') {
+                        classification = 'danger_settled';
+                    } else {
+                        classification = 'skip_already_terminal';
+                        await prisma.applicationInvoice.update({
+                            where: { id: candidate.invoiceId },
+                            data: { lastReconciledAt: new Date() },
+                        });
+                    }
+                } else {
+                    await prisma.applicationInvoice.update({
+                        where: { id: candidate.invoiceId },
+                        data: { lastReconciledAt: new Date() },
+                    });
+                }
             }
 
             results.push({
                 invoiceId: candidate.invoiceId,
                 transactionId: candidate.transactionId,
                 classification,
-                detail: gatewayStatus ?? 'unfetchable',
+                detail,
             });
         }
 
@@ -163,13 +284,21 @@ async function main(): Promise<void> {
         const skipped = results.filter((r) => r.classification === 'skip_already_terminal').length;
         const danger = results.filter((r) => r.classification === 'danger_settled').length;
         const noRef = results.filter((r) => r.classification === 'skip_no_reference').length;
+        const unchecked = results.filter((r) => r.classification === 'unchecked_error').length;
 
-        console.log(`\n${apply ? 'APPLIED' : 'DRY RUN'} — void=${voided} skip_already_terminal=${skipped} danger_settled=${danger} skip_no_reference=${noRef}`);
+        console.log(
+            `\n${apply ? 'APPLIED' : 'DRY RUN'} — void=${voided} skip_already_terminal=${skipped} danger_settled=${danger} skip_no_reference=${noRef} unchecked_error=${unchecked}`,
+        );
         if (danger > 0) {
             console.log('\nDANGER CASES (needs human refund/un-cancel review):');
             for (const r of results.filter((r) => r.classification === 'danger_settled')) {
-                console.log(`  invoice=${r.invoiceId} txn=${r.transactionId} gatewayStatus=${r.detail}`);
+                console.log(`  invoice=${r.invoiceId} txn=${r.transactionId} detail=${r.detail}`);
             }
+        }
+        if (unchecked > 0) {
+            console.warn(
+                `\nWARNING: ${unchecked} records could not be checked due to network/5xx errors — treat report as incomplete`,
+            );
         }
 
         const reportPath = `backfill-orphaned-cancellations.${apply ? 'applied' : 'dry-run'}.${Date.now()}.json`;

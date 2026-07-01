@@ -50,3 +50,6 @@ ybb-service-acc.json
 
 # one-off remediation script backups (contain participant PII)
 scripts/backups/
+
+# backfill script JSON reports (contain transaction/invoice IDs, written to cwd)
+backfill-orphaned-cancellations.*.json
