@@ -1,10 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQueryStates, parseAsString, parseAsInteger, parseAsStringEnum } from "nuqs";
-import { ChevronDown, ChevronUp, ChevronsUpDown, Eye, Mail, Pencil, RefreshCw, Search, Trash2, UserPlus } from "lucide-react";
+import { ChevronDown, ChevronUp, ChevronsUpDown, Eye, Mail, Pencil, RefreshCw, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
 import {
@@ -26,7 +25,10 @@ import { EnglishInput } from "@/src/ui/english-input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/src/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/src/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/src/ui/sheet";
-import { FilterGrid, FilterActions } from "@/src/ui/filter-grid";
+import { FilterField } from "@/src/ui/filter-grid";
+import { FilterSelect } from "@/src/ui/select";
+import { FilterPanel, type FilterPanelActiveFilter } from "@/src/ui/filter-panel";
+import { RowActions } from "@/src/ui/row-actions";
 
 type SortByType =
   | 'fullName'
@@ -49,6 +51,22 @@ const SORT_BY_VALUES = [
   'createdAt',
 ] as const;
 const SORT_ORDER_VALUES = ["asc", "desc"] as const;
+
+const SORT_BY_OPTIONS: Array<{ value: SortByType; label: string }> = [
+  { value: "fullName", label: "Name" },
+  { value: "referralCode", label: "Referral Code" },
+  { value: "institution", label: "Institution" },
+  { value: "isActive", label: "Status" },
+  { value: "totalReferrals", label: "Total Referrals" },
+  { value: "successfulReferrals", label: "Successful Referrals" },
+  { value: "lastReferralAt", label: "Last Referral" },
+  { value: "createdAt", label: "Created At" },
+];
+
+const SORT_ORDER_OPTIONS: Array<{ value: (typeof SORT_ORDER_VALUES)[number]; label: string }> = [
+  { value: "desc", label: "Descending" },
+  { value: "asc", label: "Ascending" },
+];
 
 // URL-persisted filter state (nuqs) — mirrors the pattern in
 // app/programs/[programId]/payments/page.tsx.
@@ -104,6 +122,13 @@ export default function AmbassadorsPage() {
   }, [searchInput]);
 
   const hasActiveFilters = Boolean(search || sortBy !== "createdAt" || sortOrder !== "desc");
+
+  // No filterable fields beyond search/sort exist on this page, so there are
+  // never any removable filter chips or advanced-filter count to show — sort
+  // and order live in the advanced panel per the shared pattern but (like the
+  // payments reference) are intentionally excluded from chips/count.
+  const activeFilters: FilterPanelActiveFilter[] = useMemo(() => [], []);
+  const advancedFilterCount = activeFilters.length;
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Ambassador | null>(null);
@@ -315,21 +340,48 @@ export default function AmbassadorsPage() {
 
       <div className="rounded-lg border border-zinc-200 bg-white">
         <div className="space-y-3 border-b border-zinc-200 px-4 py-3">
-          <FilterGrid className="lg:grid-cols-4">
-            <div className="relative lg:col-span-2">
-              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />
-              <Input
-                placeholder="Search by name, code, or email…"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                className="h-10 pl-8 text-sm"
-              />
-            </div>
-          </FilterGrid>
-          <FilterActions
+          <FilterPanel
+            search={{
+              value: searchInput,
+              onChange: setSearchInput,
+              placeholder: "Search by name, code, or email…",
+            }}
+            primary={null}
+            advancedCount={advancedFilterCount}
+            activeFilters={activeFilters}
             resultCount={loading ? undefined : items.length}
             onClear={clearFilters}
-            disabled={!hasActiveFilters}
+            clearDisabled={!hasActiveFilters}
+            advanced={
+              <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
+                <FilterField label="Sort by" htmlFor="filter-sort-by">
+                  <FilterSelect
+                    id="filter-sort-by"
+                    value={sortBy}
+                    onChange={(e) => { void setFilters({ sortBy: e.target.value as typeof sortBy, page: 1 }); }}
+                  >
+                    {SORT_BY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </FilterSelect>
+                </FilterField>
+                <FilterField label="Sort order" htmlFor="filter-sort-order">
+                  <FilterSelect
+                    id="filter-sort-order"
+                    value={sortOrder}
+                    onChange={(e) => { void setFilters({ sortOrder: e.target.value as typeof sortOrder, page: 1 }); }}
+                  >
+                    {SORT_ORDER_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </FilterSelect>
+                </FilterField>
+              </div>
+            }
           />
         </div>
 
@@ -453,31 +505,34 @@ export default function AmbassadorsPage() {
                     </button>
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <Button variant="ghost" size="sm" asChild>
-                        <Link href={`/programs/${params.programId}/ambassadors/${ambassador.id}`}>
-                          <Eye className="h-3.5 w-3.5" />
-                          View
-                        </Link>
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => openEdit(ambassador)}>
-                        <Pencil className="h-3.5 w-3.5" />
-                        Edit
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={resendingId === ambassador.id}
-                        onClick={() => void handleResendCredentials(ambassador)}
-                      >
-                        <Mail className="h-3.5 w-3.5" />
-                        {resendingId === ambassador.id ? "Sending..." : "Resend"}
-                      </Button>
-                      <Button variant="ghost" size="sm" className="text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => setDeleteTarget(ambassador)}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                        Delete
-                      </Button>
-                    </div>
+                    <RowActions
+                      primary={[
+                        {
+                          label: "View",
+                          icon: Eye,
+                          href: `/programs/${params.programId}/ambassadors/${ambassador.id}`,
+                        },
+                      ]}
+                      menu={[
+                        {
+                          label: "Edit",
+                          icon: Pencil,
+                          onClick: () => openEdit(ambassador),
+                        },
+                        {
+                          label: resendingId === ambassador.id ? "Sending…" : "Resend credentials",
+                          icon: Mail,
+                          disabled: resendingId === ambassador.id,
+                          onClick: () => void handleResendCredentials(ambassador),
+                        },
+                        {
+                          label: "Delete",
+                          icon: Trash2,
+                          destructive: true,
+                          onClick: () => setDeleteTarget(ambassador),
+                        },
+                      ]}
+                    />
                   </TableCell>
                 </TableRow>
               ))}

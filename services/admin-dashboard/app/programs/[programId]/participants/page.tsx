@@ -4,12 +4,11 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useQueryStates, parseAsString, parseAsInteger, parseAsStringEnum } from "nuqs";
+import { Eye } from "lucide-react";
 import {
   ArrowDownTrayIcon,
   ArrowPathIcon,
-  MagnifyingGlassIcon,
   UsersIcon,
-  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import {
   exportApplicationsExcel,
@@ -20,7 +19,9 @@ import { useAuth } from "@/app/contexts/AuthContext";
 import { EmptyState } from "@/src/admin/empty-state";
 import { Input } from "@/src/ui/input";
 import { FilterSelect } from "@/src/ui/select";
-import { FilterGrid, FilterField, FilterActions } from "@/src/ui/filter-grid";
+import { FilterField } from "@/src/ui/filter-grid";
+import { FilterPanel, type FilterPanelActiveFilter } from "@/src/ui/filter-panel";
+import { RowActions } from "@/src/ui/row-actions";
 import { formatDate } from "@/lib/utils";
 
 const regionNames = typeof Intl !== "undefined" ? new Intl.DisplayNames(["en"], { type: "region" }) : null;
@@ -339,6 +340,85 @@ export default function ParticipantsPage() {
     }
   }, [resolvedBrandId, resolvedProgramId, hasInvalidDateRange, statusFilter, search, startDate, endDate]);
 
+  // Chip keys that belong to the always-visible "primary" filters (Status,
+  // Category) rather than the collapsible advanced panel — used to derive
+  // `advancedFilterCount` below without double-counting.
+  const PRIMARY_CHIP_KEYS = useMemo(() => new Set(["status", "category"]), []);
+
+  const activeFilters: FilterPanelActiveFilter[] = useMemo(() => {
+    const chips: FilterPanelActiveFilter[] = [];
+    if (statusFilter) {
+      chips.push({
+        key: "status",
+        label: `Status: ${STATUS_FILTERS.find((o) => o.value === statusFilter)?.label ?? statusFilter}`,
+        onRemove: () => void setFilters({ status: null, page: 1 }),
+      });
+    }
+    if (categoryFilter) {
+      chips.push({
+        key: "category",
+        label: `Category: ${CATEGORY_FILTERS.find((o) => o.value === categoryFilter)?.label ?? categoryFilter}`,
+        onRemove: () => void setFilters({ category: null, page: 1 }),
+      });
+    }
+    if (countryFilter) {
+      chips.push({
+        key: "country",
+        label: `Country: ${countryFilter}`,
+        onRemove: () => void setFilters({ country: null, page: 1 }),
+      });
+    }
+    if (registrationPaymentStatusFilter) {
+      chips.push({
+        key: "registrationPaymentStatus",
+        label: `Reg. Payment: ${
+          PAYMENT_STATUS_FILTERS.find((o) => o.value === registrationPaymentStatusFilter)?.label ??
+          registrationPaymentStatusFilter
+        }`,
+        onRemove: () => void setFilters({ registrationPaymentStatus: null, page: 1 }),
+      });
+    }
+    if (programPaymentStatusFilter) {
+      chips.push({
+        key: "programPaymentStatus",
+        label: `Prog. Payment: ${
+          PAYMENT_STATUS_FILTERS.find((o) => o.value === programPaymentStatusFilter)?.label ??
+          programPaymentStatusFilter
+        }`,
+        onRemove: () => void setFilters({ programPaymentStatus: null, page: 1 }),
+      });
+    }
+    if (startDate) {
+      chips.push({
+        key: "startDate",
+        label: `Applied from: ${formatDate(startDate)}`,
+        onRemove: () => void setFilters({ startDate: null, page: 1 }),
+      });
+    }
+    if (endDate) {
+      chips.push({
+        key: "endDate",
+        label: `Applied to: ${formatDate(endDate)}`,
+        onRemove: () => void setFilters({ endDate: null, page: 1 }),
+      });
+    }
+    return chips;
+  }, [
+    statusFilter,
+    categoryFilter,
+    countryFilter,
+    registrationPaymentStatusFilter,
+    programPaymentStatusFilter,
+    startDate,
+    endDate,
+    setFilters,
+  ]);
+
+  const advancedFilterCount = useMemo(
+    () => activeFilters.filter((filter) => !PRIMARY_CHIP_KEYS.has(filter.key)).length,
+    [activeFilters, PRIMARY_CHIP_KEYS],
+  );
+
   return (
     <main className="space-y-4">
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm space-y-4">
@@ -377,160 +457,159 @@ export default function ParticipantsPage() {
           </div>
         </div>
 
-        <FilterGrid className="lg:grid-cols-4">
-          <FilterField label="Search" htmlFor="filter-search">
-            <div className="relative">
-              <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
-              <Input
-                id="filter-search"
-                type="text"
-                placeholder="Search by name or email..."
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                className="h-10 pl-8 text-xs"
-              />
+        <FilterPanel
+          search={{
+            value: searchInput,
+            onChange: setSearchInput,
+            placeholder: "Search by name or email...",
+          }}
+          primary={
+            <>
+              <div className="w-40">
+                <FilterSelect
+                  aria-label="Status"
+                  value={statusFilter}
+                  onChange={(e) => { void setFilters({ status: e.target.value || null, page: 1 }); }}
+                >
+                  {STATUS_FILTERS.map((option) => (
+                    <option key={option.value || "all"} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </FilterSelect>
+              </div>
+              <div className="w-48">
+                <FilterSelect
+                  aria-label="Category"
+                  value={categoryFilter}
+                  onChange={(e) => {
+                    void setFilters({ category: (e.target.value || null) as typeof categoryFilter | null, page: 1 });
+                  }}
+                >
+                  {CATEGORY_FILTERS.map((option) => (
+                    <option key={option.value || "all"} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </FilterSelect>
+              </div>
+            </>
+          }
+          advancedCount={advancedFilterCount}
+          activeFilters={activeFilters}
+          resultCount={total}
+          onClear={clearFilters}
+          clearDisabled={!hasActiveFilters}
+          advanced={
+            <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
+              <FilterField label="Country" htmlFor="filter-country">
+                <Input
+                  id="filter-country"
+                  type="text"
+                  value={countryFilter}
+                  placeholder="e.g. Indonesia"
+                  onChange={(e) => { void setFilters({ country: e.target.value || null, page: 1 }); }}
+                  className="h-10 text-sm"
+                />
+              </FilterField>
+              <FilterField label="Reg. Payment" htmlFor="filter-reg-payment">
+                <FilterSelect
+                  id="filter-reg-payment"
+                  value={registrationPaymentStatusFilter}
+                  onChange={(e) => {
+                    void setFilters({
+                      registrationPaymentStatus: (e.target.value || null) as typeof registrationPaymentStatusFilter | null,
+                      page: 1,
+                    });
+                  }}
+                >
+                  {PAYMENT_STATUS_FILTERS.map((option) => (
+                    <option key={`reg-${option.value || "all"}`} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </FilterSelect>
+              </FilterField>
+              <FilterField label="Prog. Payment" htmlFor="filter-prog-payment">
+                <FilterSelect
+                  id="filter-prog-payment"
+                  value={programPaymentStatusFilter}
+                  onChange={(e) => {
+                    void setFilters({
+                      programPaymentStatus: (e.target.value || null) as typeof programPaymentStatusFilter | null,
+                      page: 1,
+                    });
+                  }}
+                >
+                  {PAYMENT_STATUS_FILTERS.map((option) => (
+                    <option key={`prog-${option.value || "all"}`} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </FilterSelect>
+              </FilterField>
+              <FilterField label="Applied from" htmlFor="filter-start-date">
+                <Input
+                  id="filter-start-date"
+                  type="date"
+                  value={startDate}
+                  max={endDate || undefined}
+                  onChange={(e) => { void setFilters({ startDate: e.target.value || null, page: 1 }); }}
+                  className="h-10 text-sm"
+                />
+              </FilterField>
+              <FilterField label="Applied to" htmlFor="filter-end-date">
+                <Input
+                  id="filter-end-date"
+                  type="date"
+                  value={endDate}
+                  min={startDate || undefined}
+                  onChange={(e) => { void setFilters({ endDate: e.target.value || null, page: 1 }); }}
+                  className="h-10 text-sm"
+                />
+              </FilterField>
+              <FilterField label="Sort by" htmlFor="filter-sort-by">
+                <FilterSelect
+                  id="filter-sort-by"
+                  value={sortBy}
+                  onChange={(e) => { void setFilters({ sortBy: e.target.value as typeof sortBy, page: 1 }); }}
+                >
+                  {SORT_BY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </FilterSelect>
+              </FilterField>
+              <FilterField label="Sort order" htmlFor="filter-sort-order">
+                <FilterSelect
+                  id="filter-sort-order"
+                  value={sortOrder}
+                  onChange={(e) => { void setFilters({ sortOrder: e.target.value as typeof sortOrder, page: 1 }); }}
+                >
+                  {SORT_ORDER_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </FilterSelect>
+              </FilterField>
+              <FilterField label="Page size" htmlFor="filter-page-size">
+                <FilterSelect
+                  id="filter-page-size"
+                  value={pageSize}
+                  onChange={(e) => { void setFilters({ pageSize: Number(e.target.value), page: 1 }); }}
+                >
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <option key={size} value={size}>
+                      {size} / page
+                    </option>
+                  ))}
+                </FilterSelect>
+              </FilterField>
             </div>
-          </FilterField>
-
-          <FilterField label="Applied from" htmlFor="filter-start-date">
-            <Input
-              id="filter-start-date"
-              type="date"
-              value={startDate}
-              max={endDate || undefined}
-              onChange={(e) => { void setFilters({ startDate: e.target.value || null, page: 1 }); }}
-              className="h-10 text-xs"
-            />
-          </FilterField>
-
-          <FilterField label="Applied to" htmlFor="filter-end-date">
-            <Input
-              id="filter-end-date"
-              type="date"
-              value={endDate}
-              min={startDate || undefined}
-              onChange={(e) => { void setFilters({ endDate: e.target.value || null, page: 1 }); }}
-              className="h-10 text-xs"
-            />
-          </FilterField>
-
-          <FilterSelect
-            label="Page size"
-            value={pageSize}
-            onChange={(e) => { void setFilters({ pageSize: Number(e.target.value), page: 1 }); }}
-          >
-            {PAGE_SIZE_OPTIONS.map((size) => (
-              <option key={size} value={size}>
-                {size} / page
-              </option>
-            ))}
-          </FilterSelect>
-        </FilterGrid>
-
-        <FilterGrid className="md:grid-cols-2 lg:grid-cols-6">
-          <FilterSelect
-            label="Category"
-            value={categoryFilter}
-            onChange={(e) => {
-              void setFilters({ category: (e.target.value || null) as typeof categoryFilter | null, page: 1 });
-            }}
-          >
-            {CATEGORY_FILTERS.map((option) => (
-              <option key={option.value || "all"} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </FilterSelect>
-
-          <FilterField label="Country" htmlFor="filter-country">
-            <Input
-              id="filter-country"
-              type="text"
-              value={countryFilter}
-              placeholder="e.g. Indonesia"
-              onChange={(e) => { void setFilters({ country: e.target.value || null, page: 1 }); }}
-              className="h-10 text-xs"
-            />
-          </FilterField>
-
-          <FilterSelect
-            label="Reg. Payment"
-            value={registrationPaymentStatusFilter}
-            onChange={(e) => {
-              void setFilters({
-                registrationPaymentStatus: (e.target.value || null) as typeof registrationPaymentStatusFilter | null,
-                page: 1,
-              });
-            }}
-          >
-            {PAYMENT_STATUS_FILTERS.map((option) => (
-              <option key={`reg-${option.value || "all"}`} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </FilterSelect>
-
-          <FilterSelect
-            label="Prog. Payment"
-            value={programPaymentStatusFilter}
-            onChange={(e) => {
-              void setFilters({
-                programPaymentStatus: (e.target.value || null) as typeof programPaymentStatusFilter | null,
-                page: 1,
-              });
-            }}
-          >
-            {PAYMENT_STATUS_FILTERS.map((option) => (
-              <option key={`prog-${option.value || "all"}`} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </FilterSelect>
-
-          <FilterSelect
-            label="Sort by"
-            value={sortBy}
-            onChange={(e) => { void setFilters({ sortBy: e.target.value as typeof sortBy, page: 1 }); }}
-          >
-            {SORT_BY_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </FilterSelect>
-
-          <FilterSelect
-            label="Sort order"
-            value={sortOrder}
-            onChange={(e) => { void setFilters({ sortOrder: e.target.value as typeof sortOrder, page: 1 }); }}
-          >
-            {SORT_ORDER_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </FilterSelect>
-        </FilterGrid>
-
-        <div className="flex flex-wrap gap-1.5">
-          {STATUS_FILTERS.map((f) => (
-            <button
-              key={f.value}
-              type="button"
-              onClick={() => { void setFilters({ status: f.value || null, page: 1 }); }}
-              className={
-                "rounded-full border px-3 py-1 text-[11px] font-medium transition-colors " +
-                (statusFilter === f.value
-                  ? "border-zinc-800 bg-zinc-800 text-white"
-                  : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50")
-              }
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-
-        <FilterActions resultCount={total} onClear={clearFilters} disabled={!hasActiveFilters} />
+          }
+        />
       </section>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
@@ -547,17 +626,18 @@ export default function ParticipantsPage() {
                 <th className="px-3 py-2 font-semibold">Prog. Payment</th>
                 <th className="px-3 py-2 font-semibold">Created At</th>
                 <th className="px-3 py-2 font-semibold">Updated At</th>
+                <th className="px-3 py-2 text-right font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-6 text-center text-zinc-400">Loading…</td>
+                  <td colSpan={8} className="px-3 py-6 text-center text-zinc-400">Loading…</td>
                 </tr>
               )}
               {!loading && items.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-2">
+                  <td colSpan={8} className="px-3 py-2">
                     <EmptyState
                       title="No participants found"
                       description="Try adjusting the search, status, payment, country, or date filters."
@@ -612,6 +692,17 @@ export default function ParticipantsPage() {
                     <Link href={`/programs/${params.programId}/participants/${app.participantId}`} className="block">
                       {formatDate(app.updatedAt)}
                     </Link>
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <RowActions
+                      primary={[
+                        {
+                          label: "View",
+                          icon: Eye,
+                          href: `/programs/${params.programId}/participants/${app.participantId}`,
+                        },
+                      ]}
+                    />
                   </td>
                 </tr>
               ))}

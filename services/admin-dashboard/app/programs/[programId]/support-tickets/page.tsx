@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { useQueryStates, parseAsString, parseAsInteger, parseAsStringEnum } from "nuqs";
-import { ArrowPathIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import { ArrowPathIcon } from "@heroicons/react/24/outline";
 import {
   deleteProgramSupportTicket,
   getProgramSupportTicket,
@@ -19,9 +19,9 @@ import {
 } from "@/src/shared/api-client";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { Skeleton } from "@/src/ui/skeleton";
-import { Input } from "@/src/ui/input";
 import { FilterSelect } from "@/src/ui/select";
-import { FilterGrid, FilterActions } from "@/src/ui/filter-grid";
+import { FilterField } from "@/src/ui/filter-grid";
+import { FilterPanel, type FilterPanelActiveFilter } from "@/src/ui/filter-panel";
 import { TicketStatusTabs } from "@/app/components/support/TicketStatusTabs";
 import { TicketListItem } from "@/app/components/support/TicketListItem";
 import { TicketDetailHeader } from "@/app/components/support/TicketDetailHeader";
@@ -125,6 +125,36 @@ export default function SupportTicketsPage() {
     lastSyncedSearch.current = "";
     void setFilters({ search: null, status: null, priority: null, page: null });
   }, [setFilters]);
+
+  // Chip keys that belong to the always-visible "primary" filters (Status,
+  // Priority) rather than the collapsible advanced panel — used to derive
+  // `advancedFilterCount` below without double-counting. This page has no
+  // other filterable fields, so the advanced panel is always empty/0.
+  const PRIMARY_CHIP_KEYS = useMemo(() => new Set(["status", "priority"]), []);
+
+  const activeFilters: FilterPanelActiveFilter[] = useMemo(() => {
+    const chips: FilterPanelActiveFilter[] = [];
+    if (statusFilter) {
+      chips.push({
+        key: "status",
+        label: `Status: ${toTitleCase(statusFilter)}`,
+        onRemove: () => void setFilters({ status: null, page: 1 }),
+      });
+    }
+    if (priorityFilter) {
+      chips.push({
+        key: "priority",
+        label: `Priority: ${toTitleCase(priorityFilter)}`,
+        onRemove: () => void setFilters({ priority: null, page: 1 }),
+      });
+    }
+    return chips;
+  }, [statusFilter, priorityFilter, setFilters]);
+
+  const advancedFilterCount = useMemo(
+    () => activeFilters.filter((filter) => !PRIMARY_CHIP_KEYS.has(filter.key)).length,
+    [activeFilters, PRIMARY_CHIP_KEYS],
+  );
 
   const [total, setTotal] = useState(0);
   const limit = 20;
@@ -407,45 +437,65 @@ export default function SupportTicketsPage() {
             </button>
           </div>
 
-          {/* Search */}
-          <div className="mb-3 space-y-2">
-            <FilterGrid className="grid-cols-1">
-              <div className="relative">
-                <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />
-                <Input
-                  type="text"
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  placeholder="Search tickets..."
-                  className="h-10 pl-8 text-xs"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      lastSyncedSearch.current = searchInput;
-                      void setFilters({ search: searchInput.trim() || null, page: 1 });
-                    }
-                  }}
-                />
-              </div>
-              <FilterSelect
-                aria-label="Priority"
-                value={priorityFilter}
-                onChange={(e) => {
-                  void setFilters({
-                    priority: (e.target.value || null) as typeof priorityFilter | null,
-                    page: 1,
-                  });
-                }}
-              >
-                <option value="">All priorities</option>
-                {PRIORITY_OPTIONS.map((priority) => (
-                  <option key={priority} value={priority}>
-                    {toTitleCase(priority)}
-                  </option>
-                ))}
-              </FilterSelect>
-            </FilterGrid>
-            <FilterActions resultCount={total} onClear={clearFilters} disabled={!hasActiveFilters} />
+          {/* Search + filters */}
+          <div className="mb-3">
+            <FilterPanel
+              search={{
+                value: searchInput,
+                onChange: setSearchInput,
+                placeholder: "Search tickets...",
+              }}
+              primary={
+                <>
+                  <div className="w-full">
+                    <FilterSelect
+                      aria-label="Status"
+                      value={statusFilter}
+                      onChange={(e) => {
+                        void setFilters({
+                          status: (e.target.value || null) as typeof statusFilter | null,
+                          page: 1,
+                        });
+                      }}
+                    >
+                      <option value="">All statuses</option>
+                      {STATUS_OPTIONS.map((status) => (
+                        <option key={status} value={status}>
+                          {toTitleCase(status)}
+                        </option>
+                      ))}
+                    </FilterSelect>
+                  </div>
+                  <div className="w-full">
+                    <FilterSelect
+                      aria-label="Priority"
+                      value={priorityFilter}
+                      onChange={(e) => {
+                        void setFilters({
+                          priority: (e.target.value || null) as typeof priorityFilter | null,
+                          page: 1,
+                        });
+                      }}
+                    >
+                      <option value="">All priorities</option>
+                      {PRIORITY_OPTIONS.map((priority) => (
+                        <option key={priority} value={priority}>
+                          {toTitleCase(priority)}
+                        </option>
+                      ))}
+                    </FilterSelect>
+                  </div>
+                </>
+              }
+              advancedCount={advancedFilterCount}
+              activeFilters={activeFilters}
+              resultCount={total}
+              onClear={clearFilters}
+              clearDisabled={!hasActiveFilters}
+              advanced={
+                <p className="text-xs text-zinc-400">No additional filters for this view.</p>
+              }
+            />
           </div>
 
           {/* Ticket list */}
