@@ -4,6 +4,7 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { PaymentServiceHttpClient } from './payment-service-http.client';
 import { ConfigService } from '@nestjs/config';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
+import { PaymentGatewayClient } from './payment-gateway.client';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -48,6 +49,7 @@ describe('PaymentReconciliationService', () => {
     };
     let mockPaymentClient: { get: jest.Mock; post: jest.Mock };
     let mockRabbitmq: { emit: jest.Mock };
+    let mockGatewayClient: { voidTransaction: jest.Mock };
 
     beforeEach(async () => {
         mockPrisma = {
@@ -73,11 +75,16 @@ describe('PaymentReconciliationService', () => {
             emit: jest.fn().mockResolvedValue(undefined),
         };
 
+        mockGatewayClient = {
+            voidTransaction: jest.fn().mockResolvedValue({ outcome: 'voided', detail: 'ok' }),
+        };
+
         const module: TestingModule = await Test.createTestingModule({
             providers: [
                 PaymentReconciliationService,
                 { provide: PrismaService, useValue: mockPrisma },
                 { provide: PaymentServiceHttpClient, useValue: mockPaymentClient },
+                { provide: PaymentGatewayClient, useValue: mockGatewayClient },
                 { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('') } },
                 { provide: RabbitMQProducerService, useValue: mockRabbitmq },
             ],
@@ -95,6 +102,7 @@ describe('PaymentReconciliationService', () => {
         );
         mockPaymentClient.post.mockResolvedValue({});
         mockRabbitmq.emit.mockResolvedValue(undefined);
+        mockGatewayClient.voidTransaction.mockResolvedValue({ outcome: 'voided', detail: 'ok' });
     });
 
     // ── Test case 1: unpaid invoice + gateway SETTLED ─────────────────────────
@@ -198,6 +206,59 @@ describe('PaymentReconciliationService', () => {
                 expect.anything(),
                 expect.anything(),
             );
+        });
+    });
+
+    // ── Component 2: terminal-invoice drift scan ──────────────────────────────
+
+    describe('reconcileTerminalInvoiceDrift', () => {
+        const terminalInvoice = (overrides: Record<string, unknown> = {}) => ({
+            id: 'inv-cancelled-1',
+            applicationId: 'app-1',
+            status: 'cancelled',
+            externalTransactionId: 'txn-1',
+            externalIntentId: 'intent-1',
+            ...overrides,
+        });
+
+        it('voids a cancelled invoice whose transaction is still PENDING at the gateway', async () => {
+            mockPrisma.applicationInvoice.findMany.mockResolvedValue([terminalInvoice()]);
+            mockPaymentClient.get.mockResolvedValue({ data: { status: 'PENDING' } });
+
+            const report = await service.reconcileTerminalInvoiceDrift(true);
+
+            expect(report.details[0].outcome).toBe('voided');
+            expect(mockGatewayClient.voidTransaction).toHaveBeenCalledWith('txn-1', 'inv-cancelled-1', expect.any(String));
+        });
+
+        it('never voids and flags danger when the gateway reports SUCCESS', async () => {
+            mockGatewayClient.voidTransaction.mockResolvedValue({ outcome: 'danger_settled', detail: 'SUCCESS at gateway' });
+            mockPrisma.applicationInvoice.findMany.mockResolvedValue([terminalInvoice()]);
+
+            const report = await service.reconcileTerminalInvoiceDrift(true);
+
+            expect(report.details[0].outcome).toBe('danger_settled');
+            expect(report.dangerSettled).toBe(1);
+        });
+
+        it('skips invoices with no linked external reference', async () => {
+            mockPrisma.applicationInvoice.findMany.mockResolvedValue([
+                terminalInvoice({ externalTransactionId: null, externalIntentId: null }),
+            ]);
+
+            const report = await service.reconcileTerminalInvoiceDrift(true);
+
+            expect(report.details[0].outcome).toBe('skipped');
+            expect(mockGatewayClient.voidTransaction).not.toHaveBeenCalled();
+        });
+
+        it('dry run (apply=false) never calls voidTransaction', async () => {
+            mockPrisma.applicationInvoice.findMany.mockResolvedValue([terminalInvoice()]);
+            mockPaymentClient.get.mockResolvedValue({ data: { status: 'PENDING' } });
+
+            await service.reconcileTerminalInvoiceDrift(false);
+
+            expect(mockGatewayClient.voidTransaction).not.toHaveBeenCalled();
         });
     });
 });

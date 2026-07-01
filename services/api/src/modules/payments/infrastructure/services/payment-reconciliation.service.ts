@@ -6,6 +6,7 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { buildParticipantPaymentsUrl } from '@modules/payments/application/utils/participant-dashboard-url.util';
 import { PaymentServiceHttpClient } from './payment-service-http.client';
+import { PaymentGatewayClient } from './payment-gateway.client';
 
 /**
  * Outcome classification for a single processing invoice, reconciled against the
@@ -35,6 +36,25 @@ export interface ReconcileReport {
 export interface ReconcileOptions {
     apply: boolean;
     graceMinutes: number;
+}
+
+/**
+ * Outcome classification for the Component 2 terminal-invoice drift scan - see
+ * reconcileTerminalInvoiceDrift for the full explanation.
+ */
+export interface TerminalDriftDetail {
+    invoiceId: string;
+    outcome: 'voided' | 'already_terminal' | 'danger_settled' | 'skipped' | 'error';
+    reason: string;
+}
+
+export interface TerminalDriftReport {
+    scanned: number;
+    voided: number;
+    dangerSettled: number;
+    skipped: number;
+    errors: number;
+    details: TerminalDriftDetail[];
 }
 
 const PROCESSING_INVOICE_INCLUDE = {
@@ -78,6 +98,7 @@ export class PaymentReconciliationService {
 
     constructor(
         private readonly paymentServiceClient: PaymentServiceHttpClient,
+        private readonly paymentGatewayClient: PaymentGatewayClient,
         private readonly configService: ConfigService,
         private readonly prisma: PrismaService,
         private readonly rabbitmqProducer: RabbitMQProducerService,
@@ -111,6 +132,25 @@ export class PaymentReconciliationService {
         } catch (error) {
             this.logger.error(
                 `[payment-reconciliation] scheduled run failed: ${toErrorMessage(error)}`,
+            );
+        }
+
+        try {
+            const driftReport = await this.reconcileTerminalInvoiceDrift(true);
+            this.logger.log(
+                `[payment-reconciliation] terminal-drift scanned=${driftReport.scanned} ` +
+                `voided=${driftReport.voided} dangerSettled=${driftReport.dangerSettled} ` +
+                `skipped=${driftReport.skipped} errors=${driftReport.errors}`,
+            );
+            if (driftReport.dangerSettled > 0) {
+                this.logger.error(
+                    `[payment-reconciliation] DANGER: ${driftReport.dangerSettled} cancelled/failed/refunded ` +
+                    `invoice(s) have a SUCCESS transaction at the gateway — needs human refund/un-cancel review`,
+                );
+            }
+        } catch (error) {
+            this.logger.error(
+                `[payment-reconciliation] terminal-drift run failed: ${toErrorMessage(error)}`,
             );
         }
     }
@@ -229,6 +269,106 @@ export class PaymentReconciliationService {
                 );
             }
         }
+    }
+
+    /**
+     * Component 2 — producer-agnostic safety net. Scans TERMINAL invoices
+     * (cancelled/failed/refunded) whose linked Go transaction is still live
+     * (PENDING/NEEDS_REVIEW), re-checks the gateway at execution time, and voids
+     * genuinely-unpaid ones via the shared PaymentGatewayClient. Never trusts a
+     * cached invoice/transaction status - this is what heals drift regardless of
+     * what produced it (including the still-unidentified payment.cancelled
+     * producer described in the design doc).
+     */
+    async reconcileTerminalInvoiceDrift(apply: boolean): Promise<TerminalDriftReport> {
+        const report: TerminalDriftReport = {
+            scanned: 0,
+            voided: 0,
+            dangerSettled: 0,
+            skipped: 0,
+            errors: 0,
+            details: [],
+        };
+
+        const invoices = await this.prisma.applicationInvoice.findMany({
+            where: {
+                status: { in: [PaymentStatus.cancelled, PaymentStatus.failed, PaymentStatus.refunded] },
+                OR: [
+                    { externalIntentId: { not: null } },
+                    { externalTransactionId: { not: null } },
+                ],
+            },
+            select: {
+                id: true,
+                applicationId: true,
+                externalIntentId: true,
+                externalTransactionId: true,
+            },
+            take: this.batchSize,
+        });
+
+        report.scanned = invoices.length;
+
+        for (const invoice of invoices) {
+            try {
+                const detail = await this.reconcileTerminalDriftOne(invoice, apply);
+                report.details.push(detail);
+                if (detail.outcome === 'voided') report.voided += 1;
+                else if (detail.outcome === 'danger_settled') report.dangerSettled += 1;
+                else if (detail.outcome === 'error') report.errors += 1;
+                else report.skipped += 1;
+            } catch (error) {
+                report.errors += 1;
+                const reason = toErrorMessage(error);
+                report.details.push({ invoiceId: invoice.id, outcome: 'error', reason });
+                this.logger.error(`[payment-reconciliation] terminal-drift invoice=${invoice.id} failed: ${reason}`);
+            }
+        }
+
+        return report;
+    }
+
+    private async reconcileTerminalDriftOne(
+        invoice: { id: string; externalTransactionId: string | null; externalIntentId: string | null },
+        apply: boolean,
+    ): Promise<TerminalDriftDetail> {
+        const transactionId = invoice.externalTransactionId?.trim() || null;
+        if (!transactionId) {
+            return { invoiceId: invoice.id, outcome: 'skipped', reason: 'no linked transaction id' };
+        }
+
+        if (!apply) {
+            // Dry run: still fetch+classify so a report can be produced, but never call
+            // the void path.
+            const payload = await this.fetchPaymentPayload(transactionId);
+            if (payload === null) {
+                return { invoiceId: invoice.id, outcome: 'skipped', reason: 'gateway fetch failed' };
+            }
+            if (this.isPayloadSettled(payload)) {
+                return { invoiceId: invoice.id, outcome: 'danger_settled', reason: 'gateway settled (dry run)' };
+            }
+            return { invoiceId: invoice.id, outcome: 'skipped', reason: 'would void (dry run)' };
+        }
+
+        const result = await this.paymentGatewayClient.voidTransaction(
+            transactionId,
+            invoice.id,
+            'Reconciliation: terminal invoice with live gateway transaction',
+        );
+
+        if (result.outcome === 'danger_settled') {
+            this.logger.error(
+                `[payment-reconciliation] DANGER invoice=${invoice.id} txn=${transactionId} is settled at gateway ` +
+                `while invoice is terminal — needs human refund/un-cancel review`,
+            );
+            return { invoiceId: invoice.id, outcome: 'danger_settled', reason: result.detail };
+        }
+
+        return {
+            invoiceId: invoice.id,
+            outcome: result.outcome === 'voided' ? 'voided' : result.outcome === 'error' ? 'error' : 'already_terminal',
+            reason: result.detail,
+        };
     }
 
     private async reconcileOne(
