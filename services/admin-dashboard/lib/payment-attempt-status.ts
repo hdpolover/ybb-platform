@@ -26,3 +26,31 @@ export function resolveAttemptDisplayStatus(
   }
   return txnStatus;
 }
+
+/**
+ * Terminal attempt/transaction statuses: once an attempt lands here, it is a
+ * closed historical fact and must never be relabeled, even if the invoice it
+ * belongs to later goes terminal for a different reason.
+ */
+const TERMINAL_ATTEMPT_STATUSES = new Set(["SUCCESS", "FAILED", "VOID", "REJECTED"]);
+
+/**
+ * Per-attempt history row fallback. Unlike `resolveAttemptDisplayStatus` (which
+ * governs the single "current state" badges for the invoice's latest
+ * transaction), this governs each row in the "Payment Attempts" history list.
+ * A history list must not relabel genuinely terminal historical attempts
+ * (SUCCESS/FAILED/VOID/REJECTED) as the invoice's status — that would destroy
+ * history. It should only override a row that is still "live" (PENDING,
+ * NEEDS_REVIEW, missing, or any other non-terminal value) sitting under an
+ * invoice that has since gone terminal, since a live attempt under a terminal
+ * invoice is stale by definition.
+ */
+export function resolveAttemptRowDisplayStatus(
+  attemptStatus: string | undefined,
+  invoiceStatus: string,
+): string | undefined {
+  if (UI_TERMINAL_INVOICE_STATUSES.has(invoiceStatus) && !TERMINAL_ATTEMPT_STATUSES.has(attemptStatus ?? "")) {
+    return invoiceStatus;
+  }
+  return attemptStatus;
+}
