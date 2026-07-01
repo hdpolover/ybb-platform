@@ -294,6 +294,7 @@ func (h *PaymentHandler) publishIntentEvent(intent *entities.PaymentIntent, tx *
 		tx.FeeProvider,
 		tx.NetAmount,
 		tx.Currency,
+		tx.PaymentMethodID,
 	)
 
 	// Populate metadata
