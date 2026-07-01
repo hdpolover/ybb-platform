@@ -437,6 +437,11 @@ export class PaymentReconciliationService {
                 paymentMethod: successTxn
                     ? (String((successTxn as Record<string, unknown>).paymentMethod ?? (successTxn as Record<string, unknown>).payment_method ?? '') || undefined)
                     : undefined,
+                // fee_provider / net_amount are always present on a SUCCESS transaction
+                // (payment service defaults fee_provider to 0), so these are safe to fill
+                // whenever a match is found — see settlePaid's "only if missing" guard.
+                feeProvider: successTxn ? toNullableNumber(successTxn.fee_provider) : undefined,
+                netAmount: successTxn ? toNullableNumber(successTxn.net_amount) : undefined,
             };
             if (apply) {
                 const skipResult = await this.settlePaid(invoice, provenance);
@@ -561,7 +566,12 @@ export class PaymentReconciliationService {
      */
     private async settlePaid(
         invoice: ProcessingInvoice,
-        provenance?: { transactionId?: string; paymentMethod?: string },
+        provenance?: {
+            transactionId?: string;
+            paymentMethod?: string;
+            feeProvider?: number;
+            netAmount?: number;
+        },
     ): Promise<{ skipped: true; reason: string } | null> {
         // Supersede guard: prevent double-settling a registration fee
         if (invoice.pricingTier?.feeType === 'registration_fee') {
@@ -607,6 +617,12 @@ export class PaymentReconciliationService {
                         : {}),
                     ...(provenance?.paymentMethod && !invoice.paymentMethod
                         ? { paymentMethod: provenance.paymentMethod }
+                        : {}),
+                    ...(provenance?.feeProvider != null && invoice.feeProvider == null
+                        ? { feeProvider: provenance.feeProvider }
+                        : {}),
+                    ...(provenance?.netAmount != null && invoice.netAmount == null
+                        ? { netAmount: provenance.netAmount }
                         : {}),
                     lastReconciledAt: now,
                 },
@@ -740,4 +756,13 @@ function parsePositiveInt(value: string | undefined, defaultValue: number): numb
 function toErrorMessage(error: unknown): string {
     const raw = error instanceof Error ? error.message : String(error);
     return raw.length > 1000 ? raw.slice(0, 1000) : raw;
+}
+
+function toNullableNumber(value: unknown): number | undefined {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.trim() !== '') {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed)) return parsed;
+    }
+    return undefined;
 }

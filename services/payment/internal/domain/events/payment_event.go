@@ -32,30 +32,50 @@ type PaymentEvent struct {
 	GatewayName   string                 `json:"gateway_name"`
 	Timestamp     time.Time              `json:"timestamp"`
 	Metadata      map[string]interface{} `json:"metadata,omitempty"`
+
+	// Settled financial breakdown, sourced from the PaymentTransaction row
+	// (not the intent). AmountTotal is what the payer was actually charged;
+	// Amount above stays intent-gross for backward compatibility with
+	// existing consumers. TransactionCurrency is kept separate from
+	// Currency because gateway settlement can convert currency (e.g. a USD
+	// intent charged in IDR), so the two are not always equal.
+	AmountTotal         float64 `json:"amount_total"`
+	FeeProvider         float64 `json:"fee_provider"`
+	NetAmount           float64 `json:"net_amount"`
+	TransactionCurrency string  `json:"transaction_currency"`
 }
 
 // NewPaymentEvent creates a new payment event. intentID and transactionID are
 // optional; callers without an intent/transaction context should pass "".
+// amountTotal, feeProvider, netAmount and transactionCurrency should be
+// sourced from the settled PaymentTransaction entity; pass zero values only
+// when a genuine settled transaction is unavailable at the call site.
 func NewPaymentEvent(
 	eventType EventType,
 	paymentID, intentID, transactionID, applicationID, userID, email string,
 	amount float64,
 	currency, status, gatewayName string,
+	amountTotal, feeProvider, netAmount float64,
+	transactionCurrency string,
 ) *PaymentEvent {
 	return &PaymentEvent{
-		Type:          eventType,
-		PaymentID:     paymentID,
-		IntentID:      intentID,
-		TransactionID: transactionID,
-		ApplicationID: applicationID,
-		UserID:        userID,
-		Email:         email,
-		Amount:        amount,
-		Currency:      currency,
-		Status:        status,
-		GatewayName:   gatewayName,
-		Timestamp:     time.Now(),
-		Metadata:      make(map[string]interface{}),
+		Type:                eventType,
+		PaymentID:           paymentID,
+		IntentID:            intentID,
+		TransactionID:       transactionID,
+		ApplicationID:       applicationID,
+		UserID:              userID,
+		Email:               email,
+		Amount:              amount,
+		Currency:            currency,
+		Status:              status,
+		GatewayName:         gatewayName,
+		AmountTotal:         amountTotal,
+		FeeProvider:         feeProvider,
+		NetAmount:           netAmount,
+		TransactionCurrency: transactionCurrency,
+		Timestamp:           time.Now(),
+		Metadata:            make(map[string]interface{}),
 	}
 }
 

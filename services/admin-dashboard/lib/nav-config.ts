@@ -83,6 +83,7 @@ export const platformNavSections: NavSection[] = [
     title: "Financial",
     items: [
       { id: "payment-gateways", label: "Payment Gateways", href: "/platform/payment-gateways", icon: CreditCard },
+      { id: "revenue", label: "Revenue", href: "/platform/revenue", icon: TrendingUp },
     ],
   },
   {
@@ -144,6 +145,7 @@ export const programNavSections: NavSection[] = [
     title: "Financial",
     items: [
       { id: "payments", label: "Payments", href: "payments", icon: CreditCard },
+      { id: "revenue", label: "Revenue", href: "revenue", icon: TrendingUp },
     ],
   },
   {
