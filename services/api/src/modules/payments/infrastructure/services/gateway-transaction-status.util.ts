@@ -18,3 +18,7 @@ export function isSettledStatus(status: string): boolean {
 export function isTerminalNonSettledStatus(status: string): boolean {
     return status === 'FAILED' || status === 'VOID' || status === 'REJECTED' || status === 'CANCELED';
 }
+
+export function isAwaitingReviewStatus(status: string): boolean {
+    return status.toUpperCase() === 'NEEDS_REVIEW';
+}

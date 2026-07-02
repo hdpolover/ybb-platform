@@ -44,7 +44,7 @@ export interface ReconcileOptions {
  */
 export interface TerminalDriftDetail {
     invoiceId: string;
-    outcome: 'voided' | 'already_terminal' | 'danger_settled' | 'skipped' | 'error';
+    outcome: 'voided' | 'already_terminal' | 'danger_settled' | 'skipped_needs_review' | 'skipped' | 'error';
     reason: string;
 }
 
@@ -52,6 +52,7 @@ export interface TerminalDriftReport {
     scanned: number;
     voided: number;
     dangerSettled: number;
+    needsReview: number;
     skipped: number;
     errors: number;
     details: TerminalDriftDetail[];
@@ -140,12 +141,19 @@ export class PaymentReconciliationService {
             this.logger.log(
                 `[payment-reconciliation] terminal-drift scanned=${driftReport.scanned} ` +
                 `voided=${driftReport.voided} dangerSettled=${driftReport.dangerSettled} ` +
-                `skipped=${driftReport.skipped} errors=${driftReport.errors}`,
+                `needsReview=${driftReport.needsReview} skipped=${driftReport.skipped} errors=${driftReport.errors}`,
             );
             if (driftReport.dangerSettled > 0) {
                 this.logger.error(
                     `[payment-reconciliation] DANGER: ${driftReport.dangerSettled} cancelled/failed/refunded ` +
                     `invoice(s) have a SUCCESS transaction at the gateway — needs human refund/un-cancel review`,
+                );
+            }
+            if (driftReport.needsReview > 0) {
+                this.logger.error(
+                    `[payment-reconciliation] NEEDS REVIEW: ${driftReport.needsReview} cancelled/failed/refunded ` +
+                    `invoice(s) have a proof-backed/under-review manual transfer at the gateway — refusing to ` +
+                    `auto-void, needs human review`,
                 );
             }
         } catch (error) {
@@ -285,6 +293,7 @@ export class PaymentReconciliationService {
             scanned: 0,
             voided: 0,
             dangerSettled: 0,
+            needsReview: 0,
             skipped: 0,
             errors: 0,
             details: [],
@@ -326,6 +335,7 @@ export class PaymentReconciliationService {
                 report.details.push(detail);
                 if (detail.outcome === 'voided') report.voided += 1;
                 else if (detail.outcome === 'danger_settled') report.dangerSettled += 1;
+                else if (detail.outcome === 'skipped_needs_review') report.needsReview += 1;
                 else if (detail.outcome === 'error') report.errors += 1;
                 else report.skipped += 1;
             } catch (error) {
@@ -359,6 +369,44 @@ export class PaymentReconciliationService {
                 return { invoiceId: invoice.id, outcome: 'danger_settled', reason: 'gateway settled (dry run)' };
             }
             return { invoiceId: invoice.id, outcome: 'skipped', reason: 'would void (dry run)' };
+        }
+
+        // Fetch the live payload first - never void blind. Reuses the same fetch +
+        // classification helpers as the dry-run branch above.
+        const payload = await this.fetchPaymentPayload(transactionId);
+        if (payload === null) {
+            return { invoiceId: invoice.id, outcome: 'skipped', reason: 'gateway fetch failed' };
+        }
+
+        // NEEDS_REVIEW means a manual transfer whose proof is awaiting admin review -
+        // that is pending human adjudication, NOT genuine non-payment, so the cron
+        // must never auto-void it (mirrors the same rule in isPayloadAbandoned).
+        // Field names (status, payment_method_id, proof_file_url) are verified
+        // against the same payment-service payload shape used by
+        // PaymentRepository.inferPaymentType in payment.repository.ts - a
+        // manual-transfer transaction with an uploaded proof is also awaiting review
+        // even if its status hasn't been flipped to NEEDS_REVIEW yet.
+        const needsHumanReview = this.transactions(payload).some((t) => {
+            const status = String(t.status ?? '').toUpperCase();
+            if (status === 'NEEDS_REVIEW') return true;
+            const methodId = String(t.payment_method_id ?? '').toLowerCase();
+            const proofUrl = String(t.proof_file_url ?? '').trim();
+            return proofUrl !== '' && (methodId.includes('manual') || methodId.includes('transfer'));
+        });
+        if (needsHumanReview) {
+            this.logger.error(
+                `[payment-reconciliation] NEEDS REVIEW invoice=${invoice.id} txn=${transactionId} is a ` +
+                `proof-backed/under-review manual transfer at the gateway — refusing to auto-void, needs ` +
+                `human review`,
+            );
+            // Intentionally NOT stamped: like danger_settled below, this needs
+            // persistent human-visible alerting, so it must keep resurfacing at the
+            // front of the watermark window on every run until a human resolves it.
+            return {
+                invoiceId: invoice.id,
+                outcome: 'skipped_needs_review',
+                reason: 'manual transfer needs human review before void',
+            };
         }
 
         const result = await this.paymentGatewayClient.voidTransaction(
