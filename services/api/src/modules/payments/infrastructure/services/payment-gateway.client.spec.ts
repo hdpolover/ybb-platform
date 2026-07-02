@@ -53,6 +53,26 @@ describe('PaymentGatewayClient.voidTransaction', () => {
         expect(mockPaymentClient.post).not.toHaveBeenCalled();
     });
 
+    it('refuses to void a NEEDS_REVIEW transaction and reports needs_review', async () => {
+        mockPaymentClient.get.mockResolvedValue({ data: { status: 'NEEDS_REVIEW' } });
+
+        const result = await client.voidTransaction('txn-1', 'inv-1', 'reason');
+
+        expect(result.outcome).toBe('needs_review');
+        expect(mockPaymentClient.post).not.toHaveBeenCalled();
+    });
+
+    it('refuses to void a PENDING transaction that already has a manual-transfer proof attached', async () => {
+        mockPaymentClient.get.mockResolvedValue({
+            data: { status: 'PENDING', proof_file_url: 'https://files/proof.jpg', payment_method_id: 'manual_transfer' },
+        });
+
+        const result = await client.voidTransaction('txn-1', 'inv-1', 'reason');
+
+        expect(result.outcome).toBe('needs_review');
+        expect(mockPaymentClient.post).not.toHaveBeenCalled();
+    });
+
     it('treats a gateway 400 on cancel as already_terminal, not an error', async () => {
         mockPaymentClient.get.mockResolvedValue({ data: { status: 'PENDING' } });
         mockPaymentClient.post.mockRejectedValue({ response: { status: 400 } });

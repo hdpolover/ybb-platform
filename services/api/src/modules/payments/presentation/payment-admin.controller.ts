@@ -1328,6 +1328,11 @@ export class PaymentAdminController {
                     `Cannot mark this invoice ${body.status}: the linked transaction has already succeeded at the gateway (${voidResult.detail}).`,
                 );
             }
+            if (voidResult.outcome === 'needs_review') {
+                throw new BadRequestException(
+                    'This invoice has a manual payment awaiting review — approve or reject it via the verify action instead of changing the status directly.',
+                );
+            }
             // Fail closed: this is a synchronous, user-facing admin action. If we
             // can't verify the gateway's status, proceeding could mark the invoice
             // cancelled/failed/refunded while its transaction just settled to

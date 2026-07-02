@@ -248,6 +248,7 @@ describe('PaymentReconciliationService', () => {
 
         it('stamps lastReconciledAt after a voided outcome in apply mode, rotating it out of the watermark window', async () => {
             mockPrisma.applicationInvoice.findMany.mockResolvedValue([terminalInvoice()]);
+            mockPaymentClient.get.mockResolvedValue({ data: { status: 'PENDING' } });
             mockGatewayClient.voidTransaction.mockResolvedValue({ outcome: 'voided', detail: 'ok' });
 
             await service.reconcileTerminalInvoiceDrift(true);
@@ -259,6 +260,11 @@ describe('PaymentReconciliationService', () => {
         });
 
         it('never voids and flags danger when the gateway reports SUCCESS, and does NOT stamp lastReconciledAt (must resurface for human review)', async () => {
+            // Payload fetch inside reconcileTerminalDriftOne (the pre-void guard) - the
+            // top-level status here is irrelevant to the guard as long as no transaction
+            // is NEEDS_REVIEW/proof-backed; the settled/danger classification below comes
+            // from the separately-mocked voidTransaction call, unchanged.
+            mockPaymentClient.get.mockResolvedValue({ data: { status: 'SUCCESS', transactions: [] } });
             mockGatewayClient.voidTransaction.mockResolvedValue({ outcome: 'danger_settled', detail: 'SUCCESS at gateway' });
             mockPrisma.applicationInvoice.findMany.mockResolvedValue([terminalInvoice()]);
 
@@ -270,6 +276,7 @@ describe('PaymentReconciliationService', () => {
         });
 
         it('counts a gateway/void error without throwing and does NOT stamp lastReconciledAt (must retry)', async () => {
+            mockPaymentClient.get.mockResolvedValue({ data: { status: 'PENDING' } });
             mockGatewayClient.voidTransaction.mockResolvedValue({ outcome: 'error', detail: 'status fetch failed: timeout' });
             mockPrisma.applicationInvoice.findMany.mockResolvedValue([terminalInvoice()]);
 
@@ -281,6 +288,7 @@ describe('PaymentReconciliationService', () => {
         });
 
         it('counts an already_terminal outcome as skipped and DOES stamp lastReconciledAt (drift resolved, rotate out)', async () => {
+            mockPaymentClient.get.mockResolvedValue({ data: { status: 'PENDING' } });
             mockGatewayClient.voidTransaction.mockResolvedValue({ outcome: 'already_terminal', detail: 'transaction already FAILED' });
             mockPrisma.applicationInvoice.findMany.mockResolvedValue([terminalInvoice()]);
 
@@ -292,6 +300,41 @@ describe('PaymentReconciliationService', () => {
                 where: { id: 'inv-cancelled-1' },
                 data: { lastReconciledAt: expect.any(Date) },
             });
+        });
+
+        it('skips a NEEDS_REVIEW manual-transfer transaction — does NOT void, outcome is skipped_needs_review, does NOT stamp lastReconciledAt', async () => {
+            mockPrisma.applicationInvoice.findMany.mockResolvedValue([terminalInvoice()]);
+            mockPaymentClient.get.mockResolvedValue({
+                data: {
+                    status: 'PENDING',
+                    transactions: [
+                        { status: 'NEEDS_REVIEW', payment_method_id: 'bank_transfer', proof_file_url: 'https://files.example.com/proof.jpg' },
+                    ],
+                },
+            });
+
+            const report = await service.reconcileTerminalInvoiceDrift(true);
+
+            expect(report.details[0].outcome).toBe('skipped_needs_review');
+            expect(report.needsReview).toBe(1);
+            expect(mockGatewayClient.voidTransaction).not.toHaveBeenCalled();
+            expect(mockPrisma.applicationInvoice.update).not.toHaveBeenCalled();
+        });
+
+        it('voids a genuinely unpaid, non-review, non-manual-with-proof transaction (existing behavior preserved)', async () => {
+            mockPrisma.applicationInvoice.findMany.mockResolvedValue([terminalInvoice()]);
+            mockPaymentClient.get.mockResolvedValue({
+                data: {
+                    status: 'PENDING',
+                    transactions: [{ status: 'PENDING', payment_method_id: 'credit_card', proof_file_url: '' }],
+                },
+            });
+            mockGatewayClient.voidTransaction.mockResolvedValue({ outcome: 'voided', detail: 'ok' });
+
+            const report = await service.reconcileTerminalInvoiceDrift(true);
+
+            expect(report.details[0].outcome).toBe('voided');
+            expect(mockGatewayClient.voidTransaction).toHaveBeenCalledWith('txn-1', 'inv-cancelled-1', expect.any(String));
         });
 
         it('skips invoices with no linked external reference', async () => {
