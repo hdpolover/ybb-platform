@@ -6,8 +6,8 @@ describe('classifyOrphan', () => {
         expect(classifyOrphan('PENDING')).toBe('void');
     });
 
-    it('classifies a live NEEDS_REVIEW transaction as void', () => {
-        expect(classifyOrphan('NEEDS_REVIEW')).toBe('void');
+    it('classifies a NEEDS_REVIEW transaction as skip_needs_review, NOT void — a human still needs to approve/reject it', () => {
+        expect(classifyOrphan('NEEDS_REVIEW')).toBe('skip_needs_review');
     });
 
     it('classifies an already-VOID transaction as skip_already_terminal', () => {

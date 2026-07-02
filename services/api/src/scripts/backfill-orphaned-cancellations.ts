@@ -31,6 +31,7 @@ import {
     extractTopLevelStatus,
     isSettledStatus,
     isTerminalNonSettledStatus,
+    isAwaitingReviewStatus,
 } from '../modules/payments/infrastructure/services/gateway-transaction-status.util';
 
 dotenv.config();
@@ -38,6 +39,7 @@ dotenv.config();
 export type OrphanClassification =
     | 'void'
     | 'skip_already_terminal'
+    | 'skip_needs_review'
     | 'danger_settled'
     | 'skip_no_reference'
     | 'unchecked_error';
@@ -61,7 +63,12 @@ export function classifyOrphan(gatewayStatus: string | null): OrphanClassificati
     if (gatewayStatus === null) return 'skip_no_reference';
     if (isSettledStatus(gatewayStatus)) return 'danger_settled';
     if (isTerminalNonSettledStatus(gatewayStatus)) return 'skip_already_terminal';
-    return 'void'; // PENDING / NEEDS_REVIEW / unknown-but-live
+    // NEEDS_REVIEW means a manual-transfer proof is awaiting admin approve/reject —
+    // it is genuinely "live" at the gateway (not terminal), but voiding it would
+    // kill a payment a human still needs to act on, so it must NOT be routed to
+    // 'void' alongside a plain still-live PENDING transaction.
+    if (isAwaitingReviewStatus(gatewayStatus)) return 'skip_needs_review';
+    return 'void'; // PENDING / unknown-but-live
 }
 
 export type FetchOutcomeKind = 'ok' | 'not_found' | 'auth_failure' | 'other_failure';
@@ -282,13 +289,20 @@ async function main(): Promise<void> {
 
         const voided = results.filter((r) => r.classification === 'void').length;
         const skipped = results.filter((r) => r.classification === 'skip_already_terminal').length;
+        const skippedNeedsReview = results.filter((r) => r.classification === 'skip_needs_review').length;
         const danger = results.filter((r) => r.classification === 'danger_settled').length;
         const noRef = results.filter((r) => r.classification === 'skip_no_reference').length;
         const unchecked = results.filter((r) => r.classification === 'unchecked_error').length;
 
         console.log(
-            `\n${apply ? 'APPLIED' : 'DRY RUN'} — void=${voided} skip_already_terminal=${skipped} danger_settled=${danger} skip_no_reference=${noRef} unchecked_error=${unchecked}`,
+            `\n${apply ? 'APPLIED' : 'DRY RUN'} — void=${voided} skip_already_terminal=${skipped} skip_needs_review=${skippedNeedsReview} danger_settled=${danger} skip_no_reference=${noRef} unchecked_error=${unchecked}`,
         );
+        if (skippedNeedsReview > 0) {
+            console.log('\nSKIPPED — AWAITING MANUAL REVIEW (needs admin approve/reject via verify action):');
+            for (const r of results.filter((r) => r.classification === 'skip_needs_review')) {
+                console.log(`  invoice=${r.invoiceId} txn=${r.transactionId} detail=${r.detail}`);
+            }
+        }
         if (danger > 0) {
             console.log('\nDANGER CASES (needs human refund/un-cancel review):');
             for (const r of results.filter((r) => r.classification === 'danger_settled')) {

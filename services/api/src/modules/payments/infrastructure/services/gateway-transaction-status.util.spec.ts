@@ -1,4 +1,9 @@
-import { extractTopLevelStatus, isSettledStatus, isTerminalNonSettledStatus } from './gateway-transaction-status.util';
+import {
+    extractTopLevelStatus,
+    isSettledStatus,
+    isTerminalNonSettledStatus,
+    isAwaitingReviewStatus,
+} from './gateway-transaction-status.util';
 
 describe('gateway-transaction-status.util', () => {
     describe('extractTopLevelStatus', () => {
@@ -28,6 +33,16 @@ describe('gateway-transaction-status.util', () => {
 
         it.each(['PENDING', 'NEEDS_REVIEW', 'SUCCESS', ''])('treats %s as NOT terminal-non-settled', (status) => {
             expect(isTerminalNonSettledStatus(status)).toBe(false);
+        });
+    });
+
+    describe('isAwaitingReviewStatus', () => {
+        it.each(['NEEDS_REVIEW', 'needs_review'])('treats %s as awaiting review', (status) => {
+            expect(isAwaitingReviewStatus(status)).toBe(true);
+        });
+
+        it.each(['PENDING', 'SUCCESS', 'VOID', ''])('treats %s as NOT awaiting review', (status) => {
+            expect(isAwaitingReviewStatus(status)).toBe(false);
         });
     });
 });

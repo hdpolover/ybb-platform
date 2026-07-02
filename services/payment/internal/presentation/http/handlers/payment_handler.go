@@ -524,6 +524,13 @@ func (h *PaymentHandler) CancelPayment(c *gin.Context) {
 	}
 
 	switch tx.Status {
+	case entities.TransactionStatusNeedsReview:
+		// Defense-in-depth: a manual-transfer proof is awaiting admin review.
+		// Refuse here even though NestJS's PaymentGatewayClient.voidTransaction
+		// already refuses to call this endpoint for NEEDS_REVIEW transactions,
+		// so direct callers (ops scripts, backfills) can't void an under-review payment.
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Payments awaiting review cannot be cancelled; verify (approve or reject) first"})
+		return
 	case entities.TransactionStatusSuccess, entities.TransactionStatusFailed, entities.TransactionStatusRejected, entities.TransactionStatusVoid:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Only pending payments can be cancelled"})
 		return
