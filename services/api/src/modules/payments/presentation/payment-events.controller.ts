@@ -829,6 +829,17 @@ export class PaymentEventsController {
                 );
                 return { userId, invoiceId: invoice.id };
             }
+            // This is an async event consumer (payment.cancelled), not a synchronous
+            // user-facing action — throwing here would just trigger a message
+            // redelivery/retry loop. Instead we log and skip the cancellation,
+            // leaving the invoice as-is for the admin to resolve via verify.
+            if (voidResult.outcome === 'needs_review') {
+                this.logger.warn(
+                    `markInvoiceCancelled: skipping cancellation for invoice ${invoice.id} — ` +
+                    `transaction ${transactionId} is awaiting manual review (${voidResult.detail})`,
+                );
+                return { userId, invoiceId: invoice.id };
+            }
             // 'voided' | 'already_terminal' | 'error' all proceed: a transient gateway
             // failure must not block the invoice write — the widened reconciler
             // (Component 2) is the backstop that will retry the void later.

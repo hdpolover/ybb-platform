@@ -94,4 +94,16 @@ describe('PaymentAdminController.updateInvoiceStatus — Go cascade parity', () 
         ).rejects.toBeInstanceOf(BadRequestException);
         expect(mockPrisma.$transaction).not.toHaveBeenCalled();
     });
+
+    it('refuses the status change when the linked transaction is awaiting manual review (outcome: needs_review)', async () => {
+        mockGatewayClient.voidTransaction.mockResolvedValue({
+            outcome: 'needs_review',
+            detail: 'transaction is awaiting manual review; refusing to void',
+        });
+
+        await expect(
+            controller.updateInvoiceStatus(invoiceRow.id, { status: 'cancelled' as any, reason: 'duplicate' }, MOCK_ADMIN),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    });
 });

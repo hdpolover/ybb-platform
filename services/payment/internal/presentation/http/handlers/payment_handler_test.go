@@ -489,6 +489,24 @@ func TestCancelPaymentAlreadyTerminalReturns400(t *testing.T) {
 	require.Nil(t, txRepo.updated)
 }
 
+func TestCancelPaymentNeedsReviewRefusesToVoid(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	gw := &stubPaymentGateway{}
+	handler, txRepo, _, tx, _ := newCancelTestFixture(gw)
+	tx.Status = entities.TransactionStatusNeedsReview
+	tx.ProofFileURL = "https://files/proof.jpg"
+
+	rec := postCancel(t, handler, tx.ID)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	var body map[string]interface{}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.Equal(t, "Payments awaiting review cannot be cancelled; verify (approve or reject) first", body["error"])
+	require.Equal(t, entities.TransactionStatusNeedsReview, txRepo.byID[tx.ID].Status)
+	require.Nil(t, txRepo.updated)
+}
+
 type stubIntentRepository struct {
 	byID          map[string]*entities.PaymentIntent
 	findAllResult []*entities.PaymentIntent

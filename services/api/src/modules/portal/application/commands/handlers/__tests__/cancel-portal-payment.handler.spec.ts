@@ -73,4 +73,16 @@ describe('CancelPortalPaymentHandler', () => {
         ).rejects.toBeInstanceOf(BadRequestException);
         expect(mockPrisma.$transaction).not.toHaveBeenCalled();
     });
+
+    it('blocks the cancel and throws when the transaction is awaiting manual review (outcome: needs_review)', async () => {
+        mockGatewayClient.voidTransaction.mockResolvedValue({
+            outcome: 'needs_review',
+            detail: 'transaction is awaiting manual review; refusing to void',
+        });
+
+        await expect(
+            handler.execute({ userId: 'user-1', invoiceId: 'inv-1', reason: 'changed my mind' } as any),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    });
 });

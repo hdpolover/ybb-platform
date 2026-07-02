@@ -6,9 +6,10 @@ import {
     extractTopLevelStatus,
     isSettledStatus,
     isTerminalNonSettledStatus,
+    isAwaitingReviewStatus,
 } from './gateway-transaction-status.util';
 
-export type VoidTransactionOutcome = 'voided' | 'already_terminal' | 'danger_settled' | 'error';
+export type VoidTransactionOutcome = 'voided' | 'already_terminal' | 'danger_settled' | 'error' | 'needs_review';
 
 export interface VoidTransactionResult {
     outcome: VoidTransactionOutcome;
@@ -62,6 +63,29 @@ export class PaymentGatewayClient {
 
         if (isTerminalNonSettledStatus(status)) {
             return { outcome: 'already_terminal', detail: `transaction already ${status}` };
+        }
+
+        // A manual bank-transfer proof is awaiting admin approve/reject via the
+        // verify action. The Go service's buildTransactionResponse (GET
+        // /api/v1/payments/:id for a transaction) puts proof_file_url and
+        // payment_method_id at the top level of the payload alongside status, so
+        // we can key on either signal: the status alone (works even if this ID
+        // resolves to an intent payload, which doesn't carry proof/method
+        // fields), or a non-empty proof_file_url paired with a manual/transfer
+        // payment_method_id (belt-and-braces in case status is ever missing or
+        // stale). If a future payload shape ever stops exposing proof/method
+        // fields, this simply degrades to status-only detection.
+        const proofFileUrl = typeof payload?.proof_file_url === 'string' ? payload.proof_file_url : '';
+        const paymentMethodId = typeof payload?.payment_method_id === 'string' ? payload.payment_method_id : '';
+        const looksLikeManualTransferProof =
+            proofFileUrl.length > 0 &&
+            (paymentMethodId.toLowerCase().includes('manual') || paymentMethodId.toLowerCase().includes('transfer'));
+
+        if (isAwaitingReviewStatus(status) || looksLikeManualTransferProof) {
+            this.logger.warn(
+                `[payment-gateway-client] invoice=${invoiceId} txn=${transactionId} is awaiting manual review, refusing to void`,
+            );
+            return { outcome: 'needs_review', detail: 'transaction is awaiting manual review; refusing to void' };
         }
 
         try {
