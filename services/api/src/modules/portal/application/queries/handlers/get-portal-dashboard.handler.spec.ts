@@ -183,6 +183,113 @@ describe('GetPortalDashboardHandler', () => {
         expect(result.stats?.totalRequired).toEqual({ amount: 250.5, currency: 'IDR' });
     });
 
+    const buildAppWithRegTier = (
+        options: {
+            usdPrice?: number;
+            validityPeriods?: { startDate: Date; endDate: Date }[];
+            invoices?: Array<{ id: string; status: string; amount: number; pricingTier?: { feeType: string } }>;
+            currency?: string;
+            category?: string;
+        } = {},
+    ) => ({
+        id: 'app-reg',
+        status: 'draft',
+        updatedAt: new Date(),
+        applicationCategory: options.category ?? 'self_funded',
+        personalData: {},
+        essayAnswers: {},
+        uploadedFiles: {},
+        program: {
+            id: 'prog-reg',
+            name: 'MEYS',
+            currency: options.currency ?? 'USD',
+            applicationDeadline: new Date(Date.now() + 86400000),
+            formFields: [],
+            essays: [],
+            requirements: [],
+            pricingTiers: [
+                {
+                    id: 'reg-sf',
+                    allowedCategories: ['self_funded'],
+                    price: options.usdPrice ?? 15,
+                    currency: 'USD',
+                    usdPrice: options.usdPrice ?? 15,
+                    idrPrice: 274500,
+                    validityPeriods: options.validityPeriods ?? [
+                        { startDate: new Date(Date.now() - 86400000), endDate: new Date(Date.now() + 86400000) },
+                    ],
+                },
+            ],
+            resources: [],
+            announcements: [],
+            programAnnouncements: [],
+        },
+        registrationPaymentStatus: 'unpaid',
+        invoices: options.invoices ?? [],
+    });
+
+    const mockParticipantAndStats = () => {
+        mockCacheService.get.mockResolvedValue(null);
+        mockPortalCacheService.getParticipantProfile.mockResolvedValue({ id: 'p-1', userId: 'u-1', fullName: 'Test User' });
+        mockPortalCacheService.getParticipantStats.mockResolvedValue({
+            applicationsCount: 1,
+            completedProgramsCount: 0,
+            certificatesCount: 0,
+        });
+    };
+
+    it('adds the registration fee to totalRequired when it is due but not yet invoiced', async () => {
+        mockParticipantAndStats();
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(buildAppWithRegTier());
+
+        const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+        expect(result.stats?.totalRequired).toEqual({ amount: 15, currency: 'USD' });
+        expect(result.alerts.some((alert) => alert.id === 'payment-due')).toBe(true);
+    });
+
+    it('does not add the registration fee once it is already paid', async () => {
+        mockParticipantAndStats();
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(
+            buildAppWithRegTier({
+                invoices: [{ id: 'inv-reg', status: 'paid', amount: 15, pricingTier: { feeType: 'registration_fee' } }],
+            }),
+        );
+
+        const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+        expect(result.stats?.totalRequired).toEqual({ amount: 0, currency: 'USD' });
+        expect(result.alerts.some((alert) => alert.id === 'payment-due')).toBe(false);
+    });
+
+    it('does not double-count an existing unpaid registration invoice', async () => {
+        mockParticipantAndStats();
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(
+            buildAppWithRegTier({
+                invoices: [{ id: 'inv-reg', status: 'unpaid', amount: 15, pricingTier: { feeType: 'registration_fee' } }],
+            }),
+        );
+
+        const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+        expect(result.stats?.totalRequired).toEqual({ amount: 15, currency: 'USD' });
+    });
+
+    it('does not add the registration fee before its window opens', async () => {
+        mockParticipantAndStats();
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(
+            buildAppWithRegTier({
+                validityPeriods: [
+                    { startDate: new Date(Date.now() + 86400000), endDate: new Date(Date.now() + 2 * 86400000) },
+                ],
+            }),
+        );
+
+        const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+        expect(result.stats?.totalRequired).toEqual({ amount: 0, currency: 'USD' });
+    });
+
     const buildAppWithFfTier = (
         validityPeriods: { startDate: Date; endDate: Date }[] | undefined,
     ) => ({
