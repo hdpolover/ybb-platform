@@ -16,6 +16,7 @@ import {
 } from '../../../presentation/dto/portal-dashboard.dto';
 import { resolveMaskedFileUrl } from '@shared/utils/masked-file-url';
 import { buildRichTextPreview } from '@shared/utils/rich-text';
+import { calculatePortalTotalRequired } from '../../utils/calculate-portal-total-required';
 
 @Injectable()
 @QueryHandler(GetPortalDashboardQuery)
@@ -123,6 +124,10 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                             select: {
                                 id: true,
                                 allowedCategories: true,
+                                price: true,
+                                currency: true,
+                                usdPrice: true,
+                                idrPrice: true,
                                 validityPeriods: { select: { startDate: true, endDate: true } },
                             }
                         },
@@ -160,10 +165,18 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
             certificatesCount: 0,
         };
 
-        const totalRequired = this.calculateTotalRequired(
+        const totalRequiredResult = calculatePortalTotalRequired(
+            latestApplication?.applicationCategory ?? null,
             latestApplication?.invoices ?? [],
+            latestApplication?.program?.pricingTiers ?? [],
             latestApplication?.program?.currency,
+            new Date(),
         );
+        const totalRequired = {
+            amount: totalRequiredResult.amount,
+            currency: totalRequiredResult.currency,
+        };
+        const hasOutstandingPayment = totalRequiredResult.hasOutstanding;
 
         // 3. Application Summary & Alerts
         let activeAppSummary: PortalApplicationSummaryDto | null = null;
@@ -171,7 +184,7 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
         let announcements: { id: string; title: string; date: Date | null; preview: string; isRead: boolean }[] = [];
 
         if (latestApplication) {
-            alerts = this.generateAlerts(latestApplication);
+            alerts = this.generateAlerts(hasOutstandingPayment);
             
             const tiers = (latestApplication.program.pricingTiers ?? []) as unknown as {
                 allowedCategories: string[];
@@ -329,37 +342,19 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
          };
     }
 
-    private calculateTotalRequired(
-        invoices: Array<{ status: string; amount: unknown }>,
-        currency?: string | null,
-    ): { amount: number; currency: string } {
-        const requiredStatuses = new Set(['unpaid', 'failed']);
-        const totalRequiredAmount = invoices
-            .filter((invoice) => requiredStatuses.has(String(invoice.status).toLowerCase()))
-            .reduce((sum, invoice) => {
-                const parsedAmount = Number(invoice.amount ?? 0);
-                return Number.isFinite(parsedAmount) ? sum + parsedAmount : sum;
-            }, 0);
-
-        return {
-            amount: Math.round(totalRequiredAmount * 100) / 100,
-            currency: String(currency || 'USD').toUpperCase(),
-        };
-    }
-
-    private generateAlerts(application: { invoices: { status: string }[] }): PortalDashboardAlertDto[] {
+    private generateAlerts(hasOutstandingPayment: boolean): PortalDashboardAlertDto[] {
         const alerts: PortalDashboardAlertDto[] = [];
-        
-        // Payment Alert
-        const hasUnpaidInvoices = application.invoices.some(inv => inv.status === 'unpaid' || inv.status === 'failed');
-        if (hasUnpaidInvoices) {
+
+        // Payment Alert — fires on any amount owed, including a registration fee
+        // that is due but not yet invoiced (see calculatePortalTotalRequired).
+        if (hasOutstandingPayment) {
             alerts.push({
                 id: 'payment-due',
                 type: 'error',
                 title: 'Payment Required',
-                message: 'You have outstanding invoices.',
+                message: 'You have an outstanding payment.',
                 actionLabel: 'Pay Now',
-                actionUrl: `/portal/payments`
+                actionUrl: `/dashboard/payments`
             });
         }
 

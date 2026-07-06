@@ -98,6 +98,7 @@ export class CancelPortalPaymentHandler {
             this.cacheService.invalidateKey(
                 CACHE_KEYS.PORTAL_PAYMENTS(command.userId, invoice.application.programId),
             ),
+            this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_DASHBOARD(command.userId)),
         ]);
 
         return {
