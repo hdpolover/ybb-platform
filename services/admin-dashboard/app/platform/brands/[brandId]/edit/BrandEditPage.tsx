@@ -53,6 +53,42 @@ function Field({
   );
 }
 
+function SelectField({
+  label,
+  id,
+  value,
+  onChange,
+  options,
+  hint,
+  disabled,
+}: {
+  label: string;
+  id: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  hint?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <select
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        className="flex h-9 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+      {hint && <p className="text-xs text-zinc-400">{hint}</p>}
+    </div>
+  );
+}
+
 function TextArea({
   label,
   id,
@@ -89,12 +125,14 @@ function CheckboxField({
   checked,
   onChange,
   hint,
+  disabled,
 }: {
   label: string;
   id: string;
   checked: boolean;
   onChange: (v: boolean) => void;
   hint?: string;
+  disabled?: boolean;
 }) {
   return (
     <div className="flex items-start gap-3">
@@ -103,7 +141,8 @@ function CheckboxField({
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 h-4 w-4 rounded border-zinc-300 accent-blue-600"
+        disabled={disabled}
+        className="mt-0.5 h-4 w-4 rounded border-zinc-300 accent-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
       />
       <div>
         <Label htmlFor={id} className="cursor-pointer">{label}</Label>
@@ -566,7 +605,11 @@ function SettingsTab({
   const [requireEmailVerification, setRequireEmailVerification] = useState(
     brand.requireEmailVerification ?? true,
   );
-  const [defaultCurrency, setDefaultCurrency] = useState(brand.defaultCurrency ?? "USD");
+  // Only USD/IDR can actually settle; coerce any legacy value (e.g. a stray "CNY")
+  // to IDR so saving the form doesn't trip the API's currency validation.
+  const [defaultCurrency, setDefaultCurrency] = useState(
+    brand.defaultCurrency === "USD" ? "USD" : "IDR",
+  );
   const [enableMultiCurrency, setEnableMultiCurrency] = useState(brand.enableMultiCurrency ?? false);
   const [isMaintenanceMode, setIsMaintenanceMode] = useState(s?.isMaintenanceMode ?? false);
   const [maintenanceMessage, setMaintenanceMessage] = useState(s?.maintenanceMessage ?? "");
@@ -608,20 +651,24 @@ function SettingsTab({
       <Card>
         <CardHeader><CardTitle>Currency</CardTitle></CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Field
+          <SelectField
             label="Default Currency"
             id="defaultCurrency"
             value={defaultCurrency}
             onChange={setDefaultCurrency}
-            placeholder="USD"
-            hint="3-letter ISO code, e.g. USD, IDR"
+            options={[
+              { value: "IDR", label: "IDR" },
+              { value: "USD", label: "USD" },
+            ]}
+            hint="Display only. Settlement currency is set per program & pricing tier — this does not affect what participants pay."
           />
           <CheckboxField
             label="Enable Multi-Currency"
             id="enableMultiCurrency"
             checked={enableMultiCurrency}
             onChange={setEnableMultiCurrency}
-            hint="Allow participants to pay in multiple currencies."
+            disabled
+            hint="Not yet implemented. Payments settle in IDR/USD per pricing tier."
           />
           <CheckboxField
             label="Require Email Verification"

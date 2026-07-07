@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsBoolean, IsString, IsNumber, Min } from 'class-validator';
+import { IsOptional, IsBoolean, IsString, IsNumber, Min, IsIn } from 'class-validator';
 
 export class UpdateBrandSettingsDto {
     @ApiProperty({ required: false, description: 'Whether users must verify email before accessing dashboard.' })
@@ -7,9 +7,13 @@ export class UpdateBrandSettingsDto {
     @IsBoolean()
     requireEmailVerification?: boolean;
 
-    @ApiProperty({ required: false, example: 'USD', description: 'Default currency code.' })
+    // Settlement currency is driven at the program / pricing-tier / invoice level
+    // (IDR base + USD via usdInIdr rate). This brand-level field is not consumed by
+    // any pricing or display logic; constrain it to the currencies the system can
+    // actually settle in so it can't be set to something misleading (e.g. CNY).
+    @ApiProperty({ required: false, example: 'IDR', description: 'Default currency code (display only; not used for settlement).' })
     @IsOptional()
-    @IsString()
+    @IsIn(['USD', 'IDR'])
     defaultCurrency?: string;
 
     @ApiProperty({ required: false, description: 'Enable multi-currency support.' })
