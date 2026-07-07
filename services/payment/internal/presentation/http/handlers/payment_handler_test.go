@@ -278,6 +278,56 @@ func TestVerifyPaymentRejectUpdatesTransactionAndIntent(t *testing.T) {
 	require.Equal(t, "MANUAL_REJECTED", txRepo.updated.ErrorCode)
 }
 
+// A transaction that already settled (SUCCESS) must not be re-verified. Rejecting it
+// would flip a paid registration to failed via the NestJS cascade, un-enrolling a
+// participant who paid. Only NEEDS_REVIEW transactions are verifiable.
+func TestVerifyPaymentRejectOnSettledTransactionReturns400(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	intent := &entities.PaymentIntent{
+		ID:            "intent-1",
+		UserID:        "user-1",
+		ReferenceType: "application",
+		ReferenceID:   "app-1",
+		Amount:        100000,
+		Currency:      "IDR",
+		Status:        entities.PaymentIntentStatusSucceeded,
+		CreatedAt:     time.Unix(100, 0),
+		UpdatedAt:     time.Unix(200, 0),
+	}
+	tx := &entities.PaymentTransaction{
+		ID:              "tx-1",
+		IntentID:        intent.ID,
+		PaymentMethodID: "manual_transfer",
+		Currency:        "IDR",
+		AmountTotal:     100000,
+		AmountSubtotal:  100000,
+		NetAmount:       100000,
+		Status:          entities.TransactionStatusSuccess,
+		CreatedAt:       time.Unix(100, 0),
+		UpdatedAt:       time.Unix(200, 0),
+	}
+
+	intentRepo := &stubIntentRepository{byID: map[string]*entities.PaymentIntent{intent.ID: intent}}
+	txRepo := &stubTransactionRepository{byID: map[string]*entities.PaymentTransaction{tx.ID: tx}}
+	handler := NewPaymentHandler(intentRepo, txRepo, messaging.NewNoOpPublisher(), nil)
+
+	router := gin.New()
+	router.POST("/payments/:id/verify", handler.VerifyPayment)
+
+	body := bytes.NewBufferString(`{"action":"reject","admin_id":"admin-1","reason":"duplicate payment"}`)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/payments/tx-1/verify", body)
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	// The settled transaction must be left untouched.
+	require.Nil(t, txRepo.updated)
+	require.Nil(t, intentRepo.updated)
+	require.Equal(t, entities.TransactionStatusSuccess, txRepo.byID[tx.ID].Status)
+}
+
 func TestHandleWebhookUpdatesTransactionByGatewayReference(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

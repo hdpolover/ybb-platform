@@ -419,6 +419,16 @@ func (h *PaymentHandler) VerifyPayment(c *gin.Context) {
 			return
 		}
 
+		// Guard: only a manual payment awaiting review may be verified. Without this,
+		// approve/reject would mutate an already-terminal transaction (e.g. a SUCCESS
+		// manual transfer), and the NestJS wrapper would then cascade that onto the
+		// application's registration/program payment status — un-enrolling a participant
+		// who already paid. Mirrors CancelPayment's terminal-status guard below.
+		if tx.Status != entities.TransactionStatusNeedsReview {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Only payments awaiting review can be verified"})
+			return
+		}
+
 		now := time.Now()
 		tx.ReviewedAt = &now
 		tx.UpdatedAt = now
