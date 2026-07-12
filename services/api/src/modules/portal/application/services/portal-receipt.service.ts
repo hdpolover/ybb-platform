@@ -1,173 +1,249 @@
 import { Injectable, Logger } from '@nestjs/common';
-import * as fs from 'fs';
-import * as path from 'path';
-type PdfDocumentInstance = any;
+import { ConfigService } from '@nestjs/config';
+import {
+    FileServiceClient,
+    GenerateReceiptPayload,
+} from '@modules/files/infrastructure/clients/file-service.client';
 
-// ---------------------------------------------------------------------------
-// Unicode font resolution for pdfkit
-// ---------------------------------------------------------------------------
-// pdfkit's built-in fonts (Helvetica, Times-Roman, etc.) are AFM-only and
-// cannot render non-Latin glyphs.  A TTF must be registered explicitly.
-//
-// Search order for NotoSans-Regular.ttf at process start:
-//   1. services/api/assets/fonts/NotoSans-Regular.ttf  (repo-bundled, highest priority)
-//   2. /usr/share/fonts/noto/NotoSans-Regular.ttf      (alpine: apk add font-noto)
-//   3. /usr/share/fonts/truetype/noto/NotoSans-Regular.ttf  (debian: apt fonts-noto-core)
-//
-// If none is found the service falls back to Helvetica — Latin renders fine;
-// non-Latin glyphs will appear as tofu boxes.  To fix: place a NotoSans-Regular.ttf
-// in services/api/assets/fonts/ (gitignored binary) or install font-noto in the
-// container image (see Dockerfile.dev / Dockerfile.prod).
+// Net-7 grace period used to derive an invoice due date. ApplicationInvoice
+// has no dedicated due_date column (see prisma/schema/applications.prisma) —
+// per the plan, unpaid invoices fall back to createdAt + this offset.
+const INVOICE_DUE_OFFSET_DAYS = 7;
 
-const NOTO_SANS_SEARCH_PATHS: readonly string[] = [
-    path.resolve(__dirname, '../../../../../assets/fonts/NotoSans-Regular.ttf'),
-    '/usr/share/fonts/noto/NotoSans-Regular.ttf',
-    '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf',
-];
+const DEFAULT_ACCENT_COLOR = '#26408B';
 
-function resolveNotoSansPath(): string | null {
-    for (const candidate of NOTO_SANS_SEARCH_PATHS) {
-        try {
-            if (fs.existsSync(candidate)) {
-                return candidate;
-            }
-        } catch {
-            // continue
-        }
-    }
-    return null;
-}
+const STATUS_LABELS: Record<string, string> = {
+    paid: 'PAID',
+    unpaid: 'UNPAID',
+    pending: 'PENDING',
+    processing: 'PROCESSING',
+    failed: 'FAILED',
+    cancelled: 'CANCELLED',
+    refunded: 'REFUNDED',
+};
 
-const NOTO_SANS_TTF_PATH = resolveNotoSansPath();
-const UNICODE_FONT = NOTO_SANS_TTF_PATH ? 'NotoSans' : 'Helvetica';
+const FEE_TYPE_LABELS: Record<string, string> = {
+    registration_fee: 'Registration Fee',
+    program_fee_1: 'Program Fee',
+    program_fee_2: 'Program Fee (Installment 2)',
+    full_fee: 'Full Program Fee',
+    custom_fee: 'Program Fee',
+};
 
-export interface ReceiptData {
-    receiptNumber: string;
+export interface ReceiptDocInput {
+    docType: 'receipt' | 'invoice';
     invoiceId: string;
-    transactionId?: string;
+    status: string;
     amount: number;
     currency: string;
-    paidAt: Date;
+    amountUsd: number | null;
+    amountIdr: number | null;
+    exchangeRateSnapshot: number | null;
+    feeProvider: number | null;
+    paidAt: Date | null;
+    createdAt: Date;
+    transactionReference: string | null;
+    paymentMethod: string | null;
     customerName: string;
-    customerEmail?: string;
-    description: string;
+    customerEmail: string | null;
+    customerInstitution: string | null;
     programName: string;
-    paymentMethod?: string;
-    brandName?: string;
+    programLogoUrl: string | null;
+    programLogoColorUrl: string | null;
+    pricingTierName: string | null;
+    feeType: string | null;
+    brand: {
+        name: string;
+        logoUrl: string | null;
+        primaryColor: string | null;
+        contactEmail: string | null;
+        contactPhone: string | null;
+        contactAddress: string | null;
+        websiteUrl: string | null;
+    } | null;
 }
 
 /**
- * Generates a payment receipt PDF on the API side. Mirrors the notification
- * service's ReceiptService but lives where invoices are owned, so participants
- * can pull a receipt synchronously even when the email channel is down.
+ * Builds the Stage-1 WeasyPrint data contract for portal receipts/invoices
+ * and calls the file service to render the PDF. Replaces the old pdfkit
+ * renderer — all currency formatting, logo-fallback resolution, accent
+ * color, and FX-line construction now live here (see
+ * .planning/receipt-redesign-plan.md "Currency truth" + "Data contract").
  */
 @Injectable()
 export class PortalReceiptService {
     private readonly logger = new Logger(PortalReceiptService.name);
+    private readonly storageUrl: string;
 
-    generate(data: ReceiptData): Promise<Buffer> {
-        return new Promise((resolve, reject) => {
-            try {
-                const PDFDocument = this.getPdfDocumentConstructor();
-                const doc = new PDFDocument({ size: 'A4', margin: 50 });
-                const buffers: Buffer[] = [];
-
-                // Register NotoSans once per document if the TTF is available.
-                // This is idempotent — pdfkit silently ignores duplicate registrations
-                // for the same alias within the same document instance.
-                if (NOTO_SANS_TTF_PATH) {
-                    try {
-                        doc.registerFont('NotoSans', NOTO_SANS_TTF_PATH);
-                    } catch (fontErr) {
-                        this.logger.warn('NotoSans font registration failed; falling back to Helvetica', fontErr);
-                    }
-                }
-
-                doc.on('data', (chunk: Buffer) => buffers.push(chunk));
-                doc.on('end', () => resolve(Buffer.concat(buffers)));
-                doc.on('error', reject);
-
-                this.renderHeader(doc, data.brandName ?? 'YBB Platform');
-                this.renderMeta(doc, data);
-                this.renderBilledTo(doc, data);
-                this.renderLineItem(doc, data);
-                this.renderTotal(doc, data);
-                this.renderFooter(doc);
-
-                doc.end();
-            } catch (error) {
-                this.logger.error('Failed to generate receipt PDF', error);
-                reject(error instanceof Error ? error : new Error(String(error)));
-            }
-        });
+    constructor(
+        private readonly fileServiceClient: FileServiceClient,
+        private readonly configService: ConfigService,
+    ) {
+        const rawUrl = this.configService.get<string>('STORAGE_PUBLIC_URL', 'http://localhost:9000');
+        this.storageUrl = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
     }
 
-    private getPdfDocumentConstructor(): new (...args: any[]) => PdfDocumentInstance {
+    async generate(input: ReceiptDocInput): Promise<Buffer> {
+        const payload = this.buildPayload(input);
         try {
-            return require('pdfkit');
-        } catch {
-            throw new Error('Missing runtime dependency "pdfkit". Rebuild API image after installing dependencies.');
+            return await this.fileServiceClient.generateReceipt(payload);
+        } catch (error) {
+            this.logger.error(
+                `Failed to generate ${input.docType} for invoice ${input.invoiceId}`,
+                error instanceof Error ? error.stack : String(error),
+            );
+            throw error instanceof Error ? error : new Error(String(error));
         }
     }
 
-    private renderHeader(doc: PdfDocumentInstance, brandName: string): void {
-        doc.fontSize(20).text('PAYMENT RECEIPT', { align: 'center' });
-        doc.moveDown(0.5);
-        doc.fontSize(11).fillColor('#555').text(brandName, { align: 'center' });
-        doc.fillColor('black');
-        doc.moveDown();
+    private buildPayload(input: ReceiptDocInput): GenerateReceiptPayload {
+        const isReceipt = input.docType === 'receipt';
+        const idShort = input.invoiceId.slice(0, 8).toUpperCase();
+        const documentNumber = isReceipt ? `R-${idShort}` : `INV-${idShort}`;
+
+        const totalFormatted = formatCurrency(input.amount, input.currency);
+        const feeFormatted =
+            input.feeProvider != null ? formatCurrency(input.feeProvider, input.currency) : null;
+
+        const feeTypeLabel = input.feeType ? FEE_TYPE_LABELS[input.feeType] ?? null : null;
+        const lineItemTitle = input.pricingTierName || feeTypeLabel || 'Program Fee';
+        const lineItemSubtitle = [input.programName, feeTypeLabel && feeTypeLabel !== lineItemTitle ? feeTypeLabel : null]
+            .filter(Boolean)
+            .join(' · ') || null;
+
+        const dueDate = new Date(input.createdAt);
+        dueDate.setDate(dueDate.getDate() + INVOICE_DUE_OFFSET_DAYS);
+
+        return {
+            doc_type: input.docType,
+            status_label: STATUS_LABELS[input.status] ?? input.status.toUpperCase(),
+            is_paid: input.status === 'paid',
+            document_number: documentNumber,
+            issued_date: formatDate(input.createdAt),
+            settled_line: isReceipt && input.paidAt ? formatSettledLine(input.paidAt) : null,
+            due_line: !isReceipt ? formatDueLine(dueDate) : null,
+            transaction_reference: input.transactionReference,
+            accent_color: input.brand?.primaryColor || DEFAULT_ACCENT_COLOR,
+            program_name: input.programName,
+            program_logo_url: this.resolveProgramLogoUrl(input),
+            program_initials: buildInitials(input.programName),
+            billed_to: {
+                name: input.customerName,
+                email: input.customerEmail,
+                institution: input.customerInstitution,
+            },
+            line_items: [
+                {
+                    title: lineItemTitle,
+                    subtitle: lineItemSubtitle,
+                    amount: totalFormatted,
+                },
+            ],
+            subtotal: totalFormatted,
+            fee: feeFormatted,
+            total: totalFormatted,
+            fx_line: buildFxLine(input),
+            payment_method_label: input.paymentMethod ? formatPaymentMethodLabel(input.paymentMethod) : null,
+            brand: {
+                name: input.brand?.name || 'YBB Platform',
+                contact_email: input.brand?.contactEmail ?? null,
+                contact_phone: input.brand?.contactPhone ?? null,
+                contact_address: input.brand?.contactAddress ?? null,
+                website: input.brand?.websiteUrl ?? null,
+            },
+        };
     }
 
-    private renderMeta(doc: PdfDocumentInstance, data: ReceiptData): void {
-        const dateStr = data.paidAt.toISOString().slice(0, 10);
-        doc.fontSize(11);
-        doc.text(`Receipt No.: ${data.receiptNumber}`, { align: 'right' });
-        doc.text(`Date: ${dateStr}`, { align: 'right' });
-        if (data.transactionId) {
-            doc.text(`Transaction: ${data.transactionId}`, { align: 'right' });
-        }
-        doc.moveDown();
+    // Logo fallback chain: program.logoUrl -> program.logoColorUrl -> brand.logoUrl -> none.
+    private resolveProgramLogoUrl(input: ReceiptDocInput): string | null {
+        const candidate = input.programLogoUrl || input.programLogoColorUrl || input.brand?.logoUrl || null;
+        if (!candidate) return null;
+        return candidate.startsWith('http') ? candidate : `${this.storageUrl}/${candidate}`;
     }
+}
 
-    private renderBilledTo(doc: PdfDocumentInstance, data: ReceiptData): void {
-        doc.fontSize(11).text('Billed To:', { underline: true });
-        // Switch to the Unicode-capable font for the participant name so non-Latin
-        // scripts (Arabic, Bengali, diacritics) render instead of tofu boxes.
-        doc.font(UNICODE_FONT).text(data.customerName);
-        // Restore default Helvetica for the remaining fields which are Latin-only.
-        doc.font('Helvetica');
-        if (data.customerEmail) doc.text(data.customerEmail);
-        doc.moveDown();
+/**
+ * IDR renders grouped with no decimals ("IDR 180,000"); every other currency
+ * (USD etc.) renders with 2 decimals ("USD 10.00"). Verified against live
+ * invoice data — see .planning/receipt-redesign-plan.md "Currency truth".
+ */
+export function formatCurrency(amount: number, currency: string): string {
+    const upper = currency.toUpperCase();
+    const fractionDigits = upper === 'IDR' ? 0 : 2;
+    const formatted = new Intl.NumberFormat('en-US', {
+        minimumFractionDigits: fractionDigits,
+        maximumFractionDigits: fractionDigits,
+    }).format(amount);
+    return `${upper} ${formatted}`;
+}
+
+function formatRate(rate: number): string {
+    return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(rate);
+}
+
+/**
+ * FX line only appears when an exchange rate snapshot exists AND the
+ * equivalent currency actually differs from what was paid — e.g. an IDR
+ * invoice shows "≈ USD 10.00 · rate 17,580"; a USD invoice with an IDR
+ * equivalent on file shows the reverse. Same-currency / no-snapshot skips it.
+ */
+export function buildFxLine(input: {
+    currency: string;
+    exchangeRateSnapshot: number | null;
+    amountUsd: number | null;
+    amountIdr: number | null;
+}): string | null {
+    if (input.exchangeRateSnapshot == null) return null;
+    const upper = input.currency.toUpperCase();
+
+    if (upper === 'IDR' && input.amountUsd != null) {
+        return `≈ ${formatCurrency(input.amountUsd, 'USD')} · rate ${formatRate(input.exchangeRateSnapshot)}`;
     }
-
-    private renderLineItem(doc: PdfDocumentInstance, data: ReceiptData): void {
-        const startX = 50;
-        const headerY = doc.y;
-        doc.fontSize(11);
-        doc.text('Description', startX, headerY, { width: 350 });
-        doc.text('Amount', 410, headerY, { width: 140, align: 'right' });
-        doc.moveTo(startX, headerY + 16).lineTo(550, headerY + 16).stroke();
-        doc.moveDown(1);
-
-        const itemY = doc.y;
-        doc.text(`${data.description} - ${data.programName}`, startX, itemY, { width: 350 });
-        doc.text(`${data.currency} ${data.amount.toFixed(2)}`, 410, itemY, { width: 140, align: 'right' });
-        doc.moveDown(2);
+    if (upper === 'USD' && input.amountIdr != null) {
+        return `≈ ${formatCurrency(input.amountIdr, 'IDR')} · rate ${formatRate(input.exchangeRateSnapshot)}`;
     }
+    return null;
+}
 
-    private renderTotal(doc: PdfDocumentInstance, data: ReceiptData): void {
-        doc.fontSize(13).text(`Total: ${data.currency} ${data.amount.toFixed(2)}`, { align: 'right' });
-        if (data.paymentMethod) {
-            doc.moveDown(0.5);
-            doc.fontSize(10).fillColor('#555').text(`Paid via: ${data.paymentMethod}`, { align: 'right' });
-            doc.fillColor('black');
-        }
-    }
+function formatDate(date: Date): string {
+    return new Intl.DateTimeFormat('en-GB', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        timeZone: 'Asia/Jakarta',
+    }).format(date);
+}
 
-    private renderFooter(doc: PdfDocumentInstance): void {
-        doc.moveDown(2);
-        doc.fontSize(9).fillColor('#777')
-            .text('This receipt was generated automatically. Keep it for your records.', { align: 'center' });
-        doc.fillColor('black');
-    }
+function formatSettledLine(date: Date): string {
+    const formatted = new Intl.DateTimeFormat('en-GB', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZone: 'Asia/Jakarta',
+    }).format(date);
+    return `Settled ${formatted} WIB`;
+}
+
+function formatDueLine(date: Date): string {
+    return `Due ${formatDate(date)}`;
+}
+
+function buildInitials(programName: string): string {
+    return programName
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 3)
+        .map(word => word[0]?.toUpperCase() ?? '')
+        .join('');
+}
+
+function formatPaymentMethodLabel(method: string): string {
+    return method
+        .split(/[_\s]+/)
+        .filter(Boolean)
+        .map(word => word[0].toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
 }

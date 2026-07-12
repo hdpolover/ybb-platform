@@ -36,8 +36,54 @@ class CustomReportRequest(BaseModel):
     sheet_name: str = "Report"
 
 
-class ReceiptRequest(BaseModel):
-    transaction_data: Dict[str, Any]
+class ReceiptBilledTo(BaseModel):
+    name: str = ""
+    email: Optional[str] = None
+    institution: Optional[str] = None
+
+
+class ReceiptLineItem(BaseModel):
+    title: str = ""
+    subtitle: Optional[str] = None
+    amount: str = ""
+
+
+class ReceiptBrand(BaseModel):
+    name: str = ""
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    contact_address: Optional[str] = None
+    website: Optional[str] = None
+
+
+class ReceiptWeasyRequest(BaseModel):
+    """Stage 1 data contract for the WeasyPrint receipt/invoice generator.
+
+    NestJS pre-formats every currency string (subtotal/fee/total/line item
+    amounts) and resolves logo fallback / accent color / FX line — this
+    model is a dumb pass-through, matching
+    .planning/receipt-redesign-plan.md exactly.
+    """
+    doc_type: str  # "receipt" | "invoice"
+    status_label: str = ""
+    is_paid: bool = False
+    document_number: str = ""
+    issued_date: str = ""
+    settled_line: Optional[str] = None
+    due_line: Optional[str] = None
+    transaction_reference: Optional[str] = None
+    accent_color: Optional[str] = None
+    program_name: str = ""
+    program_logo_url: Optional[str] = None
+    program_initials: str = ""
+    billed_to: ReceiptBilledTo
+    line_items: List[ReceiptLineItem] = []
+    subtotal: str = ""
+    fee: Optional[str] = None
+    total: str = ""
+    fx_line: Optional[str] = None
+    payment_method_label: Optional[str] = None
+    brand: ReceiptBrand
 
 
 class OfferLetterRequest(BaseModel):
@@ -156,18 +202,20 @@ async def export_custom_report(
 # PDF Generation Endpoints
 @router.post("/generate/receipt")
 async def generate_receipt(
-    request: ReceiptRequest,
+    request: ReceiptWeasyRequest,
     pdf_service: PDFGeneratorService = Depends(get_pdf_generator_service)
 ):
-    """Generate payment receipt PDF."""
+    """Generate a receipt (paid) or invoice (unpaid) PDF via WeasyPrint."""
     try:
-        pdf_file = await pdf_service.generate_receipt(request.transaction_data)
-        
+        pdf_file = await pdf_service.generate_receipt_weasy(request.model_dump())
+
+        filename_prefix = "receipt" if request.doc_type == "receipt" else "invoice"
+        filename = f"{filename_prefix}_{request.document_number or 'document'}.pdf"
         return Response(
             content=pdf_file.getvalue(),
             media_type="application/pdf",
             headers={
-                "Content-Disposition": f"attachment; filename=receipt_{request.transaction_data.get('receipt_number', 'unknown')}.pdf"
+                "Content-Disposition": f"attachment; filename={filename}"
             }
         )
     except Exception as e:

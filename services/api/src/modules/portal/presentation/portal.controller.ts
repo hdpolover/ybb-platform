@@ -132,53 +132,131 @@ export class PortalController {
         const userId = user.userId;
         if (!userId) throw new UnauthorizedException();
 
+        const invoice = await this.findOwnedInvoiceForDocument(id, userId);
+        if (invoice.status !== 'paid' || !invoice.paidAt) {
+            throw new BadRequestException('Receipt is only available for paid invoices');
+        }
+
+        const pdf = await this.receiptService.generate(this.toReceiptDocInput(invoice, 'receipt'));
+
+        return new StreamableFile(Readable.from(pdf), {
+            type: 'application/pdf',
+            disposition: `attachment; filename="receipt-${invoice.id}.pdf"`,
+        });
+    }
+
+    @Get('payments/:id/invoice')
+    @ApiOperation({ summary: 'Download a PDF invoice for any invoice status' })
+    @ApiResponse({ status: 200, description: 'PDF invoice' })
+    @Header('Content-Type', 'application/pdf')
+    async downloadInvoice(
+        @Param('id') id: string,
+        @CurrentUser() user: CurrentUserData,
+    ): Promise<StreamableFile> {
+        const userId = user.userId;
+        if (!userId) throw new UnauthorizedException();
+
+        const invoice = await this.findOwnedInvoiceForDocument(id, userId);
+
+        const pdf = await this.receiptService.generate(this.toReceiptDocInput(invoice, 'invoice'));
+
+        return new StreamableFile(Readable.from(pdf), {
+            type: 'application/pdf',
+            disposition: `attachment; filename="invoice-${invoice.id}.pdf"`,
+        });
+    }
+
+    // Shared ownership-checked lookup for both the receipt and invoice PDF
+    // downloads — same Prisma `select` so both documents get the full brand/
+    // program/currency fields needed by PortalReceiptService.
+    private async findOwnedInvoiceForDocument(id: string, userId: string) {
         const invoice = await this.prisma.applicationInvoice.findUnique({
             where: { id },
             include: {
                 application: {
                     select: {
-                        program: { select: { name: true, brand: { select: { name: true } } } },
+                        program: {
+                            select: {
+                                name: true,
+                                logoUrl: true,
+                                logoColorUrl: true,
+                                brand: {
+                                    select: {
+                                        name: true,
+                                        logoUrl: true,
+                                        primaryColor: true,
+                                        contactEmail: true,
+                                        contactPhone: true,
+                                        contactAddress: true,
+                                        websiteUrl: true,
+                                    },
+                                },
+                            },
+                        },
                         participant: {
                             select: {
                                 fullName: true,
+                                institution: true,
                                 userId: true,
                                 user: { select: { email: true } },
                             },
                         },
                     },
                 },
-                pricingTier: { select: { name: true } },
+                pricingTier: { select: { name: true, feeType: true } },
             },
         });
 
         if (!invoice) throw new NotFoundException('Invoice not found');
-        // Ownership check — receipt is not a public document
+        // Ownership check — receipts/invoices are not public documents
         if (invoice.application.participant.userId !== userId) {
             throw new UnauthorizedException();
         }
-        if (invoice.status !== 'paid' || !invoice.paidAt) {
-            throw new BadRequestException('Receipt is only available for paid invoices');
-        }
+        return invoice;
+    }
 
-        const pdf = await this.receiptService.generate({
-            receiptNumber: `R-${invoice.id.slice(0, 8).toUpperCase()}`,
+    private toReceiptDocInput(
+        invoice: Awaited<ReturnType<PortalController['findOwnedInvoiceForDocument']>>,
+        docType: 'receipt' | 'invoice',
+    ): Parameters<PortalReceiptService['generate']>[0] {
+        const program = invoice.application.program;
+        const participant = invoice.application.participant;
+        const brand = program.brand;
+
+        return {
+            docType,
             invoiceId: invoice.id,
-            transactionId: invoice.externalTransactionId ?? undefined,
+            status: invoice.status,
             amount: Number(invoice.amount),
             currency: invoice.currency,
+            amountUsd: invoice.amountUsd != null ? Number(invoice.amountUsd) : null,
+            amountIdr: invoice.amountIdr != null ? Number(invoice.amountIdr) : null,
+            exchangeRateSnapshot: invoice.exchangeRateSnapshot != null ? Number(invoice.exchangeRateSnapshot) : null,
+            feeProvider: invoice.feeProvider != null ? Number(invoice.feeProvider) : null,
             paidAt: invoice.paidAt,
-            customerName: invoice.application.participant.fullName,
-            customerEmail: invoice.application.participant.user.email,
-            description: invoice.pricingTier.name,
-            programName: invoice.application.program.name,
-            paymentMethod: invoice.paymentMethod ?? undefined,
-            brandName: invoice.application.program.brand?.name,
-        });
-
-        return new StreamableFile(Readable.from(pdf), {
-            type: 'application/pdf',
-            disposition: `attachment; filename="receipt-${invoice.id}.pdf"`,
-        });
+            createdAt: invoice.createdAt,
+            transactionReference: invoice.externalTransactionId ?? null,
+            paymentMethod: invoice.paymentMethod ?? null,
+            customerName: participant.fullName,
+            customerEmail: participant.user.email ?? null,
+            customerInstitution: participant.institution ?? null,
+            programName: program.name,
+            programLogoUrl: program.logoUrl ?? null,
+            programLogoColorUrl: program.logoColorUrl ?? null,
+            pricingTierName: invoice.pricingTier.name ?? null,
+            feeType: invoice.pricingTier.feeType ?? null,
+            brand: brand
+                ? {
+                      name: brand.name,
+                      logoUrl: brand.logoUrl ?? null,
+                      primaryColor: brand.primaryColor ?? null,
+                      contactEmail: brand.contactEmail ?? null,
+                      contactPhone: brand.contactPhone ?? null,
+                      contactAddress: brand.contactAddress ?? null,
+                      websiteUrl: brand.websiteUrl ?? null,
+                  }
+                : null,
+        };
     }
 
     @Post('payments/:id/confirm')
