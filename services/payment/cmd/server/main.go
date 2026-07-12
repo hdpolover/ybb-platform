@@ -157,6 +157,7 @@ func main() {
 	// Initialize repositories
 	gatewayConfigRepo := persistence.NewGatewayConfigRepository(db, cfg.PaymentSecretsKey)
 	paymentMethodRepo := persistence.NewPaymentMethodRepository(db)
+	programPaymentMethodRepo := persistence.NewProgramPaymentMethodRepository(db)
 
 	// Load gateways: DB-stored configs take priority over env vars.
 	// Providers found in DB will override their env-var counterparts.
@@ -216,6 +217,7 @@ func main() {
 	)
 
 	paymentMethodHandler := handlers.NewPaymentMethodHandler(paymentMethodRepo, gatewayFactory)
+	programPaymentMethodHandler := handlers.NewProgramPaymentMethodHandler(programPaymentMethodRepo, gatewayFactory)
 	gatewayConfigHandler := handlers.NewGatewayConfigHandler(gatewayConfigRepo, paymentMethodRepo)
 
 	// Allow the router (and the API server, via the internal endpoint) to trigger
@@ -230,7 +232,7 @@ func main() {
 	intentHandler := handlers.NewIntentHandler(createIntentHandler, confirmIntentHandler)
 
 	// Setup router
-	r := setupRouter(paymentHandler, paymentMethodHandler, gatewayConfigHandler, intentHandler, cfg.InternalServiceKey, refreshGatewaysNow)
+	r := setupRouter(paymentHandler, paymentMethodHandler, programPaymentMethodHandler, gatewayConfigHandler, intentHandler, cfg.InternalServiceKey, refreshGatewaysNow)
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -362,6 +364,7 @@ func registerGateways(
 func setupRouter(
 	paymentHandler *handlers.PaymentHandler,
 	paymentMethodHandler *handlers.PaymentMethodHandler,
+	programPaymentMethodHandler *handlers.ProgramPaymentMethodHandler,
 	gatewayConfigHandler *handlers.GatewayConfigHandler,
 	intentHandler *handlers.IntentHandler,
 	internalServiceKey string,
@@ -421,6 +424,14 @@ func setupRouter(
 			methods.POST("", paymentMethodHandler.Create)
 			methods.PUT("/:id", paymentMethodHandler.Update)
 			methods.DELETE("/:id", paymentMethodHandler.Delete)
+		}
+
+		// Per-Program Payment Methods (overlay on master; fallback-aware reads)
+		programMethods := protected.Group("/programs/:programId/payment-methods")
+		{
+			programMethods.GET("", programPaymentMethodHandler.GetByProgram)
+			programMethods.PUT("", programPaymentMethodHandler.BulkUpsert)
+			programMethods.PUT("/:methodId", programPaymentMethodHandler.UpsertOne)
 		}
 
 		// Gateway Configs (admin — manage provider API keys and active status)
