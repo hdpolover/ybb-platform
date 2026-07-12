@@ -53,6 +53,10 @@ export const CACHE_KEYS = {
   STATS_ADMIN_PROGRAM_DASHBOARD: (programId: string) => `stats:admin:program:${programId}:dashboard`,
   PARTICIPANT_LIST: (programId: string) => `participants:program:${programId}`,
   PAYMENT_METHODS: (params: string) => `payment:methods:${params}`,
+  // Program-scoped merged (fallback-aware) payment methods list. Distinct
+  // prefix from PAYMENT_METHODS so program-scoped writes never touch/invalidate
+  // the global payment methods cache.
+  PROGRAM_PAYMENT_METHODS: (programId: string) => `payment:methods:program:${programId}`,
 
   // Participant analytics cache keys
   ANALYTICS_KNOWLEDGE_SOURCE: (programId: string) => `analytics:knowledge-source:${programId}`,

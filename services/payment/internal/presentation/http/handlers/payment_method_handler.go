@@ -68,17 +68,28 @@ func (h *PaymentMethodHandler) GetAll(c *gin.Context) {
 	if c.Query("available_only") == "true" && h.gatewayFactory != nil {
 		filtered := make([]entities.PaymentMethodEntity, 0, len(methods))
 		for _, m := range methods {
-			if !m.Type.IsManual() && m.GatewayName != "" {
-				if _, err := h.gatewayFactory.GetGateway(m.GatewayName); err != nil {
-					continue
-				}
+			if isGatewayAvailable(h.gatewayFactory, m.Type, m.GatewayName) {
+				filtered = append(filtered, m)
 			}
-			filtered = append(filtered, m)
 		}
 		methods = filtered
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": methods})
+}
+
+// isGatewayAvailable reports whether a payment method should be shown when
+// `available_only=true` is requested. Manual methods (and automatic methods
+// with no gateway configured) always pass through; automatic methods are
+// only available if their gateway is currently registered/live in the
+// factory. Shared by GetAll and GetByProgram so the two endpoints can't
+// drift on what "available" means.
+func isGatewayAvailable(gatewayFactory *gateways.GatewayFactory, methodType entities.PaymentMethodType, gatewayName string) bool {
+	if methodType.IsManual() || gatewayName == "" {
+		return true
+	}
+	_, err := gatewayFactory.GetGateway(gatewayName)
+	return err == nil
 }
 
 // GetByID godoc

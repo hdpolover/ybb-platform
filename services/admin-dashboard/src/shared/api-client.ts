@@ -1673,6 +1673,93 @@ export function deletePaymentMethod(id: string): Promise<void> {
   return request<void>(`/admin/payments/methods/${id}`, { method: "DELETE" });
 }
 
+// ─── Program Payment Methods (per-program overlay) ───────────────────────────
+// Mirrors the Go ProgramMethodView merged read model (see
+// services/payment/internal/domain/repositories/program_payment_method_repository.go).
+// Master (read-only, never overridden per-program) fields sit alongside the
+// resolved (overlay-or-master) fields and per-field override flags so the
+// admin UI can tell which values are program-specific vs. inherited.
+export type ProgramPaymentMethod = {
+  id: string;
+  name: string;
+  type: PaymentMethodType;
+  code: string;
+  is_active: boolean;
+  display_name: string;
+  icon: string;
+  // --- Automatic Payment Fields (master-only, never overridden) ---
+  gateway_name: string;
+  gateway_type: string;
+  // --- Manual Payment Fields (master-only, never overridden) ---
+  bank_name: string;
+  account_number: string;
+  account_name: string;
+  requires_proof: boolean;
+  // --- Configuration (master-only) ---
+  config: PaymentMethodFeeConfig;
+  // --- Program context ---
+  program_id: string;
+  /** True if the program has ≥1 overlay row (see fallback contract). */
+  is_configured: boolean;
+  // --- Resolved (overlay-or-master) fields ---
+  is_enabled: boolean;
+  description: string;
+  instructions: string;
+  admin_instructions: string;
+  sort_order: number;
+  // --- Per-field override flags ---
+  has_description_override: boolean;
+  has_instructions_override: boolean;
+  has_admin_instructions_override: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+// One row of a program payment method override write. PUT is full-replace:
+// a nil/omitted override field clears that override (reverts to master).
+// Always send real values for is_enabled/sort_order; send null for an
+// override field the admin has not explicitly turned on for this program.
+export type ProgramMethodOverride = {
+  payment_method_id: string;
+  is_enabled: boolean;
+  description_override: string | null;
+  instructions_override: string | null;
+  admin_instructions_override: string | null;
+  sort_order: number;
+};
+
+// Both the single and bulk upsert routes proxy the Go service, which responds
+// with `{"status": "success"}` rather than the updated merged list — callers
+// should re-fetch via listProgramPaymentMethods() after a successful write.
+export type ProgramMethodWriteResult = {
+  status: string;
+};
+
+export function listProgramPaymentMethods(programId: string): Promise<ProgramPaymentMethod[]> {
+  return request<ProgramPaymentMethod[]>(`/admin/payments/programs/${programId}/methods`);
+}
+
+export function updateProgramPaymentMethod(
+  programId: string,
+  methodId: string,
+  override: Omit<ProgramMethodOverride, "payment_method_id">,
+): Promise<ProgramMethodWriteResult> {
+  return request<ProgramMethodWriteResult>(`/admin/payments/programs/${programId}/methods/${methodId}`, {
+    method: "PUT",
+    body: JSON.stringify(override),
+  });
+}
+
+export function bulkUpsertProgramPaymentMethods(
+  programId: string,
+  methods: ProgramMethodOverride[],
+): Promise<ProgramMethodWriteResult> {
+  return request<ProgramMethodWriteResult>(`/admin/payments/programs/${programId}/methods`, {
+    method: "PUT",
+    body: JSON.stringify({ methods }),
+  });
+}
+
 // ─── Payment Gateway Configs ─────────────────────────────────────────────────
 
 export const SUPPORTED_GATEWAY_PROVIDERS = ["midtrans", "xendit", "stripe", "paypal"] as const;

@@ -1,18 +1,21 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import { useParams } from "next/navigation";
-import { PlusIcon, PencilSquareIcon, TrashIcon, ArrowPathIcon, CloudArrowUpIcon, ExclamationTriangleIcon, CheckCircleIcon } from "@heroicons/react/24/outline";
-import { MagnifyingGlassIcon } from "@heroicons/react/24/solid";
+import { ArrowPathIcon, ExclamationTriangleIcon, PencilSquareIcon, CloudArrowUpIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
 import {
+  listProgramPaymentMethods,
+  bulkUpsertProgramPaymentMethods,
   listPaymentMethods,
   createPaymentMethodWithIcon,
   updatePaymentMethodWithIcon,
   deletePaymentMethod,
   listGatewayConfigs,
+  type ProgramPaymentMethod,
+  type ProgramMethodOverride,
   type PaymentMethod,
   type PaymentMethodType,
   type GatewayConfig,
@@ -26,6 +29,7 @@ import {
   SheetFooter,
 } from "@/src/ui/sheet";
 import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
+import { EmptyState } from "@/src/admin/empty-state";
 
 function normalizePaymentMethodType(type: string | undefined): PaymentMethodType {
   const normalized = String(type ?? "").trim().toLowerCase();
@@ -45,6 +49,37 @@ function normalizeRichText(value: string): string {
   return plain ? html : "";
 }
 
+function stripHtml(value: string): string {
+  return value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+// ─── Per-program override draft state ─────────────────────────────────────────
+// The merged GET response only ever returns *resolved* values (override if
+// present, else master) plus a has_override flag — it does not expose the raw
+// master text. So each override field tracks an explicit "override this field
+// for this program" toggle rather than diffing against an unknown baseline.
+// Unchecked => description_override etc. is sent as null on save (clears the
+// override / reverts to shared default), matching the full-replace contract.
+type FieldDraft = { override: boolean; value: string };
+
+type MethodDraft = {
+  isEnabled: boolean;
+  sortOrder: string;
+  description: FieldDraft;
+  instructions: FieldDraft;
+  adminInstructions: FieldDraft;
+};
+
+function buildDraft(method: ProgramPaymentMethod): MethodDraft {
+  return {
+    isEnabled: method.is_enabled,
+    sortOrder: String(method.sort_order),
+    description: { override: method.has_description_override, value: method.description },
+    instructions: { override: method.has_instructions_override, value: method.instructions },
+    adminInstructions: { override: method.has_admin_instructions_override, value: method.admin_instructions },
+  };
+}
+
 export default function PaymentMethodsPage() {
   const params = useParams<{ programId: string }>();
   const { accessiblePrograms, adminProfile } = useAuth();
@@ -53,274 +88,446 @@ export default function PaymentMethodsPage() {
   );
   const brandId = program?.brandId ?? "";
   const userId = adminProfile?.userId ?? "";
-  const [methods, setMethods] = useState<PaymentMethod[]>([]);
+  const programName = program?.programName ?? "Selected Program";
+
+  const [methods, setMethods] = useState<ProgramPaymentMethod[]>([]);
+  const [drafts, setDrafts] = useState<Record<string, MethodDraft>>({});
   const [activeGatewayNames, setActiveGatewayNames] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [typeFilter, setTypeFilter] = useState<"all" | "MANUAL" | "AUTOMATIC">("all");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
-  const [visibilityFilter, setVisibilityFilter] = useState<"all" | "visible" | "hidden">("all");
-  const [sortBy, setSortBy] = useState<"order-asc" | "order-desc" | "name-asc" | "name-desc">("order-asc");
-  const [showCreate, setShowCreate] = useState(false);
-  const [editTarget, setEditTarget] = useState<PaymentMethod | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<PaymentMethod | null>(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const programName = program?.programName ?? "Selected Program";
+  const [editSharedTarget, setEditSharedTarget] = useState<PaymentMethod | null>(null);
+  const [editSharedLoadingId, setEditSharedLoadingId] = useState<string | null>(null);
+  const [showCreateShared, setShowCreateShared] = useState(false);
+  const [deleteSharedTarget, setDeleteSharedTarget] = useState<{ id: string; label: string } | null>(null);
+  const [deleteSharedLoading, setDeleteSharedLoading] = useState(false);
 
-  const fetch = useCallback(async () => {
+  const fetchMethods = useCallback(async () => {
     if (!params.programId) return;
     setLoading(true); setError(null);
     try {
-      // Load methods + active gateway configs in parallel so the table can flag
-      // automatic methods whose gateway provider isn't configured (which would
-      // hide them from participants and fail at confirm-time).
+      // Load the program-scoped merged list + active gateway configs in
+      // parallel, same "orphaned gateway" warning as the old global screen.
       const [methodsData, gatewayConfigs] = await Promise.all([
-        listPaymentMethods(),
+        listProgramPaymentMethods(params.programId),
         listGatewayConfigs().catch(() => []),
       ]);
-      setMethods(
-        methodsData.map((method) => ({
-          ...method,
-          type: normalizePaymentMethodType(method.type),
-        })),
-      );
+      setMethods(methodsData);
+      setDrafts(Object.fromEntries(methodsData.map((m) => [m.id, buildDraft(m)])));
       setActiveGatewayNames(
         new Set(gatewayConfigs.filter((c) => c.is_active).map((c) => c.provider)),
       );
     }
-    catch (err) { setError(err instanceof Error ? err.message : "Failed to load"); }
+    catch (err) { setError(err instanceof Error ? err.message : "Failed to load payment methods"); }
     finally { setLoading(false); }
   }, [params.programId]);
 
-  useEffect(() => { fetch(); }, [fetch]);
+  useEffect(() => { fetchMethods(); }, [fetchMethods]);
 
-  const filteredMethods = useMemo(() => {
-    const normalizedSearch = searchTerm.trim().toLowerCase();
-
-    return [...methods]
-      .filter((method) => {
-        const methodType = normalizePaymentMethodType(method.type);
-        const gatewayActive = methodType === "MANUAL" || (method.gateway_name && activeGatewayNames.has(method.gateway_name));
-        const visibleToParticipants = method.is_active && gatewayActive;
-        const matchesSearch = !normalizedSearch || [
-          method.display_name,
-          method.name,
-          method.bank_name,
-          method.gateway_name,
-          method.account_name,
-          method.account_number,
-        ].join(" ").toLowerCase().includes(normalizedSearch);
-        const matchesType = typeFilter === "all" || methodType === typeFilter;
-        const matchesStatus = statusFilter === "all" || (statusFilter === "active" ? method.is_active : !method.is_active);
-        const matchesVisibility = visibilityFilter === "all" || (visibilityFilter === "visible" ? visibleToParticipants : !visibleToParticipants);
-        return matchesSearch && matchesType && matchesStatus && matchesVisibility;
-      })
-      .sort((left, right) => comparePaymentMethods(left, right, sortBy));
-  }, [methods, activeGatewayNames, searchTerm, typeFilter, statusFilter, visibilityFilter, sortBy]);
-
-  function resetFilters() {
-    setSearchTerm("");
-    setTypeFilter("all");
-    setStatusFilter("all");
-    setVisibilityFilter("all");
-    setSortBy("order-asc");
+  function updateDraft(methodId: string, patch: Partial<MethodDraft>) {
+    setDrafts((prev) => ({ ...prev, [methodId]: { ...prev[methodId], ...patch } }));
   }
 
-  async function handleDelete() {
-    if (!deleteTarget) return;
-    setDeleteLoading(true);
-    try { await deletePaymentMethod(deleteTarget.id); toast.success("Payment method deleted."); setDeleteTarget(null); fetch(); }
-    catch (err) { toast.error(err instanceof Error ? err.message : "Delete failed"); }
-    finally { setDeleteLoading(false); }
+  function updateFieldDraft(
+    methodId: string,
+    field: "description" | "instructions" | "adminInstructions",
+    patch: Partial<FieldDraft>,
+  ) {
+    setDrafts((prev) => ({
+      ...prev,
+      [methodId]: { ...prev[methodId], [field]: { ...prev[methodId][field], ...patch } },
+    }));
+  }
+
+  // Always sends the full visible set (every method on the page, not just the
+  // ones touched) — this is what the fallback contract requires: a program's
+  // first save must materialize the whole set, otherwise enabling/disabling
+  // one method would silently drop every other method from "configured" mode.
+  async function handleSaveAll() {
+    if (!params.programId) return;
+    setSaving(true);
+    try {
+      const payload: ProgramMethodOverride[] = methods.map((m) => {
+        const draft = drafts[m.id] ?? buildDraft(m);
+        const parsedSortOrder = Number(draft.sortOrder);
+        return {
+          payment_method_id: m.id,
+          is_enabled: draft.isEnabled,
+          sort_order: Number.isFinite(parsedSortOrder) ? parsedSortOrder : m.sort_order,
+          description_override: draft.description.override ? draft.description.value : null,
+          instructions_override: draft.instructions.override ? normalizeRichText(draft.instructions.value) : null,
+          admin_instructions_override: draft.adminInstructions.override ? draft.adminInstructions.value : null,
+        };
+      });
+      await bulkUpsertProgramPaymentMethods(params.programId, payload);
+      toast.success("Payment method settings saved for this program.");
+      // The write endpoint returns { status: "success" }, not the updated
+      // list — re-fetch to pick up fresh has_*_override flags.
+      await fetchMethods();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save payment method settings.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // "Edit shared details" must operate on the true master record, never on
+  // this page's resolved/merged values — the merged description/instructions/
+  // sort_order can be a program-specific override, and the global update is a
+  // full-replace, so feeding merged data back in would corrupt master data
+  // shared by every other program.
+  async function openEditShared(methodId: string) {
+    setEditSharedLoadingId(methodId);
+    try {
+      const all = await listPaymentMethods();
+      const master = all.find((m) => m.id === methodId);
+      if (!master) { toast.error("Could not load the shared payment method record."); return; }
+      setEditSharedTarget({ ...master, type: normalizePaymentMethodType(master.type) });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load shared payment method.");
+    } finally {
+      setEditSharedLoadingId(null);
+    }
+  }
+
+  // Deletes the true master record — removes this payment method from every
+  // program that references it, not just {programName}. Gated behind a
+  // confirm dialog opened from the "Shared Account Details" zone of a row,
+  // never from the per-program controls.
+  async function handleDeleteShared() {
+    if (!deleteSharedTarget) return;
+    setDeleteSharedLoading(true);
+    try {
+      await deletePaymentMethod(deleteSharedTarget.id);
+      toast.success("Shared payment method deleted from all programs.");
+      setDeleteSharedTarget(null);
+      await fetchMethods();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete shared payment method.");
+    } finally {
+      setDeleteSharedLoading(false);
+    }
   }
 
   return (
     <main className="space-y-4">
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-        <div className="inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-blue-700">Master Data</div>
+        <div className="inline-flex items-center gap-1.5 rounded-full border border-amber-100 bg-amber-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-700">
+          This Program Only
+        </div>
         <h1 className="mt-1 text-lg font-bold text-zinc-900">{programName} Payment Methods</h1>
-        <p className="text-sm text-zinc-500">Manage accepted payment methods for this program.</p>
+        <p className="text-sm text-zinc-500">
+          Choose which shared payment methods {programName} accepts, and optionally override the description or
+          instructions shown to this program&apos;s participants. Nothing here affects any other program.
+        </p>
       </section>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-        <div className="mb-3 flex items-center justify-between">
-          <p className="text-[11px] text-zinc-500">Showing {filteredMethods.length} of {methods.length} method(s)</p>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[11px] text-zinc-500">
+            {methods.length} method{methods.length === 1 ? "" : "s"} available
+            {methods.length > 0 && !methods.some((m) => m.is_configured) && " — showing shared defaults, not yet customized for this program"}
+          </p>
           <div className="flex gap-2">
-            <button type="button" onClick={fetch} className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50"><ArrowPathIcon className="h-3.5 w-3.5" />Refresh</button>
-            <button type="button" onClick={() => setShowCreate(true)} className="inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600"><PlusIcon className="h-3.5 w-3.5" />Add Method</button>
+            <button type="button" onClick={fetchMethods} className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50">
+              <ArrowPathIcon className="h-3.5 w-3.5" />Refresh
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowCreateShared(true)}
+              title="Creates a shared payment method visible to ALL programs"
+              className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] font-semibold text-amber-700 hover:bg-amber-100"
+            >
+              <PlusIcon className="h-3.5 w-3.5" />Add Shared Method
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveAll}
+              disabled={saving || loading || methods.length === 0}
+              className="inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600 disabled:opacity-60"
+            >
+              {saving ? "Saving…" : "Save Changes"}
+            </button>
           </div>
         </div>
+
         {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
-        {!loading && (() => {
-          const orphaned = methods.filter((m) => {
-            if (normalizePaymentMethodType(m.type) !== "AUTOMATIC") return false;
-            if (!m.is_active) return false;
-            return !m.gateway_name || !activeGatewayNames.has(m.gateway_name);
-          });
-          if (orphaned.length === 0) return null;
-          return (
-            <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
-              <ExclamationTriangleIcon className="mt-0.5 h-4 w-4 shrink-0" />
-              <div>
-                <p className="font-semibold">{orphaned.length} method{orphaned.length === 1 ? "" : "s"} hidden from participants</p>
-                <p className="mt-0.5 text-amber-700">
-                  Automatic methods without an active gateway config aren&apos;t shown on the participant dashboard. Configure the provider in <a href="/platform/payment-gateways" className="underline">Platform → Payment Gateways</a> or switch the method to Manual.
-                </p>
-              </div>
-            </div>
-          );
-        })()}
-        <div className="mb-4 space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/70 p-4">
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))]">
-            <div>
-              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Search</label>
-              <div className="relative">
-                <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
-                <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search method, gateway, bank, account..." className="block w-full rounded-md border border-zinc-200 bg-white py-2 pl-8 pr-3 text-xs text-zinc-900 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
-              </div>
-            </div>
-            <div>
-              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Type</label>
-              <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as typeof typeFilter)} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
-                <option value="all">All types</option>
-                <option value="MANUAL">Manual</option>
-                <option value="AUTOMATIC">Automatic</option>
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Status</label>
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
-                <option value="all">All statuses</option>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Visibility</label>
-              <select value={visibilityFilter} onChange={(e) => setVisibilityFilter(e.target.value as typeof visibilityFilter)} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
-                <option value="all">All visibility</option>
-                <option value="visible">Visible</option>
-                <option value="hidden">Hidden</option>
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-[11px] font-medium text-zinc-700">Sort by</label>
-              <select value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)} className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
-                <option value="order-asc">Order: low to high</option>
-                <option value="order-desc">Order: high to low</option>
-                <option value="name-asc">Name: A-Z</option>
-                <option value="name-desc">Name: Z-A</option>
-              </select>
-            </div>
+
+        {loading && <p className="py-10 text-center text-xs text-zinc-400">Loading…</p>}
+
+        {!loading && methods.length === 0 && (
+          <EmptyState
+            title="No shared payment methods yet"
+            description="Use the 'Add Shared Method' button above to create one, then enable it for this program."
+          />
+        )}
+
+        {!loading && methods.length > 0 && (
+          <div className="space-y-3">
+            {methods.map((m) => (
+              <MethodRow
+                key={m.id}
+                method={m}
+                draft={drafts[m.id] ?? buildDraft(m)}
+                activeGatewayNames={activeGatewayNames}
+                editSharedLoading={editSharedLoadingId === m.id}
+                onChange={(patch) => updateDraft(m.id, patch)}
+                onFieldChange={(field, patch) => updateFieldDraft(m.id, field, patch)}
+                onEditShared={() => openEditShared(m.id)}
+                onDeleteShared={() => setDeleteSharedTarget({ id: m.id, label: m.display_name || m.name })}
+              />
+            ))}
           </div>
-          <div className="flex justify-end">
-            <button type="button" onClick={resetFilters} className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-[11px] font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50">Reset filters</button>
-          </div>
-        </div>
-        <div className="overflow-hidden rounded-md border border-zinc-200">
-          <table className="min-w-full text-left text-[11px]">
-            <thead className="bg-zinc-50 text-zinc-600">
-              <tr>
-                <th className="w-14 px-3 py-2 font-semibold">Icon</th>
-                <th className="px-3 py-2 font-semibold">Name</th>
-                <th className="px-3 py-2 font-semibold">Details</th>
-                <th className="px-3 py-2 font-semibold">Type</th>
-                <th className="px-3 py-2 font-semibold">Status</th>
-                <th className="px-3 py-2 font-semibold">Visibility</th>
-                <th className="px-3 py-2 text-right font-semibold">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && <tr><td colSpan={7} className="px-3 py-6 text-center text-zinc-400">Loading…</td></tr>}
-              {!loading && methods.length === 0 && <tr><td colSpan={7} className="px-3 py-6 text-center text-zinc-400">No payment methods yet.</td></tr>}
-              {!loading && methods.length > 0 && filteredMethods.length === 0 && <tr><td colSpan={7} className="px-3 py-6 text-center text-zinc-400">No payment methods match the current filters.</td></tr>}
-              {!loading && filteredMethods.map((m, idx) => {
-                const label = m.display_name || m.name || "";
-                const isManual = normalizePaymentMethodType(m.type) === "MANUAL";
-                const gatewayActive = isManual || (m.gateway_name && activeGatewayNames.has(m.gateway_name));
-                const visibleToParticipants = m.is_active && gatewayActive;
-                return (
-                <tr key={m.id} className={idx % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}>
-                  <td className="px-3 py-2">
-                    <div className="flex h-8 w-12 items-center justify-center overflow-hidden rounded border border-zinc-200 bg-white">
-                      {m.icon ? (
-                        <Image src={m.icon} alt={label} width={48} height={32} className="object-contain" unoptimized />
-                      ) : (
-                        <span className="text-[10px] font-semibold text-zinc-400">{(label.charAt(0) || "?").toUpperCase()}</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="font-medium text-zinc-900">{label || <span className="text-zinc-400">Unnamed</span>}</div>
-                    {m.display_name && m.name && m.display_name !== m.name && <div className="text-[10px] text-zinc-400">{m.name}</div>}
-                  </td>
-                  <td className="px-3 py-2 text-zinc-500">
-                    {isManual && m.bank_name ? (
-                      <div>
-                        <div className="font-medium text-zinc-700">{m.bank_name}</div>
-                        {m.account_number && <div className="text-[10px] text-zinc-400">{m.account_number}{m.account_name ? ` · ${m.account_name}` : ""}</div>}
-                      </div>
-                    ) : !isManual && m.gateway_name ? (
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-medium text-zinc-700">{m.gateway_name}{m.gateway_type ? ` / ${m.gateway_type}` : ""}</span>
-                        {!gatewayActive && (
-                          <span title="No active gateway configuration for this provider" className="inline-flex items-center gap-1 rounded-sm bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-700">
-                            <ExclamationTriangleIcon className="h-3 w-3" />Not configured
-                          </span>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-zinc-400">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2">
-                    <span className={`rounded px-2 py-0.5 text-[10px] font-semibold ${isManual ? "bg-blue-50 text-blue-700" : "bg-purple-50 text-purple-700"}`}>
-                      {isManual ? "Manual" : "Automatic"}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2">{m.is_active ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Active</span> : <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-600">Inactive</span>}</td>
-                  <td className="px-3 py-2">
-                    {visibleToParticipants ? (
-                      <span title="Shown on the participant dashboard" className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                        <CheckCircleIcon className="h-3 w-3" />Visible
-                      </span>
-                    ) : (
-                      <span title={!m.is_active ? "Method is inactive" : "Gateway provider has no active configuration"} className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-600">
-                        <ExclamationTriangleIcon className="h-3 w-3" />Hidden
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <button type="button" onClick={() => setEditTarget(m)} className="rounded-md border border-zinc-200 p-1 text-zinc-500 hover:bg-zinc-50"><PencilSquareIcon className="h-3.5 w-3.5" /></button>
-                      <button type="button" onClick={() => setDeleteTarget(m)} className="rounded-md border border-red-100 p-1 text-red-400 hover:bg-red-50"><TrashIcon className="h-3.5 w-3.5" /></button>
-                    </div>
-                  </td>
-                </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        )}
       </section>
 
-      {showCreate && <PaymentMethodModal userId={userId} brandId={brandId} onClose={() => setShowCreate(false)} onSaved={fetch} />}
-      {editTarget && <PaymentMethodModal method={editTarget} userId={userId} brandId={brandId} onClose={() => setEditTarget(null)} onSaved={fetch} />}
-      {deleteTarget && <ConfirmDelete name={deleteTarget.display_name || deleteTarget.name} loading={deleteLoading} onCancel={() => setDeleteTarget(null)} onConfirm={handleDelete} />}
+      {editSharedTarget && (
+        <PaymentMethodModal
+          method={editSharedTarget}
+          programName={programName}
+          userId={userId}
+          brandId={brandId}
+          onClose={() => setEditSharedTarget(null)}
+          onSaved={fetchMethods}
+        />
+      )}
+
+      {showCreateShared && (
+        <PaymentMethodModal
+          programName={programName}
+          userId={userId}
+          brandId={brandId}
+          onClose={() => setShowCreateShared(false)}
+          onSaved={fetchMethods}
+        />
+      )}
+
+      {deleteSharedTarget && (
+        <ConfirmDeleteShared
+          name={deleteSharedTarget.label}
+          loading={deleteSharedLoading}
+          onCancel={() => setDeleteSharedTarget(null)}
+          onConfirm={handleDeleteShared}
+        />
+      )}
     </main>
   );
 }
 
+function MethodRow({
+  method,
+  draft,
+  activeGatewayNames,
+  editSharedLoading,
+  onChange,
+  onFieldChange,
+  onEditShared,
+  onDeleteShared,
+}: {
+  method: ProgramPaymentMethod;
+  draft: MethodDraft;
+  activeGatewayNames: Set<string>;
+  editSharedLoading: boolean;
+  onChange: (patch: Partial<MethodDraft>) => void;
+  onFieldChange: (field: "description" | "instructions" | "adminInstructions", patch: Partial<FieldDraft>) => void;
+  onEditShared: () => void;
+  onDeleteShared: () => void;
+}) {
+  const label = method.display_name || method.name || "";
+  const isManual = normalizePaymentMethodType(method.type) === "MANUAL";
+  const gatewayActive = isManual || (!!method.gateway_name && activeGatewayNames.has(method.gateway_name));
+
+  return (
+    <div className="rounded-lg border border-zinc-200 bg-white p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-zinc-100 pb-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-14 shrink-0 items-center justify-center overflow-hidden rounded border border-zinc-200 bg-white">
+            {method.icon ? (
+              <Image src={method.icon} alt={label} width={56} height={36} className="object-contain" unoptimized />
+            ) : (
+              <span className="text-[10px] font-semibold text-zinc-400">{(label.charAt(0) || "?").toUpperCase()}</span>
+            )}
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-zinc-900">{label || <span className="text-zinc-400">Unnamed</span>}</p>
+            <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-zinc-400">
+              <span className={`rounded px-1.5 py-0.5 font-semibold ${isManual ? "bg-blue-50 text-blue-700" : "bg-purple-50 text-purple-700"}`}>
+                {isManual ? "Manual" : "Automatic"}
+              </span>
+              <span>{method.code}</span>
+              {!isManual && !gatewayActive && (
+                <span title="No active gateway configuration for this provider" className="inline-flex items-center gap-1 rounded-sm bg-amber-50 px-1.5 py-0.5 font-semibold uppercase tracking-wide text-amber-700">
+                  <ExclamationTriangleIcon className="h-3 w-3" />Not configured
+                </span>
+              )}
+              {!method.is_active && (
+                <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 font-semibold text-zinc-600">Shared method inactive</span>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2 text-[11px] font-medium text-zinc-700">
+            <input type="checkbox" checked={draft.isEnabled} onChange={(e) => onChange({ isEnabled: e.target.checked })} className="h-3.5 w-3.5" />
+            Enabled for this program
+          </label>
+          <label className="flex items-center gap-1.5 text-[11px] font-medium text-zinc-700">
+            Order
+            <input
+              type="number"
+              value={draft.sortOrder}
+              onChange={(e) => onChange({ sortOrder: e.target.value })}
+              className="w-16 rounded-md border border-zinc-200 px-2 py-1 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
+          </label>
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="space-y-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">This Program</p>
+          <OverrideField
+            label="Description"
+            field={draft.description}
+            wasOverridden={method.has_description_override}
+            onChange={(patch) => onFieldChange("description", patch)}
+            renderInput={(value, onValueChange) => (
+              <textarea rows={2} value={value} onChange={(e) => onValueChange(e.target.value)} className={inputCls} />
+            )}
+          />
+          <OverrideField
+            label="Customer Instructions"
+            field={draft.instructions}
+            wasOverridden={method.has_instructions_override}
+            onChange={(patch) => onFieldChange("instructions", patch)}
+            renderInput={(value, onValueChange) => (
+              <RichTextEditor
+                content={value}
+                onChange={onValueChange}
+                placeholder="Shown to the payer"
+                className="[&_.ProseMirror]:min-h-[100px]"
+              />
+            )}
+          />
+          <OverrideField
+            label="Admin Instructions"
+            field={draft.adminInstructions}
+            wasOverridden={method.has_admin_instructions_override}
+            onChange={(patch) => onFieldChange("adminInstructions", patch)}
+            renderInput={(value, onValueChange) => (
+              <textarea rows={2} value={value} onChange={(e) => onValueChange(e.target.value)} placeholder="Internal — shown only to admins" className={inputCls} />
+            )}
+          />
+        </div>
+
+        <div className="space-y-2 rounded-md border border-zinc-100 bg-zinc-50/60 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Shared Account Details</p>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={onEditShared}
+                disabled={editSharedLoading}
+                className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-white px-2 py-1 text-[10px] font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-60"
+              >
+                <PencilSquareIcon className="h-3 w-3" />{editSharedLoading ? "Loading…" : "Edit shared details"}
+              </button>
+              <button
+                type="button"
+                onClick={onDeleteShared}
+                title="Delete this shared payment method for ALL programs"
+                className="inline-flex items-center gap-1 rounded-md border border-red-100 bg-white px-2 py-1 text-[10px] font-medium text-red-500 hover:bg-red-50"
+              >
+                <TrashIcon className="h-3 w-3" />Delete
+              </button>
+            </div>
+          </div>
+          {isManual ? (
+            <dl className="space-y-1 text-[11px] text-zinc-600">
+              <div className="flex justify-between gap-2"><dt className="text-zinc-400">Bank</dt><dd className="font-medium text-zinc-700">{method.bank_name || "—"}</dd></div>
+              <div className="flex justify-between gap-2"><dt className="text-zinc-400">Account Number</dt><dd className="font-medium text-zinc-700">{method.account_number || "—"}</dd></div>
+              <div className="flex justify-between gap-2"><dt className="text-zinc-400">Account Name</dt><dd className="font-medium text-zinc-700">{method.account_name || "—"}</dd></div>
+            </dl>
+          ) : (
+            <dl className="space-y-1 text-[11px] text-zinc-600">
+              <div className="flex justify-between gap-2"><dt className="text-zinc-400">Gateway</dt><dd className="font-medium text-zinc-700">{method.gateway_name || "—"}</dd></div>
+              <div className="flex justify-between gap-2"><dt className="text-zinc-400">Channel</dt><dd className="font-medium text-zinc-700">{method.gateway_type || "—"}</dd></div>
+            </dl>
+          )}
+          <p className="pt-1 text-[10px] text-zinc-400">Read-only here — bank and gateway details are shared across every program.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OverrideField({
+  label,
+  field,
+  wasOverridden,
+  onChange,
+  renderInput,
+}: {
+  label: string;
+  field: FieldDraft;
+  wasOverridden: boolean;
+  onChange: (patch: Partial<FieldDraft>) => void;
+  renderInput: (value: string, onValueChange: (value: string) => void) => React.ReactNode;
+}) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          <label className="text-[11px] font-medium text-zinc-700">{label}</label>
+          {field.override && (
+            <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-blue-700">
+              Program-specific
+            </span>
+          )}
+        </div>
+        <label className="flex items-center gap-1.5 text-[10px] font-medium text-zinc-500">
+          <input
+            type="checkbox"
+            checked={field.override}
+            onChange={(e) => onChange({ override: e.target.checked })}
+            className="h-3 w-3"
+          />
+          Override for this program
+        </label>
+      </div>
+      {field.override ? (
+        renderInput(field.value, (value) => onChange({ value }))
+      ) : wasOverridden ? (
+        <p className="rounded-md border border-dashed border-amber-200 bg-amber-50/50 px-3 py-2 text-[11px] text-amber-700">
+          Will revert to the shared default when you save.
+        </p>
+      ) : (
+        <p className="rounded-md border border-dashed border-zinc-200 bg-white px-3 py-2 text-[11px] text-zinc-400">
+          Using shared default{field.value ? `: "${stripHtml(field.value).slice(0, 140)}"` : " (empty)"}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ─── Shared (global) payment method create/edit modal ─────────────────────────
+// Creates or edits the master payment_methods row directly (bank/account/
+// gateway/icon/fee config, plus the master copy of description/instructions/
+// sort_order). Reachable via "Add Shared Method" (create, `method` omitted)
+// or "Edit shared details" (edit, `method` provided) — always carries a
+// warning that the change is global, not scoped to the program the admin
+// came from.
 function PaymentMethodModal({
   method,
+  programName,
   userId,
   brandId,
   onClose,
   onSaved,
 }: {
   method?: PaymentMethod;
+  programName: string;
   userId: string;
   brandId: string;
   onClose: () => void;
@@ -402,10 +609,10 @@ function PaymentMethodModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setLoading(true); setError(null);
-    // `code` is a stable machine identifier. Derive it from the name on create
-    // and never change it on edit — renaming a method shouldn't break anything
-    // keyed off the code. A 6-char suffix keeps creates collision-resistant
-    // since the column has a unique constraint.
+    // `code` is a stable machine identifier. Derive it from the name on
+    // create and never change it on edit — renaming a method shouldn't break
+    // anything keyed off the code. A random suffix keeps creates
+    // collision-resistant since the column has a unique constraint.
     const code = method?.code ?? `${slugify(name)}_${Math.random().toString(36).slice(2, 8)}`;
     if (!code) { setError("Internal name is required to generate a code."); setLoading(false); return; }
     // AUTOMATIC methods must point at a real active gateway — otherwise the
@@ -488,8 +695,13 @@ function PaymentMethodModal({
       payload.brandId = brandId;
     }
     try {
-      if (method) { await updatePaymentMethodWithIcon(method.id, payload); toast.success("Payment method updated."); }
-      else { await createPaymentMethodWithIcon(payload); toast.success("Payment method created."); }
+      if (method) {
+        await updatePaymentMethodWithIcon(method.id, payload);
+        toast.success("Shared payment method updated.");
+      } else {
+        await createPaymentMethodWithIcon(payload);
+        toast.success("Shared payment method created.");
+      }
       onSaved(); onClose();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to save";
@@ -504,13 +716,27 @@ function PaymentMethodModal({
       <SheetContent side="right" className="flex w-full max-w-lg flex-col p-0 sm:max-w-lg">
         <form onSubmit={handleSubmit} className="flex h-full flex-col">
         <SheetHeader className="border-b border-zinc-200 px-6 py-5">
-          <SheetTitle>{method ? "Edit Payment Method" : "Add Payment Method"}</SheetTitle>
+          <SheetTitle>{method ? "Edit Shared Payment Method" : "Add Shared Payment Method"}</SheetTitle>
           <SheetDescription>
-            {method ? "Update configuration for this payment method." : "Define a new payment method and usage instructions."}
+            {method
+              ? "Update the shared account/gateway record used across every program."
+              : "Create a shared account/gateway record available to every program."}
           </SheetDescription>
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto space-y-4 px-6 py-5">
+          <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+            <ExclamationTriangleIcon className="mt-0.5 h-4 w-4 shrink-0" />
+            <p>
+              This is <span className="font-semibold">shared master data</span> —{" "}
+              {method ? (
+                <>saving here changes this payment method for <span className="font-semibold">every program</span> that uses it, not just {programName}.</>
+              ) : (
+                <>creating here adds a payment method visible to <span className="font-semibold">every program</span>, not just {programName}.</>
+              )}
+            </p>
+          </div>
+
           {error && <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
 
           <Field label="Internal Name" required><input required type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Bank BCA" className={inputCls} /></Field>
@@ -700,15 +926,35 @@ function PaymentMethodModal({
   );
 }
 
-function ConfirmDelete({ name, loading, onCancel, onConfirm }: { name: string; loading: boolean; onCancel: () => void; onConfirm: () => void }) {
+// ─── Shared (global) delete confirmation ───────────────────────────────────
+// Deletes the master record — explicitly warns this removes the method from
+// every program, not just the one the admin is currently viewing.
+function ConfirmDeleteShared({
+  name,
+  loading,
+  onCancel,
+  onConfirm,
+}: {
+  name: string;
+  loading: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
       <div className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-6 shadow-xl">
-        <h2 className="mb-2 text-sm font-semibold text-zinc-900">Delete?</h2>
-        <p className="text-[11px] text-zinc-600">Remove <span className="font-semibold">{name}</span>? This cannot be undone.</p>
+        <h2 className="mb-2 text-sm font-semibold text-zinc-900">Delete shared payment method?</h2>
+        <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+          <ExclamationTriangleIcon className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>
+            Removing <span className="font-semibold">{name}</span> deletes it from{" "}
+            <span className="font-semibold">every program</span> that uses it, not just this one. This cannot be
+            undone.
+          </p>
+        </div>
         <div className="mt-4 flex justify-end gap-2">
           <button onClick={onCancel} className="rounded-md border border-zinc-200 px-3 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50">Cancel</button>
-          <button onClick={onConfirm} disabled={loading} className="rounded-md bg-red-500 px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-60">{loading ? "Deleting…" : "Delete"}</button>
+          <button onClick={onConfirm} disabled={loading} className="rounded-md bg-red-500 px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-60">{loading ? "Deleting…" : "Delete for all programs"}</button>
         </div>
       </div>
     </div>
@@ -726,19 +972,8 @@ function Field({ label, required, children }: { label: string; required?: boolea
 
 const inputCls = "block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
 
-function comparePaymentMethods(
-  left: PaymentMethod,
-  right: PaymentMethod,
-  sortBy: "order-asc" | "order-desc" | "name-asc" | "name-desc",
-): number {
-  const leftLabel = left.display_name || left.name;
-  const rightLabel = right.display_name || right.name;
-  if (sortBy === "name-asc") return leftLabel.localeCompare(rightLabel);
-  if (sortBy === "name-desc") return rightLabel.localeCompare(leftLabel);
-  if (sortBy === "order-desc") return right.sort_order - left.sort_order || leftLabel.localeCompare(rightLabel);
-  return left.sort_order - right.sort_order || leftLabel.localeCompare(rightLabel);
-}
-
+// Derives a stable machine `code` from the admin-entered name when creating
+// a new shared payment method (edits keep the original code untouched).
 function slugify(input: string): string {
   return input
     .toLowerCase()

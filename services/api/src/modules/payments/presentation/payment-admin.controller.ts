@@ -16,13 +16,14 @@ import {
     Logger
 } from '@nestjs/common';
 import { Response } from 'express';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiQuery, ApiParam } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { UserRole } from '@core/entities/user.entity';
 import { CreatePaymentMethodDto, UpdatePaymentMethodDto } from './dto/admin-payment-method.dto';
+import { UpsertProgramMethodDto, BulkUpsertProgramMethodsDto } from './dto/program-payment-method.dto';
 import { NotifyPaymentIssueDto } from './dto/notify-payment-issue.dto';
 import { FileServiceClient } from '@modules/files/infrastructure/clients/file-service.client';
 import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
@@ -1536,6 +1537,97 @@ export class PaymentAdminController {
 
             await this.cacheService.invalidateByPattern('payment:methods:*');
             await this.cacheService.invalidateByPattern('landing:home:*');
+
+            return data;
+        } catch (error) {
+            this.handleError(error);
+        }
+    }
+
+    // ─── Program Payment Method Endpoints ────────────────────────────────────────
+    // Proxies to the Go payment service's per-program payment method overlay
+    // routes. Fallback contract: a program with 0 overlay rows is "unconfigured"
+    // and the merged GET returns all active master methods as-is; a program
+    // with >=1 overlay row is "configured" and returns only its enabled,
+    // overridden methods. PUT is full-replace — a nil/omitted override field
+    // clears that override rather than merging with the previous value, so
+    // callers must always send the complete override set for a method.
+
+    @Get('programs/:programId/methods')
+    @ApiOperation({ summary: 'List merged (fallback-aware) payment methods for a program (Admin)' })
+    @ApiParam({ name: 'programId', description: 'Program ID (UUID)' })
+    @ApiResponse({ status: 200, description: 'Merged program payment methods list' })
+    async listProgramMethods(@Param('programId') programId: string) {
+        if (!this.isValidUUID(programId)) throw new HttpException('Invalid program id', 400);
+        try {
+            const cacheKey = CACHE_KEYS.PROGRAM_PAYMENT_METHODS(programId);
+
+            const cached = await this.cacheService.get(cacheKey);
+            if (cached) return cached;
+
+            const { data } = await this.paymentServiceClient.get(
+                `/api/v1/programs/${programId}/payment-methods`,
+                { headers: this.buildInternalHeaders() },
+            );
+
+            await this.cacheService.set(cacheKey, data, CACHE_TTL.MEDIUM);
+
+            return data;
+        } catch (error) {
+            this.handleError(error);
+        }
+    }
+
+    @Put('programs/:programId/methods/:methodId')
+    @AuditTrail({ entityType: 'ProgramPaymentMethod', action: ChangeType.update, idParam: 'methodId' })
+    @ApiOperation({ summary: 'Upsert a single per-program payment method override (Admin)' })
+    @ApiParam({ name: 'programId', description: 'Program ID (UUID)' })
+    @ApiParam({ name: 'methodId', description: 'Payment method ID (UUID)' })
+    @ApiBody({ type: UpsertProgramMethodDto })
+    @ApiResponse({ status: 200, description: 'Program payment method override saved' })
+    async upsertProgramMethod(
+        @Param('programId') programId: string,
+        @Param('methodId') methodId: string,
+        @Body() body: UpsertProgramMethodDto,
+    ) {
+        if (!this.isValidUUID(programId)) throw new HttpException('Invalid program id', 400);
+        if (!this.isValidUUID(methodId)) throw new HttpException('Invalid payment method id', 400);
+        try {
+            const { data } = await this.paymentServiceClient.put(
+                `/api/v1/programs/${programId}/payment-methods/${methodId}`,
+                body,
+                { headers: this.buildInternalHeaders() },
+            );
+
+            // Program-scoped writes only ever affect this program's merged view —
+            // never touch the global `payment:methods:*` cache.
+            await this.cacheService.invalidateKey(CACHE_KEYS.PROGRAM_PAYMENT_METHODS(programId));
+
+            return data;
+        } catch (error) {
+            this.handleError(error);
+        }
+    }
+
+    @Put('programs/:programId/methods')
+    @AuditTrail({ entityType: 'ProgramPaymentMethod', action: ChangeType.bulk_update, idParam: 'programId' })
+    @ApiOperation({ summary: 'Bulk upsert the full set of per-program payment method overrides (Admin)' })
+    @ApiParam({ name: 'programId', description: 'Program ID (UUID)' })
+    @ApiBody({ type: BulkUpsertProgramMethodsDto })
+    @ApiResponse({ status: 200, description: 'Program payment method overrides saved' })
+    async bulkUpsertProgramMethods(
+        @Param('programId') programId: string,
+        @Body() body: BulkUpsertProgramMethodsDto,
+    ) {
+        if (!this.isValidUUID(programId)) throw new HttpException('Invalid program id', 400);
+        try {
+            const { data } = await this.paymentServiceClient.put(
+                `/api/v1/programs/${programId}/payment-methods`,
+                body,
+                { headers: this.buildInternalHeaders() },
+            );
+
+            await this.cacheService.invalidateKey(CACHE_KEYS.PROGRAM_PAYMENT_METHODS(programId));
 
             return data;
         } catch (error) {

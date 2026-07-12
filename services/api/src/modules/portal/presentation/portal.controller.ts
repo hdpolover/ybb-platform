@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards, UnauthorizedException, BadRequestException, NotFoundException, UseInterceptors, UploadedFile, StreamableFile, Header, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, UseGuards, UnauthorizedException, BadRequestException, NotFoundException, UseInterceptors, UploadedFile, StreamableFile, Header, ForbiddenException, Logger } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Readable } from 'stream';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
@@ -40,11 +40,29 @@ import { PaymentServiceHttpClient } from '../../payments/infrastructure/services
 import type { AdminPaymentMethod } from '../../payments/common/proto/payment.interface';
 import { LoaDownloadService } from '../application/services/loa-download.service';
 
+// Subset of the Go payment service's ProgramMethodView (merged, fallback-aware
+// per-program payment methods response) needed to project onto PortalPaymentMethodDto.
+// See services/payment/internal/domain/repositories/program_payment_method_repository.go.
+interface ProgramMergedPaymentMethod {
+    id: string;
+    code: string;
+    display_name: string;
+    bank_name: string;
+    account_number: string;
+    account_name: string;
+    instructions: string;
+    icon: string;
+    requires_proof: boolean;
+    type: string;
+}
+
 @ApiTags('Portal')
 @Controller('portal')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class PortalController {
+    private readonly logger = new Logger(PortalController.name);
+
     constructor(
         private readonly queryBus: QueryBus,
         private readonly commandBus: CommandBus,
@@ -225,35 +243,107 @@ export class PortalController {
     @Get('payment-methods')
     @ApiOperation({ summary: 'Get available manual payment methods for participants' })
     @ApiResponse({ status: 200, type: [PortalPaymentMethodDto] })
-    async getPaymentMethods(): Promise<PortalPaymentMethodDto[]> {
+    async getPaymentMethods(
+        @CurrentUser() user: CurrentUserData,
+        @Query('programId') queryProgramId?: string,
+    ): Promise<PortalPaymentMethodDto[]> {
         try {
-            const internalKey = this.configService.get<string>('PAYMENT_SERVICE_INTERNAL_KEY', '');
-            const headers = internalKey ? { 'X-Internal-Service-Key': internalKey } : {};
-            const { data } = await this.paymentServiceClient.get<AdminPaymentMethod[] | { data: AdminPaymentMethod[] }>(
-                '/api/v1/payment-methods',
-                // `available_only=true` makes the Go service drop automatic methods whose
-                // gateway provider isn't registered, so participants don't see options that
-                // would fail at confirm-time.
-                { params: { is_active: true, available_only: true }, headers },
-            );
-            const methods: AdminPaymentMethod[] = Array.isArray(data) ? data : ((data as { data?: AdminPaymentMethod[] })?.data ?? []);
-            return methods
-                .filter(m => m.is_active)
-                .map(m => ({
-                    id: m.id,
-                    code: m.code,
-                    display_name: m.display_name,
-                    bank_name: m.bank_name,
-                    account_number: m.account_number,
-                    account_name: m.account_name,
-                    instructions: m.instructions,
-                    icon: m.icon,
-                    requires_proof: m.requires_proof,
-                    type: m.type,
-                }));
+            const programId = queryProgramId?.trim() || (await this.resolveCurrentProgramId(user.userId));
+
+            if (programId) {
+                try {
+                    return await this.getProgramPaymentMethods(programId);
+                } catch (error) {
+                    // Go-side fallback contract makes this safe: an unconfigured/
+                    // unresolvable program just gets today's global behavior.
+                    this.logger.warn(
+                        `Falling back to global payment methods for program ${programId}: ${(error as Error).message}`,
+                    );
+                }
+            }
+
+            return await this.getGlobalPaymentMethods();
         } catch {
             return [];
         }
+    }
+
+    // Resolves the participant's current program the same way GetPortalPaymentsHandler
+    // does (participant -> latest participantApplication.programId). The
+    // payment-methods route has no invoiceId/applicationId param of its own, so this
+    // "current application" lookup is the only reliable signal short of the caller
+    // passing ?programId= explicitly (mirrors the optional programId query param
+    // already accepted by GET /portal/payments and GET /portal/submissions).
+    private async resolveCurrentProgramId(userId: string): Promise<string | null> {
+        const participant = await this.prisma.participant.findUnique({
+            where: { userId },
+            select: { id: true },
+        });
+        if (!participant) return null;
+
+        const application = await this.prisma.participantApplication.findFirst({
+            where: { participantId: participant.id },
+            select: { programId: true },
+        });
+        return application?.programId ?? null;
+    }
+
+    private async getGlobalPaymentMethods(): Promise<PortalPaymentMethodDto[]> {
+        const internalKey = this.configService.get<string>('PAYMENT_SERVICE_INTERNAL_KEY', '');
+        const headers = internalKey ? { 'X-Internal-Service-Key': internalKey } : {};
+        const { data } = await this.paymentServiceClient.get<AdminPaymentMethod[] | { data: AdminPaymentMethod[] }>(
+            '/api/v1/payment-methods',
+            // `available_only=true` makes the Go service drop automatic methods whose
+            // gateway provider isn't registered, so participants don't see options that
+            // would fail at confirm-time.
+            { params: { is_active: true, available_only: true }, headers },
+        );
+        const methods: AdminPaymentMethod[] = Array.isArray(data) ? data : ((data as { data?: AdminPaymentMethod[] })?.data ?? []);
+        return methods
+            .filter(m => m.is_active)
+            .map(m => ({
+                id: m.id,
+                code: m.code,
+                display_name: m.display_name,
+                bank_name: m.bank_name,
+                account_number: m.account_number,
+                account_name: m.account_name,
+                instructions: m.instructions,
+                icon: m.icon,
+                requires_proof: m.requires_proof,
+                type: m.type,
+            }));
+    }
+
+    // Merged (fallback-aware) per-program list. Already filtered server-side to
+    // only the visible/enabled set (see FindMergedByProgram in
+    // program_payment_method_repository.go), so no further is_active/is_enabled
+    // filtering is needed here.
+    // `available_only=true` mirrors getGlobalPaymentMethods() below: manual
+    // methods are always included, automatic methods only if their gateway
+    // provider is registered/live, so participants don't see options that
+    // would fail at confirm-time.
+    private async getProgramPaymentMethods(programId: string): Promise<PortalPaymentMethodDto[]> {
+        const internalKey = this.configService.get<string>('PAYMENT_SERVICE_INTERNAL_KEY', '');
+        const headers = internalKey ? { 'X-Internal-Service-Key': internalKey } : {};
+        const { data } = await this.paymentServiceClient.get<
+            ProgramMergedPaymentMethod[] | { data: ProgramMergedPaymentMethod[] }
+        >(`/api/v1/programs/${programId}/payment-methods`, { params: { available_only: true }, headers });
+        const methods: ProgramMergedPaymentMethod[] = Array.isArray(data)
+            ? data
+            : ((data as { data?: ProgramMergedPaymentMethod[] })?.data ?? []);
+        return methods.map(m => ({
+            id: m.id,
+            code: m.code,
+            display_name: m.display_name,
+            bank_name: m.bank_name,
+            account_number: m.account_number,
+            account_name: m.account_name,
+            instructions: m.instructions,
+            icon: m.icon,
+            requires_proof: m.requires_proof,
+            type: m.type,
+        }));
     }
 
     @Get('documents')
