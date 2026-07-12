@@ -52,6 +52,42 @@ export interface BrandLogoAssetsResponse {
   apple_icon: UploadedBrandImageAsset;
 }
 
+// Stage 1 data contract for the WeasyPrint receipt/invoice generator
+// (services/file `ReceiptWeasyRequest`). All amounts are pre-formatted
+// strings — NestJS owns currency formatting (see .planning/receipt-redesign-plan.md).
+export interface GenerateReceiptPayload {
+  doc_type: 'receipt' | 'invoice';
+  status_label: string;
+  is_paid: boolean;
+  document_number: string;
+  issued_date: string;
+  settled_line: string | null;
+  due_line: string | null;
+  transaction_reference: string | null;
+  accent_color: string;
+  program_name: string;
+  program_logo_url: string | null;
+  program_initials: string;
+  billed_to: {
+    name: string;
+    email: string | null;
+    institution: string | null;
+  };
+  line_items: Array<{ title: string; subtitle: string | null; amount: string }>;
+  subtotal: string;
+  fee: string | null;
+  total: string;
+  fx_line: string | null;
+  payment_method_label: string | null;
+  brand: {
+    name: string;
+    contact_email: string | null;
+    contact_phone: string | null;
+    contact_address: string | null;
+    website: string | null;
+  };
+}
+
 /**
  * File Service HTTP Client
  * 
@@ -275,14 +311,18 @@ export class FileServiceClient {
   }
 
   /**
-   * Generate payment receipt PDF
+   * Generate a receipt (paid) or invoice (unpaid) PDF via the WeasyPrint
+   * template. Stage 1 data contract — see .planning/receipt-redesign-plan.md
+   * "Data contract". NestJS pre-formats every currency string and resolves
+   * logo fallback / accent color / FX line; the file service is a dumb
+   * renderer.
    */
-  async generateReceipt(transactionData: Record<string, unknown>): Promise<Buffer> {
+  async generateReceipt(payload: GenerateReceiptPayload): Promise<Buffer> {
     try {
       const response: AxiosResponse<ArrayBuffer> = await firstValueFrom(
         this.httpService.post(
           `${this.fileServiceUrl}/api/v1/documents/generate/receipt`,
-          { transaction_data: transactionData },
+          payload,
           {
             responseType: 'arraybuffer',
           },

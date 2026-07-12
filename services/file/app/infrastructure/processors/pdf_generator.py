@@ -1,5 +1,7 @@
 """PDF document generation service."""
 # type: ignore
+import html
+import re
 from typing import Dict, Any, Optional
 from reportlab.lib.pagesizes import letter, A4  # type: ignore
 from reportlab.lib.units import inch  # type: ignore
@@ -366,6 +368,320 @@ def generate_loa_sync(
     return HTML(string=full_html).write_pdf()
 
 
+# ---------------------------------------------------------------------------
+# Receipt / Invoice generation (WeasyPrint) — Stage 1 of the receipt redesign.
+#
+# This service is a dumb renderer: NestJS pre-formats every currency string
+# (subtotal/fee/total/line item amounts) and resolves the logo-fallback
+# chain / accent color / FX line. We only interpolate, HTML-escape, and lay
+# out. See .planning/receipt-redesign-plan.md for the full data contract.
+# ---------------------------------------------------------------------------
+
+_ACCENT_HEX_RE = re.compile(r'^#[0-9A-Fa-f]{6}$')
+_DEFAULT_ACCENT = '#26408B'
+
+# Static, brand-independent CSS. Accent-driven colors (header band, table
+# underline, grand-total tint) are applied via inline styles per element
+# instead of CSS custom properties, to avoid relying on WeasyPrint's
+# var() support. Layout uses tables/inline-block only — no flexbox/grid.
+_RECEIPT_CSS = """
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Noto Sans", "Noto Sans Arabic", "Noto Sans CJK SC", "Noto Sans Bengali", "DejaVu Sans", sans-serif;
+    color: #1A1D24;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .num { font-variant-numeric: tabular-nums; }
+  .band td { padding: 26px 40px 22px; vertical-align: top; color: #fff; }
+  .brand-name { font-size: 15px; font-weight: 650; letter-spacing: .2px; }
+  .brand-sub { font-size: 11.5px; color: rgba(255,255,255,.72); margin-top: 2px; }
+  .doc-title { font-size: 15px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; margin-bottom: 8px; }
+  .doc-label { font-size: 11px; color: rgba(255,255,255,.68); }
+  .doc-value { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+  .body { padding: 30px 40px 12px; }
+  .eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: #8A929E; margin-bottom: 7px; }
+  .party-name { font-size: 14.5px; font-weight: 650; }
+  .party-line { color: #5B6472; font-size: 12.5px; margin-top: 3px; }
+  .status-pill { display: inline-block; font-size: 11.5px; font-weight: 700; letter-spacing: .4px; padding: 4px 10px; border-radius: 999px; text-transform: uppercase; }
+  table.items { width: 100%; border-collapse: collapse; margin-top: 22px; }
+  table.items th { font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: #8A929E; text-align: left; padding: 0 0 10px; }
+  table.items th.r { text-align: right; }
+  table.items td { padding: 14px 0; border-bottom: 1px solid #E4E7EC; vertical-align: top; }
+  table.items td.r { text-align: right; }
+  .item-title { font-weight: 600; font-size: 13.5px; }
+  .item-sub { color: #5B6472; font-size: 12px; margin-top: 3px; }
+  .totals-row td { padding: 6px 0; font-size: 13px; color: #5B6472; }
+  .totals-row td.v { text-align: right; color: #1A1D24; font-weight: 500; }
+  .grand-k { font-size: 12px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; }
+  .grand-v { font-size: 22px; font-weight: 750; letter-spacing: -.3px; }
+  .seal { width: 108px; height: 108px; border-radius: 50%; border: 3px solid #0F7A4A; color: #0F7A4A; text-align: center; transform: rotate(-9deg); opacity: .85; margin: 0 auto; }
+  .seal b { display: block; font-size: 25px; font-weight: 800; letter-spacing: 3px; padding-top: 32px; }
+  .seal small { display: block; font-size: 8.5px; letter-spacing: 1.5px; margin-top: 2px; }
+  .method-k { font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: #8A929E; margin-bottom: 5px; }
+  .method-v { font-size: 13px; font-weight: 550; }
+  .foot { color: #5B6472; font-size: 11.5px; line-height: 1.55; }
+  .foot strong { color: #1A1D24; font-weight: 650; display: block; margin-bottom: 3px; font-size: 12px; }
+  .foot .note { text-align: right; color: #8A929E; }
+"""
+
+
+def _esc(value: Any) -> str:
+    """HTML-escape any interpolated field; None becomes an empty string."""
+    if value is None:
+        return ''
+    return html.escape(str(value))
+
+
+def _valid_accent(color: Optional[str]) -> str:
+    """Validate a brand accent hex color, falling back to the YBB default."""
+    if color and _ACCENT_HEX_RE.match(color):
+        return color
+    return _DEFAULT_ACCENT
+
+
+def _receipt_mark_html(logo_url: str, initials: str, accent: str) -> str:
+    """Program logo tile, or an accent-colored monogram when no logo is set."""
+    if logo_url:
+        return (
+            f'<div style="width:52px;height:52px;border-radius:12px;background:#fff;padding:7px;">'
+            f'{_img_tag(logo_url, "38pt")}</div>'
+        )
+    initials_safe = _esc((initials or '?')[:3].upper())
+    return (
+        f'<div style="width:52px;height:52px;border-radius:12px;background:{accent};'
+        f'color:#fff;text-align:center;line-height:52px;font-size:18px;font-weight:700;'
+        f'letter-spacing:.5px;">{initials_safe}</div>'
+    )
+
+
+def _build_receipt_header_html(payload: Dict[str, Any], accent: str) -> str:
+    """Accent header band: program logo/name left, doc title/number right."""
+    program_name = _esc(payload.get('program_name'))
+    mark_html = _receipt_mark_html(payload.get('program_logo_url') or '', payload.get('program_initials') or '', accent)
+
+    is_receipt = payload.get('doc_type') == 'receipt' and bool(payload.get('is_paid'))
+    title = 'PAYMENT RECEIPT' if is_receipt else 'INVOICE'
+    number_label = 'Receipt No.' if is_receipt else 'Invoice No.'
+    doc_number = _esc(payload.get('document_number'))
+    issued_date = _esc(payload.get('issued_date'))
+
+    return f"""<table class="band" style="width:100%;border-collapse:collapse;background:{accent};">
+  <tr>
+    <td style="width:60%;">
+      <table style="border-collapse:collapse;"><tr>
+        <td style="vertical-align:middle;padding-right:14px;">{mark_html}</td>
+        <td style="vertical-align:middle;">
+          <div class="brand-name">{program_name}</div>
+          <div class="brand-sub">A YBB Platform Program</div>
+        </td>
+      </tr></table>
+    </td>
+    <td style="width:40%;text-align:right;">
+      <div class="doc-title">{title}</div>
+      <div class="doc-label">{number_label}</div>
+      <div class="doc-value num">{doc_number}</div>
+      <div class="doc-label">Issued</div>
+      <div class="doc-value num">{issued_date}</div>
+    </td>
+  </tr>
+</table>"""
+
+
+def _build_parties_status_html(payload: Dict[str, Any]) -> str:
+    """Two-column 'Billed to' / status block, table-based (no flex/grid)."""
+    billed = payload.get('billed_to') or {}
+    name = _esc(billed.get('name'))
+    email_html = f'<div class="party-line">{_esc(billed.get("email"))}</div>' if billed.get('email') else ''
+    inst_html = f'<div class="party-line">{_esc(billed.get("institution"))}</div>' if billed.get('institution') else ''
+
+    is_paid = bool(payload.get('is_paid'))
+    status_label = _esc(payload.get('status_label') or ('Paid' if is_paid else 'Unpaid'))
+    pill_bg, pill_fg = ('#E7F3EC', '#0F7A4A') if is_paid else ('#FFF4E5', '#B45309')
+    sub_line = payload.get('settled_line') if is_paid else payload.get('due_line')
+    sub_html = f'<div class="party-line" style="margin-top:8px;">{_esc(sub_line)}</div>' if sub_line else ''
+
+    return f"""<div style="border-bottom:1px solid #E4E7EC;padding-bottom:24px;">
+  <table style="width:100%;border-collapse:collapse;">
+    <tr>
+      <td style="width:50%;vertical-align:top;">
+        <div class="eyebrow">Billed To</div>
+        <div class="party-name">{name}</div>
+        {email_html}
+        {inst_html}
+      </td>
+      <td style="width:50%;vertical-align:top;text-align:right;">
+        <div class="eyebrow">Status</div>
+        <span class="status-pill" style="background:{pill_bg};color:{pill_fg};">{status_label}</span>
+        {sub_html}
+      </td>
+    </tr>
+  </table>
+</div>"""
+
+
+def _build_line_items_html(payload: Dict[str, Any], accent: str) -> str:
+    """Itemized table with an accent-colored underline beneath the header row."""
+    rows = []
+    for item in (payload.get('line_items') or []):
+        subtitle = item.get('subtitle')
+        sub_html = f'<div class="item-sub">{_esc(subtitle)}</div>' if subtitle else ''
+        rows.append(f"""<tr>
+      <td><div class="item-title">{_esc(item.get('title'))}</div>{sub_html}</td>
+      <td class="r num" style="font-weight:600;">{_esc(item.get('amount'))}</td>
+    </tr>""")
+
+    border = f'border-bottom:1.5px solid {accent};'
+    return f"""<table class="items">
+  <thead>
+    <tr>
+      <th style="{border}">Description</th>
+      <th class="r" style="{border}">Amount</th>
+    </tr>
+  </thead>
+  <tbody>
+    {''.join(rows)}
+  </tbody>
+</table>"""
+
+
+def _build_paid_seal_html() -> str:
+    """Rotated circular 'PAID' seal — only rendered for a paid receipt."""
+    from datetime import datetime as _dt
+    year = _dt.utcnow().strftime('%Y')
+    return f'<div class="seal"><b>PAID</b><small>YBB &middot; {year}</small></div>'
+
+
+def _build_totals_seal_html(payload: Dict[str, Any], accent: str) -> str:
+    """Totals box (accent-tinted grand total) with the PAID seal to its left."""
+    is_paid = bool(payload.get('is_paid'))
+    show_seal = payload.get('doc_type') == 'receipt' and is_paid
+    fee = payload.get('fee')
+    show_fee = bool(fee) and str(fee).strip() not in ('', '0')
+    fx_line = payload.get('fx_line')
+
+    fee_row = (
+        f'<tr class="totals-row"><td>Processing fee</td><td class="v num">{_esc(fee)}</td></tr>'
+        if show_fee else ''
+    )
+    fx_html = (
+        f'<div style="text-align:right;color:#8A929E;font-size:11px;margin-top:6px;">{_esc(fx_line)}</div>'
+        if fx_line else ''
+    )
+    grand_label = 'Total Paid' if is_paid else 'Amount Due'
+
+    box_html = f"""<table style="width:100%;border-collapse:collapse;">
+    <tr class="totals-row"><td>Subtotal</td><td class="v num">{_esc(payload.get('subtotal'))}</td></tr>
+    {fee_row}
+  </table>
+  <table style="width:100%;border-collapse:collapse;margin-top:8px;background:{accent}14;border-radius:8px;">
+    <tr>
+      <td class="grand-k" style="padding:14px 16px;color:{accent};">{grand_label}</td>
+      <td class="grand-v num" style="padding:14px 16px;text-align:right;color:{accent};">{_esc(payload.get('total'))}</td>
+    </tr>
+  </table>
+  {fx_html}"""
+
+    seal_html = _build_paid_seal_html() if show_seal else ''
+    return f"""<table style="width:100%;border-collapse:collapse;margin-top:20px;">
+  <tr>
+    <td style="width:120px;vertical-align:middle;">{seal_html}</td>
+    <td style="vertical-align:top;">{box_html}</td>
+  </tr>
+</table>"""
+
+
+def _build_payment_method_html(payload: Dict[str, Any]) -> str:
+    """Two-column payment-method / transaction-reference row, omitted if empty."""
+    method_label = payload.get('payment_method_label')
+    txn_ref = payload.get('transaction_reference')
+    if not method_label and not txn_ref:
+        return ''
+
+    method_html = f'<div class="method-k">Payment Method</div><div class="method-v">{_esc(method_label)}</div>' if method_label else ''
+    txn_html = f'<div class="method-k">Transaction Reference</div><div class="method-v num">{_esc(txn_ref)}</div>' if txn_ref else ''
+
+    return f"""<table style="width:100%;border-collapse:collapse;margin-top:26px;border-top:1px solid #E4E7EC;">
+  <tr>
+    <td style="width:50%;vertical-align:top;padding-top:18px;">{method_html}</td>
+    <td style="width:50%;vertical-align:top;padding-top:18px;">{txn_html}</td>
+  </tr>
+</table>"""
+
+
+def _build_receipt_footer_html(payload: Dict[str, Any], accent: str) -> str:
+    """Brand-contact footer + accent rule at the very bottom of the sheet."""
+    brand = payload.get('brand') or {}
+    contact_bits = [b for b in (brand.get('contact_email'), brand.get('contact_phone'), brand.get('website')) if b]
+    contact_line = ' &middot; '.join(_esc(b) for b in contact_bits)
+    address = brand.get('contact_address')
+
+    contact_html = ''
+    if brand.get('name') or contact_line or address:
+        contact_html = f'<div><strong>{_esc(brand.get("name"))}</strong>'
+        contact_html += f'{contact_line}<br>' if contact_line else ''
+        contact_html += _esc(address) if address else ''
+        contact_html += '</div>'
+
+    is_paid = bool(payload.get('is_paid'))
+    note = (
+        'This receipt was generated automatically as proof of payment. Please retain it for your records.'
+        if is_paid else
+        'Please complete payment before the due date shown above. This document is not proof of payment.'
+    )
+
+    return f"""<table class="foot" style="width:100%;border-collapse:collapse;margin-top:8px;">
+  <tr>
+    <td style="padding:20px 40px 30px;vertical-align:bottom;">{contact_html}</td>
+    <td class="note" style="padding:20px 40px 30px;vertical-align:bottom;width:220px;">{note}</td>
+  </tr>
+</table>
+<div style="height:5px;background:{accent};"></div>"""
+
+
+def generate_receipt_weasy_sync(payload: Dict[str, Any]) -> bytes:
+    """Generate a receipt (paid) or invoice (unpaid) PDF via WeasyPrint.
+
+    `payload` matches the Stage 1 data contract in
+    .planning/receipt-redesign-plan.md exactly. All amounts arrive as
+    pre-formatted strings from NestJS — no currency math happens here.
+    """
+    from weasyprint import HTML  # type: ignore
+
+    accent = _valid_accent(payload.get('accent_color'))
+
+    header_html = _build_receipt_header_html(payload, accent)
+    parties_html = _build_parties_status_html(payload)
+    items_html = _build_line_items_html(payload, accent)
+    totals_html = _build_totals_seal_html(payload, accent)
+    method_html = _build_payment_method_html(payload)
+    footer_html = _build_receipt_footer_html(payload, accent)
+
+    full_html = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page {{ size: A4; margin: 0; }}
+  {_RECEIPT_CSS}
+</style>
+</head>
+<body>
+  {header_html}
+  <div class="body">
+    {parties_html}
+    {items_html}
+    {totals_html}
+    {method_html}
+  </div>
+  {footer_html}
+</body>
+</html>"""
+
+    return HTML(string=full_html).write_pdf()
+
+
 class PDFGeneratorService:
     """Service for generating PDF documents."""
     
@@ -382,7 +698,15 @@ class PDFGeneratorService:
         """Generate payment receipt PDF using ProcessPool."""
         pdf_bytes = await run_in_processpool(generate_receipt_sync, transaction_data)
         return BytesIO(pdf_bytes)
-    
+
+    async def generate_receipt_weasy(
+        self,
+        payload: Dict[str, Any]
+    ) -> BytesIO:
+        """Generate a receipt/invoice PDF (WeasyPrint) using ProcessPool."""
+        pdf_bytes = await run_in_processpool(generate_receipt_weasy_sync, payload)
+        return BytesIO(pdf_bytes)
+
     async def generate_offer_letter(
         self,
         participant_data: Dict[str, Any],

@@ -98,6 +98,19 @@ export class EventsController {
       const amount = getNumber(payload, 'amount');
       const currency = getString(payload, 'currency') || 'IDR';
 
+      const rawBrand = asRecord(payload.brand);
+      const brand = payload.brand
+        ? {
+            name: getString(rawBrand, 'name'),
+            logoUrl: getString(rawBrand, 'logoUrl') ?? null,
+            primaryColor: getString(rawBrand, 'primaryColor') ?? null,
+            contactEmail: getString(rawBrand, 'contactEmail') ?? null,
+            contactPhone: getString(rawBrand, 'contactPhone') ?? null,
+            contactAddress: getString(rawBrand, 'contactAddress') ?? null,
+            websiteUrl: getString(rawBrand, 'websiteUrl') ?? null,
+          }
+        : null;
+
       let receiptBuffer: Buffer | undefined;
       try {
         receiptBuffer = await this.receiptService.generateReceipt({
@@ -105,9 +118,11 @@ export class EventsController {
           amount,
           currency,
           customerName,
-          date: new Date().toLocaleDateString(),
+          customerEmail: email,
+          date: new Date(),
           description,
-          items,
+          transactionReference: getString(payload, 'payment_id'),
+          brand,
         });
       } catch (error) {
         this.logger.error(
