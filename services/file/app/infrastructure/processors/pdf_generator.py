@@ -220,6 +220,62 @@ def generate_from_template_sync(
     return buffer.read()
 
 
+def _img_tag(url: str, max_height: str) -> str:
+    """Build a WeasyPrint-renderable <img> tag for a stored asset URL.
+
+    WeasyPrint fetches http(s) image sources itself, so a plain <img src="...">
+    (same convention the admin template preview already uses for {{logo}} /
+    {{signature}}) is sufficient — no base64 inlining needed.
+    """
+    if not url:
+        return ''
+    return f'<img src="{url}" style="max-height:{max_height};max-width:100%;display:block;" />'
+
+
+def _build_structured_header_html(header: Dict[str, Any], logo_url: str) -> str:
+    """JYS-style 3-column header: logo left, program name/batch centered, contact right."""
+    logo_cell = _img_tag(logo_url, '60pt')
+    program_name = header.get('program_name') or ''
+    batch = header.get('batch') or ''
+    tagline = header.get('tagline') or ''
+    website = header.get('website') or ''
+    email = header.get('email') or ''
+    phone = header.get('phone') or ''
+
+    title_line = program_name
+    if batch:
+        title_line = f'{program_name} &mdash; Batch {batch}' if program_name else f'Batch {batch}'
+    tagline_html = f'<div style="font-style:italic;font-size:9pt;margin-top:2pt;">{tagline}</div>' if tagline else ''
+
+    contact_rows = ''.join(f'<div>{value}</div>' for value in (website, email, phone) if value)
+
+    return f"""<table style="width:100%;border-collapse:collapse;">
+  <tr>
+    <td style="width:20%;vertical-align:middle;text-align:left;">{logo_cell}</td>
+    <td style="width:60%;vertical-align:middle;text-align:center;">
+      <div style="font-weight:bold;font-size:14pt;">{title_line}</div>
+      {tagline_html}
+    </td>
+    <td style="width:20%;vertical-align:middle;text-align:right;font-size:9pt;">{contact_rows}</td>
+  </tr>
+</table>"""
+
+
+def _build_signer_html(signature_url: str, stamp_url: str, signer_name: str, signer_title: str) -> str:
+    """Stamp above signature, then signer name (bold) and title beneath."""
+    stamp_cell = _img_tag(stamp_url, '70pt')
+    signature_cell = _img_tag(signature_url, '50pt')
+    name_html = f'<div style="font-weight:bold;">{signer_name}</div>' if signer_name else ''
+    title_html = f'<div>{signer_title}</div>' if signer_title else ''
+
+    return f"""<div style="text-align:center;">
+  {stamp_cell}
+  {signature_cell}
+  {name_html}
+  {title_html}
+</div>"""
+
+
 def generate_loa_sync(
     html_content: str,
     header_html: str,
@@ -228,18 +284,51 @@ def generate_loa_sync(
     margins: Dict[str, Any],
     placeholder_data: Dict[str, Any],
     document_number: str,
+    logo_url: str = "",
+    signature_url: str = "",
+    stamp_url: str = "",
+    signer_name: str = "",
+    signer_title: str = "",
+    header: Optional[Dict[str, Any]] = None,
 ) -> bytes:
     """Generate LOA PDF from Tiptap HTML using WeasyPrint."""
     from weasyprint import HTML, CSS  # type: ignore
 
+    # Merge legacy {{logo}}/{{signature}}/{{stamp}} image tokens into the
+    # generic substitution map so any occurrence in body/header/footer HTML
+    # (wherever the admin placed them) renders as a real image instead of
+    # literal placeholder text. Empty urls leave tokens untouched — this is
+    # what keeps the no-image back-compat path byte-for-byte identical.
+    image_tokens: Dict[str, Any] = {}
+    if logo_url:
+        image_tokens['{{logo}}'] = _img_tag(logo_url, '60pt')
+    if signature_url:
+        image_tokens['{{signature}}'] = _img_tag(signature_url, '50pt')
+    if stamp_url:
+        image_tokens['{{stamp}}'] = _img_tag(stamp_url, '70pt')
+    merged_data = {**placeholder_data, **image_tokens}
+
     def replace_tokens(text: str) -> str:
-        for key, value in placeholder_data.items():
+        for key, value in merged_data.items():
             text = text.replace(key, str(value) if value is not None else '')
         return text
 
     body = replace_tokens(html_content)
-    header = replace_tokens(header_html or '')
-    footer = replace_tokens(footer_html or '')
+
+    # Structured header when a header config is supplied; otherwise fall back
+    # to the existing header_html behavior exactly as today (back-compat).
+    if header:
+        header_rendered = _build_structured_header_html(header, logo_url)
+    else:
+        header_rendered = replace_tokens(header_html or '')
+
+    # Structured signer/signature block when any signer-related field is
+    # provided; otherwise fall back to footer_html exactly as today (back-compat).
+    has_signer_block = bool(signature_url or stamp_url or signer_name or signer_title)
+    if has_signer_block:
+        footer_rendered = _build_signer_html(signature_url, stamp_url, signer_name, signer_title)
+    else:
+        footer_rendered = replace_tokens(footer_html or '')
 
     top = margins.get('top', 40)
     right = margins.get('right', 40)
@@ -268,9 +357,9 @@ def generate_loa_sync(
 </style>
 </head>
 <body>
-  <div class="loa-header">{header}</div>
+  <div class="loa-header">{header_rendered}</div>
   <div class="loa-body">{body}</div>
-  <div class="loa-footer">{footer}</div>
+  <div class="loa-footer">{footer_rendered}</div>
 </body>
 </html>"""
 
@@ -329,6 +418,12 @@ class PDFGeneratorService:
         margins: Dict[str, Any],
         placeholder_data: Dict[str, Any],
         document_number: str,
+        logo_url: str = "",
+        signature_url: str = "",
+        stamp_url: str = "",
+        signer_name: str = "",
+        signer_title: str = "",
+        header: Optional[Dict[str, Any]] = None,
     ) -> BytesIO:
         """Generate LOA PDF from Tiptap HTML using WeasyPrint."""
         pdf_bytes = await run_in_processpool(
@@ -340,5 +435,11 @@ class PDFGeneratorService:
             margins,
             placeholder_data,
             document_number,
+            logo_url=logo_url,
+            signature_url=signature_url,
+            stamp_url=stamp_url,
+            signer_name=signer_name,
+            signer_title=signer_title,
+            header=header,
         )
         return BytesIO(pdf_bytes)

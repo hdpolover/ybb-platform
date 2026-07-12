@@ -35,7 +35,7 @@ export class LoaDownloadService {
         status: true,
         submittedAt: true,
         programId: true,
-        participant: { select: { fullName: true } },
+        participant: { select: { fullName: true, institution: true } },
         participationCategory: { select: { name: true } },
       },
     });
@@ -84,6 +84,12 @@ export class LoaDownloadService {
     // 7. Build placeholder substitution map (mirrors GenerateLOAHandler source map)
     const now = new Date();
     const generatedAt = now.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    const startDate = program.startDate
+      ? program.startDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+      : '';
+    const endDate = program.endDate
+      ? program.endDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+      : '';
     const sourceMap: Record<string, string> = {
       'participant.fullName': application.participant.fullName,
       'program.name': program.name,
@@ -91,6 +97,10 @@ export class LoaDownloadService {
       'generated_at': generatedAt,
       'participant_document.documentNumber': docNumber,
       'application.participationCategory.name': application.participationCategory?.name ?? '',
+      'program.location': program.location ?? '',
+      'program.startDate': startDate,
+      'program.endDate': endDate,
+      'participant.institution': application.participant.institution ?? '',
     };
 
     const placeholders = (template.placeholders ?? []) as Array<{ key: string; source: string }>;
@@ -103,6 +113,33 @@ export class LoaDownloadService {
 
     // 8. Extract layout settings from layoutConfig
     const layoutConfig = (template.layoutConfig ?? {}) as Record<string, unknown>;
+    const headerConfig = (layoutConfig['header'] as Record<string, unknown> | undefined) ?? undefined;
+
+    // 8b. Resolve signature — legacy fallback is raw layoutConfig.signatureUrl with
+    // empty signer name/title (Stage 1 behavior). If layoutConfig.signatureId is set,
+    // look up the reusable brand-scoped Signature record and supersede the legacy
+    // values with its imageUrl/name/title. Any lookup failure (missing id, deleted
+    // row, DB error) degrades gracefully back to the legacy fallback — a bad
+    // signature reference must never break LOA download.
+    let signatureUrl = (layoutConfig['signatureUrl'] as string) ?? '';
+    let signerName = '';
+    let signerTitle = '';
+    const signatureId = layoutConfig['signatureId'] as string | undefined;
+    if (signatureId) {
+      try {
+        const signature = await this.prisma.signature.findFirst({
+          where: { id: signatureId, deletedAt: null },
+          select: { imageUrl: true, name: true, title: true },
+        });
+        if (signature) {
+          signatureUrl = signature.imageUrl;
+          signerName = signature.name;
+          signerTitle = signature.title ?? '';
+        }
+      } catch {
+        // Swallow — fall back to legacy layoutConfig.signatureUrl values above.
+      }
+    }
 
     // 9. Generate PDF via file service — no storage upload
     const buffer = await this.fileServiceClient.generateLoa({
@@ -118,6 +155,21 @@ export class LoaDownloadService {
       },
       placeholder_data: placeholderData,
       document_number: docNumber,
+      logo_url: (layoutConfig['logoUrl'] as string) ?? '',
+      signature_url: signatureUrl,
+      stamp_url: (layoutConfig['stampUrl'] as string) ?? '',
+      signer_name: signerName,
+      signer_title: signerTitle,
+      header: headerConfig
+        ? {
+            program_name: program.name,
+            batch: String(program.year),
+            tagline: (headerConfig['tagline'] as string) ?? '',
+            website: (headerConfig['website'] as string) ?? '',
+            email: (headerConfig['email'] as string) ?? '',
+            phone: (headerConfig['phone'] as string) ?? '',
+          }
+        : undefined,
     });
 
     // 10. Record download tracking

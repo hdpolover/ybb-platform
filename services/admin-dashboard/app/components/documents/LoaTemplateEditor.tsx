@@ -13,6 +13,7 @@ import {
   Bold, Italic, Underline as UnderlineIcon, AlignLeft, AlignCenter,
   AlignRight, List, ListOrdered, Undo, Redo, RemoveFormatting,
   Heading1, Heading2, Loader2, CheckCircle2, Upload, ImageIcon, X, Eye, EyeOff,
+  ChevronDown, Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
@@ -23,15 +24,26 @@ import {
   DialogTitle,
 } from "@/src/ui/dialog";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/src/ui/dropdown-menu";
+import {
   listDocumentTemplates,
   createDocumentTemplate,
   updateDocumentTemplate,
   listProgramMedia,
   uploadFileViaPresignedUrl,
+  listSignatures,
+  createSignature,
+  updateSignature,
+  deleteSignature,
   type DocumentTemplate,
   type DocumentTemplatePlaceholder,
   type DocumentTemplateLayoutConfig,
   type MediaFile,
+  type Signature,
 } from "@/src/shared/api-client";
 import { formatDate } from "@/lib/utils";
 
@@ -42,6 +54,10 @@ const PLACEHOLDER_TOKENS: DocumentTemplatePlaceholder[] = [
   { key: "{{batch}}", label: "Batch / Cohort", source: "program.batch" },
   { key: "{{document_number}}", label: "Document Number", source: "participant_document.documentNumber" },
   { key: "{{participation_category}}", label: "Participation Category", source: "application.participationCategory.name" },
+  { key: "{{program_location}}", label: "Program Location", source: "program.location" },
+  { key: "{{start_date}}", label: "Start Date", source: "program.startDate" },
+  { key: "{{end_date}}", label: "End Date", source: "program.endDate" },
+  { key: "{{institution}}", label: "Institution", source: "participant.institution" },
 ];
 
 const DEFAULT_LAYOUT: DocumentTemplateLayoutConfig = {
@@ -229,15 +245,53 @@ function ImageUploadField({
 
 // ─── Mini Section Editor (header / footer) ────────────────────────────────────
 
+/** Dropdown listing every token in `tokens`, inserting the selected one at the cursor. */
+function TokenInsertMenu({
+  editor,
+  tokens,
+}: {
+  editor: ReturnType<typeof useEditor> | null;
+  tokens: DocumentTemplatePlaceholder[];
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          title="Insert token"
+          className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-zinc-600 hover:bg-zinc-100"
+        >
+          Tokens
+          <ChevronDown className="h-3 w-3" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="max-h-64 w-64 overflow-y-auto">
+        {tokens.map((t) => (
+          <DropdownMenuItem
+            key={t.key}
+            onSelect={() => editor?.chain().focus().insertContent(t.key).run()}
+            className="flex flex-col items-start gap-0"
+          >
+            <span className="text-xs text-zinc-700">{t.label}</span>
+            <code className="text-[10px] font-mono text-blue-600">{t.key}</code>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function MiniEditor({
   editor,
   tokenLabel,
   tokenKey,
+  allTokens,
   placeholder,
 }: {
   editor: ReturnType<typeof useEditor> | null;
   tokenLabel: string;
   tokenKey: string;
+  allTokens: DocumentTemplatePlaceholder[];
   placeholder?: string;
 }) {
   void placeholder;
@@ -272,6 +326,7 @@ function MiniEditor({
         >
           {tokenKey}
         </button>
+        <TokenInsertMenu editor={editor} tokens={allTokens} />
       </div>
       <div className="min-h-[72px] px-4 py-3">
         {editor && <EditorContent editor={editor} />}
@@ -302,6 +357,16 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
   const [layout, setLayout] = useState<DocumentTemplateLayoutConfig>(DEFAULT_LAYOUT);
   const [templateName, setTemplateName] = useState("Letter of Acceptance");
   const [previewMode, setPreviewMode] = useState(false);
+
+  // Signatures (brand-scoped, reusable across templates)
+  const [signatures, setSignatures] = useState<Signature[]>([]);
+  const [signaturesLoading, setSignaturesLoading] = useState(false);
+  const [signatureFormOpen, setSignatureFormOpen] = useState(false);
+  const [editingSignature, setEditingSignature] = useState<Signature | null>(null);
+  const [sigFormName, setSigFormName] = useState("");
+  const [sigFormTitle, setSigFormTitle] = useState("");
+  const [sigFormImageUrl, setSigFormImageUrl] = useState("");
+  const [sigFormSaving, setSigFormSaving] = useState(false);
 
   const editorExtensions = [
     StarterKit,
@@ -356,6 +421,85 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
       .finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolvedProgramId]);
+
+  const refreshSignatures = useCallback(() => {
+    if (!brandId) return;
+    setSignaturesLoading(true);
+    listSignatures(brandId)
+      .then(setSignatures)
+      .catch(() => toast.error("Failed to load signatures"))
+      .finally(() => setSignaturesLoading(false));
+  }, [brandId]);
+
+  useEffect(() => {
+    refreshSignatures();
+  }, [refreshSignatures]);
+
+  function openCreateSignature() {
+    setEditingSignature(null);
+    setSigFormName("");
+    setSigFormTitle("");
+    setSigFormImageUrl("");
+    setSignatureFormOpen(true);
+  }
+
+  function openEditSignature(sig: Signature) {
+    setEditingSignature(sig);
+    setSigFormName(sig.name);
+    setSigFormTitle(sig.title ?? "");
+    setSigFormImageUrl(sig.imageUrl);
+    setSignatureFormOpen(true);
+  }
+
+  async function saveSignatureForm() {
+    if (!sigFormName.trim()) {
+      toast.error("Signature name is required");
+      return;
+    }
+    if (!sigFormImageUrl) {
+      toast.error("Signature image is required");
+      return;
+    }
+    setSigFormSaving(true);
+    try {
+      if (editingSignature) {
+        await updateSignature(editingSignature.id, {
+          name: sigFormName.trim(),
+          title: sigFormTitle.trim() || undefined,
+          imageUrl: sigFormImageUrl,
+        });
+        toast.success("Signature updated");
+      } else {
+        await createSignature({
+          brandId,
+          name: sigFormName.trim(),
+          title: sigFormTitle.trim() || undefined,
+          imageUrl: sigFormImageUrl,
+        });
+        toast.success("Signature created");
+      }
+      setSignatureFormOpen(false);
+      refreshSignatures();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save signature");
+    } finally {
+      setSigFormSaving(false);
+    }
+  }
+
+  async function removeSignature(sig: Signature) {
+    if (!window.confirm(`Delete signature "${sig.name}"? This cannot be undone.`)) return;
+    try {
+      await deleteSignature(sig.id);
+      if (layout.signatureId === sig.id) {
+        setLayout((l) => ({ ...l, signatureId: undefined }));
+      }
+      toast.success("Signature deleted");
+      refreshSignatures();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete signature");
+    }
+  }
 
   // Set editor content once editors + template are ready
   const contentSetRef = useRef(false);
@@ -422,6 +566,10 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
       "{{batch}}": "Batch 1",
       "{{document_number}}": "DOC-2026-001",
       "{{participation_category}}": "International Delegate",
+      "{{program_location}}": "Jakarta, Indonesia",
+      "{{start_date}}": formatDate(new Date(2026, 6, 20), { year: "numeric", month: "long", day: "numeric" }),
+      "{{end_date}}": formatDate(new Date(2026, 6, 27), { year: "numeric", month: "long", day: "numeric" }),
+      "{{institution}}": "State University of Jakarta",
       "{{logo}}": layout.logoUrl
         ? `<img src="${layout.logoUrl}" style="height:60px;display:block;margin:0 auto 6px" />`
         : `<div style="display:inline-block;height:60px;width:120px;background:#e5e7eb;border-radius:6px;line-height:60px;text-align:center;font-size:11px;color:#6b7280">[LOGO]</div>`,
@@ -550,6 +698,7 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
                   editor={headerEditor}
                   tokenLabel="Logo"
                   tokenKey="{{logo}}"
+                  allTokens={PLACEHOLDER_TOKENS}
                   placeholder="Header content — use {{logo}} to insert the logo…"
                 />
               </div>
@@ -614,6 +763,7 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
                   editor={footerEditor}
                   tokenLabel="Signature"
                   tokenKey="{{signature}}"
+                  allTokens={PLACEHOLDER_TOKENS}
                   placeholder="Footer content — use {{signature}} to insert the signature image…"
                 />
               </div>
@@ -694,9 +844,74 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
               />
             </div>
 
+            <div className="mb-1">
+              <span className={labelCls}>Letterhead Details</span>
+              <p className="mb-2 text-[10px] text-zinc-400">
+                Program name and batch render automatically — these fill the tagline/contact row next to the logo.
+              </p>
+            </div>
+            <div className="mb-4 grid grid-cols-2 gap-2">
+              <div>
+                <label className={labelCls}>Tagline</label>
+                <input
+                  className={inputCls}
+                  value={layout.header?.tagline ?? ""}
+                  onChange={(e) =>
+                    setLayout((l) => ({ ...l, header: { ...(l.header ?? {}), tagline: e.target.value } }))
+                  }
+                  placeholder="e.g. Empowering Youth Leaders"
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Website</label>
+                <input
+                  className={inputCls}
+                  value={layout.header?.website ?? ""}
+                  onChange={(e) =>
+                    setLayout((l) => ({ ...l, header: { ...(l.header ?? {}), website: e.target.value } }))
+                  }
+                  placeholder="ybb.foundation"
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Email</label>
+                <input
+                  className={inputCls}
+                  value={layout.header?.email ?? ""}
+                  onChange={(e) =>
+                    setLayout((l) => ({ ...l, header: { ...(l.header ?? {}), email: e.target.value } }))
+                  }
+                  placeholder="info@ybb.foundation"
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Phone</label>
+                <input
+                  className={inputCls}
+                  value={layout.header?.phone ?? ""}
+                  onChange={(e) =>
+                    setLayout((l) => ({ ...l, header: { ...(l.header ?? {}), phone: e.target.value } }))
+                  }
+                  placeholder="+62 21 000 0000"
+                />
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <ImageUploadField
+                label="Stamp"
+                value={layout.stampUrl ?? ""}
+                onChange={(url) => setLayout((l) => ({ ...l, stampUrl: url }))}
+                programId={resolvedProgramId}
+                brandId={brandId}
+                userId={userId}
+              />
+              <p className="mt-1 text-[10px] text-zinc-400">Rendered above the signature.</p>
+            </div>
+
             <div>
               <ImageUploadField
-                label="Signature Image"
+                label="Legacy signature image (fallback — used only when no signature is selected below)"
                 value={layout.signatureUrl ?? ""}
                 onChange={(url) => setLayout((l) => ({ ...l, signatureUrl: url }))}
                 programId={resolvedProgramId}
@@ -705,8 +920,149 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
               />
             </div>
           </div>
+
+          {/* Signature picker */}
+          <div className="rounded-lg border border-zinc-200 bg-white p-4">
+            <div className="mb-1 flex items-center justify-between">
+              <h3 className="text-xs font-semibold text-zinc-800">Signature</h3>
+              <button
+                type="button"
+                onClick={openCreateSignature}
+                className="text-[11px] font-medium text-blue-600 hover:text-blue-700"
+              >
+                + New
+              </button>
+            </div>
+            <p className="mb-3 text-[11px] text-zinc-500">
+              Signer name and title render under the signature image automatically.
+            </p>
+
+            {signaturesLoading ? (
+              <div className="flex h-16 items-center justify-center">
+                <Loader2 className="h-4 w-4 animate-spin text-zinc-400" />
+              </div>
+            ) : signatures.length === 0 ? (
+              <p className="rounded-md border border-zinc-100 bg-zinc-50 px-3 py-4 text-center text-[11px] text-zinc-400">
+                No signatures yet for this brand. Add one to select it here.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setLayout((l) => ({ ...l, signatureId: undefined }))}
+                  className={[
+                    "rounded-md border px-3 py-2 text-left text-[11px] transition",
+                    !layout.signatureId
+                      ? "border-blue-300 bg-blue-50 text-blue-700"
+                      : "border-zinc-100 bg-zinc-50 text-zinc-500 hover:border-blue-200 hover:bg-blue-50",
+                  ].join(" ")}
+                >
+                  None (use legacy signature image)
+                </button>
+                {signatures.map((sig) => (
+                  <div
+                    key={sig.id}
+                    className={[
+                      "flex items-center gap-2 rounded-md border px-2 py-1.5 transition",
+                      layout.signatureId === sig.id
+                        ? "border-blue-300 bg-blue-50"
+                        : "border-zinc-100 bg-zinc-50 hover:border-blue-200",
+                    ].join(" ")}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setLayout((l) => ({ ...l, signatureId: sig.id }))}
+                      className="flex flex-1 items-center gap-2 text-left"
+                    >
+                      <div className="flex h-8 w-14 shrink-0 items-center justify-center overflow-hidden rounded border border-zinc-200 bg-white">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={sig.imageUrl} alt="" className="h-full w-full object-contain p-0.5" />
+                      </div>
+                      <span className="min-w-0">
+                        <span className="block truncate text-[11px] font-medium text-zinc-700">{sig.name}</span>
+                        {sig.title ? (
+                          <span className="block truncate text-[10px] text-zinc-400">{sig.title}</span>
+                        ) : null}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      title="Edit signature"
+                      onClick={() => openEditSignature(sig)}
+                      className="shrink-0 text-zinc-400 hover:text-blue-600"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Delete signature"
+                      onClick={() => removeSignature(sig)}
+                      className="shrink-0 text-zinc-400 hover:text-red-500"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Signature create/edit modal */}
+      <Dialog open={signatureFormOpen} onOpenChange={setSignatureFormOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingSignature ? "Edit Signature" : "New Signature"}</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className={labelCls}>Name</label>
+              <input
+                className={inputCls}
+                value={sigFormName}
+                onChange={(e) => setSigFormName(e.target.value)}
+                placeholder="e.g. Dr. Jane Doe"
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Title (optional)</label>
+              <input
+                className={inputCls}
+                value={sigFormTitle}
+                onChange={(e) => setSigFormTitle(e.target.value)}
+                placeholder="e.g. Program Director"
+              />
+            </div>
+            <ImageUploadField
+              label="Signature Image"
+              value={sigFormImageUrl}
+              onChange={setSigFormImageUrl}
+              programId={resolvedProgramId}
+              brandId={brandId}
+              userId={userId}
+            />
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setSignatureFormOpen(false)}
+                className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={sigFormSaving}
+                onClick={saveSignatureForm}
+                className="flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {sigFormSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                {editingSignature ? "Save Changes" : "Create Signature"}
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

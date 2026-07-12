@@ -1,7 +1,7 @@
 """Document generation routes."""
 # type: ignore
 from fastapi import APIRouter, Depends, HTTPException, Response  # type: ignore
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from pydantic import BaseModel  # type: ignore
 from app.infrastructure.processors.excel_export import ExcelExportService
 from app.infrastructure.processors.pdf_generator import PDFGeneratorService
@@ -51,6 +51,15 @@ class CertificateRequest(BaseModel):
     certificate_type: str = "completion"  # completion or participation
 
 
+class LoaHeaderConfig(BaseModel):
+    program_name: str = ""
+    batch: str = ""
+    tagline: str = ""
+    website: str = ""
+    email: str = ""
+    phone: str = ""
+
+
 class LoaRequest(BaseModel):
     html_content: str
     header_html: str = ""
@@ -59,6 +68,15 @@ class LoaRequest(BaseModel):
     margins: Dict[str, Any] = {"top": 40, "right": 40, "bottom": 40, "left": 40}
     placeholder_data: Dict[str, Any] = {}
     document_number: str = ""
+    # Stage 1: legacy single logo/signature/stamp images forwarded from
+    # document_templates.layout_config. Stage 2 will replace signer_name/
+    # signer_title with data sourced from a real multi-signature record.
+    logo_url: str = ""
+    signature_url: str = ""
+    stamp_url: str = ""
+    signer_name: str = ""
+    signer_title: str = ""
+    header: Optional[LoaHeaderConfig] = None
 
 
 # Excel Export Endpoints
@@ -195,6 +213,12 @@ async def generate_loa(
             margins=request.margins,
             placeholder_data=request.placeholder_data,
             document_number=request.document_number,
+            logo_url=request.logo_url,
+            signature_url=request.signature_url,
+            stamp_url=request.stamp_url,
+            signer_name=request.signer_name,
+            signer_title=request.signer_title,
+            header=request.header.model_dump() if request.header else None,
         )
         filename = f"loa_{request.document_number or 'document'}.pdf"
         return Response(

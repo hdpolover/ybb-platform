@@ -73,6 +73,7 @@ model Brand {
   sponsorshipTiers         SponsorshipTier[]
   partnershipEnquiries     PartnershipEnquiry[]
   landingSnapshots         BrandLandingSnapshot[]
+  signatures               Signature[]
 
   @@index([slug])
   @@index([isActive])
