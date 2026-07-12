@@ -2849,6 +2849,18 @@ export type DocumentTemplateLayoutConfig = {
   footerHtml?: string;
   logoUrl?: string;
   signatureUrl?: string;
+  // Brand-scoped Signature record (preferred over legacy signatureUrl above when set)
+  signatureId?: string;
+  // Stamp image, rendered above the signature in the generated PDF
+  stampUrl?: string;
+  // Structured letterhead metadata read directly by the renderer.
+  // Program name and batch render automatically server-side — not typed here.
+  header?: {
+    tagline?: string;
+    website?: string;
+    email?: string;
+    phone?: string;
+  };
 };
 
 export type DocumentTemplate = {
@@ -2988,6 +3000,61 @@ export async function updateDocumentTemplate(
 
 export function deleteDocumentTemplate(id: string): Promise<void> {
   return request<void>(`/programs/document-templates/${id}`, { method: 'DELETE' });
+}
+
+// ─── Signatures ───────────────────────────────────────────────────────────────
+
+/**
+ * A reusable signature image, scoped to a brand, selectable in LOA templates
+ * via layoutConfig.signatureId. Mirrors the Signature Prisma model (services/api).
+ */
+export type Signature = {
+  id: string;
+  brandId: string;
+  name: string;
+  title: string | null;
+  imageUrl: string;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export function listSignatures(brandId: string): Promise<Signature[]> {
+  return request<Signature[]>(`/admin/signatures?brandId=${encodeURIComponent(brandId)}`);
+}
+
+export function createSignature(input: {
+  brandId: string;
+  name: string;
+  title?: string;
+  imageUrl: string;
+  sortOrder?: number;
+}): Promise<Signature> {
+  return request<Signature>(`/admin/signatures`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateSignature(
+  id: string,
+  patch: Partial<{
+    name: string;
+    title: string;
+    imageUrl: string;
+    sortOrder: number;
+    isActive: boolean;
+  }>,
+): Promise<Signature> {
+  return request<Signature>(`/admin/signatures/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
+}
+
+export function deleteSignature(id: string): Promise<void> {
+  return request<void>(`/admin/signatures/${id}`, { method: 'DELETE' });
 }
 
 // ─── LOA Release Batches ──────────────────────────────────────────────────────

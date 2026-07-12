@@ -362,6 +362,19 @@ export class FileServiceClient {
     margins: { top: number; right: number; bottom: number; left: number };
     placeholder_data: Record<string, string>;
     document_number: string;
+    logo_url?: string;
+    signature_url?: string;
+    stamp_url?: string;
+    signer_name?: string;
+    signer_title?: string;
+    header?: {
+      program_name: string;
+      batch: string;
+      tagline: string;
+      website: string;
+      email: string;
+      phone: string;
+    };
   }): Promise<Buffer> {
     try {
       const response: AxiosResponse<ArrayBuffer> = await firstValueFrom(
