@@ -50,7 +50,7 @@ export class LoaDocumentNumberService {
         applicationId,
         templateId,         // required: lets GetPortalDocumentsHandler match by templateId
         type: 'letter_of_acceptance',
-        name: 'Letter of Acceptance',
+        name: 'Invitation Letter',
         documentNumber: docNumber,
         fileUrl: '',        // LOA is streamed on-demand; no stored file
         generatedAt: new Date(),

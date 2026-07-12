@@ -555,7 +555,7 @@ export function EditSubmissionDrawer({
             onChange={(e) => setReason(e.target.value)}
             rows={3}
             className={TEXTAREA_CLS}
-            placeholder="e.g. Participant reported a typo in their name before LOA printing."
+            placeholder="e.g. Participant reported a typo in their name before Invitation Letter printing."
           />
         </Field>
       </FormSection>

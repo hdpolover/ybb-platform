@@ -95,21 +95,21 @@ export const CYS_2026_DATA = {
       order: 1,
     },
     {
-      title: 'LoA Batch 1 Announcement',
+      title: 'Invitation Letter Batch 1 Announcement',
       date: '2026-03-01',
-      description: 'Letter of Acceptance for early applicants (Jan 15 - Feb 28).',
+      description: 'Invitation Letter for early applicants (Jan 15 - Feb 28).',
       order: 2,
     },
     {
-      title: 'LoA Batch 2 Announcement',
+      title: 'Invitation Letter Batch 2 Announcement',
       date: '2026-04-15',
-      description: 'Letter of Acceptance for second batch applicants (Mar 1 - Apr 10).',
+      description: 'Invitation Letter for second batch applicants (Mar 1 - Apr 10).',
       order: 3,
     },
     {
-      title: 'LoA Batch 3 Announcement',
+      title: 'Invitation Letter Batch 3 Announcement',
       date: '2026-05-25',
-      description: 'Letter of Acceptance for third batch applicants (Apr 11 - May 20).',
+      description: 'Invitation Letter for third batch applicants (Apr 11 - May 20).',
       order: 4,
     },
     {
@@ -370,9 +370,9 @@ export const CYS_2026_DATA = {
       order: 5,
     },
     {
-      question: 'When will I receive my Letter of Acceptance (LoA)?',
+      question: 'When will I receive my Invitation Letter?',
       answer:
-        'LoAs are released in batches. Batch 1: March 1, Batch 2: April 15, Batch 3: May 25, 2026. Earlier applications receive earlier decisions.',
+        'Invitation Letters are released in batches. Batch 1: March 1, Batch 2: April 15, Batch 3: May 25, 2026. Earlier applications receive earlier decisions.',
       category: 'registration',
       order: 6,
     },

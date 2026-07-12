@@ -201,7 +201,7 @@ export async function seedParticipants() {
             await prisma.participantDocument.create({
                 data: {
                     applicationId: app.id,
-                    name: "Letter of Acceptance",
+                    name: "Invitation Letter",
                     type: "loa",
                     fileUrl: "https://example.com/loa.pdf",
                     isPublic: false

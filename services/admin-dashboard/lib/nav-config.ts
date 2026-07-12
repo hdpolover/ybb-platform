@@ -222,7 +222,7 @@ export const programNavSections: NavSection[] = [
         icon: FileText,
         children: [
           { id: "documents-program-documents", label: "Program Documents", href: "documents/program-documents", icon: FileText },
-          { id: "documents-loa-template", label: "LOA Template", href: "documents/loa-template", icon: FileEdit },
+          { id: "documents-loa-template", label: "Invitation Letter Template", href: "documents/loa-template", icon: FileEdit },
           { id: "documents-certificates", label: "Certificates", href: "documents/certificates", icon: FileBadge },
           { id: "documents-program-guidelines", label: "Guidelines", href: "documents/program-guidelines", icon: BookOpen },
         ],

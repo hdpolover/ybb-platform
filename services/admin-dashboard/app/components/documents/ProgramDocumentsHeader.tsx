@@ -15,7 +15,7 @@ export function ProgramDocumentsHeader() {
             <span>Program Documents Overview</span>
           </h1>
           <p className="mt-0.5 text-[12px] text-zinc-500">
-            Manage LOA, agreement letters, and complementary document templates used across this program.
+            Manage Invitation Letters, agreement letters, and complementary document templates used across this program.
           </p>
         </div>
       </div>
