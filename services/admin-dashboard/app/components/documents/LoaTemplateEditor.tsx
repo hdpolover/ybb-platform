@@ -355,7 +355,7 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [layout, setLayout] = useState<DocumentTemplateLayoutConfig>(DEFAULT_LAYOUT);
-  const [templateName, setTemplateName] = useState("Letter of Acceptance");
+  const [templateName, setTemplateName] = useState("Invitation Letter");
   const [previewMode, setPreviewMode] = useState(false);
 
   // Signatures (brand-scoped, reusable across templates)
@@ -389,7 +389,7 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
     immediatelyRender: false,
     extensions: [
       ...editorExtensions,
-      Placeholder.configure({ placeholder: "Write your LOA body here. Click placeholders on the right to insert them…" }),
+      Placeholder.configure({ placeholder: "Write your Invitation Letter body here. Click placeholders on the right to insert them…" }),
     ],
     editorProps: { attributes: { class: "focus:outline-none min-h-[400px] text-sm leading-relaxed" } },
   });
@@ -417,7 +417,7 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
           setLayout(lc);
         }
       })
-      .catch(() => toast.error("Failed to load LOA template"))
+      .catch(() => toast.error("Failed to load Invitation Letter template"))
       .finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolvedProgramId]);
@@ -624,7 +624,7 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-zinc-900">LOA Template Editor</h1>
+          <h1 className="text-lg font-semibold text-zinc-900">Invitation Letter Template Editor</h1>
           <p className="text-xs text-zinc-500">
             {template ? (template.isActive ? "Published" : "Draft") : "No template yet"}
             {template && ` · Last updated ${formatDate(template.updatedAt)}`}
@@ -667,7 +667,7 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
           className={inputCls}
           value={templateName}
           onChange={(e) => setTemplateName(e.target.value)}
-          placeholder="Letter of Acceptance"
+          placeholder="Invitation Letter"
         />
       </div>
 
@@ -685,7 +685,7 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
                 srcDoc={buildPreviewDoc()}
                 sandbox="allow-same-origin"
                 className="h-full w-full flex-1"
-                title="LOA Preview"
+                title="Invitation Letter Preview"
                 style={{ minHeight: 560 }}
               />
             </div>

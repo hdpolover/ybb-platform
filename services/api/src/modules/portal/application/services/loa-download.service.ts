@@ -39,7 +39,7 @@ export class LoaDownloadService {
         participationCategory: { select: { name: true } },
       },
     });
-    if (!application) throw new ForbiddenException('LOA not available');
+    if (!application) throw new ForbiddenException('Invitation Letter not available');
 
     // 3. Resolve the program deterministically from the application's own programId
     const program = await this.prisma.program.findUnique({
@@ -58,7 +58,7 @@ export class LoaDownloadService {
 
     // 4. Eligibility gate
     const eligibility = await this.loaEligibilityService.checkEligibility(application.id, program.id);
-    if (!eligibility.eligible) throw new ForbiddenException('LOA not available');
+    if (!eligibility.eligible) throw new ForbiddenException('Invitation Letter not available');
 
     // 5. Fetch the active LOA document template (moved before assignOrGet so we can pass
     //    its id to assignOrGet — Bug 2 fix: templateId must be set on the created row)
@@ -67,7 +67,7 @@ export class LoaDownloadService {
       select: { id: true, htmlContent: true, placeholders: true, layoutConfig: true },
     });
     if (!template || !template.htmlContent) {
-      throw new NotFoundException('LOA template not configured');
+      throw new NotFoundException('Invitation Letter template not configured');
     }
 
     // 6. Assign or reuse stable document number (Bug 2 fix: pass template.id so the

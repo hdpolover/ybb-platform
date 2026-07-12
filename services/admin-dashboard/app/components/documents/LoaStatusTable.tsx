@@ -65,7 +65,7 @@ export function LoaStatusTable({ programId }: LoaStatusTableProps) {
           <EmptyState
             icon={Download}
             title="No downloads yet"
-            description="Downloads will appear here once participants open their LoA"
+            description="Downloads will appear here once participants open their Invitation Letter"
           />
         ) : (
           <Table>

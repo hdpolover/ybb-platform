@@ -14,12 +14,12 @@ export default function LoaTemplatePage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Letter of Acceptance"
+        title="Invitation Letter"
         breadcrumb={
           <nav className="text-xs text-zinc-400">
             <span>Documents</span>
             <span className="mx-1">/</span>
-            <span className="text-zinc-700">Letter of Acceptance</span>
+            <span className="text-zinc-700">Invitation Letter</span>
           </nav>
         }
       />

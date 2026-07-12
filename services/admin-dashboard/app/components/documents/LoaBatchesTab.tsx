@@ -193,7 +193,7 @@ export function LoaBatchesTab({ programId }: LoaBatchesTabProps) {
         toast.success(`Batch "${batch.name}" is now a draft.`);
       } else {
         await releaseLoaBatch(resolvedProgramId, batch.id);
-        toast.success(`Batch "${batch.name}" released. Eligible participants can now download their LOA.`);
+        toast.success(`Batch "${batch.name}" released. Eligible participants can now download their Invitation Letter.`);
       }
       void fetchBatches();
     } catch (err) {
@@ -210,7 +210,7 @@ export function LoaBatchesTab({ programId }: LoaBatchesTabProps) {
       {/* Header row */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-zinc-500">
-          Manage release batches to control which participants can download their LOA.
+          Manage release batches to control which participants can download their Invitation Letter.
         </p>
         <Button size="sm" onClick={handleNewBatch}>
           <PlusIcon className="mr-1.5 h-3.5 w-3.5" />
@@ -245,7 +245,7 @@ export function LoaBatchesTab({ programId }: LoaBatchesTabProps) {
         <EmptyState
           icon={CalendarRange}
           title="No release batches yet"
-          description="Create a batch to define a submission date window and release LOAs for eligible participants."
+          description="Create a batch to define a submission date window and release Invitation Letters for eligible participants."
           action={{ label: "Create First Batch", onClick: handleNewBatch }}
         />
       )}
@@ -298,7 +298,7 @@ export function LoaBatchesTab({ programId }: LoaBatchesTabProps) {
           }
         }}
         title={`Delete "${deleteTarget?.name ?? "batch"}"?`}
-        description="This will permanently remove the batch. Participants already in this batch will lose their LOA access if no other released batch covers them."
+        description="This will permanently remove the batch. Participants already in this batch will lose their Invitation Letter access if no other released batch covers them."
         confirmLabel="Delete Batch"
         variant="destructive"
         loading={deleting}

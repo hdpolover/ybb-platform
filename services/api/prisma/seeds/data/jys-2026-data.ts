@@ -78,21 +78,21 @@ export const JYS_2026_DATA = {
       order: 1
     },
     {
-      title: 'LoA Batch 1 Announcement',
+      title: 'Invitation Letter Batch 1 Announcement',
       date: '2026-04-20',
-      description: 'Letter of Acceptance for early applicants (Mar 15 - Apr 15).',
+      description: 'Invitation Letter for early applicants (Mar 15 - Apr 15).',
       order: 2
     },
     {
-      title: 'LoA Batch 2 Announcement',
+      title: 'Invitation Letter Batch 2 Announcement',
       date: '2026-05-20',
-      description: 'Letter of Acceptance for second batch applicants (Apr 16 - May 15).',
+      description: 'Invitation Letter for second batch applicants (Apr 16 - May 15).',
       order: 3
     },
     {
-      title: 'LoA Batch 3 Announcement',
+      title: 'Invitation Letter Batch 3 Announcement',
       date: '2026-06-05',
-      description: 'Letter of Acceptance for third batch applicants (May 16 - Jun 15).',
+      description: 'Invitation Letter for third batch applicants (May 16 - Jun 15).',
       order: 4
     },
     {
