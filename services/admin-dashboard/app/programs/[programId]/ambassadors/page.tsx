@@ -72,7 +72,7 @@ const SORT_ORDER_OPTIONS: Array<{ value: (typeof SORT_ORDER_VALUES)[number]; lab
 // app/programs/[programId]/payments/page.tsx.
 const ambassadorsFilterParsers = {
   search: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
-  sortBy: parseAsStringEnum([...SORT_BY_VALUES]).withDefault("createdAt").withOptions({ clearOnDefault: true }),
+  sortBy: parseAsStringEnum([...SORT_BY_VALUES]).withDefault("totalReferrals").withOptions({ clearOnDefault: true }),
   sortOrder: parseAsStringEnum([...SORT_ORDER_VALUES]).withDefault("desc").withOptions({ clearOnDefault: true }),
   page: parseAsInteger.withDefault(1).withOptions({ clearOnDefault: true }),
 };
@@ -121,7 +121,7 @@ export default function AmbassadorsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchInput]);
 
-  const hasActiveFilters = Boolean(search || sortBy !== "createdAt" || sortOrder !== "desc");
+  const hasActiveFilters = Boolean(search || sortBy !== "totalReferrals" || sortOrder !== "desc");
 
   // No filterable fields beyond search/sort exist on this page, so there are
   // never any removable filter chips or advanced-filter count to show — sort

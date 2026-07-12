@@ -42,7 +42,7 @@ export class GetAmbassadorsListHandler implements IQueryHandler<GetAmbassadorsLi
             : sortBy === 'institution' ? { institution: dir }
             : sortBy === 'isActive' ? { isActive: dir }
             : sortBy === 'createdAt' ? { createdAt: dir }
-            : { createdAt: Prisma.SortOrder.desc };
+            : { totalReferrals: Prisma.SortOrder.desc };
 
         const [data, total] = await Promise.all([
             this.prisma.ambassador.findMany({
