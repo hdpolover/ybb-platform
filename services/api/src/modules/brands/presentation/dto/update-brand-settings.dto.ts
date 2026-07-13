@@ -64,4 +64,18 @@ export class UpdateBrandSettingsDto {
     @IsOptional()
     @IsString()
     supportEmail?: string;
+
+    // Secret token — write-only. Only send when the admin actually enters a new
+    // value; omit entirely to leave the stored token unchanged (undefined values
+    // are dropped before reaching the repository's upsert, see the handler).
+    @ApiProperty({ required: false, description: 'Meta Conversions API (CAPI) access token. Write-only — never returned by any read endpoint.' })
+    @IsOptional()
+    @IsString()
+    capiAccessToken?: string;
+
+    // Not a secret — routed normally through read responses (unlike the token).
+    @ApiProperty({ required: false, description: 'Meta CAPI test_event_code (from Meta Events Manager). Not secret.' })
+    @IsOptional()
+    @IsString()
+    capiTestEventCode?: string;
 }

@@ -10,6 +10,8 @@ export class BrandSetting {
         public readonly googleAnalyticsId: string | null,
         public readonly pixelId: string | null,
         public readonly supportEmail: string | null,
+        public readonly capiAccessToken: string | null,
+        public readonly capiTestEventCode: string | null,
         public readonly createdAt: Date,
         public readonly updatedAt: Date,
         public readonly deletedAt: Date | null,

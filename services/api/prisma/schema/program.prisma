@@ -100,6 +100,17 @@ model BrandSetting {
   pixelId           String? @map("pixel_id") @db.VarChar(50)
   supportEmail      String? @map("support_email") @db.VarChar(255)
 
+  // Meta Conversions API (CAPI) — server-side access token. Long-lived and can
+  // exceed typical VarChar bounds, so stored as Text like other OAuth access
+  // tokens (see UserSession.accessToken in auth.prisma). NEVER return this raw
+  // over any public or admin-read API — see brand-settings-response.util.ts.
+  capiAccessToken String? @map("capi_access_token") @db.Text
+
+  // Meta CAPI test_event_code — NOT a secret. Short code from Meta Events
+  // Manager used to route test events; safe to return normally in admin/read
+  // responses (unlike capiAccessToken). VarChar matches pixelId's style.
+  capiTestEventCode String? @map("capi_test_event_code") @db.VarChar(50)
+
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)

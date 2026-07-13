@@ -8,6 +8,7 @@ import { BrandSetting } from '@core/entities/brand-setting.entity';
 import { LandingRevalidationService } from '../../services/landing-revalidation.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { toSafeBrandSettingsResponse } from '../../../shared/brand-settings-response.util';
 
 @CommandHandler(UpdateBrandSettingsCommand)
 export class UpdateBrandSettingsHandler implements ICommandHandler<UpdateBrandSettingsCommand> {
@@ -42,6 +43,11 @@ export class UpdateBrandSettingsHandler implements ICommandHandler<UpdateBrandSe
             googleAnalyticsId: dto.googleAnalyticsId,
             pixelId: dto.pixelId,
             supportEmail: dto.supportEmail,
+            // Secret, write-only: undefined here (admin didn't type a new value)
+            // is filtered out below, so the upsert never overwrites the stored
+            // token with undefined/empty.
+            capiAccessToken: dto.capiAccessToken,
+            capiTestEventCode: dto.capiTestEventCode,
         };
 
         // Filter out undefined from settingsUpdate so we don't overwrite with undefined?
@@ -99,7 +105,7 @@ export class UpdateBrandSettingsHandler implements ICommandHandler<UpdateBrandSe
         dto.createdAt = brand.createdAt;
         dto.updatedAt = brand.updatedAt;
         dto.deletedAt = brand.deletedAt;
-        dto.settings = brand.settings as unknown as Record<string, unknown> | null;
+        dto.settings = toSafeBrandSettingsResponse(brand.settings);
         return dto;
     }
 }
