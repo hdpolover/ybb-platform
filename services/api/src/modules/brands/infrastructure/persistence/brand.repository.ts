@@ -91,6 +91,8 @@ export class BrandRepository implements IBrandRepository {
                 googleAnalyticsId: data.settings.googleAnalyticsId,
                 pixelId: data.settings.pixelId,
                 supportEmail: data.settings.supportEmail,
+                capiAccessToken: data.settings.capiAccessToken,
+                capiTestEventCode: data.settings.capiTestEventCode,
             };
             settingsUpdate = {
                 upsert: {
@@ -197,6 +199,8 @@ export class BrandRepository implements IBrandRepository {
                 prismaEntity.settings.googleAnalyticsId,
                 prismaEntity.settings.pixelId,
                 prismaEntity.settings.supportEmail,
+                prismaEntity.settings.capiAccessToken,
+                prismaEntity.settings.capiTestEventCode,
                 prismaEntity.settings.createdAt,
                 prismaEntity.settings.updatedAt,
                 prismaEntity.settings.deletedAt,

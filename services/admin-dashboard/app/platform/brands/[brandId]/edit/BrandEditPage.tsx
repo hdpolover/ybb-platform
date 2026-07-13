@@ -616,6 +616,14 @@ function SettingsTab({
   const [supportEmail, setSupportEmail] = useState(s?.supportEmail ?? "");
   const [googleAnalyticsId, setGoogleAnalyticsId] = useState(s?.googleAnalyticsId ?? "");
   const [pixelId, setPixelId] = useState(s?.pixelId ?? "");
+  // Secret, write-only: the backend never returns the raw token, only whether
+  // one is set (hasCapiAccessToken). Start empty; only send a new value if the
+  // admin actually types into this field, so an untouched field never clobbers
+  // the stored token.
+  const [capiAccessToken, setCapiAccessToken] = useState("");
+  const hadCapiAccessToken = s?.hasCapiAccessToken ?? false;
+  // Not secret — routed through the read response normally, unlike the token.
+  const [capiTestEventCode, setCapiTestEventCode] = useState(s?.capiTestEventCode ?? "");
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -636,8 +644,14 @@ function SettingsTab({
         supportEmail: supportEmail || undefined,
         googleAnalyticsId: googleAnalyticsId || undefined,
         pixelId: pixelId || undefined,
+        // Omit unless the admin typed something — an empty string here would
+        // be sent as "clear the token", which is not what an untouched field
+        // means.
+        capiAccessToken: capiAccessToken || undefined,
+        capiTestEventCode: capiTestEventCode || undefined,
       });
       setSuccess("Settings saved.");
+      setCapiAccessToken("");
       onSaved(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save.");
@@ -727,6 +741,27 @@ function SettingsTab({
             value={pixelId}
             onChange={setPixelId}
             placeholder="0000000000000"
+          />
+          <Field
+            label="Meta CAPI Access Token"
+            id="capiAccessToken"
+            type="password"
+            value={capiAccessToken}
+            onChange={setCapiAccessToken}
+            placeholder={hadCapiAccessToken ? "••••• (set) — leave blank to keep" : "Paste a new access token"}
+            hint={
+              hadCapiAccessToken
+                ? "A token is already saved. It's write-only and never shown here — type a new value only to replace it."
+                : "Used for server-side Meta Conversions API event forwarding."
+            }
+          />
+          <Field
+            label="Meta CAPI Test Event Code"
+            id="capiTestEventCode"
+            value={capiTestEventCode}
+            onChange={setCapiTestEventCode}
+            placeholder="TEST12345"
+            hint="From Meta Events Manager's Test Events tab. Not secret — safe to display."
           />
         </CardContent>
       </Card>

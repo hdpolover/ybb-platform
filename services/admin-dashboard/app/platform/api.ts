@@ -262,6 +262,12 @@ export type PlatformBrandDetail = PlatformBrand & {
     googleAnalyticsId?: string | null;
     pixelId?: string | null;
     supportEmail?: string | null;
+    // The backend never returns the raw token (write-only secret) — only
+    // whether one is currently set, so the UI can render a masked placeholder.
+    hasCapiAccessToken?: boolean;
+    // Not secret — the Meta Events Manager test_event_code is safe to display
+    // and edit like any other field.
+    capiTestEventCode?: string | null;
   } | null;
 };
 
@@ -408,6 +414,10 @@ export function updatePlatformBrandSettings(
     googleAnalyticsId?: string;
     pixelId?: string;
     supportEmail?: string;
+    // Omit entirely (do not send "") when the admin didn't type a new value —
+    // the backend leaves the stored token unchanged when this key is absent.
+    capiAccessToken?: string;
+    capiTestEventCode?: string;
   },
 ): Promise<PlatformBrandDetail> {
   return request<RawPlatformBrand>(`/brands/${brandId}/settings`, {

@@ -24,6 +24,7 @@ import { HealthModule } from '@modules/health/health.module';
 import { LandingModule } from '@modules/landing/landing.module';
 import { LegalModule } from '@modules/legal/legal.module';
 import { MetadataModule } from '@modules/metadata/metadata.module';
+import { MetaModule } from '@modules/meta/meta.module';
 import { NewsletterModule } from '@modules/newsletter/newsletter.module';
 import { AiBotModule } from '@modules/ai-bot/ai-bot.module';
 import { ParticipantsModule } from '@modules/participants/participants.module';
@@ -126,6 +127,7 @@ import { EmailTemplatesModule } from '@modules/email-templates/email-templates.m
     LandingModule,
     LegalModule,
     MetadataModule,
+    MetaModule,
     NewsletterModule,
     AiBotModule,
     ParticipantsModule,
