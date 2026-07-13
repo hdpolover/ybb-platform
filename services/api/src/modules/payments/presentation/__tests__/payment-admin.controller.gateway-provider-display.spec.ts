@@ -6,6 +6,7 @@ import { PaymentGatewayClient } from '../../infrastructure/services/payment-gate
 import { FileServiceClient } from '@modules/files/infrastructure/clients/file-service.client';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
@@ -41,6 +42,10 @@ describe('PaymentAdminController.getInvoice — gateway_response.provider displa
                 { provide: CacheService, useValue: {} },
                 {
                     provide: PrismaService,
+                    useValue: { applicationInvoice: { findUnique: jest.fn().mockResolvedValue(invoiceRow) } },
+                },
+                {
+                    provide: PrismaReadService,
                     useValue: { applicationInvoice: { findUnique: jest.fn().mockResolvedValue(invoiceRow) } },
                 },
                 { provide: RabbitMQProducerService, useValue: { emit: jest.fn() } },
