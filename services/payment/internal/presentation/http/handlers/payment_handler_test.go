@@ -557,6 +557,42 @@ func TestCancelPaymentNeedsReviewRefusesToVoid(t *testing.T) {
 	require.Nil(t, txRepo.updated)
 }
 
+// A manual-transfer SUCCESS transaction has no real gateway capture - its
+// SUCCESS status only reflects a prior admin /verify approval. An admin
+// reversing that approval must be able to void it via this same endpoint.
+func TestCancelPaymentManualTransferSuccessVoidsTransaction(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	gw := &stubPaymentGateway{}
+	handler, txRepo, intentRepo, tx, intent := newCancelTestFixture(gw)
+	tx.Status = entities.TransactionStatusSuccess
+	tx.PaymentMethodID = string(entities.PaymentMethodManualTransfer)
+	tx.GatewayResponse = json.RawMessage(`{"is_manual":true}`)
+
+	rec := postCancel(t, handler, tx.ID)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, entities.TransactionStatusVoid, txRepo.byID[tx.ID].Status)
+	require.Equal(t, entities.PaymentIntentStatusRequiresMethod, intentRepo.byID[intent.ID].Status)
+}
+
+// Regression guard: a real gateway SUCCESS transaction (non-manual payment
+// method) must stay blocked even though the manual-transfer bypass above exists.
+func TestCancelPaymentGatewaySuccessStaysBlocked(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	gw := &stubPaymentGateway{}
+	handler, txRepo, _, tx, _ := newCancelTestFixture(gw)
+	tx.Status = entities.TransactionStatusSuccess
+	// tx.PaymentMethodID stays "xendit_va" from newCancelTestFixture.
+
+	rec := postCancel(t, handler, tx.ID)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Equal(t, entities.TransactionStatusSuccess, txRepo.byID[tx.ID].Status)
+	require.Nil(t, txRepo.updated)
+}
+
 type stubIntentRepository struct {
 	byID          map[string]*entities.PaymentIntent
 	findAllResult []*entities.PaymentIntent

@@ -39,6 +39,14 @@ export class PaymentGatewayClient {
         transactionId: string,
         invoiceId: string,
         reason: string,
+        // Set by callers that already know (from invoice.paymentMethod on the API
+        // side - see PaymentAdminController.isManualPaymentMethod) that this
+        // transaction is a manual bank transfer. A manual transfer has no real
+        // gateway capture: its SUCCESS status only reflects a prior admin
+        // /verify approval, not a live charge, so the settled-block below (and
+        // the proof-based awaiting-review fallback) would otherwise wrongly
+        // refuse a deliberate admin reversal (paid -> failed/cancelled).
+        isManual = false,
     ): Promise<VoidTransactionResult> {
         const headers = this.buildHeaders();
 
@@ -53,8 +61,9 @@ export class PaymentGatewayClient {
             return { outcome: 'error', detail: `status fetch failed: ${message}` };
         }
         const status = extractTopLevelStatus(payload);
+        const settled = isSettledStatus(status);
 
-        if (isSettledStatus(status)) {
+        if (settled && !isManual) {
             this.logger.error(
                 `[payment-gateway-client] DANGER invoice=${invoiceId} txn=${transactionId} is ${status} at gateway, refusing to void`,
             );
@@ -81,7 +90,17 @@ export class PaymentGatewayClient {
             proofFileUrl.length > 0 &&
             (paymentMethodId.toLowerCase().includes('manual') || paymentMethodId.toLowerCase().includes('transfer'));
 
-        if (isAwaitingReviewStatus(status) || looksLikeManualTransferProof) {
+        // When the caller already confirmed isManual AND the gateway reports this
+        // transaction as settled, the proof-based fallback above would otherwise
+        // misfire (an approved manual transfer keeps its proof_file_url forever)
+        // and re-block the very reversal isManual was passed in for. That
+        // fallback exists only to catch a stale/missing status on a still-pending
+        // review, which doesn't apply once the primary status signal already says
+        // settled.
+        const treatAsAwaitingReview =
+            isAwaitingReviewStatus(status) || (looksLikeManualTransferProof && !(isManual && settled));
+
+        if (treatAsAwaitingReview) {
             this.logger.warn(
                 `[payment-gateway-client] invoice=${invoiceId} txn=${transactionId} is awaiting manual review, refusing to void`,
             );

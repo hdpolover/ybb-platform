@@ -541,7 +541,20 @@ func (h *PaymentHandler) CancelPayment(c *gin.Context) {
 		// so direct callers (ops scripts, backfills) can't void an under-review payment.
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Payments awaiting review cannot be cancelled; verify (approve or reject) first"})
 		return
-	case entities.TransactionStatusSuccess, entities.TransactionStatusFailed, entities.TransactionStatusRejected, entities.TransactionStatusVoid:
+	case entities.TransactionStatusSuccess:
+		// A manual bank-transfer transaction has no real gateway capture - its
+		// SUCCESS status only reflects a prior admin /verify approval (see
+		// SubmitManualPayment / VerifyPayment), not a live charge. That means an
+		// admin reversing their own approval (NestJS PaymentAdminController's
+		// updateInvoiceStatus, paid -> failed/cancelled, with isManual passed
+		// through PaymentGatewayClient.voidTransaction) must be able to void it
+		// here too. A real gateway SUCCESS (Xendit/Midtrans/etc.) stays blocked -
+		// only an exact "manual_transfer" PaymentMethodID bypasses this check.
+		if tx.PaymentMethodID != string(entities.PaymentMethodManualTransfer) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Only pending payments can be cancelled"})
+			return
+		}
+	case entities.TransactionStatusFailed, entities.TransactionStatusRejected, entities.TransactionStatusVoid:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Only pending payments can be cancelled"})
 		return
 	}
