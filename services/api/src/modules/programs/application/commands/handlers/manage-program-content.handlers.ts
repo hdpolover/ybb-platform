@@ -1326,6 +1326,7 @@ export class CreateDocumentTemplateHandler implements ICommandHandler<CreateDocu
     ) {}
 
     async execute(command: CreateDocumentTemplateCommand) {
+        const sourceType = command.dto.sourceType ?? 'upload';
         let templateUrl = command.dto.templateUrl;
         let fileSize: number | undefined = command.dto.fileSize;
         let fileType = command.dto.fileType;
@@ -1348,12 +1349,18 @@ export class CreateDocumentTemplateHandler implements ICommandHandler<CreateDocu
             fileType = command.file.mimetype;
         }
 
+        if (sourceType === 'link' && !command.dto.linkUrl) {
+            throw new BadRequestException('linkUrl is required when sourceType is "link"');
+        }
+
         const data = {
             programId: command.dto.programId,
             name: command.dto.name,
             type: command.dto.type,
             description: command.dto.description,
-            templateUrl,
+            sourceType,
+            templateUrl: sourceType === 'link' ? null : templateUrl,
+            linkUrl: sourceType === 'link' ? command.dto.linkUrl : null,
             htmlContent: command.dto.htmlContent,
             placeholders: command.dto.placeholders,
             // Explicit layoutConfig from DTO takes precedence; fall back to file metadata for file-based templates
@@ -1383,6 +1390,7 @@ export class UpdateDocumentTemplateHandler implements ICommandHandler<UpdateDocu
         const template = await this.repository.findDocumentTemplateById(command.id);
         if (!template) throw new NotFoundException('Document template not found');
 
+        const sourceType = command.dto.sourceType ?? template.sourceType ?? 'upload';
         let templateUrl = command.dto.templateUrl;
         let fileSize = command.dto.fileSize;
         let fileType = command.dto.fileType;
@@ -1405,9 +1413,16 @@ export class UpdateDocumentTemplateHandler implements ICommandHandler<UpdateDocu
             fileType = command.file.mimetype;
         }
 
+        if (sourceType === 'link' && !command.dto.linkUrl && !template.linkUrl) {
+            throw new BadRequestException('linkUrl is required when sourceType is "link"');
+        }
+
         const data: Record<string, unknown> = {
             ...command.dto,
-            ...(templateUrl ? { templateUrl } : {}),
+            sourceType,
+            ...(sourceType === 'link'
+                ? { templateUrl: null, linkUrl: command.dto.linkUrl ?? template.linkUrl }
+                : { linkUrl: null, ...(templateUrl ? { templateUrl } : {}) }),
             // Only derive layoutConfig from file metadata when no explicit layoutConfig provided (LOA templates pass their own)
             ...((fileSize !== undefined || fileType !== undefined) && !command.dto.layoutConfig
                 ? { layoutConfig: { fileSize, fileType } }

@@ -2867,9 +2867,11 @@ export type DocumentTemplate = {
   id: string;
   programId: string;
   name: string;
-  type: string; // 'agreement_letter' | 'complementary_document' | 'letter_of_acceptance'
+  type: string; // 'agreement_letter' | 'complementary_document' | 'letter_of_acceptance' | 'letter_of_invitation'
   description?: string;
   templateUrl?: string;
+  sourceType: "upload" | "link";
+  linkUrl?: string | null;
   htmlContent?: string;
   placeholders?: DocumentTemplatePlaceholder[];
   layoutConfig?: DocumentTemplateLayoutConfig;
@@ -2899,7 +2901,9 @@ export async function createDocumentTemplate(
     audienceConfig?: Record<string, unknown>;
     order?: number;
     // File-based templates
+    sourceType?: "upload" | "link";
     file?: File;
+    linkUrl?: string;
     userId?: string;
     brandId?: string;
     // LOA templates
@@ -2908,6 +2912,28 @@ export async function createDocumentTemplate(
     layoutConfig?: DocumentTemplateLayoutConfig;
   },
 ): Promise<DocumentTemplate> {
+  const sourceType = input.sourceType ?? "upload";
+
+  if (sourceType === "link") {
+    return request<DocumentTemplate>(`/programs/${programId}/document-templates`, {
+      method: 'POST',
+      body: JSON.stringify({
+        programId,
+        name: input.name,
+        type: input.type,
+        description: input.description,
+        sourceType: "link",
+        linkUrl: input.linkUrl,
+        ...(input.htmlContent !== undefined ? { htmlContent: input.htmlContent } : {}),
+        ...(input.placeholders !== undefined ? { placeholders: input.placeholders } : {}),
+        ...(input.layoutConfig !== undefined ? { layoutConfig: input.layoutConfig } : {}),
+        audienceType: input.audienceType ?? 'all_registered',
+        audienceConfig: input.audienceConfig ?? {},
+        order: input.order ?? 0,
+      }),
+    });
+  }
+
   let templateUrl: string | undefined;
   let fileSize: number | undefined;
   let fileType: string | undefined;
@@ -2934,6 +2960,7 @@ export async function createDocumentTemplate(
       name: input.name,
       type: input.type,
       description: input.description,
+      sourceType: "upload",
       ...(templateUrl ? { templateUrl, fileSize, fileType } : {}),
       ...(input.htmlContent !== undefined ? { htmlContent: input.htmlContent } : {}),
       ...(input.placeholders !== undefined ? { placeholders: input.placeholders } : {}),
@@ -2956,7 +2983,9 @@ export async function updateDocumentTemplate(
     order?: number;
     isActive?: boolean;
     // File-based templates
+    sourceType?: "upload" | "link";
     file?: File;
+    linkUrl?: string;
     userId?: string;
     brandId?: string;
     // LOA templates
@@ -2965,6 +2994,15 @@ export async function updateDocumentTemplate(
     layoutConfig?: DocumentTemplateLayoutConfig;
   },
 ): Promise<DocumentTemplate> {
+  if (input.sourceType === "link") {
+    const { file: _f, userId: _u, brandId: _b, ...rest } = input;
+    void _f; void _u; void _b;
+    return request<DocumentTemplate>(`/programs/document-templates/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ ...rest, sourceType: "link" }),
+    });
+  }
+
   let templateUrl: string | undefined;
   let fileSize: number | undefined;
   let fileType: string | undefined;
@@ -2985,13 +3023,14 @@ export async function updateDocumentTemplate(
     fileType = input.file.type;
   }
 
-  const { file: _f, userId: _u, brandId: _b, ...rest } = input;
-  void _f; void _u; void _b;
+  const { file: _f, userId: _u, brandId: _b, linkUrl: _l, ...rest } = input;
+  void _f; void _u; void _b; void _l;
 
   return request<DocumentTemplate>(`/programs/document-templates/${id}`, {
     method: 'PUT',
     body: JSON.stringify({
       ...rest,
+      sourceType: "upload",
       ...(templateUrl ? { templateUrl, fileSize, fileType } : {}),
     }),
   });
