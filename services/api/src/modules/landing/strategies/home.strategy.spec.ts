@@ -85,32 +85,27 @@ describe('HomeStrategy', () => {
             },
         };
 
-        // 1. Program with details
-        mockPrismaService.program.findFirst
-            // First call: Main Program
-            .mockResolvedValueOnce({
-                id: 'prog-1',
-                name: 'Main Program',
-                gallery: [
-                    { id: 'img-1', type: 'image', imageUrl: 'img1.jpg', title: 'Img 1' },
-                ],
-                pricingTiers: [
-                    { id: 'tier-1', name: 'Basic', price: 100, currency: 'USD' },
-                ],
-                resources: [
-                    { id: 'res-1', title: 'Guide', type: 'pdf', fileUrl: 'guide.pdf' },
-                ],
-                objectives: [
-                    { id: 'obj-1', description: 'Obj 1', order: 1 },
-                ]
-            })
-            // Second call (in Promise.all): Latest Program for Awards
-            .mockResolvedValueOnce({
-                name: 'Latest Program',
-                awards: [
-                    { id: 'award-1', name: 'Best Speaker', winnerCount: 1, tags: ['TOP'] }
-                ]
-            });
+        // 1. Program with details (single findFirst now serves both the hero
+        // section and the awards section — see home.strategy.ts Fix 2 merge)
+        mockPrismaService.program.findFirst.mockResolvedValueOnce({
+            id: 'prog-1',
+            name: 'Main Program',
+            gallery: [
+                { id: 'img-1', type: 'image', imageUrl: 'img1.jpg', title: 'Img 1' },
+            ],
+            pricingTiers: [
+                { id: 'tier-1', name: 'Basic', price: 100, currency: 'USD' },
+            ],
+            resources: [
+                { id: 'res-1', title: 'Guide', type: 'pdf', fileUrl: 'guide.pdf' },
+            ],
+            objectives: [
+                { id: 'obj-1', description: 'Obj 1', order: 1 },
+            ],
+            awards: [
+                { id: 'award-1', name: 'Best Speaker', winnerCount: 1, tags: ['TOP'] }
+            ]
+        });
 
         mockPrismaService.programGallery.findMany.mockResolvedValue([
             { id: 'img-brand-1', type: 'image', imageUrl: 'img-brand-1.jpg', title: 'Brand Img 1' },
@@ -175,7 +170,7 @@ describe('HomeStrategy', () => {
         const awards = sections.find(s => s.type === 'program_awards');
         expect(awards).toBeDefined();
         expect(awards?.content?.items).toHaveLength(1);
-        expect(awards?.content?.title).toContain('Latest Program');
+        expect(awards?.content?.title).toContain('Main Program');
 
         // Check Video Highlights
         const videos = sections.find(s => s.type === 'program_highlight_videos');

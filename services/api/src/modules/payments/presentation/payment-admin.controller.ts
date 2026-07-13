@@ -35,8 +35,12 @@ import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { PaymentServiceHttpClient } from '../infrastructure/services/payment-service-http.client';
 import { PaymentGatewayClient } from '../infrastructure/services/payment-gateway.client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
-import { buildParticipantPaymentsUrl as buildParticipantPaymentsDashboardUrl } from '@modules/payments/application/utils/participant-dashboard-url.util';
+import {
+    buildParticipantPaymentsUrl as buildParticipantPaymentsDashboardUrl,
+    buildParticipantInvoiceUrl,
+} from '@modules/payments/application/utils/participant-dashboard-url.util';
 
 // Display/filter-only threshold for surfacing invoices stuck in 'processing'
 // past a reasonable window. Not tied to the reconciliation cron's own grace
@@ -62,6 +66,7 @@ export class PaymentAdminController {
         private readonly fileService: FileServiceClient,
         private readonly cacheService: CacheService,
         private readonly prisma: PrismaService,
+        private readonly readPrisma: PrismaReadService,
         private readonly rabbitmqProducer: RabbitMQProducerService,
     ) {
         this.logger.log("Using HTTP Payment Admin Controller");
@@ -139,7 +144,7 @@ export class PaymentAdminController {
         // allowed_categories does NOT include the application's current applicationCategory.
         // These arise when a participant switches funding category (self_funded <-> fully_funded).
         // If applicationCategory is null we skip exclusion for that application.
-        const obsoleteRows = await this.prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
+        const obsoleteRows = await this.readPrisma.$queryRaw<{ id: string }[]>(Prisma.sql`
             SELECT ai.id::text AS id
             FROM application_invoices ai
             JOIN program_pricing_tiers pt ON pt.id = ai.pricing_tier_id
@@ -269,9 +274,9 @@ export class PaymentAdminController {
             paymentFailedCount,
             manualProofRejectedCount,
             paymentProcessingStuckCount,
-            allProblemsCount,
+            paymentMethodCatalog,
         ] = await Promise.all([
-            this.prisma.applicationInvoice.findMany({
+            this.readPrisma.applicationInvoice.findMany({
                 where: listWhere,
                 include: {
                     application: {
@@ -295,41 +300,41 @@ export class PaymentAdminController {
                 ...(useCursorMode ? {} : { skip }),
                 take: useCursorMode ? limitNum + 1 : limitNum,
             }),
-            this.prisma.applicationInvoice.count({ where }),
-            this.prisma.applicationInvoice.groupBy({
+            this.readPrisma.applicationInvoice.count({ where }),
+            this.readPrisma.applicationInvoice.groupBy({
                 by: ['status'],
                 where,
                 _count: { id: true },
                 _sum: { amount: true },
             }),
-            this.prisma.applicationInvoice.groupBy({
+            this.readPrisma.applicationInvoice.groupBy({
                 by: ['status'],
                 where: summaryWhere,
                 _count: { id: true },
                 _sum: { amount: true },
             }),
-            this.prisma.applicationInvoice.groupBy({
+            this.readPrisma.applicationInvoice.groupBy({
                 by: ['status'],
                 where: statusFacetWhere,
                 _count: { id: true },
             }),
-            this.prisma.applicationInvoice.aggregate({
+            this.readPrisma.applicationInvoice.aggregate({
                 where: { ...where, status: PaymentStatus.paid },
                 _sum: { amount: true },
                 _avg: { amount: true },
                 _count: { id: true },
             }),
-            this.prisma.applicationInvoice.aggregate({
+            this.readPrisma.applicationInvoice.aggregate({
                 where,
                 _sum: { amount: true },
                 _count: { id: true },
             }),
-            this.prisma.programPricingTier.findMany({
+            this.readPrisma.programPricingTier.findMany({
                 where: { programId, deletedAt: null },
                 select: { id: true, name: true, feeType: true },
                 orderBy: { name: 'asc' },
             }),
-            this.prisma.applicationInvoice.groupBy({
+            this.readPrisma.applicationInvoice.groupBy({
                 by: ['paymentMethod'],
                 where: {
                     application: { programId },
@@ -338,17 +343,17 @@ export class PaymentAdminController {
                 },
                 _count: { id: true },
             }),
-            this.prisma.applicationInvoice.groupBy({
+            this.readPrisma.applicationInvoice.groupBy({
                 by: ['currency'],
                 where: { application: { programId }, ...excludeObsolete },
                 _count: { id: true },
             }),
-            this.prisma.participantApplication.groupBy({
+            this.readPrisma.participantApplication.groupBy({
                 by: ['status'],
                 where: { programId, deletedAt: null },
                 _count: { id: true },
             }),
-            this.prisma.applicationInvoice.count({
+            this.readPrisma.applicationInvoice.count({
                 where: {
                     application: { programId },
                     status: PaymentStatus.cancelled,
@@ -359,7 +364,7 @@ export class PaymentAdminController {
                     ...excludeObsolete,
                 },
             }),
-            this.prisma.applicationInvoice.count({
+            this.readPrisma.applicationInvoice.count({
                 where: {
                     application: { programId },
                     status: PaymentStatus.cancelled,
@@ -372,7 +377,7 @@ export class PaymentAdminController {
                     ...excludeObsolete,
                 },
             }),
-            this.prisma.applicationInvoice.count({
+            this.readPrisma.applicationInvoice.count({
                 where: {
                     application: { programId },
                     status: PaymentStatus.failed,
@@ -380,7 +385,7 @@ export class PaymentAdminController {
                     ...excludeObsolete,
                 },
             }),
-            this.prisma.applicationInvoice.count({
+            this.readPrisma.applicationInvoice.count({
                 where: {
                     application: { programId },
                     status: PaymentStatus.failed,
@@ -388,7 +393,7 @@ export class PaymentAdminController {
                     ...excludeObsolete,
                 },
             }),
-            this.prisma.applicationInvoice.count({
+            this.readPrisma.applicationInvoice.count({
                 where: {
                     application: { programId },
                     status: PaymentStatus.processing,
@@ -396,31 +401,19 @@ export class PaymentAdminController {
                     ...excludeObsolete,
                 },
             }),
-            this.prisma.applicationInvoice.count({
-                where: {
-                    application: { programId },
-                    OR: [
-                        { status: PaymentStatus.failed, verifiedBy: null },
-                        { status: PaymentStatus.failed, verifiedBy: { not: null } },
-                        {
-                            status: PaymentStatus.cancelled,
-                            NOT: {
-                                rejectionReason: {
-                                    equals: PaymentAdminController.PARTICIPANT_CANCELLATION_REASON,
-                                    mode: 'insensitive',
-                                },
-                            },
-                        },
-                        {
-                            status: PaymentStatus.processing,
-                            updatedAt: { lt: new Date(Date.now() - STUCK_PROCESSING_THRESHOLD_MS) },
-                        },
-                    ],
-                    ...excludeObsolete,
-                },
-            }),
+            // Independent of the DB fan-out above (hits the payment service over
+            // HTTP, not Postgres) — folded into the same Promise.all so it runs
+            // concurrently with the reads instead of sequentially after them.
+            this.getPaymentMethodCatalog(),
         ]);
-        const paymentMethodCatalog = await this.getPaymentMethodCatalog();
+        // allProblemsCount used to be a 6th DB round trip running an OR across
+        // these same 4 buckets (participant-initiated cancellations are
+        // deliberately excluded from "problems"). Its 4 branches are mutually
+        // exclusive (distinct status, or distinct verifiedBy/cancellation-reason
+        // conditions within the same status), so OR-count == sum of the
+        // individual counts. Plain JS sum instead of a redundant query.
+        const allProblemsCount =
+            paymentCancelledIssueCount + paymentFailedCount + manualProofRejectedCount + paymentProcessingStuckCount;
         const hasMore = useCursorMode ? invoices.length > limitNum : pageNum * limitNum < total;
         const invoiceWindow = useCursorMode ? invoices.slice(0, limitNum) : invoices;
         await this.enrichInvoicePaymentMethods(invoiceWindow, paymentMethodCatalog);
@@ -1677,32 +1670,51 @@ export class PaymentAdminController {
         invoices: Array<{ paymentMethod: string | null; externalTransactionId?: string | null }>,
         catalog: Array<{ value: string; label: string }>,
     ): Promise<void> {
-        await Promise.all(invoices.map(async (invoice) => {
+        // The per-row lookup key is externalTransactionId (each unresolved row
+        // fetches /api/v1/payments/{externalTransactionId} to derive its method),
+        // not the raw paymentMethod string — paymentMethod is never used to make
+        // the call, only checked to see whether resolution is needed at all. So
+        // the correct dedupe key is the distinct set of externalTransactionIds
+        // among rows still needing resolution: fetch each transaction once via
+        // Promise.all, then map the result back onto every row sharing that id.
+        // This keeps output identical to the old one-fetch-per-row version while
+        // collapsing duplicate outbound HTTP calls when multiple rows reference
+        // the same transaction id.
+        const rowsNeedingResolution: Array<{ invoice: { paymentMethod: string | null; externalTransactionId?: string | null }; txnId: string }> = [];
+        for (const invoice of invoices) {
             const normalizedExisting = this.normalizePaymentMethod(invoice.paymentMethod, catalog);
             if (normalizedExisting) {
                 invoice.paymentMethod = normalizedExisting.label;
-                return;
+                continue;
             }
-
             if (!invoice.externalTransactionId) {
                 invoice.paymentMethod = null;
-                return;
+                continue;
             }
+            rowsNeedingResolution.push({ invoice, txnId: invoice.externalTransactionId });
+        }
 
+        const distinctTxnIds = Array.from(new Set(rowsNeedingResolution.map((row) => row.txnId)));
+        const resolvedByTxnId = new Map<string, string | null>();
+        await Promise.all(distinctTxnIds.map(async (txnId) => {
             try {
                 const { data } = await this.paymentServiceClient.get(
-                    `/api/v1/payments/${invoice.externalTransactionId}`,
+                    `/api/v1/payments/${txnId}`,
                     { headers: this.buildInternalHeaders() },
                 );
                 const transaction = data as Record<string, unknown>;
                 const extracted = this.extractPaymentMethodFromTransaction(transaction);
                 const normalizedFromTransaction = this.normalizePaymentMethod(extracted, catalog);
-                invoice.paymentMethod = normalizedFromTransaction?.label ?? null;
+                resolvedByTxnId.set(txnId, normalizedFromTransaction?.label ?? null);
             } catch (error) {
-                this.logger.debug(`Could not resolve payment method for tx ${invoice.externalTransactionId}: ${(error as Error).message}`);
-                invoice.paymentMethod = null;
+                this.logger.debug(`Could not resolve payment method for tx ${txnId}: ${(error as Error).message}`);
+                resolvedByTxnId.set(txnId, null);
             }
         }));
+
+        for (const row of rowsNeedingResolution) {
+            row.invoice.paymentMethod = resolvedByTxnId.get(row.txnId) ?? null;
+        }
     }
 
     private extractPaymentMethodFromTransaction(transaction: Record<string, unknown>): string | null {

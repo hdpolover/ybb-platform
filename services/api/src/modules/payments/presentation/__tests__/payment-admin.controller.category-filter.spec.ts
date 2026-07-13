@@ -6,6 +6,7 @@ import { PaymentGatewayClient } from '../../infrastructure/services/payment-gate
 import { FileServiceClient } from '@modules/files/infrastructure/clients/file-service.client';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
@@ -74,6 +75,7 @@ async function buildController(mockPrisma: ReturnType<typeof buildMockPrisma>) {
             { provide: FileServiceClient, useValue: {} },
             { provide: CacheService, useValue: { invalidateInvoiceCache: jest.fn() } },
             { provide: PrismaService, useValue: mockPrisma },
+            { provide: PrismaReadService, useValue: mockPrisma },
             { provide: RabbitMQProducerService, useValue: { emit: jest.fn() } },
         ],
     })
