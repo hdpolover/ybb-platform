@@ -222,21 +222,34 @@ def generate_from_template_sync(
     return buffer.read()
 
 
-def _img_tag(url: str, max_height: str) -> str:
+LOA_LOGO_MAX_HEIGHT = '60pt'
+LOA_STAMP_MAX_HEIGHT = '70pt'
+LOA_SIGNATURE_MAX_HEIGHT = '36pt'
+LOA_SIGNER_RULE_WIDTH = '140pt'
+
+
+def _img_tag(url: str, max_height: str, center: bool = False) -> str:
     """Build a WeasyPrint-renderable <img> tag for a stored asset URL.
 
     WeasyPrint fetches http(s) image sources itself, so a plain <img src="...">
     (same convention the admin template preview already uses for {{logo}} /
     {{signature}}) is sufficient — no base64 inlining needed.
+
+    A block-level image ignores the parent's text-align, so `center` adds the
+    `margin:0 auto` that actually centers it.
     """
     if not url:
         return ''
-    return f'<img src="{url}" style="max-height:{max_height};max-width:100%;display:block;" />'
+    centering = 'margin:0 auto;' if center else ''
+    return (
+        f'<img src="{url}" style="max-height:{max_height};max-width:100%;'
+        f'display:block;{centering}" />'
+    )
 
 
 def _build_structured_header_html(header: Dict[str, Any], logo_url: str) -> str:
     """JYS-style 3-column header: logo left, program name/batch centered, contact right."""
-    logo_cell = _img_tag(logo_url, '60pt')
+    logo_cell = _img_tag(logo_url, LOA_LOGO_MAX_HEIGHT)
     program_name = header.get('program_name') or ''
     batch = header.get('batch') or ''
     tagline = header.get('tagline') or ''
@@ -244,35 +257,58 @@ def _build_structured_header_html(header: Dict[str, Any], logo_url: str) -> str:
     email = header.get('email') or ''
     phone = header.get('phone') or ''
 
-    title_line = program_name
+    title_lines = ''
+    if program_name:
+        title_lines += f'<div>{program_name}</div>'
     if batch:
-        title_line = f'{program_name} &mdash; Batch {batch}' if program_name else f'Batch {batch}'
-    tagline_html = f'<div style="font-style:italic;font-size:9pt;margin-top:2pt;">{tagline}</div>' if tagline else ''
+        title_lines += f'<div>Batch {batch}</div>'
+    title_html = (
+        f'<div style="font-weight:bold;font-size:14pt;line-height:1.3;'
+        f'letter-spacing:0.2pt;">{title_lines}</div>'
+        if title_lines
+        else ''
+    )
+    tagline_html = (
+        f'<div style="font-style:italic;font-size:9pt;margin-top:3pt;color:#444;">{tagline}</div>'
+        if tagline
+        else ''
+    )
 
     contact_rows = ''.join(f'<div>{value}</div>' for value in (website, email, phone) if value)
 
     return f"""<table style="width:100%;border-collapse:collapse;">
   <tr>
-    <td style="width:20%;vertical-align:middle;text-align:left;">{logo_cell}</td>
-    <td style="width:60%;vertical-align:middle;text-align:center;">
-      <div style="font-weight:bold;font-size:14pt;">{title_line}</div>
+    <td style="width:18%;vertical-align:middle;text-align:left;">{logo_cell}</td>
+    <td style="width:58%;vertical-align:middle;text-align:center;padding:0 8pt;">
+      {title_html}
       {tagline_html}
     </td>
-    <td style="width:20%;vertical-align:middle;text-align:right;font-size:9pt;">{contact_rows}</td>
+    <td style="width:24%;vertical-align:middle;text-align:right;font-size:9pt;line-height:1.6;color:#444;">{contact_rows}</td>
   </tr>
 </table>"""
 
 
 def _build_signer_html(signature_url: str, stamp_url: str, signer_name: str, signer_title: str) -> str:
-    """Stamp above signature, then signer name (bold) and title beneath."""
-    stamp_cell = _img_tag(stamp_url, '70pt')
-    signature_cell = _img_tag(signature_url, '50pt')
+    """Stamp above signature, a signature rule, then signer name (bold) and title.
+
+    The rule only appears when there is a name to sit under it — a bare line over
+    empty space reads as a rendering fault, not a signature block.
+    """
+    stamp_cell = _img_tag(stamp_url, LOA_STAMP_MAX_HEIGHT, center=True)
+    signature_cell = _img_tag(signature_url, LOA_SIGNATURE_MAX_HEIGHT, center=True)
+    rule_html = (
+        f'<div style="width:{LOA_SIGNER_RULE_WIDTH};border-top:0.75pt solid #000;'
+        f'margin:8pt auto 4pt auto;"></div>'
+        if signer_name
+        else ''
+    )
     name_html = f'<div style="font-weight:bold;">{signer_name}</div>' if signer_name else ''
-    title_html = f'<div>{signer_title}</div>' if signer_title else ''
+    title_html = f'<div style="font-size:10pt;color:#444;">{signer_title}</div>' if signer_title else ''
 
     return f"""<div style="text-align:center;">
   {stamp_cell}
   {signature_cell}
+  {rule_html}
   {name_html}
   {title_html}
 </div>"""
@@ -303,11 +339,11 @@ def generate_loa_sync(
     # what keeps the no-image back-compat path byte-for-byte identical.
     image_tokens: Dict[str, Any] = {}
     if logo_url:
-        image_tokens['{{logo}}'] = _img_tag(logo_url, '60pt')
+        image_tokens['{{logo}}'] = _img_tag(logo_url, LOA_LOGO_MAX_HEIGHT)
     if signature_url:
-        image_tokens['{{signature}}'] = _img_tag(signature_url, '50pt')
+        image_tokens['{{signature}}'] = _img_tag(signature_url, LOA_SIGNATURE_MAX_HEIGHT)
     if stamp_url:
-        image_tokens['{{stamp}}'] = _img_tag(stamp_url, '70pt')
+        image_tokens['{{stamp}}'] = _img_tag(stamp_url, LOA_STAMP_MAX_HEIGHT)
     merged_data = {**placeholder_data, **image_tokens}
 
     def replace_tokens(text: str) -> str:
@@ -353,7 +389,11 @@ def generate_loa_sync(
     line-height: 1.6;
     color: #000;
   }}
-  .loa-header {{ margin-bottom: 24pt; }}
+  .loa-header {{
+    padding-bottom: 10pt;
+    margin-bottom: 24pt;
+    border-bottom: 1pt solid #000;
+  }}
   .loa-body {{ }}
   .loa-footer {{ margin-top: 32pt; }}
 </style>
