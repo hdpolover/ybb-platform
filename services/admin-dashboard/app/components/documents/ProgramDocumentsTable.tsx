@@ -11,6 +11,8 @@ import {
   ArrowPathIcon,
   CheckCircleIcon,
   XCircleIcon,
+  LinkIcon,
+  ArrowUpTrayIcon,
 } from "@heroicons/react/24/solid";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
@@ -148,7 +150,9 @@ export function ProgramDocumentsTable({ programId }: { programId: string }) {
                 </td>
               </tr>
             )}
-            {!loading && items.map((row, index) => (
+            {!loading && items.map((row, index) => {
+              const href = row.sourceType === "link" ? row.linkUrl : row.templateUrl;
+              return (
               <tr key={row.id} className="border-b border-zinc-100 hover:bg-zinc-50">
                 <td className="px-3 py-2 align-top text-[11px] text-zinc-500">{index + 1}</td>
                 <td className="px-3 py-2 align-top">
@@ -156,15 +160,24 @@ export function ProgramDocumentsTable({ programId }: { programId: string }) {
                   {row.description && (
                     <div className="line-clamp-1 text-[11px] text-zinc-500">{row.description}</div>
                   )}
-                  {row.templateUrl && (
-                    <a
-                      href={row.templateUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-0.5 inline-block text-[10px] text-blue-500 hover:underline"
-                    >
-                      View file ↗
-                    </a>
+                  {row.sourceType === "link" ? (
+                    href && (
+                      <div className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                        <LinkIcon className="h-3 w-3" />
+                        External Link
+                      </div>
+                    )
+                  ) : (
+                    href && (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-0.5 inline-block text-[10px] text-blue-500 hover:underline"
+                      >
+                        View file ↗
+                      </a>
+                    )
                   )}
                 </td>
                 <td className="px-3 py-2 align-top">
@@ -190,13 +203,13 @@ export function ProgramDocumentsTable({ programId }: { programId: string }) {
                 </td>
                 <td className="px-3 py-2 align-top">
                   <div className="inline-flex gap-1">
-                    {row.templateUrl && (
+                    {href && (
                       <a
-                        href={row.templateUrl}
+                        href={href}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex h-7 w-7 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50"
-                        title="Preview file"
+                        title={row.sourceType === "link" ? "Open link" : "Preview file"}
                       >
                         <EyeIcon className="h-4 w-4" />
                       </a>
@@ -220,7 +233,7 @@ export function ProgramDocumentsTable({ programId }: { programId: string }) {
                   </div>
                 </td>
               </tr>
-            ))}
+            );})}
           </tbody>
         </table>
       </div>
@@ -263,6 +276,7 @@ function DocumentSheet({
   const isEdit = !!item;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [mode, setMode] = useState<"upload" | "link">("upload");
   const [name, setName] = useState("");
   const [type, setType] = useState("agreement_letter");
   const [description, setDescription] = useState("");
@@ -272,11 +286,13 @@ function DocumentSheet({
   const [order, setOrder] = useState("0");
   const [isActive, setIsActive] = useState(true);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [linkUrl, setLinkUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
+      setMode(item?.sourceType === "link" ? "link" : "upload");
       setName(item?.name ?? "");
       setType(item?.type ?? "agreement_letter");
       setDescription(item?.description ?? "");
@@ -287,6 +303,7 @@ function DocumentSheet({
       setOrder(String(item?.order ?? 0));
       setIsActive(item?.isActive ?? true);
       setSelectedFile(null);
+      setLinkUrl(item?.linkUrl ?? "");
       setError(null);
     }
   }, [open, item]);
@@ -307,25 +324,43 @@ function DocumentSheet({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!isEdit && !selectedFile) { setError("Select a file to upload."); return; }
+    if (mode === "upload" && !isEdit && !selectedFile) { setError("Select a file to upload."); return; }
+    if (mode === "link" && !linkUrl.trim()) { setError("Paste a URL to attach as link."); return; }
     if (!userId || !brandId) { setError("Must be signed in to an accessible program."); return; }
     setLoading(true);
     setError(null);
     try {
       const audienceConfig = buildAudienceConfig();
       if (isEdit && item) {
-        await updateDocumentTemplate(item.id, {
-          name, type, description: description || undefined,
-          audienceType, audienceConfig, order: Number(order), isActive,
-          ...(selectedFile ? { file: selectedFile, userId, brandId } : {}),
-        });
+        if (mode === "link") {
+          await updateDocumentTemplate(item.id, {
+            name, type, description: description || undefined,
+            audienceType, audienceConfig, order: Number(order), isActive,
+            sourceType: "link", linkUrl: linkUrl.trim(),
+          });
+        } else {
+          await updateDocumentTemplate(item.id, {
+            name, type, description: description || undefined,
+            audienceType, audienceConfig, order: Number(order), isActive,
+            sourceType: "upload",
+            ...(selectedFile ? { file: selectedFile, userId, brandId } : {}),
+          });
+        }
         toast.success("Document updated.");
       } else {
-        await createDocumentTemplate(programId, {
-          name, type, description: description || undefined,
-          audienceType, audienceConfig, order: Number(order),
-          file: selectedFile!, userId, brandId,
-        });
+        if (mode === "link") {
+          await createDocumentTemplate(programId, {
+            name, type, description: description || undefined,
+            audienceType, audienceConfig, order: Number(order),
+            sourceType: "link", linkUrl: linkUrl.trim(),
+          });
+        } else {
+          await createDocumentTemplate(programId, {
+            name, type, description: description || undefined,
+            audienceType, audienceConfig, order: Number(order),
+            sourceType: "upload", file: selectedFile!, userId, brandId,
+          });
+        }
         toast.success("Document created.");
       }
       onSaved();
@@ -357,39 +392,88 @@ function DocumentSheet({
               <p className="rounded-md bg-red-50 px-3 py-2 text-[11px] text-red-700">{error}</p>
             )}
 
-            {/* File upload */}
+            {/* Mode toggle */}
             <div>
-              <label className="mb-1.5 block text-[11px] font-medium text-zinc-700">
-                File {!isEdit ? <span className="text-red-500">*</span> : <span className="ml-1 text-zinc-400">(leave blank to keep existing)</span>}
-              </label>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex w-full flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-zinc-300 bg-zinc-50 px-4 py-5 transition hover:border-blue-400 hover:bg-blue-50/30"
-              >
-                <DocumentTextIcon className="h-7 w-7 text-zinc-400" />
-                {selectedFile ? (
-                  <span className="text-[11px] font-medium text-blue-600">{selectedFile.name}</span>
-                ) : (
-                  <>
-                    <span className="text-[11px] font-medium text-zinc-600">Click to select file</span>
-                    <span className="text-[10px] text-zinc-400">PDF, Word · Max 20 MB</span>
-                  </>
-                )}
-              </button>
-              {isEdit && item?.templateUrl && !selectedFile && (
-                <p className="mt-1 truncate text-[10px] text-zinc-400">
-                  Current: {item.templateUrl.split("/").pop()}
-                </p>
-              )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf,.doc,.docx"
-                className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) setSelectedFile(f); }}
-              />
+              <p className="mb-1.5 text-[11px] font-medium text-zinc-700">Source</p>
+              <div className="inline-flex rounded-md border border-zinc-200 bg-zinc-50 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setMode("upload")}
+                  className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-[11px] font-semibold transition ${
+                    mode === "upload"
+                      ? "bg-white text-zinc-900 shadow-sm"
+                      : "text-zinc-500 hover:text-zinc-700"
+                  }`}
+                >
+                  <ArrowUpTrayIcon className="h-3.5 w-3.5" />
+                  Upload Document
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode("link")}
+                  className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-[11px] font-semibold transition ${
+                    mode === "link"
+                      ? "bg-white text-zinc-900 shadow-sm"
+                      : "text-zinc-500 hover:text-zinc-700"
+                  }`}
+                >
+                  <LinkIcon className="h-3.5 w-3.5" />
+                  Attach Link
+                </button>
+              </div>
             </div>
+
+            {/* File upload (upload mode) */}
+            {mode === "upload" && (
+              <div>
+                <label className="mb-1.5 block text-[11px] font-medium text-zinc-700">
+                  File {!isEdit ? <span className="text-red-500">*</span> : <span className="ml-1 text-zinc-400">(leave blank to keep existing)</span>}
+                </label>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex w-full flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-zinc-300 bg-zinc-50 px-4 py-5 transition hover:border-blue-400 hover:bg-blue-50/30"
+                >
+                  <DocumentTextIcon className="h-7 w-7 text-zinc-400" />
+                  {selectedFile ? (
+                    <span className="text-[11px] font-medium text-blue-600">{selectedFile.name}</span>
+                  ) : (
+                    <>
+                      <span className="text-[11px] font-medium text-zinc-600">Click to select file</span>
+                      <span className="text-[10px] text-zinc-400">PDF, Word, JPG, PNG · Max 20 MB</span>
+                    </>
+                  )}
+                </button>
+                {isEdit && item && item.sourceType !== "link" && item?.templateUrl && !selectedFile && (
+                  <p className="mt-1 truncate text-[10px] text-zinc-400">
+                    Current: {item.templateUrl.split("/").pop()}
+                  </p>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                  className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) setSelectedFile(f); }}
+                />
+              </div>
+            )}
+
+            {/* Link URL (link mode) */}
+            {mode === "link" && (
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-zinc-700">
+                  File Link (URL) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="url"
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                  placeholder="https://drive.google.com/..."
+                  className={inputCls}
+                />
+              </div>
+            )}
 
             <div>
               <label className="mb-1 block text-[11px] font-medium text-zinc-700">

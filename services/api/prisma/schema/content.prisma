@@ -443,6 +443,8 @@ model DocumentTemplate {
 
   // Template Content
   templateUrl String? @map("template_url") @db.VarChar(500) // Background image/PDF
+  sourceType  String  @default("upload") @map("source_type") @db.VarChar(20)
+  linkUrl     String? @map("link_url") @db.VarChar(500)
   htmlContent String? @map("html_content") @db.Text // HTML template
 
   // Placeholders/Fields Configuration

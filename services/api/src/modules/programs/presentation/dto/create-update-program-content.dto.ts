@@ -1432,8 +1432,8 @@ export class CreateDocumentTemplateDto {
     @IsNotEmpty()
     name: string;
 
-    @ApiProperty({ enum: ['agreement_letter', 'complementary_document', 'letter_of_acceptance'] })
-    @IsIn(['agreement_letter', 'complementary_document', 'letter_of_acceptance'])
+    @ApiProperty({ enum: ['agreement_letter', 'complementary_document', 'letter_of_acceptance', 'letter_of_invitation'] })
+    @IsIn(['agreement_letter', 'complementary_document', 'letter_of_acceptance', 'letter_of_invitation'])
     @IsString()
     @IsNotEmpty()
     type: string;
@@ -1447,6 +1447,17 @@ export class CreateDocumentTemplateDto {
     @IsString()
     @IsOptional()
     templateUrl?: string;
+
+    @ApiProperty({ required: false, description: 'Source type: "upload" or "link"', enum: ['upload', 'link'] })
+    @IsOptional()
+    @IsIn(['upload', 'link'])
+    sourceType?: 'upload' | 'link';
+
+    @ApiProperty({ required: false, description: 'External URL (required when sourceType is "link")' })
+    @IsOptional()
+    @IsString()
+    @IsUrl()
+    linkUrl?: string;
 
     @ApiProperty({ required: false, description: 'Tiptap HTML body for LOA templates' })
     @IsString()
@@ -1498,8 +1509,8 @@ export class UpdateDocumentTemplateDto {
     @IsOptional()
     name?: string;
 
-    @ApiProperty({ required: false, enum: ['agreement_letter', 'complementary_document', 'letter_of_acceptance'] })
-    @IsIn(['agreement_letter', 'complementary_document', 'letter_of_acceptance'])
+    @ApiProperty({ required: false, enum: ['agreement_letter', 'complementary_document', 'letter_of_acceptance', 'letter_of_invitation'] })
+    @IsIn(['agreement_letter', 'complementary_document', 'letter_of_acceptance', 'letter_of_invitation'])
     @IsString()
     @IsOptional()
     type?: string;
@@ -1513,6 +1524,17 @@ export class UpdateDocumentTemplateDto {
     @IsString()
     @IsOptional()
     templateUrl?: string;
+
+    @ApiProperty({ required: false, description: 'Source type: "upload" or "link"', enum: ['upload', 'link'] })
+    @IsOptional()
+    @IsIn(['upload', 'link'])
+    sourceType?: 'upload' | 'link';
+
+    @ApiProperty({ required: false, description: 'External URL (required when sourceType is "link")' })
+    @IsOptional()
+    @IsString()
+    @IsUrl()
+    linkUrl?: string;
 
     @ApiProperty({ required: false, description: 'Tiptap HTML body for LOA templates' })
     @IsString()
