@@ -194,5 +194,77 @@ describe('LoaDownloadService', () => {
       // program.findUnique must NOT be called — application resolution gate comes first
       expect(prisma.program.findUnique).not.toHaveBeenCalled();
     });
+
+    it('splits "Program Name Batch N" into header.program_name/header.batch, and degrades new placeholders to "" (never "null"/"undefined") when participant fields are missing', async () => {
+      const applicationWithNullableFields = {
+        ...mockApplication,
+        participant: {
+          fullName: 'John Doe',
+          // institution/nationality/birthdate/gender/originCountry/phoneCountryCode/
+          // phoneNumber/major/occupation/user all intentionally absent to exercise the
+          // null-guard fallback on every new placeholder.
+        },
+      };
+      const programWithBatchSuffix = { ...mockProgram, name: 'Japan Youth Summit 2026 Batch 2' };
+      const templateWithNewTokens = {
+        ...mockTemplate,
+        placeholders: [
+          ...mockTemplate.placeholders,
+          { key: '{{batch}}', source: 'program.batch' },
+          { key: '{{nationality}}', source: 'participant.nationality' },
+          { key: '{{date_of_birth}}', source: 'participant.birthdate' },
+          { key: '{{gender}}', source: 'participant.gender' },
+          { key: '{{country_of_origin}}', source: 'participant.originCountry' },
+          { key: '{{signer_name}}', source: 'signer_name' },
+          { key: '{{signer_title}}', source: 'signer_title' },
+          { key: '{{program_year}}', source: 'program.year' },
+          { key: '{{participant_email}}', source: 'participant.email' },
+          { key: '{{participant_phone}}', source: 'participant.phone' },
+          { key: '{{major}}', source: 'participant.major' },
+          { key: '{{occupation}}', source: 'participant.occupation' },
+        ],
+        layoutConfig: { ...mockTemplate.layoutConfig, header: { tagline: '', website: '', email: '', phone: '' } },
+      };
+
+      (portalCacheService.getParticipantProfile as jest.Mock).mockResolvedValue(mockParticipant);
+      (prisma.participantApplication.findFirst as jest.Mock).mockResolvedValue(applicationWithNullableFields);
+      (prisma.program.findUnique as jest.Mock).mockResolvedValue(programWithBatchSuffix);
+      (prisma.documentTemplate.findFirst as jest.Mock).mockResolvedValue(templateWithNewTokens);
+      (loaEligibilityService.checkEligibility as jest.Mock).mockResolvedValue({ eligible: true, batchId: 'batch-1' });
+      (loaDocumentNumberService.assignOrGet as jest.Mock).mockResolvedValue({
+        docNumber: 'LOA-2026-0001',
+        isNew: false,
+        existingDocId: 'doc-1',
+      });
+      (fileServiceClient.generateLoa as jest.Mock).mockResolvedValue(mockPdfBuffer);
+      (prisma.participantDocument.update as jest.Mock).mockResolvedValue({});
+      (prisma.participantDocument.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+
+      await service.downloadLoa('user-1', 'brand-1');
+
+      const call = (fileServiceClient.generateLoa as jest.Mock).mock.calls[0][0];
+
+      // Header title is split: stripped name + parsed batch token
+      expect(call.header).toMatchObject({ program_name: 'Japan Youth Summit 2026', batch: '2' });
+
+      // Every new token degrades to '' — never the literal string "null"/"undefined"
+      expect(call.placeholder_data['{{batch}}']).toBe('2');
+      expect(call.placeholder_data['{{nationality}}']).toBe('');
+      expect(call.placeholder_data['{{date_of_birth}}']).toBe('');
+      expect(call.placeholder_data['{{gender}}']).toBe('');
+      expect(call.placeholder_data['{{country_of_origin}}']).toBe('');
+      expect(call.placeholder_data['{{signer_name}}']).toBe('');
+      expect(call.placeholder_data['{{signer_title}}']).toBe('');
+      expect(call.placeholder_data['{{program_year}}']).toBe('2026');
+      expect(call.placeholder_data['{{participant_email}}']).toBe('');
+      expect(call.placeholder_data['{{participant_phone}}']).toBe('');
+      expect(call.placeholder_data['{{major}}']).toBe('');
+      expect(call.placeholder_data['{{occupation}}']).toBe('');
+
+      for (const value of Object.values(call.placeholder_data)) {
+        expect(value).not.toBe('null');
+        expect(value).not.toBe('undefined');
+      }
+    });
   });
 });
