@@ -146,7 +146,7 @@ export class ApplicationRepository implements IApplicationRepository {
       offset?: number;
     },
   ): Promise<{ applications: ParticipantApplication[]; total: number }> {
-    const where: Prisma.ParticipantApplicationWhereInput = { programId };
+    const where: Prisma.ParticipantApplicationWhereInput = { programId, deletedAt: null };
 
     if (filters?.status) {
       where.status = filters.status;
@@ -239,6 +239,7 @@ export class ApplicationRepository implements IApplicationRepository {
     },
   ): Promise<{ applications: ParticipantApplication[]; total: number }> {
     const where: Prisma.ParticipantApplicationWhereInput = {
+      deletedAt: null,
       program: {
         brand: {
           id: brandId,
