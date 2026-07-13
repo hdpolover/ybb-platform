@@ -117,7 +117,7 @@ export class HomeStrategy implements ILandingPageStrategy {
 
     const brandMeta = (brand as Brand & { metadata?: Record<string, unknown> }).metadata || {};
 
-    const [program, brandImageGallery, brandSponsors, socialFeeds, videoPrograms, alumniTestimonials, delegateTestimonials, latestProgramWithAwards, registeredApplications] = await Promise.all([
+    const [program, brandImageGallery, brandSponsors, socialFeeds, videoPrograms, alumniTestimonials, delegateTestimonials, registeredApplications] = await Promise.all([
       this.prisma.program.findFirst({
         where: {
           brandId: brand.id, // Scoped to brand
@@ -146,6 +146,12 @@ export class HomeStrategy implements ILandingPageStrategy {
             orderBy: { order: 'asc' },
           },
           objectives: {
+            where: { isActive: true },
+            orderBy: { order: 'asc' }
+          },
+          // Also used by the program_awards section further below — merged here
+          // to avoid a duplicate program.findFirst with the identical where/orderBy.
+          awards: {
             where: { isActive: true },
             orderBy: { order: 'asc' }
           }
@@ -234,22 +240,6 @@ export class HomeStrategy implements ILandingPageStrategy {
           { order: 'asc' }
         ],
         take: 10
-      }),
-      // For Awards - Fetch the latest published program and its awards
-      this.prisma.program.findFirst({
-        where: {
-          brandId: brand.id,
-          isPublished: true,
-          isActive: true
-        },
-        orderBy: { startDate: 'desc' }, // Latest program first
-        select: {
-          name: true,
-          awards: {
-            where: { isActive: true },
-            orderBy: { order: 'asc' }
-          }
-        }
       }),
       this.prisma.participantApplication.findMany({
         where: {
@@ -581,9 +571,9 @@ export class HomeStrategy implements ILandingPageStrategy {
         {
           type: 'program_awards',
           content: {
-            title: `Awards at ${latestProgramWithAwards?.name || brand.name}`,
+            title: `Awards at ${program?.name || brand.name}`,
             subtitle: `At ${brand.name}, we recognize delegates who lead, speak up, and make an impact. Your journey could be celebrated here.`,
-            items: latestProgramWithAwards?.awards.map(a => ({
+            items: program?.awards.map(a => ({
               id: a.id,
               name: a.name,
               description: a.description,
