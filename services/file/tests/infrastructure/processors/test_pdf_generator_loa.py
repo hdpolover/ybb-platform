@@ -51,9 +51,11 @@ class TestStructuredHeader:
 
     def test_three_columns_logo_left_title_center_contact_right(self):
         html = _build_structured_header_html(HEADER_CONFIG, LOGO)
-        assert "text-align:left;\">" in html and LOGO in html
-        assert "text-align:center;\">" in html
+        assert "text-align:left" in html and LOGO in html
+        assert "text-align:center" in html
         assert "text-align:right" in html
+        # Logo cell precedes the title, which precedes the contact column.
+        assert html.index(LOGO) < html.index("Japan Youth Summit 2026") < html.index("www.youthacademicforum.com")
         for contact in ("www.youthacademicforum.com", "info@ybbfoundation.com", "0882005909333"):
             assert contact in html
 
@@ -83,8 +85,18 @@ class TestSignerFooter:
     def test_signer_name_and_title_render_beneath_the_marks(self):
         html = _build_signer_html(SIGNATURE, STAMP, "Muhammad Aldi Subakti", "Chairman")
         assert "<div style=\"font-weight:bold;\">Muhammad Aldi Subakti</div>" in html
-        assert "<div>Chairman</div>" in html
-        assert html.index(SIGNATURE) < html.index("Muhammad Aldi Subakti")
+        assert ">Chairman</div>" in html
+        assert html.index(SIGNATURE) < html.index("Muhammad Aldi Subakti") < html.index("Chairman")
+
+    def test_signature_rule_sits_above_the_signer_name(self):
+        html = _build_signer_html(SIGNATURE, STAMP, "Muhammad Aldi Subakti", "Chairman")
+        assert "border-top:0.75pt solid #000" in html
+        assert html.index("border-top") < html.index("Muhammad Aldi Subakti")
+
+    def test_no_signature_rule_without_a_signer_name(self):
+        # A rule floating over empty space reads as a rendering fault.
+        html = _build_signer_html(SIGNATURE, STAMP, "", "")
+        assert "border-top" not in html
 
     @pytest.mark.parametrize("signature,stamp", [("", ""), (SIGNATURE, ""), ("", STAMP)])
     def test_missing_assets_do_not_emit_empty_img_tags(self, signature, stamp):

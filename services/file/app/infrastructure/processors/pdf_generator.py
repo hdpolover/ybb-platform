@@ -225,6 +225,7 @@ def generate_from_template_sync(
 LOA_LOGO_MAX_HEIGHT = '60pt'
 LOA_STAMP_MAX_HEIGHT = '70pt'
 LOA_SIGNATURE_MAX_HEIGHT = '36pt'
+LOA_SIGNER_RULE_WIDTH = '140pt'
 
 
 def _img_tag(url: str, max_height: str, center: bool = False) -> str:
@@ -262,36 +263,52 @@ def _build_structured_header_html(header: Dict[str, Any], logo_url: str) -> str:
     if batch:
         title_lines += f'<div>Batch {batch}</div>'
     title_html = (
-        f'<div style="font-weight:bold;font-size:14pt;line-height:1.25;">{title_lines}</div>'
+        f'<div style="font-weight:bold;font-size:14pt;line-height:1.3;'
+        f'letter-spacing:0.2pt;">{title_lines}</div>'
         if title_lines
         else ''
     )
-    tagline_html = f'<div style="font-style:italic;font-size:9pt;margin-top:2pt;">{tagline}</div>' if tagline else ''
+    tagline_html = (
+        f'<div style="font-style:italic;font-size:9pt;margin-top:3pt;color:#444;">{tagline}</div>'
+        if tagline
+        else ''
+    )
 
     contact_rows = ''.join(f'<div>{value}</div>' for value in (website, email, phone) if value)
 
     return f"""<table style="width:100%;border-collapse:collapse;">
   <tr>
-    <td style="width:20%;vertical-align:middle;text-align:left;">{logo_cell}</td>
-    <td style="width:55%;vertical-align:middle;text-align:center;">
+    <td style="width:18%;vertical-align:middle;text-align:left;">{logo_cell}</td>
+    <td style="width:58%;vertical-align:middle;text-align:center;padding:0 8pt;">
       {title_html}
       {tagline_html}
     </td>
-    <td style="width:25%;vertical-align:middle;text-align:right;font-size:9pt;line-height:1.5;">{contact_rows}</td>
+    <td style="width:24%;vertical-align:middle;text-align:right;font-size:9pt;line-height:1.6;color:#444;">{contact_rows}</td>
   </tr>
 </table>"""
 
 
 def _build_signer_html(signature_url: str, stamp_url: str, signer_name: str, signer_title: str) -> str:
-    """Stamp above signature, then signer name (bold) and title beneath, all centered."""
+    """Stamp above signature, a signature rule, then signer name (bold) and title.
+
+    The rule only appears when there is a name to sit under it — a bare line over
+    empty space reads as a rendering fault, not a signature block.
+    """
     stamp_cell = _img_tag(stamp_url, LOA_STAMP_MAX_HEIGHT, center=True)
     signature_cell = _img_tag(signature_url, LOA_SIGNATURE_MAX_HEIGHT, center=True)
+    rule_html = (
+        f'<div style="width:{LOA_SIGNER_RULE_WIDTH};border-top:0.75pt solid #000;'
+        f'margin:8pt auto 4pt auto;"></div>'
+        if signer_name
+        else ''
+    )
     name_html = f'<div style="font-weight:bold;">{signer_name}</div>' if signer_name else ''
-    title_html = f'<div>{signer_title}</div>' if signer_title else ''
+    title_html = f'<div style="font-size:10pt;color:#444;">{signer_title}</div>' if signer_title else ''
 
     return f"""<div style="text-align:center;">
   {stamp_cell}
   {signature_cell}
+  {rule_html}
   {name_html}
   {title_html}
 </div>"""
