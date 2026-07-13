@@ -1086,6 +1086,24 @@ export class PaymentAdminController {
         return buildParticipantPaymentsDashboardUrl(brand);
     }
 
+    // Manual-transfer detection for invoice.paymentMethod, the API-side field
+    // populated from Go's payment_method_id (see PaymentEventsController /
+    // ConfirmPortalPaymentHandler). This gates the void settled-block bypass, so it
+    // MUST mirror the Go CancelPayment guard exactly — that guard only lets a
+    // SUCCESS transaction be cancelled when PaymentMethodID == "manual_transfer"
+    // (the entities.PaymentMethodManualTransfer literal that SubmitManualPayment
+    // always writes). A broader substring match (e.g. includes('transfer')) would
+    // also catch the real Midtrans "bank_transfer"/VA method, wrongly skip the
+    // API-side DANGER settled-block for a genuinely captured gateway payment, then
+    // hit Go's 400 — which voidTransaction swallows as 'already_terminal' — and let
+    // the local invoice drift to failed while the gateway stays SUCCESS (an actual
+    // un-enrolment of a paid participant). So keep this strict equality, not a
+    // substring match. Deliberately does NOT trust payment_transactions.is_manual,
+    // which has been observed false on a genuine manual transaction in prod.
+    private isManualPaymentMethod(paymentMethod: string | null | undefined): boolean {
+        return (paymentMethod || '').toLowerCase().trim() === 'manual_transfer';
+    }
+
     @Post('notify-payment-issue')
     @ApiOperation({ summary: 'Notify participants of a payment issue with alternative payment methods (Admin)' })
     @ApiBody({ type: NotifyPaymentIssueDto })
@@ -1312,10 +1330,18 @@ export class PaymentAdminController {
             || body.status === PaymentStatus.refunded;
 
         if (isTerminalNonPaid && invoice.externalTransactionId) {
+            // A manual bank-transfer invoice has no real gateway capture — its
+            // prior 'paid' status only reflects an earlier admin /verify approval,
+            // not a live charge. Tell voidTransaction so it can bypass the
+            // "never void a settled transaction" guard specifically for this
+            // invoice, while that guard stays fully intact for a real gateway
+            // SUCCESS transaction (see isManualPaymentMethod below).
+            const isManual = this.isManualPaymentMethod(invoice.paymentMethod);
             const voidResult = await this.paymentGatewayClient.voidTransaction(
                 invoice.externalTransactionId,
                 invoice.id,
                 body.reason?.trim() || `Invoice marked ${body.status} by admin`,
+                isManual,
             );
             if (voidResult.outcome === 'danger_settled') {
                 throw new BadRequestException(
@@ -1389,6 +1415,10 @@ export class PaymentAdminController {
                                     },
                                 },
                             },
+                            // Brand needed to build the receipt email's invoice/payments
+                            // links and letterhead when this update transitions to paid —
+                            // see the notification.payment_succeeded emit below.
+                            program: { include: { brand: { include: { settings: true } } } },
                         },
                     },
                     pricingTier: { select: { id: true, name: true, feeType: true, usdPrice: true, idrPrice: true } },
@@ -1403,6 +1433,72 @@ export class PaymentAdminController {
         const participantUserId = invoice.application?.participant?.userId;
         if (participantUserId) {
             await this.cacheService.invalidateInvoiceCache(id, participantUserId);
+        }
+
+        // Fire the receipt email on a genuine non-paid -> paid transition only.
+        // priorStatus was captured on `invoice` before this method's own update
+        // above, so this guards against paid->paid no-ops, non-paid->non-paid
+        // transitions, and paid->non-paid (the Change 2 reversal path, which
+        // never reaches PaymentStatus.paid here).
+        const priorStatus = invoice.status;
+        if (priorStatus !== PaymentStatus.paid && body.status === PaymentStatus.paid) {
+            try {
+                const email = updatedInvoice.application?.participant?.user?.email;
+                if (!email) {
+                    this.logger.warn(`receipt email skipped: no participant email for invoice ${id}`);
+                } else {
+                    const rawBrand = updatedInvoice.application?.program?.brand ?? null;
+                    const brandPayload = rawBrand
+                        ? {
+                            name: rawBrand.name,
+                            primaryColor: rawBrand.primaryColor,
+                            logoUrl: rawBrand.logoUrl,
+                            websiteUrl: rawBrand.websiteUrl,
+                            contactEmail: rawBrand.contactEmail,
+                            contactAddress: rawBrand.contactAddress,
+                            socialMediaLinks: rawBrand.socialMediaLinks,
+                            settings: rawBrand.settings
+                                ? {
+                                    footerNavigation: rawBrand.settings.footerNavigation,
+                                    supportEmail: rawBrand.settings.supportEmail,
+                                }
+                                : null,
+                        }
+                        : null;
+
+                    // Dedupe rationale: payment_id = externalTransactionId||invoice.id is
+                    // the same key the Go /verify path uses when it republishes
+                    // payment.succeeded for a NEEDS_REVIEW manual txn (see
+                    // payment-events.controller.ts handlePaymentSucceeded) — both events
+                    // land on the same notification-service Redis dedupe key
+                    // (notification-idempotency.service.ts buildDedupeKey falls back
+                    // payment_id -> order_id), so only one receipt actually sends even
+                    // when both paths fire for the same approval. The priorStatus guard
+                    // above additionally prevents a duplicate send when Redis dedupe is
+                    // down (fail-open) or on a redundant re-PATCH-to-paid call.
+                    await this.rabbitmqProducer.emit('notification.payment_succeeded', {
+                        email,
+                        customer_name: updatedInvoice.application?.participant?.fullName || 'Customer',
+                        amount: Number(updatedInvoice.amount),
+                        currency: updatedInvoice.currency || 'IDR',
+                        order_id: updatedInvoice.id,
+                        payment_id: updatedInvoice.externalTransactionId || updatedInvoice.id,
+                        description: updatedInvoice.pricingTier?.name
+                            ? `Payment for ${updatedInvoice.pricingTier.name}`
+                            : 'Payment for services',
+                        invoice_url: buildParticipantInvoiceUrl(rawBrand, updatedInvoice.id),
+                        payments_page_url: buildParticipantPaymentsDashboardUrl(rawBrand),
+                        metadata: {
+                            invoice_id: updatedInvoice.id,
+                            application_id: updatedInvoice.applicationId,
+                        },
+                        brand: brandPayload,
+                    });
+                }
+            } catch (emitError) {
+                const message = emitError instanceof Error ? emitError.message : String(emitError);
+                this.logger.warn(`Failed to publish notification.payment_succeeded for invoice ${id}: ${message}`);
+            }
         }
 
         // Keep payment service in sync for manual verification flows where possible.
