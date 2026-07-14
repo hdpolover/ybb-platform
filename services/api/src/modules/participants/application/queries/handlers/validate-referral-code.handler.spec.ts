@@ -75,4 +75,50 @@ describe('ValidateReferralCodeHandler', () => {
         expect(result).toEqual({ valid: true });
         expect(JSON.stringify(result)).not.toContain('amb-1');
     });
+
+    describe('program scoping', () => {
+        const PROGRAM_ID = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+
+        it('scopes the lookup to the program when one is supplied', async () => {
+            mockPrismaService.ambassador.findFirst.mockResolvedValue({ id: 'amb-1' });
+
+            await handler.execute(new ValidateReferralCodeQuery('URO19948', PROGRAM_ID));
+
+            expect(mockPrismaService.ambassador.findFirst).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    where: expect.objectContaining({
+                        referralCode: 'URO19948',
+                        programId: PROGRAM_ID,
+                    }),
+                }),
+            );
+        });
+
+        it('rejects a real code that belongs to a different program', async () => {
+            // The scoped query finds nothing even though the code exists elsewhere.
+            mockPrismaService.ambassador.findFirst.mockResolvedValue(null);
+
+            await expect(
+                handler.execute(new ValidateReferralCodeQuery('URO19948', PROGRAM_ID)),
+            ).rejects.toThrow(NotFoundException);
+        });
+
+        it('stays unscoped when no program is supplied, rather than guessing one', async () => {
+            mockPrismaService.ambassador.findFirst.mockResolvedValue({ id: 'amb-1' });
+
+            await handler.execute(new ValidateReferralCodeQuery('URO19948'));
+
+            const [[arg]] = mockPrismaService.ambassador.findFirst.mock.calls;
+            expect(arg.where.programId).toBeUndefined();
+        });
+
+        it('ignores a blank program instead of scoping to an empty string', async () => {
+            mockPrismaService.ambassador.findFirst.mockResolvedValue({ id: 'amb-1' });
+
+            await handler.execute(new ValidateReferralCodeQuery('URO19948', '   '));
+
+            const [[arg]] = mockPrismaService.ambassador.findFirst.mock.calls;
+            expect(arg.where.programId).toBeUndefined();
+        });
+    });
 });

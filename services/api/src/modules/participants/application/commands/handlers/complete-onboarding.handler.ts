@@ -80,11 +80,28 @@ export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboar
 
                 if (!existingReferral) {
                      // 2. Validate Ambassador
+                     //
+                     // Ambassadors belong to exactly one program, so a code only earns
+                     // credit for a referral into that program. Onboarding carries no
+                     // program of its own, so derive it from the participant's own
+                     // application. If they have exactly one, scope to it; if they have
+                     // none or several, the intended program is genuinely ambiguous, so
+                     // stay unscoped rather than silently dropping a real referral.
+                     const applications = await tx.participantApplication.findMany({
+                         where: { participantId: participant.id },
+                         select: { programId: true },
+                         distinct: ['programId'],
+                         take: 2,
+                     });
+                     const scopedProgramId =
+                         applications.length === 1 ? applications[0].programId : undefined;
+
                      const ambassador = await tx.ambassador.findFirst({
                          where: {
                              referralCode: normalizeReferralCode(dto.referralCode),
                              isActive: true,
                              deletedAt: null,
+                             ...(scopedProgramId ? { programId: scopedProgramId } : {}),
                          }
                      });
 
