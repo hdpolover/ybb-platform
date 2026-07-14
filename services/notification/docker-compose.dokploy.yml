@@ -34,6 +34,10 @@ services:
       REDIS_HOST: ${REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT:-6379}
       REDIS_PASSWORD: ${REDIS_PASSWORD}
+      # File service — renders the receipt PDF attached to the payment success email.
+      # Without this the ReceiptService falls back to http://file-service:8001, which does
+      # not resolve here, and every receipt silently fails to attach.
+      FILE_SERVICE_URL: ${FILE_SERVICE_URL:-http://ybb-prod-file:8001}
     networks:
       - dokploy-network
     # Notification might not need a public domain if it only consumes events
