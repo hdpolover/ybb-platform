@@ -85,8 +85,13 @@ export class EventsController {
 
       const metadata = asRecord(payload.metadata);
       const items = getReceiptItems(metadata, 'item_details');
+      // Both producers emit `description` at the top level (like `reason` on
+      // payment.failed); metadata is the fallback. Reading metadata only made
+      // every receipt say "Payment for services" instead of naming the tier.
       const description =
-        getString(metadata, 'description') || 'Payment for services';
+        getString(payload, 'description') ||
+        getString(metadata, 'description') ||
+        'Payment for services';
       const customerName =
         getString(metadata, 'customer_name') ||
         getString(payload, 'customer_name') ||
@@ -159,6 +164,95 @@ export class EventsController {
             undefined,
           items,
           brand: payload.brand ?? undefined,
+        },
+        receiptBuffer,
+      );
+    });
+  }
+
+  @EventPattern('notification.receipt_requested')
+  async handleReceiptRequested(
+    @Payload() data: unknown,
+    @Ctx() context: RmqContext,
+  ) {
+    const payload = asRecord(data);
+    await this.processEvent('receipt.requested', payload, context, async () => {
+      this.logger.log(
+        `Received receipt.requested event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+      );
+
+      const email = getString(payload, 'email');
+      if (!email) return;
+
+      const metadata = asRecord(payload.metadata);
+      // Both producers emit `description` at the top level (like `reason` on
+      // payment.failed); metadata is the fallback. Reading metadata only made
+      // every receipt say "Payment for services" instead of naming the tier.
+      const description =
+        getString(payload, 'description') ||
+        getString(metadata, 'description') ||
+        'Payment for services';
+      const customerName =
+        getString(payload, 'customer_name') ||
+        getString(metadata, 'customer_name') ||
+        'Customer';
+      const orderId =
+        getString(payload, 'order_id') ||
+        getString(payload, 'payment_id') ||
+        'unknown-order';
+      const amount = getNumber(payload, 'amount');
+      const currency = getString(payload, 'currency') || 'IDR';
+
+      const rawBrand = asRecord(payload.brand);
+      const brand = payload.brand
+        ? {
+            name: getString(rawBrand, 'name'),
+            logoUrl: getString(rawBrand, 'logoUrl') ?? null,
+            primaryColor: getString(rawBrand, 'primaryColor') ?? null,
+            contactEmail: getString(rawBrand, 'contactEmail') ?? null,
+            contactPhone: getString(rawBrand, 'contactPhone') ?? null,
+            contactAddress: getString(rawBrand, 'contactAddress') ?? null,
+            websiteUrl: getString(rawBrand, 'websiteUrl') ?? null,
+          }
+        : null;
+
+      // Divergence from handlePaymentSucceeded: that handler swallows a
+      // generateReceipt failure and still sends the payment-success email
+      // without the PDF, because the success notification itself is the
+      // primary payload. Here the PDF *is* the entire point of the email —
+      // "your receipt is attached" with nothing attached is worse than no
+      // email at all — so we let the error propagate. processEvent() will
+      // nack the message and the queue's retry/DLX logic takes over.
+      const receiptBuffer = await this.receiptService.generateReceipt({
+        orderId,
+        amount,
+        currency,
+        customerName,
+        customerEmail: email,
+        date: new Date(),
+        description,
+        transactionReference: getString(payload, 'payment_id'),
+        brand,
+      });
+
+      await this.emailService.sendReceiptEmail(
+        email,
+        {
+          name: customerName,
+          amount,
+          currency,
+          orderId,
+          description,
+          invoiceUrl:
+            getString(payload, 'invoiceUrl') ||
+            getString(payload, 'invoice_url') ||
+            getString(metadata, 'invoice_url') ||
+            undefined,
+          brand: payload.brand ?? undefined,
+          program:
+            getString(payload, 'program') || getString(metadata, 'program'),
+          brandId: getString(payload, 'brandId'),
+          programId: getString(payload, 'programId'),
         },
         receiptBuffer,
       );

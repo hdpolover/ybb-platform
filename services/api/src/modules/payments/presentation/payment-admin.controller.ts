@@ -25,6 +25,7 @@ import { UserRole } from '@core/entities/user.entity';
 import { CreatePaymentMethodDto, UpdatePaymentMethodDto } from './dto/admin-payment-method.dto';
 import { UpsertProgramMethodDto, BulkUpsertProgramMethodsDto } from './dto/program-payment-method.dto';
 import { NotifyPaymentIssueDto } from './dto/notify-payment-issue.dto';
+import { ResendReceiptDto } from './dto/resend-receipt.dto';
 import { FileServiceClient } from '@modules/files/infrastructure/clients/file-service.client';
 import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
@@ -1254,6 +1255,120 @@ export class PaymentAdminController {
         return { sent, skipped };
     }
 
+    @Post('resend-receipt')
+    @ApiOperation({ summary: 'Send (or resend) the receipt PDF email for a paid invoice (Admin)' })
+    @ApiBody({ type: ResendReceiptDto })
+    async resendReceipt(
+        @Body() body: ResendReceiptDto,
+        @CurrentUser() user: CurrentUserData,
+    ): Promise<{ sent: boolean; email: string }> {
+        const invoice = await this.prisma.applicationInvoice.findUnique({
+            where: { id: body.invoiceId },
+            select: {
+                id: true,
+                applicationId: true,
+                amount: true,
+                currency: true,
+                status: true,
+                externalTransactionId: true,
+                pricingTier: { select: { name: true } },
+                application: {
+                    select: {
+                        id: true,
+                        participant: {
+                            select: {
+                                fullName: true,
+                                userId: true,
+                                user: { select: { email: true } },
+                            },
+                        },
+                        program: {
+                            select: {
+                                id: true,
+                                name: true,
+                                brand: {
+                                    select: {
+                                        id: true,
+                                        landingUrl: true,
+                                        websiteUrl: true,
+                                        name: true,
+                                        primaryColor: true,
+                                        logoUrl: true,
+                                        contactEmail: true,
+                                        contactPhone: true,
+                                        contactAddress: true,
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        });
+
+        if (!invoice) {
+            throw new NotFoundException('Invoice not found');
+        }
+
+        if (invoice.status !== PaymentStatus.paid) {
+            throw new BadRequestException('Cannot send a receipt for an invoice that has not been paid');
+        }
+
+        const email = invoice.application?.participant?.user?.email;
+        if (!email) {
+            throw new BadRequestException('Cannot send a receipt: participant has no email on file');
+        }
+
+        const rawBrand = invoice.application?.program?.brand ?? null;
+        const brandPayload = rawBrand
+            ? {
+                name: rawBrand.name,
+                logoUrl: rawBrand.logoUrl,
+                primaryColor: rawBrand.primaryColor,
+                contactEmail: rawBrand.contactEmail,
+                contactPhone: rawBrand.contactPhone,
+                contactAddress: rawBrand.contactAddress,
+                websiteUrl: rawBrand.websiteUrl,
+            }
+            : null;
+
+        const description = invoice.pricingTier?.name
+            ? `Payment for ${invoice.pricingTier.name}`
+            : 'Payment for services';
+
+        try {
+            // Money truth is invoice.currency/amount, not amount_usd/amount_idr —
+            // those are FX-snapshot equivalents, not the ledger amount actually
+            // charged. See ybb-receipt-invoice-pipeline memory note.
+            await this.rabbitmqProducer.emit('notification.receipt_requested', {
+                email,
+                customer_name: invoice.application?.participant?.fullName || 'Customer',
+                amount: Number(invoice.amount),
+                currency: invoice.currency || 'IDR',
+                order_id: invoice.id,
+                payment_id: invoice.externalTransactionId || invoice.id,
+                program: invoice.application?.program?.name ?? null,
+                programId: invoice.application?.program?.id ?? null,
+                brandId: rawBrand?.id ?? null,
+                invoice_url: buildParticipantInvoiceUrl(rawBrand, invoice.id),
+                metadata: {
+                    description,
+                    invoice_id: invoice.id,
+                    application_id: invoice.applicationId,
+                    triggered_by: user.userId,
+                    triggered_at: new Date().toISOString(),
+                },
+                brand: brandPayload,
+            });
+        } catch (emitError) {
+            const message = emitError instanceof Error ? emitError.message : String(emitError);
+            this.logger.error(`Failed to publish notification.receipt_requested for invoice ${body.invoiceId}: ${message}`);
+            throw new HttpException('Failed to queue receipt email', 502);
+        }
+
+        return { sent: true, email };
+    }
+
     @Patch('invoices/:id/status')
     @ApiOperation({ summary: 'Update invoice status (manual transfer/admin override)' })
     async updateInvoiceStatus(
@@ -1322,12 +1437,19 @@ export class PaymentAdminController {
             if (!hasRealPayment) {
                 const overrideReason = body.overrideReason?.trim() ?? '';
                 if (body.manualOverride !== true || overrideReason.length === 0) {
+                    // Admin-facing copy: describes the situation, not the API contract.
+                    // The dashboard keys off errorCode to open its confirm-and-justify
+                    // flow, so this text never has to name request parameters.
                     const reason = !hasExternalIds
                         ? 'This invoice has no linked payment transaction.'
-                        : 'The linked payment transaction has not settled successfully (invoice is not in a confirmed paid state).';
-                    throw new BadRequestException(
-                        reason + ' To override, set manualOverride=true and provide a non-empty overrideReason.',
-                    );
+                        : 'The linked payment transaction has not settled successfully.';
+                    throw new BadRequestException({
+                        message:
+                            reason
+                            + ' Marking it paid records a payment the gateway never captured,'
+                            + ' so it needs to be confirmed with a written justification.',
+                        errorCode: 'MANUAL_OVERRIDE_REQUIRED',
+                    });
                 }
                 this.logger.warn(
                     `Manual payment override applied — admin: ${user.userId}, `
@@ -1363,9 +1485,19 @@ export class PaymentAdminController {
                 isManual,
             );
             if (voidResult.outcome === 'danger_settled') {
-                throw new BadRequestException(
-                    `Cannot mark this invoice ${body.status}: the linked transaction has already succeeded at the gateway (${voidResult.detail}).`,
+                // voidResult.detail is raw gateway text — useful in the log, noise
+                // (or worse, leaked internals) in an admin toast.
+                this.logger.error(
+                    `Refused to mark invoice ${id} ${body.status}: gateway reports the linked `
+                    + `transaction ${invoice.externalTransactionId} already succeeded. `
+                    + `Gateway detail: ${voidResult.detail}`,
                 );
+                throw new BadRequestException({
+                    message:
+                        `Cannot mark this invoice ${body.status}: the payment has already succeeded`
+                        + ' at the payment gateway. Refund it instead of changing the status.',
+                    errorCode: 'TRANSACTION_ALREADY_SETTLED',
+                });
             }
             if (voidResult.outcome === 'needs_review') {
                 throw new BadRequestException(
