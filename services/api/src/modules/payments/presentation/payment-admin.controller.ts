@@ -49,6 +49,10 @@ import {
 // invoice list flags as a "follow up" candidate.
 const STUCK_PROCESSING_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
+// Who paid: 'ambassador' = the payer holds an ambassador record, 'participant' = they don't.
+const PAYER_TYPES = ['all', 'participant', 'ambassador'] as const;
+type PayerType = (typeof PAYER_TYPES)[number];
+
 @ApiTags('Admin Payments')
 @Controller('admin/payments')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -114,6 +118,7 @@ export class PaymentAdminController {
             feeType,
             applicationStatus,
             followUpStatus,
+            payerType,
             currency,
             dateFrom,
             dateTo,
@@ -127,6 +132,11 @@ export class PaymentAdminController {
         } = query;
 
         if (!programId) throw new HttpException('programId is required', 400);
+
+        const payerTypeFilter = payerType?.trim() || 'all';
+        if (!PAYER_TYPES.includes(payerTypeFilter as PayerType)) {
+            throw new HttpException(`payerType must be one of: ${PAYER_TYPES.join(', ')}`, 400);
+        }
 
         const pageNum = Math.max(1, parseInt(page, 10) || 1);
         const limitNum = Math.min(Math.max(1, parseInt(limit, 10) || 20), 100);
@@ -166,6 +176,15 @@ export class PaymentAdminController {
         const searchKeyword = search?.trim() || null;
         if (applicationStatus?.trim()) {
             applicationFilter.status = applicationStatus as Prisma.EnumApplicationStatusFilter;
+        }
+        // Classify a payer by whether they hold an ambassador record at all. This is a
+        // historical question ("was this paid by an ambassador"), not an authorization one,
+        // so it deliberately ignores isActive/deletedAt — deactivating or deleting an
+        // ambassador must not retroactively reclassify their past payments and shift the stats.
+        if (payerTypeFilter === 'ambassador') {
+            applicationFilter.participant = { user: { ambassador: { isNot: null } } };
+        } else if (payerTypeFilter === 'participant') {
+            applicationFilter.participant = { user: { ambassador: { is: null } } };
         }
 
         const where: Prisma.ApplicationInvoiceWhereInput = { application: applicationFilter };

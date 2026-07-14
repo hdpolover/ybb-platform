@@ -100,6 +100,9 @@ const FOLLOW_UP_FILTER_VALUES = [
 ] as const;
 const SORT_BY_VALUES = ["createdAt", "paidAt", "amount", "updatedAt"] as const;
 const SORT_ORDER_VALUES = ["asc", "desc"] as const;
+// "" = no filter. "ambassador" = payer holds an ambassador record; "participant" = they don't.
+const PAYER_TYPE_VALUES = ["", "participant", "ambassador"] as const;
+type PayerTypeFilter = (typeof PAYER_TYPE_VALUES)[number];
 
 // URL-persisted filter state (nuqs). Every field has a `.withDefault(...)`
 // and `clearOnDefault: true` so default values never pollute the URL.
@@ -112,6 +115,9 @@ const paymentsFilterParsers = {
   feeType: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
   applicationStatus: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
   followUpStatus: parseAsStringEnum([...FOLLOW_UP_FILTER_VALUES])
+    .withDefault("")
+    .withOptions({ clearOnDefault: true }),
+  payerType: parseAsStringEnum([...PAYER_TYPE_VALUES])
     .withDefault("")
     .withOptions({ clearOnDefault: true }),
   currency: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
@@ -225,6 +231,7 @@ export default function PaymentsPage({
     feeType: feeTypeFilter,
     applicationStatus: applicationStatusFilter,
     followUpStatus: followUpStatusFilter,
+    payerType: payerTypeFilter,
     currency: currencyFilter,
     dateFrom,
     dateTo,
@@ -278,6 +285,7 @@ export default function PaymentsPage({
     feeTypeFilter ||
     applicationStatusFilter ||
     followUpStatusFilter ||
+    payerTypeFilter ||
     currencyFilter ||
     dateFrom ||
     dateTo ||
@@ -307,6 +315,7 @@ export default function PaymentsPage({
         feeType: feeTypeFilter || undefined,
         applicationStatus: applicationStatusFilter || undefined,
         followUpStatus: followUpStatusFilter || undefined,
+        payerType: payerTypeFilter || undefined,
         currency: currencyFilter || undefined,
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
@@ -339,6 +348,7 @@ export default function PaymentsPage({
     feeTypeFilter,
     applicationStatusFilter,
     followUpStatusFilter,
+    payerTypeFilter,
     currencyFilter,
     dateFrom,
     dateTo,
@@ -383,6 +393,7 @@ export default function PaymentsPage({
       feeType: null,
       applicationStatus: null,
       followUpStatus: null,
+      payerType: null,
       currency: null,
       dateFrom: null,
       dateTo: null,
@@ -480,6 +491,13 @@ export default function PaymentsPage({
         onRemove: () => void setFilters({ followUpStatus: null, page: 1 }),
       });
     }
+    if (payerTypeFilter) {
+      chips.push({
+        key: "payerType",
+        label: `Paid by: ${payerTypeFilter === "ambassador" ? "Ambassadors" : "Participants"}`,
+        onRemove: () => void setFilters({ payerType: null, page: 1 }),
+      });
+    }
     if (currencyFilter) {
       chips.push({
         key: "currency",
@@ -537,6 +555,7 @@ export default function PaymentsPage({
     feeTypeFilter,
     applicationStatusFilter,
     followUpStatusFilter,
+    payerTypeFilter,
     currencyFilter,
     minAmount,
     maxAmount,
@@ -829,6 +848,17 @@ export default function PaymentsPage({
                         {formatLabel(option.value)} ({option.count})
                       </option>
                     ))}
+                  </FilterSelect>
+                </FilterField>
+                <FilterField label="Paid by" htmlFor="filter-payer-type">
+                  <FilterSelect
+                    id="filter-payer-type"
+                    value={payerTypeFilter}
+                    onChange={(e) => { void setFilters({ payerType: (e.target.value || null) as PayerTypeFilter | null, page: 1 }); }}
+                  >
+                    <option value="">Everyone</option>
+                    <option value="participant">Participants only</option>
+                    <option value="ambassador">Ambassadors only</option>
                   </FilterSelect>
                 </FilterField>
                 <FilterField label="Follow-up status" htmlFor="filter-followup-status">

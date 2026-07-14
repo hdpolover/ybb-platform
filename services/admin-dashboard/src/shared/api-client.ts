@@ -3298,6 +3298,7 @@ export async function listProgramInvoices(params: {
     | "manual_proof_rejected"
     | "payment_processing_stuck"
     | "all_problems";
+  payerType?: "all" | "participant" | "ambassador";
   currency?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -3325,6 +3326,7 @@ export async function listProgramInvoices(params: {
   if (params.feeType) q.set("feeType", params.feeType);
   if (params.applicationStatus) q.set("applicationStatus", params.applicationStatus);
   if (params.followUpStatus) q.set("followUpStatus", params.followUpStatus);
+  if (params.payerType) q.set("payerType", params.payerType);
   if (params.currency) q.set("currency", params.currency);
   if (params.dateFrom) q.set("dateFrom", params.dateFrom);
   if (params.dateTo) q.set("dateTo", params.dateTo);
