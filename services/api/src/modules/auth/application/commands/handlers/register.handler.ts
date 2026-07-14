@@ -10,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { AuthLoggingService } from '../../services/auth-logging.service';
+import { normalizeReferralCode } from '@modules/participants/application/utils/referral-code.util';
 import { MetricsService } from '../../../../../shared/infrastructure/monitoring/metrics.service';
 import { GeoIpService } from '@shared/infrastructure/geoip/geoip.service';
 import { ensureProgramApplication, resolveAuthTargetProgram } from '../../services/auth-program-linking.util';
@@ -153,11 +154,11 @@ export class RegisterHandler {
     // Check Ambassador Referral
     let ambassador: Ambassador | null = null;
     if (command.referralCode) {
-        ambassador = await this.prisma.ambassador.findUnique({
-            where: { referralCode: command.referralCode },
+        ambassador = await this.prisma.ambassador.findFirst({
+            where: { referralCode: normalizeReferralCode(command.referralCode), deletedAt: null },
         });
-        
-        // If ambassador not found or inactive, we generally ignore or log warning, 
+
+        // If ambassador not found or inactive, we generally ignore or log warning,
         // but typically registration should proceed without referral.
         if (!ambassador || !ambassador.isActive) {
             this.logger.warn(`Invalid or inactive referral code used: ${command.referralCode}`);

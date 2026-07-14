@@ -6,6 +6,7 @@ import {
     Body,
     UseGuards,
     UnauthorizedException,
+    Param,
     Query,
     BadRequestException,
 } from '@nestjs/common';
@@ -24,12 +25,13 @@ import { CompleteOnboardingCommand } from '../application/commands/complete-onbo
 import { OnboardingDto } from './dto/onboarding.dto';
 import { UpdateParticipantProfileDto, ParticipantResponseDto } from './dto/participant.dto';
 import { ParticipantDashboardResponseDto } from './dto/participant-dashboard.dto';
-import { ApplyAmbassadorDto, AmbassadorDashboardDto, AmbassadorShareTokenResolutionDto } from './dto/ambassador.dto';
+import { ApplyAmbassadorDto, AmbassadorDashboardDto, AmbassadorShareTokenResolutionDto, ReferralCodeValidationDto } from './dto/ambassador.dto';
 import { ApplyAmbassadorCommand } from '../application/commands/apply-ambassador.command';
 import { GetAmbassadorDashboardQuery } from '../application/queries/get-ambassador-dashboard.query';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { Public } from '@shared/decorators/public.decorator';
 import { ResolveAmbassadorShareTokenQuery } from '../application/queries/resolve-ambassador-share-token.query';
+import { ValidateReferralCodeQuery } from '../application/queries/validate-referral-code.query';
 
 @ApiTags('Participants')
 @Controller('participants')
@@ -144,5 +146,16 @@ export class ParticipantsController {
             throw new BadRequestException('token is required');
         }
         return this.queryBus.execute(new ResolveAmbassadorShareTokenQuery(token));
+    }
+
+    @Public()
+    @Get('ambassador/referral-codes/:code')
+    @ApiOperation({ summary: 'Check whether an ambassador referral code is usable' })
+    @ApiResponse({ status: 200, type: ReferralCodeValidationDto })
+    @ApiResponse({ status: 404, description: 'Unknown, inactive, or deleted referral code' })
+    async validateReferralCode(
+        @Param('code') code: string,
+    ): Promise<ReferralCodeValidationDto> {
+        return this.queryBus.execute(new ValidateReferralCodeQuery(code));
     }
 }

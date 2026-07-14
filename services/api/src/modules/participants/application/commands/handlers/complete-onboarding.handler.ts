@@ -6,6 +6,7 @@ import { Gender } from '@prisma/client';
 import { Country } from 'country-state-city';
 import { Logger, BadRequestException } from '@nestjs/common';
 import { ReferralFunnelService } from '../../services/referral-funnel.service';
+import { normalizeReferralCode } from '../../utils/referral-code.util';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
 
@@ -79,8 +80,12 @@ export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboar
 
                 if (!existingReferral) {
                      // 2. Validate Ambassador
-                     const ambassador = await tx.ambassador.findUnique({
-                         where: { referralCode: dto.referralCode, isActive: true }
+                     const ambassador = await tx.ambassador.findFirst({
+                         where: {
+                             referralCode: normalizeReferralCode(dto.referralCode),
+                             isActive: true,
+                             deletedAt: null,
+                         }
                      });
 
                      if (ambassador) {

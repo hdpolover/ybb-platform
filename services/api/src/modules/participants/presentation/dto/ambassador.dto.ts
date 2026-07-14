@@ -98,3 +98,8 @@ export class AmbassadorShareTokenResolutionDto {
     @ApiProperty()
     referralCode: string;
 }
+
+export class ReferralCodeValidationDto {
+    @ApiProperty({ description: 'Always true; an unknown or inactive code returns 404.' })
+    valid: boolean;
+}
