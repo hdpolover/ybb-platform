@@ -1,13 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { ExcelService } from '@shared/infrastructure/excel/excel.service';
 import { Response } from 'express';
-import { PaymentStatus, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import {
   buildE164Phone,
   extractPhoneFromPersonalData,
   sanitizePhone,
 } from '@shared/utils/phone-e164';
+import {
+  buildInvoiceWhere,
+  obsoleteRegistrationFeeInvoiceIdsSql,
+  InvoiceFilterQuery,
+} from '@modules/payments/application/services/invoice-where.builder';
 
 @Injectable()
 export class ReportingService {
@@ -16,6 +22,7 @@ export class ReportingService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly readPrisma: PrismaReadService,
     private readonly excelService: ExcelService,
   ) { }
 
@@ -88,7 +95,7 @@ export class ReportingService {
     );
   }
 
-  async exportPayments(res: Response, filters?: { programId?: string; status?: string; search?: string }) {
+  async exportPayments(res: Response, filters?: InvoiceFilterQuery) {
     const columns = [
       { header: 'Invoice ID', key: 'id', width: 36 },
       { header: 'Status', key: 'status', width: 15 },
@@ -104,9 +111,22 @@ export class ReportingService {
       { header: 'Ext Tx ID', key: 'extId', width: 30 },
     ];
 
+    // Mirrors PaymentAdminController.listInvoices: exclude obsolete
+    // registration_fee invoices so the export matches what the admin table
+    // shows. Only meaningful (and only runs) when scoped to a program — an
+    // export with no programId has no program to resolve pricing tiers
+    // against, same as the list endpoint, which requires programId.
+    const obsoleteInvoiceIds = filters?.programId
+      ? (
+        await this.readPrisma.$queryRaw<{ id: string }[]>(
+          obsoleteRegistrationFeeInvoiceIdsSql(filters.programId),
+        )
+      ).map((r) => r.id)
+      : [];
+
     await this.excelService.streamExcelRows(
       res,
-      this.iteratePaymentRows(filters),
+      this.iteratePaymentRows(filters, obsoleteInvoiceIds),
       columns,
       'payments-export',
     );
@@ -237,54 +257,24 @@ export class ReportingService {
     }
   }
 
-  private async *iteratePaymentRows(filters?: { programId?: string; status?: string; search?: string }) {
+  private async *iteratePaymentRows(
+    filters?: InvoiceFilterQuery,
+    obsoleteInvoiceIds: string[] = [],
+  ) {
     let cursor: { id: string; createdAt: Date } | null = null;
+
+    // Single source of truth shared with PaymentAdminController.listInvoices —
+    // see invoice-where.builder.ts. Computed once; only the cursor window
+    // changes per page.
+    const invoiceWhere = buildInvoiceWhere(filters ?? {}, obsoleteInvoiceIds);
 
     while (true) {
       const cursorWhere = this.buildCreatedAtCursorWhere(cursor);
+      const where: Prisma.ApplicationInvoiceWhereInput = cursorWhere
+        ? { AND: [cursorWhere, invoiceWhere] }
+        : invoiceWhere;
 
-      const filterConditions: Prisma.ApplicationInvoiceWhereInput[] = [];
-
-      if (filters?.programId) {
-        filterConditions.push({ application: { is: { programId: filters.programId } } });
-      }
-
-      if (filters?.status) {
-        filterConditions.push({ status: filters.status as PaymentStatus });
-      }
-
-      if (filters?.search) {
-        const keyword = filters.search.trim();
-        if (keyword) {
-          filterConditions.push({
-            OR: [
-              { externalTransactionId: { contains: keyword, mode: 'insensitive' } },
-              {
-                application: {
-                  is: {
-                    participant: {
-                      is: {
-                        user: {
-                          is: {
-                            email: { contains: keyword, mode: 'insensitive' },
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            ],
-          });
-        }
-      }
-
-      const where: Prisma.ApplicationInvoiceWhereInput =
-        filterConditions.length > 0
-          ? { AND: [cursorWhere ?? {}, ...filterConditions] }
-          : (cursorWhere ?? {});
-
-      const invoices = await this.prisma.applicationInvoice.findMany({
+      const invoices = await this.readPrisma.applicationInvoice.findMany({
         where,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         include: {

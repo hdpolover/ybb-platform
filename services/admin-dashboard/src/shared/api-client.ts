@@ -3897,12 +3897,46 @@ export function exportProgramPaymentsExcel(params: {
   programId: string;
   status?: string;
   search?: string;
+  paymentMethod?: string;
+  tierId?: string;
+  feeType?: string;
+  applicationStatus?: string;
+  followUpStatus?:
+    | "participant_cancelled"
+    | "payment_cancelled_issue"
+    | "payment_failed"
+    | "manual_proof_rejected"
+    | "payment_processing_stuck"
+    | "all_problems";
+  payerType?: "all" | "participant" | "ambassador";
+  currency?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  paidFrom?: string;
+  paidTo?: string;
+  minAmount?: number;
+  maxAmount?: number;
 }): Promise<void> {
   const date = new Date().toISOString().slice(0, 10);
+  // Mirrors listProgramInvoices's query params exactly so the exported file
+  // always matches whatever filters are active on the visible table.
   const q = new URLSearchParams();
   q.set("programId", params.programId);
   if (params.status) q.set("status", params.status);
   if (params.search) q.set("search", params.search);
+  if (params.paymentMethod) q.set("paymentMethod", params.paymentMethod);
+  if (params.tierId) q.set("tierId", params.tierId);
+  if (params.feeType) q.set("feeType", params.feeType);
+  if (params.applicationStatus) q.set("applicationStatus", params.applicationStatus);
+  if (params.followUpStatus) q.set("followUpStatus", params.followUpStatus);
+  if (params.payerType) q.set("payerType", params.payerType);
+  if (params.currency) q.set("currency", params.currency);
+  if (params.dateFrom) q.set("dateFrom", params.dateFrom);
+  if (params.dateTo) q.set("dateTo", params.dateTo);
+  if (params.paidFrom) q.set("paidFrom", params.paidFrom);
+  if (params.paidTo) q.set("paidTo", params.paidTo);
+  if (typeof params.minAmount === "number") q.set("minAmount", String(params.minAmount));
+  if (typeof params.maxAmount === "number") q.set("maxAmount", String(params.maxAmount));
   return triggerFileDownload(
     buildApiUrl(`/reporting/payments/export?${q.toString()}`),
     `payments-${params.programId}-${date}.xlsx`,

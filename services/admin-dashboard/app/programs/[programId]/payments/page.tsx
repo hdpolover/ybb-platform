@@ -368,10 +368,26 @@ export default function PaymentsPage({
     setExporting(true);
     setError(null);
     try {
+      // Forward every active filter — matches what fetchInvoices sends the
+      // list endpoint — so the exported file always matches the visible
+      // table instead of silently exporting the whole unfiltered program.
       await exportProgramPaymentsExcel({
         programId: resolvedProgramId,
         status: statusFilter || undefined,
         search: search.trim() || undefined,
+        paymentMethod: paymentMethodFilter || undefined,
+        tierId: tierFilter || undefined,
+        feeType: feeTypeFilter || undefined,
+        applicationStatus: applicationStatusFilter || undefined,
+        followUpStatus: followUpStatusFilter || undefined,
+        payerType: payerTypeFilter || undefined,
+        currency: currencyFilter || undefined,
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
+        paidFrom: paidFrom || undefined,
+        paidTo: paidTo || undefined,
+        minAmount: minAmount ? Number(minAmount) : undefined,
+        maxAmount: maxAmount ? Number(maxAmount) : undefined,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to export payments.");
