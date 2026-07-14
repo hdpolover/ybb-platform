@@ -31,14 +31,40 @@ export function getAccessToken(): string {
   return token;
 }
 
-async function readErrorMessage(res: Response): Promise<string> {
+/**
+ * Error carrying the API's machine-readable `errorCode` alongside its message,
+ * so callers can branch on the code instead of pattern-matching English copy.
+ * Extends Error, so existing `err instanceof Error` handling still works.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly errorCode?: string;
+
+  constructor(message: string, status: number, errorCode?: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.errorCode = errorCode;
+  }
+}
+
+async function readErrorBody(res: Response): Promise<{ message: string; errorCode?: string }> {
   try {
-    const body = (await res.json()) as { message?: string | string[]; error?: string };
-    if (Array.isArray(body.message)) return body.message.join(", ");
-    if (typeof body.message === "string") return body.message;
-    if (typeof body.error === "string") return body.error;
+    const body = (await res.json()) as {
+      message?: string | string[];
+      error?: string;
+      errorCode?: string;
+    };
+    const errorCode = typeof body.errorCode === "string" ? body.errorCode : undefined;
+    if (Array.isArray(body.message)) return { message: body.message.join(", "), errorCode };
+    if (typeof body.message === "string") return { message: body.message, errorCode };
+    if (typeof body.error === "string") return { message: body.error, errorCode };
   } catch { /* fall through */ }
-  return `Request failed with status ${res.status}.`;
+  return { message: "Something went wrong. Please try again." };
+}
+
+async function readErrorMessage(res: Response): Promise<string> {
+  return (await readErrorBody(res)).message;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -62,7 +88,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error("Session expired. Redirecting to login...");
   }
 
-  if (!res.ok) throw new Error(await readErrorMessage(res));
+  if (!res.ok) {
+    const { message, errorCode } = await readErrorBody(res);
+    throw new ApiError(message, res.status, errorCode);
+  }
   if (res.status === 204) {
     if (shouldRefreshAdminProfileForMutation(path, method)) {
       requestAdminProfileRefresh();
@@ -3423,14 +3452,37 @@ export function notifyPaymentIssue(invoiceIds: string[]): Promise<NotifyPaymentI
   });
 }
 
+export interface ResendReceiptResult {
+  sent: boolean;
+  email: string;
+}
+
+export function resendReceiptEmail(invoiceId: string): Promise<ResendReceiptResult> {
+  return request<ResendReceiptResult>("/admin/payments/resend-receipt", {
+    method: "POST",
+    body: JSON.stringify({ invoiceId }),
+  });
+}
+
+/**
+ * Marking an invoice paid when no settled gateway transaction backs it records a
+ * payment that was never captured. The API refuses that unless the caller opts in
+ * explicitly with a written justification, replying with errorCode
+ * MANUAL_OVERRIDE_REQUIRED. Pass `override` to confirm after the admin has.
+ */
 export function updateProgramInvoiceStatus(
   id: string,
   status: "unpaid" | "paid" | "processing" | "failed" | "cancelled" | "refunded",
   reason?: string,
+  override?: { overrideReason: string },
 ): Promise<InvoiceListItem> {
   return request<InvoiceListItem>(`/admin/payments/invoices/${id}/status`, {
     method: "PATCH",
-    body: JSON.stringify({ status, reason }),
+    body: JSON.stringify({
+      status,
+      reason,
+      ...(override ? { manualOverride: true, overrideReason: override.overrideReason } : {}),
+    }),
   });
 }
 

@@ -578,6 +578,53 @@ export class EmailService {
     return this.sendRawEmail(to, subject, html, attachments);
   }
 
+  // On-demand "send me my receipt" email — distinct from
+  // sendPaymentSuccessEmail because it can be triggered by an admin long
+  // after the payment happened, so it must never say "payment successful".
+  async sendReceiptEmail(
+    to: string,
+    receiptData: any,
+    receiptBuffer?: Buffer,
+  ) {
+    const templateData = {
+      name: receiptData.name,
+      amount: receiptData.amount,
+      currency: receiptData.currency || 'IDR',
+      orderId: receiptData.orderId,
+      date: new Date().toLocaleDateString(),
+      description: receiptData.description,
+      invoiceUrl: receiptData.invoiceUrl || '#',
+      brand: receiptData.brand,
+      program: receiptData.program,
+      brandId: receiptData.brandId,
+      programId: receiptData.programId,
+    };
+
+    const attachments = receiptBuffer
+      ? [
+          {
+            filename: `receipt-${receiptData.orderId}.pdf`,
+            content: receiptBuffer,
+          },
+        ]
+      : [];
+
+    const fallbackSubject = `Your receipt for ${receiptData.description || receiptData.program || 'your payment'}`;
+
+    const { subject, html } = await this.resolveEmailContent({
+      type: 'payment_receipt',
+      fallbackTemplateName: 'payment-receipt',
+      fallbackSubject,
+      data: templateData,
+    });
+
+    this.logger.log(
+      `[sendReceiptEmail] Sending receipt email to=${maskEmail(to)} orderId=${receiptData.orderId} hasAttachment=${attachments.length > 0}`,
+    );
+
+    return this.sendRawEmail(to, subject, html, attachments);
+  }
+
   async sendForgotPasswordEmail(
     to: string,
     name: string,

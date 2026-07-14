@@ -17,6 +17,7 @@ import {
   verifyInvoice,
   submitApplication,
   downloadInvoiceProof,
+  ApiError,
   type InvoiceDetail,
   type InvoiceStatus,
 } from "@/src/shared/api-client";
@@ -28,6 +29,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/src/ui/dialo
 import { formatDate, formatDateTime } from "@/lib/utils";
 import { resolveAttemptDisplayStatus, resolveAttemptRowDisplayStatus } from "@/lib/payment-attempt-status";
 import { NotifyParticipantButton } from "@/app/components/payments/details/NotifyParticipantButton";
+import { SendReceiptEmailButton } from "@/app/components/payments/details/SendReceiptEmailButton";
 
 const STATUS_CLASS: Record<string, string> = {
   paid: "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -115,6 +117,10 @@ export default function PaymentDetailPage({
   const [manualStatus, setManualStatus] = useState<InvoiceStatus>("processing");
   const [manualReason, setManualReason] = useState("");
   const [manualSaving, setManualSaving] = useState(false);
+  // Set when the API refuses a mark-paid that no settled transaction backs
+  // (errorCode MANUAL_OVERRIDE_REQUIRED). Holds the explanation to show the
+  // admin so they can confirm deliberately rather than hit a dead end.
+  const [overridePrompt, setOverridePrompt] = useState<string | null>(null);
   const [submittingApplication, setSubmittingApplication] = useState(false);
   const [proofOpen, setProofOpen] = useState(false);
 
@@ -694,6 +700,12 @@ export default function PaymentDetailPage({
                       invoiceId={invoice.id}
                     />
                   )}
+                  {invoice && invoice.status === "paid" && (
+                    <SendReceiptEmailButton
+                      email={invoice.participant.email ?? "the participant"}
+                      invoiceId={invoice.id}
+                    />
+                  )}
                   {needsReview && invoice?.externalTransactionId ? (
                     <div className="grid gap-2 sm:grid-cols-2">
                       <Button
@@ -756,7 +768,12 @@ export default function PaymentDetailPage({
                     </label>
                     <select
                       value={manualStatus}
-                      onChange={(e) => setManualStatus(e.target.value as InvoiceStatus)}
+                      onChange={(e) => {
+                        setManualStatus(e.target.value as InvoiceStatus);
+                        // The pending confirmation belongs to the previous selection;
+                        // a new status has to be re-checked by the API from scratch.
+                        setOverridePrompt(null);
+                      }}
                       className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="processing">Processing</option>
@@ -767,14 +784,31 @@ export default function PaymentDetailPage({
                       <option value="refunded">Refunded</option>
                     </select>
                   </div>
+                  {overridePrompt && (
+                    <div
+                      role="alert"
+                      className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+                    >
+                      <p className="font-medium mb-1">Confirmation needed</p>
+                      <p>{overridePrompt}</p>
+                      <p className="mt-1">
+                        Write why below, then choose Confirm and apply. This is recorded against
+                        your account.
+                      </p>
+                    </div>
+                  )}
                   <div>
                     <label className="text-xs font-medium text-zinc-600 mb-1 block">
-                      Reason (optional)
+                      {overridePrompt ? "Justification (required)" : "Reason (optional)"}
                     </label>
                     <textarea
                       className="w-full rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                       rows={3}
-                      placeholder="Why this status change?"
+                      placeholder={
+                        overridePrompt
+                          ? "e.g. Bank transfer confirmed against the account statement on 14 Jul."
+                          : "Why this status change?"
+                      }
                       value={manualReason}
                       onChange={(e) => setManualReason(e.target.value)}
                     />
@@ -783,17 +817,32 @@ export default function PaymentDetailPage({
                     variant="default"
                     size="sm"
                     className="w-full"
-                    disabled={manualSaving || !invoice}
+                    disabled={manualSaving || !invoice || (!!overridePrompt && !manualReason.trim())}
                     onClick={async () => {
                       if (!invoice) return;
                       setManualSaving(true);
                       setToast(null);
                       try {
-                        await updateProgramInvoiceStatus(invoice.id, manualStatus, manualReason || undefined);
+                        await updateProgramInvoiceStatus(
+                          invoice.id,
+                          manualStatus,
+                          manualReason || undefined,
+                          overridePrompt ? { overrideReason: manualReason.trim() } : undefined,
+                        );
+                        setOverridePrompt(null);
                         setToast({ text: "Invoice status updated.", ok: true });
                         await fetchInvoice();
                       } catch (err) {
-                        setToast({ text: err instanceof Error ? err.message : "Failed to update status", ok: false });
+                        // The API asks for a deliberate confirmation instead of failing
+                        // outright — surface its explanation and require a justification.
+                        if (err instanceof ApiError && err.errorCode === "MANUAL_OVERRIDE_REQUIRED") {
+                          setOverridePrompt(err.message);
+                        } else {
+                          setToast({
+                            text: err instanceof Error ? err.message : "Couldn't update the status. Please try again.",
+                            ok: false,
+                          });
+                        }
                       } finally {
                         setManualSaving(false);
                       }
@@ -804,7 +853,7 @@ export default function PaymentDetailPage({
                     ) : (
                       <ShieldCheck className="mr-2 h-3.5 w-3.5" />
                     )}
-                    Apply Status
+                    {overridePrompt ? "Confirm and apply" : "Apply Status"}
                   </Button>
                   {needsReview && (
                     <p className="text-[11px] text-zinc-500">
