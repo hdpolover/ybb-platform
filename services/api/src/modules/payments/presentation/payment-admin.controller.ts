@@ -42,17 +42,14 @@ import {
     buildParticipantPaymentsUrl as buildParticipantPaymentsDashboardUrl,
     buildParticipantInvoiceUrl,
 } from '@modules/payments/application/utils/participant-dashboard-url.util';
-
-// Display/filter-only threshold for surfacing invoices stuck in 'processing'
-// past a reasonable window. Not tied to the reconciliation cron's own grace
-// period (PAYMENT_RECONCILIATION_GRACE_MINUTES in payment-reconciliation.service.ts),
-// which governs when the cron itself acts — this only affects what the admin
-// invoice list flags as a "follow up" candidate.
-const STUCK_PROCESSING_THRESHOLD_MS = 24 * 60 * 60 * 1000;
-
-// Who paid: 'ambassador' = the payer holds an ambassador record, 'participant' = they don't.
-const PAYER_TYPES = ['all', 'participant', 'ambassador'] as const;
-type PayerType = (typeof PAYER_TYPES)[number];
+import {
+    buildInvoiceWhere,
+    obsoleteRegistrationFeeInvoiceIdsSql,
+    buildExcludeObsoleteWhere,
+    resolvePayerTypeFilter,
+    STUCK_PROCESSING_THRESHOLD_MS,
+    INVOICE_ID_RE,
+} from '@modules/payments/application/services/invoice-where.builder';
 
 @ApiTags('Admin Payments')
 @Controller('admin/payments')
@@ -134,10 +131,11 @@ export class PaymentAdminController {
 
         if (!programId) throw new HttpException('programId is required', 400);
 
-        const payerTypeFilter = payerType?.trim() || 'all';
-        if (!PAYER_TYPES.includes(payerTypeFilter as PayerType)) {
-            throw new HttpException(`payerType must be one of: ${PAYER_TYPES.join(', ')}`, 400);
-        }
+        // Validated here (before the obsolete-invoice query) so an invalid payerType
+        // 400s immediately rather than after an unnecessary DB round trip.
+        // buildInvoiceWhere() re-validates internally too, so any other caller
+        // (e.g. the reporting export) gets the same guarantee even if it skips this.
+        resolvePayerTypeFilter(payerType);
 
         const pageNum = Math.max(1, parseInt(page, 10) || 1);
         const limitNum = Math.min(Math.max(1, parseInt(limit, 10) || 20), 100);
@@ -155,106 +153,36 @@ export class PaymentAdminController {
         // allowed_categories does NOT include the application's current applicationCategory.
         // These arise when a participant switches funding category (self_funded <-> fully_funded).
         // If applicationCategory is null we skip exclusion for that application.
-        const obsoleteRows = await this.readPrisma.$queryRaw<{ id: string }[]>(Prisma.sql`
-            SELECT ai.id::text AS id
-            FROM application_invoices ai
-            JOIN program_pricing_tiers pt ON pt.id = ai.pricing_tier_id
-            JOIN participant_applications pa ON pa.id = ai.application_id
-            WHERE pa.program_id = ${programId}::uuid
-              AND pa.deleted_at IS NULL
-              AND pt.fee_type = 'registration_fee'
-              AND pa.application_category IS NOT NULL
-              AND NOT (pa.application_category = ANY(pt.allowed_categories))
-        `);
+        const obsoleteRows = await this.readPrisma.$queryRaw<{ id: string }[]>(
+            obsoleteRegistrationFeeInvoiceIdsSql(programId),
+        );
         const obsoleteInvoiceIds = obsoleteRows.map((r) => r.id);
-        const excludeObsolete: Prisma.ApplicationInvoiceWhereInput =
-            obsoleteInvoiceIds.length > 0 ? { id: { notIn: obsoleteInvoiceIds } } : {};
+        const excludeObsolete: Prisma.ApplicationInvoiceWhereInput = buildExcludeObsoleteWhere(obsoleteInvoiceIds);
 
-        const minAmountNum = typeof minAmount === 'string' && minAmount.trim() !== '' ? Number(minAmount) : undefined;
-        const maxAmountNum = typeof maxAmount === 'string' && maxAmount.trim() !== '' ? Number(maxAmount) : undefined;
-
-        const applicationFilter: Prisma.ParticipantApplicationWhereInput = { programId };
-        const searchKeyword = search?.trim() || null;
-        if (applicationStatus?.trim()) {
-            applicationFilter.status = applicationStatus as Prisma.EnumApplicationStatusFilter;
-        }
-        // Classify a payer by whether they hold an ambassador record at all. This is a
-        // historical question ("was this paid by an ambassador"), not an authorization one,
-        // so it deliberately ignores isActive/deletedAt — deactivating or deleting an
-        // ambassador must not retroactively reclassify their past payments and shift the stats.
-        if (payerTypeFilter === 'ambassador') {
-            applicationFilter.participant = { user: { ambassador: { isNot: null } } };
-        } else if (payerTypeFilter === 'participant') {
-            applicationFilter.participant = { user: { ambassador: { is: null } } };
-        }
-
-        const where: Prisma.ApplicationInvoiceWhereInput = { application: applicationFilter };
-        const followUpWhere = this.buildFollowUpStatusWhere(followUpStatus);
-        if (followUpWhere) {
-            const andFilters = Array.isArray(where.AND)
-                ? where.AND
-                : where.AND
-                    ? [where.AND]
-                    : [];
-            where.AND = [...andFilters, followUpWhere];
-        }
-        if (searchKeyword) {
-            const participantSearch: Prisma.ParticipantWhereInput = {
-                OR: [
-                    { fullName: { contains: searchKeyword, mode: 'insensitive' } },
-                    { user: { email: { contains: searchKeyword, mode: 'insensitive' } } },
-                    { nationality: { contains: searchKeyword, mode: 'insensitive' } },
-                    { originCountry: { contains: searchKeyword, mode: 'insensitive' } },
-                ],
-            };
-            const invoiceSearch: Prisma.ApplicationInvoiceWhereInput[] = [
-                { externalTransactionId: { contains: searchKeyword, mode: 'insensitive' } },
-                { externalIntentId: { contains: searchKeyword, mode: 'insensitive' } },
-                {
-                    application: {
-                        ...applicationFilter,
-                        participant: participantSearch,
-                    },
-                },
-            ];
-            if (PaymentAdminController.UUID_RE.test(searchKeyword)) {
-                invoiceSearch.unshift({ id: searchKeyword });
-            }
-            where.OR = invoiceSearch;
-        }
-        if (status) where.status = status as PaymentStatus;
-        if (paymentMethod?.trim()) where.paymentMethod = paymentMethod.trim();
-        if (tierId?.trim()) where.pricingTierId = tierId.trim();
-        if (feeType?.trim()) {
-            where.pricingTier = { feeType: feeType.trim() as Prisma.EnumPricingFeeTypeFilter };
-        }
-        if (currency?.trim()) where.currency = currency.trim();
-
-        if (dateFrom || dateTo) {
-            where.createdAt = {
-                ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-                ...(dateTo ? { lte: this.endOfDayUtc(dateTo) } : {}),
-            };
-        }
-        if (paidFrom || paidTo) {
-            where.paidAt = {
-                ...(paidFrom ? { gte: new Date(paidFrom) } : {}),
-                ...(paidTo ? { lte: this.endOfDayUtc(paidTo) } : {}),
-            };
-        }
-        if (minAmountNum !== undefined || maxAmountNum !== undefined) {
-            where.amount = {
-                ...(minAmountNum !== undefined && !Number.isNaN(minAmountNum) ? { gte: new Prisma.Decimal(minAmountNum) } : {}),
-                ...(maxAmountNum !== undefined && !Number.isNaN(maxAmountNum) ? { lte: new Prisma.Decimal(maxAmountNum) } : {}),
-            };
-        }
-
-        // Exclude obsolete registration_fee invoices from all queries in this method.
-        // The id field is only used inside where.OR (UUID search), never as a top-level
-        // scalar on `where`, so adding id: { notIn } at the top level is safe and ANDs correctly.
-        if (obsoleteInvoiceIds.length > 0) {
-            Object.assign(where, excludeObsolete);
-        }
+        // Single source of truth for the list/export where clause — see
+        // invoice-where.builder.ts. Must stay identical to what the export
+        // endpoint builds so filtered rows in the table match the exported file.
+        const where: Prisma.ApplicationInvoiceWhereInput = buildInvoiceWhere(
+            {
+                programId,
+                status,
+                search,
+                paymentMethod,
+                tierId,
+                feeType,
+                applicationStatus,
+                followUpStatus,
+                payerType,
+                currency,
+                dateFrom,
+                dateTo,
+                paidFrom,
+                paidTo,
+                minAmount,
+                maxAmount,
+            },
+            obsoleteInvoiceIds,
+        );
 
         const allowedSortBy: Record<string, Prisma.ApplicationInvoiceOrderByWithRelationInput> = {
             createdAt: { createdAt: sortDirection },
@@ -553,69 +481,6 @@ export class PaymentAdminController {
         };
     }
 
-    private buildFollowUpStatusWhere(
-        followUpStatus?: string,
-    ): Prisma.ApplicationInvoiceWhereInput | null {
-        switch ((followUpStatus ?? '').trim()) {
-            case 'participant_cancelled':
-                return {
-                    status: PaymentStatus.cancelled,
-                    rejectionReason: {
-                        equals: PaymentAdminController.PARTICIPANT_CANCELLATION_REASON,
-                        mode: 'insensitive',
-                    },
-                };
-            case 'payment_cancelled_issue':
-                return {
-                    status: PaymentStatus.cancelled,
-                    NOT: {
-                        rejectionReason: {
-                            equals: PaymentAdminController.PARTICIPANT_CANCELLATION_REASON,
-                            mode: 'insensitive',
-                        },
-                    },
-                };
-            case 'payment_failed':
-                return {
-                    status: PaymentStatus.failed,
-                    verifiedBy: null,
-                };
-            case 'manual_proof_rejected':
-                return {
-                    status: PaymentStatus.failed,
-                    verifiedBy: { not: null },
-                };
-            case 'payment_processing_stuck': {
-                const staleCutoff = new Date(Date.now() - STUCK_PROCESSING_THRESHOLD_MS);
-                return {
-                    status: PaymentStatus.processing,
-                    updatedAt: { lt: staleCutoff },
-                };
-            }
-            case 'all_problems': {
-                const staleCutoff = new Date(Date.now() - STUCK_PROCESSING_THRESHOLD_MS);
-                return {
-                    OR: [
-                        { status: PaymentStatus.failed, verifiedBy: null },
-                        { status: PaymentStatus.failed, verifiedBy: { not: null } },
-                        {
-                            status: PaymentStatus.cancelled,
-                            NOT: {
-                                rejectionReason: {
-                                    equals: PaymentAdminController.PARTICIPANT_CANCELLATION_REASON,
-                                    mode: 'insensitive',
-                                },
-                            },
-                        },
-                        { status: PaymentStatus.processing, updatedAt: { lt: staleCutoff } },
-                    ],
-                };
-            }
-            default:
-                return null;
-        }
-    }
-
     private isParticipantInitiatedCancellationReason(reason?: string | null): boolean {
         if (!reason) return false;
         return reason.trim().toLowerCase() === PaymentAdminController.PARTICIPANT_CANCELLATION_REASON.toLowerCase();
@@ -625,17 +490,6 @@ export class PaymentAdminController {
         return sortOrder?.toLowerCase() === 'asc' ? 'asc' : 'desc';
     }
 
-    private endOfDayUtc(dateString: string): Date {
-        const base = new Date(dateString);
-        if (Number.isNaN(base.getTime())) {
-            return new Date(dateString);
-        }
-        return new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), 23, 59, 59, 999));
-    }
-
-    private static readonly UUID_RE =
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
     private decodeCreatedAtCursor(cursor: string): { id: string; createdAt: Date } {
         try {
             const json = Buffer.from(cursor, 'base64url').toString('utf8');
@@ -643,7 +497,7 @@ export class PaymentAdminController {
             if (!parsed.id || !parsed.createdAt) {
                 throw new Error('missing cursor fields');
             }
-            if (!PaymentAdminController.UUID_RE.test(parsed.id)) {
+            if (!INVOICE_ID_RE.test(parsed.id)) {
                 throw new Error('invalid cursor id');
             }
             const createdAt = new Date(parsed.createdAt);

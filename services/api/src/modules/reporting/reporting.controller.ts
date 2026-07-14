@@ -1,8 +1,9 @@
 import { Controller, Logger, Get, Res, Query, UseGuards } from '@nestjs/common';
 import { Ctx, EventPattern, Payload, RmqContext } from '@nestjs/microservices';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { Response } from 'express';
 import { ReportingService } from './reporting.service';
+import { InvoiceFilterQuery } from '@modules/payments/application/services/invoice-where.builder';
 import { PaymentSucceededPayload, UserRegisteredPayload } from '@common/types/events';
 import { JwtAuthGuard } from '../auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/infrastructure/guards/roles.guard';
@@ -61,13 +62,49 @@ export class ReportingController {
   @ApiResponse({ status: 200, description: 'Excel file with payments' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden - admin role required' })
+  // Query params mirror PaymentAdminController.listInvoices exactly — both
+  // endpoints build their `where` clause via the same buildInvoiceWhere()
+  // (see invoice-where.builder.ts) so the exported rows always match the
+  // admin payments table for the same filter set.
+  @ApiQuery({ name: 'programId', required: false })
+  @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'paymentMethod', required: false })
+  @ApiQuery({ name: 'tierId', required: false })
+  @ApiQuery({ name: 'feeType', required: false })
+  @ApiQuery({ name: 'applicationStatus', required: false })
+  @ApiQuery({ name: 'followUpStatus', required: false })
+  @ApiQuery({ name: 'payerType', required: false })
+  @ApiQuery({ name: 'currency', required: false })
+  @ApiQuery({ name: 'dateFrom', required: false })
+  @ApiQuery({ name: 'dateTo', required: false })
+  @ApiQuery({ name: 'paidFrom', required: false })
+  @ApiQuery({ name: 'paidTo', required: false })
+  @ApiQuery({ name: 'minAmount', required: false })
+  @ApiQuery({ name: 'maxAmount', required: false })
   async exportPayments(
     @Res() res: Response,
-    @Query('programId') programId?: string,
-    @Query('status') status?: string,
-    @Query('search') search?: string,
+    @Query() query: Record<string, string>,
   ) {
-    await this.reportingService.exportPayments(res, { programId, status, search });
+    const filters: InvoiceFilterQuery = {
+      programId: query.programId,
+      status: query.status,
+      search: query.search,
+      paymentMethod: query.paymentMethod,
+      tierId: query.tierId,
+      feeType: query.feeType,
+      applicationStatus: query.applicationStatus,
+      followUpStatus: query.followUpStatus,
+      payerType: query.payerType,
+      currency: query.currency,
+      dateFrom: query.dateFrom,
+      dateTo: query.dateTo,
+      paidFrom: query.paidFrom,
+      paidTo: query.paidTo,
+      minAmount: query.minAmount,
+      maxAmount: query.maxAmount,
+    };
+    await this.reportingService.exportPayments(res, filters);
   }
 
   @EventPattern('payment.succeeded')
