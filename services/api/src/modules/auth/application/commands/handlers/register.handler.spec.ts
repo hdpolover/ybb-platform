@@ -259,9 +259,11 @@ describe('RegisterHandler', () => {
         const createArgs = mockPrismaService.user.create.mock.calls[0][0];
         expect(createArgs.data.email).toBe('test@example.com');
         
-        // Verify Referral Lookup skips soft-deleted ambassadors
+        // Verify Referral Lookup skips soft-deleted ambassadors and is scoped to the
+        // program being registered for — an ambassador must not earn credit for a
+        // referral into a program they are not an ambassador of.
         expect(mockPrismaService.ambassador.findFirst).toHaveBeenCalledWith({
-            where: { referralCode: 'REFCODE', deletedAt: null },
+            where: { referralCode: 'REFCODE', deletedAt: null, programId: 'program-id-123' },
         });
 
         // Verify Referral Tracking

@@ -152,10 +152,14 @@ export class ParticipantsController {
     @Get('ambassador/referral-codes/:code')
     @ApiOperation({ summary: 'Check whether an ambassador referral code is usable' })
     @ApiResponse({ status: 200, type: ReferralCodeValidationDto })
-    @ApiResponse({ status: 404, description: 'Unknown, inactive, or deleted referral code' })
+    @ApiResponse({
+        status: 404,
+        description: 'Unknown, inactive, or deleted code — or a code belonging to another program',
+    })
     async validateReferralCode(
         @Param('code') code: string,
+        @Query('programId') programId?: string,
     ): Promise<ReferralCodeValidationDto> {
-        return this.queryBus.execute(new ValidateReferralCodeQuery(code));
+        return this.queryBus.execute(new ValidateReferralCodeQuery(code, programId));
     }
 }

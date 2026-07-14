@@ -15,11 +15,17 @@ export class ValidateReferralCodeHandler implements IQueryHandler<ValidateReferr
             throw new BadRequestException('code is required');
         }
 
+        const programId = query.programId?.trim() || undefined;
+
         const ambassador = await this.prisma.ambassador.findFirst({
             where: {
                 referralCode,
                 isActive: true,
                 deletedAt: null,
+                // Ambassadors belong to one program; a code from another program is
+                // not usable here. Only scope when the caller actually knows the
+                // program — scoping to a guess would reject legitimate codes.
+                ...(programId ? { programId } : {}),
             },
             // Unauthenticated endpoint — never select identifying fields.
             select: {

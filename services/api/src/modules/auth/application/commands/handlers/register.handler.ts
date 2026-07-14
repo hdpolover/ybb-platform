@@ -154,14 +154,25 @@ export class RegisterHandler {
     // Check Ambassador Referral
     let ambassador: Ambassador | null = null;
     if (command.referralCode) {
+        // Ambassadors belong to exactly one program, so a code only earns credit for
+        // a referral into that program. Scope the lookup when the target program is
+        // known; when it is not, stay unscoped rather than silently dropping a
+        // legitimate referral (registration must proceed either way).
         ambassador = await this.prisma.ambassador.findFirst({
-            where: { referralCode: normalizeReferralCode(command.referralCode), deletedAt: null },
+            where: {
+                referralCode: normalizeReferralCode(command.referralCode),
+                deletedAt: null,
+                ...(targetProgramId ? { programId: targetProgramId } : {}),
+            },
         });
 
         // If ambassador not found or inactive, we generally ignore or log warning,
         // but typically registration should proceed without referral.
         if (!ambassador || !ambassador.isActive) {
-            this.logger.warn(`Invalid or inactive referral code used: ${command.referralCode}`);
+            this.logger.warn(
+                `Referral code not applied: ${command.referralCode} `
+                + `(unknown, inactive, or not an ambassador for program ${targetProgramId ?? 'unknown'})`,
+            );
             ambassador = null;
         }
     }
