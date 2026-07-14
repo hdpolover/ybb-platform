@@ -4,6 +4,8 @@ import { AmbassadorAdminController } from './ambassador-admin.controller';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
+import { ConfigService } from '@nestjs/config';
 import { GetAmbassadorsListQuery, UpdateAmbassadorStatusCommand } from '../application/commands/ambassador-admin.commands';
 
 describe('AmbassadorAdminController', () => {
@@ -33,6 +35,8 @@ describe('AmbassadorAdminController', () => {
         { provide: CommandBus, useValue: mockCommandBus },
         { provide: QueryBus, useValue: mockQueryBus },
         { provide: PrismaService, useValue: mockPrismaService },
+        { provide: RabbitMQProducerService, useValue: { emit: jest.fn() } },
+        { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('') } },
       ],
     })
     .overrideGuard(JwtAuthGuard)
