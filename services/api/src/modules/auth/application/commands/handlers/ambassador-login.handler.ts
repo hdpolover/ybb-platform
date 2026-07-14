@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { AuthLoggingService } from '../../services/auth-logging.service';
 import { GeoIpService } from '@shared/infrastructure/geoip/geoip.service';
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
+import { normalizeReferralCode } from '@modules/participants/application/utils/referral-code.util';
 
 @Injectable()
 export class AmbassadorLoginHandler {
@@ -77,8 +78,9 @@ export class AmbassadorLoginHandler {
     const ambassador = await this.prisma.ambassador.findFirst({
       where: {
         userId: user.id,
-        referralCode: command.referralCode.trim().toUpperCase(),
+        referralCode: normalizeReferralCode(command.referralCode),
         isActive: true,
+        deletedAt: null,
       },
     });
 
