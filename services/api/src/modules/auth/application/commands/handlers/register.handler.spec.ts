@@ -42,7 +42,7 @@ describe('RegisterHandler', () => {
       findFirst: jest.fn(),
     },
     ambassador: {
-      findUnique: jest.fn(),
+      findFirst: jest.fn(),
       update: jest.fn(),
     },
     user: {
@@ -220,7 +220,7 @@ describe('RegisterHandler', () => {
         });
 
         // Mock Ambassador (Referral)
-        mockPrismaService.ambassador.findUnique.mockResolvedValue({
+        mockPrismaService.ambassador.findFirst.mockResolvedValue({
             id: 'ambassador-id-123',
             referralCode: 'REFCODE',
             isActive: true,
@@ -259,6 +259,11 @@ describe('RegisterHandler', () => {
         const createArgs = mockPrismaService.user.create.mock.calls[0][0];
         expect(createArgs.data.email).toBe('test@example.com');
         
+        // Verify Referral Lookup skips soft-deleted ambassadors
+        expect(mockPrismaService.ambassador.findFirst).toHaveBeenCalledWith({
+            where: { referralCode: 'REFCODE', deletedAt: null },
+        });
+
         // Verify Referral Tracking
         expect(mockPrismaService.ambassadorReferral.create).toHaveBeenCalledWith({
             data: {
