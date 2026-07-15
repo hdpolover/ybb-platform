@@ -155,6 +155,14 @@ export class AmbassadorAdminController {
       throw new BadRequestException('email, fullName, and programId are required');
     }
 
+    // gender is optional, but when present it must match the Prisma Gender enum
+    // (male | female). Guard here so an invalid value returns a clean 400 instead
+    // of a raw PrismaClientValidationError 500.
+    const allowedGenders = ['male', 'female'];
+    if (gender && !allowedGenders.includes(gender)) {
+      throw new BadRequestException(`gender must be one of: ${allowedGenders.join(', ')}`);
+    }
+
     // Resolve program to get brandId and brand details for the welcome email
     const program = await this.prisma.program.findUnique({
       where: { id: programId },
