@@ -20,6 +20,9 @@ type PaymentIntentRepository interface {
 	Create(ctx context.Context, intent *entities.PaymentIntent) error
 	FindByID(ctx context.Context, id string) (*entities.PaymentIntent, error)
 	FindByReference(ctx context.Context, refType, refID string) ([]*entities.PaymentIntent, error)
+	// FindOpenByReference returns the open (REQUIRES_PAYMENT_METHOD, not deleted)
+	// intent for a reference, or (nil, nil) if none exists.
+	FindOpenByReference(ctx context.Context, referenceType, referenceID string) (*entities.PaymentIntent, error)
 	Update(ctx context.Context, intent *entities.PaymentIntent) error
 	FindAll(ctx context.Context, filter PaymentIntentFilter) ([]*entities.PaymentIntent, int64, error)
 }

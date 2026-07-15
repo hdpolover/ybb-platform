@@ -31,4 +31,6 @@ var (
 	ErrGatewayError          = NewDomainError("GATEWAY_PROVIDER_ERROR", "Error from upstream payment provider")
 	ErrIdempotencyConflict   = NewDomainError("IDEMPOTENCY_CONFLICT", "Idempotency key has already been used for a different request")
 	ErrIdempotencyInProgress = NewDomainError("IDEMPOTENCY_IN_PROGRESS", "A request with this idempotency key is already processing")
+
+	ErrDuplicateOpenIntent = NewDomainError("DUPLICATE_OPEN_INTENT", "An open payment intent already exists for this reference")
 )
