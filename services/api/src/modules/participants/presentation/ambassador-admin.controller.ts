@@ -50,6 +50,16 @@ export class AmbassadorAdminController {
     private readonly configService: ConfigService,
   ) { }
 
+  // gender is optional, but when present it must match the Prisma Gender enum
+  // (male | female). Guard so an invalid value returns a clean 400 instead of a
+  // raw PrismaClientValidationError 500.
+  private assertValidGender(gender?: string): void {
+    const allowedGenders = ['male', 'female'];
+    if (gender && !allowedGenders.includes(gender)) {
+      throw new BadRequestException(`gender must be one of: ${allowedGenders.join(', ')}`);
+    }
+  }
+
   @Get()
   @ApiOperation({ summary: 'List all ambassadors (Admin)' })
   @ApiQuery({ name: 'programId', required: false })
@@ -154,14 +164,7 @@ export class AmbassadorAdminController {
     if (!email || !fullName || !programId) {
       throw new BadRequestException('email, fullName, and programId are required');
     }
-
-    // gender is optional, but when present it must match the Prisma Gender enum
-    // (male | female). Guard here so an invalid value returns a clean 400 instead
-    // of a raw PrismaClientValidationError 500.
-    const allowedGenders = ['male', 'female'];
-    if (gender && !allowedGenders.includes(gender)) {
-      throw new BadRequestException(`gender must be one of: ${allowedGenders.join(', ')}`);
-    }
+    this.assertValidGender(gender);
 
     // Resolve program to get brandId and brand details for the welcome email
     const program = await this.prisma.program.findUnique({
@@ -321,6 +324,8 @@ export class AmbassadorAdminController {
       notes?: string;
     },
   ) {
+    this.assertValidGender(body.gender);
+
     const ambassador = await this.prisma.ambassador.findUnique({ where: { id } });
     if (!ambassador || ambassador.deletedAt) throw new NotFoundException('Ambassador not found');
 
