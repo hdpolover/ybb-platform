@@ -24,7 +24,7 @@ Replace the admin-generates-and-stores-and-emails LOA model with **participant s
 - Remove the now-obsolete admin generate/send/email machinery.
 
 **Non-Goals**
-- Email notifications when an LOA becomes available (out of scope; participants discover it in-dashboard).
+- ~~Email notifications when an LOA becomes available (out of scope; participants discover it in-dashboard).~~ **Amended 2026-07-15 (notify-on-release):** re-added as *notify, don't attach*. On a genuine unreleased→released transition the API emits `loa.batch.released` and notifies each **eligible-in-window** participant (status submitted/accepted AND `submission_date` within the batch window) with an in-app `user_notification` (written by the API) **and** a "your Invitation Letter is ready, log in to download" email (via the notification service, no PDF attached — pull model preserved). Idempotent: `release()` is an atomic `UPDATE ... WHERE released_at IS NULL`; re-release does not re-notify. See §7 amendment below.
 - Changing how other document types (certificates, agreement letters) work.
 - Changing the LOA template authoring experience.
 
@@ -99,7 +99,7 @@ CRUD under the program/documents area, ADMIN/SUPER_ADMIN guarded:
 No change to the renderer: `FileServiceClient.generateLoa()` → FastAPI `POST /api/v1/documents/generate/loa` → `PDFGeneratorService.generate_loa_sync()` (WeasyPrint, returns bytes). The only change is the **caller**: the new portal endpoint streams the returned buffer to the participant and does **not** upload to MinIO.
 
 ## 9. Removed / Obsolete (backend)
-- `loa_ready` RabbitMQ event emit; `loa-ready.hbs`; `sendLoaReadyEmail()`; its `EventPattern` handler; the template spec.
+- `loa_ready` RabbitMQ event emit; `loa-ready.hbs`; `sendLoaReadyEmail()`; its `EventPattern` handler; the template spec. **Partially reinstated 2026-07-15** as `loa.batch.released` + `loa-ready.hbs` + `sendLoaReadyEmail()` (single `@EventPattern` in the existing `EventsController`) — see §2 Non-Goals amendment. Difference from the original: fired once per *batch release transition* (not per-participant generate), carries the eligible recipient list, and the in-app notification is written API-side (the notification service is email-only, no DB).
 - Admin LOA generate/bulk endpoint path (`participantId`/`participantIds`/`audience`/`bulk` generate) for LOA.
 - `MarkDocumentViewedHandler` + `/viewed` endpoint — superseded by the download endpoint's tracking (repurpose or remove).
 - `fileUrl` upload step in the old `GenerateLOAHandler` (the LOA branch).
