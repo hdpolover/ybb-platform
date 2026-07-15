@@ -3,6 +3,7 @@ package grpc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	"fmt"
 	"log"
@@ -15,8 +16,11 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"github.com/ybb-platform/payment/internal/application/commands"
+	"github.com/ybb-platform/payment/internal/application/commands/handlers"
 	"github.com/ybb-platform/payment/internal/domain/entities"
 	"github.com/ybb-platform/payment/internal/domain/events"
+	"github.com/ybb-platform/payment/internal/domain/exceptions"
 	"github.com/ybb-platform/payment/internal/domain/gateways"
 	"github.com/ybb-platform/payment/internal/domain/repositories"
 	"github.com/ybb-platform/payment/internal/domain/services"
@@ -26,13 +30,14 @@ import (
 
 type PaymentGrpcServer struct {
 	pb.UnimplementedPaymentServiceServer
-	intentRepo      repositories.PaymentIntentRepository
-	txRepo          repositories.PaymentTransactionRepository
-	methodRepo      repositories.PaymentMethodRepository
-	idempotencyRepo repositories.PaymentIdempotencyRepository
-	gatewayFact     gateways.GatewayFactory
-	publisher       messaging.EventPublisher
-	defaultGateway  string
+	intentRepo          repositories.PaymentIntentRepository
+	txRepo              repositories.PaymentTransactionRepository
+	methodRepo          repositories.PaymentMethodRepository
+	idempotencyRepo     repositories.PaymentIdempotencyRepository
+	gatewayFact         gateways.GatewayFactory
+	publisher           messaging.EventPublisher
+	defaultGateway      string
+	createIntentHandler *handlers.CreateIntentHandler
 }
 
 func NewPaymentGrpcServer(
@@ -43,15 +48,17 @@ func NewPaymentGrpcServer(
 	gatewayFact gateways.GatewayFactory,
 	publisher messaging.EventPublisher,
 	defaultGateway string,
+	createIntentHandler *handlers.CreateIntentHandler,
 ) *PaymentGrpcServer {
 	return &PaymentGrpcServer{
-		intentRepo:      intentRepo,
-		txRepo:          txRepo,
-		methodRepo:      methodRepo,
-		idempotencyRepo: idempotencyRepo,
-		gatewayFact:     gatewayFact,
-		publisher:       publisher,
-		defaultGateway:  defaultGateway,
+		intentRepo:          intentRepo,
+		txRepo:              txRepo,
+		methodRepo:          methodRepo,
+		idempotencyRepo:     idempotencyRepo,
+		gatewayFact:         gatewayFact,
+		publisher:           publisher,
+		defaultGateway:      defaultGateway,
+		createIntentHandler: createIntentHandler,
 	}
 }
 
@@ -93,28 +100,29 @@ func (s *PaymentGrpcServer) CreateIntent(ctx context.Context, req *pb.CreateInte
 		}
 	}
 
-	intent := entities.NewPaymentIntent(
-		req.UserId,
-		float64(req.Amount),
-		req.Currency,
-		req.ReferenceType,
-		req.ReferenceId,
-		metadata,
-		exchangeRate,
-	)
-
-	if req.ParticipantId != "" {
-		intent.ParticipantID = &req.ParticipantId
-	}
-
-	if err := s.intentRepo.Create(ctx, intent); err != nil {
+	resp, err := s.createIntentHandler.Handle(ctx, &commands.CreateIntentCommand{
+		UserID:        req.UserId,
+		ParticipantID: req.ParticipantId,
+		Amount:        float64(req.Amount),
+		Currency:      req.Currency,
+		ReferenceType: req.ReferenceType,
+		ReferenceID:   req.ReferenceId,
+		Metadata:      metadata,
+		ExchangeRate:  exchangeRate,
+	})
+	if err != nil {
+		// Defence in depth: the handler already retries a lost find-or-create
+		// race internally, so this should only fire if that retry also fails.
+		if errors.Is(err, exceptions.ErrDuplicateOpenIntent) {
+			return nil, status.Error(codes.AlreadyExists, err.Error())
+		}
 		return nil, status.Errorf(codes.Internal, "failed to create intent: %v", err)
 	}
 
 	return &pb.CreateIntentResponse{
-		IntentId:     intent.ID,
-		Status:       string(intent.Status),
-		ClientSecret: intent.ClientSecret,
+		IntentId:     resp.IntentID,
+		Status:       resp.Status,
+		ClientSecret: resp.ClientSecret,
 	}, nil
 }
 
