@@ -1,6 +1,10 @@
 import { CommandHandler, ICommandHandler, QueryHandler, IQueryHandler } from '@nestjs/cqrs';
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
+import { IUserNotificationRepository } from '@core/interfaces/repositories/user-notification.repository.interface';
+import { UserNotification } from '@core/entities/user-notification.entity';
+import { LoaBatchReleasedPayload, LoaBatchReleasedRecipient } from '../../../../common/types/events';
 import { LoaReleaseBatchRepository } from '../../infrastructure/persistence/loa-release-batch.repository';
 import {
   CreateLoaBatchCommand,
@@ -100,14 +104,146 @@ export class UpdateLoaBatchHandler implements ICommandHandler<UpdateLoaBatchComm
 
 @CommandHandler(ReleaseLoaBatchCommand)
 export class ReleaseLoaBatchHandler implements ICommandHandler<ReleaseLoaBatchCommand> {
-  constructor(private readonly batchRepo: LoaReleaseBatchRepository) {}
+  private readonly logger = new Logger(ReleaseLoaBatchHandler.name);
+
+  constructor(
+    private readonly batchRepo: LoaReleaseBatchRepository,
+    private readonly prisma: PrismaService,
+    private readonly rabbitmqProducer: RabbitMQProducerService,
+    @Inject(IUserNotificationRepository)
+    private readonly userNotificationRepository: IUserNotificationRepository,
+  ) {}
 
   async execute(command: ReleaseLoaBatchCommand) {
-    const batch = await this.batchRepo.findById(command.batchId);
-    if (!batch || batch.programId !== command.programId) {
+    const existing = await this.batchRepo.findById(command.batchId);
+    if (!existing || existing.programId !== command.programId) {
       throw new NotFoundException('Batch not found');
     }
-    return this.batchRepo.release(command.batchId);
+
+    const { batch, transitioned } = await this.batchRepo.release(command.batchId);
+
+    // Only notify on a genuine unreleased→released transition. Re-releasing
+    // an already-released batch (double click, retried request) must NOT
+    // re-notify every eligible participant — `transitioned` is what makes
+    // this idempotent.
+    if (transitioned) {
+      // Best-effort: the release itself already committed above, so a
+      // notification failure must not turn into a 500 for the admin (and
+      // must not make them think the release failed and retry it — retrying
+      // would just no-op on `transitioned` and never notify anyone).
+      try {
+        await this.notifyEligibleRecipients(batch);
+      } catch (error) {
+        this.logger.error(
+          `[loa-batch] notify pipeline failed for batch=${batch.id}`,
+          error instanceof Error ? error.stack : String(error),
+        );
+      }
+    }
+
+    return batch;
+  }
+
+  private async notifyEligibleRecipients(batch: {
+    id: string;
+    programId: string;
+    name: string;
+    submissionFrom: Date;
+    submissionTo: Date;
+  }): Promise<void> {
+    const recipients = await this.batchRepo.findEligibleRecipients(
+      batch.programId,
+      batch.submissionFrom,
+      batch.submissionTo,
+    );
+
+    if (recipients.length === 0) {
+      this.logger.log(
+        `[loa-batch] batch=${batch.id} released with 0 eligible recipients — skipping notify`,
+      );
+      return;
+    }
+
+    // In-app notifications are written directly here rather than by
+    // services/notification: that service has no database access at all
+    // (no Prisma dependency in its package.json) — it only sends email. This
+    // reuses the one existing path that writes user_notifications today
+    // (IUserNotificationRepository.create), same as list/mark-read use.
+    await this.createInAppNotifications(batch, recipients);
+
+    const program = await this.prisma.program.findUnique({
+      where: { id: batch.programId },
+      select: { name: true },
+    });
+
+    const payload: LoaBatchReleasedPayload = {
+      batchId: batch.id,
+      programId: batch.programId,
+      programName: program?.name ?? '',
+      batchName: batch.name,
+      recipients,
+    };
+
+    try {
+      await this.rabbitmqProducer.emit('loa.batch.released', payload);
+    } catch (error) {
+      // In-app notifications above are already committed — a publish
+      // failure here must not roll back the release. Log loudly; there's no
+      // outbox for this event type (see PaymentOutboxService for that
+      // pattern if guaranteed delivery becomes a requirement later).
+      this.logger.error(
+        `[loa-batch] failed to publish loa.batch.released for batch=${batch.id}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+  }
+
+  private async createInAppNotifications(
+    batch: { id: string; name: string },
+    recipients: LoaBatchReleasedRecipient[],
+  ): Promise<void> {
+    const documentsUrl = this.buildDocumentsUrl();
+
+    const results = await Promise.allSettled(
+      recipients.map((recipient) =>
+        this.userNotificationRepository.create(
+          new UserNotification(
+            '',
+            recipient.userId,
+            'loa_available',
+            'Invitation Letter Ready',
+            `Your Invitation Letter for "${batch.name}" is ready. Log in to download it.`,
+            documentsUrl,
+            null,
+            'loa_release_batch',
+            batch.id,
+            {},
+            false,
+            null,
+            'normal',
+            false,
+            false,
+            null,
+            null,
+            new Date(),
+            null,
+            null,
+          ),
+        ),
+      ),
+    );
+
+    const failures = results.filter((result) => result.status === 'rejected');
+    if (failures.length > 0) {
+      this.logger.error(
+        `[loa-batch] ${failures.length}/${recipients.length} in-app notification writes failed for batch=${batch.id}`,
+      );
+    }
+  }
+
+  private buildDocumentsUrl(): string {
+    const baseUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+    return `${baseUrl}/dashboard/documents`;
   }
 }
 

@@ -924,6 +924,44 @@ export class EmailService {
     return this.sendRawEmail(to, subject, html);
   }
 
+  async sendLoaReadyEmail(
+    to: string,
+    data: {
+      name: string;
+      program?: string;
+      brand?: any;
+      brandId?: string;
+      programId?: string;
+    },
+  ) {
+    const templateData = {
+      name: data.name,
+      program: data.program,
+      documentsUrl: this.resolveDocumentsUrl(data.brand),
+      brand: data.brand,
+      brandId: data.brandId,
+      programId: data.programId,
+    };
+    const fallbackSubject = data.brand?.name
+      ? `Your Invitation Letter Is Ready - ${data.brand.name}`
+      : 'Your Invitation Letter Is Ready';
+    const { subject, html } = await this.resolveEmailContent({
+      type: 'loa_ready',
+      fallbackTemplateName: 'loa-ready',
+      fallbackSubject,
+      data: templateData,
+    });
+    return this.sendRawEmail(to, subject, html);
+  }
+
+  private resolveDocumentsUrl(brand?: any): string {
+    const baseUrl =
+      brand?.websiteUrl?.replace(/\/$/, '') ||
+      this.configService.get('FRONTEND_URL') ||
+      'http://localhost:3001';
+    return `${baseUrl}/dashboard/documents`;
+  }
+
   async sendAmbassadorWelcomeEmail(
     to: string,
     data: { name: string; referralCode: string; loginUrl: string; brand?: any },
