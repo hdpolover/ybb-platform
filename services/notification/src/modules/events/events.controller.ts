@@ -13,6 +13,7 @@ import {
 
 type EventPayload = Record<string, unknown>;
 type ReceiptItem = { name: string; quantity: number; price: number };
+type LoaRecipient = { userId: string; email: string; fullName: string };
 type RmqMessage = {
   content?: Buffer;
   properties?: {
@@ -675,6 +676,51 @@ export class EventsController {
     );
   }
 
+  @EventPattern('loa.batch.released')
+  async handleLoaBatchReleased(
+    @Payload() data: unknown,
+    @Ctx() context: RmqContext,
+  ) {
+    const payload = asRecord(data);
+    await this.processEvent(
+      'loa.batch.released',
+      payload,
+      context,
+      async () => {
+        this.logger.log(
+          `Received loa.batch.released event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+        );
+
+        const batchId = getString(payload, 'batchId');
+        const programId = getString(payload, 'programId');
+        const programName = getString(payload, 'programName');
+        const recipients = getLoaRecipients(payload, 'recipients');
+        if (recipients.length === 0) return;
+
+        // Per-recipient errors are caught and logged rather than thrown: this
+        // event carries the whole batch as one message, so throwing would
+        // nack the entire message and (depending on retry/idempotency state)
+        // either resend to already-succeeded recipients or, once the
+        // dedupe key set by canProcess() is already claimed, get silently
+        // skipped on retry. Best-effort per recipient avoids both.
+        for (const recipient of recipients) {
+          try {
+            await this.emailService.sendLoaReadyEmail(recipient.email, {
+              name: recipient.fullName || 'Participant',
+              program: programName,
+              programId,
+            });
+          } catch (error) {
+            this.logger.error(
+              `[loa-batch] failed to send LOA-ready email batch=${batchId} to=${maskEmail(recipient.email)}`,
+              error instanceof Error ? error.stack : String(error),
+            );
+          }
+        }
+      },
+    );
+  }
+
   @EventPattern('support.ticket.status-updated')
   async handleSupportTicketStatusUpdated(
     @Payload() data: unknown,
@@ -894,6 +940,28 @@ function getReceiptItems(
       name,
       quantity: Math.max(1, getNumber(item, 'quantity') || 1),
       price: Math.max(0, getNumber(item, 'price')),
+    });
+  }
+
+  return normalized;
+}
+
+function getLoaRecipients(
+  source: Record<string, unknown>,
+  key: string,
+): LoaRecipient[] {
+  const rawRecipients = getArray(source, key);
+  const normalized: LoaRecipient[] = [];
+
+  for (const rawRecipient of rawRecipients) {
+    const recipient = asRecord(rawRecipient);
+    const email = getString(recipient, 'email');
+    if (!email) continue;
+
+    normalized.push({
+      userId: getString(recipient, 'userId') || '',
+      email,
+      fullName: getString(recipient, 'fullName') || '',
     });
   }
 
