@@ -26,3 +26,17 @@ export interface UserRegisteredPayload {
   email?: string;
   brand_id?: string;
 }
+
+export interface LoaBatchReleasedRecipient {
+  userId: string;
+  email: string;
+  fullName: string;
+}
+
+export interface LoaBatchReleasedPayload {
+  batchId: string;
+  programId: string;
+  programName: string;
+  batchName: string;
+  recipients: LoaBatchReleasedRecipient[];
+}
