@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { GetBrandDetailQuery } from '../get-brand-detail.query';
 import { IBrandRepository } from '@core/interfaces/repositories/brand.repository.interface';
 import { BrandResponseDto } from '@modules/brands/presentation/dto/brand.dto';
+import { toSafeBrandSettingsResponse } from '@modules/brands/shared/brand-settings-response.util';
 
 @QueryHandler(GetBrandDetailQuery)
 export class GetBrandDetailHandler implements IQueryHandler<GetBrandDetailQuery> {
@@ -70,7 +71,7 @@ export class GetBrandDetailHandler implements IQueryHandler<GetBrandDetailQuery>
             createdAt: brand.createdAt,
             updatedAt: brand.updatedAt,
             deletedAt: brand.deletedAt || null,
-            settings: (brand.settings as unknown as Record<string, unknown>) || null,
+            settings: toSafeBrandSettingsResponse(brand.settings),
         };
     }
 }

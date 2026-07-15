@@ -10,6 +10,7 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { BrandLogoAssetsService } from '../../services/brand-logo-assets.service';
 import { Prisma } from '@prisma/client';
+import { toSafeBrandSettingsResponse } from '../../../shared/brand-settings-response.util';
 
 @CommandHandler(UpdateBrandDetailsCommand)
 export class UpdateBrandDetailsHandler implements ICommandHandler<UpdateBrandDetailsCommand> {
@@ -134,7 +135,7 @@ export class UpdateBrandDetailsHandler implements ICommandHandler<UpdateBrandDet
         dto.createdAt = brand.createdAt;
         dto.updatedAt = brand.updatedAt;
         dto.deletedAt = brand.deletedAt;
-        dto.settings = brand.settings as unknown as Record<string, unknown> | null;
+        dto.settings = toSafeBrandSettingsResponse(brand.settings);
         return dto;
     }
 

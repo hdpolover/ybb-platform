@@ -48,6 +48,14 @@ export class BrandSettingsDto {
   @ApiProperty({ example: '123456789', required: false, description: 'Meta/Facebook Pixel ID' })
   pixel_id?: string;
 
+  // SECURITY: capi_access_token (Meta Conversions API secret) is intentionally
+  // NOT a field on this DTO. This class is explicitly field-whitelisted (no
+  // entity spread), and settings.strategy.ts builds `brand.*` by hand — so the
+  // token can never leak through this public, unauthenticated endpoint. Do not
+  // add it here. The token is only ever read server-side inside MetaCapiService
+  // to authenticate the platform's own outbound call to Meta's Graph API; it
+  // never reaches any client response.
+
   @ApiProperty({ example: '+628123456789', required: false, description: 'Contact phone number' })
   contact_phone?: string;
 
