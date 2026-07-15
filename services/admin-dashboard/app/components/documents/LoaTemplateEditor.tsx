@@ -23,6 +23,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/src/ui/dialog";
+import { ConfirmDialog } from "@/src/admin/confirm-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -370,6 +371,7 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
   const [layout, setLayout] = useState<DocumentTemplateLayoutConfig>(DEFAULT_LAYOUT);
   const [templateName, setTemplateName] = useState("Invitation Letter");
   const [previewMode, setPreviewMode] = useState(false);
+  const [unpublishConfirmOpen, setUnpublishConfirmOpen] = useState(false);
 
   // Signatures (brand-scoped, reusable across templates)
   const [signatures, setSignatures] = useState<Signature[]>([]);
@@ -424,6 +426,7 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
       .then((list) => {
         const t = list[0] ?? null;
         setTemplate(t);
+        onTemplateChange?.(t);
         if (t) {
           setTemplateName(t.name);
           const lc = { ...DEFAULT_LAYOUT, ...(t.layoutConfig ?? {}) };
@@ -668,7 +671,13 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
           <button
             type="button"
             disabled={saving}
-            onClick={() => save(false)}
+            onClick={() => {
+              if (template?.isActive) {
+                setUnpublishConfirmOpen(true);
+              } else {
+                save(false);
+              }
+            }}
             className="flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
           >
             {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
@@ -1089,6 +1098,21 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Confirm unpublish (Save Draft on a currently-published template) */}
+      <ConfirmDialog
+        open={unpublishConfirmOpen}
+        onOpenChange={setUnpublishConfirmOpen}
+        title="Unpublish this template?"
+        description="This unpublishes the Invitation Letter and participants will lose access to download it, even from batches already released. Continue?"
+        confirmLabel="Unpublish"
+        cancelLabel="Keep Published"
+        variant="destructive"
+        onConfirm={async () => {
+          await save(false);
+          setUnpublishConfirmOpen(false);
+        }}
+      />
     </div>
   );
 }
