@@ -87,11 +87,22 @@ export class MetaCapiController {
         }
     }
 
+    // The X-Forwarded-For chain is `client, proxy1, proxy2, ...` where each hop
+    // appends the address it saw. A client can prepend arbitrary values, so the
+    // LEFTMOST entry is attacker-controlled — using it lets an attacker rotate a
+    // fake IP per request to defeat the per-IP rate limit, and feeds garbage to
+    // Meta's client_ip_address. The RIGHTMOST entry is the one our own trusted
+    // ingress appended, so it's the real connecting client (assuming a single
+    // trusted proxy hop, which is our deployment). If the proxy topology grows,
+    // configure Express `trust proxy` to the hop count and switch to `req.ip`.
     private extractIp(req: Request): string | undefined {
         const forwardedFor = req.headers['x-forwarded-for'];
-        const firstHop = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
-        if (firstHop) {
-            return firstHop.split(',')[0].trim();
+        const header = Array.isArray(forwardedFor) ? forwardedFor.join(',') : forwardedFor;
+        if (header) {
+            const hops = header.split(',').map((h) => h.trim()).filter(Boolean);
+            if (hops.length > 0) {
+                return hops[hops.length - 1];
+            }
         }
         return req.ip;
     }

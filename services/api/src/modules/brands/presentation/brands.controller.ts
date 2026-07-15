@@ -32,6 +32,8 @@ import { UpdateSocialFeedCommand } from '../application/commands/update-social-f
 import { DeleteSocialFeedCommand } from '../application/commands/delete-social-feed.command';
 import { GetBrandMetadataQuery } from '../application/queries/get-brand-metadata.query';
 import { BrandResponseDto, SocialFeedResponseDto, SponsorResponseDto } from './dto/brand.dto';
+import { Brand } from '@core/entities/brand.entity';
+import { toSafeBrandSettingsResponse } from '@modules/brands/shared/brand-settings-response.util';
 import { CreateSponsorDto, UpdateSponsorDto } from './dto/sponsor.dto';
 import { CreateSocialFeedDto, UpdateSocialFeedDto } from './dto/social-feed.dto';
 import { CreateBrandDto } from './dto/create-brand.dto';
@@ -233,7 +235,8 @@ export class BrandsController {
             logo: files?.logo?.[0],
             banner: files?.banner?.[0],
         };
-        return this.commandBus.execute(new CreateBrandCommand(dto, user.userId, uploadedFiles));
+        const brand: Brand = await this.commandBus.execute(new CreateBrandCommand(dto, user.userId, uploadedFiles));
+        return this.toSafeBrandResponse(brand);
     }
 
     @Put(':id')
@@ -260,7 +263,18 @@ export class BrandsController {
             logo: files?.logo?.[0],
             banner: files?.banner?.[0],
         };
-        return this.commandBus.execute(new UpdateBrandCommand(id, dto, user.userId, uploadedFiles));
+        const brand: Brand = await this.commandBus.execute(new UpdateBrandCommand(id, dto, user.userId, uploadedFiles));
+        return this.toSafeBrandResponse(brand);
+    }
+
+    // createBrand/updateBrand resolve the raw Brand entity, whose `settings`
+    // carries the Meta CAPI access token. Strip it at the HTTP boundary before
+    // it reaches the admin browser, mirroring the query + settings handlers.
+    private toSafeBrandResponse(brand: Brand): BrandResponseDto {
+        return {
+            ...brand,
+            settings: toSafeBrandSettingsResponse(brand.settings),
+        } as unknown as BrandResponseDto;
     }
 
     @Put(':id/details')
