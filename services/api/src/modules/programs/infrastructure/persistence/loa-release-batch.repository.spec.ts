@@ -29,8 +29,13 @@ describe('LoaReleaseBatchRepository', () => {
             loaReleaseBatch: {
               findMany: jest.fn(),
               findFirst: jest.fn(),
+              findUniqueOrThrow: jest.fn(),
               create: jest.fn(),
               update: jest.fn(),
+              updateMany: jest.fn(),
+            },
+            participantApplication: {
+              findMany: jest.fn(),
             },
           },
         },
@@ -78,12 +83,64 @@ describe('LoaReleaseBatchRepository', () => {
     expect(result.name).toBe('Wave 1');
   });
 
-  it('release sets releasedAt to now', async () => {
-    (prisma.loaReleaseBatch.update as jest.Mock).mockResolvedValue({ ...mockBatch, releasedAt: new Date() });
-    await repo.release('batch-1');
-    expect(prisma.loaReleaseBatch.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'batch-1' }, data: expect.objectContaining({ releasedAt: expect.any(Date) }) }),
+  it('release sets releasedAt and reports transitioned:true on the first release', async () => {
+    (prisma.loaReleaseBatch.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+    (prisma.loaReleaseBatch.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+      ...mockBatch,
+      releasedAt: new Date(),
+    });
+
+    const result = await repo.release('batch-1');
+
+    expect(prisma.loaReleaseBatch.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'batch-1', releasedAt: null },
+        data: expect.objectContaining({ releasedAt: expect.any(Date) }),
+      }),
     );
+    expect(result.transitioned).toBe(true);
+    expect(result.batch.releasedAt).toBeInstanceOf(Date);
+  });
+
+  it('release is idempotent: reports transitioned:false when already released', async () => {
+    (prisma.loaReleaseBatch.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+    (prisma.loaReleaseBatch.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+      ...mockBatch,
+      releasedAt: new Date('2026-01-05'),
+    });
+
+    const result = await repo.release('batch-1');
+
+    expect(result.transitioned).toBe(false);
+  });
+
+  it('findEligibleRecipients maps submitted/accepted applications in-window to userId/email/fullName', async () => {
+    (prisma.participantApplication.findMany as jest.Mock).mockResolvedValue([
+      {
+        participant: {
+          fullName: 'Jane Doe',
+          user: { id: 'user-1', email: 'jane@example.com' },
+        },
+      },
+    ]);
+
+    const result = await repo.findEligibleRecipients(
+      'prog-1',
+      new Date('2026-01-01'),
+      new Date('2026-03-31'),
+    );
+
+    expect(prisma.participantApplication.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          programId: 'prog-1',
+          status: { in: ['submitted', 'accepted'] },
+          submittedAt: { gte: new Date('2026-01-01'), lte: new Date('2026-03-31') },
+          deletedAt: null,
+        }),
+      }),
+    );
+    expect(result).toEqual([{ userId: 'user-1', email: 'jane@example.com', fullName: 'Jane Doe' }]);
   });
 
   it('unrelease clears releasedAt', async () => {

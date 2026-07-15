@@ -159,3 +159,95 @@ describe('EventsController.handlePaymentSucceeded — description field resoluti
     );
   });
 });
+
+describe('EventsController.handleLoaBatchReleased', () => {
+  let controller: EventsController;
+  let sendLoaReadyEmail: jest.Mock;
+
+  beforeEach(() => {
+    sendLoaReadyEmail = jest.fn().mockResolvedValue(undefined);
+    controller = new EventsController(
+      { sendLoaReadyEmail } as unknown as EmailService,
+      {} as ReceiptService,
+      {
+        shouldProcess: jest.fn().mockResolvedValue({ shouldProcess: true, dedupeKey: 'key', reason: 'new' }),
+        markProcessed: jest.fn().mockResolvedValue(undefined),
+      } as unknown as NotificationIdempotencyService,
+    );
+  });
+
+  it('sends one LOA-ready email per recipient', async () => {
+    const payload = {
+      batchId: 'batch-1',
+      programId: 'prog-1',
+      programName: 'YBB Summit 2026',
+      batchName: 'Wave 1',
+      recipients: [
+        { userId: 'user-1', email: 'jane@example.com', fullName: 'Jane Doe' },
+        { userId: 'user-2', email: 'john@example.com', fullName: 'John Smith' },
+      ],
+    };
+
+    await controller.handleLoaBatchReleased(payload, makeContext());
+
+    expect(sendLoaReadyEmail).toHaveBeenCalledTimes(2);
+    expect(sendLoaReadyEmail).toHaveBeenCalledWith(
+      'jane@example.com',
+      expect.objectContaining({ name: 'Jane Doe', program: 'YBB Summit 2026', programId: 'prog-1' }),
+    );
+    expect(sendLoaReadyEmail).toHaveBeenCalledWith(
+      'john@example.com',
+      expect.objectContaining({ name: 'John Smith' }),
+    );
+  });
+
+  it('does nothing when recipients array is empty', async () => {
+    const payload = {
+      batchId: 'batch-1',
+      programId: 'prog-1',
+      programName: 'YBB Summit 2026',
+      batchName: 'Wave 1',
+      recipients: [],
+    };
+
+    await controller.handleLoaBatchReleased(payload, makeContext());
+
+    expect(sendLoaReadyEmail).not.toHaveBeenCalled();
+  });
+
+  it('skips recipients without an email and continues sending to the rest', async () => {
+    const payload = {
+      batchId: 'batch-1',
+      programId: 'prog-1',
+      programName: 'YBB Summit 2026',
+      batchName: 'Wave 1',
+      recipients: [
+        { userId: 'user-1', fullName: 'No Email' },
+        { userId: 'user-2', email: 'john@example.com', fullName: 'John Smith' },
+      ],
+    };
+
+    await controller.handleLoaBatchReleased(payload, makeContext());
+
+    expect(sendLoaReadyEmail).toHaveBeenCalledTimes(1);
+    expect(sendLoaReadyEmail).toHaveBeenCalledWith('john@example.com', expect.anything());
+  });
+
+  it('continues sending to remaining recipients when one send fails', async () => {
+    sendLoaReadyEmail.mockRejectedValueOnce(new Error('smtp down')).mockResolvedValueOnce(undefined);
+    const payload = {
+      batchId: 'batch-1',
+      programId: 'prog-1',
+      programName: 'YBB Summit 2026',
+      batchName: 'Wave 1',
+      recipients: [
+        { userId: 'user-1', email: 'jane@example.com', fullName: 'Jane Doe' },
+        { userId: 'user-2', email: 'john@example.com', fullName: 'John Smith' },
+      ],
+    };
+
+    await controller.handleLoaBatchReleased(payload, makeContext());
+
+    expect(sendLoaReadyEmail).toHaveBeenCalledTimes(2);
+  });
+});
