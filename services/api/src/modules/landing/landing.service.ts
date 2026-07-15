@@ -31,7 +31,10 @@ export class LandingService {
     private readonly landingSnapshotService: LandingSnapshotService,
   ) { }
 
-  private async resolveBrand(url?: string): Promise<Brand | null> {
+  // Public: reused by the Meta CAPI module (MetaCapiService) to resolve a brand
+  // by its request Origin/Referer host without duplicating brand-by-domain
+  // lookup logic.
+  async resolveBrand(url?: string): Promise<Brand | null> {
     if (!url) {
       // Return default active brand if no URL specified, likely the main YBB one
       return this.prisma.brand.findFirst({
