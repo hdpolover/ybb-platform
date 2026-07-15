@@ -21,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/src/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/src/ui/tooltip";
 import { EmptyState } from "@/src/admin/empty-state";
 import { ConfirmDialog } from "@/src/admin/confirm-dialog";
 import { LoaBatchDialog } from "./LoaBatchDialog";
@@ -30,6 +31,14 @@ import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 
 interface LoaBatchesTabProps {
   programId: string;
+  /**
+   * Whether the program has an ACTIVE letter_of_acceptance template.
+   * `null` while unknown/loading — the Release action is only blocked once
+   * this resolves to `false`, to avoid flashing a disabled state.
+   */
+  hasActiveTemplate?: boolean | null;
+  /** Reports the latest batch list up to the parent (e.g. for a status banner). */
+  onBatchesChange?: (batches: LoaBatch[]) => void;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -46,6 +55,7 @@ interface BatchRowProps {
   onDeleteRequest: (batch: LoaBatch) => void;
   onToggleRelease: (batch: LoaBatch) => void;
   toggling: boolean;
+  hasActiveTemplate?: boolean | null;
 }
 
 function BatchRow({
@@ -54,8 +64,25 @@ function BatchRow({
   onDeleteRequest,
   onToggleRelease,
   toggling,
+  hasActiveTemplate,
 }: BatchRowProps) {
   const isReleased = !!batch.releasedAt;
+  // Only block once we positively know there's no active template — `null`
+  // (still loading) must not flash a disabled button.
+  const blockRelease = !isReleased && hasActiveTemplate === false;
+
+  const releaseButton = (
+    <Button
+      size="sm"
+      variant={isReleased ? "outline" : "default"}
+      onClick={() => onToggleRelease(batch)}
+      loading={toggling}
+      disabled={toggling || blockRelease}
+      className="min-w-[90px]"
+    >
+      {isReleased ? "Unrelease" : "Release"}
+    </Button>
+  );
 
   return (
     <TableRow>
@@ -72,16 +99,16 @@ function BatchRow({
       </TableCell>
       <TableCell>
         <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant={isReleased ? "outline" : "default"}
-            onClick={() => onToggleRelease(batch)}
-            loading={toggling}
-            disabled={toggling}
-            className="min-w-[90px]"
-          >
-            {isReleased ? "Unrelease" : "Release"}
-          </Button>
+          {blockRelease ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span tabIndex={0}>{releaseButton}</span>
+              </TooltipTrigger>
+              <TooltipContent>Publish an Invitation Letter template first.</TooltipContent>
+            </Tooltip>
+          ) : (
+            releaseButton
+          )}
           <Button
             size="sm"
             variant="outline"
@@ -106,7 +133,7 @@ function BatchRow({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function LoaBatchesTab({ programId }: LoaBatchesTabProps) {
+export function LoaBatchesTab({ programId, hasActiveTemplate = null, onBatchesChange }: LoaBatchesTabProps) {
   const resolvedProgramId = useResolvedProgramId(programId);
   const [batches, setBatches] = useState<LoaBatch[]>([]);
   const [loading, setLoading] = useState(true);
@@ -130,12 +157,13 @@ export function LoaBatchesTab({ programId }: LoaBatchesTabProps) {
     try {
       const data = await getLoaBatches(resolvedProgramId);
       setBatches(data);
+      onBatchesChange?.(data);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
-  }, [resolvedProgramId]);
+  }, [resolvedProgramId, onBatchesChange]);
 
   useEffect(() => {
     void fetchBatches();
@@ -186,6 +214,12 @@ export function LoaBatchesTab({ programId }: LoaBatchesTabProps) {
   }
 
   async function handleToggleRelease(batch: LoaBatch) {
+    // Defense in depth: the Release button is disabled in this state too,
+    // but guard the handler directly in case of a stale/race click.
+    if (!batch.releasedAt && hasActiveTemplate === false) {
+      toast.error("Publish an Invitation Letter template before releasing a batch.");
+      return;
+    }
     setTogglingId(batch.id);
     try {
       if (batch.releasedAt) {
@@ -193,7 +227,13 @@ export function LoaBatchesTab({ programId }: LoaBatchesTabProps) {
         toast.success(`Batch "${batch.name}" is now a draft.`);
       } else {
         await releaseLoaBatch(resolvedProgramId, batch.id);
-        toast.success(`Batch "${batch.name}" released. Eligible participants can now download their Invitation Letter.`);
+        if (hasActiveTemplate) {
+          toast.success(`Batch "${batch.name}" released. Eligible participants can now download their Invitation Letter.`);
+        } else {
+          // hasActiveTemplate is still unresolved (null) — release went through,
+          // but we can't yet confirm participants can actually download.
+          toast.warning(`Batch "${batch.name}" released. Confirm a template is published so participants can download.`);
+        }
       }
       void fetchBatches();
     } catch (err) {
@@ -272,6 +312,7 @@ export function LoaBatchesTab({ programId }: LoaBatchesTabProps) {
                 onDeleteRequest={handleDeleteRequest}
                 onToggleRelease={handleToggleRelease}
                 toggling={togglingId === batch.id}
+                hasActiveTemplate={hasActiveTemplate}
               />
             ))}
           </TableBody>
