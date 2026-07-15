@@ -217,15 +217,42 @@ func mustBuildHash(t *testing.T, methodCode, token string, details interface{}, 
 type stubIntentRepository struct {
 	intent  *entities.PaymentIntent
 	updates int
+
+	createErr      error
+	createCalls    int
+	createdIntents []*entities.PaymentIntent
+
+	// findOpenResults are returned in order, one per FindOpenByReference call
+	// (nil entries are valid: "no open intent found"). Once exhausted, (nil, nil)
+	// is returned. findOpenErr, if set, is returned on every call instead.
+	findOpenResults []*entities.PaymentIntent
+	findOpenErr     error
+	findOpenCalls   int
 }
 
 func (r *stubIntentRepository) Create(ctx context.Context, intent *entities.PaymentIntent) error {
+	r.createCalls++
+	if r.createErr != nil {
+		return r.createErr
+	}
+	r.createdIntents = append(r.createdIntents, intent)
 	return nil
 }
 func (r *stubIntentRepository) FindByID(ctx context.Context, id string) (*entities.PaymentIntent, error) {
 	return r.intent, nil
 }
 func (r *stubIntentRepository) FindByReference(ctx context.Context, refType, refID string) ([]*entities.PaymentIntent, error) {
+	return nil, nil
+}
+func (r *stubIntentRepository) FindOpenByReference(ctx context.Context, referenceType, referenceID string) (*entities.PaymentIntent, error) {
+	if r.findOpenErr != nil {
+		return nil, r.findOpenErr
+	}
+	idx := r.findOpenCalls
+	r.findOpenCalls++
+	if idx < len(r.findOpenResults) {
+		return r.findOpenResults[idx], nil
+	}
 	return nil, nil
 }
 func (r *stubIntentRepository) Update(ctx context.Context, intent *entities.PaymentIntent) error {

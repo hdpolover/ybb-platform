@@ -620,6 +620,10 @@ func (s *stubIntentRepository) FindByReference(ctx context.Context, refType, ref
 	return nil, nil
 }
 
+func (s *stubIntentRepository) FindOpenByReference(ctx context.Context, referenceType, referenceID string) (*entities.PaymentIntent, error) {
+	return nil, nil
+}
+
 func (s *stubIntentRepository) Update(ctx context.Context, intent *entities.PaymentIntent) error {
 	s.updated = intent
 	if s.byID == nil {

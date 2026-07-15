@@ -7,6 +7,7 @@ toolchain go1.24.11
 require (
 	github.com/gin-gonic/gin v1.11.0
 	github.com/google/uuid v1.6.0
+	github.com/jackc/pgx/v5 v5.7.0
 	github.com/joho/godotenv v1.5.1
 	github.com/midtrans/midtrans-go v1.3.8
 	github.com/plutov/paypal/v4 v4.16.0
@@ -59,7 +60,6 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.22.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgx/v5 v5.7.0 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
