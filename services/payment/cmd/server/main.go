@@ -185,6 +185,10 @@ func main() {
 	txRepo := persistence.NewGormPaymentTransactionRepository(db)
 	idempotencyRepo := persistence.NewGormPaymentIdempotencyRepository(db)
 
+	// Initialize Intent Handlers (created here, not near the HTTP handlers below,
+	// so the gRPC server construction can share this instance instead of a duplicate).
+	createIntentHandler := commandHandlers.NewCreateIntentHandler(intentRepo)
+
 	// Start gRPC Server
 	go func() {
 		grpcPort := "50053" // TODO: Move to config
@@ -201,6 +205,7 @@ func main() {
 			gatewayFactory,
 			eventPublisher,
 			cfg.DefaultGateway,
+			createIntentHandler,
 		)
 		pb.RegisterPaymentServiceServer(s, paymentGrpcService)
 		logger.Infof("gRPC server listening at %v", lis.Addr())
@@ -226,8 +231,8 @@ func main() {
 		registerGateways(context.Background(), cfg, gatewayFactory, gatewayConfigRepo, logger)
 	}
 
-	// Initialize Intent Handlers
-	createIntentHandler := commandHandlers.NewCreateIntentHandler(intentRepo)
+	// Initialize remaining Intent Handlers (createIntentHandler was constructed
+	// earlier, above the gRPC server setup, and is reused here).
 	confirmIntentHandler := commandHandlers.NewConfirmIntentHandler(intentRepo, txRepo, paymentMethodRepo, idempotencyRepo, gatewayFactory, cfg.DefaultGateway)
 	intentHandler := handlers.NewIntentHandler(createIntentHandler, confirmIntentHandler)
 
