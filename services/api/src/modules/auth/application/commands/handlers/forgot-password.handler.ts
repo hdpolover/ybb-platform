@@ -1,9 +1,13 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ForgotPasswordCommand } from '../forgot-password.command';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { randomBytes } from 'crypto';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { AuthLoggingService } from '../../services/auth-logging.service';
+
+// Returned for both existing and non-existent accounts. Must stay a single
+// constant: any divergence between the two paths re-opens account enumeration.
+const FORGOT_PASSWORD_RESPONSE = 'A password reset link has been sent to your email.';
 
 @Injectable()
 export class ForgotPasswordHandler {
@@ -82,8 +86,12 @@ export class ForgotPasswordHandler {
         });
 
         if (!user) {
+            // Respond identically to the success path. A 404 here let callers
+            // enumerate which emails have accounts. Timing still differs (the
+            // success path does token generation, a user update, a brand fetch
+            // and an event emit) — this closes the status/body channel only.
             this.logger.warn('Forgot password requested for non-existent account');
-            throw new NotFoundException(`User not found.`);
+            return { message: FORGOT_PASSWORD_RESPONSE };
         }
 
         // Generate a fake reset token for simulation
@@ -138,8 +146,6 @@ export class ForgotPasswordHandler {
             command.userAgent || 'unknown',
         );
 
-        return {
-            message: 'A password reset link has been sent to your email.',
-        };
+        return { message: FORGOT_PASSWORD_RESPONSE };
     }
 }
