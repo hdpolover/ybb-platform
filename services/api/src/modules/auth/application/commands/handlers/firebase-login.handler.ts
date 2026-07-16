@@ -11,7 +11,11 @@ import { FirebaseAuthService } from '../../../infrastructure/services/firebase-a
 import { AuthLoggingService } from '../../services/auth-logging.service';
 import { GeoIpService } from '@shared/infrastructure/geoip/geoip.service';
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
-import { ensureProgramApplication, resolveAuthTargetProgram } from '../../services/auth-program-linking.util';
+import {
+  ensureProgramApplication,
+  resolveAuthTargetProgram,
+  toProgramRegistrationInfo,
+} from '../../services/auth-program-linking.util';
 
 @Injectable()
 export class FirebaseLoginHandler {
@@ -257,6 +261,8 @@ export class FirebaseLoginHandler {
     }
 
     // 6.5. Ensure Participant Exists & Handle Program Linking (Auto-Registration Logic for ALL users)
+    let applicationResult: Awaited<ReturnType<typeof ensureProgramApplication>> | undefined;
+
     try {
         // Check for existing participant profile
         let participant = await this.prisma.participant.findUnique({
@@ -339,7 +345,7 @@ export class FirebaseLoginHandler {
             select: { id: true },
         });
 
-        const applicationResult = await ensureProgramApplication(this.prisma, {
+        applicationResult = await ensureProgramApplication(this.prisma, {
             participantId: participant.id,
             brandId,
             programId: requestedProgram?.id,
@@ -349,6 +355,10 @@ export class FirebaseLoginHandler {
         if (applicationResult.status === 'created') {
             this.logger.log(
                 `Auto-linked user ${user.id} to program ${applicationResult.program.name} (${applicationResult.program.id})`,
+            );
+        } else if (applicationResult.status === 'closed') {
+            this.logger.warn(
+                `Registration closed for program ${applicationResult.program.id} at auth time (userId: ${user.id})`,
             );
         }
 
@@ -458,6 +468,7 @@ export class FirebaseLoginHandler {
         isOnboardingCompleted: user.isOnboardingCompleted ?? false,
         registeredPrograms,
       },
+      programRegistration: applicationResult ? toProgramRegistrationInfo(applicationResult) : undefined,
     };
   }
 }
