@@ -44,6 +44,33 @@ type EnsureProgramApplicationResult =
   | { status: 'existing'; program: AuthTargetProgram }
   | { status: 'created'; program: AuthTargetProgram };
 
+/**
+ * Auth-response-facing view of a program-linking outcome that the client needs
+ * to surface to the user (e.g. "registration for X has closed"). Only the
+ * 'closed' outcome carries an actionable program to name; 'missing_target'
+ * covers both "no program was requested" (the common case) and "fallback
+ * found nothing open", which are indistinguishable and not worth surfacing.
+ */
+export type ProgramRegistrationInfo = {
+  status: 'closed';
+  programId: string;
+  programName: string;
+};
+
+export function toProgramRegistrationInfo(
+  result: EnsureProgramApplicationResult,
+): ProgramRegistrationInfo | undefined {
+  if (result.status !== 'closed') {
+    return undefined;
+  }
+
+  return {
+    status: 'closed',
+    programId: result.program.id,
+    programName: result.program.name,
+  };
+}
+
 function buildOpenRegistrationFilter(now: Date): Prisma.ProgramWhereInput {
   return {
     isPublished: true,
