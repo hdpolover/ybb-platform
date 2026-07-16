@@ -1,0 +1,100 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    restart: always
+    # No ports exposed to host, only via Traefik
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-4000}
+      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres-api:5432/${DATABASE_NAME}
+      REDIS_URL: redis://default:${REDIS_PASSWORD}@${REDIS_HOST:-ybb-platform-redis-service-omv9vw}:6379
+      REDIS_HOST: ${REDIS_HOST:-ybb-platform-redis-service-omv9vw}
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      # Links to other services (on same dokploy-network)
+      PAYMENT_SERVICE_URL: ${PAYMENT_SERVICE_URL}
+      PAYMENT_SERVICE_FALLBACK_URL: ${PAYMENT_SERVICE_FALLBACK_URL}
+      PAYMENT_SERVICE_INTERNAL_KEY: ${PAYMENT_SERVICE_INTERNAL_KEY}
+      PAYMENT_GRPC_URL: ${PAYMENT_GRPC_URL}
+      FILE_SERVICE_URL: ${FILE_SERVICE_URL}
+      FILE_SERVICE_INTERNAL_KEY: ${FILE_SERVICE_INTERNAL_KEY}
+      STORAGE_PUBLIC_URL: ${STORAGE_PUBLIC_URL}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@ybb-prod-shared-rabbitmq:5672/
+      RABBITMQ_QUEUE_CLEANUP_ON_DEPLOY: ${RABBITMQ_QUEUE_CLEANUP_ON_DEPLOY:-false}
+      # NOTE: api-service-payment-events must NOT be a cleanup target. Purging it
+      # drops in-flight payment.succeeded events, which silently leaves paid invoices
+      # stuck unpaid and blocks application submission. Reconciliation is the safety net.
+      RABBITMQ_QUEUE_CLEANUP_TARGETS: ${RABBITMQ_QUEUE_CLEANUP_TARGETS:-audit_log_queue,reporting_queue}
+      RABBITMQ_QUEUE_CLEANUP_INCLUDE_RETRY_DLQ: ${RABBITMQ_QUEUE_CLEANUP_INCLUDE_RETRY_DLQ:-true}
+      # Optional overrides for RabbitMQ Management API used by cleanup script
+      RABBITMQ_MANAGEMENT_URL: ${RABBITMQ_MANAGEMENT_URL:-}
+      RABBITMQ_MANAGEMENT_USER: ${RABBITMQ_MANAGEMENT_USER:-}
+      RABBITMQ_MANAGEMENT_PASS: ${RABBITMQ_MANAGEMENT_PASS:-}
+      RABBITMQ_MANAGEMENT_VHOST: ${RABBITMQ_MANAGEMENT_VHOST:-}
+      # Auth
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
+      JWT_ADMIN_EXPIRES_IN: ${JWT_ADMIN_EXPIRES_IN:-8h}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      ADMIN_REGISTRATION_SECRET: ${ADMIN_REGISTRATION_SECRET}
+      # Rate Limiting
+      THROTTLE_SHORT_LIMIT: ${THROTTLE_SHORT_LIMIT:-20}
+      THROTTLE_MEDIUM_LIMIT: ${THROTTLE_MEDIUM_LIMIT:-100}
+      THROTTLE_LONG_LIMIT: ${THROTTLE_LONG_LIMIT:-300}
+      # gRPC
+      FILE_GRPC_URL: ${FILE_GRPC_URL:-ybb-prod-file:50052}
+      # Firebase Admin
+      # Option 1: Full JSON in Env Var (Recommended for Dokploy)
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON}
+      # Firebase Client
+      FIREBASE_API_KEY: ${FIREBASE_API_KEY}
+      FIREBASE_AUTH_DOMAIN: ${FIREBASE_AUTH_DOMAIN}
+      FIREBASE_STORAGE_BUCKET: ${FIREBASE_STORAGE_BUCKET}
+      FIREBASE_MESSAGING_SENDER_ID: ${FIREBASE_MESSAGING_SENDER_ID}
+      FIREBASE_APP_ID: ${FIREBASE_APP_ID}
+      FIREBASE_MEASUREMENT_ID: ${FIREBASE_MEASUREMENT_ID}
+      # Advanced Features Configuration
+      READ_REPLICA_URL: ${READ_REPLICA_URL:-}
+      CIRCUIT_BREAKER_FAILURE_THRESHOLD: ${CIRCUIT_BREAKER_FAILURE_THRESHOLD:-5}
+      CIRCUIT_BREAKER_SUCCESS_THRESHOLD: ${CIRCUIT_BREAKER_SUCCESS_THRESHOLD:-3}
+      CIRCUIT_BREAKER_TIMEOUT: ${CIRCUIT_BREAKER_TIMEOUT:-60000}
+      # Observability
+      LOKI_URL: ${LOKI_URL}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_LOG_LEVEL: ${OTEL_LOG_LEVEL:-info}
+    depends_on:
+      postgres-api:
+        condition: service_healthy
+    networks:
+      - dokploy-network
+    # Dokploy handles Traefik labels and SSL termination automatically via the UI
+
+  postgres-api:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
+      # Safety switch for automatic seeding (Default: false)
+      ENABLE_DB_SEEDING: ${ENABLE_DB_SEEDING:-false}
+    volumes:
+      - postgres_api_data_prod:/var/lib/postgresql/data
+      - ./database-dump:/docker-entrypoint-initdb.d:rw
+    networks:
+      - dokploy-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  postgres_api_data_prod:

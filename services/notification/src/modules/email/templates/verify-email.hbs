@@ -1,0 +1,29 @@
+<div style="text-align: center;">
+    <h2 style="font-size: 24px; font-weight: 700; color: {{theme.primaryDark}}; margin: 0 0 16px;">
+        Verify Your Email
+    </h2>
+    
+    <p style="font-size: 16px; color: #4b5563; margin-bottom: 24px;">
+        Hi {{name}},
+    </p>
+
+    <p style="font-size: 16px; color: #4b5563; margin-bottom: 32px; line-height: 1.6; max-width: 480px; margin-left: auto; margin-right: auto;">
+        Welcome to <strong>{{#if brand.name}}{{brand.name}}{{else}}YBB Platform{{/if}}</strong>! 
+        To maintain the security of your account and access all features, please verify your email address by clicking the button below.
+    </p>
+
+    <a href="{{verificationUrl}}" class="cta-button">
+        Verify My Account
+    </a>
+
+    <p style="margin-top: 32px; font-size: 14px; color: {{theme.primaryDark}};">
+        This link will expire in 24 hours.
+    </p>
+
+    <div style="margin-top: 32px; border-top: 1px solid {{theme.border}}; padding-top: 24px;">
+        <p style="font-size: 13px; color: #9ca3af; line-height: 1.5; margin-bottom: 8px;">
+            Button not working? Copy and paste this URL into your browser:
+        </p>
+        <a href="{{verificationUrl}}" class="link break-word" style="font-size: 13px;">{{verificationUrl}}</a>
+    </div>
+</div>

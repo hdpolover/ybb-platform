@@ -1,0 +1,103 @@
+services:
+  # =========================================
+  # File Service (Python)
+  # =========================================
+  file:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: file-file
+    container_name: ybb-file
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+      - "50052:50052"
+    environment:
+      SERVICE_PORT: 8001
+      PYTHON_ENV: development
+      # Database
+      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres-file:5432/${DATABASE_NAME}
+      # RabbitMQ
+      RABBITMQ_URL: amqp://guest:guest@host.docker.internal:5672/
+      # MinIO (Remote/Staging by default as per root config)
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_SECURE: ${MINIO_SECURE}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
+      MINIO_PUBLIC_SECURE: ${MINIO_PUBLIC_SECURE}
+      # Observability
+      LOKI_URL: ${LOKI_URL}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+    volumes:
+      - .:/app
+    depends_on:
+      postgres-file:
+        condition: service_healthy
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - ybb-network
+
+  # =========================================
+  # Dedicated Postgres for File Service
+  # =========================================
+  postgres-file:
+    image: postgres:15-alpine
+    container_name: ybb-postgres-file
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
+    ports:
+      - "5434:5432" # Exposed on 5434 to avoid conflict
+    volumes:
+      - postgres_file_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =========================================
+  # Local MinIO (Optional)
+  # =========================================
+  # Note: Standard dev uses DigitalOcean Spaces (via .env).
+  # Run this only if you need completely offline dev.
+  minio:
+    image: minio/minio:RELEASE.2024-01-16T16-07-38Z
+    container_name: ybb-minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    profiles: [ "offline" ] # Only start if explicitly requested
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - default
+
+volumes:
+  postgres_file_data:
+  minio_data:
+
+networks:
+  ybb-network:
+    name: ybb-network
+    external: true

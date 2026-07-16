@@ -1,0 +1,217 @@
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum AssessmentType {
+  document_review
+  interview
+  essay_scoring
+  final_assessment
+}
+
+enum AssessmentStatus {
+  pending
+  in_progress
+  completed
+  skipped
+}
+
+enum Gender {
+  male
+  female
+}
+
+enum ApplicationCategory {
+  fully_funded
+  self_funded
+}
+
+enum ApplicationStatus {
+  draft
+  submitted
+  under_review
+  interview_scheduled
+  accepted
+  rejected
+  waitlisted
+  withdrawn
+}
+
+enum ScoreStatus {
+  pending
+  scored
+  go_to_interview
+  rejected
+}
+
+enum ReferralStatus {
+  referred
+  registered
+  applied
+  accepted
+  completed
+}
+
+enum BlockType {
+  temporary
+  permanent
+}
+
+enum RiskLevel {
+  low
+  medium
+  high
+  critical
+}
+
+enum NotificationPriority {
+  low
+  normal
+  high
+  urgent
+}
+
+enum AnnouncementTarget {
+  all
+  participants
+  ambassadors
+  specific_program
+}
+
+enum AnnouncementPriority {
+  low
+  normal
+  high
+  urgent
+}
+
+enum AnnouncementType {
+  general
+  maintenance
+  deadline
+  feature
+  alert
+}
+
+enum FaqCategory {
+  general
+  registration
+  payment
+  event_details
+  accommodation
+  visa
+  other
+}
+
+enum DeletionStatus {
+  pending
+  approved
+  rejected
+  completed
+  cancelled
+}
+
+enum Theme {
+  light
+  dark
+  auto
+}
+
+enum ChangeType {
+  create
+  update
+  delete
+  status_change
+  bulk_update
+}
+
+enum ChangedByType {
+  participant
+  admin
+  system
+  webhook
+}
+
+enum PricingFeeType {
+  registration_fee
+  program_fee_1
+  program_fee_2
+  full_fee
+  custom_fee
+}
+
+enum PricingTarget {
+  self_funded
+  fully_funded
+  all
+}
+
+enum SupportTicketStatus {
+  open
+  in_progress
+  waiting_response
+  resolved
+  closed
+}
+
+enum SupportTicketPriority {
+  low
+  normal
+  high
+  urgent
+}
+
+enum DocumentTemplateType {
+  letter_of_acceptance
+  letter_of_invitation
+  certificate_participation
+  certificate_achievement
+  certificate_speaker
+  letter_recommendation
+  agreement_letter
+  complementary_document
+  custom
+}
+
+enum TimelineType {
+  registration
+  announcement_loa
+  payment_1
+  payment_2
+  mentoring
+  interview
+  announcement_final
+  program_start
+  program_end
+  onboarding
+  custom
+}
+
+enum TimelineCompletionType {
+  date_passed // Step completes when date passes
+  status_change // Step completes when ApplicationStatus matches
+  payment_completed // Step completes when a specific Fee Type is paid
+  document_uploaded // Step completes when a specific document is uploaded
+  manual // Step must be manually marked by admin
+  always_open // Informational only
+}
+
+enum PaymentStatus {
+  unpaid
+  paid
+  processing
+  failed
+  refunded
+  cancelled
+}
+
+enum ScoringStage {
+  application
+  interview
+}
+
+enum ProgramFormat {
+  in_person
+  hybrid
+  online
+}

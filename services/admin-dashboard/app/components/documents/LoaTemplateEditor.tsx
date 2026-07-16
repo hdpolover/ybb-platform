@@ -1,0 +1,1118 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
+import { useEditor, EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import TextAlign from "@tiptap/extension-text-align";
+import Underline from "@tiptap/extension-underline";
+import { TextStyle } from "@tiptap/extension-text-style";
+import Link from "@tiptap/extension-link";
+import Placeholder from "@tiptap/extension-placeholder";
+import {
+  Bold, Italic, Underline as UnderlineIcon, AlignLeft, AlignCenter,
+  AlignRight, List, ListOrdered, Undo, Redo, RemoveFormatting,
+  Heading1, Heading2, Loader2, CheckCircle2, Upload, ImageIcon, X, Eye, EyeOff,
+  ChevronDown, Pencil,
+} from "lucide-react";
+import { toast } from "sonner";
+import { useAuth } from "@/app/contexts/AuthContext";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/src/ui/dialog";
+import { ConfirmDialog } from "@/src/admin/confirm-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/src/ui/dropdown-menu";
+import {
+  listDocumentTemplates,
+  createDocumentTemplate,
+  updateDocumentTemplate,
+  listProgramMedia,
+  uploadFileViaPresignedUrl,
+  listSignatures,
+  createSignature,
+  updateSignature,
+  deleteSignature,
+  type DocumentTemplate,
+  type DocumentTemplatePlaceholder,
+  type DocumentTemplateLayoutConfig,
+  type MediaFile,
+  type Signature,
+} from "@/src/shared/api-client";
+import { formatDate } from "@/lib/utils";
+
+const PLACEHOLDER_TOKENS: DocumentTemplatePlaceholder[] = [
+  { key: "{{participant_name}}", label: "Participant Full Name", source: "participant.fullName" },
+  { key: "{{program_name}}", label: "Program Name", source: "program.name" },
+  { key: "{{acceptance_date}}", label: "Acceptance Date", source: "generated_at" },
+  { key: "{{batch}}", label: "Batch / Cohort", source: "program.batch" },
+  { key: "{{document_number}}", label: "Document Number", source: "participant_document.documentNumber" },
+  { key: "{{participation_category}}", label: "Participation Category", source: "application.participationCategory.name" },
+  { key: "{{program_location}}", label: "Program Location", source: "program.location" },
+  { key: "{{start_date}}", label: "Start Date", source: "program.startDate" },
+  { key: "{{end_date}}", label: "End Date", source: "program.endDate" },
+  { key: "{{institution}}", label: "Institution", source: "participant.institution" },
+  { key: "{{nationality}}", label: "Nationality", source: "participant.nationality" },
+  { key: "{{date_of_birth}}", label: "Date of Birth", source: "participant.birthdate" },
+  { key: "{{gender}}", label: "Gender", source: "participant.gender" },
+  { key: "{{country_of_origin}}", label: "Country of Origin", source: "participant.originCountry" },
+  { key: "{{signer_name}}", label: "Signer Name", source: "signer_name" },
+  { key: "{{signer_title}}", label: "Signer Title", source: "signer_title" },
+  { key: "{{program_year}}", label: "Program Year", source: "program.year" },
+  { key: "{{participant_email}}", label: "Participant Email", source: "participant.email" },
+  { key: "{{participant_phone}}", label: "Participant Phone", source: "participant.phone" },
+  { key: "{{major}}", label: "Major", source: "participant.major" },
+  { key: "{{occupation}}", label: "Occupation", source: "participant.occupation" },
+  { key: "{{program_theme}}", label: "Program Theme", source: "program.theme" },
+  { key: "{{brand_name}}", label: "Brand Name", source: "brand.name" },
+];
+
+const DEFAULT_LAYOUT: DocumentTemplateLayoutConfig = {
+  pageSize: "A4",
+  margins: { top: 40, right: 40, bottom: 40, left: 40 },
+  headerHtml: "",
+  footerHtml: "",
+  logoUrl: "",
+  signatureUrl: "",
+};
+
+function ToolbarBtn({
+  onClick, active, title, disabled, children,
+}: {
+  onClick: () => void; active?: boolean; title?: string; disabled?: boolean; children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      disabled={disabled}
+      onMouseDown={(e) => { e.preventDefault(); onClick(); }}
+      className={[
+        "flex h-7 w-7 items-center justify-center rounded transition-colors",
+        active ? "bg-blue-100 text-blue-700" : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900",
+        disabled ? "pointer-events-none opacity-30" : "",
+      ].join(" ")}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Sep() {
+  return <div className="mx-0.5 h-5 w-px bg-zinc-200" />;
+}
+
+const inputCls =
+  "block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
+
+const labelCls = "block text-[11px] font-medium text-zinc-500 mb-1";
+
+// ─── Image Upload Field ───────────────────────────────────────────────────────
+
+function ImageUploadField({
+  label,
+  value,
+  onChange,
+  programId,
+  brandId,
+  userId,
+}: {
+  label: string;
+  value: string;
+  onChange: (url: string) => void;
+  programId: string;
+  brandId: string;
+  userId: string;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [mediaOpen, setMediaOpen] = useState(false);
+  const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
+  const [mediaLoading, setMediaLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const result = await uploadFileViaPresignedUrl(file, {
+        userId,
+        brandId,
+        programId,
+        bucket: "documents",
+        assetType: "image",
+      });
+      if (result.publicUrl) onChange(result.publicUrl);
+      else toast.error("Upload succeeded but no URL returned");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  async function openMediaLibrary() {
+    setMediaOpen(true);
+    setMediaLoading(true);
+    try {
+      const result = await listProgramMedia({ programId, brandId, limit: 50 });
+      setMediaFiles(result.files.filter((f) => f.content_type.startsWith("image/")));
+    } catch {
+      toast.error("Failed to load media library");
+    } finally {
+      setMediaLoading(false);
+    }
+  }
+
+  return (
+    <>
+      <div>
+        <label className={labelCls}>{label}</label>
+        {value ? (
+          <div className="relative mb-2 flex h-16 items-center justify-center overflow-hidden rounded-md border border-zinc-200 bg-zinc-50">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={value} alt="" className="h-full w-auto max-w-full object-contain p-1" />
+            <button
+              type="button"
+              title="Remove"
+              onClick={() => onChange("")}
+              className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white text-zinc-400 shadow ring-1 ring-zinc-200 hover:text-red-500"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        ) : null}
+        <div className="flex gap-1.5">
+          <button
+            type="button"
+            disabled={uploading}
+            onClick={() => fileInputRef.current?.click()}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+          >
+            {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+            Upload
+          </button>
+          <button
+            type="button"
+            onClick={openMediaLibrary}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50"
+          >
+            <ImageIcon className="h-3 w-3" />
+            Media Library
+          </button>
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+      </div>
+
+      <Dialog open={mediaOpen} onOpenChange={setMediaOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Media Library</DialogTitle>
+          </DialogHeader>
+          {mediaLoading ? (
+            <div className="flex h-40 items-center justify-center">
+              <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />
+            </div>
+          ) : mediaFiles.length === 0 ? (
+            <p className="py-10 text-center text-xs text-zinc-400">No images found in media library.</p>
+          ) : (
+            <div className="grid max-h-96 grid-cols-4 gap-2 overflow-y-auto">
+              {mediaFiles.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => { onChange(f.url ?? f.download_url ?? ""); setMediaOpen(false); }}
+                  className="group relative aspect-square overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50 hover:border-blue-400"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={f.url ?? f.download_url ?? ""}
+                    alt={f.alt_text ?? f.original_filename}
+                    className="h-full w-full object-contain p-1"
+                  />
+                  <div className="absolute inset-x-0 bottom-0 truncate bg-black/50 px-1 py-0.5 text-[9px] text-white opacity-0 group-hover:opacity-100">
+                    {f.original_filename}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+// ─── Mini Section Editor (header / footer) ────────────────────────────────────
+
+/** Dropdown listing every token in `tokens`, inserting the selected one at the cursor. */
+function TokenInsertMenu({
+  editor,
+  tokens,
+}: {
+  editor: ReturnType<typeof useEditor> | null;
+  tokens: DocumentTemplatePlaceholder[];
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          title="Insert token"
+          className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-zinc-600 hover:bg-zinc-100"
+        >
+          Tokens
+          <ChevronDown className="h-3 w-3" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="max-h-64 w-64 overflow-y-auto">
+        {tokens.map((t) => (
+          <DropdownMenuItem
+            key={t.key}
+            onSelect={() => editor?.chain().focus().insertContent(t.key).run()}
+            className="flex flex-col items-start gap-0"
+          >
+            <span className="text-xs text-zinc-700">{t.label}</span>
+            <code className="text-[10px] font-mono text-blue-600">{t.key}</code>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function MiniEditor({
+  editor,
+  tokenLabel,
+  tokenKey,
+  allTokens,
+  placeholder,
+}: {
+  editor: ReturnType<typeof useEditor> | null;
+  tokenLabel: string;
+  tokenKey: string;
+  allTokens: DocumentTemplatePlaceholder[];
+  placeholder?: string;
+}) {
+  void placeholder;
+  return (
+    <div className="rounded-lg border border-zinc-200 bg-white">
+      <div className="flex flex-wrap items-center gap-0.5 border-b border-zinc-200 px-2 py-1">
+        <ToolbarBtn title="Bold" active={editor?.isActive("bold")} onClick={() => editor?.chain().focus().toggleBold().run()}>
+          <Bold className="h-3 w-3" />
+        </ToolbarBtn>
+        <ToolbarBtn title="Italic" active={editor?.isActive("italic")} onClick={() => editor?.chain().focus().toggleItalic().run()}>
+          <Italic className="h-3 w-3" />
+        </ToolbarBtn>
+        <ToolbarBtn title="Underline" active={editor?.isActive("underline")} onClick={() => editor?.chain().focus().toggleUnderline().run()}>
+          <UnderlineIcon className="h-3 w-3" />
+        </ToolbarBtn>
+        <Sep />
+        <ToolbarBtn title="Align Left" active={editor?.isActive({ textAlign: "left" })} onClick={() => editor?.chain().focus().setTextAlign("left").run()}>
+          <AlignLeft className="h-3 w-3" />
+        </ToolbarBtn>
+        <ToolbarBtn title="Align Center" active={editor?.isActive({ textAlign: "center" })} onClick={() => editor?.chain().focus().setTextAlign("center").run()}>
+          <AlignCenter className="h-3 w-3" />
+        </ToolbarBtn>
+        <ToolbarBtn title="Align Right" active={editor?.isActive({ textAlign: "right" })} onClick={() => editor?.chain().focus().setTextAlign("right").run()}>
+          <AlignRight className="h-3 w-3" />
+        </ToolbarBtn>
+        <Sep />
+        <button
+          type="button"
+          title={`Insert ${tokenLabel}`}
+          onMouseDown={(e) => { e.preventDefault(); editor?.chain().focus().insertContent(tokenKey).run(); }}
+          className="rounded bg-blue-50 px-2 py-0.5 font-mono text-[10px] text-blue-700 hover:bg-blue-100"
+        >
+          {tokenKey}
+        </button>
+        <TokenInsertMenu editor={editor} tokens={allTokens} />
+      </div>
+      <div className="min-h-[72px] px-4 py-3">
+        {editor && <EditorContent editor={editor} />}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+interface LoaTemplateEditorProps {
+  programId: string;
+  onTemplateChange?: (template: DocumentTemplate | null) => void;
+}
+
+export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEditorProps) {
+  const resolvedProgramId = useResolvedProgramId(programId);
+  const { accessiblePrograms, adminProfile } = useAuth();
+  const program = accessiblePrograms.find(
+    (p) => p.programId === programId || p.programSlug === programId,
+  );
+  const brandId = program?.brandId ?? "";
+  const userId = adminProfile?.userId ?? "";
+
+  const [template, setTemplate] = useState<DocumentTemplate | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [layout, setLayout] = useState<DocumentTemplateLayoutConfig>(DEFAULT_LAYOUT);
+  const [templateName, setTemplateName] = useState("Invitation Letter");
+  const [previewMode, setPreviewMode] = useState(false);
+  const [unpublishConfirmOpen, setUnpublishConfirmOpen] = useState(false);
+
+  // Signatures (brand-scoped, reusable across templates)
+  const [signatures, setSignatures] = useState<Signature[]>([]);
+  const [signaturesLoading, setSignaturesLoading] = useState(false);
+  const [signatureFormOpen, setSignatureFormOpen] = useState(false);
+  const [editingSignature, setEditingSignature] = useState<Signature | null>(null);
+  const [sigFormName, setSigFormName] = useState("");
+  const [sigFormTitle, setSigFormTitle] = useState("");
+  const [sigFormImageUrl, setSigFormImageUrl] = useState("");
+  const [sigFormSaving, setSigFormSaving] = useState(false);
+
+  const editorExtensions = [
+    StarterKit,
+    Underline,
+    TextStyle,
+    TextAlign.configure({ types: ["heading", "paragraph"] }),
+    Link.configure({ openOnClick: false }),
+  ];
+
+  const headerEditor = useEditor({
+    immediatelyRender: false,
+    extensions: [
+      ...editorExtensions,
+      Placeholder.configure({ placeholder: "Header content — use {{logo}} to insert the logo…" }),
+    ],
+    editorProps: { attributes: { class: "focus:outline-none text-sm leading-relaxed" } },
+  });
+
+  const editor = useEditor({
+    immediatelyRender: false,
+    extensions: [
+      ...editorExtensions,
+      Placeholder.configure({ placeholder: "Write your Invitation Letter body here. Click placeholders on the right to insert them…" }),
+    ],
+    editorProps: { attributes: { class: "focus:outline-none min-h-[400px] text-sm leading-relaxed" } },
+  });
+
+  const footerEditor = useEditor({
+    immediatelyRender: false,
+    extensions: [
+      ...editorExtensions,
+      Placeholder.configure({ placeholder: "Footer content — use {{signature}} to insert the signature image…" }),
+    ],
+    editorProps: { attributes: { class: "focus:outline-none text-sm leading-relaxed" } },
+  });
+
+  // Load existing template
+  useEffect(() => {
+    if (!resolvedProgramId) return;
+    setLoading(true);
+    listDocumentTemplates(resolvedProgramId, "letter_of_acceptance")
+      .then((list) => {
+        const t = list[0] ?? null;
+        setTemplate(t);
+        onTemplateChange?.(t);
+        if (t) {
+          setTemplateName(t.name);
+          const lc = { ...DEFAULT_LAYOUT, ...(t.layoutConfig ?? {}) };
+          setLayout(lc);
+        }
+      })
+      .catch(() => toast.error("Failed to load Invitation Letter template"))
+      .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolvedProgramId]);
+
+  const refreshSignatures = useCallback(() => {
+    if (!brandId) return;
+    setSignaturesLoading(true);
+    listSignatures(brandId)
+      .then(setSignatures)
+      .catch(() => toast.error("Failed to load signatures"))
+      .finally(() => setSignaturesLoading(false));
+  }, [brandId]);
+
+  useEffect(() => {
+    refreshSignatures();
+  }, [refreshSignatures]);
+
+  function openCreateSignature() {
+    setEditingSignature(null);
+    setSigFormName("");
+    setSigFormTitle("");
+    setSigFormImageUrl("");
+    setSignatureFormOpen(true);
+  }
+
+  function openEditSignature(sig: Signature) {
+    setEditingSignature(sig);
+    setSigFormName(sig.name);
+    setSigFormTitle(sig.title ?? "");
+    setSigFormImageUrl(sig.imageUrl);
+    setSignatureFormOpen(true);
+  }
+
+  async function saveSignatureForm() {
+    if (!sigFormName.trim()) {
+      toast.error("Signature name is required");
+      return;
+    }
+    if (!sigFormImageUrl) {
+      toast.error("Signature image is required");
+      return;
+    }
+    setSigFormSaving(true);
+    try {
+      if (editingSignature) {
+        await updateSignature(editingSignature.id, {
+          name: sigFormName.trim(),
+          title: sigFormTitle.trim() || undefined,
+          imageUrl: sigFormImageUrl,
+        });
+        toast.success("Signature updated");
+      } else {
+        await createSignature({
+          brandId,
+          name: sigFormName.trim(),
+          title: sigFormTitle.trim() || undefined,
+          imageUrl: sigFormImageUrl,
+        });
+        toast.success("Signature created");
+      }
+      setSignatureFormOpen(false);
+      refreshSignatures();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save signature");
+    } finally {
+      setSigFormSaving(false);
+    }
+  }
+
+  async function removeSignature(sig: Signature) {
+    if (!window.confirm(`Delete signature "${sig.name}"? This cannot be undone.`)) return;
+    try {
+      await deleteSignature(sig.id);
+      if (layout.signatureId === sig.id) {
+        setLayout((l) => ({ ...l, signatureId: undefined }));
+      }
+      toast.success("Signature deleted");
+      refreshSignatures();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete signature");
+    }
+  }
+
+  // Set editor content once editors + template are ready
+  const contentSetRef = useRef(false);
+  useEffect(() => {
+    if (contentSetRef.current || !template) return;
+    if (editor && template.htmlContent) {
+      editor.commands.setContent(template.htmlContent, { emitUpdate: false });
+    }
+    if (headerEditor && template.layoutConfig?.headerHtml) {
+      headerEditor.commands.setContent(template.layoutConfig.headerHtml, { emitUpdate: false });
+    }
+    if (footerEditor && template.layoutConfig?.footerHtml) {
+      footerEditor.commands.setContent(template.layoutConfig.footerHtml, { emitUpdate: false });
+    }
+    if (editor && headerEditor && footerEditor) {
+      contentSetRef.current = true;
+    }
+  }, [editor, headerEditor, footerEditor, template]);
+
+  const insertPlaceholder = useCallback((key: string) => {
+    if (!editor) return;
+    editor.chain().focus().insertContent(key).run();
+  }, [editor]);
+
+  async function save(publish: boolean) {
+    if (!editor) return;
+    setSaving(true);
+    const htmlContent = editor.getHTML();
+    const headerHtml = headerEditor?.getHTML() ?? layout.headerHtml ?? "";
+    const footerHtml = footerEditor?.getHTML() ?? layout.footerHtml ?? "";
+    const body = {
+      name: templateName,
+      type: "letter_of_acceptance" as const,
+      htmlContent,
+      placeholders: PLACEHOLDER_TOKENS,
+      layoutConfig: { ...layout, headerHtml, footerHtml },
+      audienceType: "all_registered",
+      isActive: publish,
+    };
+    try {
+      if (template) {
+        const updated = await updateDocumentTemplate(template.id, body);
+        setTemplate(updated);
+        onTemplateChange?.(updated);
+        toast.success(publish ? "Template published" : "Draft saved");
+      } else {
+        const created = await createDocumentTemplate(resolvedProgramId, { ...body, userId, brandId });
+        setTemplate(created);
+        onTemplateChange?.(created);
+        toast.success(publish ? "Template published" : "Draft saved");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function buildPreviewDoc(): string {
+    const SAMPLE: Record<string, string> = {
+      "{{participant_name}}": "Jane Doe",
+      "{{program_name}}": program?.programName ?? "Your Program",
+      "{{acceptance_date}}": formatDate(new Date(), { year: "numeric", month: "long", day: "numeric" }),
+      "{{batch}}": "Batch 1",
+      "{{document_number}}": "DOC-2026-001",
+      "{{participation_category}}": "International Delegate",
+      "{{program_location}}": "Jakarta, Indonesia",
+      "{{start_date}}": formatDate(new Date(2026, 6, 20), { year: "numeric", month: "long", day: "numeric" }),
+      "{{end_date}}": formatDate(new Date(2026, 6, 27), { year: "numeric", month: "long", day: "numeric" }),
+      "{{institution}}": "State University of Jakarta",
+      "{{nationality}}": "Indonesian",
+      "{{date_of_birth}}": formatDate(new Date(2002, 4, 12), { year: "numeric", month: "long", day: "numeric" }),
+      "{{gender}}": "Female",
+      "{{country_of_origin}}": "Indonesia",
+      "{{signer_name}}": "Dr. Jane Doe",
+      "{{signer_title}}": "Program Director",
+      "{{program_year}}": "2026",
+      "{{participant_email}}": "jane.doe@example.com",
+      "{{participant_phone}}": "+62 812345678",
+      "{{major}}": "International Relations",
+      "{{occupation}}": "Student",
+      "{{program_theme}}": "Innovate for Tomorrow",
+      "{{brand_name}}": "Japan Youth Summit",
+      "{{logo}}": layout.logoUrl
+        ? `<img src="${layout.logoUrl}" style="height:60px;display:block;margin:0 auto 6px" />`
+        : `<div style="display:inline-block;height:60px;width:120px;background:#e5e7eb;border-radius:6px;line-height:60px;text-align:center;font-size:11px;color:#6b7280">[LOGO]</div>`,
+      "{{signature}}": layout.signatureUrl
+        ? `<img src="${layout.signatureUrl}" style="height:48px;display:block;margin-bottom:4px" />`
+        : `<div style="display:inline-block;height:48px;width:120px;background:#e5e7eb;border-radius:4px;line-height:48px;text-align:center;font-size:11px;color:#6b7280">[SIGNATURE]</div>`,
+    };
+
+    const m = layout.margins ?? { top: 40, right: 40, bottom: 40, left: 40 };
+    let combined = [
+      headerEditor?.getHTML() ?? "",
+      editor?.getHTML() ?? "",
+      footerEditor?.getHTML() ?? "",
+    ].join("\n");
+
+    for (const [key, val] of Object.entries(SAMPLE)) {
+      combined = combined.split(key).join(val);
+    }
+
+    return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"/>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Georgia,serif;font-size:12pt;line-height:1.7;color:#111;
+       padding:${m.top}pt ${m.right}pt ${m.bottom}pt ${m.left}pt;background:#fff}
+  h1{font-size:20pt;margin-bottom:10pt;font-weight:700}
+  h2{font-size:15pt;margin-bottom:8pt;font-weight:600}
+  h3{font-size:13pt;margin-bottom:6pt;font-weight:600}
+  p{margin-bottom:9pt}
+  ul,ol{margin:0 0 9pt 18pt}
+  li{margin-bottom:3pt}
+  strong{font-weight:700}
+  em{font-style:italic}
+  u{text-decoration:underline}
+  img{max-width:100%}
+  [style*="text-align:center"],[style*="text-align: center"]{text-align:center}
+  [style*="text-align:right"],[style*="text-align: right"]{text-align:right}
+</style>
+</head><body>${combined}</body></html>`;
+  }
+
+  if (loading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-col gap-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-lg font-semibold text-zinc-900">Invitation Letter Template Editor</h1>
+          <p className="text-xs text-zinc-500">
+            {template ? (template.isActive ? "Published" : "Draft") : "No template yet"}
+            {template && ` · Last updated ${formatDate(template.updatedAt)}`}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setPreviewMode((p) => !p)}
+            className="flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+          >
+            {previewMode ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            {previewMode ? "Edit" : "Preview"}
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => {
+              if (template?.isActive) {
+                setUnpublishConfirmOpen(true);
+              } else {
+                save(false);
+              }
+            }}
+            className="flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+            Save Draft
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => save(true)}
+            className="flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            Publish
+          </button>
+        </div>
+      </div>
+
+      {/* Template name */}
+      <div className="w-80">
+        <label className={labelCls}>Template Name</label>
+        <input
+          className={inputCls}
+          value={templateName}
+          onChange={(e) => setTemplateName(e.target.value)}
+          placeholder="Invitation Letter"
+        />
+      </div>
+
+      {/* Two-column editor */}
+      <div className="flex flex-1 gap-4 overflow-hidden">
+        {/* Left: editors or preview (60%) */}
+        <div className="flex w-[60%] flex-col gap-3 overflow-y-auto">
+          {previewMode ? (
+            <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-inner" style={{ minHeight: 600 }}>
+              <div className="flex items-center gap-2 border-b border-zinc-100 bg-zinc-50 px-4 py-2 text-[11px] text-zinc-500">
+                <Eye className="h-3 w-3" />
+                Preview — sample data substituted
+              </div>
+              <iframe
+                srcDoc={buildPreviewDoc()}
+                sandbox="allow-same-origin"
+                className="h-full w-full flex-1"
+                title="Invitation Letter Preview"
+                style={{ minHeight: 560 }}
+              />
+            </div>
+          ) : (
+            <>
+              {/* Header editor */}
+              <div>
+                <label className={labelCls}>Header</label>
+                <MiniEditor
+                  editor={headerEditor}
+                  tokenLabel="Logo"
+                  tokenKey="{{logo}}"
+                  allTokens={PLACEHOLDER_TOKENS}
+                  placeholder="Header content — use {{logo}} to insert the logo…"
+                />
+              </div>
+
+              {/* Body editor */}
+              <div className="flex flex-1 flex-col rounded-lg border border-zinc-200 bg-white">
+                <div className="flex flex-wrap items-center gap-0.5 border-b border-zinc-200 px-2 py-1.5">
+                  <ToolbarBtn title="Undo" disabled={!editor?.can().undo()} onClick={() => editor?.chain().focus().undo().run()}>
+                    <Undo className="h-3.5 w-3.5" />
+                  </ToolbarBtn>
+                  <ToolbarBtn title="Redo" disabled={!editor?.can().redo()} onClick={() => editor?.chain().focus().redo().run()}>
+                    <Redo className="h-3.5 w-3.5" />
+                  </ToolbarBtn>
+                  <Sep />
+                  <ToolbarBtn title="H1" active={editor?.isActive("heading", { level: 1 })} onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}>
+                    <Heading1 className="h-3.5 w-3.5" />
+                  </ToolbarBtn>
+                  <ToolbarBtn title="H2" active={editor?.isActive("heading", { level: 2 })} onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}>
+                    <Heading2 className="h-3.5 w-3.5" />
+                  </ToolbarBtn>
+                  <Sep />
+                  <ToolbarBtn title="Bold" active={editor?.isActive("bold")} onClick={() => editor?.chain().focus().toggleBold().run()}>
+                    <Bold className="h-3.5 w-3.5" />
+                  </ToolbarBtn>
+                  <ToolbarBtn title="Italic" active={editor?.isActive("italic")} onClick={() => editor?.chain().focus().toggleItalic().run()}>
+                    <Italic className="h-3.5 w-3.5" />
+                  </ToolbarBtn>
+                  <ToolbarBtn title="Underline" active={editor?.isActive("underline")} onClick={() => editor?.chain().focus().toggleUnderline().run()}>
+                    <UnderlineIcon className="h-3.5 w-3.5" />
+                  </ToolbarBtn>
+                  <Sep />
+                  <ToolbarBtn title="Align Left" active={editor?.isActive({ textAlign: "left" })} onClick={() => editor?.chain().focus().setTextAlign("left").run()}>
+                    <AlignLeft className="h-3.5 w-3.5" />
+                  </ToolbarBtn>
+                  <ToolbarBtn title="Align Center" active={editor?.isActive({ textAlign: "center" })} onClick={() => editor?.chain().focus().setTextAlign("center").run()}>
+                    <AlignCenter className="h-3.5 w-3.5" />
+                  </ToolbarBtn>
+                  <ToolbarBtn title="Align Right" active={editor?.isActive({ textAlign: "right" })} onClick={() => editor?.chain().focus().setTextAlign("right").run()}>
+                    <AlignRight className="h-3.5 w-3.5" />
+                  </ToolbarBtn>
+                  <Sep />
+                  <ToolbarBtn title="Bullet List" active={editor?.isActive("bulletList")} onClick={() => editor?.chain().focus().toggleBulletList().run()}>
+                    <List className="h-3.5 w-3.5" />
+                  </ToolbarBtn>
+                  <ToolbarBtn title="Numbered List" active={editor?.isActive("orderedList")} onClick={() => editor?.chain().focus().toggleOrderedList().run()}>
+                    <ListOrdered className="h-3.5 w-3.5" />
+                  </ToolbarBtn>
+                  <Sep />
+                  <ToolbarBtn title="Clear Formatting" onClick={() => editor?.chain().focus().unsetAllMarks().clearNodes().run()}>
+                    <RemoveFormatting className="h-3.5 w-3.5" />
+                  </ToolbarBtn>
+                </div>
+                <div className="flex-1 overflow-y-auto px-5 py-4">
+                  {editor && <EditorContent editor={editor} />}
+                </div>
+              </div>
+
+              {/* Footer editor */}
+              <div>
+                <label className={labelCls}>Footer</label>
+                <MiniEditor
+                  editor={footerEditor}
+                  tokenLabel="Signature"
+                  tokenKey="{{signature}}"
+                  allTokens={PLACEHOLDER_TOKENS}
+                  placeholder="Footer content — use {{signature}} to insert the signature image…"
+                />
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Right: sidebar (40%) */}
+        <div className="flex w-[40%] flex-col gap-4 overflow-y-auto">
+          {/* Placeholders */}
+          <div className="rounded-lg border border-zinc-200 bg-white p-4">
+            <h3 className="mb-1 text-xs font-semibold text-zinc-800">Placeholder Tokens</h3>
+            <p className="mb-3 text-[11px] text-zinc-500">Click to insert at cursor position</p>
+            <div className="flex flex-col gap-1.5">
+              {PLACEHOLDER_TOKENS.map((p) => (
+                <button
+                  key={p.key}
+                  type="button"
+                  onClick={() => insertPlaceholder(p.key)}
+                  className="flex items-center justify-between rounded-md border border-zinc-100 bg-zinc-50 px-3 py-2 text-left transition hover:border-blue-200 hover:bg-blue-50"
+                >
+                  <span className="text-[11px] text-zinc-600">{p.label}</span>
+                  <code className="ml-2 shrink-0 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-mono text-blue-700">
+                    {p.key}
+                  </code>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Layout config */}
+          <div className="rounded-lg border border-zinc-200 bg-white p-4">
+            <h3 className="mb-3 text-xs font-semibold text-zinc-800">Layout Settings</h3>
+
+            <div className="mb-3">
+              <label className={labelCls}>Page Size</label>
+              <select
+                className={inputCls}
+                value={layout.pageSize ?? "A4"}
+                onChange={(e) => setLayout((l) => ({ ...l, pageSize: e.target.value }))}
+              >
+                <option value="A4">A4</option>
+                <option value="Letter">Letter</option>
+              </select>
+            </div>
+
+            <div className="mb-4">
+              <label className={labelCls}>Margins (pt)</label>
+              <div className="grid grid-cols-4 gap-1.5">
+                {(["top", "right", "bottom", "left"] as const).map((side) => (
+                  <div key={side}>
+                    <span className="block text-center text-[10px] text-zinc-400 mb-0.5 capitalize">{side}</span>
+                    <input
+                      type="number"
+                      min={0}
+                      className={inputCls + " text-center"}
+                      value={layout.margins?.[side] ?? 40}
+                      onChange={(e) =>
+                        setLayout((l) => ({
+                          ...l,
+                          margins: { ...(l.margins ?? { top: 40, right: 40, bottom: 40, left: 40 }), [side]: Number(e.target.value) },
+                        }))
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <ImageUploadField
+                label="Logo"
+                value={layout.logoUrl ?? ""}
+                onChange={(url) => setLayout((l) => ({ ...l, logoUrl: url }))}
+                programId={resolvedProgramId}
+                brandId={brandId}
+                userId={userId}
+              />
+            </div>
+
+            <div className="mb-1">
+              <span className={labelCls}>Letterhead Details</span>
+              <p className="mb-2 text-[10px] text-zinc-400">
+                Program name and batch render automatically — these fill the tagline/contact row next to the logo.
+              </p>
+            </div>
+            <div className="mb-4 grid grid-cols-2 gap-2">
+              <div>
+                <label className={labelCls}>Tagline</label>
+                <input
+                  className={inputCls}
+                  value={layout.header?.tagline ?? ""}
+                  onChange={(e) =>
+                    setLayout((l) => ({ ...l, header: { ...(l.header ?? {}), tagline: e.target.value } }))
+                  }
+                  placeholder="e.g. Empowering Youth Leaders"
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Website</label>
+                <input
+                  className={inputCls}
+                  value={layout.header?.website ?? ""}
+                  onChange={(e) =>
+                    setLayout((l) => ({ ...l, header: { ...(l.header ?? {}), website: e.target.value } }))
+                  }
+                  placeholder="ybb.foundation"
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Email</label>
+                <input
+                  className={inputCls}
+                  value={layout.header?.email ?? ""}
+                  onChange={(e) =>
+                    setLayout((l) => ({ ...l, header: { ...(l.header ?? {}), email: e.target.value } }))
+                  }
+                  placeholder="info@ybb.foundation"
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Phone</label>
+                <input
+                  className={inputCls}
+                  value={layout.header?.phone ?? ""}
+                  onChange={(e) =>
+                    setLayout((l) => ({ ...l, header: { ...(l.header ?? {}), phone: e.target.value } }))
+                  }
+                  placeholder="+62 21 000 0000"
+                />
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <ImageUploadField
+                label="Stamp"
+                value={layout.stampUrl ?? ""}
+                onChange={(url) => setLayout((l) => ({ ...l, stampUrl: url }))}
+                programId={resolvedProgramId}
+                brandId={brandId}
+                userId={userId}
+              />
+              <p className="mt-1 text-[10px] text-zinc-400">Rendered above the signature.</p>
+            </div>
+
+            <div>
+              <ImageUploadField
+                label="Legacy signature image (fallback — used only when no signature is selected below)"
+                value={layout.signatureUrl ?? ""}
+                onChange={(url) => setLayout((l) => ({ ...l, signatureUrl: url }))}
+                programId={resolvedProgramId}
+                brandId={brandId}
+                userId={userId}
+              />
+            </div>
+          </div>
+
+          {/* Signature picker */}
+          <div className="rounded-lg border border-zinc-200 bg-white p-4">
+            <div className="mb-1 flex items-center justify-between">
+              <h3 className="text-xs font-semibold text-zinc-800">Signature</h3>
+              <button
+                type="button"
+                onClick={openCreateSignature}
+                className="text-[11px] font-medium text-blue-600 hover:text-blue-700"
+              >
+                + New
+              </button>
+            </div>
+            <p className="mb-3 text-[11px] text-zinc-500">
+              Signer name and title render under the signature image automatically.
+            </p>
+
+            {signaturesLoading ? (
+              <div className="flex h-16 items-center justify-center">
+                <Loader2 className="h-4 w-4 animate-spin text-zinc-400" />
+              </div>
+            ) : signatures.length === 0 ? (
+              <p className="rounded-md border border-zinc-100 bg-zinc-50 px-3 py-4 text-center text-[11px] text-zinc-400">
+                No signatures yet for this brand. Add one to select it here.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setLayout((l) => ({ ...l, signatureId: undefined }))}
+                  className={[
+                    "rounded-md border px-3 py-2 text-left text-[11px] transition",
+                    !layout.signatureId
+                      ? "border-blue-300 bg-blue-50 text-blue-700"
+                      : "border-zinc-100 bg-zinc-50 text-zinc-500 hover:border-blue-200 hover:bg-blue-50",
+                  ].join(" ")}
+                >
+                  None (use legacy signature image)
+                </button>
+                {signatures.map((sig) => (
+                  <div
+                    key={sig.id}
+                    className={[
+                      "flex items-center gap-2 rounded-md border px-2 py-1.5 transition",
+                      layout.signatureId === sig.id
+                        ? "border-blue-300 bg-blue-50"
+                        : "border-zinc-100 bg-zinc-50 hover:border-blue-200",
+                    ].join(" ")}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setLayout((l) => ({ ...l, signatureId: sig.id }))}
+                      className="flex flex-1 items-center gap-2 text-left"
+                    >
+                      <div className="flex h-8 w-14 shrink-0 items-center justify-center overflow-hidden rounded border border-zinc-200 bg-white">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={sig.imageUrl} alt="" className="h-full w-full object-contain p-0.5" />
+                      </div>
+                      <span className="min-w-0">
+                        <span className="block truncate text-[11px] font-medium text-zinc-700">{sig.name}</span>
+                        {sig.title ? (
+                          <span className="block truncate text-[10px] text-zinc-400">{sig.title}</span>
+                        ) : null}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      title="Edit signature"
+                      onClick={() => openEditSignature(sig)}
+                      className="shrink-0 text-zinc-400 hover:text-blue-600"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Delete signature"
+                      onClick={() => removeSignature(sig)}
+                      className="shrink-0 text-zinc-400 hover:text-red-500"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Signature create/edit modal */}
+      <Dialog open={signatureFormOpen} onOpenChange={setSignatureFormOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingSignature ? "Edit Signature" : "New Signature"}</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className={labelCls}>Name</label>
+              <input
+                className={inputCls}
+                value={sigFormName}
+                onChange={(e) => setSigFormName(e.target.value)}
+                placeholder="e.g. Dr. Jane Doe"
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Title (optional)</label>
+              <input
+                className={inputCls}
+                value={sigFormTitle}
+                onChange={(e) => setSigFormTitle(e.target.value)}
+                placeholder="e.g. Program Director"
+              />
+            </div>
+            <ImageUploadField
+              label="Signature Image"
+              value={sigFormImageUrl}
+              onChange={setSigFormImageUrl}
+              programId={resolvedProgramId}
+              brandId={brandId}
+              userId={userId}
+            />
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setSignatureFormOpen(false)}
+                className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={sigFormSaving}
+                onClick={saveSignatureForm}
+                className="flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {sigFormSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                {editingSignature ? "Save Changes" : "Create Signature"}
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm unpublish (Save Draft on a currently-published template) */}
+      <ConfirmDialog
+        open={unpublishConfirmOpen}
+        onOpenChange={setUnpublishConfirmOpen}
+        title="Unpublish this template?"
+        description="This unpublishes the Invitation Letter and participants will lose access to download it, even from batches already released. Continue?"
+        confirmLabel="Unpublish"
+        cancelLabel="Keep Published"
+        variant="destructive"
+        onConfirm={async () => {
+          await save(false);
+          setUnpublishConfirmOpen(false);
+        }}
+      />
+    </div>
+  );
+}

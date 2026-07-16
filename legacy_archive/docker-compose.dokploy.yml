@@ -1,0 +1,523 @@
+services:
+  # =========================================
+  # Database Initialization
+  # =========================================
+  db-init:
+    image: postgres:16-alpine
+    restart: "no"
+    networks:
+      - ybb-network
+    # depends_on:
+    #   postgres:
+    #     condition: service_healthy
+    command: >
+      /bin/sh -c "
+      export PGPASSWORD=${DATABASE_PASSWORD};
+      until pg_isready -h ${DATABASE_HOST} -U ${DATABASE_USER} -d postgres; do echo waiting for postgres; sleep 2; done;
+      psql -h ${DATABASE_HOST} -U ${DATABASE_USER} -d postgres -tc \"SELECT 1 FROM pg_database WHERE datname = 'ybb_payments_db'\" | grep -q 1 || psql -h ${DATABASE_HOST} -U ${DATABASE_USER} -d postgres -c \"CREATE DATABASE ybb_payments_db\";
+      psql -h ${DATABASE_HOST} -U ${DATABASE_USER} -d postgres -tc \"SELECT 1 FROM pg_database WHERE datname = 'ybb_files_db'\" | grep -q 1 || psql -h ${DATABASE_HOST} -U ${DATABASE_USER} -d postgres -c \"CREATE DATABASE ybb_files_db\";
+      echo 'Databases verified/created';
+      "
+
+  # =========================================
+  # Database GUI (PgAdmin) -> db.ybbhub.com
+  # =========================================
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@ybbhub.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
+      PGADMIN_CONFIG_SERVER_MODE: "True"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+      PGADMIN_CONFIG_CHECK_EMAIL_DELIVERABILITY: "False"
+    volumes:
+      - pgadmin_data_v3:/var/lib/pgadmin
+      # Mount different config based on Environment? 
+      # Dockploy doesn't support conditional mounting easily.
+      # We'll stick to a generic Servers.json that we can override later 
+      # OR just mount the specific staging one if we are in Staging.
+      # For now, let's keep it simple (servers.json) but you might need to update the file on the server.
+      - ./infrastructure/pgadmin/servers.${APP_ENV:-prod}.json:/pgadmin4/servers.json:ro
+    networks:
+      - ybb-network
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pgadmin-${APP_ENV:-prod}.rule=Host(`${DOMAIN_DB}`)"
+      - "traefik.http.routers.pgadmin-${APP_ENV:-prod}.entrypoints=websecure"
+      - "traefik.http.routers.pgadmin-${APP_ENV:-prod}.tls.certresolver=letsencrypt"
+      - "traefik.http.services.pgadmin-${APP_ENV:-prod}.loadbalancer.server.port=80"
+      - "traefik.docker.network=dokploy-network"
+
+  # =========================================
+  # Cache (Redis)
+  # =========================================
+  # redis:
+  #   image: redis:7-alpine
+  #   restart: unless-stopped
+  #   # Use the mounted config file AND the password from environment
+  #   command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD}
+  #   volumes:
+  #     - redis_data:/data
+  #     - ./infrastructure/redis/redis.conf:/usr/local/etc/redis/redis.conf
+  #   networks:
+  #     - ybb-network
+  #   healthcheck:
+  #     test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping" ]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '2.0'
+  #         memory: 2G
+  #       reservations:
+  #         cpus: '0.25'
+  #         memory: 256M
+
+  # =========================================
+  # Storage (MinIO) - Conditional
+  # If APP_ENV=staging: Run Minio + Use local file-service env
+  # If APP_ENV=prod: Do NOT run Minio (use spaces) + file-service uses external env
+  # =========================================
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+      MINIO_BROWSER_REDIRECT_URL: "https://${DOMAIN_CONSOLE}"
+      MINIO_SERVER_URL: "https://${DOMAIN_S3}"
+    volumes:
+      - /var/ybb-storage:/data
+    networks:
+      - ybb-network
+      - dokploy-network
+    labels:
+      - "traefik.enable=${ENABLE_MINIO:-true}" # Disable if using Spaces
+      # API (S3)
+      - "traefik.http.routers.minio-api-${APP_ENV:-prod}.rule=Host(`${DOMAIN_S3}`)"
+      - "traefik.http.routers.minio-api-${APP_ENV:-prod}.entrypoints=websecure"
+      - "traefik.http.routers.minio-api-${APP_ENV:-prod}.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.minio-api-${APP_ENV:-prod}.service=minio-api-service-${APP_ENV:-prod}"
+      - "traefik.http.services.minio-api-service-${APP_ENV:-prod}.loadbalancer.server.port=9000"
+      # Console
+      - "traefik.http.routers.minio-console-${APP_ENV:-prod}.rule=Host(`${DOMAIN_CONSOLE}`)"
+      - "traefik.http.routers.minio-console-${APP_ENV:-prod}.entrypoints=websecure"
+      - "traefik.http.routers.minio-console-${APP_ENV:-prod}.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.minio-console-${APP_ENV:-prod}.service=minio-console-service-${APP_ENV:-prod}"
+      - "traefik.http.services.minio-console-service-${APP_ENV:-prod}.loadbalancer.server.port=9001"
+      - "traefik.docker.network=dokploy-network"
+    profiles:
+      - staging  # Only start this container when profile 'staging' is active OR if you don't use profiles...
+                 # Simpler approach for Dockploy: Use an if/else env var or keep it running but unused.
+                 # Since Dockploy might not support 'profiles' easily via UI, we'll keep it simple.
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  # =========================================
+  # Storage Browser (Filestash) - For Prod (Spaces)
+  # =========================================
+  file-browser:
+    image: machines/filestash:latest
+    restart: unless-stopped
+    networks:
+      - ybb-network
+      - dokploy-network
+    labels:
+      - "traefik.enable=${ENABLE_FILESTASH:-false}"
+      - "traefik.http.routers.file-browser-${APP_ENV:-prod}.rule=Host(`${DOMAIN_CONSOLE}`)"
+      - "traefik.http.routers.file-browser-${APP_ENV:-prod}.entrypoints=websecure"
+      - "traefik.http.routers.file-browser-${APP_ENV:-prod}.tls.certresolver=letsencrypt"
+      - "traefik.http.services.file-browser-${APP_ENV:-prod}.loadbalancer.server.port=8334"
+      - "traefik.docker.network=dokploy-network"
+
+
+  # =========================================
+  # Message Queue (RabbitMQ) -> queue.ybbhub.com
+  # =========================================
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - ybb-network
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rabbitmq-${APP_ENV:-prod}.rule=Host(`${DOMAIN_QUEUE}`)"
+      - "traefik.http.routers.rabbitmq-${APP_ENV:-prod}.entrypoints=websecure"
+      - "traefik.http.routers.rabbitmq-${APP_ENV:-prod}.tls.certresolver=letsencrypt"
+      - "traefik.http.services.rabbitmq-${APP_ENV:-prod}.loadbalancer.server.port=15672"
+      - "traefik.docker.network=dokploy-network"
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "ping" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.25'
+          memory: 512M
+
+  # =========================================
+  # API Gateway (NestJS) -> api.ybbhub.com
+  # =========================================
+  api:
+    build:
+      context: ./services/api
+      dockerfile: Dockerfile.prod
+    # Run database migration (and cache warming, if needed) before starting the app
+    # 'npx prisma migrate deploy' ensures the DB schema is up to date
+    command: /bin/sh -c "npx prisma migrate deploy && node dist/src/main"
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 4000
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRATION}
+      REDIS_URL: ${REDIS_URL}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      FILE_SERVICE_URL: ${FILE_SERVICE_URL}
+      PAYMENT_SERVICE_URL: ${PAYMENT_SERVICE_URL}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+    networks:
+      - ybb-network
+      - dokploy-network
+    depends_on:
+      # postgres:
+      #   condition: service_healthy
+      # redis:
+      #   condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api-${APP_ENV:-prod}.rule=Host(`${DOMAIN_API}`)"
+      - "traefik.http.routers.api-${APP_ENV:-prod}.entrypoints=websecure"
+      - "traefik.http.routers.api-${APP_ENV:-prod}.tls.certresolver=letsencrypt"
+      - "traefik.http.services.api-${APP_ENV:-prod}.loadbalancer.server.port=4000"
+      - "traefik.docker.network=dokploy-network"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:4000/v1/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # =========================================
+  # Payment Service (Go) -> payments.ybbhub.com
+  # =========================================
+  payment-service:
+    build:
+      context: ./services/payment-service
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    environment:
+      PORT: 8002
+      DATABASE_URL: ${DATABASE_URL_PAYMENT}
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      MIDTRANS_SERVER_KEY: ${MIDTRANS_SERVER_KEY:-}
+      MIDTRANS_CLIENT_KEY: ${MIDTRANS_CLIENT_KEY:-}
+      MIDTRANS_IS_PRODUCTION: ${MIDTRANS_IS_PRODUCTION:-false}
+    networks:
+      - ybb-network
+      - dokploy-network
+    depends_on:
+      # postgres:
+      #   condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.payment-${APP_ENV:-prod}.rule=Host(`${DOMAIN_PAYMENT}`)"
+      - "traefik.http.routers.payment-${APP_ENV:-prod}.entrypoints=websecure"
+      - "traefik.http.routers.payment-${APP_ENV:-prod}.tls.certresolver=letsencrypt"
+      - "traefik.http.services.payment-${APP_ENV:-prod}.loadbalancer.server.port=8002"
+      - "traefik.docker.network=dokploy-network"
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8002/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  # =========================================
+  # File Service (Python) -> files.ybbhub.com
+  # =========================================
+  file-service:
+    build:
+      context: ./services/file-service
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    environment:
+      PYTHON_ENV: production
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
+      MINIO_PUBLIC_SECURE: ${MINIO_PUBLIC_SECURE}
+      DATABASE_URL: ${DATABASE_URL_FILE}
+      SERVICE_PORT: 8001
+    networks:
+      - ybb-network
+      - dokploy-network
+    depends_on:
+      # postgres:
+      #   condition: service_healthy
+      # minio:
+      #   condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.files-${APP_ENV:-prod}.rule=Host(`${DOMAIN_FILES}`)"
+      - "traefik.http.routers.files-${APP_ENV:-prod}.entrypoints=websecure"
+      - "traefik.http.routers.files-${APP_ENV:-prod}.tls.certresolver=letsencrypt"
+      - "traefik.http.services.files-${APP_ENV:-prod}.loadbalancer.server.port=8001"
+      - "traefik.docker.network=dokploy-network"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8001/" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  # =========================================
+  # Notification Service (NestJS) -> notification.ybbhub.com
+  # =========================================
+  notification-service:
+    build:
+      context: ./services/notification-service
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 4002
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      RESEND_FROM: ${RESEND_FROM}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM: ${SMTP_FROM}
+    networks:
+      - ybb-network
+      - dokploy-network
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.notification-${APP_ENV:-prod}.rule=Host(`${DOMAIN_NOTIFICATION}`)"
+      - "traefik.http.routers.notification-${APP_ENV:-prod}.entrypoints=websecure"
+      - "traefik.http.routers.notification-${APP_ENV:-prod}.tls.certresolver=letsencrypt"
+      - "traefik.http.services.notification-${APP_ENV:-prod}.loadbalancer.server.port=4002"
+      - "traefik.docker.network=dokploy-network"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:4002/" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  # =========================================
+  # Admin Dashboard (Next.js) -> admin.ybbhub.com
+  # =========================================
+  admin-dashboard:
+    build:
+      context: ./services/admin-dashboard
+      dockerfile: Dockerfile.prod
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      PORT: 4001
+    networks:
+      - ybb-network
+      - dokploy-network
+    depends_on:
+      - api
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.admin-${APP_ENV:-prod}.rule=Host(`${DOMAIN_ADMIN}`)"
+      - "traefik.http.routers.admin-${APP_ENV:-prod}.entrypoints=websecure"
+      - "traefik.http.routers.admin-${APP_ENV:-prod}.tls.certresolver=letsencrypt"
+      - "traefik.http.services.admin-${APP_ENV:-prod}.loadbalancer.server.port=4001"
+      - "traefik.docker.network=dokploy-network"
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    healthcheck:
+      test: [ "CMD", "node", "-e", "require('http').get('http://localhost:4001/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # =========================================
+  # Landing Page / Static (Nginx) -> ybbhub.com
+  # =========================================
+  nginx:
+    build:
+      context: ./infrastructure/nginx
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    volumes:
+      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infrastructure/nginx/conf.d/default.${APP_ENV:-prod}.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - ybb-network
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.landing-${APP_ENV:-prod}.rule=Host(`${DOMAIN_LANDING}`)"
+      - "traefik.http.routers.landing-${APP_ENV:-prod}.entrypoints=websecure"
+      - "traefik.http.routers.landing-${APP_ENV:-prod}.tls.certresolver=letsencrypt"
+      - "traefik.http.services.landing-${APP_ENV:-prod}.loadbalancer.server.port=80"
+      - "traefik.docker.network=dokploy-network"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  # =========================================
+  # Monitoring (Prometheus)
+  # =========================================
+  prometheus:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - ybb-network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.1'
+          memory: 256M
+
+  # =========================================
+  # Monitoring (Grafana) -> monitor.ybbhub.com
+  # =========================================
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infrastructure/grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin123}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      # Ensure Grafana knows its public URL for correct redirects
+      GF_SERVER_ROOT_URL: "https://${DOMAIN_MONITOR}"
+      GF_SERVER_DOMAIN: "${DOMAIN_MONITOR}"
+    networks:
+      - ybb-network
+      - dokploy-network
+    depends_on:
+      - prometheus
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana-${APP_ENV:-prod}.rule=Host(`${DOMAIN_MONITOR}`)"
+      - "traefik.http.routers.grafana-${APP_ENV:-prod}.entrypoints=websecure"
+      - "traefik.http.routers.grafana-${APP_ENV:-prod}.tls.certresolver=letsencrypt"
+      - "traefik.http.services.grafana-${APP_ENV:-prod}.loadbalancer.server.port=3000"
+      - "traefik.docker.network=dokploy-network"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+networks:
+  ybb-network:
+    driver: bridge
+  dokploy-network:
+    external: true
+
+volumes:
+  # postgres_data:
+  # redis_data:
+  rabbitmq_data:
+  pgadmin_data_v3:
+  prometheus_data:
+  grafana_data:
+

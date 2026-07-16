@@ -1,0 +1,29 @@
+// ============================================================================
+// PROGRAM PARTICIPATION INFO
+// ============================================================================
+
+model ProgramParticipationInfo {
+  id        String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId String              @map("program_id") @db.Uuid
+  category  ApplicationCategory // Enum from enums.prisma
+
+  // Content
+  heroTitle       String? @map("hero_title") @db.VarChar(255)
+  heroDescription String? @map("hero_description") @db.Text
+
+  benefits     Json? @default("[]") @db.Json // Structured benefits list
+  requirements Json? @default("[]") @db.Json // Structured requirements list
+
+  // Generic sections for flexibility (Hero, Features, Steps, etc)
+  sections Json? @default("[]") @db.Json
+
+  isActive Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@unique([programId, category])
+  @@map("program_participation_infos")
+}

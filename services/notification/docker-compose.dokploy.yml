@@ -1,0 +1,55 @@
+services:
+  notification:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: ybb-prod-notification
+    restart: always
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-4002}
+      # RabbitMQ
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@ybb-prod-shared-rabbitmq:5672/
+      NOTIFICATION_QUEUE_CLEANUP_ON_DEPLOY: ${NOTIFICATION_QUEUE_CLEANUP_ON_DEPLOY:-false}
+      NOTIFICATION_QUEUE_CLEANUP_TARGETS: ${NOTIFICATION_QUEUE_CLEANUP_TARGETS:-notification_queue}
+      NOTIFICATION_QUEUE_CLEANUP_INCLUDE_RETRY_DLQ: ${NOTIFICATION_QUEUE_CLEANUP_INCLUDE_RETRY_DLQ:-true}
+      # Optional overrides for RabbitMQ Management API used by cleanup script
+      RABBITMQ_MANAGEMENT_URL: ${RABBITMQ_MANAGEMENT_URL:-}
+      RABBITMQ_MANAGEMENT_USER: ${RABBITMQ_MANAGEMENT_USER:-}
+      RABBITMQ_MANAGEMENT_PASS: ${RABBITMQ_MANAGEMENT_PASS:-}
+      RABBITMQ_MANAGEMENT_VHOST: ${RABBITMQ_MANAGEMENT_VHOST:-}
+      # Email / SMTP Config (Add as needed in Dockploy dashboard)
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      # Resend
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      RESEND_FROM: ${RESEND_FROM}
+      # Observability
+      LOKI_URL: ${LOKI_URL}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_LOG_LEVEL: ${OTEL_LOG_LEVEL:-info}
+      # Redis — used for notification idempotency deduplication
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      # File service — renders the receipt PDF attached to the payment success email.
+      # Without this the ReceiptService falls back to http://file-service:8001, which does
+      # not resolve here, and every receipt silently fails to attach.
+      FILE_SERVICE_URL: ${FILE_SERVICE_URL:-http://ybb-prod-file:8001}
+    networks:
+      - dokploy-network
+    # Notification might not need a public domain if it only consumes events
+    # But if it has webhooks or API, we expose it:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=dokploy-network"
+      - "traefik.http.routers.ybb-prod-notification.rule=${APP_DOMAINS_RULE:-Host(`notifications.ybbhub.com`)}"
+      - "traefik.http.routers.ybb-prod-notification.entrypoints=websecure"
+      - "traefik.http.routers.ybb-prod-notification.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ybb-prod-notification.loadbalancer.server.port=4002"
+
+networks:
+  dokploy-network:
+    external: true

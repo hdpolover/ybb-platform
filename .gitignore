@@ -1,0 +1,114 @@
+# Dependencies
+node_modules/
+vendor/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+.venv/
+venv/
+ENV/
+env/
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+.next/
+out/
+.nuxt
+.cache
+
+# Environment variables
+.env
+.env*
+!.env.example
+!.env*.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Testing
+coverage/
+*.cover
+.hypothesis/
+.pytest_cache/
+.nyc_output
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Docker
+*.pid
+*.seed
+*.pid.lock
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# SSL certificates (exclude from git, manage separately)
+infrastructure/nginx/ssl/*.key
+infrastructure/nginx/ssl/*.crt
+infrastructure/nginx/ssl/*.pem
+
+# Database backups
+infrastructure/postgres/backups/*.sql
+infrastructure/postgres/backups/*.dump
+
+# Compiled binaries
+services/payment-service/bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go
+services/payment-service/vendor/
+
+# Python
+services/file-service/__pycache__/
+services/file-service/*.py[cod]
+services/file-service/*$py.class
+
+# Node
+services/api/.next/
+services/api/dist/
+services/admin-dashboard/.next/
+services/admin-dashboard/out/
+
+
+# Migration Data
+migration_data/
+migration_temp_data/
+!*.sql
+*.sql.gz
+!**/prisma/migrations/*/migration.sql
+services/api/ybb-platform-firebase-adminsdk-*.json
+
+# Playwright MCP browser artifacts (downloads, snapshots)
+.playwright-mcp/

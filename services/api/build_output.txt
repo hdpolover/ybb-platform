@@ -1,0 +1,6 @@
+
+> @ybb-platform/api@1.0.0 build
+> nest build
+
+Found 6 error(s).
+

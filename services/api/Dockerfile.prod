@@ -1,0 +1,59 @@
+# Build Stage
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+RUN apk add --no-cache openssl
+
+COPY package*.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci
+
+COPY . .
+RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" npx prisma generate
+RUN npm run build
+RUN npm run build:seed
+
+# Production Stage
+FROM node:20-alpine AS production
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+# font-noto provides NotoSans-Regular.ttf at /usr/share/fonts/noto/ for Unicode PDF rendering
+RUN apk add --no-cache openssl curl font-noto
+
+COPY package*.json ./
+
+# Copy node_modules from builder and prune dev dependencies
+# This avoids a second network-heavy npm install in the production stage
+COPY --from=builder /app/node_modules ./node_modules
+RUN npm prune --production
+
+COPY --from=builder /app/dist ./dist
+# Ensure proto files are copied to dist/protos (matching structure)
+RUN mkdir -p dist/protos
+COPY --from=builder /app/src/protos/*.proto ./dist/protos/
+RUN mkdir -p dist/common/proto
+COPY --from=builder /app/src/common/proto ./dist/common/proto
+
+
+# Copy prisma schema if it exists in expected location for generating client
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
+COPY --from=builder /app/tsconfig.json ./tsconfig.json
+COPY --from=builder /app/tsconfig.seed.json ./tsconfig.seed.json
+
+# Generate Prisma Client (if needed at runtime, otherwise run in build)
+RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" npx prisma generate
+
+# Copy entrypoint script
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+COPY rabbitmq-queue-cleanup.sh /app/rabbitmq-queue-cleanup.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.sh \
+  && sed -i 's/\r$//' /app/rabbitmq-queue-cleanup.sh \
+  && chmod +x /docker-entrypoint.sh /app/rabbitmq-queue-cleanup.sh
+
+# Use entrypoint to run migrations before starting app
+ENTRYPOINT ["/bin/sh", "/docker-entrypoint.sh"]
+CMD ["node", "dist/main"]

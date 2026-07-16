@@ -1,0 +1,66 @@
+services:
+  # =========================================
+  # Payment Service
+  # =========================================
+  payment:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: ybb-payment
+    restart: unless-stopped
+    environment:
+      PORT: 8002
+      ENVIRONMENT: development
+      GIN_MODE: ${GIN_MODE:-debug}
+      # Database
+      DATABASE_URL: postgres://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres-payment:5432/${DATABASE_NAME}?sslmode=disable
+      # RabbitMQ
+      RABBITMQ_URL: amqp://guest:guest@host.docker.internal:5672/
+      # Payment Gateways (Credentials in .env)
+      MIDTRANS_SERVER_KEY: ${MIDTRANS_SERVER_KEY}
+      MIDTRANS_CLIENT_KEY: ${MIDTRANS_CLIENT_KEY}
+      MIDTRANS_IS_PRODUCTION: ${MIDTRANS_IS_PRODUCTION}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY}
+      # Observability
+      LOKI_URL: ${LOKI_URL}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      # Payment Service
+      PAYMENT_AUTO_MIGRATE: "true"
+      PAYMENT_SECRETS_KEY: ${PAYMENT_SECRETS_KEY}
+    ports:
+      - "8002:8002"
+      - "50053:50053"
+    volumes:
+      - .:/app
+    depends_on:
+      postgres-payment:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - default
+
+  # =========================================
+  # Dedicated Postgres for Payment
+  # =========================================
+  postgres-payment:
+    image: postgres:15-alpine
+    container_name: ybb-postgres-payment
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
+    ports:
+      - "5433:5432" # Exposed on 5433 to avoid conflict with API's 5432
+    volumes:
+      - postgres_payment_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_payment_data:

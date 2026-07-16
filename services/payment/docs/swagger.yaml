@@ -1,0 +1,393 @@
+basePath: /api/v1
+definitions:
+  entities.PaymentMethodEntity:
+    properties:
+      account_name:
+        example: PT YBB Platform
+        type: string
+      account_number:
+        example: "1234567890"
+        type: string
+      admin_instructions:
+        example: Cek mutasi bank tanggal sekian
+        type: string
+      bank_name:
+        description: '--- Manual Payment Fields ---'
+        example: BCA
+        type: string
+      code:
+        description: e.g., "bank_bca", "midtrans", "gopay"
+        type: string
+      created_at:
+        description: '--- Timestamps ---'
+        example: "2025-12-01T10:00:00Z"
+        type: string
+      description:
+        type: string
+      displayName:
+        description: User-facing name
+        type: string
+      gateway_name:
+        description: '--- Automatic Payment Fields ---'
+        example: ""
+        type: string
+      gateway_type:
+        example: ""
+        type: string
+      icon:
+        description: Icon URL or identifier
+        type: string
+      id:
+        type: string
+      instructions:
+        example: Silakan transfer sesuai nominal unik
+        type: string
+      isActive:
+        type: boolean
+      name:
+        description: e.g., "Bank BCA", "Midtrans", "GoPay"
+        type: string
+      requires_proof:
+        example: true
+        type: boolean
+      sort_order:
+        example: 1
+        type: integer
+      type:
+        $ref: '#/definitions/entities.PaymentMethodType'
+      updated_at:
+        example: "2025-12-01T10:00:00Z"
+        type: string
+    type: object
+  entities.PaymentMethodType:
+    enum:
+    - automatic
+    - manual
+    type: string
+    x-enum-comments:
+      MethodTypeAutomatic: Via payment gateway
+      MethodTypeManual: Manual verification
+    x-enum-descriptions:
+    - Via payment gateway
+    - Manual verification
+    x-enum-varnames:
+    - MethodTypeAutomatic
+    - MethodTypeManual
+  handlers.UploadProofReq:
+    properties:
+      file_id:
+        type: string
+      file_url:
+        type: string
+    type: object
+  handlers.VerifyPaymentRequest:
+    properties:
+      action:
+        description: '"approve" or "reject"'
+        type: string
+      admin_id:
+        description: Simulated Admin ID
+        type: string
+      reason:
+        description: Required if rejected
+        type: string
+    type: object
+externalDocs:
+  description: OpenAPI
+  url: https://swagger.io/resources/open-api/
+host: localhost:8002
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: This is the API documentation for the YBB Platform Payment Service.
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: YBB Payment Service API
+  version: "1.0"
+paths:
+  /payment-methods:
+    get:
+      description: Get a list of all available payment methods
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              items:
+                $ref: '#/definitions/entities.PaymentMethodEntity'
+              type: array
+            type: object
+      summary: Get All Payment Methods
+      tags:
+      - Payment Methods
+    post:
+      consumes:
+      - application/json
+      description: Add a new bank or payment method to the database
+      parameters:
+      - description: Payment Method Data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/entities.PaymentMethodEntity'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/entities.PaymentMethodEntity'
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Add New Payment Method
+      tags:
+      - Payment Methods
+  /payment-methods/{id}:
+    delete:
+      description: Delete (Soft Delete) payment method by ID
+      parameters:
+      - description: Payment Method ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete Payment Method
+      tags:
+      - Payment Methods
+    get:
+      description: Get payment method details by ID
+      parameters:
+      - description: Payment Method ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/entities.PaymentMethodEntity'
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get Payment Method Detail
+      tags:
+      - Payment Methods
+    put:
+      consumes:
+      - application/json
+      description: Update bank or payment method details by ID
+      parameters:
+      - description: Payment Method ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Update Data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/entities.PaymentMethodEntity'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/entities.PaymentMethodEntity'
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update Payment Method
+      tags:
+      - Payment Methods
+  /payments/{id}:
+    get:
+      description: Get a payment transaction or payment intent by its ID
+      parameters:
+      - description: Payment ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get Payment Details
+      tags:
+      - Payments
+  /payments/{id}/proof:
+    post:
+      consumes:
+      - application/json
+      description: Menerima URL Bukti Transfer yang sudah diupload oleh API/File Service
+      parameters:
+      - description: Transaction ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Data File (ID & URL)
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.UploadProofReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Upload Bukti Transfer (Submit URL)
+      tags:
+      - Manual Payment
+  /payments/{id}/verify:
+    post:
+      consumes:
+      - application/json
+      description: Admin menyetujui (Approve) atau menolak (Reject) pembayaran manual
+      parameters:
+      - description: Transaction ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Data Verifikasi (Action & Admin ID)
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.VerifyPaymentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Verifikasi Pembayaran (Admin)
+      tags:
+      - Manual Payment
+  /payments/user/{userId}:
+    get:
+      description: Get list of payments for a user with pagination
+      parameters:
+      - description: User UUID
+        in: path
+        name: userId
+        required: true
+        type: string
+      - description: Limit (default 10)
+        in: query
+        name: limit
+        type: integer
+      - description: Offset (default 0)
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get User's Payments
+      tags:
+      - Payments
+securityDefinitions:
+  BasicAuth:
+    type: basic
+swagger: "2.0"

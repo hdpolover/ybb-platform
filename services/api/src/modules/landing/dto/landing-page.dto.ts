@@ -1,0 +1,114 @@
+import { ApiProperty, ApiExtraModels, getSchemaPath } from '@nestjs/swagger';
+
+export class LandingPageSectionContentDto {
+  @ApiProperty({ description: 'Main heading', example: 'Welcome to YBB', required: false })
+  headline?: string;
+
+  @ApiProperty({ description: 'Sub heading or description', example: 'Empowering youth worldwide.', required: false })
+  subheadline?: string;
+
+  @ApiProperty({ description: 'Call to action text', example: 'Join Now', required: false })
+  ctaText?: string;
+
+  @ApiProperty({ description: 'Call to action URL', example: '/register', required: false })
+  ctaUrl?: string;
+
+  @ApiProperty({ description: 'Image URL', example: 'https://example.com/banner.jpg', required: false, nullable: true })
+  image?: string | null;
+  
+  @ApiProperty({ description: 'Background Image URL', example: 'https://example.com/bg.jpg', required: false, nullable: true })
+  bg_image?: string | null;
+
+  @ApiProperty({ description: 'Title inside content', example: 'Section Title', required: false })
+  title?: string;
+
+  @ApiProperty({ description: 'Description text', example: 'Detailed description...', required: false, nullable: true })
+  description?: string | null;
+
+  @ApiProperty({ description: 'Name field', example: 'Program Name', required: false })
+  name?: string;
+
+  @ApiProperty({ description: 'Theme string', example: 'Innovation', required: false, nullable: true })
+  theme?: string | null;
+
+  @ApiProperty({ description: 'Subthemes list', example: ['Tech', 'Social'], required: false, isArray: true })
+  subthemes?: string[];
+
+  @ApiProperty({ description: 'Main poster image', example: 'https://example.com/poster.jpg', required: false, nullable: true })
+  main_poster?: string | null;
+  
+  @ApiProperty({ description: 'Video URL', example: 'https://youtube.com/...', required: false })
+  video?: string;
+
+  @ApiProperty({ description: 'Vision statement', required: false, nullable: true })
+  vision?: string | null;
+
+  @ApiProperty({ description: 'Mission statement', required: false, nullable: true })
+  mission?: string | null;
+
+  // Additional fields for complex sections
+  @ApiProperty({ example: 'Some text about us', required: false })
+  about_us?: string;
+
+  @ApiProperty({ example: { vision: '...', mission: '...' }, required: false })
+  vision_mission?: Record<string, unknown>;
+
+  @ApiProperty({ description: 'Instagram feed items', required: false, isArray: true, example: [{ id: '...', imageUrl: '...' }] })
+  ig_feed?: Record<string, unknown>[];
+
+  @ApiProperty({ description: 'Registration types/tiers', required: false, isArray: true })
+  registration_types?: Record<string, unknown>[];
+
+  @ApiProperty({ description: 'Guidelines or resources', required: false, isArray: true })
+  guidelines?: Record<string, unknown>[];
+
+  @ApiProperty({ description: 'Tabs for video content', required: false, isArray: true })
+  tabs?: Record<string, unknown>[];
+
+  @ApiProperty({ description: 'List of items (e.g., testimonials, awards)', required: false, isArray: true })
+  items?: Record<string, unknown>[];
+
+  @ApiProperty({ description: 'Canonical gallery list for image-driven sections', required: false, isArray: true })
+  gallery?: Record<string, unknown>[];
+}
+
+export class LandingPageSectionDto {
+  @ApiProperty({ example: 'hero', description: 'The type of the section (hero, about, programs, stats, faq, contact, etc.)' })
+  type: string;
+
+  @ApiProperty({ 
+    example: 'Section Title', 
+    description: 'Title of the section', 
+    required: false 
+  })
+  title?: string;
+
+  @ApiProperty({ 
+    description: 'Content object for the section', 
+    required: false,
+    type: LandingPageSectionContentDto
+  })
+  content?: LandingPageSectionContentDto;
+
+  @ApiProperty({ 
+    description: 'Data array for the section (e.g., list of programs, testimonials, faqs)', 
+    required: false,
+    isArray: true,
+    example: [
+      { id: '1', title: 'Program A', description: '...' },
+      { id: '2', title: 'Program B', description: '...' }
+    ]
+  })
+  data?: Record<string, unknown>[];
+}
+
+export class LandingPageResponseDto {
+  @ApiProperty({ example: 'home', description: 'The slug of the page' })
+  slug: string;
+
+  @ApiProperty({ example: 'Welcome to YBB', description: 'The title of the page' })
+  title: string;
+
+  @ApiProperty({ type: [LandingPageSectionDto], description: 'List of sections on the page' })
+  sections: LandingPageSectionDto[];
+}

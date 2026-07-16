@@ -1,0 +1,13 @@
+// Base configuration for Prisma
+
+generator client {
+  provider        = "prisma-client-js"
+  engineType      = "library"
+  binaryTargets   = ["native", "linux-musl-openssl-3.0.x", "linux-musl"]
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [uuidOssp(map: "uuid-ossp")]
+}

@@ -1,0 +1,140 @@
+syntax = "proto3";
+
+package file;
+
+service FileService {
+  // Upload a file (streaming request to handle large files)
+  rpc UploadFile (stream UploadFileRequest) returns (UploadFileResponse) {}
+
+  // Download a file (streaming response)
+  rpc DownloadFile (DownloadFileRequest) returns (stream DownloadFileResponse) {}
+
+  // Get file metadata
+  rpc GetFile (GetFileRequest) returns (FileResponse) {}
+
+  // --- New Methods ---
+
+  // Generate a certificate (returns PDF bytes)
+  rpc GenerateCertificate (GenerateCertificateRequest) returns (GenerateDocumentResponse) {}
+
+  // Generate a receipt (returns PDF bytes)
+  rpc GenerateReceipt (GenerateReceiptRequest) returns (GenerateDocumentResponse) {}
+
+  // Get a presigned URL for direct upload (Client -> S3/MinIO)
+  rpc GetPresignedUploadUrl (GetPresignedUploadUrlRequest) returns (GetPresignedUploadUrlResponse) {}
+
+  // Confirm that a file has been uploaded (Event Hook)
+  rpc ConfirmUpload (ConfirmUploadRequest) returns (ConfirmUploadResponse) {}
+}
+
+message GenerateCertificateRequest {
+  string participant_name = 1;
+  string program_name = 2;
+  string issued_at = 3; // Date string or empty
+  string template_type = 4; // "completion" or "participation"
+  map<string, string> metadata = 5;
+}
+
+message GenerateReceiptRequest {
+  string receipt_number = 1;
+  string transaction_id = 2;
+  double amount = 3;
+  string currency = 4;
+  string payer_name = 5;
+  string date = 6;
+  string payment_method = 7;
+  string status = 8;
+  map<string, string> additional_data = 9;
+}
+
+message GenerateDocumentResponse {
+  bytes file_data = 1;
+  string filename = 2;
+  string content_type = 3;
+}
+
+message GetPresignedUploadUrlRequest {
+  string filename = 1;
+  string content_type = 2;
+  string user_id = 3;
+  string brand_id = 4;
+  string bucket = 5; 
+  optional string program_id = 6;
+  optional string participant_id = 7;
+  int64 size = 8;
+}
+
+message GetPresignedUploadUrlResponse {
+  string upload_url = 1;
+  string file_id = 2;
+  string storage_path = 3;
+  string bucket = 4;
+}
+
+message ConfirmUploadRequest {
+  string storage_path = 1;
+  string bucket = 2;
+  optional int64 size = 3; // Actual size from the event
+}
+
+message ConfirmUploadResponse {
+  bool success = 1;
+  string file_id = 2;
+  string status = 3;
+}
+
+message UploadFileRequest {
+  oneof request {
+    FileMetadata metadata = 1;
+    bytes chunk_data = 2;
+  }
+}
+
+message FileMetadata {
+  string filename = 1;
+  string content_type = 2;
+  string user_id = 3;
+  string brand_id = 4;
+  string bucket = 5;
+  optional string program_id = 6;
+  optional string participant_id = 7;
+  int64 size = 8;
+}
+
+message UploadFileResponse {
+  string id = 1;
+  string url = 2;
+  string storage_path = 3;
+  string original_filename = 4;
+  string content_type = 5;
+  int64 size = 6;
+  string bucket = 7;
+}
+
+message DownloadFileRequest {
+  string file_id = 1;
+  string user_id = 2;
+  string brand_id = 3;
+}
+
+message DownloadFileResponse {
+  bytes chunk_data = 1;
+}
+
+message GetFileRequest {
+  string file_id = 1;
+  string user_id = 2;
+  string brand_id = 3;
+}
+
+message FileResponse {
+  string id = 1;
+  string original_filename = 2;
+  string content_type = 3;
+  int64 size = 4;
+  string url = 5;
+  string bucket = 6;
+  string storage_path = 7;
+  string created_at = 8;
+  string updated_at = 9;
+}

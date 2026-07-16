@@ -1,0 +1,169 @@
+import { Injectable, BadRequestException } from '@nestjs/common';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { PaymentReconciliationService } from '@modules/payments/infrastructure/services/payment-reconciliation.service';
+
+/**
+ * RegistrationFeeGateService
+ *
+ * Single authoritative check for whether a participant application has
+ * satisfied the program's registration fee requirement before submission,
+ * and whether the registration fee has already been paid (duplicate-payment guard).
+ *
+ * Business rules enforced here:
+ * - Gate signal is the PROGRAM's active registration_fee pricing tier, NOT
+ *   invoice existence (fail-closed: no invoice → still blocked when a tier exists).
+ * - No category bypass: fully_funded and self_funded participants are both
+ *   subject to the same gate (reimbursement model — pay first, reimburse later).
+ * - A participant passes the gate if EITHER:
+ *     (a) application.registrationPaymentStatus === 'paid'  [canonical/fast path], OR
+ *     (b) a paid ApplicationInvoice for a registration_fee tier exists [race-condition guard].
+ * - When the program has NO active registration_fee tier the gate is a no-op (allow).
+ *
+ * Used by both the portal submit path and the admin submit path so the two
+ * paths cannot diverge.
+ */
+@Injectable()
+export class RegistrationFeeGateService {
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly reconciliation: PaymentReconciliationService,
+    ) {}
+
+    /**
+     * Checks whether the registration fee has already been paid for the given
+     * application. Fails safe (returns false) when the application cannot be
+     * found or any lookup throws.
+     *
+     * This is the duplicate-payment guard — used before creating a new payment
+     * intent to prevent a participant from paying the registration fee twice.
+     */
+    async isRegistrationFeePaid(applicationId: string): Promise<boolean> {
+        try {
+            const application = await this.prisma.participantApplication.findUnique({
+                where: { id: applicationId },
+                select: {
+                    registrationPaymentStatus: true,
+                },
+            });
+
+            if (!application) {
+                return false;
+            }
+
+            // Fast path: canonical status already reflects payment.
+            if (application.registrationPaymentStatus === 'paid') {
+                return true;
+            }
+
+            // Race-condition fallback: check for a paid registration_fee invoice
+            // in case registrationPaymentStatus has not been updated yet.
+            const paidInvoice = await this.prisma.applicationInvoice.findFirst({
+                where: {
+                    applicationId,
+                    pricingTier: { feeType: 'registration_fee' },
+                    status: 'paid',
+                },
+                select: { id: true },
+            });
+
+            return paidInvoice !== null;
+        } catch {
+            // Fail safe: if we cannot determine paid status, do not block the caller.
+            return false;
+        }
+    }
+
+    /**
+     * Asserts that the registration fee requirement is satisfied for the given
+     * application. Loads all required state from the database itself so callers
+     * do not need to pre-fetch payment status or program pricing tiers.
+     *
+     * @throws {BadRequestException} when the program requires a registration fee
+     *   that has not been paid.
+     */
+    async assertRegistrationFeePaid(applicationId: string): Promise<void> {
+        // Load the minimum fields needed for the gate check.
+        const application = await this.prisma.participantApplication.findUnique({
+            where: { id: applicationId },
+            select: {
+                registrationPaymentStatus: true,
+                programId: true,
+            },
+        });
+
+        if (!application) {
+            // Caller should have validated existence already; treat as blocked to be safe.
+            throw new BadRequestException('Application not found during payment gate check.');
+        }
+
+        // 1. Check program config — fail-closed signal.
+        //    We look for an active registration_fee tier on the program.
+        const tier = await this.prisma.programPricingTier.findFirst({
+            where: {
+                programId: application.programId,
+                isActive: true,
+                feeType: 'registration_fee',
+            },
+            select: { id: true },
+        });
+
+        if (!tier) {
+            // Program genuinely charges no registration fee → allow.
+            return;
+        }
+
+        // 2. Fast path: denormalised status already reflects payment.
+        if (application.registrationPaymentStatus === 'paid') {
+            return;
+        }
+
+        // 3. Race-condition fallback: check for a paid registration_fee invoice.
+        //    registrationPaymentStatus can lag behind the invoice if the
+        //    payment.succeeded event hasn't propagated yet. Allow through if
+        //    the invoice itself is already marked paid.
+        const paidInvoice = await this.prisma.applicationInvoice.findFirst({
+            where: {
+                applicationId,
+                pricingTier: { feeType: 'registration_fee' },
+                status: 'paid',
+            },
+            select: { id: true },
+        });
+
+        if (paidInvoice) {
+            return;
+        }
+
+        // 4. Self-heal: attempt reconciliation before blocking.
+        //    If the gateway already settled the payment but the event was dropped,
+        //    reconciliation will update the invoice to 'paid' and we can allow through.
+        //    Fail-closed: any error in reconciliation must not unblock the gate.
+        try {
+            await this.reconciliation.reconcileApplicationRegistration(applicationId);
+            // Re-check canonical status after reconciliation
+            const recheck = await this.prisma.participantApplication.findUnique({
+                where: { id: applicationId },
+                select: { registrationPaymentStatus: true },
+            });
+            if (recheck?.registrationPaymentStatus === 'paid') return;
+            // Fallback: check invoice directly in case denorm update lagged
+            const recheckedInvoice = await this.prisma.applicationInvoice.findFirst({
+                where: {
+                    applicationId,
+                    status: 'paid',
+                    pricingTier: { feeType: 'registration_fee' },
+                },
+                select: { id: true },
+            });
+            if (recheckedInvoice) return;
+        } catch {
+            // fail-closed: reconciliation error must not unblock the gate
+        }
+
+        // 5. Program has a registration fee but payment is not confirmed => block.
+        //    Covers "never started payment" (no invoice) and "invoice exists but unpaid".
+        throw new BadRequestException(
+            'Registration fee must be paid before submission.',
+        );
+    }
+}

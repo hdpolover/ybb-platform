@@ -1,0 +1,26 @@
+services:
+  admin-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    container_name: ybb-prod-admin-dashboard
+    restart: always
+    environment:
+      NODE_ENV: production
+      # Internal APIs
+      NEXT_PUBLIC_API_URL: https://api.ybbhub.com
+    networks:
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=dokploy-network"
+      - "traefik.http.routers.ybb-prod-admin-dashboard.rule=${APP_DOMAINS_RULE:-Host(`admin.ybbhub.com`)}"
+      - "traefik.http.routers.ybb-prod-admin-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.ybb-prod-admin-dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ybb-prod-admin-dashboard.loadbalancer.server.port=4001"
+
+networks:
+  dokploy-network:
+    external: true

@@ -1,0 +1,580 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Patch,
+  Param,
+  Body,
+  Query,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+  Logger,
+  BadRequestException,
+} from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
+import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
+import { Roles } from '@modules/auth/application/decorators/roles.decorator';
+import { UserRole } from '@core/entities/user.entity';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
+import { CacheInvalidate } from '@shared/decorators/cache-invalidate.decorator';
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { ChangeType, PaymentStatus } from '@prisma/client';
+
+// Commands
+import { CreateApplicationHandler } from '../application/commands/handlers/create-application.handler';
+import { UpdateApplicationHandler } from '../application/commands/handlers/update-application.handler';
+import { SubmitApplicationHandler } from '../application/commands/handlers/submit-application.handler';
+import { ReviewApplicationHandler } from '../application/commands/handlers/review-application.handler';
+import { WithdrawApplicationHandler } from '../application/commands/handlers/withdraw-application.handler';
+import { SwitchApplicationCategoryHandler } from '../application/commands/handlers/switch-application-category.handler';
+import { CreateRegistrationPaymentIntentHandler } from '../application/commands/handlers/create-registration-payment-intent.handler';
+import { AdminUpdateSubmissionHandler } from '../application/commands/handlers/admin-update-submission.handler';
+import { AdminUpdateSubmissionCommand } from '../application/commands/admin-update-submission.command';
+
+import { CreateApplicationCommand } from '../application/commands/create-application.command';
+import { UpdateApplicationCommand } from '../application/commands/update-application.command';
+import { SubmitApplicationCommand } from '../application/commands/submit-application.command';
+import { ReviewApplicationCommand } from '../application/commands/review-application.command';
+import { WithdrawApplicationCommand } from '../application/commands/withdraw-application.command';
+import { SwitchApplicationCategoryCommand } from '../application/commands/switch-application-category.command';
+import { CreateRegistrationPaymentIntentCommand } from '../application/commands/create-registration-payment-intent.command';
+
+// Queries
+import { GetApplicationHandler } from '../application/queries/handlers/get-application.handler';
+import { ListApplicationsHandler } from '../application/queries/handlers/list-applications.handler';
+import { ExportApplicationsHandler } from '../application/queries/handlers/export-applications.handler';
+import { GetApplicationQuery } from '../application/queries/get-application.query';
+import {
+  ListApplicationsQuery,
+  ListApplicationsSortBy,
+  ListApplicationsSortOrder,
+} from '../application/queries/list-applications.query';
+import { ExportApplicationsQuery } from '../application/queries/export-applications.query';
+import { StreamableFile } from '@nestjs/common';
+import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
+
+// DTOs
+import { CreateApplicationRequestDto } from './dto/create-application-request.dto';
+import { UpdateApplicationRequestDto } from './dto/update-application-request.dto';
+import { ReviewApplicationRequestDto } from './dto/review-application-request.dto';
+import { SwitchApplicationCategoryRequestDto } from './dto/switch-application-category-request.dto';
+import { AdminUpdateSubmissionDto } from './dto/admin-update-submission.dto';
+import { ApplicationResponseDto, ApplicationListResponseDto } from '../application/dto/application-response.dto';
+import { ApplicationCategory, ApplicationStatus } from '@core/entities/participant-application.entity';
+
+/**
+ * Applications Controller
+ * 
+ * Presentation Layer - REST API
+ * Handles HTTP requests for application operations
+ */
+@ApiTags('Applications')
+@Controller('applications')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
+export class ApplicationsController {
+  private readonly logger = new Logger(ApplicationsController.name);
+  private static readonly SORT_BY_VALUES: ReadonlySet<ListApplicationsSortBy> = new Set([
+    'updatedAt',
+    'createdAt',
+    'submittedAt',
+    'participantName',
+    'country',
+    'status',
+    'registrationPaymentStatus',
+    'programPaymentStatus',
+  ]);
+  private static readonly SORT_ORDER_VALUES: ReadonlySet<ListApplicationsSortOrder> = new Set(['asc', 'desc']);
+  private static readonly CATEGORY_VALUES: ReadonlySet<ApplicationCategory> = new Set([
+    ApplicationCategory.FULLY_FUNDED,
+    ApplicationCategory.SELF_FUNDED,
+  ]);
+  private static readonly PAYMENT_STATUS_VALUES: ReadonlySet<PaymentStatus> = new Set([
+    PaymentStatus.unpaid,
+    PaymentStatus.paid,
+    PaymentStatus.processing,
+    PaymentStatus.failed,
+    PaymentStatus.refunded,
+  ]);
+
+  constructor(
+    private readonly createApplicationHandler: CreateApplicationHandler,
+    private readonly updateApplicationHandler: UpdateApplicationHandler,
+    private readonly submitApplicationHandler: SubmitApplicationHandler,
+    private readonly reviewApplicationHandler: ReviewApplicationHandler,
+    private readonly withdrawApplicationHandler: WithdrawApplicationHandler,
+    private readonly switchApplicationCategoryHandler: SwitchApplicationCategoryHandler,
+    private readonly createRegistrationPaymentIntentHandler: CreateRegistrationPaymentIntentHandler,
+    private readonly adminUpdateSubmissionHandler: AdminUpdateSubmissionHandler,
+    private readonly getApplicationHandler: GetApplicationHandler,
+    private readonly listApplicationsHandler: ListApplicationsHandler,
+    private readonly exportApplicationsHandler: ExportApplicationsHandler,
+    private readonly cacheService: CacheService,
+    private readonly readPrisma: PrismaReadService,
+  ) { }
+
+  private validateDateRange(startDate?: string, endDate?: string): void {
+    const isValidDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00.000Z`));
+
+    if (startDate && !isValidDate(startDate)) {
+      throw new BadRequestException('Invalid startDate format. Expected YYYY-MM-DD.');
+    }
+
+    if (endDate && !isValidDate(endDate)) {
+      throw new BadRequestException('Invalid endDate format. Expected YYYY-MM-DD.');
+    }
+
+    if (startDate && endDate && startDate > endDate) {
+      throw new BadRequestException('startDate cannot be after endDate.');
+    }
+  }
+
+  private validateListFilters(params: {
+    sortBy?: string;
+    sortOrder?: string;
+    category?: string;
+    registrationPaymentStatus?: string;
+    programPaymentStatus?: string;
+  }): void {
+    if (params.sortBy && !ApplicationsController.SORT_BY_VALUES.has(params.sortBy as ListApplicationsSortBy)) {
+      throw new BadRequestException('Invalid sortBy value.');
+    }
+
+    if (params.sortOrder && !ApplicationsController.SORT_ORDER_VALUES.has(params.sortOrder as ListApplicationsSortOrder)) {
+      throw new BadRequestException('Invalid sortOrder value.');
+    }
+
+    if (params.category && !ApplicationsController.CATEGORY_VALUES.has(params.category as ApplicationCategory)) {
+      throw new BadRequestException('Invalid category value.');
+    }
+
+    if (
+      params.registrationPaymentStatus &&
+      !ApplicationsController.PAYMENT_STATUS_VALUES.has(params.registrationPaymentStatus as PaymentStatus)
+    ) {
+      throw new BadRequestException('Invalid registrationPaymentStatus value.');
+    }
+
+    if (
+      params.programPaymentStatus &&
+      !ApplicationsController.PAYMENT_STATUS_VALUES.has(params.programPaymentStatus as PaymentStatus)
+    ) {
+      throw new BadRequestException('Invalid programPaymentStatus value.');
+    }
+  }
+
+  @Post()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Create a new application (admin)' })
+  @ApiResponse({ status: 201, description: 'Application created successfully', type: ApplicationResponseDto })
+  @ApiResponse({ status: 409, description: 'Application already exists' })
+  @CacheInvalidate(['portal:*:${userId}'])
+  @AuditTrail({ entityType: 'ParticipantApplication', action: ChangeType.create })
+  async create(@Body() dto: CreateApplicationRequestDto): Promise<ApplicationResponseDto> {
+    this.logger.log(`Creating application for participant ${dto.participantId} in program ${dto.programId}`);
+
+    const command = new CreateApplicationCommand(
+      dto.participantId,
+      dto.programId,
+      dto.applicationCategory,
+      dto.motivationLetter,
+      dto.achievements,
+      dto.experiences,
+      dto.documents,
+      dto.requirementFiles,
+      dto.twibbonLink,
+      dto.pricingTierId,
+    );
+
+    return this.createApplicationHandler.execute(command);
+  }
+
+  @Get('export')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Export applications to CSV (admin)' })
+  @ApiQuery({ name: 'brandId', required: true })
+  @ApiQuery({ name: 'programId', required: false })
+  @ApiQuery({ name: 'status', enum: ApplicationStatus, required: false })
+  @ApiQuery({ name: 'category', enum: ApplicationCategory, required: false })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'country', required: false })
+  @ApiQuery({ name: 'registrationPaymentStatus', enum: PaymentStatus, required: false })
+  @ApiQuery({ name: 'programPaymentStatus', enum: PaymentStatus, required: false })
+  @ApiQuery({ name: 'sortBy', required: false, enum: ['updatedAt', 'createdAt', 'submittedAt', 'participantName', 'country', 'status', 'registrationPaymentStatus', 'programPaymentStatus'] })
+  @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
+  @ApiQuery({ name: 'startDate', required: false, description: 'Applied from date (YYYY-MM-DD)' })
+  @ApiQuery({ name: 'endDate', required: false, description: 'Applied until date (YYYY-MM-DD)' })
+  @ApiResponse({ status: 200, description: 'CSV file stream' })
+  async export(
+    @Query('brandId') brandId: string,
+    @Query('programId') programId?: string,
+    @Query('status') status?: ApplicationStatus,
+    @Query('category') category?: ApplicationCategory,
+    @Query('search') search?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ): Promise<StreamableFile> {
+    this.logger.log(`Exporting applications: brandId=${brandId}, programId=${programId}`);
+    this.validateDateRange(startDate, endDate);
+
+    // Handler is injected directly (practical CQRS pattern) because QueryBus
+    // generic return type doesn't carry StreamableFile cleanly.
+    const query = new ExportApplicationsQuery(brandId, programId, status, category, search, startDate, endDate);
+    return this.exportApplicationsHandler.execute(query);
+  }
+
+  @Get()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'List applications with filters (admin)' })
+  @ApiQuery({ name: 'brandId', required: false })
+  @ApiQuery({ name: 'programId', required: false })
+  @ApiQuery({ name: 'participantId', required: false })
+  @ApiQuery({ name: 'status', enum: ApplicationStatus, required: false })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'startDate', required: false, description: 'Applied from date (YYYY-MM-DD)' })
+  @ApiQuery({ name: 'endDate', required: false, description: 'Applied until date (YYYY-MM-DD)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'offset', required: false, type: Number })
+  @ApiResponse({ status: 200, description: 'Applications retrieved successfully', type: ApplicationListResponseDto })
+  async findAll(
+    @Query('brandId') brandId?: string,
+    @Query('programId') programId?: string,
+    @Query('participantId') participantId?: string,
+    @Query('status') status?: ApplicationStatus,
+    @Query('category') category?: ApplicationCategory,
+    @Query('search') search?: string,
+    @Query('country') country?: string,
+    @Query('registrationPaymentStatus') registrationPaymentStatus?: PaymentStatus,
+    @Query('programPaymentStatus') programPaymentStatus?: PaymentStatus,
+    @Query('sortBy') sortBy?: ListApplicationsSortBy,
+    @Query('sortOrder') sortOrder?: ListApplicationsSortOrder,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('limit') limit?: number,
+    @Query('offset') offset?: number,
+  ): Promise<ApplicationListResponseDto> {
+    this.logger.log(`Listing applications with filters: brandId=${brandId}, programId=${programId}`);
+    this.validateDateRange(startDate, endDate);
+    this.validateListFilters({
+      sortBy,
+      sortOrder,
+      category,
+      registrationPaymentStatus,
+      programPaymentStatus,
+    });
+
+    const actualLimit = limit ? Number(limit) : 20;
+    const actualOffset = offset ? Number(offset) : 0;
+
+    // Cache strategy: Only cache the first 5 pages to avoid cache pollution with deep pagination
+    // 5 pages * 20 items = 100 items. Roughly covering "recent" items.
+    const shouldCache = actualOffset < (actualLimit * 5);
+    let cacheKey = '';
+
+    if (shouldCache) {
+      // Create a deterministic cache key based on all filters
+      const filterParams = JSON.stringify({
+        participantId,
+        status,
+        category,
+        search,
+        country,
+        registrationPaymentStatus,
+        programPaymentStatus,
+        sortBy,
+        sortOrder,
+        startDate,
+        endDate,
+        limit: actualLimit,
+        offset: actualOffset,
+      });
+      // We hash the params to keep the key length manageable, or just use stringified if short enough. 
+      // For simplicity/readability in redis, we'll use a simple string representation if it's not too long, 
+      // but here we can just use the stringified JSON.
+      cacheKey = CACHE_KEYS.APPLICATION_LIST(brandId, programId, filterParams);
+
+      try {
+        const cached = await this.cacheService.get<ApplicationListResponseDto>(cacheKey);
+        if (cached) {
+          return cached;
+        }
+      } catch (e) {
+        this.logger.error('Cache get error', e);
+      }
+    }
+
+    const query = new ListApplicationsQuery({
+      brandId,
+      programId,
+      participantId,
+      status,
+      category,
+      search,
+      country,
+      registrationPaymentStatus,
+      programPaymentStatus,
+      sortBy,
+      sortOrder,
+      startDate,
+      endDate,
+      limit: actualLimit,
+      offset: actualOffset,
+    });
+
+    const result = await this.listApplicationsHandler.execute(query);
+
+    // Enrich applications with participant data and payment statuses via single batch lookup
+    if (result.applications.length > 0) {
+      const appIds = result.applications.map(a => a.id);
+      const enriched = await this.readPrisma.participantApplication.findMany({
+        where: { id: { in: appIds } },
+        select: {
+          id: true,
+          registrationPaymentStatus: true,
+          programPaymentStatus: true,
+          participant: {
+            include: { user: { select: { id: true, email: true } } },
+          },
+        },
+      });
+      const enrichMap = new Map(enriched.map(e => [e.id, e]));
+      result.applications = result.applications.map(app => {
+        const e = enrichMap.get(app.id);
+        if (!e) return app;
+        const p = e.participant;
+        return {
+          ...app,
+          registrationPaymentStatus: e.registrationPaymentStatus,
+          programPaymentStatus: e.programPaymentStatus,
+          participant: p ? {
+            id: p.id,
+            fullName: p.fullName,
+            nickName: p.nickName,
+            email: (p as any).user?.email ?? null,
+            phoneCountryCode: p.phoneCountryCode,
+            phoneNumber: p.phoneNumber,
+            originCountry: p.originCountry,
+            originCity: p.originCity,
+            nationality: p.nationality,
+            gender: p.gender,
+            profilePictureUrl: p.profilePictureUrl,
+          } : undefined,
+        };
+      });
+    }
+
+    if (shouldCache) {
+      try {
+        await this.cacheService.set(cacheKey, result, CACHE_TTL.MEDIUM); // 5 minutes TTL
+      } catch (e) {
+        this.logger.error('Cache set error', e);
+      }
+    }
+
+    return result;
+  }
+
+  @Get(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Get application by ID (admin)' })
+  @ApiResponse({ status: 200, description: 'Application retrieved successfully', type: ApplicationResponseDto })
+  @ApiResponse({ status: 404, description: 'Application not found' })
+  async findOne(
+    @Param('id') id: string,
+    @Query('includeRelations') includeRelations?: boolean,
+  ): Promise<ApplicationResponseDto> {
+    this.logger.log(`Getting application ${id}`);
+
+    const query = new GetApplicationQuery(id, includeRelations);
+    return this.getApplicationHandler.execute(query);
+  }
+
+  @Put(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Update application (draft only, admin)' })
+  @ApiResponse({ status: 200, description: 'Application updated successfully', type: ApplicationResponseDto })
+  @ApiResponse({ status: 400, description: 'Cannot edit non-draft application' })
+  @ApiResponse({ status: 404, description: 'Application not found' })
+  @CacheInvalidate(['portal:*:${userId}'])
+  @AuditTrail({ entityType: 'ParticipantApplication', action: ChangeType.update })
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateApplicationRequestDto,
+  ): Promise<ApplicationResponseDto> {
+    this.logger.log(`Updating application ${id}`);
+
+    const command = new UpdateApplicationCommand(id, dto);
+    return this.updateApplicationHandler.execute(command);
+  }
+
+  @Post(':id/switch-category')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Switch application category' })
+  @ApiResponse({ status: 200, description: 'Application category switched successfully', type: ApplicationResponseDto })
+  @ApiResponse({ status: 400, description: 'Cannot switch category due to status or payments' })
+  @ApiResponse({ status: 404, description: 'Application not found' })
+  @CacheInvalidate(['portal:*:${userId}'])
+  @AuditTrail({ entityType: 'ParticipantApplication', action: ChangeType.update })
+  async switchCategory(
+    @Param('id') id: string,
+    @Body() dto: SwitchApplicationCategoryRequestDto,
+    @CurrentUser() user: CurrentUserData,
+  ): Promise<ApplicationResponseDto> {
+    this.logger.log(`Switching category for application ${id} to ${dto.targetCategory}`);
+
+    const command = new SwitchApplicationCategoryCommand(id, dto.targetCategory, user.userId);
+    return this.switchApplicationCategoryHandler.execute(command);
+  }
+
+  @Post(':id/submit')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Submit application (admin; participants use /portal/submissions/submit)' })
+  @ApiResponse({ status: 200, description: 'Application submitted successfully', type: ApplicationResponseDto })
+  @ApiResponse({ status: 400, description: 'Application cannot be submitted' })
+  @ApiResponse({ status: 404, description: 'Application not found' })
+  @CacheInvalidate(['portal:*:${userId}'])
+  @AuditTrail({ entityType: 'ParticipantApplication', action: ChangeType.status_change })
+  async submit(
+    @Param('id') id: string,
+    @Body('participantId') participantId: string,
+  ): Promise<ApplicationResponseDto> {
+    this.logger.log(`Submitting application ${id}`);
+
+    const command = new SubmitApplicationCommand(id, participantId);
+    return this.submitApplicationHandler.execute(command);
+  }
+
+  /**
+   * PATCH /applications/:id/submission-data
+   *
+   * ADMIN ONLY — edits a participant's submission data after it has been locked
+   * (post-submit).  Bypasses the draft-only edit guard intentionally so admins
+   * can correct typos (e.g. names) that would otherwise propagate to ID cards,
+   * certificates, and LoA documents.
+   *
+   * Auth: requires an admin/super-admin role (RolesGuard) on top of a valid JWT.
+   * This mutation bypasses the submission lock, so it must never be reachable by
+   * a participant token.
+   *
+   * Every edit is recorded in application_edit_history with a required `reason`.
+   */
+  @Patch(':id/submission-data')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Admin: edit submission data of a locked application' })
+  @ApiResponse({
+    status: 200,
+    description: 'Submission data updated and audit record created',
+    schema: {
+      properties: {
+        success: { type: 'boolean' },
+        applicationId: { type: 'string' },
+        editHistoryId: { type: 'string' },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Application not found' })
+  @ApiResponse({ status: 400, description: 'Validation error in payload' })
+  @AuditTrail({ entityType: 'ParticipantApplication', action: ChangeType.update })
+  async adminUpdateSubmission(
+    @Param('id') id: string,
+    @Body() dto: AdminUpdateSubmissionDto,
+    @CurrentUser() user: CurrentUserData,
+  ): Promise<{ success: boolean; applicationId: string; editHistoryId: string }> {
+    this.logger.log(
+      `Admin ${user.userId} editing submission data for application ${id}: ${dto.reason}`,
+    );
+
+    const command = new AdminUpdateSubmissionCommand(
+      id,
+      user.userId,
+      dto.reason,
+      dto.personalData,
+      dto.essayAnswers,
+      dto.participant,
+      dto.application,
+    );
+
+    return this.adminUpdateSubmissionHandler.execute(command);
+  }
+
+  @Post(':id/payment-intent')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create Registration Payment Intent (admin; participants use /portal/payments)' })
+  @ApiResponse({ status: 201, description: 'Payment Intent created' })
+  @CacheInvalidate(['portal:*:${userId}'])
+  async createPaymentIntent(
+    @Param('id') id: string,
+    @Body('userId') userId: string
+  ) {
+    this.logger.log(`Creating payment intent for application ${id}`);
+    const command = new CreateRegistrationPaymentIntentCommand(id, userId);
+    return this.createRegistrationPaymentIntentHandler.execute(command);
+  }
+
+  @Post(':id/review')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Review application (admin only)' })
+  @ApiResponse({ status: 200, description: 'Application reviewed successfully', type: ApplicationResponseDto })
+  @ApiResponse({ status: 400, description: 'Application cannot be reviewed' })
+  @ApiResponse({ status: 404, description: 'Application not found' })
+  @AuditTrail({ entityType: 'ParticipantApplication', action: ChangeType.status_change })
+  async review(
+    @Param('id') id: string,
+    @Body() dto: ReviewApplicationRequestDto,
+    @Body('reviewerId') reviewerId: string,
+  ): Promise<ApplicationResponseDto> {
+    this.logger.log(`Reviewing application ${id} by reviewer ${reviewerId}`);
+
+    const command = new ReviewApplicationCommand(
+      id,
+      reviewerId,
+      dto.status,
+      dto.reviewerNotes,
+      dto.scoreTotal,
+      dto.scoreBreakdown,
+      dto.scoreStatus,
+      dto.approvalMode,
+    );
+
+    return this.reviewApplicationHandler.execute(command);
+  }
+
+  @Post(':id/withdraw')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Withdraw application (admin)' })
+  @ApiResponse({ status: 200, description: 'Application withdrawn successfully', type: ApplicationResponseDto })
+  @ApiResponse({ status: 400, description: 'Application cannot be withdrawn' })
+  @ApiResponse({ status: 404, description: 'Application not found' })
+  @CacheInvalidate(['portal:*:${userId}'])
+  @AuditTrail({ entityType: 'ParticipantApplication', action: ChangeType.status_change })
+  async withdraw(
+    @Param('id') id: string,
+    @Body('userId') userId: string,
+  ): Promise<ApplicationResponseDto> {
+    this.logger.log(`Withdrawing application ${id}`);
+
+    const command = new WithdrawApplicationCommand(id, userId);
+    return this.withdrawApplicationHandler.execute(command);
+  }
+}

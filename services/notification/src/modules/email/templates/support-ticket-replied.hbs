@@ -1,0 +1,31 @@
+<div style="text-align: left;">
+    <h2 style="font-size: 24px; font-weight: 700; color: {{theme.primaryDark}}; margin: 0 0 16px;">
+        You have a new support reply
+    </h2>
+
+    {{#if program}}
+    <p style="font-size: 13px; color: #6b7280; text-align: left; margin: 0 0 20px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">
+        {{program}}
+    </p>
+    {{/if}}
+
+    <p style="font-size: 16px; color: #4b5563; margin-bottom: 20px;">
+        Hi {{name}}, there is a new update on your support ticket.
+    </p>
+
+    <div style="background-color: {{theme.primaryMuted}}; border: 1px solid {{theme.border}}; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
+        <p style="margin: 0 0 8px; font-size: 14px;"><strong>Ticket Number:</strong> {{ticketNumber}}</p>
+        <p style="margin: 0 0 8px; font-size: 14px;"><strong>Subject:</strong> {{subject}}</p>
+        <p style="margin: 0 0 8px; font-size: 14px;"><strong>Responder:</strong> {{responderName}}</p>
+        <p style="margin: 0; font-size: 14px;"><strong>Status:</strong> {{status}}</p>
+    </div>
+
+    <p style="font-size: 14px; color: #6b7280; margin-bottom: 12px;"><strong>Message preview:</strong></p>
+    <p style="font-size: 14px; color: #4b5563; margin-bottom: 28px;">
+        {{messagePreview}}
+    </p>
+
+    <a href="{{supportUrl}}" class="cta-button">
+        View Ticket Conversation
+    </a>
+</div>

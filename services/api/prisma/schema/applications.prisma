@@ -1,0 +1,466 @@
+// ============================================================================
+// APPLICATIONS & PRICING
+// ============================================================================
+
+model ProgramPricingTier {
+  id          String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId   String  @map("program_id") @db.Uuid
+  name        String  @db.VarChar(255) // e.g., "Early Bird", "Regular", "Group"
+  description String? @db.Text
+  price       Decimal @db.Decimal(10, 2)
+  currency    String  @default("IDR") @db.VarChar(3)
+
+  // Dual-pricing fields (Phase 1: nullable; promoted to NOT NULL in Phase 5).
+  // `price` + `currency` remain in use until all code paths migrate.
+  usdPrice Decimal? @map("usd_price") @db.Decimal(10, 2)
+  idrPrice Decimal? @map("idr_price") @db.Decimal(15, 0)
+
+  capacity     Int? @default(0) // 0 or null = unlimited
+  currentCount Int  @default(0) @map("current_count") // Track usage
+
+  // New/Restored Fields
+  benefits          String[]              @default([])
+  requirements      String[]              @default([])
+  feeType           PricingFeeType        @default(registration_fee) @map("fee_type")
+  allowedCategories ApplicationCategory[] @default([self_funded]) @map("allowed_categories")
+  icon              String?               @db.VarChar(255)
+  soldCount         Int                   @default(0) @map("sold_count")
+
+  isActive  Boolean   @default(true) @map("is_active")
+  order     Int       @default(0)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  program         Program                     @relation(fields: [programId], references: [id], onDelete: Cascade)
+  validityPeriods PricingTierValidityPeriod[]
+  invoices        ApplicationInvoice[]
+  applications    ParticipantApplication[]
+  // transactions    PaymentTransaction[] -- REMOVED: Managed by Payment Service
+
+  @@index([programId])
+  @@index([isActive])
+  @@map("program_pricing_tiers")
+}
+
+model PricingTierValidityPeriod {
+  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  pricingTierId String   @map("pricing_tier_id") @db.Uuid
+  startDate     DateTime @map("start_date") @db.Timestamptz(6)
+  endDate       DateTime @map("end_date") @db.Timestamptz(6)
+  description   String?  @db.VarChar(255) // e.g., "Wave 1", "Wave 2"
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  pricingTier ProgramPricingTier @relation(fields: [pricingTierId], references: [id], onDelete: Cascade)
+
+  @@index([pricingTierId])
+  @@index([startDate, endDate])
+  @@map("pricing_tier_validity_periods")
+}
+
+model ProgramRequirement {
+  id          String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId   String  @map("program_id") @db.Uuid
+  name        String  @db.VarChar(255)
+  description String? @db.Text
+  type        String  @default("document") @db.VarChar(50) // document, text, checkbox, link
+
+  // Extra Config
+  fileMaxSize      Int?    @map("file_max_size") // in KB
+  fileAllowedTypes String? @map("file_allowed_types") @db.VarChar(255)
+  options          Json?   @default("[]") @db.Json // For select/checkbox
+
+  isRequired Boolean   @default(true) @map("is_required")
+  order      Int       @default(0)
+  isActive   Boolean   @default(true) @map("is_active")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt  DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@index([type])
+  @@index([order])
+  @@map("program_requirements")
+}
+
+model ApplicationFormField {
+  id              String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId       String  @map("program_id") @db.Uuid
+  section         String  @default("personal_info") @db.VarChar(50)
+  label           String  @db.VarChar(255)
+  name            String  @db.VarChar(100)
+  type            String  @db.VarChar(50)
+  placeholder     String? @db.VarChar(255)
+  helpText        String? @map("help_text") @db.Text
+  mediaUrl        String? @map("media_url") @db.Text
+  mediaAlt        String? @map("media_alt") @db.VarChar(255)
+  helpAssets      Json?   @default("[]") @map("help_assets") @db.Json
+  options         Json?   @default("[]") @db.Json
+  validationRules Json?   @default("{}") @map("validation_rules") @db.Json
+  isRequired      Boolean @default(true) @map("is_required")
+  order           Int     @default(0)
+  isActive        Boolean @default(true) @map("is_active")
+
+  // NEW: catalog linkage
+  source         String  @default("custom") @db.VarChar(16)
+  // Intentionally no FK to system_form_field_definitions.key — loose coupling
+  // so catalog soft-deletes don't cascade-break existing program fields.
+  systemFieldKey String? @map("system_field_key") @db.VarChar(64)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  // Enforced as a partial UNIQUE index in the migration SQL:
+  //   CREATE UNIQUE INDEX application_form_fields_program_name_uq
+  //     ON application_form_fields (program_id, name) WHERE deleted_at IS NULL;
+  // Prisma 7 DSL cannot express partial indexes, so the Prisma-level line
+  // below is a plain @@index for query performance; uniqueness is DB-enforced.
+  @@index([programId, name], map: "application_form_fields_program_name_uq")
+  @@index([programId])
+  @@index([section])
+  @@index([order])
+  @@index([source])
+  @@map("application_form_fields")
+}
+
+model ParticipantApplication {
+  id            String            @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId     String            @map("program_id") @db.Uuid
+  participantId String            @map("participant_id") @db.Uuid
+  status        ApplicationStatus @default(draft)
+
+  // Payment Status Overview (Detailed tracking in ApplicationInvoice)
+  registrationPaymentStatus PaymentStatus @default(unpaid) @map("registration_payment_status")
+  programPaymentStatus      PaymentStatus @default(unpaid) @map("program_payment_status")
+
+  ticketStatus            String                        @default("regular") @map("ticket_status")
+  referralCode            String?                       @map("referral_code") @db.VarChar(50)
+  applicationCategory     ApplicationCategory?          @map("application_category")
+  participationCategoryId String?                       @map("participation_category_id") @db.Uuid
+  participationCategory   ProgramParticipationCategory? @relation(fields: [participationCategoryId], references: [id])
+
+  pricingTierId String?             @map("pricing_tier_id") @db.Uuid
+  pricingTier   ProgramPricingTier? @relation(fields: [pricingTierId], references: [id])
+
+  submittedAt DateTime? @map("submission_date") @db.Timestamptz(6)
+
+  // Application Content (separate columns enable full-text search & filtering)
+  motivationLetter String? @map("motivation_letter") @db.Text
+  achievements     String? @db.Text
+  experiences      String? @db.Text
+  twibbonLink      String? @map("twibbon_link") @db.VarChar(500)
+
+  // Application Data (Flexible JSON stores for dynamic form responses)
+  personalData  Json @default("{}") @map("personal_data") @db.Json
+  essayAnswers  Json @default("{}") @map("essay_answers") @db.Json
+  uploadedFiles Json @default("{}") @map("uploaded_files") @db.Json
+
+  // File Attachments (JSON maps — named documentFiles to avoid conflict with ParticipantDocument relation)
+  documentFiles    Json? @default("{}") @map("document_files") @db.Json
+  requirementFiles Json? @default("[]") @map("requirement_files") @db.Json
+
+  // Audit & History
+  participantSnapshot Json? @map("participant_snapshot") @db.Json
+  statusHistory       Json? @default("[]") @map("status_history") @db.Json
+
+  // Denormalized scoring (convenience fields; source of truth is ApplicationAssessment)
+  scoreTotal     Decimal?     @map("score_total") @db.Decimal(5, 2)
+  scoreBreakdown Json?        @map("score_breakdown") @db.Json
+  scoreStatus    ScoreStatus? @map("score_status")
+  reviewedBy     String?      @map("reviewed_by") @db.Uuid
+  reviewedAt     DateTime?    @map("reviewed_at") @db.Timestamptz(6)
+  reviewerNotes  String?      @map("reviewer_notes") @db.Text
+
+  // Timestamps
+  lastEditedAt DateTime? @map("last_edited_at") @db.Timestamptz(6)
+  withdrawnAt  DateTime? @map("withdrawn_at") @db.Timestamptz(6)
+
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedBy   String?   @map("deleted_by") @db.Uuid
+  withdrawnBy String?   @map("withdrawn_by") @db.Uuid
+
+  // Meta
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  program     Program     @relation(fields: [programId], references: [id], onDelete: Cascade)
+  participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  deleter     User?       @relation("ApplicationDeleter", fields: [deletedBy], references: [id])
+  withdrawer  User?       @relation("ApplicationWithdrawer", fields: [withdrawnBy], references: [id])
+
+  editHistory ApplicationEditHistory[]
+  awards      ParticipantAward[]
+  documents   ParticipantDocument[]
+  reviews     ApplicationReview[]
+
+  // New Modular Relations
+  invoices    ApplicationInvoice[]
+  assessments ApplicationAssessment[]
+
+  @@unique([participantId, programId])
+  @@index([programId])
+  @@index([participantId])
+  @@index([status])
+  @@index([registrationPaymentStatus])
+  @@map("participant_applications")
+}
+
+model ApplicationInvoice {
+  id            String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  applicationId String        @map("application_id") @db.Uuid
+  pricingTierId String        @map("pricing_tier_id") @db.Uuid
+  amount        Decimal       @db.Decimal(10, 2)
+  currency      String        @default("IDR") @db.VarChar(3)
+  status        PaymentStatus @default(unpaid)
+  paidAt        DateTime?     @map("paid_at") @db.Timestamptz(6)
+
+  // Dual-price snapshots: frozen at intent creation so later tier price edits
+  // don't retroactively change what the participant owed. `amount` + `currency`
+  // are the canonical settlement values — USD by default, flipped to IDR on
+  // manual confirm. These columns are reference snapshots for both currencies.
+  amountUsd Decimal? @map("amount_usd") @db.Decimal(10, 2)
+  amountIdr Decimal? @map("amount_idr") @db.Decimal(15, 0)
+
+  // Exchange rate snapshot at time of payment — locked so past invoices are unaffected by future rate changes
+  exchangeRateSnapshot Decimal? @map("exchange_rate_snapshot") @db.Decimal(10, 2)
+
+  // Provider fee + net settlement amount, mirrored from the Go payment service's
+  // payment_transactions (fee_provider / net_amount) via the payment.succeeded
+  // event payload. Null until that event carries the fields (older in-flight
+  // events / not-yet-backfilled rows) — see prisma/migration-scripts backfill.
+  feeProvider Decimal? @map("fee_provider") @db.Decimal(15, 2)
+  netAmount   Decimal? @map("net_amount") @db.Decimal(15, 2)
+
+  // Link to external transaction ID from Payment Service for reference
+  externalTransactionId String? @map("external_transaction_id") @db.VarChar(100)
+  // Link to payment-service PaymentIntent (the user's obligation)
+  externalIntentId      String? @map("external_intent_id") @db.VarChar(100)
+  paymentMethod         String? @map("payment_method") @db.VarChar(50)
+
+  // Verifier audit trail — populated whenever an admin manually approves,
+  // rejects, or overrides this invoice's status. Source of truth for the
+  // payment service's PaymentTransaction.AdminNotes / ReviewedBy fields.
+  verifiedBy      String?   @map("verified_by") @db.Uuid
+  verifiedAt      DateTime? @map("verified_at") @db.Timestamptz(6)
+  rejectionReason String?   @map("rejection_reason") @db.Text
+
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  lastReconciledAt DateTime? @map("last_reconciled_at") @db.Timestamptz(6)
+
+  application ParticipantApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  pricingTier ProgramPricingTier     @relation(fields: [pricingTierId], references: [id])
+
+  @@index([applicationId])
+  @@index([status])
+  @@index([externalIntentId])
+  @@index([externalTransactionId])
+  @@index([lastReconciledAt])
+  @@map("application_invoices")
+}
+
+model PaymentOutboxEvent {
+  id            String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  eventType     String    @map("event_type") @db.VarChar(120)
+  aggregateType String    @map("aggregate_type") @db.VarChar(64)
+  aggregateId   String    @map("aggregate_id") @db.VarChar(128)
+  payload       Json      @db.JsonB
+  dedupeKey     String    @unique(map: "payment_outbox_events_dedupe_key_key") @map("dedupe_key") @db.VarChar(191)
+  correlationId String?   @map("correlation_id") @db.VarChar(191)
+  status        String    @default("pending") @db.VarChar(20)
+  attempts      Int       @default(0)
+  lastError     String?   @map("last_error") @db.Text
+  nextAttemptAt DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  publishedAt   DateTime? @map("published_at") @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([status, nextAttemptAt], map: "idx_payment_outbox_status_next_attempt_at")
+  @@index([aggregateType, aggregateId], map: "idx_payment_outbox_aggregate")
+  @@map("payment_outbox_events")
+}
+
+model ApplicationAssessment {
+  id            String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  applicationId String           @map("application_id") @db.Uuid
+  type          AssessmentType   @default(document_review)
+  status        AssessmentStatus @default(pending)
+
+  score    Decimal? @db.Decimal(5, 2) // e.g. 85.50
+  notes    String?  @db.Text // Internal notes
+  feedback String?  @db.Text // Feedback for participant (optional)
+
+  assessorId String?   @map("assessor_id") @db.Uuid
+  assessedAt DateTime? @map("assessed_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  application ParticipantApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  assessor    User?                  @relation(fields: [assessorId], references: [id])
+
+  @@index([applicationId])
+  @@index([type])
+  @@map("application_assessments")
+}
+
+model ApplicationEditHistory {
+  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  applicationId String   @map("application_id") @db.Uuid
+  editedBy      String   @map("edited_by") @db.Uuid
+  reason        String?  @db.Text
+  changes       Json     @db.Json // { field: { old: "val", new: "val" } }
+  snapshot      Json?    @db.Json // Full state of the application before/after edit
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  application ParticipantApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  editor      User                   @relation("EditHistoryChangedBy", fields: [editedBy], references: [id])
+
+  @@index([applicationId])
+  @@map("application_edit_history")
+}
+
+model ParticipantAward {
+  id             String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  applicationId  String    @map("application_id") @db.Uuid
+  programAwardId String    @map("program_award_id") @db.Uuid
+  awardedAt      DateTime  @default(now()) @map("awarded_at") @db.Timestamptz(6)
+  awardedBy      String?   @map("awarded_by") @db.Uuid
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Added/Restored fields
+  notes          String? @db.Text
+  certificateUrl String? @map("certificate_url") @db.VarChar(500)
+
+  // Relations
+  application  ParticipantApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  programAward ProgramAward           @relation(fields: [programAwardId], references: [id], onDelete: Cascade)
+  admin        User?                  @relation(fields: [awardedBy], references: [id])
+
+  @@unique([applicationId, programAwardId])
+  @@index([applicationId])
+  @@index([programAwardId])
+  @@map("participant_awards")
+}
+
+model ParticipantDocument {
+  id            String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  applicationId String  @map("application_id") @db.Uuid
+  templateId    String? @map("template_id") @db.Uuid // If generated from template
+
+  // Document Info
+  documentNumber String? @map("document_number") @db.VarChar(50)
+  name           String  @db.VarChar(255) // e.g., "Certificate of Participation", "Letter of Acceptance"
+  type           String  @db.VarChar(50) // certificate, letter, invoice, agreement
+  fileUrl        String  @map("file_url") @db.VarChar(500)
+  fileType       String  @default("pdf") @map("file_type") @db.VarChar(10)
+
+  // Status
+  isPublic      Boolean @default(false) @map("is_public")
+  downloadCount Int     @default(0) @map("download_count")
+
+  // Signed copy (for agreement_letter type documents)
+  signedCopyUrl    String? @map("signed_copy_url") @db.VarChar(500)
+  submissionStatus String  @default("not_required") @map("submission_status") @db.VarChar(50)
+  submissionNote   String? @map("submission_note") @db.Text
+
+  // Meta
+  generatedAt DateTime  @default(now()) @map("generated_at") @db.Timestamptz(6)
+  emailedAt   DateTime? @map("emailed_at") @db.Timestamptz(6)
+  viewedAt    DateTime? @map("viewed_at") @db.Timestamptz(6)
+  expiresAt   DateTime? @map("expires_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  legacyId    Int?      @unique @map("legacy_id")
+
+  // LOA download tracking
+  firstDownloadedAt DateTime? @map("first_downloaded_at") @db.Timestamptz(6)
+  lastDownloadedAt  DateTime? @map("last_downloaded_at") @db.Timestamptz(6)
+  loaReleaseBatchId String?   @map("loa_release_batch_id") @db.Uuid
+
+  // Relations
+  application     ParticipantApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  template        DocumentTemplate?      @relation(fields: [templateId], references: [id])
+  loaReleaseBatch LoaReleaseBatch?       @relation(fields: [loaReleaseBatchId], references: [id])
+
+  @@index([applicationId])
+  @@index([type])
+  @@map("participant_documents")
+}
+
+model SystemFormFieldDefinition {
+  id              String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  key             String    @unique @db.VarChar(64)
+  label           String    @db.VarChar(255)
+  category        String    @db.VarChar(32)
+  type            String    @db.VarChar(32)
+  defaultOptions  Json?     @default("[]") @map("default_options") @db.Json
+  validationRules Json?     @default("{}") @map("validation_rules") @db.Json
+  helpText        String?   @map("help_text") @db.Text
+  placeholder     String?   @db.VarChar(255)
+  isMagic         Boolean   @default(false) @map("is_magic")
+  isActive        Boolean   @default(true) @map("is_active")
+  order           Int       @default(0)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@index([category])
+  @@index([isActive])
+  @@map("system_form_field_definitions")
+}
+
+model ApplicationFormTemplate {
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name        String    @db.VarChar(255)
+  description String?   @db.Text
+  category    String?   @db.VarChar(64)
+  isDefault   Boolean   @default(false) @map("is_default")
+  createdBy   String?   @map("created_by") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  fields ApplicationFormTemplateField[]
+
+  @@index([category])
+  @@map("application_form_templates")
+}
+
+model ApplicationFormTemplateField {
+  id             String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  templateId     String  @map("template_id") @db.Uuid
+  source         String  @db.VarChar(16)
+  // Intentionally no FK to system_form_field_definitions.key — loose coupling
+  // so catalog soft-deletes don't cascade-break existing program fields.
+  systemFieldKey String? @map("system_field_key") @db.VarChar(64)
+
+  name            String? @db.VarChar(100)
+  label           String? @db.VarChar(255)
+  type            String? @db.VarChar(50)
+  placeholder     String? @db.VarChar(255)
+  helpText        String? @map("help_text") @db.Text
+  options         Json?   @default("[]") @db.Json
+  validationRules Json?   @default("{}") @map("validation_rules") @db.Json
+
+  section          String  @default("personal_details") @db.VarChar(50)
+  isRequired       Boolean @default(false) @map("is_required")
+  order            Int     @default(0)
+  labelOverride    String? @map("label_override") @db.VarChar(255)
+  helpTextOverride String? @map("help_text_override") @db.Text
+
+  template ApplicationFormTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+  @@map("application_form_template_fields")
+}
