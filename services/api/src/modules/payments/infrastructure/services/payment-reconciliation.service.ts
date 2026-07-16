@@ -217,7 +217,10 @@ export class PaymentReconciliationService {
                 ],
             },
             include: PROCESSING_INVOICE_INCLUDE,
-            orderBy: [{ lastReconciledAt: 'asc' }, { updatedAt: 'asc' }],
+            // Nulls first: plain ASC sorts NULLs LAST in Postgres, which would starve
+            // never-reconciled invoices behind already-stamped ones whenever the
+            // matching set exceeds batchSize. Mirrors reconcileTerminalInvoiceDrift.
+            orderBy: [{ lastReconciledAt: { sort: 'asc', nulls: 'first' } }, { updatedAt: 'asc' }],
             take: this.batchSize,
         });
 

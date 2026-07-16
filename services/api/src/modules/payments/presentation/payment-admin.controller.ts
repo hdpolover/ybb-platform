@@ -757,6 +757,7 @@ export class PaymentAdminController {
                 applicationId: true,
                 amount: true,
                 currency: true,
+                status: true,
                 externalTransactionId: true,
                 application: {
                     select: {
@@ -801,6 +802,14 @@ export class PaymentAdminController {
         if (!invoice) throw new HttpException('Invoice not found', 404);
         if (!invoice.externalTransactionId) {
             throw new HttpException('No transaction linked to this invoice', 400);
+        }
+        // Independent of Go's NEEDS_REVIEW guard, which covers the inverse case: a
+        // dropped payment.succeeded leaves the invoice 'processing' while the gateway
+        // txn is SUCCESS. This covers a locally-settled invoice, where rejecting would
+        // flip the application's payment status to failed and email a paying
+        // participant that their payment was rejected.
+        if (body.action === 'reject' && invoice.status === PaymentStatus.paid) {
+            throw new HttpException('Cannot reject an invoice that is already paid', 400);
         }
 
         try {
