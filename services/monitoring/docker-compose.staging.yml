@@ -1,0 +1,89 @@
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ybb-prometheus-staging
+    restart: always
+    volumes:
+      - ./prometheus/prometheus.local.yml:/etc/prometheus/prometheus.yml.tpl
+      - ./prometheus/docker-entrypoint.sh:/etc/prometheus/docker-entrypoint.sh
+      - prometheus_data_staging:/prometheus
+    entrypoint: [ "/bin/sh", "/etc/prometheus/docker-entrypoint.sh" ]
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+    env_file:
+      - .env.staging
+    ports:
+      - "9091:9090" # Use distinct port for staging if on same node
+    networks:
+      - ybb-network-staging
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ybb-grafana-staging
+    restart: always
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - grafana_data_staging:/var/lib/grafana
+    env_file:
+      - .env.staging
+    networks:
+      - ybb-network-staging
+    ports:
+      - "3002:3000"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana-staging.rule=Host(`staging-monitor.ybbhub.com`)"
+      - "traefik.http.routers.grafana-staging.entrypoints=websecure"
+      - "traefik.http.routers.grafana-staging.tls.certresolver=myresolver"
+      - "traefik.http.services.grafana-staging.loadbalancer.server.port=3000"
+
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: ybb-loki-staging
+    restart: always
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/local-config.yaml
+      - loki_data_staging:/tmp/loki
+    env_file:
+      - .env.staging
+    networks:
+      - ybb-network-staging
+
+  tempo:
+    image: grafana/tempo:2.4.1
+    container_name: ybb-tempo-staging
+    command: [ "-config.file=/etc/tempo.yaml" ]
+    volumes:
+      - ./tempo/tempo-config.yml:/etc/tempo.yaml
+      - tempo_data_staging:/tmp/tempo
+    env_file:
+      - .env.staging
+    networks:
+      - ybb-network-staging
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.96.0
+    container_name: ybb-otel-collector-staging
+    command: [ "--config=/etc/otel-collector-config.yaml" ]
+    volumes:
+      - ./otel/otel-collector-config.yml:/etc/otel-collector-config.yaml
+    env_file:
+      - .env.staging
+    networks:
+      - ybb-network-staging
+    depends_on:
+      - tempo
+
+networks:
+  ybb-network-staging:
+    name: ybb-network-staging
+    external: true
+
+volumes:
+  prometheus_data_staging:
+  grafana_data_staging:
+  loki_data_staging:
+  tempo_data_staging:

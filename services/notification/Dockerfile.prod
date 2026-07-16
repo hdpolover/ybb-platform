@@ -1,0 +1,37 @@
+# Build Stage
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci
+
+COPY . .
+RUN npm run build
+
+# Production Stage
+FROM node:20-alpine AS production
+
+RUN apk add --no-cache curl
+
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+COPY package*.json ./
+RUN --mount=type=cache,target=/root/.npm \
+    npm config set fetch-retry-maxtimeout 600000 && \
+    npm config set fetch-retries 5 && \
+    npm ci --omit=dev
+
+COPY --from=builder /app/dist ./dist
+
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+COPY rabbitmq-queue-cleanup.sh /app/rabbitmq-queue-cleanup.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.sh \
+    && sed -i 's/\r$//' /app/rabbitmq-queue-cleanup.sh \
+    && chmod +x /docker-entrypoint.sh /app/rabbitmq-queue-cleanup.sh
+
+ENTRYPOINT ["/bin/sh", "/docker-entrypoint.sh"]
+CMD ["node", "dist/main"]

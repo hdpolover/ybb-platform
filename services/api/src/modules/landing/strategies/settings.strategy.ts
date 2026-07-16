@@ -1,0 +1,145 @@
+import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
+import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
+import { Brand } from '@prisma/client';
+import { LandingSettingsResponseDto } from '../dto/landing-settings.dto';
+import { LandingSnapshotService } from '../services/landing-snapshot.service';
+
+function readBrandMetadataString(category: Brand, key: string): string | undefined {
+    const raw = (category.metadata as Record<string, unknown> | null)?.[key];
+    return typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : undefined;
+}
+
+@Injectable()
+export class SettingsStrategy {
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly cacheService: CacheService,
+        private readonly landingSnapshotService: LandingSnapshotService,
+    ) { }
+
+    async getData(category: Brand | null): Promise<LandingSettingsResponseDto> {
+        if (category) {
+            return this.landingSnapshotService.getOrBuildSettingsSnapshot(
+                category,
+                () => this.buildSettingsPayload(category),
+            );
+        }
+
+        // Check cache first
+        const cacheKey = CACHE_KEYS.LANDING_SETTINGS('default');
+        const cached = await this.cacheService.get<LandingSettingsResponseDto>(cacheKey);
+        if (cached) {
+            return cached;
+        }
+
+        const result = await this.buildSettingsPayload(category);
+
+        // Cache for 1 hour
+        await this.cacheService.set(cacheKey, result, CACHE_TTL.HOUR);
+
+        return result;
+    }
+
+    private async buildSettingsPayload(category: Brand | null): Promise<LandingSettingsResponseDto> {
+
+        const availableBrands = await this.prisma.brand.findMany({
+            where: { isActive: true, deletedAt: null },
+            select: {
+                id: true,
+                slug: true,
+                name: true,
+                websiteUrl: true,
+                landingUrl: true,
+                logoUrl: true,
+                logoIconUrl: true,
+            },
+            orderBy: { name: 'asc' },
+        });
+
+        if (!category) {
+            return {
+                maintenance: { is_maintenance_mode: false },
+                brand: { name: 'Youth Break the Boundaries', logo_url: '', description: undefined, logo_white_url: undefined, logo_color_url: undefined, logo_icon_url: undefined },
+                footer_navigation: [],
+                currency: { code: 'USD', rate_to_idr: 16000 },
+                available_brands: availableBrands.map((brand) => ({
+                    id: brand.id,
+                    slug: brand.slug,
+                    name: brand.name,
+                    website_url: brand.websiteUrl || undefined,
+                    landing_url: brand.landingUrl || undefined,
+                    logo_url: brand.logoUrl || undefined,
+                    logo_icon_url: brand.logoIconUrl || brand.logoUrl || undefined,
+                })),
+            };
+        }
+
+        const program = await this.prisma.program.findFirst({ where: { brandId: category.id, isPublished: true, isActive: true }, orderBy: [{ year: 'desc' }, { createdAt: 'desc' }] });
+        const settings = await this.prisma.brandSetting.findUnique({
+            where: { brandId: category.id }
+        });
+
+        // Exchange rate is configured per program. Keep a neutral fallback only
+        // when no active program or program-specific rate is available yet.
+        const programRate = program?.usdInIdr ? Number(program.usdInIdr) : null;
+        const effectiveRate = programRate ?? 16000;
+        const faviconUrl = readBrandMetadataString(category, 'favicon_url');
+        const appleIconUrl = readBrandMetadataString(category, 'apple_icon_url');
+
+        const result = {
+            maintenance: {
+                is_maintenance_mode: settings?.isMaintenanceMode || false,
+                message: settings?.maintenanceMessage || undefined,
+                scheduled_end: settings?.maintenanceScheduledEnd || undefined
+            },
+            brand: {
+                name: category.name,
+                logo_url: program?.logoUrl || category.logoUrl || '',
+                logo_white_url: category.logoWhiteUrl || undefined,
+                logo_color_url: category.logoColorUrl || undefined,
+                logo_icon_url: category.logoIconUrl || program?.logoUrl || category.logoUrl || undefined,
+                favicon_url: faviconUrl || category.logoIconUrl || program?.logoUrl || category.logoUrl || undefined,
+                apple_icon_url: appleIconUrl || category.logoIconUrl || program?.logoUrl || category.logoUrl || undefined,
+                primary_color: category.primaryColor || undefined,
+                description: category.about || category.description || undefined,
+                support_email: settings?.supportEmail || category.contactEmail || undefined,
+                google_analytics_id: settings?.googleAnalyticsId || undefined,
+                pixel_id: settings?.pixelId || undefined,
+                contact_phone: category.contactPhone || undefined,
+                contact_whatsapp: category.contactWhatsapp || undefined,
+                address: category.contactAddress || undefined,
+                social_media: (category.socialMediaLinks || undefined) as unknown as Record<string, string> | undefined
+            },
+            footer_navigation: ((settings?.footerNavigation as Record<string, unknown>[] | null) || []) as unknown as import('../dto/landing-settings.dto').FooterColumnDto[],
+            currency: {
+                code: category.defaultCurrency || 'USD',
+                rate_to_idr: effectiveRate
+            },
+            active_program: program ? { 
+                id: program.id, 
+                name: program.name, 
+                slug: program.slug,
+                year: program.year || undefined,
+                logo_url: program.logoUrl || undefined,
+                logo_white_url: program.logoWhiteUrl || undefined,
+                logo_color_url: program.logoColorUrl || undefined,
+                logo_icon_url: program.logoIconUrl || program.logoUrl || category.logoIconUrl || category.logoUrl || undefined,
+                favicon_url: faviconUrl || category.logoIconUrl || program.logoIconUrl || program.logoUrl || category.logoUrl || undefined,
+                apple_icon_url: appleIconUrl || category.logoIconUrl || program.logoIconUrl || program.logoUrl || category.logoUrl || undefined,
+            } : undefined,
+            available_brands: availableBrands.map((brand) => ({
+                id: brand.id,
+                slug: brand.slug,
+                name: brand.name,
+                website_url: brand.websiteUrl || undefined,
+                landing_url: brand.landingUrl || undefined,
+                logo_url: brand.logoUrl || undefined,
+                logo_icon_url: brand.logoIconUrl || brand.logoUrl || undefined,
+            })),
+        };
+
+        return result;
+    }
+}

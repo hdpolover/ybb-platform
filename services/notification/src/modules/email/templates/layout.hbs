@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <meta name="supported-color-schemes" content="light dark">
+    <title>{{#if brand.name}}{{brand.name}}{{else}}YBB Platform{{/if}}</title>
+    <!--[if mso]>
+    <style>
+        table {border-collapse:collapse;border-spacing:0;border:none;margin:0;}
+        div, td {padding:0;}
+        div {margin:0 !important;}
+        </style>
+        <noscript>
+        <xml>
+            <o:OfficeDocumentSettings>
+            <o:PixelsPerInch>96</o:PixelsPerInch>
+            </o:OfficeDocumentSettings>
+        </xml>
+        </noscript>
+    <![endif]-->
+    <style>
+        /* Base Reset */
+        body { 
+            font-family: 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif; 
+            background-color: #f3f4f6;
+            margin: 0; 
+            padding: 0; 
+            width: 100% !important;
+            -webkit-text-size-adjust: 100%;
+            -ms-text-size-adjust: 100%;
+        }
+        
+        /* Layout Containers */
+        .wrapper {
+            width: 100%;
+            table-layout: fixed;
+            background-color: #f3f4f6;
+            padding-top: 40px;
+            padding-bottom: 40px;
+        }
+        
+        .main-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            border: 1px solid #e5e7eb;
+            border-top: 4px solid {{theme.primary}};
+        }
+
+        /* Elements */
+        .header {
+            padding: 32px 40px 24px;
+            text-align: center;
+            border-bottom: 1px solid #f3f4f6;
+            background: linear-gradient(180deg, {{theme.primaryMuted}} 0%, #ffffff 80%);
+        }
+        
+        .brand-logo {
+            max-height: 52px;
+            width: auto;
+            display: block;
+            margin: 0;
+        }
+
+        .brand-lockup {
+            margin: 0 auto;
+        }
+
+        .brand-lockup-logo {
+            vertical-align: middle;
+            padding-right: 16px;
+        }
+
+        .brand-lockup-name {
+            vertical-align: middle;
+            text-align: left;
+            color: #111827;
+            font-size: 28px;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            line-height: 1.1;
+        }
+        
+        .brand-text {
+            color: #111827;
+            font-size: 24px;
+            font-weight: 700;
+            margin: 0;
+            letter-spacing: -0.025em;
+        }
+
+
+        .content {
+            padding: 32px 40px 48px;
+            color: #374151;
+            font-size: 16px;
+            line-height: 1.6;
+            text-align: left;
+            background-color: #ffffff;
+        }
+
+        .cta-button {
+            display: inline-block;
+            background-color: {{theme.primary}};
+            color: {{theme.onPrimary}} !important;
+            padding: 14px 32px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 16px;
+            text-align: center;
+            margin-top: 32px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            transition: opacity 0.2s ease;
+        }
+        
+        .cta-button:hover {
+            opacity: 0.9;
+        }
+        
+        .link {
+            color: {{theme.primary}};
+            text-decoration: underline;
+            font-weight: 500;
+        }
+        
+        .break-word {
+            word-break: break-all;
+        }
+
+        /* Footer */
+        .footer {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 32px 20px;
+            text-align: center;
+            color: #6b7280;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .social-links {
+            margin-bottom: 24px;
+        }
+
+        .social-links a {
+            display: inline-block;
+            margin: 0 10px;
+            text-decoration: none;
+            color: {{theme.primary}};
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .legal-links {
+            margin-top: 16px;
+            margin-bottom: 24px;
+            font-size: 12px;
+            color: #9ca3af;
+        }
+
+        .legal-links a {
+            color: #6b7280;
+            text-decoration: underline;
+            margin: 0 6px;
+        }
+        
+        .address-box {
+            font-style: normal;
+            margin-bottom: 16px;
+            font-size: 12px;
+            color: #9ca3af;
+        }
+
+        /* Mobile */
+        @media screen and (max-width: 600px) {
+            .wrapper { padding-top: 0; padding-bottom: 0; background-color: #ffffff; }
+            .main-container { border: none; box-shadow: none; border-radius: 0; border-top: none; }
+            .header { padding: 24px 20px 20px; border-bottom: none; }
+            .brand-lockup-name { font-size: 20px; }
+            .brand-logo { max-height: 44px; }
+            .content { padding: 0 20px 40px; }
+            .footer { padding: 20px; border-top: 1px solid #f3f4f6; }
+            .cta-button { display: block; width: 100%; box-sizing: border-box; }
+        }
+
+        /* Dark mode: clients that render dark can darken the light header
+           background, which would hide near-black text. Force the brand name,
+           heading fallback, and header surface to hold contrast. */
+        @media (prefers-color-scheme: dark) {
+            .brand-lockup-name { color: #f9fafb !important; }
+            .brand-text { color: #f9fafb !important; }
+            .header { background: #111827 !important; }
+        }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <!-- Main Card -->
+        <div class="main-container">
+            <!-- Header -->
+            <div class="header">
+                {{#if brand.logoUrl}}
+                    <table role="presentation" class="brand-lockup" cellpadding="0" cellspacing="0" border="0" align="center">
+                        <tr>
+                            <td class="brand-lockup-logo">
+                                <img src="{{brand.logoUrl}}" alt="{{#if brand.name}}{{brand.name}}{{else}}Logo{{/if}}" class="brand-logo">
+                            </td>
+                            {{#if brand.name}}
+                            <td class="brand-lockup-name">{{brand.name}}</td>
+                            {{/if}}
+                        </tr>
+                    </table>
+                {{else}}
+                    <h1 class="brand-text">{{#if brand.name}}{{brand.name}}{{else}}YBB Platform{{/if}}</h1>
+                {{/if}}
+            </div>
+
+            <!-- Body -->
+            <div class="content">
+                {{{body}}}
+            </div>
+        </div>
+
+        <!-- External Footer -->
+        <div class="footer">
+            <!-- Social Links -->
+            {{#if brand.socialMediaLinks}}
+            <div class="social-links">
+                {{#if brand.socialMediaLinks.instagram}}
+                    <a href="{{brand.socialMediaLinks.instagram}}" target="_blank">Instagram</a>
+                {{/if}}
+                {{#if brand.socialMediaLinks.facebook}}
+                    <a href="{{brand.socialMediaLinks.facebook}}" target="_blank">Facebook</a>
+                {{/if}}
+                {{#if brand.socialMediaLinks.linkedin}}
+                    <a href="{{brand.socialMediaLinks.linkedin}}" target="_blank">LinkedIn</a>
+                {{/if}}
+                {{#if brand.socialMediaLinks.website}}
+                    <a href="{{brand.socialMediaLinks.website}}" target="_blank">Website</a>
+                {{/if}}
+                {{#if brand.socialMediaLinks.tiktok}}
+                    <a href="{{brand.socialMediaLinks.tiktok}}" target="_blank">TikTok</a>
+                {{/if}}
+                {{#if brand.socialMediaLinks.youtube}}
+                    <a href="{{brand.socialMediaLinks.youtube}}" target="_blank">YouTube</a>
+                {{/if}}
+            </div>
+            {{/if}}
+
+            <p style="margin: 0 0 12px;">
+                You received this email because you registered for <strong>{{#if brand.name}}{{brand.name}}{{else}}YBB Platform{{/if}}</strong>.
+            </p>
+            
+            {{#if brand.contactAddress}}
+            <div class="address-box">
+                {{brand.contactAddress}}
+            </div>
+            {{/if}}
+
+            {{#if brand.contactEmail}}
+                <p style="margin: 0 0 16px;">
+                    Questions? Email us at <a href="mailto:{{brand.contactEmail}}" style="color: inherit; text-decoration: underline;">{{brand.contactEmail}}</a>
+                </p>
+            {{else}}
+                {{#if brand.settings.supportEmail}}
+                <p style="margin: 0 0 16px;">
+                    Need help? Email <a href="mailto:{{brand.settings.supportEmail}}" style="color: inherit; text-decoration: underline;">{{brand.settings.supportEmail}}</a>
+                </p>
+                {{/if}}
+            {{/if}}
+
+            <!-- Legal Links -->
+            <div class="legal-links">
+                {{#if brand.websiteUrl}}
+                    <a href="{{brand.websiteUrl}}/terms" target="_blank">Terms of Service</a> &bull;
+                    <a href="{{brand.websiteUrl}}/privacy" target="_blank">Privacy Policy</a>
+                {{else}}
+                     <a href="#" target="_blank">Terms of Service</a> &bull;
+                     <a href="#" target="_blank">Privacy Policy</a>
+                {{/if}}
+                
+                {{#if brand.settings.supportEmail}}
+                 &bull; <a href="mailto:{{brand.settings.supportEmail}}">Support</a>
+                {{/if}}
+            </div>
+
+            <p style="margin: 0; opacity: 0.7;">
+                &copy; {{year}} {{#if brand.name}}{{brand.name}}{{else}}YBB Platform{{/if}}. All rights reserved.
+            </p>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,48 @@
+# Build Stage
+FROM python:3.11-slim AS builder
+
+WORKDIR /app
+
+COPY requirements.txt .
+ENV PIP_ROOT_USER_ACTION=ignore
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip && \
+    pip install --user --no-warn-script-location -r requirements.txt
+
+# Production Stage
+FROM python:3.11-slim
+
+# Install curl for healthchecks and WeasyPrint dependencies
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y \
+    curl \
+    libpango-1.0-0 \
+    libpangoft2-1.0-0 \
+    libcairo2 \
+    # Unicode fonts: Latin+diacritics, Arabic, Bengali via NotoSans;
+    # CJK (Chinese/Japanese/Korean) via fonts-noto-cjk
+    fonts-noto-core \
+    fonts-noto-cjk \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy installed packages from builder
+COPY --from=builder /root/.local /root/.local
+ENV PATH=/root/.local/bin:$PATH
+
+COPY . .
+
+# Generate Prisma Client
+RUN prisma generate
+
+# Copy entrypoint
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+EXPOSE 8001
+EXPOSE 50052
+
+# Run with entrypoint (starts gRPC in background, then uvicorn as main process)
+ENTRYPOINT ["/docker-entrypoint.sh"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "4"]

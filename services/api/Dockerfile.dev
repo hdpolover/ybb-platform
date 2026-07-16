@@ -1,0 +1,40 @@
+# Development Dockerfile with hot reload
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install OpenSSL for Prisma, and Noto Sans fonts for Unicode PDF rendering
+# font-noto provides NotoSans-Regular.ttf at /usr/share/fonts/noto/
+RUN apk add --no-cache openssl font-noto
+
+# Install dependencies first (for better caching)
+COPY package*.json ./
+RUN npm install
+RUN npm install prisma@latest @prisma/client@latest
+
+# Copy Prisma schema
+COPY prisma ./prisma/
+COPY prisma.config.ts ./
+
+# Copy tsconfig
+COPY tsconfig.json ./
+
+# Copy source code
+COPY src ./src
+
+# Create dist/protos directory ensuring proto files exist there (fix for missing protos)
+RUN mkdir -p dist/protos && cp src/protos/*.proto dist/protos/
+
+# Copy and set up entrypoint script
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+COPY rabbitmq-queue-cleanup.sh /app/rabbitmq-queue-cleanup.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.sh \
+  && sed -i 's/\r$//' /app/rabbitmq-queue-cleanup.sh \
+  && chmod +x /docker-entrypoint.sh /app/rabbitmq-queue-cleanup.sh
+
+# Expose port
+EXPOSE 4000
+
+# Use entrypoint to run migrations before starting app
+ENTRYPOINT ["/bin/sh", "/docker-entrypoint.sh"]
+CMD ["npm", "run", "start:dev"]

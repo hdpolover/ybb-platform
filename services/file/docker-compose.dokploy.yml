@@ -1,0 +1,90 @@
+services:
+  file:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: ybb-prod-file
+    restart: always
+    environment:
+      PYTHON_ENV: production
+      SERVICE_PORT: 8001
+      # Database
+      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@ybb-prod-postgres-file:5432/${DATABASE_NAME}
+      # MinIO (External or Staging)
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_REGION: ${MINIO_REGION:-sgp1}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+      MINIO_SECURE: "true"
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
+      MINIO_PUBLIC_SECURE: "true"
+      # RabbitMQ
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@ybb-prod-shared-rabbitmq:5672/
+      # Service Configuration
+      CERTIFICATE_SIGNING_KEY: ${CERTIFICATE_SIGNING_KEY}
+      CERTIFICATE_VERIFICATION_URL: ${CERTIFICATE_VERIFICATION_URL}
+      FILE_SERVICE_INTERNAL_KEY: ${FILE_SERVICE_INTERNAL_KEY}
+      # Observability
+      LOKI_URL: ${LOKI_URL}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_LOG_LEVEL: ${OTEL_LOG_LEVEL:-info}
+    depends_on:
+      postgres-file:
+        condition: service_healthy
+    networks:
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=dokploy-network"
+      - "traefik.http.routers.ybb-prod-file.rule=${APP_DOMAINS_RULE:-Host(`files.ybbhub.com`)}"
+      - "traefik.http.routers.ybb-prod-file.entrypoints=websecure"
+      - "traefik.http.routers.ybb-prod-file.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ybb-prod-file.loadbalancer.server.port=8001"
+      - "traefik.http.routers.ybb-prod-file.service=ybb-prod-file"
+
+  # Filestash (S3 Browser for DigitalOcean Spaces)
+  filestash:
+    image: machines/filestash:latest
+    container_name: ybb-prod-filestash
+    restart: always
+    environment:
+      - APPLICATION_URL=https://console.ybbhub.com
+    volumes:
+      - filestash_data:/app/data/state/
+    networks:
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=dokploy-network"
+      - "traefik.http.routers.ybb-prod-filestash.rule=Host(`console.ybbhub.com`)"
+      - "traefik.http.routers.ybb-prod-filestash.entrypoints=websecure"
+      - "traefik.http.routers.ybb-prod-filestash.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ybb-prod-filestash.loadbalancer.server.port=8334"
+
+  postgres-file:
+    image: postgres:15-alpine
+    container_name: ybb-prod-postgres-file
+    restart: always
+    environment:
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
+    volumes:
+      - postgres_file_data_prod:/var/lib/postgresql/data
+    networks:
+      - dokploy-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  postgres_file_data_prod:
+  filestash_data:

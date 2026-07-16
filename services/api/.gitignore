@@ -1,0 +1,55 @@
+# Dependencies
+node_modules/
+dist/
+build/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Prisma
+prisma/.env
+*.db
+*.db-journal
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Testing
+coverage/
+.nyc_output/
+
+# Uploads
+uploads/
+temp/
+
+# Build
+*.tsbuildinfo
+
+# Security
+service-account.json
+*-service-acc.json
+ybb-service-acc.json
+
+# one-off remediation script backups (contain participant PII)
+scripts/backups/
+
+# backfill script JSON reports (contain transaction/invoice IDs, written to cwd)
+backfill-orphaned-cancellations.*.json

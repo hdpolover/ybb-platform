@@ -1,0 +1,32 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'ybb-api'
+    metrics_path: '/v1/metrics'
+    static_configs:
+      - targets: ['{{API_HOST}}:{{API_PORT}}']
+
+  - job_name: 'ybb-payment'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['{{PAYMENT_HOST}}:{{PAYMENT_PORT}}']
+
+  - job_name: 'ybb-file'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['{{FILE_HOST}}:{{FILE_PORT}}']
+
+  - job_name: 'ybb-notification'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['{{NOTIFICATION_HOST}}:{{NOTIFICATION_PORT}}']
+
+  - job_name: 'ybb-rabbitmq'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['{{RABBITMQ_HOST}}:{{RABBITMQ_PORT}}']

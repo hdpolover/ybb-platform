@@ -1,0 +1,28 @@
+services:
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: ybb-pgadmin-staging
+    restart: always
+    env_file:
+      - .env.staging
+    environment:
+      PGADMIN_SERVER_JSON_FILE: /pgadmin4/servers.json
+    volumes:
+      - pgadmin_data_staging:/var/lib/pgadmin
+      - ./servers.staging.json:/pgadmin4/servers.json:ro
+    networks:
+      - ybb-network-staging
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pgadmin-staging.rule=Host(`staging-db.ybbhub.com`)"
+      - "traefik.http.routers.pgadmin-staging.entrypoints=websecure"
+      - "traefik.http.routers.pgadmin-staging.tls.certresolver=myresolver"
+      - "traefik.http.services.pgadmin-staging.loadbalancer.server.port=80"
+
+networks:
+  ybb-network-staging:
+    name: ybb-network-staging
+    external: true
+
+volumes:
+  pgadmin_data_staging:

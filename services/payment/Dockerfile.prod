@@ -1,0 +1,37 @@
+# Build Stage
+FROM golang:1.24-alpine AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apk add --no-cache git
+
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+
+COPY . .
+
+# Update go.sum to ensure all dependencies are correct
+RUN go mod tidy
+
+# Copy migrations (Required for runtime)
+COPY migrations ./migrations
+
+# Build the application
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main ./cmd/server/main.go
+
+# Production Stage
+FROM alpine:latest  
+
+WORKDIR /root/
+
+# Install CA certificates for external API calls (Stripe)
+RUN apk --no-cache add ca-certificates
+
+COPY --from=builder /app/main .
+COPY --from=builder /app/migrations ./migrations
+
+EXPOSE 8002
+
+CMD ["./main"]

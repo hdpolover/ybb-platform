@@ -1,0 +1,80 @@
+services:
+  # =========================================
+  # API Service (Staging)
+  # =========================================
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: ybb-api-staging
+    restart: always
+    ports:
+      - "4000:4000"
+    env_file:
+      - .env.staging
+    # Advanced features env vars (READ_REPLICA_URL, CIRCUIT_BREAKER_*) should be set in .env.staging
+    depends_on:
+      postgres-api:
+        condition: service_healthy
+      redis-api:
+        condition: service_healthy
+    networks:
+      - ybb-network-staging
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=dokploy-network"
+      - "traefik.http.routers.ybb-api-staging.rule=Host(`staging-api.ybbhub.com`)"
+      - "traefik.http.routers.ybb-api-staging.entrypoints=websecure"
+      - "traefik.http.routers.ybb-api-staging.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ybb-api-staging.loadbalancer.server.port=4000"
+
+  postgres-api:
+    image: postgres:15-alpine
+    container_name: ybb-postgres-api-staging
+    restart: always
+    env_file:
+      - .env.staging
+    environment:
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_api_data_staging:/var/lib/postgresql/data
+    networks:
+      - ybb-network-staging
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-api:
+    image: redis:7-alpine
+    container_name: ybb-redis-api-staging
+    restart: always
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_api_data_staging:/data
+    networks:
+      - ybb-network-staging
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  ybb-network-staging:
+    name: ybb-network-staging
+    external: true
+  dokploy-network:
+    external: true
+
+volumes:
+  postgres_api_data_staging:
+  redis_api_data_staging:

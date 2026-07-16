@@ -1,0 +1,37 @@
+<div style="text-align: center;">
+    <h2 style="font-size: 24px; font-weight: 700; color: #111827; margin: 0 0 8px;">
+        Payment Failed
+    </h2>
+    <p style="font-size: 16px; color: #6b7280; margin: 0 0 32px;">
+        We couldn't process your payment
+    </p>
+
+    {{#if program}}
+    <p style="font-size: 13px; color: #6b7280; text-align: center; margin: 0 0 24px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">
+        {{program}}
+    </p>
+    {{/if}}
+
+    <div style="background-color: #fff1f2; border: 1px solid #fecaca; border-radius: 8px; padding: 16px; text-align: left; margin-bottom: 24px;">
+        <p style="font-size: 14px; color: #991b1b; margin: 0;">
+            <strong>Reason:</strong> {{reason}}
+        </p>
+    </div>
+
+    <div style="background-color: {{theme.primaryMuted}}; border: 1px solid {{theme.border}}; border-radius: 8px; padding: 24px; text-align: left; margin-bottom: 32px;">
+         <table style="width: 100%; font-size: 14px; color: #374151;">
+            <tr>
+                <td style="padding-bottom: 8px; color: #6b7280;">Amount Attempted</td>
+                <td style="padding-bottom: 8px; text-align: right; font-weight: 600;">{{currency}} {{amount}}</td>
+            </tr>
+            <tr>
+                <td style="padding-bottom: 0px; color: #6b7280;">Order ID</td>
+                <td style="padding-bottom: 0px; text-align: right; font-family: monospace;">{{orderId}}</td>
+            </tr>
+        </table>
+    </div>
+
+    <a href="{{retryUrl}}" class="cta-button">
+        Try Payment Again
+    </a>
+</div>

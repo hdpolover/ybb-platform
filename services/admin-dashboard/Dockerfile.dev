@@ -1,0 +1,21 @@
+# Development Dockerfile
+FROM node:20-alpine
+
+# Create app directory
+WORKDIR /app
+
+# Install dependencies
+COPY package*.json ./
+RUN npm install \
+    --fetch-retry-mintimeout 20000 \
+    --fetch-retry-maxtimeout 120000 \
+    --fetch-retries 5
+
+# Copy project files
+COPY . .
+
+# Expose port
+EXPOSE 4001
+
+# Run in development mode (no build needed)
+CMD ["npm", "run", "dev"]

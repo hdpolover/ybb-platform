@@ -1,0 +1,56 @@
+// services/file/prisma/schema.prisma
+
+generator client {
+  provider             = "prisma-client-py"
+  interface            = "asyncio"
+  recursive_type_depth = 5
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model File {
+  id                String    @id
+  filename          String    @db.VarChar(255)
+  original_filename String    @map("original_filename") @db.VarChar(255)
+  file_type         String    @map("file_type") @db.VarChar(50)
+  mime_type         String    @map("mime_type") @db.VarChar(100)
+  file_size         BigInt    @map("file_size")
+  storage_path      String    @unique @map("storage_path") @db.VarChar(500)
+  bucket            String    @db.VarChar(100)
+  user_id           String    @map("user_id") @db.VarChar(36)
+  brand_id          String    @map("brand_id") @db.VarChar(50)
+  file_metadata     Json?     @default("{}") @map("metadata")
+  
+  uploaded_at       DateTime  @default(now()) @map("uploaded_at") @db.Timestamptz
+  updated_at        DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  deleted_at        DateTime? @map("deleted_at") @db.Timestamptz
+  is_deleted        Boolean   @default(false) @map("is_deleted")
+
+  // Additional fields for documents
+  document_type     String?   @map("document_type") @db.VarChar(50)
+  generated         Boolean   @default(false)
+  template_id       String?   @map("template_id") @db.VarChar(36)
+  version           Int       @default(1)
+
+  // Media library fields
+  program_id        String?   @map("program_id") @db.VarChar(50)
+  asset_type        String?   @map("asset_type") @db.VarChar(50)
+  alt_text          String?   @map("alt_text") @db.VarChar(500)
+  title             String?   @map("title") @db.VarChar(255)
+  width             Int?      @map("width")
+  height            Int?      @map("height")
+
+  // Upload lifecycle: PROCESSING (reserved via presigned URL) → READY (confirmed on storage) | FAILED
+  status            String    @default("PROCESSING") @db.VarChar(20)
+
+  @@index([user_id])
+  @@index([brand_id])
+  @@index([program_id])
+  @@index([brand_id, program_id])
+  @@index([is_deleted])
+  @@index([status])
+  @@map("files")
+}

@@ -1,0 +1,364 @@
+// ============================================================================
+// PROGRAM & BRAND STRUCTURE
+// ============================================================================
+
+model Brand {
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name        String    @unique @db.VarChar(100)
+  description String?   @db.Text
+  slug        String    @unique @db.VarChar(100)
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  legacyId    Int?      @unique @map("legacy_id")
+
+  // Brand/Website Information
+  websiteUrl   String? @map("website_url") @db.VarChar(255)
+  // Canonical public landing URL (origin only, e.g. https://chinayouthsummit.com).
+  // Distinct from websiteUrl because some brands point that at a marketing site
+  // while the Next.js landing lives elsewhere. Used by the admin API to notify
+  // /api/settings/revalidate when brand data changes.
+  landingUrl   String? @map("landing_url") @db.VarChar(255)
+  about        String? @db.Text
+  vision       String? @db.Text
+  mission      String? @db.Text
+  logoUrl      String? @map("logo_url") @db.VarChar(500)
+  logoWhiteUrl String? @map("logo_white_url") @db.VarChar(500)
+  logoColorUrl String? @map("logo_color_url") @db.VarChar(500)
+  logoIconUrl  String? @map("logo_icon_url") @db.VarChar(500)
+  bannerUrl    String? @map("banner_url") @db.VarChar(500)
+  primaryColor String? @map("primary_color") @db.VarChar(7) // Hex color
+
+  // Contact Information
+  contactEmail     String? @map("contact_email") @db.VarChar(255)
+  contactPhone     String? @map("contact_phone") @db.VarChar(50)
+  contactWhatsapp  String? @map("contact_whatsapp") @db.VarChar(50)
+  contactAddress   String? @map("contact_address") @db.Text
+  socialMediaLinks Json?   @default("{}") @map("social_media_links") @db.Json // {instagram, facebook, linkedin, etc}
+
+  // Location
+  defaultLocation String? @map("default_location") @db.VarChar(255)
+  defaultCountry  String? @map("default_country") @db.VarChar(100)
+  defaultTimezone String? @map("default_timezone") @db.VarChar(50)
+
+  // Settings
+  requireEmailVerification Boolean @default(true) @map("require_email_verification")
+  defaultCurrency          String  @default("USD") @map("default_currency") @db.VarChar(3)
+  enableMultiCurrency      Boolean @default(false) @map("enable_multi_currency")
+
+  // SEO
+  metaTitle       String? @map("meta_title") @db.VarChar(255)
+  metaDescription String? @map("meta_description") @db.Text
+  metaKeywords    String? @map("meta_keywords") @db.Text
+
+  // Flexible brand-scoped content (impact stats, features, recognition, etc.)
+  metadata Json @default("{}") @db.Json
+
+  // Relations
+  testimonials             ProgramTestimonial[]
+  users                    User[]
+  userIdentities           UserIdentity[]
+  programs                 Program[]
+  systemAnnouncements      SystemAnnouncement[]
+  sponsors                 Sponsor[]
+  emailTemplates           EmailTemplate[]
+  team                     ProgramTeam[]
+  settings                 BrandSetting?
+  socialFeeds              BrandSocialFeed[]
+  activeAdmins             AdminBrand[]
+  legalDocuments           LegalDocument[]
+  aiChatBots               AiChatBotConfig[]
+  partnershipOpportunities PartnershipOpportunity[]
+  sponsorshipTiers         SponsorshipTier[]
+  partnershipEnquiries     PartnershipEnquiry[]
+  landingSnapshots         BrandLandingSnapshot[]
+  signatures               Signature[]
+
+  @@index([slug])
+  @@index([isActive])
+  @@map("brands")
+}
+
+model BrandSetting {
+  id      String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  brandId String @unique @map("brand_id") @db.Uuid
+
+  // Maintenance Control
+  isMaintenanceMode       Boolean   @default(false) @map("is_maintenance_mode")
+  maintenanceMessage      String?   @map("maintenance_message") @db.Text
+  maintenanceScheduledEnd DateTime? @map("maintenance_scheduled_end") @db.Timestamptz(6)
+
+  // Navigation & Content
+  footerNavigation Json @default("[]") @map("footer_navigation") @db.Json // Flexible array of columns/links
+
+  // Currency Settings
+  usdInIdr Decimal @default(16000) @map("usd_in_idr") @db.Decimal(10, 2)
+
+  // Integrations / Analytics
+  googleAnalyticsId String? @map("google_analytics_id") @db.VarChar(50)
+  pixelId           String? @map("pixel_id") @db.VarChar(50)
+  supportEmail      String? @map("support_email") @db.VarChar(255)
+
+  // Meta Conversions API (CAPI) — server-side access token. Long-lived and can
+  // exceed typical VarChar bounds, so stored as Text like other OAuth access
+  // tokens (see UserSession.accessToken in auth.prisma). NEVER return this raw
+  // over any public or admin-read API — see brand-settings-response.util.ts.
+  capiAccessToken String? @map("capi_access_token") @db.Text
+
+  // Meta CAPI test_event_code — NOT a secret. Short code from Meta Events
+  // Manager used to route test events; safe to return normally in admin/read
+  // responses (unlike capiAccessToken). VarChar matches pixelId's style.
+  capiTestEventCode String? @map("capi_test_event_code") @db.VarChar(50)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  @@map("brand_settings")
+}
+
+model BrandSocialFeed {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  brandId   String   @map("brand_id") @db.Uuid
+  platform  String   @default("instagram") @db.VarChar(50) // instagram, tiktok
+  postId    String   @map("post_id") @db.VarChar(100) // External ID
+  imageUrl  String   @map("image_url") @db.VarChar(500)
+  permalink String   @db.VarChar(500)
+  caption   String?  @db.Text
+  postedAt  DateTime @map("posted_at") @db.Timestamptz(6)
+
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  @@index([brandId])
+  @@index([platform])
+  @@index([postedAt])
+  @@map("brand_social_feeds")
+}
+
+model Program {
+  id                  String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  brandId             String         @map("brand_id") @db.Uuid
+  name                String         @db.VarChar(255)
+  slug                String         @db.VarChar(255)
+  description         String?        @db.Text
+  shortDescription    String?        @map("short_description") @db.VarChar(500)
+  theme               String?        @db.VarChar(255) // Main Program Theme
+  programType         String?        @map("program_type") @db.VarChar(100) // e.g. Cohort, Conference, Workshop
+  programFormat       ProgramFormat? @map("program_format")
+  year                Int
+  startDate           DateTime       @map("start_date") @db.Date
+  endDate             DateTime       @map("end_date") @db.Date
+  applicationDeadline DateTime       @map("application_deadline") @db.Timestamptz(6)
+  location            String?        @db.VarChar(255)
+  capacity            Int?
+
+  // Visibility & Status
+  isPublished      Boolean @default(false) @map("is_published")
+  isVisibleToUsers Boolean @default(true) @map("is_visible_to_users") // Show on website
+  isActive         Boolean @default(true) @map("is_active") // Accept applications
+  status           String  @default("draft") @db.VarChar(50) // draft, published, ongoing, completed, cancelled
+
+  // Media
+  thumbnailUrl String? @map("thumbnail_url") @db.VarChar(500)
+  bannerUrl    String? @map("banner_url") @db.VarChar(500)
+  videoUrl     String? @map("video_url") @db.VarChar(500)
+
+  // Program Settings
+  requireEmailVerification Boolean  @default(true) @map("require_email_verification")
+  currency                 String   @default("USD") @map("currency") @db.VarChar(3)
+  enableCurrencyConversion Boolean  @default(false) @map("enable_currency_conversion")
+  usdInIdr                 Decimal? @map("usd_in_idr") @db.Decimal(10, 2) // Program-level exchange rate; falls back to brand_settings.usd_in_idr if null
+  logoUrl                  String?  @map("logo_url") @db.VarChar(500)
+  logoWhiteUrl             String?  @map("logo_white_url") @db.VarChar(500)
+  logoColorUrl             String?  @map("logo_color_url") @db.VarChar(500)
+  logoIconUrl              String?  @map("logo_icon_url") @db.VarChar(500)
+
+  // Registration Settings
+  allowRegistration     Boolean   @default(true) @map("allow_registration")
+  registrationOpenDate  DateTime? @map("registration_open_date") @db.Timestamptz(6)
+  registrationCloseDate DateTime? @map("registration_close_date") @db.Timestamptz(6)
+  requirePayment        Boolean   @default(false) @map("require_payment")
+  registrationFee       Decimal?  @map("registration_fee") @db.Decimal(10, 2)
+
+  // Additional Info
+  requirementsDescription String?  @map("requirements_description") @db.Text
+  benefitsDescription     String?  @map("benefits_description") @db.Text
+  termsAndConditions      String?  @map("terms_and_conditions") @db.Text
+  paymentInfoHtml         String?  @map("payment_info_html") @db.Text
+  essayGuidelineText      String?  @map("essay_guideline_text") @db.Text
+  essayGuidelineUrl       String?  @map("essay_guideline_url") @db.VarChar(500)
+  previewChecklistItems   String[] @map("preview_checklist_items")
+
+  // SEO
+  metaTitle       String? @map("meta_title") @db.VarChar(255)
+  metaDescription String? @map("meta_description") @db.Text
+
+  // Timestamps
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  legacyId  Int?      @unique @map("legacy_id")
+
+  // Relations
+  brand                    Brand                          @relation(fields: [brandId], references: [id])
+  applications             ParticipantApplication[]
+  ambassadors              Ambassador[]
+  adminPrograms            AdminProgram[]
+  announcements            SystemAnnouncement[]
+  faqs                     ProgramFaq[]
+  timeline                 ProgramTimeline[]
+  schedules                ProgramSchedule[]
+  speakers                 ProgramSpeaker[]
+  gallery                  ProgramGallery[]
+  testimonials             ProgramTestimonial[]
+  pricingTiers             ProgramPricingTier[]
+  requirements             ProgramRequirement[]
+  formFields               ApplicationFormField[]
+  emailTemplates           EmailTemplate[]
+  team                     ProgramTeam[]
+  partners                 ProgramPartner[]
+  resources                ProgramResource[]
+  programAnnouncements     ProgramAnnouncement[]
+  tags                     ProgramTagRelation[]
+  waitlist                 ProgramWaitlist[]
+  objectives               ProgramObjective[]
+  subthemes                ProgramSubtheme[]
+  certificateTemplates     CertificateTemplate[]
+  awards                   ProgramAward[]
+  participationInfos       ProgramParticipationInfo[]
+  partnershipOpportunities PartnershipOpportunity[]
+  sponsorshipTiers         SponsorshipTier[]
+  partnershipEnquiries     PartnershipEnquiry[]
+  essays                   ProgramEssay[]
+  scoringSchemas           ScoringSchema[]
+  participationCategories  ProgramParticipationCategory[]
+  exchangeRateHistory      ProgramExchangeRateHistory[]
+  loaReleaseBatches        LoaReleaseBatch[]
+
+  @@unique([brandId, slug])
+  @@index([brandId])
+  @@index([year])
+  @@index([isPublished])
+  @@index([isVisibleToUsers])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("programs")
+}
+
+model ProgramTag {
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name        String    @unique @db.VarChar(100)
+  slug        String    @unique @db.VarChar(100)
+  description String?   @db.Text
+  color       String?   @db.VarChar(7) // Hex color for UI
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  programs ProgramTagRelation[]
+
+  @@index([slug])
+  @@map("program_tags")
+}
+
+model ProgramTagRelation {
+  programId String @map("program_id") @db.Uuid
+  tagId     String @map("tag_id") @db.Uuid
+
+  program Program    @relation(fields: [programId], references: [id], onDelete: Cascade)
+  tag     ProgramTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([programId, tagId])
+  @@index([programId])
+  @@index([tagId])
+  @@map("program_tag_relations")
+}
+
+model ProgramWaitlist {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId String   @map("program_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  position  Int // Queue position
+  notified  Boolean  @default(false) // Notified when spot available
+  joinedAt  DateTime @default(now()) @map("joined_at") @db.Timestamptz(6)
+
+  // Relations
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([programId, userId])
+  @@index([programId])
+  @@index([userId])
+  @@index([position])
+  @@map("program_waitlist")
+}
+
+model ProgramEssay {
+  id          String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId   String  @map("program_id") @db.Uuid
+  question    String  @db.Text
+  description String? @db.Text
+  wordLimit   Int?    @map("word_limit")
+  isRequired  Boolean @default(true) @map("is_required")
+  order       Int     @default(0)
+  isActive    Boolean @default(true) @map("is_active")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@index([isActive])
+  @@map("program_essays")
+}
+
+model ProgramParticipationCategory {
+  id          String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId   String  @map("program_id") @db.Uuid
+  name        String  @db.VarChar(255) // "Future Innovators", "High School Students"
+  description String? @db.Text
+  benefits    String? @db.Text
+  eligibility String? @db.Text
+
+  order     Int      @default(0)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  program      Program                  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  applications ParticipantApplication[]
+
+  @@index([programId])
+  @@map("program_participation_categories")
+}
+
+model ProgramExchangeRateHistory {
+  id        String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId String  @map("program_id") @db.Uuid
+  oldRate   Decimal @map("old_rate") @db.Decimal(10, 2)
+  newRate   Decimal @map("new_rate") @db.Decimal(10, 2)
+  changedBy String  @map("changed_by") @db.Uuid
+  reason    String? @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+  admin   User    @relation("ExchangeRateChangedBy", fields: [changedBy], references: [id])
+
+  @@index([programId])
+  @@index([createdAt])
+  @@map("program_exchange_rate_history")
+}

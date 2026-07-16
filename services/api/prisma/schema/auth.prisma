@@ -1,0 +1,364 @@
+// ============================================================================
+// CORE AUTHENTICATION (Brand-Scoped)
+// ============================================================================
+
+// Authentication Providers - Configurable OAuth/Auth Providers
+model AuthProvider {
+  id          String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name        String  @unique @db.VarChar(50) // 'local', 'google', 'facebook', 'apple', etc.
+  displayName String  @map("display_name") @db.VarChar(100) // 'Email & Password', 'Google', 'Facebook'
+  description String? @db.Text
+
+  // OAuth Configuration (optional, for OAuth providers)
+  clientId     String? @map("client_id") @db.VarChar(255)
+  clientSecret String? @map("client_secret") @db.VarChar(255)
+  authUrl      String? @map("auth_url") @db.VarChar(500)
+  tokenUrl     String? @map("token_url") @db.VarChar(500)
+  scopes       Json?   @default("[]") @db.Json // ["email", "profile"]
+
+  // Status
+  isActive Boolean @default(true) @map("is_active")
+  isOAuth  Boolean @default(false) @map("is_oauth") // true for OAuth providers, false for local
+
+  // UI
+  icon        String? @db.VarChar(100) // Icon identifier or URL
+  buttonColor String? @map("button_color") @db.VarChar(7) // Hex color for button
+  order       Int     @default(0) // Display order
+
+  // Audit
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  identities UserIdentity[]
+
+  @@index([name])
+  @@index([isActive])
+  @@index([order])
+  @@map("auth_providers")
+}
+
+model User {
+  id      String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  email   String @db.VarChar(255)
+  brandId String @map("brand_id") @db.Uuid
+
+  // Authentication - passwordHash kept for backward compatibility
+  passwordHash             String?   @map("password_hash") @db.VarChar(255)
+  emailVerified            Boolean   @default(false) @map("email_verified")
+  emailVerifiedAt          DateTime? @map("email_verified_at") @db.Timestamptz(6)
+  emailVerificationToken   String?   @map("email_verification_token") @db.VarChar(255)
+  emailVerificationExpires DateTime? @map("email_verification_expires") @db.Timestamptz(6)
+  passwordResetToken       String?   @map("password_reset_token") @db.VarChar(255)
+  passwordResetExpires     DateTime? @map("password_reset_expires") @db.Timestamptz(6)
+
+  // Account Status
+  isActive              Boolean @default(true) @map("is_active")
+  isOnboardingCompleted Boolean @default(false) @map("is_onboarding_completed")
+
+  // Security (Basic)
+  failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
+  lastFailedLogin     DateTime? @map("last_failed_login") @db.Timestamptz(6)
+  lastLoginAt         DateTime? @map("last_login_at") @db.Timestamptz(6)
+  lastPasswordChange  DateTime? @map("last_password_change") @db.Timestamptz(6)
+
+  // Audit
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Migration Support
+  legacyId   Int?    @unique @map("legacy_id")
+  legacyType String? @map("legacy_type") @db.VarChar(20)
+
+  // Relations
+  brand                    Brand                     @relation(fields: [brandId], references: [id])
+  identities               UserIdentity[] // Multiple auth providers
+  admin                    Admin?
+  participant              Participant?
+  ambassador               Ambassador?
+  preferences              UserPreference?
+  sessions                 UserSession[]
+  securityLogs             UserSecurityLog[]
+  notifications            UserNotification[]
+  privacyConsents          UserPrivacyConsent[]
+  blockedAccounts          UserBlockedAccount[]
+  activityLogs             UserActivityLog[]
+  deletionRequests         AccountDeletionRequest[]
+  announcementReads        UserAnnouncementRead[]
+  programAnnouncementReads ProgramAnnouncementRead[]
+  // applications          ParticipantApplication[] // Main submission relation (Moved to Participant)
+  editHistoryChangedBy     ApplicationEditHistory[]  @relation("EditHistoryChangedBy")
+  deletedParticipants      Participant[]             @relation("ParticipantDeleter")
+  deletedApplications      ParticipantApplication[]  @relation("ApplicationDeleter")
+  deletedAmbassadors       Ambassador[]              @relation("AmbassadorDeleter")
+  withdrawnApplications    ParticipantApplication[]  @relation("ApplicationWithdrawer")
+  awardedParticipantAwards ParticipantAward[]
+  files                    File[]
+  waitlist                 ProgramWaitlist[]
+  newsletterSubscription   NewsletterSubscriber[]
+
+  // Relations for new modular tables
+  assessments         ApplicationAssessment[]
+  exchangeRateChanges ProgramExchangeRateHistory[] @relation("ExchangeRateChangedBy")
+
+  @@unique([email, brandId])
+  @@index([email])
+  @@index([brandId])
+  @@index([emailVerified])
+  @@index([isActive, deletedAt])
+  @@index([passwordResetToken])
+  @@map("users")
+}
+
+// User Authentication Identities - Supports multiple auth providers per user
+model UserIdentity {
+  id             String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId         String  @map("user_id") @db.Uuid
+  providerId     String  @map("provider_id") @db.Uuid // Reference to AuthProvider
+  brandId        String  @map("brand_id") @db.Uuid
+  providerUserId String? @map("provider_user_id") @db.VarChar(255) // Provider's user ID (null for local)
+  providerEmail  String? @map("provider_email") @db.VarChar(255) // Email from provider
+
+  // OAuth tokens (optional, for future use)
+  accessToken  String?   @map("access_token") @db.Text
+  refreshToken String?   @map("refresh_token") @db.Text
+  tokenExpiry  DateTime? @map("token_expiry") @db.Timestamptz(6)
+
+  // Metadata
+  isPrimary  Boolean   @default(false) @map("is_primary") // Primary login method
+  lastUsedAt DateTime? @map("last_used_at") @db.Timestamptz(6)
+
+  // Timestamps
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  brand    Brand        @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  provider AuthProvider @relation(fields: [providerId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, providerId]) // One provider per user
+  @@unique([brandId, providerId, providerUserId]) // Unique provider-providerUserId combination per brand
+  @@index([userId])
+  @@index([brandId])
+  @@index([providerId])
+  @@index([providerUserId])
+  @@map("user_identities")
+}
+
+model UserSession {
+  id     String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+
+  // Session Info
+  sessionToken String  @unique @map("session_token") @db.VarChar(255)
+  refreshToken String? @unique @map("refresh_token") @db.Text
+
+  // Device Info
+  deviceType      String? @map("device_type") @db.VarChar(50)
+  deviceName      String? @map("device_name") @db.VarChar(100)
+  browser         String? @db.VarChar(100)
+  operatingSystem String? @map("operating_system") @db.VarChar(100)
+
+  // Location
+  ipAddress String? @map("ip_address") @db.Inet
+  country   String? @db.VarChar(100)
+  city      String? @db.VarChar(100)
+
+  // Session Status
+  isActive     Boolean  @default(true) @map("is_active")
+  lastActivity DateTime @default(now()) @map("last_activity") @db.Timestamptz(6)
+
+  // Timestamps
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  // Relations
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activityLogs UserActivityLog[]
+
+  @@index([userId])
+  @@index([sessionToken])
+  @@index([userId, isActive, revokedAt])
+  @@index([expiresAt])
+  @@map("user_sessions")
+}
+
+model UserSecurityLog {
+  id     String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId String? @map("user_id") @db.Uuid
+
+  // Event Details
+  eventType        String  @map("event_type") @db.VarChar(50)
+  eventStatus      String  @map("event_status") @db.VarChar(20)
+  eventDescription String? @map("event_description") @db.Text
+
+  // Context
+  ipAddress         String? @map("ip_address") @db.Inet
+  userAgent         String? @map("user_agent") @db.Text
+  deviceFingerprint String? @map("device_fingerprint") @db.VarChar(255)
+  location          String? @db.VarChar(255)
+
+  // Risk Assessment
+  riskLevel RiskLevel? @map("risk_level")
+  flagged   Boolean    @default(false)
+
+  // Timestamp
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@index([userId, flagged])
+  @@index([riskLevel])
+  @@map("user_security_logs")
+}
+
+model UserPrivacyConsent {
+  id     String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+
+  // Consent Details
+  consentType    String  @map("consent_type") @db.VarChar(100)
+  consentVersion String  @map("consent_version") @db.VarChar(50)
+  consentText    String? @map("consent_text") @db.Text
+
+  // Status
+  isGranted Boolean   @map("is_granted")
+  grantedAt DateTime? @map("granted_at") @db.Timestamptz(6)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  // Context
+  ipAddress String? @map("ip_address") @db.Inet
+  userAgent String? @map("user_agent") @db.Text
+
+  // Audit
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, consentType])
+  @@index([userId, consentType, isGranted, revokedAt])
+  @@map("user_privacy_consents")
+}
+
+model UserBlockedAccount {
+  id     String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+
+  // Block Details
+  blockReason      String    @map("block_reason") @db.VarChar(50)
+  blockDescription String    @map("block_description") @db.Text
+  blockType        BlockType @default(temporary) @map("block_type")
+
+  // Duration
+  blockedAt    DateTime  @default(now()) @map("blocked_at") @db.Timestamptz(6)
+  blockedUntil DateTime? @map("blocked_until") @db.Timestamptz(6)
+  unblockedAt  DateTime? @map("unblocked_at") @db.Timestamptz(6)
+
+  // Authority
+  blockedBy   String? @map("blocked_by") @db.Uuid
+  unblockedBy String? @map("unblocked_by") @db.Uuid
+
+  // Additional Info
+  violationsCount Int     @default(1) @map("violations_count")
+  notes           String? @db.Text
+
+  // Status
+  isActive  Boolean   @default(true) @map("is_active")
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  blocker   Admin? @relation("BlockedBy", fields: [blockedBy], references: [id])
+  unblocker Admin? @relation("UnblockedBy", fields: [unblockedBy], references: [id])
+
+  @@index([userId])
+  @@index([userId, isActive])
+  @@index([blockedUntil])
+  @@map("user_blocked_accounts")
+}
+
+model UserActivityLog {
+  id     String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId String? @map("user_id") @db.Uuid
+
+  // Activity Details
+  activityType     String  @map("activity_type") @db.VarChar(100)
+  activityCategory String? @map("activity_category") @db.VarChar(50)
+  activityData     Json    @default("{}") @map("activity_data") @db.Json
+
+  // Context
+  pageUrl     String? @map("page_url") @db.VarChar(500)
+  referrerUrl String? @map("referrer_url") @db.VarChar(500)
+  sessionId   String? @map("session_id") @db.Uuid
+
+  // Device Info
+  ipAddress  String? @map("ip_address") @db.Inet
+  userAgent  String? @map("user_agent") @db.Text
+  deviceType String? @map("device_type") @db.VarChar(50)
+
+  // Timestamp
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  user    User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session UserSession? @relation(fields: [sessionId], references: [id])
+
+  @@index([userId])
+  @@index([activityType])
+  @@index([createdAt])
+  @@index([sessionId])
+  @@map("user_activity_logs")
+}
+
+model AccountDeletionRequest {
+  id     String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+
+  // Request Details
+  reason         String? @db.Text
+  reasonCategory String? @map("reason_category") @db.VarChar(50)
+
+  // Status
+  status DeletionStatus @default(pending)
+
+  // Processing
+  reviewedBy  String?   @map("reviewed_by") @db.Uuid
+  reviewedAt  DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  reviewNotes String?   @map("review_notes") @db.Text
+
+  // Retention Period
+  scheduledDeletionDate DateTime? @map("scheduled_deletion_date") @db.Timestamptz(6)
+  actualDeletionDate    DateTime? @map("actual_deletion_date") @db.Timestamptz(6)
+
+  // Audit Trail
+  dataSnapshot Json? @map("data_snapshot") @db.Json
+  deletionLog  Json  @default("{}") @map("deletion_log") @db.Json
+
+  // Metadata
+  ipAddress String? @map("ip_address") @db.Inet
+  userAgent String? @map("user_agent") @db.Text
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewer Admin? @relation(fields: [reviewedBy], references: [id])
+
+  @@index([userId])
+  @@index([status, createdAt])
+  @@index([scheduledDeletionDate])
+  @@map("account_deletion_requests")
+}

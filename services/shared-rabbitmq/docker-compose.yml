@@ -1,0 +1,47 @@
+services:
+  # =========================================
+  # Shared RabbitMQ (Dev)
+  # =========================================
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: ybb-shared-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"   # Standard AMQP
+      - "15672:15672" # Management UI
+      - "15692:15692" # Prometheus Metrics
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./enabled_plugins:/etc/rabbitmq/enabled_plugins
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 30s
+      timeout: 30s
+      retries: 5
+      start_period: 60s
+
+  # =========================================
+  # RabbitMQ Init Script
+  # =========================================
+  rabbitmq-init:
+    image: python:3.9-slim
+    container_name: ybb-rabbitmq-init
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_DEFAULT_USER:-guest}
+      RABBITMQ_PASS: ${RABBITMQ_DEFAULT_PASS:-guest}
+    working_dir: /app
+    volumes:
+      - ./scripts:/app
+    command: >
+      sh -c "pip install pika && python init_rabbitmq.py"
+
+volumes:
+  rabbitmq_data:

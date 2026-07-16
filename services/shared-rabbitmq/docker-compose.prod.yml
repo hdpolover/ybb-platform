@@ -1,0 +1,36 @@
+services:
+  # =========================================
+  # Shared RabbitMQ (Production)
+  # =========================================
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: ybb-shared-rabbitmq
+    restart: always
+    env_file:
+      - .env.prod
+    ports:
+      - "5672:5672" # Internal usage (or exposed if external producers needed)
+      - "15672:15672" # UI potentially blocked by firewall unless proxied
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./enabled_plugins:/etc/rabbitmq/enabled_plugins
+    networks:
+      - ybb-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rabbitmq.rule=Host(`queue.ybbhub.com`)"
+      - "traefik.http.routers.rabbitmq.entrypoints=websecure"
+      - "traefik.http.services.rabbitmq.loadbalancer.server.port=15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+networks:
+  ybb-network:
+    name: ybb-network
+    external: true
+
+volumes:
+  rabbitmq_data:

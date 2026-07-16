@@ -1,0 +1,52 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: ybb-prod-shared-rabbitmq
+    restart: always
+    ports:
+      - "5672:5672" # Optional to expose if needed by services outside dokploy network (unlikely)
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=dokploy-network"
+      - "traefik.http.routers.ybb-prod-rabbitmq.rule=${APP_DOMAINS_RULE:-Host(`queue.ybbhub.com`)}"
+      - "traefik.http.routers.ybb-prod-rabbitmq.entrypoints=websecure"
+      - "traefik.http.routers.ybb-prod-rabbitmq.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ybb-prod-rabbitmq.loadbalancer.server.port=15672"
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "ping" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  init-rabbitmq:
+    image: python:3.9-alpine
+    container_name: ybb-prod-init-rabbitmq
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_PASS: ${RABBITMQ_DEFAULT_PASS}
+    volumes:
+      - ./scripts:/app/scripts
+    working_dir: /app
+    networks:
+      - dokploy-network
+    command: >
+      sh -c "pip install -r scripts/requirements.txt && python scripts/init_rabbitmq.py"
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  rabbitmq_data:

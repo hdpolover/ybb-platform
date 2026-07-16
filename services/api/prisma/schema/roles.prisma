@@ -1,0 +1,363 @@
+// ============================================================================
+// USER PROFILES & ROLES
+// ============================================================================
+
+model Admin {
+  id     String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId String @unique @map("user_id") @db.Uuid
+
+  // Profile
+  fullName    String  @map("full_name") @db.VarChar(255)
+  phoneNumber String? @map("phone_number") @db.VarChar(20)
+  bio         String? @db.Text
+  avatarUrl   String? @map("avatar_url") @db.VarChar(500)
+
+  // Employment
+  employeeId String? @unique @map("employee_id") @db.VarChar(50)
+  department String? @db.VarChar(100)
+  jobTitle   String? @map("job_title") @db.VarChar(100)
+
+  // Role & Permissions
+  roleId            String? @map("role_id") @db.Uuid
+  customPermissions Json    @default("[]") @map("custom_permissions")
+
+  // Access Control
+  accessLevel     Int     @default(1) @map("access_level")
+  canManageAdmins Boolean @default(false) @map("can_manage_admins")
+  canAssignRoles  Boolean @default(false) @map("can_assign_roles")
+
+  // Settings
+  timezone    String @default("UTC") @db.VarChar(50)
+  locale      String @default("en") @db.VarChar(10)
+  preferences Json   @default("{}") @db.Json
+
+  // Audit & Timeline
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  activatedAt   DateTime? @map("activated_at") @db.Timestamptz(6)
+  deactivatedAt DateTime? @map("deactivated_at") @db.Timestamptz(6)
+  lastActiveAt  DateTime? @map("last_active_at") @db.Timestamptz(6)
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdBy     String?   @map("created_by") @db.Uuid
+  deletedBy     String?   @map("deleted_by") @db.Uuid
+  legacyId      Int?      @unique @map("legacy_id")
+
+  // Relations
+  user                 User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role                 AdminRole?               @relation(fields: [roleId], references: [id])
+  adminPrograms        AdminProgram[]
+  adminBrands          AdminBrand[]
+  verifiedReferrals    AmbassadorReferral[]
+  createdAnnouncements SystemAnnouncement[]     @relation("AnnouncementCreator")
+  updatedAnnouncements SystemAnnouncement[]     @relation("AnnouncementUpdater")
+  reviewedDeletions    AccountDeletionRequest[]
+  blockedAccounts      UserBlockedAccount[]     @relation("BlockedBy")
+  unblockedAccounts    UserBlockedAccount[]     @relation("UnblockedBy")
+  deletedParticipants  Participant[]            @relation("AdminParticipantDeleter")
+  deletedAmbassadors   Ambassador[]             @relation("AdminAmbassadorDeleter")
+  applicationReviews   ApplicationReview[]
+
+  @@index([userId])
+  @@index([roleId])
+  @@index([employeeId])
+  @@index([department])
+  @@index([deletedAt])
+  @@map("admins")
+}
+
+model AdminRole {
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name        String    @unique @db.VarChar(100)
+  description String?   @db.Text
+  permissions Json      @default("[]")
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  legacyId    Int?      @unique @map("legacy_id")
+
+  // Relations
+  admins Admin[]
+
+  @@index([name])
+  @@map("admin_roles")
+}
+
+model AdminProgram {
+  id        String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  adminId   String @map("admin_id") @db.Uuid
+  programId String @map("program_id") @db.Uuid
+
+  // Access Control
+  roleInProgram String? @map("role_in_program") @db.VarChar(50)
+  permissions   Json    @default("[]")
+
+  // Audit
+  assignedAt DateTime  @default(now()) @map("assigned_at") @db.Timestamptz(6)
+  assignedBy String?   @map("assigned_by") @db.Uuid
+  removedAt  DateTime? @map("removed_at") @db.Timestamptz(6)
+  removedBy  String?   @map("removed_by") @db.Uuid
+  legacyId   Int?      @unique @map("legacy_id")
+
+  // Relations
+  admin   Admin   @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@unique([adminId, programId])
+  @@index([adminId])
+  @@index([programId])
+  @@index([removedAt])
+  @@map("admin_programs")
+}
+
+model AdminBrand {
+  id      String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  adminId String @map("admin_id") @db.Uuid
+  brandId String @map("brand_id") @db.Uuid
+
+  // Access Control
+  roleInBrand String? @map("role_in_brand") @db.VarChar(50)
+  permissions Json    @default("[]")
+
+  // Audit
+  assignedAt DateTime @default(now()) @map("assigned_at") @db.Timestamptz(6)
+  assignedBy String?  @map("assigned_by") @db.Uuid
+  legacyId   Int?     @unique @map("legacy_id")
+
+  // Relations
+  admin Admin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  @@unique([adminId, brandId])
+  @@index([adminId])
+  @@index([brandId])
+  @@map("admin_brands")
+}
+
+model Participant {
+  id     String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId String @unique @map("user_id") @db.Uuid
+
+  // Basic Profile
+  fullName    String    @map("full_name") @db.VarChar(255)
+  nickName    String?   @map("nick_name") @db.VarChar(100)
+  displayName String?   @map("display_name") @db.VarChar(100)
+  birthdate   DateTime? @db.Date
+  gender      Gender?
+
+  // Contact Information
+  phoneCountryCode String? @map("phone_country_code") @db.VarChar(10)
+  phoneNumber      String? @map("phone_number") @db.VarChar(25)
+  phoneVerified    Boolean @default(false) @map("phone_verified")
+
+  // Location
+  nationality     String? @db.VarChar(100)
+  nationalityCode String? @map("nationality_code") @db.VarChar(3)
+  originCountry   String? @map("origin_country") @db.VarChar(100)
+  originCity      String? @map("origin_city") @db.VarChar(100)
+  originAddress   String? @map("origin_address") @db.Text
+  currentCountry  String? @map("current_country") @db.VarChar(100)
+  currentCity     String? @map("current_city") @db.VarChar(100)
+  currentAddress  String? @map("current_address") @db.Text
+
+  // Education & Occupation
+  educationLevel String? @map("education_level") @db.VarChar(100)
+  institution    String? @db.VarChar(200)
+  major          String? @db.VarChar(200)
+  graduationYear Int?    @map("graduation_year")
+  occupation     String? @db.VarChar(100)
+
+  // Social & Professional
+  instagramUsername String? @map("instagram_username") @db.VarChar(50)
+  linkedinUrl       String? @map("linkedin_url") @db.VarChar(500)
+  portfolioUrl      String? @map("portfolio_url") @db.VarChar(500)
+  organizations     String? @db.Text
+
+  // Additional Info
+  tshirtSize          String? @map("tshirt_size") @db.VarChar(10)
+  dietaryRestrictions String? @map("dietary_restrictions") @db.Text
+  medicalConditions   String? @map("medical_conditions") @db.Text
+  specialNeeds        String? @map("special_needs") @db.Text
+
+  // Emergency Contact
+  emergencyContactName        String? @map("emergency_contact_name") @db.VarChar(255)
+  emergencyContactRelation    String? @map("emergency_contact_relation") @db.VarChar(50)
+  emergencyContactCountryCode String? @map("emergency_contact_country_code") @db.VarChar(10)
+  emergencyContactPhone       String? @map("emergency_contact_phone") @db.VarChar(25)
+  emergencyContactEmail       String? @map("emergency_contact_email") @db.VarChar(255)
+
+  // Profile Media
+  profilePictureUrl String? @map("profile_picture_url") @db.VarChar(500)
+  resumeUrl         String? @map("resume_url") @db.VarChar(500)
+
+  // Engagement
+  knowledgeSource String? @map("knowledge_source") @db.VarChar(100)
+  referralCode    String? @map("referral_code") @db.VarChar(20)
+  preferences     Json    @default("{}") @db.Json
+
+  // Audit & Analytics
+  createdAt                   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  profileCompletedAt          DateTime? @map("profile_completed_at") @db.Timestamptz(6)
+  profileCompletionPercentage Int       @default(0) @map("profile_completion_percentage")
+  lastProfileUpdate           DateTime? @map("last_profile_update") @db.Timestamptz(6)
+  emailVerifiedAt             DateTime? @map("email_verified_at") @db.Timestamptz(6)
+  phoneVerifiedAt             DateTime? @map("phone_verified_at") @db.Timestamptz(6)
+  deletedAt                   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedBy                   String?   @map("deleted_by") @db.Uuid
+  legacyId                    Int?      @unique @map("legacy_id")
+
+  // Relations
+  user                User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  applications        ParticipantApplication[]
+  ambassadorReferrals AmbassadorReferral[]
+  userDeleter         User?                    @relation("ParticipantDeleter", fields: [deletedBy], references: [id], map: "fk_participant_deleted_by_user")
+  adminDeleter        Admin?                   @relation("AdminParticipantDeleter", fields: [deletedBy], references: [id], map: "fk_participant_deleted_by_admin")
+
+  @@index([userId])
+  @@index([nationalityCode])
+  @@index([institution])
+  @@index([referralCode])
+  @@index([deletedAt])
+  @@map("participants")
+}
+
+model Ambassador {
+  id     String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId String @unique @map("user_id") @db.Uuid
+
+  // Profile
+  fullName    String  @map("full_name") @db.VarChar(255)
+  phoneNumber String? @map("phone_number") @db.VarChar(25)
+
+  // Ambassador Specific
+  referralCode String  @unique @map("referral_code") @db.VarChar(20)
+  programId    String  @map("program_id") @db.Uuid
+  institution  String? @db.VarChar(255)
+  gender       Gender?
+
+  // Performance Tracking
+  totalReferrals            Int       @default(0) @map("total_referrals")
+  successfulReferrals       Int       @default(0) @map("successful_referrals")
+  lastReferralAt            DateTime? @map("last_referral_at") @db.Timestamptz(6)
+  firstSuccessfulReferralAt DateTime? @map("first_successful_referral_at") @db.Timestamptz(6)
+
+  // Status
+  notes              String?   @db.Text
+  isActive           Boolean   @default(true) @map("is_active")
+  activatedAt        DateTime? @map("activated_at") @db.Timestamptz(6)
+  deactivatedAt      DateTime? @map("deactivated_at") @db.Timestamptz(6)
+  deactivationReason String?   @map("deactivation_reason") @db.Text
+
+  // Audit
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedBy String?   @map("deleted_by") @db.Uuid
+  legacyId  Int?      @unique @map("legacy_id")
+
+  // Relations
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  program      Program              @relation(fields: [programId], references: [id])
+  referrals    AmbassadorReferral[]
+  userDeleter  User?                @relation("AmbassadorDeleter", fields: [deletedBy], references: [id], map: "fk_ambassador_deleted_by_user")
+  adminDeleter Admin?               @relation("AdminAmbassadorDeleter", fields: [deletedBy], references: [id], map: "fk_ambassador_deleted_by_admin")
+
+  @@index([userId])
+  @@index([referralCode])
+  @@index([programId])
+  @@index([deletedAt])
+  @@map("ambassadors")
+}
+
+model AmbassadorReferral {
+  id            String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  ambassadorId  String @map("ambassador_id") @db.Uuid
+  participantId String @map("participant_id") @db.Uuid
+
+  // Referral Status
+  status ReferralStatus @default(referred)
+
+  // Verification
+  verifiedAt DateTime? @map("verified_at") @db.Timestamptz(6)
+  verifiedBy String?   @map("verified_by") @db.Uuid
+
+  // Conversion Funnel Timestamps
+  referredAt         DateTime  @default(now()) @map("referred_at") @db.Timestamptz(6)
+  registeredAt       DateTime? @map("registered_at") @db.Timestamptz(6)
+  profileCompletedAt DateTime? @map("profile_completed_at") @db.Timestamptz(6)
+  appliedAt          DateTime? @map("applied_at") @db.Timestamptz(6)
+  acceptedAt         DateTime? @map("accepted_at") @db.Timestamptz(6)
+  completedAt        DateTime? @map("completed_at") @db.Timestamptz(6)
+
+  // Funnel Analytics (Calculated in application logic or database triggers)
+  daysToRegister      Int?      @map("days_to_register")
+  daysToApply         Int?      @map("days_to_apply")
+  daysToAccept        Int?      @map("days_to_accept")
+  totalConversionDays Int?      @map("total_conversion_days")
+  deletedAt           DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  legacyId Int? @unique @map("legacy_id")
+
+  // Relations
+  ambassador  Ambassador  @relation(fields: [ambassadorId], references: [id], onDelete: Cascade)
+  participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  verifier    Admin?      @relation(fields: [verifiedBy], references: [id])
+
+  @@unique([ambassadorId, participantId])
+  @@index([ambassadorId])
+  @@index([participantId])
+  @@index([status])
+  @@index([referredAt, acceptedAt])
+  @@map("ambassador_referrals")
+}
+
+model SupportAccessConfig {
+  id String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+
+  key String @unique @default("global") @db.VarChar(32)
+
+  isEnabled     Boolean   @default(false) @map("is_enabled")
+  secretHash    String?   @map("secret_hash") @db.VarChar(255)
+  lastRotatedAt DateTime? @map("last_rotated_at") @db.Timestamptz(6)
+
+  updatedByAdminId String? @map("updated_by_admin_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("support_access_configs")
+}
+
+model SupportAccessImpersonationTicket {
+  id String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+
+  adminId String @map("admin_id") @db.Uuid
+
+  targetUserId        String  @map("target_user_id") @db.Uuid
+  targetParticipantId String? @map("target_participant_id") @db.Uuid
+  targetProgramId     String? @map("target_program_id") @db.Uuid
+  targetBrandId       String  @map("target_brand_id") @db.Uuid
+
+  reason    String @db.Text
+  tokenHash String @unique @map("token_hash") @db.Char(64)
+
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(6)
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(6)
+  status     String    @default("pending") @db.VarChar(32)
+
+  createdIpAddress  String? @map("created_ip_address") @db.Inet
+  createdUserAgent  String? @map("created_user_agent") @db.Text
+  consumedIpAddress String? @map("consumed_ip_address") @db.Inet
+  consumedUserAgent String? @map("consumed_user_agent") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([adminId])
+  @@index([targetUserId])
+  @@index([targetBrandId])
+  @@index([status, expiresAt])
+  @@map("support_access_impersonation_tickets")
+}

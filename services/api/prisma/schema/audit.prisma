@@ -1,0 +1,50 @@
+// ============================================================================
+// AUDIT TRAIL & RECONCILIATION
+// ============================================================================
+
+model DataChangeLog {
+  id String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+
+  // What changed
+  entityType String  @map("entity_type") @db.VarChar(100) // "ParticipantApplication", "ApplicationInvoice", etc.
+  entityId   String? @map("entity_id") @db.VarChar(255) // UUID of the affected record
+
+  // The change
+  action        ChangeType
+  changedFields String[]   @default([]) @map("changed_fields") // ["status", "registrationPaymentStatus"]
+  beforeState   Json?      @map("before_state") @db.JsonB // Snapshot BEFORE the change
+  afterState    Json?      @map("after_state") @db.JsonB // Snapshot AFTER the change
+
+  // Who did it
+  actorType ChangedByType @default(system) @map("actor_type")
+  actorId   String?       @map("actor_id") @db.Uuid
+
+  // Context (HTTP request or event)
+  source     String? @db.VarChar(50) // "http", "rabbitmq", "cron"
+  endpoint   String? @db.VarChar(255) // "PATCH /api/applications/:id/status"
+  httpMethod String? @map("http_method") @db.VarChar(10)
+  event      String? @db.VarChar(255) // RabbitMQ event name (e.g. "payment.succeeded")
+  ipAddress  String? @map("ip_address") @db.VarChar(45)
+  userAgent  String? @map("user_agent") @db.Text
+
+  // Risk & Reconciliation
+  riskLevel     RiskLevel @default(low) @map("risk_level")
+  reason        String?   @db.Text // Optional reason for the change
+  correlationId String?   @map("correlation_id") @db.Uuid // Group related changes (batch ops)
+
+  // Status
+  status       String? @db.VarChar(50) // SUCCESS, FAILURE
+  errorMessage String? @map("error_message") @db.Text
+
+  // Timestamp
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@index([action])
+  @@index([riskLevel])
+  @@index([createdAt])
+  @@index([correlationId])
+  @@index([event])
+  @@map("data_change_logs")
+}

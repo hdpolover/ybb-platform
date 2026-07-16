@@ -1,0 +1,139 @@
+# YBB Notification Service
+
+NestJS-based microservice for handling platform notifications via RabbitMQ message queue.
+
+## Overview
+
+The Notification Service listens for events from other services via RabbitMQ and sends notifications:
+- **Email** - Transactional and notification emails
+- **In-App** - Real-time notifications (planned)
+- **Push** - Mobile push notifications (planned)
+
+## Technology Stack
+
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| NestJS | 10.x | Node.js framework |
+| TypeScript | 5.x | Type safety |
+| RabbitMQ | 3.x | Message queue for events |
+
+## Architecture
+
+```
+notification/
+├── src/
+│   ├── main.ts                  # Application bootstrap
+│   ├── app.module.ts            # Root module
+│   ├── app.controller.ts        # Health check endpoint
+│   ├── app.service.ts           # Base service
+│   └── modules/
+│       ├── email/               # Email sending module
+│       └── notifications/       # Core notification handling
+├── Dockerfile.dev              # Development with hot reload
+└── package.json
+```
+
+## Event Types
+
+The service listens for RabbitMQ events:
+
+| Event | Description | Action |
+|-------|-------------|--------|
+| `payment.succeeded` | Payment completed | Send confirmation email |
+| `payment.failed` | Payment failed | Send failure notification |
+| `application.submitted` | New application | Send confirmation |
+| `application.approved` | Application approved | Send approval email |
+| `application.rejected` | Application rejected | Send rejection email |
+
+## Getting Started
+
+### Prerequisites
+- Node.js 18+
+- RabbitMQ (or Docker Compose)
+
+### Development
+
+```bash
+npm install
+npm run start:dev
+```
+
+### With Docker
+
+```bash
+# From project root
+docker-compose up notification
+```
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PORT` | Service port | `4002` |
+| `NODE_ENV` | Environment | `development` |
+| `RABBITMQ_URL` | RabbitMQ connection | `amqp://guest:guest@rabbitmq:5672/` |
+| `NOTIFICATION_QUEUE_CLEANUP_ON_DEPLOY` | One-time deploy startup cleanup for legacy queues | `false` |
+| `NOTIFICATION_QUEUE_CLEANUP_TARGETS` | Comma-separated queue base names to delete during cleanup | `notification_queue` |
+| `NOTIFICATION_QUEUE_CLEANUP_INCLUDE_RETRY_DLQ` | Also delete `.retry` and `.dlq` variants | `true` |
+| `NOTIFICATION_QUEUE_MAX_RETRIES` | Max rejected deliveries before routing to DLQ | `3` |
+| `NOTIFICATION_QUEUE_RETRY_DELAY_MS` | Delay in retry queue before requeueing | `15000` |
+| `REDIS_URL` | Redis connection for notification idempotency | - |
+| `NOTIFICATION_IDEMPOTENCY_ENABLED` | Enable dedupe guard for consumed events | `true` |
+| `NOTIFICATION_IDEMPOTENCY_DEFAULT_TTL_SECONDS` | Default dedupe TTL (non-payment events) | `86400` |
+| `NOTIFICATION_IDEMPOTENCY_PAYMENT_TTL_SECONDS` | Dedupe TTL for payment events | `604800` |
+| `SMTP_HOST` | Email server host | - |
+| `SMTP_PORT` | Email server port | `587` |
+| `SMTP_USER` | Email username | - |
+| `SMTP_PASS` | Email password | - |
+
+## Available Scripts
+
+```bash
+npm run start:dev    # Development with hot reload
+npm run start:prod   # Production mode
+npm run build        # Compile TypeScript
+npm run test         # Run tests
+```
+
+## RabbitMQ Integration
+
+```typescript
+@RabbitSubscribe({
+  exchange: 'payment-events',
+  routingKey: 'payment.succeeded',
+  queue: 'notification-payment-queue',
+})
+async handlePaymentSuccess(data: PaymentSuccessDto) {
+  await this.emailService.sendPaymentConfirmation(data);
+}
+```
+
+The production bootstrap binds `notification_queue` to both exchanges used in
+this workspace:
+
+- `payment-events` with `payment.#` for events published by the Go payment service
+- `ybb.events` with `#` for events published by NestJS services like the API
+
+## Health Check
+
+```bash
+curl http://localhost:4002/health
+# {"status": "ok"}
+```
+
+## Future Enhancements
+
+- [ ] Email templates with Handlebars
+- [ ] In-app notification storage
+- [ ] Push notifications (Firebase/APNs)
+- [ ] Notification preferences per user
+- [ ] Retry mechanism for failed deliveries
+
+## Related Documentation
+
+- [Architecture](../../docs/architecture.md)
+- [Infrastructure - RabbitMQ](../../infrastructure/README.md)
+
+## License
+
+Private - YBB Platform

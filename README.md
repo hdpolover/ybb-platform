@@ -1,73 +1,45 @@
 # YBB Platform
 
-Monorepo architecture for YBB master platform with microservices managed by Docker.
-
-## Overview
-
-This project is a comprehensive platform for managing YBB (Youth Break the Boundaries) programs, applications, and payments. Built with a microservices architecture using Docker containerization.
-
-## Technology Stack
-
-- **API Gateway**: NestJS (TypeScript)
-- **Payment Service**: Golang
-- **File Service**: Python (FastAPI)
-- **Admin Dashboard**: Next.js 14+
-- **Database**: PostgreSQL 16
-- **Cache**: Redis 7+
-- **Storage**: MinIO (S3-compatible)
-- **Reverse Proxy**: Nginx
-
-## Getting Started
-
-### Prerequisites
-
-- Docker & Docker Compose
-- Node.js 18+
-- Go 1.21+
-- Python 3.11+
-
-### Quick Start
-
-```bash
-# Clone the repository
-git clone https://github.com/hdpolover/ybb-platform.git
-cd ybb-platform
-
-# Copy environment files
-cp .env.example .env
-
-# Run setup script
-./scripts/setup.sh
-
-# Start all services
-make dev
-# or
-docker-compose up -d
-
-# Check service health
-./scripts/health-check.sh
-```
-
-## Project Structure
-
-See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for detailed project structure and architecture.
+YBB Platform is a microservices workspace containing the API gateway, payment, file, notification, admin dashboard, and landing content services.
 
 ## Services
 
-- **API Gateway** (Port 4000): Main backend API
-- **Payment Service** (Port 8080): Payment processing and Stripe integration
-- **File Service** (Port 8000): File upload, storage, and processing
-- **Admin Dashboard** (Port 3000): Admin management interface
+| Service | Directory | App Port |
+| --- | --- | ---: |
+| API Gateway | `services/api` | 4000 |
+| Payment Service | `services/payment` | 8002 |
+| File Service | `services/file` | 8001 |
+| Notification Service | `services/notification` | 4002 |
+| Admin Dashboard | `services/admin-dashboard` | 4001 |
+| Landing Content Service | `services/landing-content` | 4003 |
 
-All services are accessible through Nginx on ports 80/443.
+## Quick start
+
+### Prerequisites
+- Docker + Docker Compose
+- Make
+
+### Run all services
+```bash
+make start
+make status
+make stop
+```
+
+### Run one service
+```bash
+make start-api
+make logs-api
+make restart-api
+```
 
 ## Documentation
 
-- Architecture: `docs/architecture.md`
-- Setup Guide: `docs/setup.md`
-- API Documentation: `docs/api-documentation.md`
-- Deployment: `docs/deployment.md`
+- Main docs index: [`docs/README.md`](./docs/README.md)
+- Optimization roadmap and execution log: [`docs/PLATFORM_OPTIMIZATION_RECOMMENDATIONS.md`](./docs/PLATFORM_OPTIMIZATION_RECOMMENDATIONS.md)
+- Potential future service split notes: [`docs/POTENTIAL_NEW_SERVICES.md`](./docs/POTENTIAL_NEW_SERVICES.md)
 
-## License
+## Notes
 
-Proprietary
+- Service-specific envs and compose files live in each `services/<name>/` directory.
+- Root orchestration behavior is defined in [`Makefile`](./Makefile).

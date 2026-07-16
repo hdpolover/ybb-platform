@@ -1,0 +1,65 @@
+services:
+  payment:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: ybb-prod-payment
+    restart: always
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      GIN_MODE: ${GIN_MODE:-release}
+      PORT: 8002
+      # Database
+      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@ybb-prod-postgres-payment:5432/${DATABASE_NAME}?sslmode=disable
+      # RabbitMQ
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@ybb-prod-shared-rabbitmq:5672/
+      # Gateways
+      MIDTRANS_SERVER_KEY: ${MIDTRANS_SERVER_KEY}
+      MIDTRANS_CLIENT_KEY: ${MIDTRANS_CLIENT_KEY}
+      MIDTRANS_IS_PRODUCTION: "${MIDTRANS_IS_PRODUCTION:-true}"
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY}
+      # Observability
+      LOKI_URL: ${LOKI_URL}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_LOG_LEVEL: ${OTEL_LOG_LEVEL:-info}
+      # Payment Service
+      PAYMENT_SECRETS_KEY: ${PAYMENT_SECRETS_KEY}
+      # PAYMENT_AUTO_MIGRATE intentionally unset — SQL migrations are authoritative
+    depends_on:
+      postgres-payment:
+        condition: service_healthy
+    networks:
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=dokploy-network"
+      - "traefik.http.routers.ybb-prod-payment.rule=${APP_DOMAINS_RULE:-Host(`payments.ybbhub.com`)}"
+      - "traefik.http.routers.ybb-prod-payment.entrypoints=websecure"
+      - "traefik.http.routers.ybb-prod-payment.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ybb-prod-payment.loadbalancer.server.port=8002"
+
+  postgres-payment:
+    image: postgres:15-alpine
+    container_name: ybb-prod-postgres-payment
+    restart: always
+    environment:
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
+    volumes:
+      - postgres_payment_data_prod_v2:/var/lib/postgresql/data
+    networks:
+      - dokploy-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  postgres_payment_data_prod_v2:

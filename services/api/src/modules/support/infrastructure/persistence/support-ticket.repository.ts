@@ -1,0 +1,127 @@
+import { Injectable } from '@nestjs/common';
+import { ISupportTicketRepository } from '@core/interfaces/repositories/support-ticket.repository.interface';
+import { SupportTicket, SupportTicketMessage } from '@core/entities/support-ticket.entity';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { SupportTicket as PrismaSupportTicket, SupportTicketMessage as PrismaSupportTicketMessage, SupportTicketStatus, SupportTicketPriority } from '@prisma/client';
+
+@Injectable()
+export class SupportTicketRepository implements ISupportTicketRepository {
+    constructor(private readonly prisma: PrismaService) { }
+
+    async create(ticket: SupportTicket): Promise<SupportTicket> {
+        const created = await this.prisma.supportTicket.create({
+            data: {
+                id: ticket.id,
+                participantId: ticket.participantId,
+                ticketNumber: ticket.ticketNumber,
+                category: ticket.category,
+                subCategory: ticket.subCategory,
+                subject: ticket.subject,
+                description: ticket.description,
+                status: ticket.status as SupportTicketStatus,
+                priority: ticket.priority as SupportTicketPriority,
+            },
+        });
+        return this.mapToEntity(created);
+    }
+
+    async findById(id: string, includeInternalNotes = true): Promise<SupportTicket | null> {
+        const ticket = await this.prisma.supportTicket.findUnique({
+            where: { id },
+            include: {
+                messages: {
+                    where: includeInternalNotes ? undefined : { isInternalNote: false },
+                    orderBy: { createdAt: 'asc' },
+                },
+            },
+        });
+        return ticket ? this.mapToEntity(ticket) : null;
+    }
+
+    async findByParticipantId(participantId: string): Promise<SupportTicket[]> {
+        const tickets = await this.prisma.supportTicket.findMany({
+            where: { participantId },
+            orderBy: { createdAt: 'desc' },
+            include: {
+                messages: {
+                    take: 1,
+                    orderBy: { createdAt: 'desc' }
+                }
+            }
+        });
+        return tickets.map((ticket) => this.mapToEntity(ticket));
+    }
+
+    async addMessage(message: SupportTicketMessage): Promise<SupportTicketMessage> {
+        const created = await this.prisma.supportTicketMessage.create({
+            data: {
+                id: message.id,
+                ticketId: message.ticketId,
+                message: message.message,
+                isFromAdmin: message.isFromAdmin,
+                senderId: message.senderId,
+                senderName: message.senderName,
+                attachments: message.attachments as unknown as import('@prisma/client').Prisma.InputJsonValue,
+                isRead: message.isRead,
+            },
+        });
+        return this.mapMessageToEntity(created);
+    }
+
+    async updateStatus(id: string, status: string, resolvedAt?: Date, closedAt?: Date): Promise<void> {
+        const data: Partial<PrismaSupportTicket> = { status: status as SupportTicketStatus };
+        if (resolvedAt) data.resolvedAt = resolvedAt;
+        if (closedAt) data.closedAt = closedAt;
+
+        await this.prisma.supportTicket.update({
+            where: { id },
+            data,
+        });
+    }
+
+    async generateTicketNumber(): Promise<string> {
+        const count = await this.prisma.supportTicket.count();
+        const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const num = (count + 1).toString().padStart(4, '0');
+        return `TKT-${date}-${num}`;
+    }
+
+    private mapToEntity(prisma: PrismaSupportTicket & { messages?: (PrismaSupportTicketMessage & Record<string, unknown>)[] }): SupportTicket {
+        const messages = prisma.messages?.map((message) => this.mapMessageToEntity(message)) || [];
+        return new SupportTicket(
+            prisma.id,
+            prisma.participantId,
+            prisma.ticketNumber,
+            prisma.category,
+            prisma.subject,
+            prisma.description,
+            prisma.status,
+            prisma.priority,
+            prisma.createdAt,
+            prisma.updatedAt,
+            prisma.subCategory,
+            prisma.assignedTo,
+            prisma.programId,
+            prisma.resolution,
+            prisma.resolvedAt,
+            prisma.closedAt,
+            prisma.satisfactionRating,
+            prisma.feedback,
+            messages,
+        );
+    }
+
+    private mapMessageToEntity(prisma: PrismaSupportTicketMessage): SupportTicketMessage {
+        return new SupportTicketMessage(
+            prisma.id,
+            prisma.ticketId,
+            prisma.message,
+            prisma.isFromAdmin,
+            prisma.senderId,
+            prisma.senderName,
+            prisma.createdAt,
+            prisma.attachments as unknown as import('@core/entities/participant-application.entity').DocumentFile[],
+            prisma.isRead,
+        );
+    }
+}
