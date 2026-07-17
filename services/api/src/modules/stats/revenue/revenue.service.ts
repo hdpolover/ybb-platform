@@ -1,7 +1,7 @@
 // src/modules/stats/revenue/revenue.service.ts
 import { Injectable } from '@nestjs/common';
 import { Response } from 'express';
-import { Prisma, PaymentStatus } from '@prisma/client';
+import { ApplicationCategory, Prisma, PaymentStatus } from '@prisma/client';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { ExcelService } from '@shared/infrastructure/excel/excel.service';
 import {
@@ -43,6 +43,7 @@ const revenueInvoiceSelect = {
   application: {
     select: {
       programId: true,
+      applicationCategory: true,
       program: {
         select: {
           id: true,
@@ -183,6 +184,7 @@ export class RevenueService {
       { header: 'Application ID', key: 'applicationId', width: 36 },
       { header: 'Program', key: 'program', width: 30 },
       { header: 'Participant', key: 'participant', width: 30 },
+      { header: 'Application Category', key: 'applicationCategory', width: 18 },
       { header: 'Gross Amount', key: 'grossAmount', width: 15 },
       { header: 'Currency', key: 'currency', width: 10 },
       { header: 'Fee (Est. IDR)', key: 'feeIdr', width: 15 },
@@ -230,6 +232,7 @@ export class RevenueService {
           applicationId: row.applicationId,
           program: row.programName,
           participant: row.participantName ?? 'N/A',
+          applicationCategory: this.humanizeApplicationCategory(invoice.application.applicationCategory),
           grossAmount: row.grossAmount,
           currency: row.currency,
           feeIdr: row.feeIdr ?? '-',
@@ -317,6 +320,20 @@ export class RevenueService {
     }
 
     return { AND: conditions };
+  }
+
+  /** Humanises the funding category enum for the export column. */
+  private humanizeApplicationCategory(
+    category: ApplicationCategory | null | undefined,
+  ): string {
+    switch (category) {
+      case ApplicationCategory.fully_funded:
+        return 'Fully Funded';
+      case ApplicationCategory.self_funded:
+        return 'Self Funded';
+      default:
+        return 'N/A';
+    }
   }
 
   private endOfDay(dateStr: string): Date {

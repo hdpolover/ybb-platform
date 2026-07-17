@@ -52,6 +52,14 @@ func (g *XenditGateway) CreatePayment(ctx context.Context, req *domainGateways.C
 	if req.Payment.Description != "" {
 		createInvoiceRequest.SetDescription(req.Payment.Description)
 	}
+	if req.CustomerName != "" {
+		customer := invoice.NewCustomerObject()
+		customer.SetGivenNames(req.CustomerName)
+		if req.CustomerEmail != "" {
+			customer.SetEmail(req.CustomerEmail)
+		}
+		createInvoiceRequest.SetCustomer(*customer)
+	}
 	if req.CallbackURL != "" {
 		createInvoiceRequest.SetSuccessRedirectUrl(req.CallbackURL)
 		createInvoiceRequest.SetFailureRedirectUrl(req.CallbackURL)
@@ -76,11 +84,17 @@ func (g *XenditGateway) CreatePayment(ctx context.Context, req *domainGateways.C
 
 // ChargePayment initiates an invoice-based payment (redirect flow) for Xendit.
 func (g *XenditGateway) ChargePayment(ctx context.Context, req *domainGateways.ChargePaymentRequest) (*domainGateways.ChargePaymentResponse, error) {
+	description := req.Description
+	if description == "" {
+		// Fallback so we never regress to an empty description.
+		description = req.IntentID
+	}
+
 	payment := &entities.Payment{
 		ID:            req.TransactionID,
 		Amount:        req.Amount,
 		Currency:      req.Currency,
-		Description:   req.IntentID,
+		Description:   description,
 		CustomerEmail: req.CustomerDetails.Email,
 	}
 
@@ -98,7 +112,7 @@ func (g *XenditGateway) ChargePayment(ctx context.Context, req *domainGateways.C
 
 	return &domainGateways.ChargePaymentResponse{
 		Status:             "PENDING",
-		GatewayReferenceID: createResp.GatewayOrderID,
+		GatewayReferenceID: createResp.Token,
 		ActionType:         "redirect",
 		ActionURL:          createResp.RedirectURL,
 		Metadata: map[string]interface{}{
