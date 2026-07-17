@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { LoginCommand } from '../login.command';
 import { AuthResponseDto } from '../../../presentation/dto/auth-response.dto';
@@ -9,10 +9,16 @@ import { ConfigService } from '@nestjs/config';
 import { AuthLoggingService } from '../../services/auth-logging.service';
 import { GeoIpService } from '@shared/infrastructure/geoip/geoip.service';
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
-import { ensureParticipantExists, ensureProgramApplication } from '../../services/auth-program-linking.util';
+import {
+  ensureParticipantExists,
+  ensureProgramApplication,
+  toProgramRegistrationInfo,
+} from '../../services/auth-program-linking.util';
 
 @Injectable()
 export class LoginHandler {
+  private readonly logger = new Logger(LoginHandler.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
@@ -253,12 +259,18 @@ export class LoginHandler {
     });
 
     const participant = await ensureParticipantExists(this.prisma, user.id, user.email);
-    await ensureProgramApplication(this.prisma, {
+    const applicationResult = await ensureProgramApplication(this.prisma, {
       participantId: participant.id,
       brandId,
       programId: command.programId,
       programSlug: command.programSlug,
     });
+
+    if (applicationResult.status === 'closed') {
+      this.logger.warn(
+        `Registration closed for program ${applicationResult.program.id} at login time (userId: ${user.id})`,
+      );
+    }
 
     // Log success
     await this.authLoggingService.logSuccessfulLogin(user.id, command.ipAddress, command.userAgent);
@@ -346,6 +358,7 @@ export class LoginHandler {
         isOnboardingCompleted: user.isOnboardingCompleted ?? false,
         registeredPrograms,
       },
+      programRegistration: toProgramRegistrationInfo(applicationResult),
     };
   }
 }

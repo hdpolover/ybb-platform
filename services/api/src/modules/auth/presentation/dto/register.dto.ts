@@ -22,7 +22,10 @@ export class RegisterDto {
   @IsString()
   @IsOptional()
   @MinLength(8)
-  @Matches(/((?=.*\d)|(?=.*\W+))(?![.\n])(?=.*[A-Z])(?=.*[a-z]).*$/, {
+  // Kept in sync with ybb-program-next/lib/auth/passwordRules.ts. The previous
+  // pattern rejected passwords whose only special character was a leading "."
+  // (".Password" failed while "Password." passed), which no stated rule covers.
+  @Matches(/^(?=.*[A-Z])(?=.*[a-z])(?=.*[\d\W]).+$/, {
     message: 'Password must contain uppercase, lowercase, number/special character',
   })
   password?: string;

@@ -13,7 +13,11 @@ import { AuthLoggingService } from '../../services/auth-logging.service';
 import { normalizeReferralCode } from '@modules/participants/application/utils/referral-code.util';
 import { MetricsService } from '../../../../../shared/infrastructure/monitoring/metrics.service';
 import { GeoIpService } from '@shared/infrastructure/geoip/geoip.service';
-import { ensureProgramApplication, resolveAuthTargetProgram } from '../../services/auth-program-linking.util';
+import {
+  ensureProgramApplication,
+  resolveAuthTargetProgram,
+  toProgramRegistrationInfo,
+} from '../../services/auth-program-linking.util';
 
 @Injectable()
 export class RegisterHandler {
@@ -238,12 +242,20 @@ export class RegisterHandler {
         }
       }
 
-      await ensureProgramApplication(this.prisma, {
+      const applicationResult = await ensureProgramApplication(this.prisma, {
         participantId: participant.id,
         brandId,
         programId: targetProgramId,
         applicationCategory: command.applicationCategory,
       });
+
+      if (applicationResult.status === 'closed') {
+        this.logger.warn(
+          `Registration closed for program ${applicationResult.program.id} at auth time (userId: ${userId})`,
+        );
+      }
+
+      return applicationResult;
     };
 
     // For OAuth providers, check if identity already exists
@@ -260,7 +272,7 @@ export class RegisterHandler {
       });
 
       if (existingIdentity) {
-        await handleProgramRegistration(existingIdentity.user.id, existingIdentity.user.email);
+        const applicationResult = await handleProgramRegistration(existingIdentity.user.id, existingIdentity.user.email);
 
         // User with this provider already exists, return login tokens
         const payload = {
@@ -291,6 +303,7 @@ export class RegisterHandler {
             isOnboardingCompleted: existingIdentity.user.isOnboardingCompleted ?? false,
             registeredPrograms,
           },
+          programRegistration: toProgramRegistrationInfo(applicationResult),
         };
       }
     }
@@ -300,7 +313,7 @@ export class RegisterHandler {
 
     if (user) {
       // User exists, handle program registration first just in case
-      await handleProgramRegistration(user.id, user.email);
+      const applicationResult = await handleProgramRegistration(user.id, user.email);
 
       // User exists, check if they can add this provider
       const existingIdentity = user.identities.find(i => i.providerId === authProvider.id);
@@ -354,6 +367,7 @@ export class RegisterHandler {
           isOnboardingCompleted: user.isOnboardingCompleted ?? false,
           registeredPrograms,
         },
+        programRegistration: toProgramRegistrationInfo(applicationResult),
       };
     }
 
@@ -459,13 +473,21 @@ export class RegisterHandler {
       select: { id: true },
     });
 
+    let applicationResult: Awaited<ReturnType<typeof ensureProgramApplication>> | undefined;
+
     if (newParticipant) {
-      await ensureProgramApplication(this.prisma, {
+      applicationResult = await ensureProgramApplication(this.prisma, {
         participantId: newParticipant.id,
         brandId,
         programId: targetProgramId,
         applicationCategory: command.applicationCategory,
       });
+
+      if (applicationResult.status === 'closed') {
+        this.logger.warn(
+          `Registration closed for program ${applicationResult.program.id} at auth time (userId: ${newUser.id})`,
+        );
+      }
     }
 
     // Send notifications
@@ -565,6 +587,7 @@ export class RegisterHandler {
         isOnboardingCompleted: newUser.isOnboardingCompleted ?? false,
         registeredPrograms,
       },
+      programRegistration: applicationResult ? toProgramRegistrationInfo(applicationResult) : undefined,
     };
   }
 }
