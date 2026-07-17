@@ -46,6 +46,7 @@ type ItemDetails struct {
 type ChargePaymentRequest struct {
 	TransactionID   string // Unique ID for this attempt (OrderID in Midtrans)
 	IntentID        string
+	Description     string // Human-readable description shown on the gateway dashboard
 	Amount          float64
 	Currency        string
 	PaymentMethodID string                 // "bca_va", "credit_card", "gopay"

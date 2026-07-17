@@ -152,9 +152,22 @@ func (h *ConfirmIntentHandler) Handle(ctx context.Context, cmd *commands.Confirm
 		_ = json.Unmarshal(cmd.PaymentDetails, &detailsMap)
 	}
 
+	// Description shown on the gateway dashboard (e.g. Xendit invoice list).
+	// Sourced from intent metadata, populated upstream by the API service.
+	var description string
+	if len(intent.Metadata) > 0 {
+		var metaMap map[string]interface{}
+		if err := json.Unmarshal(intent.Metadata, &metaMap); err == nil {
+			if d, ok := metaMap["description"].(string); ok {
+				description = d
+			}
+		}
+	}
+
 	chargeReq := &gateways.ChargePaymentRequest{
 		TransactionID:   tx.ID,
 		IntentID:        intent.ID,
+		Description:     description,
 		Amount:          intent.Amount,
 		Currency:        intent.Currency,
 		PaymentMethodID: method.Code,
