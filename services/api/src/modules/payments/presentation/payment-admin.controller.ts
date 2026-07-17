@@ -42,6 +42,7 @@ import {
     buildParticipantPaymentsUrl as buildParticipantPaymentsDashboardUrl,
     buildParticipantInvoiceUrl,
 } from '@modules/payments/application/utils/participant-dashboard-url.util';
+import { isManualPaymentMethod } from '@modules/payments/application/utils/payment-method.util';
 import {
     buildInvoiceWhere,
     obsoleteRegistrationFeeInvoiceIdsSql,
@@ -972,21 +973,6 @@ export class PaymentAdminController {
     // Manual-transfer detection for invoice.paymentMethod, the API-side field
     // populated from Go's payment_method_id (see PaymentEventsController /
     // ConfirmPortalPaymentHandler). This gates the void settled-block bypass, so it
-    // MUST mirror the Go CancelPayment guard exactly — that guard only lets a
-    // SUCCESS transaction be cancelled when PaymentMethodID == "manual_transfer"
-    // (the entities.PaymentMethodManualTransfer literal that SubmitManualPayment
-    // always writes). A broader substring match (e.g. includes('transfer')) would
-    // also catch the real Midtrans "bank_transfer"/VA method, wrongly skip the
-    // API-side DANGER settled-block for a genuinely captured gateway payment, then
-    // hit Go's 400 — which voidTransaction swallows as 'already_terminal' — and let
-    // the local invoice drift to failed while the gateway stays SUCCESS (an actual
-    // un-enrolment of a paid participant). So keep this strict equality, not a
-    // substring match. Deliberately does NOT trust payment_transactions.is_manual,
-    // which has been observed false on a genuine manual transaction in prod.
-    private isManualPaymentMethod(paymentMethod: string | null | undefined): boolean {
-        return (paymentMethod || '').toLowerCase().trim() === 'manual_transfer';
-    }
-
     @Post('notify-payment-issue')
     @ApiOperation({ summary: 'Notify participants of a payment issue with alternative payment methods (Admin)' })
     @ApiBody({ type: NotifyPaymentIssueDto })
@@ -1339,8 +1325,8 @@ export class PaymentAdminController {
             // not a live charge. Tell voidTransaction so it can bypass the
             // "never void a settled transaction" guard specifically for this
             // invoice, while that guard stays fully intact for a real gateway
-            // SUCCESS transaction (see isManualPaymentMethod below).
-            const isManual = this.isManualPaymentMethod(invoice.paymentMethod);
+            // SUCCESS transaction (see isManualPaymentMethod).
+            const isManual = isManualPaymentMethod(invoice.paymentMethod);
             const voidResult = await this.paymentGatewayClient.voidTransaction(
                 invoice.externalTransactionId,
                 invoice.id,

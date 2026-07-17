@@ -5,6 +5,7 @@ import { PaymentStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { buildParticipantPaymentsUrl } from '@modules/payments/application/utils/participant-dashboard-url.util';
+import { isManualPaymentMethod } from '@modules/payments/application/utils/payment-method.util';
 import { PaymentServiceHttpClient } from './payment-service-http.client';
 import { PaymentGatewayClient } from './payment-gateway.client';
 
@@ -44,7 +45,14 @@ export interface ReconcileOptions {
  */
 export interface TerminalDriftDetail {
     invoiceId: string;
-    outcome: 'voided' | 'already_terminal' | 'danger_settled' | 'skipped_needs_review' | 'skipped' | 'error';
+    outcome:
+        | 'voided'
+        | 'already_terminal'
+        | 'danger_settled'
+        | 'resolved_refunded_manual'
+        | 'skipped_needs_review'
+        | 'skipped'
+        | 'error';
     reason: string;
 }
 
@@ -52,6 +60,7 @@ export interface TerminalDriftReport {
     scanned: number;
     voided: number;
     dangerSettled: number;
+    resolvedRefundedManual: number;
     needsReview: number;
     skipped: number;
     errors: number;
@@ -141,6 +150,7 @@ export class PaymentReconciliationService {
             this.logger.log(
                 `[payment-reconciliation] terminal-drift scanned=${driftReport.scanned} ` +
                 `voided=${driftReport.voided} dangerSettled=${driftReport.dangerSettled} ` +
+                `resolvedRefundedManual=${driftReport.resolvedRefundedManual} ` +
                 `needsReview=${driftReport.needsReview} skipped=${driftReport.skipped} errors=${driftReport.errors}`,
             );
             if (driftReport.dangerSettled > 0) {
@@ -296,6 +306,7 @@ export class PaymentReconciliationService {
             scanned: 0,
             voided: 0,
             dangerSettled: 0,
+            resolvedRefundedManual: 0,
             needsReview: 0,
             skipped: 0,
             errors: 0,
@@ -313,6 +324,8 @@ export class PaymentReconciliationService {
             select: {
                 id: true,
                 applicationId: true,
+                status: true,
+                paymentMethod: true,
                 externalIntentId: true,
                 externalTransactionId: true,
             },
@@ -338,6 +351,7 @@ export class PaymentReconciliationService {
                 report.details.push(detail);
                 if (detail.outcome === 'voided') report.voided += 1;
                 else if (detail.outcome === 'danger_settled') report.dangerSettled += 1;
+                else if (detail.outcome === 'resolved_refunded_manual') report.resolvedRefundedManual += 1;
                 else if (detail.outcome === 'skipped_needs_review') report.needsReview += 1;
                 else if (detail.outcome === 'error') report.errors += 1;
                 else report.skipped += 1;
@@ -353,12 +367,41 @@ export class PaymentReconciliationService {
     }
 
     private async reconcileTerminalDriftOne(
-        invoice: { id: string; externalTransactionId: string | null; externalIntentId: string | null },
+        invoice: {
+            id: string;
+            status: PaymentStatus;
+            paymentMethod: string | null;
+            externalTransactionId: string | null;
+            externalIntentId: string | null;
+        },
         apply: boolean,
     ): Promise<TerminalDriftDetail> {
         const transactionId = invoice.externalTransactionId?.trim() || null;
         if (!transactionId) {
             return { invoiceId: invoice.id, outcome: 'skipped', reason: 'no linked transaction id' };
+        }
+
+        // A manual bank transfer never gets refunded at the gateway - there is no
+        // gateway charge to refund, so the linked transaction stays SUCCESS
+        // forever. Without this branch, 'refunded' + manual would fire
+        // danger_settled hourly with no achievable resolution, since 'refunded'
+        // IS the human acknowledgement for a manual transfer. A card/real-gateway
+        // invoice still falls through to the danger_settled check below - if we
+        // marked it refunded but the gateway is still SUCCESS, that is real
+        // drift and must keep alerting. Checked before the gateway fetch so this
+        // never spends an HTTP call on an already-resolved row.
+        if (invoice.status === PaymentStatus.refunded && isManualPaymentMethod(invoice.paymentMethod)) {
+            if (apply) {
+                await this.prisma.applicationInvoice.update({
+                    where: { id: invoice.id },
+                    data: { lastReconciledAt: new Date() },
+                });
+            }
+            return {
+                invoiceId: invoice.id,
+                outcome: 'resolved_refunded_manual',
+                reason: 'refunded manual transfer - no gateway charge to refund, resolved',
+            };
         }
 
         if (!apply) {
