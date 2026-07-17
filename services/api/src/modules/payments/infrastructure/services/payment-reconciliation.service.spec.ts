@@ -216,6 +216,7 @@ describe('PaymentReconciliationService', () => {
             id: 'inv-cancelled-1',
             applicationId: 'app-1',
             status: 'cancelled',
+            paymentMethod: null,
             externalTransactionId: 'txn-1',
             externalIntentId: 'intent-1',
             ...overrides,
@@ -335,6 +336,70 @@ describe('PaymentReconciliationService', () => {
 
             expect(report.details[0].outcome).toBe('voided');
             expect(mockGatewayClient.voidTransaction).toHaveBeenCalledWith('txn-1', 'inv-cancelled-1', expect.any(String));
+        });
+
+        // ── refunded + manual transfer resolution (this fix) ──────────────────
+
+        it('resolves a refunded manual-transfer invoice without calling the gateway, logs no danger, and stamps lastReconciledAt', async () => {
+            const errorSpy = jest.spyOn((service as unknown as { logger: { error: jest.Mock } }).logger, 'error');
+            mockPrisma.applicationInvoice.findMany.mockResolvedValue([
+                terminalInvoice({ status: 'refunded', paymentMethod: 'manual_transfer' }),
+            ]);
+
+            const report = await service.reconcileTerminalInvoiceDrift(true);
+
+            expect(report.details[0].outcome).toBe('resolved_refunded_manual');
+            expect(report.resolvedRefundedManual).toBe(1);
+            expect(report.dangerSettled).toBe(0);
+            expect(mockPaymentClient.get).not.toHaveBeenCalled();
+            expect(mockGatewayClient.voidTransaction).not.toHaveBeenCalled();
+            expect(errorSpy).not.toHaveBeenCalled();
+            expect(mockPrisma.applicationInvoice.update).toHaveBeenCalledWith({
+                where: { id: 'inv-cancelled-1' },
+                data: { lastReconciledAt: expect.any(Date) },
+            });
+        });
+
+        it('does NOT resolve a refunded manual-transfer invoice in dry-run mode, but still skips the gateway and never writes', async () => {
+            mockPrisma.applicationInvoice.findMany.mockResolvedValue([
+                terminalInvoice({ status: 'refunded', paymentMethod: 'manual_transfer' }),
+            ]);
+
+            const report = await service.reconcileTerminalInvoiceDrift(false);
+
+            expect(report.details[0].outcome).toBe('resolved_refunded_manual');
+            expect(mockPaymentClient.get).not.toHaveBeenCalled();
+            expect(mockPrisma.applicationInvoice.update).not.toHaveBeenCalled();
+        });
+
+        it('still flags danger for a refunded CARD invoice whose gateway transaction is still SUCCESS, and does NOT stamp lastReconciledAt', async () => {
+            mockPaymentClient.get.mockResolvedValue({ data: { status: 'SUCCESS', transactions: [] } });
+            mockGatewayClient.voidTransaction.mockResolvedValue({ outcome: 'danger_settled', detail: 'SUCCESS at gateway' });
+            mockPrisma.applicationInvoice.findMany.mockResolvedValue([
+                terminalInvoice({ status: 'refunded', paymentMethod: 'credit_card' }),
+            ]);
+
+            const report = await service.reconcileTerminalInvoiceDrift(true);
+
+            expect(report.details[0].outcome).toBe('danger_settled');
+            expect(report.dangerSettled).toBe(1);
+            expect(report.resolvedRefundedManual).toBe(0);
+            expect(mockPrisma.applicationInvoice.update).not.toHaveBeenCalled();
+        });
+
+        it('regression: a cancelled invoice settled at the gateway still reports danger_settled, unchanged by the refunded-manual fix', async () => {
+            mockPaymentClient.get.mockResolvedValue({ data: { status: 'SUCCESS', transactions: [] } });
+            mockGatewayClient.voidTransaction.mockResolvedValue({ outcome: 'danger_settled', detail: 'SUCCESS at gateway' });
+            mockPrisma.applicationInvoice.findMany.mockResolvedValue([
+                terminalInvoice({ status: 'cancelled', paymentMethod: 'manual_transfer' }),
+            ]);
+
+            const report = await service.reconcileTerminalInvoiceDrift(true);
+
+            expect(report.details[0].outcome).toBe('danger_settled');
+            expect(report.dangerSettled).toBe(1);
+            expect(report.resolvedRefundedManual).toBe(0);
+            expect(mockPrisma.applicationInvoice.update).not.toHaveBeenCalled();
         });
 
         it('skips invoices with no linked external reference', async () => {
