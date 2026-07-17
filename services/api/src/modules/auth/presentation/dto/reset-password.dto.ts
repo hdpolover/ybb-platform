@@ -11,7 +11,9 @@ export class ResetPasswordDto {
   @IsString()
   @IsNotEmpty()
   @MinLength(8)
-  @Matches(/((?=.*\d)|(?=.*\W+))(?![.\n])(?=.*[A-Z])(?=.*[a-z]).*$/, {
+  // Kept in sync with ybb-program-next/lib/auth/passwordRules.ts. See the note
+  // on RegisterDto.password for why the previous pattern was replaced.
+  @Matches(/^(?=.*[A-Z])(?=.*[a-z])(?=.*[\d\W]).+$/, {
     message: 'Password must contain uppercase, lowercase, number/special character',
   })
   password: string;
