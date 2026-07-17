@@ -163,6 +163,18 @@ export class ConfirmPortalPaymentHandler {
 
         this.logger.log(`[confirm-payment] invoiceId=${invoiceId} currency=${settlementCurrency} programUsdInIdr=${invoice.application.program.usdInIdr} snapshot=${invoice.exchangeRateSnapshot} resolvedRate=${exchangeRate}`);
 
+        // Description shown on the gateway dashboard (e.g. Xendit invoice list).
+        // Append the invoice's own display amount/currency, not the settlement
+        // amount/currency (which flips to IDR for manual transfers) so this stays
+        // the human-facing price regardless of payment type.
+        const baseDescription = `${invoice.pricingTier.name} - ${invoice.application.program.name}`;
+        const invoiceDisplayAmount = invoice.amount !== null && invoice.amount !== undefined ? Number(invoice.amount) : NaN;
+        const invoiceDisplayCurrency = invoice.currency?.trim();
+        const description =
+            !Number.isNaN(invoiceDisplayAmount) && invoiceDisplayCurrency
+                ? `${baseDescription} (${invoiceDisplayCurrency.toUpperCase()} ${invoiceDisplayAmount.toFixed(2)})`.slice(0, 255)
+                : baseDescription;
+
         // Create a payment intent via the Payment Service
         const intentResponse = await this.paymentClient.createIntent({
             user_id: userId,
@@ -171,7 +183,7 @@ export class ConfirmPortalPaymentHandler {
             currency: settlementCurrency,
             reference_type: 'invoice',
             reference_id: invoice.id,
-            description: `${invoice.pricingTier.name} - ${invoice.application.program.name}`,
+            description,
             metadata: {
                 invoice_id: invoice.id,
                 application_id: invoice.applicationId,
