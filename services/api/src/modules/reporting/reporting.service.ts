@@ -3,7 +3,7 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { ExcelService } from '@shared/infrastructure/excel/excel.service';
 import { Response } from 'express';
-import { Prisma } from '@prisma/client';
+import { ApplicationCategory, Prisma } from '@prisma/client';
 import {
   buildE164Phone,
   extractPhoneFromPersonalData,
@@ -97,17 +97,26 @@ export class ReportingService {
 
   async exportPayments(res: Response, filters?: InvoiceFilterQuery) {
     const columns = [
+      // Identifiers
       { header: 'Invoice ID', key: 'id', width: 36 },
-      { header: 'Status', key: 'status', width: 15 },
-      { header: 'Amount', key: 'amount', width: 15 },
-      { header: 'Currency', key: 'currency', width: 10 },
-      { header: 'Program', key: 'program', width: 30 },
+      { header: 'Application ID', key: 'applicationId', width: 36 },
+      // Who / what
+      { header: 'Participant Name', key: 'participantName', width: 30 },
       { header: 'Payer Email', key: 'payerEmail', width: 30 },
       { header: 'Payer Phone', key: 'payerPhone', width: 20 },
       { header: 'Phone Valid', key: 'phoneValid', width: 12 },
+      { header: 'Program', key: 'program', width: 30 },
+      { header: 'Application Category', key: 'applicationCategory', width: 18 },
       { header: 'Price Tier', key: 'tier', width: 20 },
+      // Money
+      { header: 'Amount', key: 'amount', width: 15 },
+      { header: 'Currency', key: 'currency', width: 10 },
+      // Status / dates
+      { header: 'Status', key: 'status', width: 15 },
       { header: 'Method', key: 'method', width: 15 },
+      { header: 'Created At', key: 'createdAt', width: 20 },
       { header: 'Paid At', key: 'paidAt', width: 20 },
+      // Technical ids
       { header: 'Ext Tx ID', key: 'extId', width: 30 },
     ];
 
@@ -311,15 +320,21 @@ export class ReportingService {
 
         yield {
           id: invoice.id,
-          status: invoice.status,
-          amount: invoice.amount ? invoice.amount.toString() : '0',
-          currency: invoice.currency,
-          program: invoice.application?.program?.name ?? 'Unknown',
+          applicationId: invoice.applicationId,
+          participantName: invoice.application?.participant?.fullName ?? 'N/A',
           payerEmail: invoice.application?.participant?.user?.email ?? 'N/A',
           payerPhone,
-          phoneValid: payerPhone === '-' ? '—' : phoneValid ? 'Yes' : 'No',
+          phoneValid: payerPhone === '-' ? '-' : phoneValid ? 'Yes' : 'No',
+          program: invoice.application?.program?.name ?? 'Unknown',
+          applicationCategory: this.humanizeApplicationCategory(
+            invoice.application?.applicationCategory,
+          ),
           tier: invoice.pricingTier?.name ?? 'N/A',
+          amount: invoice.amount ? invoice.amount.toString() : '0',
+          currency: invoice.currency,
+          status: invoice.status,
           method: invoice.paymentMethod || '-',
+          createdAt: invoice.createdAt ? new Date(invoice.createdAt).toISOString() : '-',
           paidAt: invoice.paidAt ? new Date(invoice.paidAt).toISOString() : '-',
           extId: invoice.externalTransactionId || '-',
         };
@@ -327,6 +342,20 @@ export class ReportingService {
 
       const last = invoices[invoices.length - 1];
       cursor = { id: last.id, createdAt: last.createdAt };
+    }
+  }
+
+  /** Humanises the funding category enum for a human-readable export column. */
+  private humanizeApplicationCategory(
+    category: ApplicationCategory | null | undefined,
+  ): string {
+    switch (category) {
+      case ApplicationCategory.fully_funded:
+        return 'Fully Funded';
+      case ApplicationCategory.self_funded:
+        return 'Self Funded';
+      default:
+        return 'N/A';
     }
   }
 
