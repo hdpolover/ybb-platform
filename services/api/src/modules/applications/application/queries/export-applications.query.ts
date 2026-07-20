@@ -1,4 +1,4 @@
-import { ApplicationStatus, ApplicationCategory } from '@core/entities/participant-application.entity';
+import { ApplicationStatus, ApplicationCategory, ScoreStatus } from '@core/entities/participant-application.entity';
 
 export class ExportApplicationsQuery {
     constructor(
@@ -9,5 +9,6 @@ export class ExportApplicationsQuery {
         public readonly search?: string,
         public readonly startDate?: string,
         public readonly endDate?: string,
+        public readonly scoreStatus?: ScoreStatus,
     ) { }
 }
