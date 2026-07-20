@@ -77,6 +77,23 @@ export class ApplicationResponseDto {
   scoreTotal?: number;
   scoreBreakdown?: Record<string, number>;
   scoreStatus?: ScoreStatus;
+  /**
+   * Essay-completeness summary for the LIST endpoint only (undefined on the
+   * single-application detail path, which already returns full `essays`
+   * with answers for the admin to inspect directly).
+   *
+   * - 'filled': every required program essay has an answer (or the program
+   *   defines zero essays — nothing is outstanding, so it reads as complete).
+   * - 'partial': some but not all required essays are answered.
+   * - 'empty': none of the required essays are answered.
+   *
+   * Derived from `essayAnswers` + `program_essays.isRequired` per request —
+   * NOT a stored column. Computed once per program per list request (see
+   * ListApplicationsHandler), so it is only populated for the brand-scoped
+   * `findByBrand` path when it can be computed correctly per-application
+   * (grouped by each row's own programId); left undefined otherwise.
+   */
+  essayFilled?: 'filled' | 'partial' | 'empty';
   reviewedBy?: string;
   reviewedAt?: Date;
   reviewerNotes?: string;

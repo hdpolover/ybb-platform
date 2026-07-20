@@ -551,6 +551,12 @@ export type Application = {
   ticketStatus?: string | null;
   scoreTotal: number | null;
   scoreStatus: string | null;
+  /**
+   * List-endpoint-only essay-completeness summary (see ApplicationResponseDto.essayFilled
+   * on the API). Undefined on responses that don't populate it (e.g. the
+   * single-application detail endpoint).
+   */
+  essayFilled?: "filled" | "partial" | "empty";
   registrationPaymentStatus: string;
   programPaymentStatus: string;
   motivationLetter?: string;
@@ -1866,6 +1872,7 @@ export async function listApplications(params?: {
   country?: string;
   registrationPaymentStatus?: "unpaid" | "paid" | "processing" | "failed" | "cancelled" | "refunded";
   programPaymentStatus?: "unpaid" | "paid" | "processing" | "failed" | "cancelled" | "refunded";
+  scoreStatus?: "pending" | "scored" | "go_to_interview" | "rejected";
   sortBy?:
     | "updatedAt"
     | "createdAt"
@@ -1874,7 +1881,9 @@ export async function listApplications(params?: {
     | "country"
     | "status"
     | "registrationPaymentStatus"
-    | "programPaymentStatus";
+    | "programPaymentStatus"
+    | "scoreTotal"
+    | "scoreStatus";
   sortOrder?: "asc" | "desc";
   startDate?: string;
   endDate?: string;
@@ -1891,6 +1900,7 @@ export async function listApplications(params?: {
   if (params?.country) q.set("country", params.country);
   if (params?.registrationPaymentStatus) q.set("registrationPaymentStatus", params.registrationPaymentStatus);
   if (params?.programPaymentStatus) q.set("programPaymentStatus", params.programPaymentStatus);
+  if (params?.scoreStatus) q.set("scoreStatus", params.scoreStatus);
   if (params?.sortBy) q.set("sortBy", params.sortBy);
   if (params?.sortOrder) q.set("sortOrder", params.sortOrder);
   if (params?.startDate) q.set("startDate", params.startDate);

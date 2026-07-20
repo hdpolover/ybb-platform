@@ -9,11 +9,15 @@ import {
   FullyFundedParticipantsFilters,
   SORT_BY_VALUES,
   SORT_ORDER_VALUES,
+  STATUS_VALUES,
+  SCORE_STATUS_VALUES,
   DEFAULT_PAGE_SIZE,
   MIN_PAGE_SIZE,
   MAX_PAGE_SIZE,
   type FullyFundedSortBy,
   type FullyFundedSortOrder,
+  type FullyFundedStatusFilter,
+  type FullyFundedScoreStatusFilter,
 } from "./FullyFundedParticipantsFilters";
 import { FullyFundedParticipantsTable, type FullyFundedParticipantRow } from "./FullyFundedParticipantsTable";
 import { EmptyState } from "@/src/admin/empty-state";
@@ -25,10 +29,13 @@ interface FullyFundedParticipantsAllProps {
 
 // URL-persisted filter/sort/pagination state (nuqs) — mirrors the pattern in
 // app/programs/[programId]/participants/page.tsx. Category ("fully_funded")
-// and status ("submitted") stay hardcoded per this page's purpose, so they
-// aren't part of the URL state.
+// stays hardcoded per this page's purpose, so it isn't part of the URL state.
+// `status` defaults to "submitted" (this page's historical scope) but is now
+// a real, changeable filter — "all" sends no status filter to the API.
 const fullyFundedFilterParsers = {
   search: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
+  status: parseAsStringEnum([...STATUS_VALUES]).withDefault("submitted").withOptions({ clearOnDefault: true }),
+  scoreStatus: parseAsStringEnum([...SCORE_STATUS_VALUES]).withDefault("all").withOptions({ clearOnDefault: true }),
   sortBy: parseAsStringEnum([...SORT_BY_VALUES]).withDefault("updatedAt").withOptions({ clearOnDefault: true }),
   sortOrder: parseAsStringEnum([...SORT_ORDER_VALUES]).withDefault("desc").withOptions({ clearOnDefault: true }),
   page: parseAsInteger.withDefault(1).withOptions({ clearOnDefault: true }),
@@ -53,7 +60,7 @@ export function FullyFundedParticipantsAll({ programId }: FullyFundedParticipant
   );
 
   const [filters, setFilters] = useQueryStates(fullyFundedFilterParsers);
-  const { search, sortBy, sortOrder, page } = filters;
+  const { search, status, scoreStatus, sortBy, sortOrder, page } = filters;
   const pageSize = clampPageSize(filters.pageSize);
 
   const [items, setItems] = useState<Application[]>([]);
@@ -71,7 +78,8 @@ export function FullyFundedParticipantsAll({ programId }: FullyFundedParticipant
       const res = await listApplications({
         programId: resolvedProgramId,
         category: "fully_funded",
-        status: "submitted",
+        status: status === "all" ? undefined : status,
+        scoreStatus: scoreStatus === "all" ? undefined : scoreStatus,
         search: search || undefined,
         sortBy,
         sortOrder,
@@ -85,7 +93,7 @@ export function FullyFundedParticipantsAll({ programId }: FullyFundedParticipant
     } finally {
       setLoading(false);
     }
-  }, [resolvedProgramId, search, sortBy, sortOrder, page, pageSize]);
+  }, [resolvedProgramId, search, status, scoreStatus, sortBy, sortOrder, page, pageSize]);
 
   useEffect(() => {
     void fetchData();
@@ -102,6 +110,14 @@ export function FullyFundedParticipantsAll({ programId }: FullyFundedParticipant
 
   const handleSearch = useCallback(
     (value: string) => void setFilters({ search: value || null, page: 1 }),
+    [setFilters],
+  );
+  const handleStatusChange = useCallback(
+    (value: FullyFundedStatusFilter) => void setFilters({ status: value, page: 1 }),
+    [setFilters],
+  );
+  const handleScoreStatusChange = useCallback(
+    (value: FullyFundedScoreStatusFilter) => void setFilters({ scoreStatus: value, page: 1 }),
     [setFilters],
   );
   const handleSortByChange = useCallback(
@@ -130,7 +146,7 @@ export function FullyFundedParticipantsAll({ programId }: FullyFundedParticipant
         brandId: resolvedBrandId,
         programId: resolvedProgramId,
         category: "fully_funded",
-        status: "submitted",
+        status: status === "all" ? undefined : status,
         search: search || undefined,
       });
     } catch (err) {
@@ -150,6 +166,9 @@ export function FullyFundedParticipantsAll({ programId }: FullyFundedParticipant
       app.participant?.nationality ?? app.participant?.originCountry ?? "",
     formStatus: mapFormStatus(app.status),
     registeredOn: formatDate(app.createdAt),
+    essayFilled: app.essayFilled,
+    scoreTotal: app.scoreTotal,
+    scoreStatus: app.scoreStatus,
   }));
 
   if (loading) {
@@ -177,6 +196,10 @@ export function FullyFundedParticipantsAll({ programId }: FullyFundedParticipant
         onSearch={handleSearch}
         onExport={handleExport}
         exporting={exporting}
+        status={status}
+        onStatusChange={handleStatusChange}
+        scoreStatus={scoreStatus}
+        onScoreStatusChange={handleScoreStatusChange}
         sortBy={sortBy}
         sortOrder={sortOrder}
         onSortByChange={handleSortByChange}

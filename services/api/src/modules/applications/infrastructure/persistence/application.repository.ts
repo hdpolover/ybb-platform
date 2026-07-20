@@ -3,6 +3,7 @@ import { IApplicationRepository } from '@core/interfaces/repositories/applicatio
 import {
   ParticipantApplication,
   ApplicationStatus,
+  ScoreStatus,
 } from '@core/entities/participant-application.entity';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
@@ -58,7 +59,9 @@ export class ApplicationRepository implements IApplicationRepository {
       | 'country'
       | 'status'
       | 'registrationPaymentStatus'
-      | 'programPaymentStatus';
+      | 'programPaymentStatus'
+      | 'scoreTotal'
+      | 'scoreStatus';
     sortOrder?: 'asc' | 'desc';
   }): Prisma.ParticipantApplicationOrderByWithRelationInput[] {
     const sortOrder: Prisma.SortOrder = filters?.sortOrder === 'asc' ? 'asc' : 'desc';
@@ -82,6 +85,13 @@ export class ApplicationRepository implements IApplicationRepository {
         return [{ registrationPaymentStatus: sortOrder }, { updatedAt: 'desc' }];
       case 'programPaymentStatus':
         return [{ programPaymentStatus: sortOrder }, { updatedAt: 'desc' }];
+      case 'scoreTotal':
+        // Unscored applications (scoreTotal IS NULL) must always sort last,
+        // regardless of asc/desc — otherwise they'd bunch at the top of an
+        // ascending sort, ahead of every actually-scored application.
+        return [{ scoreTotal: { sort: sortOrder, nulls: 'last' } }, { updatedAt: 'desc' }];
+      case 'scoreStatus':
+        return [{ scoreStatus: { sort: sortOrder, nulls: 'last' } }, { updatedAt: 'desc' }];
       case 'updatedAt':
       default:
         return [{ updatedAt: sortOrder }, { createdAt: 'desc' }];
@@ -130,6 +140,7 @@ export class ApplicationRepository implements IApplicationRepository {
       country?: string;
       registrationPaymentStatus?: PaymentStatus;
       programPaymentStatus?: PaymentStatus;
+      scoreStatus?: ScoreStatus;
       sortBy?:
         | 'updatedAt'
         | 'createdAt'
@@ -138,7 +149,9 @@ export class ApplicationRepository implements IApplicationRepository {
         | 'country'
         | 'status'
         | 'registrationPaymentStatus'
-        | 'programPaymentStatus';
+        | 'programPaymentStatus'
+        | 'scoreTotal'
+        | 'scoreStatus';
       sortOrder?: 'asc' | 'desc';
       startDate?: string;
       endDate?: string;
@@ -191,6 +204,10 @@ export class ApplicationRepository implements IApplicationRepository {
       where.programPaymentStatus = filters.programPaymentStatus;
     }
 
+    if (filters?.scoreStatus) {
+      where.scoreStatus = filters.scoreStatus;
+    }
+
     const createdAt = this.buildCreatedAtFilter(filters?.startDate, filters?.endDate);
     if (createdAt) {
       where.createdAt = createdAt;
@@ -222,6 +239,7 @@ export class ApplicationRepository implements IApplicationRepository {
       country?: string;
       registrationPaymentStatus?: PaymentStatus;
       programPaymentStatus?: PaymentStatus;
+      scoreStatus?: ScoreStatus;
       sortBy?:
         | 'updatedAt'
         | 'createdAt'
@@ -230,7 +248,9 @@ export class ApplicationRepository implements IApplicationRepository {
         | 'country'
         | 'status'
         | 'registrationPaymentStatus'
-        | 'programPaymentStatus';
+        | 'programPaymentStatus'
+        | 'scoreTotal'
+        | 'scoreStatus';
       sortOrder?: 'asc' | 'desc';
       startDate?: string;
       endDate?: string;
@@ -292,6 +312,10 @@ export class ApplicationRepository implements IApplicationRepository {
 
     if (filters?.programPaymentStatus) {
       where.programPaymentStatus = filters.programPaymentStatus;
+    }
+
+    if (filters?.scoreStatus) {
+      where.scoreStatus = filters.scoreStatus;
     }
 
     const createdAt = this.buildCreatedAtFilter(filters?.startDate, filters?.endDate);
