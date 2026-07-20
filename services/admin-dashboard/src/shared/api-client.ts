@@ -1932,6 +1932,7 @@ export async function exportApplicationsExcel(params: {
   search?: string;
   startDate?: string;
   endDate?: string;
+  scoreStatus?: "pending" | "scored" | "go_to_interview" | "rejected";
 }): Promise<void> {
   const q = new URLSearchParams();
   q.set("brandId", params.brandId);
@@ -1941,6 +1942,7 @@ export async function exportApplicationsExcel(params: {
   if (params.search) q.set("search", params.search);
   if (params.startDate) q.set("startDate", params.startDate);
   if (params.endDate) q.set("endDate", params.endDate);
+  if (params.scoreStatus) q.set("scoreStatus", params.scoreStatus);
 
   const response = await fetch(buildApiUrl(`/applications/export?${q}`), {
     method: "GET",

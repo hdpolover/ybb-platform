@@ -71,6 +71,7 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
         if (query.programId) where.programId = query.programId;
         if (query.status) where.status = query.status;
         if (query.category) where.applicationCategory = query.category;
+        if (query.scoreStatus) where.scoreStatus = query.scoreStatus;
         if (query.search) {
             where.OR = [
                 { motivationLetter: { contains: query.search, mode: 'insensitive' } },

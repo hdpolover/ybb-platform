@@ -248,6 +248,7 @@ export class ApplicationsController {
   @ApiQuery({ name: 'country', required: false })
   @ApiQuery({ name: 'registrationPaymentStatus', enum: PaymentStatus, required: false })
   @ApiQuery({ name: 'programPaymentStatus', enum: PaymentStatus, required: false })
+  @ApiQuery({ name: 'scoreStatus', enum: ScoreStatus, required: false })
   @ApiQuery({ name: 'sortBy', required: false, enum: ['updatedAt', 'createdAt', 'submittedAt', 'participantName', 'country', 'status', 'registrationPaymentStatus', 'programPaymentStatus'] })
   @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
   @ApiQuery({ name: 'startDate', required: false, description: 'Applied from date (YYYY-MM-DD)' })
@@ -261,13 +262,15 @@ export class ApplicationsController {
     @Query('search') search?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('scoreStatus') scoreStatus?: ScoreStatus,
   ): Promise<StreamableFile> {
     this.logger.log(`Exporting applications: brandId=${brandId}, programId=${programId}`);
     this.validateDateRange(startDate, endDate);
+    this.validateListFilters({ scoreStatus });
 
     // Handler is injected directly (practical CQRS pattern) because QueryBus
     // generic return type doesn't carry StreamableFile cleanly.
-    const query = new ExportApplicationsQuery(brandId, programId, status, category, search, startDate, endDate);
+    const query = new ExportApplicationsQuery(brandId, programId, status, category, search, startDate, endDate, scoreStatus);
     return this.exportApplicationsHandler.execute(query);
   }
 

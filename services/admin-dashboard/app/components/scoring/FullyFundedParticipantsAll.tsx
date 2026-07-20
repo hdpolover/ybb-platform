@@ -147,6 +147,7 @@ export function FullyFundedParticipantsAll({ programId }: FullyFundedParticipant
         programId: resolvedProgramId,
         category: "fully_funded",
         status: status === "all" ? undefined : status,
+        scoreStatus: scoreStatus === "all" ? undefined : scoreStatus,
         search: search || undefined,
       });
     } catch (err) {
