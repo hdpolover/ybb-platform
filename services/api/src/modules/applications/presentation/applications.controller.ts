@@ -102,6 +102,30 @@ export class ApplicationsController {
     PaymentStatus.refunded,
   ]);
 
+  // Pagination bounds for GET /applications (shared by every admin list page
+  // that calls this endpoint) — keeps `limit`/`offset` parsing NaN-safe and
+  // prevents an unbounded `limit` from turning into a full-table scan.
+  private static readonly DEFAULT_PAGE_SIZE = 20;
+  private static readonly MIN_PAGE_SIZE = 1;
+  private static readonly MAX_PAGE_SIZE = 500;
+  private static readonly DEFAULT_OFFSET = 0;
+  private static readonly MIN_OFFSET = 0;
+
+  private static parseLimit(raw?: number): number {
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) return ApplicationsController.DEFAULT_PAGE_SIZE;
+    return Math.min(
+      Math.max(Math.floor(parsed), ApplicationsController.MIN_PAGE_SIZE),
+      ApplicationsController.MAX_PAGE_SIZE,
+    );
+  }
+
+  private static parseOffset(raw?: number): number {
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) return ApplicationsController.DEFAULT_OFFSET;
+    return Math.max(Math.floor(parsed), ApplicationsController.MIN_OFFSET);
+  }
+
   constructor(
     private readonly createApplicationHandler: CreateApplicationHandler,
     private readonly updateApplicationHandler: UpdateApplicationHandler,
@@ -272,8 +296,8 @@ export class ApplicationsController {
       programPaymentStatus,
     });
 
-    const actualLimit = limit ? Number(limit) : 20;
-    const actualOffset = offset ? Number(offset) : 0;
+    const actualLimit = ApplicationsController.parseLimit(limit);
+    const actualOffset = ApplicationsController.parseOffset(offset);
 
     // Cache strategy: Only cache the first 5 pages to avoid cache pollution with deep pagination
     // 5 pages * 20 items = 100 items. Roughly covering "recent" items.
