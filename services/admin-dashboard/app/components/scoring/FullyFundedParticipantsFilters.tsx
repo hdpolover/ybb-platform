@@ -17,6 +17,8 @@ export const SORT_BY_OPTIONS = [
   { value: "status", label: "Status" },
   { value: "registrationPaymentStatus", label: "Reg. Payment" },
   { value: "programPaymentStatus", label: "Prog. Payment" },
+  { value: "scoreTotal", label: "Score" },
+  { value: "scoreStatus", label: "Score Status" },
 ] as const;
 
 export const SORT_BY_VALUES = [
@@ -28,6 +30,8 @@ export const SORT_BY_VALUES = [
   "status",
   "registrationPaymentStatus",
   "programPaymentStatus",
+  "scoreTotal",
+  "scoreStatus",
 ] as const;
 
 export const SORT_ORDER_OPTIONS = [
@@ -45,12 +49,59 @@ export const DEFAULT_PAGE_SIZE = 10;
 export const MIN_PAGE_SIZE = 1;
 export const MAX_PAGE_SIZE = 500;
 
+// Application workflow statuses the backend accepts on GET /applications
+// (see ApplicationStatus in @core/entities/participant-application.entity).
+// "all" is UI-only — it means "send no status filter".
+export const STATUS_OPTIONS = [
+  { value: "all", label: "All Status" },
+  { value: "draft", label: "Draft" },
+  { value: "submitted", label: "Submitted" },
+  { value: "under_review", label: "Under Review" },
+  { value: "interview_scheduled", label: "Interview Scheduled" },
+  { value: "accepted", label: "Accepted" },
+  { value: "rejected", label: "Rejected" },
+  { value: "waitlisted", label: "Waitlisted" },
+  { value: "withdrawn", label: "Withdrawn" },
+] as const;
+
+export const STATUS_VALUES = [
+  "all",
+  "draft",
+  "submitted",
+  "under_review",
+  "interview_scheduled",
+  "accepted",
+  "rejected",
+  "waitlisted",
+  "withdrawn",
+] as const;
+
+export type FullyFundedStatusFilter = (typeof STATUS_VALUES)[number];
+
+// Score statuses — mirrors ScoreStatus in @core/entities/participant-application.entity.
+// "all" is UI-only — it means "send no scoreStatus filter".
+export const SCORE_STATUS_OPTIONS = [
+  { value: "all", label: "All Scores" },
+  { value: "pending", label: "Pending" },
+  { value: "scored", label: "Scored" },
+  { value: "go_to_interview", label: "Go to Interview" },
+  { value: "rejected", label: "Rejected" },
+] as const;
+
+export const SCORE_STATUS_VALUES = ["all", "pending", "scored", "go_to_interview", "rejected"] as const;
+
+export type FullyFundedScoreStatusFilter = (typeof SCORE_STATUS_VALUES)[number];
+
 interface FullyFundedParticipantsFiltersProps {
   onSearch?: (value: string) => void;
   onExport?: () => void;
   exporting?: boolean;
   /** Seeds the search box from the URL-persisted value on mount. */
   initialSearch?: string;
+  status: FullyFundedStatusFilter;
+  onStatusChange: (value: FullyFundedStatusFilter) => void;
+  scoreStatus: FullyFundedScoreStatusFilter;
+  onScoreStatusChange: (value: FullyFundedScoreStatusFilter) => void;
   sortBy: FullyFundedSortBy;
   sortOrder: FullyFundedSortOrder;
   onSortByChange: (value: FullyFundedSortBy) => void;
@@ -64,6 +115,10 @@ export function FullyFundedParticipantsFilters({
   onExport,
   exporting,
   initialSearch,
+  status,
+  onStatusChange,
+  scoreStatus,
+  onScoreStatusChange,
   sortBy,
   sortOrder,
   onSortByChange,
@@ -129,12 +184,32 @@ export function FullyFundedParticipantsFilters({
 
         <div className="w-full md:w-48">
           <label className="mb-1.5 block text-xs font-medium text-zinc-500">Form Status</label>
-          <select className="block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
-            <option>All Status</option>
-            <option>Not Started</option>
-            <option>On Progress</option>
-            <option>Submitted</option>
-          </select>
+          <FilterSelect
+            aria-label="Form Status"
+            value={status}
+            onChange={(e) => onStatusChange(e.target.value as FullyFundedStatusFilter)}
+          >
+            {STATUS_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </FilterSelect>
+        </div>
+
+        <div className="w-full md:w-44">
+          <label className="mb-1.5 block text-xs font-medium text-zinc-500">Score Status</label>
+          <FilterSelect
+            aria-label="Score Status"
+            value={scoreStatus}
+            onChange={(e) => onScoreStatusChange(e.target.value as FullyFundedScoreStatusFilter)}
+          >
+            {SCORE_STATUS_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </FilterSelect>
         </div>
 
         <div className="w-full md:w-40">

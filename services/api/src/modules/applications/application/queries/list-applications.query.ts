@@ -1,4 +1,4 @@
-import { ApplicationStatus } from '@core/entities/participant-application.entity';
+import { ApplicationStatus, ScoreStatus } from '@core/entities/participant-application.entity';
 import { PaymentStatus } from '@prisma/client';
 
 export type ListApplicationsSortBy =
@@ -9,7 +9,9 @@ export type ListApplicationsSortBy =
   | 'country'
   | 'status'
   | 'registrationPaymentStatus'
-  | 'programPaymentStatus';
+  | 'programPaymentStatus'
+  | 'scoreTotal'
+  | 'scoreStatus';
 
 export type ListApplicationsSortOrder = 'asc' | 'desc';
 
@@ -30,6 +32,7 @@ export class ListApplicationsQuery {
       country?: string;
       registrationPaymentStatus?: PaymentStatus;
       programPaymentStatus?: PaymentStatus;
+      scoreStatus?: ScoreStatus;
       sortBy?: ListApplicationsSortBy;
       sortOrder?: ListApplicationsSortOrder;
       startDate?: string;

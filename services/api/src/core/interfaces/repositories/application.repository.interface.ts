@@ -1,4 +1,4 @@
-import { ParticipantApplication, ApplicationStatus } from '@core/entities/participant-application.entity';
+import { ParticipantApplication, ApplicationStatus, ScoreStatus } from '@core/entities/participant-application.entity';
 import { PaymentStatus } from '@prisma/client';
 
 /**
@@ -38,6 +38,7 @@ export interface IApplicationRepository {
       country?: string;
       registrationPaymentStatus?: PaymentStatus;
       programPaymentStatus?: PaymentStatus;
+      scoreStatus?: ScoreStatus;
       sortBy?:
         | 'updatedAt'
         | 'createdAt'
@@ -46,7 +47,9 @@ export interface IApplicationRepository {
         | 'country'
         | 'status'
         | 'registrationPaymentStatus'
-        | 'programPaymentStatus';
+        | 'programPaymentStatus'
+        | 'scoreTotal'
+        | 'scoreStatus';
       sortOrder?: 'asc' | 'desc';
       startDate?: string;
       endDate?: string;
@@ -68,6 +71,7 @@ export interface IApplicationRepository {
       country?: string;
       registrationPaymentStatus?: PaymentStatus;
       programPaymentStatus?: PaymentStatus;
+      scoreStatus?: ScoreStatus;
       sortBy?:
         | 'updatedAt'
         | 'createdAt'
@@ -76,7 +80,9 @@ export interface IApplicationRepository {
         | 'country'
         | 'status'
         | 'registrationPaymentStatus'
-        | 'programPaymentStatus';
+        | 'programPaymentStatus'
+        | 'scoreTotal'
+        | 'scoreStatus';
       sortOrder?: 'asc' | 'desc';
       startDate?: string;
       endDate?: string;

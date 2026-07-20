@@ -13,6 +13,10 @@ export interface FullyFundedParticipantRow {
   nationality: string;
   formStatus: "Not Started" | "On Progress" | "Submitted";
   registeredOn: string;
+  /** Essay-completeness summary from the list endpoint (see Application.essayFilled). */
+  essayFilled?: "filled" | "partial" | "empty";
+  scoreTotal: number | null;
+  scoreStatus: string | null;
 }
 
 interface FullyFundedParticipantsTableProps {
@@ -49,9 +53,10 @@ export function FullyFundedParticipantsTable({
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50/80 text-xs uppercase tracking-wider text-zinc-500">
                 <th className="w-12 px-4 py-3 font-semibold">#</th>
-                <th className="px-4 py-3 font-semibold">Account ID</th>
                 <th className="px-4 py-3 font-semibold">Participant Details</th>
                 <th className="px-4 py-3 font-semibold">Submission Status</th>
+                <th className="px-4 py-3 font-semibold">Essay</th>
+                <th className="px-4 py-3 font-semibold">Score</th>
                 <th className="px-4 py-3 font-semibold">Registered On</th>
                 <th className="px-4 py-3 font-semibold">Actions</th>
               </tr>
@@ -59,7 +64,7 @@ export function FullyFundedParticipantsTable({
             <tbody className="divide-y divide-zinc-200 bg-white">
               {data.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-sm text-zinc-500">
+                  <td colSpan={7} className="px-4 py-12 text-center text-sm text-zinc-500">
                     <div className="inline-flex flex-col items-center gap-2">
                       <span className="inline-block h-8 w-8 rounded-full border border-dashed border-zinc-300" />
                       <span className="font-semibold text-zinc-900">No participants found</span>
@@ -76,9 +81,6 @@ export function FullyFundedParticipantsTable({
                       {startIndex + index + 1}
                     </td>
                     <td className="px-4 py-3 align-top">
-                      <div className="text-xs text-zinc-600">{row.accountId}</div>
-                    </td>
-                    <td className="px-4 py-3 align-top">
                       <div className="flex items-start gap-3">
                         <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-bold text-blue-600">
                           {row.name.charAt(0).toUpperCase()}
@@ -86,12 +88,23 @@ export function FullyFundedParticipantsTable({
                         <div className="flex flex-col">
                           <span className="font-semibold text-zinc-900">{row.name}</span>
                           <span className="text-xs text-zinc-500">{row.email}</span>
-                          <span className="text-xs text-zinc-400">{row.participantId}</span>
+                          <span className="font-mono text-[11px] text-zinc-400">{row.accountId}</span>
                         </div>
                       </div>
                     </td>
                     <td className="px-4 py-3 align-top">
                       <FullyFundedStatusBadge status={row.formStatus} />
+                    </td>
+                    <td className="px-4 py-3 align-top">
+                      <EssayFilledBadge status={row.essayFilled} />
+                    </td>
+                    <td className="px-4 py-3 align-top">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs font-semibold text-zinc-900">
+                          {row.scoreTotal ?? "—"}
+                        </span>
+                        <ScoreStatusBadge status={row.scoreStatus} />
+                      </div>
                     </td>
                     <td className="px-4 py-3 align-top">
                       <span className="text-xs font-medium text-zinc-700">{row.registeredOn}</span>
@@ -160,6 +173,57 @@ function FullyFundedStatusBadge({ status }: { status: FullyFundedParticipantRow[
   return (
     <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide ${className}`}>
       {status}
+    </span>
+  );
+}
+
+/**
+ * Essay-completeness badge — driven by `Application.essayFilled`, a derived
+ * (not stored) value computed by the list endpoint from required program
+ * essays vs. answered essays. A row can legitimately show "Submitted" in
+ * Submission Status while this reads "Empty" — the workflow status and the
+ * essay-completeness check are independent signals, and that's intended.
+ */
+function EssayFilledBadge({ status }: { status: FullyFundedParticipantRow["essayFilled"] }) {
+  const label = status === "filled" ? "Filled" : status === "partial" ? "Partial" : status === "empty" ? "Empty" : "—";
+  let className = "bg-zinc-100 text-zinc-500 border-zinc-200";
+
+  if (status === "filled") className = "bg-emerald-50 text-emerald-700 border-emerald-200";
+  else if (status === "partial") className = "bg-amber-50 text-amber-700 border-amber-200";
+  else if (status === "empty") className = "bg-rose-50 text-rose-700 border-rose-200";
+
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide ${className}`}>
+      {label}
+    </span>
+  );
+}
+
+/**
+ * Score-status badge for the real `ScoreStatus` enum (pending / scored /
+ * go_to_interview / rejected). NOTE: InterviewParticipantsTable.tsx has its
+ * own local `ScoreStatusBadge`, but it's keyed on "High"/"Medium"/"Low" —
+ * unrelated display values, not this enum — so it isn't reusable here.
+ * This is a fresh mapping for the actual enum values, not a duplicate.
+ */
+function ScoreStatusBadge({ status }: { status: string | null }) {
+  const labels: Record<string, string> = {
+    pending: "Pending",
+    scored: "Scored",
+    go_to_interview: "Go to Interview",
+    rejected: "Rejected",
+  };
+  const label = status ? labels[status] ?? status : "Not Scored";
+  let className = "bg-zinc-100 text-zinc-500";
+
+  if (status === "scored") className = "bg-emerald-100 text-emerald-700";
+  else if (status === "go_to_interview") className = "bg-blue-100 text-blue-700";
+  else if (status === "rejected") className = "bg-rose-100 text-rose-700";
+  else if (status === "pending") className = "bg-amber-100 text-amber-700";
+
+  return (
+    <span className={`inline-flex w-fit rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${className}`}>
+      {label}
     </span>
   );
 }
