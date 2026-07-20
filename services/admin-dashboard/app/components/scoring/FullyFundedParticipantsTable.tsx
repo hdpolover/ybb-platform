@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { EyeIcon } from "@heroicons/react/24/solid";
 
@@ -15,18 +15,31 @@ export interface FullyFundedParticipantRow {
   registeredOn: string;
 }
 
-export function FullyFundedParticipantsTable({ data }: { data: FullyFundedParticipantRow[] }) {
+interface FullyFundedParticipantsTableProps {
+  data: FullyFundedParticipantRow[];
+  /** Current 1-based page, server-driven — rows are exactly this page's slice. */
+  page: number;
+  pageSize: number;
+  /** Total row count across all pages, from the server response. */
+  total: number;
+  onPageChange: (page: number) => void;
+}
+
+export function FullyFundedParticipantsTable({
+  data,
+  page,
+  pageSize,
+  total,
+  onPageChange,
+}: FullyFundedParticipantsTableProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
-  
-  const [page, setPage] = useState(1);
-  const pageSize = 3;
-  const totalPages = Math.max(1, Math.ceil(data.length / pageSize));
-  const clampedPage = Math.min(page, totalPages);
-  const startIndex = (clampedPage - 1) * pageSize;
-  const endIndex = Math.min(startIndex + pageSize, data.length);
-  const visibleRows = data.slice(startIndex, endIndex);
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const startIndex = (page - 1) * pageSize;
+  const showingFrom = total === 0 ? 0 : startIndex + 1;
+  const showingTo = total === 0 ? 0 : startIndex + data.length;
 
   return (
     <div>
@@ -57,9 +70,11 @@ export function FullyFundedParticipantsTable({ data }: { data: FullyFundedPartic
                   </td>
                 </tr>
               ) : (
-                visibleRows.map((row, index) => (
-                  <tr key={row.id} className="transition-colors hover:bg-zinc-50/50">
-                    <td className="px-4 py-3 align-top text-xs font-medium text-zinc-500">{startIndex + index + 1}</td>
+                data.map((row, index) => (
+                  <tr key={row.accountId} className="transition-colors hover:bg-zinc-50/50">
+                    <td className="px-4 py-3 align-top text-xs font-medium text-zinc-500">
+                      {startIndex + index + 1}
+                    </td>
                     <td className="px-4 py-3 align-top">
                       <div className="text-xs text-zinc-600">{row.accountId}</div>
                     </td>
@@ -108,25 +123,25 @@ export function FullyFundedParticipantsTable({ data }: { data: FullyFundedPartic
         </div>
       </div>
 
-      {/* Paginasi */}
+      {/* Pagination */}
       <div className="mt-4 flex items-center justify-between text-xs font-medium text-zinc-500">
         <span>
-          Showing {data.length === 0 ? 0 : startIndex + 1} to {endIndex} of {data.length} entries
+          Showing {showingFrom} to {showingTo} of {total} entries
         </span>
         <div className="inline-flex items-center gap-2">
           <button
             type="button"
             className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
-            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-            disabled={clampedPage === 1}
+            onClick={() => onPageChange(page - 1)}
+            disabled={page <= 1}
           >
             Previous
           </button>
           <button
             type="button"
             className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
-            onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-            disabled={clampedPage === totalPages}
+            onClick={() => onPageChange(page + 1)}
+            disabled={page >= totalPages}
           >
             Next
           </button>
