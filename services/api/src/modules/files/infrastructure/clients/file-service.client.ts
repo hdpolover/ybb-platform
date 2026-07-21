@@ -415,6 +415,9 @@ export class FileServiceClient {
       email: string;
       phone: string;
     };
+    footer_note?: string;
+    show_generated_date?: boolean;
+    program_name?: string;
   }): Promise<Buffer> {
     try {
       const response: AxiosResponse<ArrayBuffer> = await firstValueFrom(
