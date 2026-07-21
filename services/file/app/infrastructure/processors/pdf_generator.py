@@ -288,6 +288,102 @@ def _build_structured_header_html(header: Dict[str, Any], logo_url: str) -> str:
 </table>"""
 
 
+_EMPTY_HTML_RE = re.compile(r'^(<p>(\s|&nbsp;|<br\s*/?>)*</p>\s*)*$', re.IGNORECASE)
+
+
+def _is_effectively_empty_html(text: str) -> bool:
+    """True when Tiptap HTML has no visible content — just empty <p> shells.
+
+    Tiptap's "cleared" state isn't an empty string, it's `<p></p>` or
+    `<p><br></p>`. Treat those (and whitespace/&nbsp;-only variants, possibly
+    repeated across multiple empty paragraphs) as empty so the signer-block
+    fallback still kicks in for untouched/cleared footers.
+    """
+    stripped = (text or '').strip()
+    if not stripped:
+        return True
+    return bool(_EMPTY_HTML_RE.match(stripped))
+
+
+def _format_long_date(dt: datetime) -> str:
+    """'Month D, YYYY' with no zero-padded day, without relying on the
+    platform-specific %-d / %#d strftime flag."""
+    return f"{dt.strftime('%B')} {dt.day}, {dt.strftime('%Y')}"
+
+
+def _css_string_escape(text: str) -> str:
+    """Escape free text for safe interpolation into a double-quoted CSS
+    string literal (used by the @page margin-box `content` property below).
+
+    Backslash and the delimiter (`"`) are the two characters that would
+    otherwise break out of the string — both get a preceding backslash.
+    Embedded newlines are flattened to spaces: `footerNote` is admin-authored
+    free text meant to read as one logical line, and a raw newline inside a
+    CSS string is invalid unless itself backslash-escaped as a line
+    continuation, which is not what we want here (we inject our own `\\A`
+    line break between the two disclaimer lines, deliberately, below).
+    """
+    return (
+        text.replace('\\', '\\\\')
+        .replace('"', '\\"')
+        .replace('\n', ' ')
+        .replace('\r', ' ')
+    )
+
+
+# Extra bottom @page margin reserved for the disclaimer's @bottom-center
+# margin box (border-top + padding + up to 2 lines at 8.5pt/1.5 line-height),
+# added on top of the template's own bottom margin ONLY when a disclaimer is
+# actually configured — templates without one keep their exact margins.
+LOA_PAGE_FOOTER_EXTRA_BOTTOM_MARGIN_PT = 34
+
+
+def _build_page_footer_css(footer_note: str, show_generated_date: bool, program_name: str, generated_at: Optional[datetime]) -> str:
+    """CSS for the page-footer disclaimer as a true running page footer: a
+    CSS Paged Media `@bottom-center` margin box, not in-flow HTML content.
+
+    This is deliberately NOT a `<div>` in the document body. Margin-box
+    content lives entirely in the page's margin area — outside the flow
+    WeasyPrint paginates — so it is structurally impossible for it to be
+    torn across a page boundary or orphan onto its own near-blank page the
+    way an in-flow block could (and did, in the in-flow version this
+    replaces). It is also, by CSS Paged Media semantics, a genuine *running*
+    footer: `@page` (not `@page :first` or similar) applies it to every page.
+
+    Returns '' when neither footer_note nor show_generated_date is set, so
+    the caller can leave the @page block's margin untouched — templates that
+    never configured a disclaimer get byte-for-byte the same page geometry
+    as before this feature existed.
+    """
+    note = (footer_note or '').strip()
+    lines = []
+    if note:
+        lines.append(_css_string_escape(note))
+    if show_generated_date:
+        date_str = _format_long_date(generated_at or datetime.utcnow())
+        parts = [p for p in (program_name, f'Generated on {date_str}') if p]
+        lines.append(_css_string_escape(' • '.join(parts)))
+    if not lines:
+        return ''
+    # `\A` is the CSS escape for a line feed inside `content`; it only
+    # actually breaks the line when paired with `white-space: pre-line`
+    # (default `white-space: normal` collapses it away).
+    content = '\\A '.join(lines)
+    return f"""
+  @bottom-center {{
+    content: "{content}";
+    white-space: pre-line;
+    font-family: "Noto Sans", "Noto Sans Arabic", "Noto Sans CJK SC", "Noto Sans Bengali", "DejaVu Sans", sans-serif;
+    font-size: 8.5pt;
+    line-height: 1.5;
+    color: #666;
+    border-top: 0.5pt solid #ccc;
+    padding-top: 8pt;
+    text-align: center;
+    vertical-align: bottom;
+  }}"""
+
+
 def _build_signer_html(signature_url: str, stamp_url: str, signer_name: str, signer_title: str) -> str:
     """Stamp above signature, a signature rule, then signer name (bold) and title.
 
@@ -314,24 +410,27 @@ def _build_signer_html(signature_url: str, stamp_url: str, signer_name: str, sig
 </div>"""
 
 
-def generate_loa_sync(
+def _build_loa_html_document(
     html_content: str,
     header_html: str,
     footer_html: str,
     page_size: str,
     margins: Dict[str, Any],
     placeholder_data: Dict[str, Any],
-    document_number: str,
     logo_url: str = "",
     signature_url: str = "",
     stamp_url: str = "",
     signer_name: str = "",
     signer_title: str = "",
     header: Optional[Dict[str, Any]] = None,
-) -> bytes:
-    """Generate LOA PDF from Tiptap HTML using WeasyPrint."""
-    from weasyprint import HTML, CSS  # type: ignore
-
+    footer_note: str = "",
+    show_generated_date: bool = False,
+    program_name: str = "",
+    generated_at: Optional[datetime] = None,
+) -> str:
+    """Build the full LOA HTML document (pre-WeasyPrint) — pure and testable
+    without the PDF toolchain, mirroring the other `_build_*_html` helpers.
+    """
     # Merge legacy {{logo}}/{{signature}}/{{stamp}} image tokens into the
     # generic substitution map so any occurrence in body/header/footer HTML
     # (wherever the admin placed them) renders as a real image instead of
@@ -360,17 +459,33 @@ def generate_loa_sync(
     else:
         header_rendered = replace_tokens(header_html or '')
 
-    # Structured signer/signature block when any signer-related field is
-    # provided; otherwise fall back to footer_html exactly as today (back-compat).
-    has_signer_block = bool(signature_url or stamp_url or signer_name or signer_title)
-    if has_signer_block:
+    # Footer precedence: an admin-authored footer_html (Tiptap sign-off, which
+    # already has {{signature}}/{{signer_name}}/{{signer_title}}/{{stamp}}
+    # tokens available to it) always wins over the structured signer block —
+    # rendering both would duplicate the signature image and name. The
+    # structured block is only a fallback for templates that never authored
+    # a footer (or had it cleared back to an empty Tiptap `<p></p>` shell).
+    if not _is_effectively_empty_html(footer_html):
+        footer_rendered = replace_tokens(footer_html)
+    elif signature_url or stamp_url or signer_name or signer_title:
         footer_rendered = _build_signer_html(signature_url, stamp_url, signer_name, signer_title)
     else:
         footer_rendered = replace_tokens(footer_html or '')
 
+    # Page-footer disclaimer: a running @bottom-center page-margin footer,
+    # not in-flow content — see _build_page_footer_css. Empty string when
+    # neither footer_note nor show_generated_date is set.
+    page_footer_css = _build_page_footer_css(
+        footer_note, show_generated_date, program_name, generated_at or datetime.utcnow()
+    )
+
     top = margins.get('top', 40)
     right = margins.get('right', 40)
     bottom = margins.get('bottom', 40)
+    # Only grow the bottom margin when a disclaimer is actually present —
+    # templates without one keep their exact original page geometry.
+    if page_footer_css:
+        bottom += LOA_PAGE_FOOTER_EXTRA_BOTTOM_MARGIN_PT
     left = margins.get('left', 40)
     page_size_css = 'A4' if str(page_size).upper() == 'A4' else 'Letter'
 
@@ -381,7 +496,7 @@ def generate_loa_sync(
 <style>
   @page {{
     size: {page_size_css};
-    margin: {top}pt {right}pt {bottom}pt {left}pt;
+    margin: {top}pt {right}pt {bottom}pt {left}pt;{page_footer_css}
   }}
   body {{
     font-family: "Noto Sans", "Noto Sans Arabic", "Noto Sans CJK SC", "Noto Sans Bengali", "DejaVu Sans", sans-serif;
@@ -395,7 +510,11 @@ def generate_loa_sync(
     border-bottom: 1pt solid #000;
   }}
   .loa-body {{ }}
-  .loa-footer {{ margin-top: 32pt; }}
+  .loa-footer {{
+    margin-top: 32pt;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }}
 </style>
 </head>
 <body>
@@ -404,7 +523,47 @@ def generate_loa_sync(
   <div class="loa-footer">{footer_rendered}</div>
 </body>
 </html>"""
+    return full_html
 
+
+def generate_loa_sync(
+    html_content: str,
+    header_html: str,
+    footer_html: str,
+    page_size: str,
+    margins: Dict[str, Any],
+    placeholder_data: Dict[str, Any],
+    document_number: str,
+    logo_url: str = "",
+    signature_url: str = "",
+    stamp_url: str = "",
+    signer_name: str = "",
+    signer_title: str = "",
+    header: Optional[Dict[str, Any]] = None,
+    footer_note: str = "",
+    show_generated_date: bool = False,
+    program_name: str = "",
+) -> bytes:
+    """Generate LOA PDF from Tiptap HTML using WeasyPrint."""
+    from weasyprint import HTML  # type: ignore
+
+    full_html = _build_loa_html_document(
+        html_content,
+        header_html,
+        footer_html,
+        page_size,
+        margins,
+        placeholder_data,
+        logo_url=logo_url,
+        signature_url=signature_url,
+        stamp_url=stamp_url,
+        signer_name=signer_name,
+        signer_title=signer_title,
+        header=header,
+        footer_note=footer_note,
+        show_generated_date=show_generated_date,
+        program_name=program_name,
+    )
     return HTML(string=full_html).write_pdf()
 
 
@@ -788,6 +947,9 @@ class PDFGeneratorService:
         signer_name: str = "",
         signer_title: str = "",
         header: Optional[Dict[str, Any]] = None,
+        footer_note: str = "",
+        show_generated_date: bool = False,
+        program_name: str = "",
     ) -> BytesIO:
         """Generate LOA PDF from Tiptap HTML using WeasyPrint."""
         pdf_bytes = await run_in_processpool(
@@ -805,5 +967,8 @@ class PDFGeneratorService:
             signer_name=signer_name,
             signer_title=signer_title,
             header=header,
+            footer_note=footer_note,
+            show_generated_date=show_generated_date,
+            program_name=program_name,
         )
         return BytesIO(pdf_bytes)

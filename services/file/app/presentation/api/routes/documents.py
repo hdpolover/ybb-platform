@@ -123,6 +123,11 @@ class LoaRequest(BaseModel):
     signer_name: str = ""
     signer_title: str = ""
     header: Optional[LoaHeaderConfig] = None
+    # Page-footer disclaimer, rendered below the body and sign-off block.
+    # Both optional; when absent no disclaimer markup is emitted at all.
+    footer_note: str = ""
+    show_generated_date: bool = False
+    program_name: str = ""
 
 
 # Excel Export Endpoints
@@ -267,6 +272,9 @@ async def generate_loa(
             signer_name=request.signer_name,
             signer_title=request.signer_title,
             header=request.header.model_dump() if request.header else None,
+            footer_note=request.footer_note,
+            show_generated_date=request.show_generated_date,
+            program_name=request.program_name,
         )
         filename = f"loa_{request.document_number or 'document'}.pdf"
         return Response(

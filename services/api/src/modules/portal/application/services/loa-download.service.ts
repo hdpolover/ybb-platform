@@ -199,6 +199,11 @@ export class LoaDownloadService {
     }
     // Always include document_number token even if not listed in placeholders definition
     placeholderData['{{document_number}}'] = docNumber;
+    // Always include signer_name/signer_title tokens too — footerHtml can reference
+    // them (e.g. "Sincerely, {{signer_name}}") even when the admin never wired up a
+    // placeholders-array mapping for those sources.
+    placeholderData['{{signer_name}}'] = signerName;
+    placeholderData['{{signer_title}}'] = signerTitle;
 
     // 9. Generate PDF via file service — no storage upload
     const buffer = await this.fileServiceClient.generateLoa({
@@ -229,6 +234,12 @@ export class LoaDownloadService {
             phone: (headerConfig['phone'] as string) ?? '',
           }
         : undefined,
+      footer_note: (layoutConfig['footerNote'] as string) ?? '',
+      show_generated_date: Boolean(layoutConfig['showGeneratedDate']),
+      // Always sent regardless of whether the structured `header` block above is
+      // configured — the page-footer disclaimer's "{program} • Generated on ..."
+      // line needs it independently of letterhead rendering.
+      program_name: programDisplayName,
     });
 
     // 10. Record download tracking
