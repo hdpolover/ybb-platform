@@ -174,20 +174,24 @@ class TestAutomaticStampFallback:
     the signature" caption. Auto-render only kicks in when the raw
     footerHtml genuinely has no {{stamp}} token; an author who placed the
     token explicitly keeps full control and never gets a duplicate.
+
+    Placement: the stamp attaches directly below the signature (expanding
+    {{signature}} into signature-then-stamp) rather than being prepended
+    above the whole footer block — prepending above everything used to read
+    as a stray banner floating over "Sincerely," in the real render.
     """
 
-    def test_stamp_url_with_no_token_renders_above_the_footer_content(self):
+    def test_stamp_url_with_no_token_attaches_below_the_signature(self):
         html = _build_html(
             footer_html="<p>Sincerely,</p><p>{{signature}}</p><p>Name</p>",
             signature_url=SIGNATURE,
             stamp_url=STAMP,
         )
         assert html.count("<img") == 2
-        assert STAMP in html
-        # Auto-rendered above everything, not just above {{signature}} —
-        # matches the "positioned above the footer content" contract.
-        assert html.index(STAMP) < html.index("Sincerely")
-        assert html.index(STAMP) < html.index(SIGNATURE)
+        # Order: "Sincerely," first, then signature, then the stamp
+        # immediately after it, then the name line — the stamp attaches to
+        # the signature, it does not float above the whole block.
+        assert html.index("Sincerely") < html.index(SIGNATURE) < html.index(STAMP) < html.index("Name")
 
     def test_stamp_url_with_explicit_token_renders_exactly_once_no_auto_stamp(self):
         html = _build_html(
@@ -222,6 +226,34 @@ class TestAutomaticStampFallback:
         assert STAMP in html
         assert SIGNATURE in html
         assert html.count("<img") == 2
+        # Signature, then stamp right after it, then the name line.
+        assert html.index(SIGNATURE) < html.index(STAMP) < html.index("Muhammad Aldi Subakti")
+
+    def test_stamp_url_with_no_signature_token_falls_back_to_above_footer_content(self):
+        # Edge case: stampUrl is set but footerHtml has no {{signature}}
+        # token either (nothing to attach the stamp to). Falls back to the
+        # original "prepend above the footer content" behavior so the seal
+        # doesn't vanish entirely.
+        html = _build_html(
+            footer_html="<p>Sincerely,</p><p>No signature token here</p>",
+            stamp_url=STAMP,
+        )
+        assert STAMP in html
+        assert html.index(STAMP) < html.index("Sincerely")
+
+    def test_stamp_url_with_signature_token_but_no_signature_url_falls_back(self):
+        # Edge case: footerHtml has {{signature}} but signature_url itself
+        # isn't set — there's no actual signature image to attach the stamp
+        # below, so this also falls back to prepend-above, and the
+        # {{signature}} token is left unexpanded (consistent with the
+        # existing "empty urls leave tokens untouched" back-compat rule).
+        html = _build_html(
+            footer_html="<p>Sincerely,</p><p>{{signature}}</p>",
+            stamp_url=STAMP,
+        )
+        assert STAMP in html
+        assert html.index(STAMP) < html.index("Sincerely")
+        assert "{{signature}}" in html
 
     def test_detection_is_an_exact_string_match_like_replace_tokens(self):
         # Whitespace-padded tokens aren't recognized by replace_tokens either
@@ -235,6 +267,7 @@ class TestAutomaticStampFallback:
         )
         assert "{{ stamp }}" in html  # left untouched, not a real token
         assert html.count("<img") == 2  # signature + the auto-rendered stamp
+        assert html.index(SIGNATURE) < html.index(STAMP)  # attached below signature
 
 
 class TestIsEffectivelyEmptyHtml:

@@ -445,8 +445,8 @@ def _build_loa_html_document(
         image_tokens['{{stamp}}'] = _img_tag(stamp_url, LOA_STAMP_MAX_HEIGHT)
     merged_data = {**placeholder_data, **image_tokens}
 
-    def replace_tokens(text: str) -> str:
-        for key, value in merged_data.items():
+    def replace_tokens(text: str, data: Optional[Dict[str, Any]] = None) -> str:
+        for key, value in (data if data is not None else merged_data).items():
             text = text.replace(key, str(value) if value is not None else '')
         return text
 
@@ -466,22 +466,43 @@ def _build_loa_html_document(
     # structured block is only a fallback for templates that never authored
     # a footer (or had it cleared back to an empty Tiptap `<p></p>` shell).
     if not _is_effectively_empty_html(footer_html):
-        footer_rendered = replace_tokens(footer_html)
         # Automatic stamp fallback: an uploaded stampUrl has to render
         # *somewhere*, even when the author's footerHtml never placed a
         # {{stamp}} token — otherwise the seal silently vanishes despite the
         # admin UI's "Rendered above the signature" caption. Detection is on
-        # the RAW footer_html param, BEFORE substitution — by the time
-        # footer_rendered exists the token text is already gone, so checking
-        # footer_rendered instead would always see it as "absent". This is an
-        # exact `'{{stamp}}' in text` containment check, same as how
-        # replace_tokens itself matches keys — whitespace variants like
-        # `{{ stamp }}` are not recognized by either, consistently.
-        if stamp_url and '{{stamp}}' not in footer_html:
-            footer_rendered = (
-                f'<div style="text-align:center;">{_img_tag(stamp_url, LOA_STAMP_MAX_HEIGHT, center=True)}</div>'
-                + footer_rendered
-            )
+        # the RAW footer_html param, BEFORE substitution — by the time any
+        # substituted output exists the token text is already gone. Exact
+        # `'{{...}}' in text` containment checks, same as how replace_tokens
+        # itself matches keys — whitespace variants like `{{ stamp }}` are
+        # not recognized by either, consistently.
+        auto_stamp = bool(stamp_url) and '{{stamp}}' not in footer_html
+        if auto_stamp and signature_url and '{{signature}}' in footer_html:
+            # Attach the stamp directly to the signature: expand {{signature}}
+            # into signature-then-stamp — both `_img_tag`s are display:block,
+            # so they stack vertically with no extra wrapper markup — instead
+            # of prepending the stamp above the whole footer block, which
+            # read as a stray banner floating over "Sincerely,". Scoped to a
+            # footer-only token map (not the shared `merged_data`) so a
+            # stray {{signature}} elsewhere (body/header) is unaffected.
+            footer_merged_data = {
+                **merged_data,
+                '{{signature}}': (
+                    _img_tag(signature_url, LOA_SIGNATURE_MAX_HEIGHT)
+                    + _img_tag(stamp_url, LOA_STAMP_MAX_HEIGHT)
+                ),
+            }
+            footer_rendered = replace_tokens(footer_html, footer_merged_data)
+        else:
+            footer_rendered = replace_tokens(footer_html)
+            if auto_stamp:
+                # No {{signature}} token to attach the stamp to (or no
+                # signature_url at all) — fall back to rendering the stamp
+                # above the footer content so the seal doesn't vanish
+                # entirely.
+                footer_rendered = (
+                    f'<div style="text-align:center;">{_img_tag(stamp_url, LOA_STAMP_MAX_HEIGHT, center=True)}</div>'
+                    + footer_rendered
+                )
     elif signature_url or stamp_url or signer_name or signer_title:
         footer_rendered = _build_signer_html(signature_url, stamp_url, signer_name, signer_title)
     else:
