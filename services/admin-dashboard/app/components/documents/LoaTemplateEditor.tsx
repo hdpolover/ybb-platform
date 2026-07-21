@@ -13,7 +13,7 @@ import {
   Bold, Italic, Underline as UnderlineIcon, AlignLeft, AlignCenter,
   AlignRight, List, ListOrdered, Undo, Redo, RemoveFormatting,
   Heading1, Heading2, Loader2, CheckCircle2, Upload, ImageIcon, X, Eye, EyeOff,
-  ChevronDown, Pencil,
+  ChevronDown, Pencil, AlertTriangle, RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
@@ -34,6 +34,7 @@ import {
   listDocumentTemplates,
   createDocumentTemplate,
   updateDocumentTemplate,
+  previewDocumentTemplate,
   listProgramMedia,
   uploadFileViaPresignedUrl,
   listSignatures,
@@ -82,6 +83,13 @@ const DEFAULT_LAYOUT: DocumentTemplateLayoutConfig = {
   logoUrl: "",
   signatureUrl: "",
 };
+
+/** True when `html` has visible content — not just empty Tiptap `<p></p>` shells. */
+function hasMeaningfulHtml(html?: string): boolean {
+  if (!html) return false;
+  const stripped = html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, "").trim();
+  return stripped.length > 0 || /<img\b/i.test(html);
+}
 
 function ToolbarBtn({
   onClick, active, title, disabled, children,
@@ -373,6 +381,20 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
   const [previewMode, setPreviewMode] = useState(false);
   const [unpublishConfirmOpen, setUnpublishConfirmOpen] = useState(false);
 
+  // Structured letterhead migration gate (Task 3): true once it's safe to edit
+  // the Tagline/Website/Email/Phone fields — either the template already has a
+  // `header` struct, it never had legacy headerHtml, or the admin explicitly
+  // confirmed switching away from the legacy freeform HTML. Starts true (no
+  // legacy content assumed) and gets corrected downward once the template loads.
+  const [structuredHeaderConfirmed, setStructuredHeaderConfirmed] = useState(true);
+
+  // Real-renderer preview (Task 2): the PDF blob URL from the file-service
+  // WeasyPrint pipeline, not a hand-rolled HTML mock.
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const previewObjectUrlRef = useRef<string | null>(null);
+
   // Signatures (brand-scoped, reusable across templates)
   const [signatures, setSignatures] = useState<Signature[]>([]);
   const [signaturesLoading, setSignaturesLoading] = useState(false);
@@ -390,15 +412,6 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
     TextAlign.configure({ types: ["heading", "paragraph"] }),
     Link.configure({ openOnClick: false }),
   ];
-
-  const headerEditor = useEditor({
-    immediatelyRender: false,
-    extensions: [
-      ...editorExtensions,
-      Placeholder.configure({ placeholder: "Header content — use {{logo}} to insert the logo…" }),
-    ],
-    editorProps: { attributes: { class: "focus:outline-none text-sm leading-relaxed" } },
-  });
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -431,6 +444,15 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
           setTemplateName(t.name);
           const lc = { ...DEFAULT_LAYOUT, ...(t.layoutConfig ?? {}) };
           setLayout(lc);
+          // Legacy gate: only block editing the structured fields when this
+          // template has real freeform header HTML AND no `header` struct yet —
+          // that's the exact condition under which touching Tagline/Website/
+          // Email/Phone would silently orphan the old HTML (see Task 3 brief).
+          const hasStructured = Boolean(lc.header);
+          const hasLegacyHtml = hasMeaningfulHtml(lc.headerHtml);
+          setStructuredHeaderConfirmed(hasStructured || !hasLegacyHtml);
+        } else {
+          setStructuredHeaderConfirmed(true);
         }
       })
       .catch(() => toast.error("Failed to load Invitation Letter template"))
@@ -524,16 +546,20 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
     if (editor && template.htmlContent) {
       editor.commands.setContent(template.htmlContent, { emitUpdate: false });
     }
-    if (headerEditor && template.layoutConfig?.headerHtml) {
-      headerEditor.commands.setContent(template.layoutConfig.headerHtml, { emitUpdate: false });
-    }
     if (footerEditor && template.layoutConfig?.footerHtml) {
       footerEditor.commands.setContent(template.layoutConfig.footerHtml, { emitUpdate: false });
     }
-    if (editor && headerEditor && footerEditor) {
+    if (editor && footerEditor) {
       contentSetRef.current = true;
     }
-  }, [editor, headerEditor, footerEditor, template]);
+  }, [editor, footerEditor, template]);
+
+  // Revoke the preview PDF's blob URL on unmount / before generating a new one.
+  useEffect(() => {
+    return () => {
+      if (previewObjectUrlRef.current) URL.revokeObjectURL(previewObjectUrlRef.current);
+    };
+  }, []);
 
   const insertPlaceholder = useCallback((key: string) => {
     if (!editor) return;
@@ -544,14 +570,17 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
     if (!editor) return;
     setSaving(true);
     const htmlContent = editor.getHTML();
-    const headerHtml = headerEditor?.getHTML() ?? layout.headerHtml ?? "";
+    // headerHtml is no longer editable in this UI (Task 3) — whatever value
+    // `layout.headerHtml` already holds (legacy content, or nothing) is
+    // preserved untouched. It only stops being *used* by the renderer once
+    // `layout.header` is set — see the legacy-header switch action below.
     const footerHtml = footerEditor?.getHTML() ?? layout.footerHtml ?? "";
     const body = {
       name: templateName,
       type: "letter_of_acceptance" as const,
       htmlContent,
       placeholders: PLACEHOLDER_TOKENS,
-      layoutConfig: { ...layout, headerHtml, footerHtml },
+      layoutConfig: { ...layout, footerHtml },
       audienceType: "all_registered",
       isActive: publish,
     };
@@ -574,70 +603,36 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
     }
   }
 
-  function buildPreviewDoc(): string {
-    const SAMPLE: Record<string, string> = {
-      "{{participant_name}}": "Jane Doe",
-      "{{program_name}}": program?.programName ?? "Your Program",
-      "{{acceptance_date}}": formatDate(new Date(), { year: "numeric", month: "long", day: "numeric" }),
-      "{{batch}}": "Batch 1",
-      "{{document_number}}": "DOC-2026-001",
-      "{{participation_category}}": "International Delegate",
-      "{{program_location}}": "Jakarta, Indonesia",
-      "{{start_date}}": formatDate(new Date(2026, 6, 20), { year: "numeric", month: "long", day: "numeric" }),
-      "{{end_date}}": formatDate(new Date(2026, 6, 27), { year: "numeric", month: "long", day: "numeric" }),
-      "{{institution}}": "State University of Jakarta",
-      "{{nationality}}": "Indonesian",
-      "{{date_of_birth}}": formatDate(new Date(2002, 4, 12), { year: "numeric", month: "long", day: "numeric" }),
-      "{{gender}}": "Female",
-      "{{country_of_origin}}": "Indonesia",
-      "{{signer_name}}": "Dr. Jane Doe",
-      "{{signer_title}}": "Program Director",
-      "{{program_year}}": "2026",
-      "{{participant_email}}": "jane.doe@example.com",
-      "{{participant_phone}}": "+62 812345678",
-      "{{major}}": "International Relations",
-      "{{occupation}}": "Student",
-      "{{program_theme}}": "Innovate for Tomorrow",
-      "{{brand_name}}": "Japan Youth Summit",
-      "{{logo}}": layout.logoUrl
-        ? `<img src="${layout.logoUrl}" style="height:60px;display:block;margin:0 auto 6px" />`
-        : `<div style="display:inline-block;height:60px;width:120px;background:#e5e7eb;border-radius:6px;line-height:60px;text-align:center;font-size:11px;color:#6b7280">[LOGO]</div>`,
-      "{{signature}}": layout.signatureUrl
-        ? `<img src="${layout.signatureUrl}" style="height:48px;display:block;margin-bottom:4px" />`
-        : `<div style="display:inline-block;height:48px;width:120px;background:#e5e7eb;border-radius:4px;line-height:48px;text-align:center;font-size:11px;color:#6b7280">[SIGNATURE]</div>`,
-    };
-
-    const m = layout.margins ?? { top: 40, right: 40, bottom: 40, left: 40 };
-    let combined = [
-      headerEditor?.getHTML() ?? "",
-      editor?.getHTML() ?? "",
-      footerEditor?.getHTML() ?? "",
-    ].join("\n");
-
-    for (const [key, val] of Object.entries(SAMPLE)) {
-      combined = combined.split(key).join(val);
+  // Renders through the same file-service WeasyPrint pipeline
+  // (structured header, footer precedence, auto-stamp, page-footer disclaimer)
+  // that LoaDownloadService uses for real participant downloads — see
+  // PreviewLoaTemplateHandler on the API side. No hand-rolled HTML mock.
+  const generatePreview = useCallback(async () => {
+    if (!editor || !resolvedProgramId) return;
+    setPreviewLoading(true);
+    setPreviewError(null);
+    try {
+      const footerHtml = footerEditor?.getHTML() ?? layout.footerHtml ?? "";
+      const blob = await previewDocumentTemplate(resolvedProgramId, {
+        htmlContent: editor.getHTML(),
+        placeholders: PLACEHOLDER_TOKENS,
+        layoutConfig: { ...layout, footerHtml },
+      });
+      if (previewObjectUrlRef.current) URL.revokeObjectURL(previewObjectUrlRef.current);
+      const url = URL.createObjectURL(blob);
+      previewObjectUrlRef.current = url;
+      setPreviewPdfUrl(url);
+    } catch (err) {
+      setPreviewError(err instanceof Error ? err.message : "Failed to generate preview");
+    } finally {
+      setPreviewLoading(false);
     }
+  }, [editor, footerEditor, layout, resolvedProgramId]);
 
-    return `<!DOCTYPE html>
-<html><head><meta charset="utf-8"/>
-<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:Georgia,serif;font-size:12pt;line-height:1.7;color:#111;
-       padding:${m.top}pt ${m.right}pt ${m.bottom}pt ${m.left}pt;background:#fff}
-  h1{font-size:20pt;margin-bottom:10pt;font-weight:700}
-  h2{font-size:15pt;margin-bottom:8pt;font-weight:600}
-  h3{font-size:13pt;margin-bottom:6pt;font-weight:600}
-  p{margin-bottom:9pt}
-  ul,ol{margin:0 0 9pt 18pt}
-  li{margin-bottom:3pt}
-  strong{font-weight:700}
-  em{font-style:italic}
-  u{text-decoration:underline}
-  img{max-width:100%}
-  [style*="text-align:center"],[style*="text-align: center"]{text-align:center}
-  [style*="text-align:right"],[style*="text-align: right"]{text-align:right}
-</style>
-</head><body>${combined}</body></html>`;
+  function togglePreview() {
+    const next = !previewMode;
+    setPreviewMode(next);
+    if (next) void generatePreview();
   }
 
   if (loading) {
@@ -662,7 +657,7 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setPreviewMode((p) => !p)}
+            onClick={togglePreview}
             className="flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
           >
             {previewMode ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
@@ -712,30 +707,98 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
         <div className="flex w-[60%] flex-col gap-3 overflow-y-auto">
           {previewMode ? (
             <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-inner" style={{ minHeight: 600 }}>
-              <div className="flex items-center gap-2 border-b border-zinc-100 bg-zinc-50 px-4 py-2 text-[11px] text-zinc-500">
-                <Eye className="h-3 w-3" />
-                Preview — sample data substituted
+              <div className="flex items-center justify-between gap-2 border-b border-zinc-100 bg-zinc-50 px-4 py-2 text-[11px] text-zinc-500">
+                <span className="flex items-center gap-2">
+                  <Eye className="h-3 w-3" />
+                  Real PDF preview — sample participant data, actual renderer
+                </span>
+                <button
+                  type="button"
+                  disabled={previewLoading}
+                  onClick={() => void generatePreview()}
+                  className="flex items-center gap-1 rounded px-1.5 py-0.5 font-medium text-zinc-600 hover:bg-zinc-100 disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-3 w-3 ${previewLoading ? "animate-spin" : ""}`} />
+                  Regenerate
+                </button>
               </div>
-              <iframe
-                srcDoc={buildPreviewDoc()}
-                sandbox="allow-same-origin"
-                className="h-full w-full flex-1"
-                title="Invitation Letter Preview"
-                style={{ minHeight: 560 }}
-              />
+              {previewLoading ? (
+                <div className="flex flex-1 items-center justify-center gap-2 text-xs text-zinc-400">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Rendering PDF…
+                </div>
+              ) : previewError ? (
+                <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
+                  <p className="text-xs font-medium text-red-600">Preview failed</p>
+                  <p className="max-w-sm text-[11px] text-zinc-500">{previewError}</p>
+                  <button
+                    type="button"
+                    onClick={() => void generatePreview()}
+                    className="mt-1 rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50"
+                  >
+                    Try again
+                  </button>
+                </div>
+              ) : previewPdfUrl ? (
+                <iframe
+                  src={previewPdfUrl}
+                  className="h-full w-full flex-1"
+                  title="Invitation Letter Preview"
+                  style={{ minHeight: 560 }}
+                />
+              ) : (
+                <div className="flex flex-1 items-center justify-center text-xs text-zinc-400">No preview yet.</div>
+              )}
             </div>
           ) : (
             <>
-              {/* Header editor */}
+              {/* Header — structured letterhead only; see sidebar "Letterhead Details" */}
               <div>
                 <label className={labelCls}>Header</label>
-                <MiniEditor
-                  editor={headerEditor}
-                  tokenLabel="Logo"
-                  tokenKey="{{logo}}"
-                  allTokens={PLACEHOLDER_TOKENS}
-                  placeholder="Header content — use {{logo}} to insert the logo…"
-                />
+                {structuredHeaderConfirmed ? (
+                  <p className="rounded-md border border-zinc-100 bg-zinc-50 px-3 py-2 text-[11px] text-zinc-500">
+                    Built from the Logo and Letterhead Details fields in the sidebar — there is no freeform header editor.
+                  </p>
+                ) : (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium text-amber-800">Legacy freeform header</p>
+                        <p className="mt-0.5 text-[11px] text-amber-700">
+                          This template&apos;s letterhead still comes from old freeform HTML, shown read-only below. The
+                          freeform header editor has been removed — switch to the structured Logo + Letterhead Details
+                          fields in the sidebar to keep editing it. Switching stops using this HTML permanently.
+                        </p>
+                        <div
+                          className="mt-2 max-h-32 overflow-y-auto rounded border border-amber-200 bg-white px-3 py-2 text-xs text-zinc-700"
+                          // Read-only render of admin-authored HTML already stored on this template —
+                          // same trust boundary Tiptap's setContent() rendered it under before.
+                          dangerouslySetInnerHTML={{ __html: layout.headerHtml || "" }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                "Switch to the structured letterhead fields? The old HTML header will no longer be used.",
+                              )
+                            ) {
+                              setLayout((l) => ({
+                                ...l,
+                                header: l.header ?? { tagline: "", website: "", email: "", phone: "" },
+                              }));
+                              setStructuredHeaderConfirmed(true);
+                            }
+                          }}
+                          className="mt-2 rounded-md border border-amber-300 bg-white px-2.5 py-1 text-[11px] font-medium text-amber-800 hover:bg-amber-100"
+                        >
+                          Switch to structured letterhead fields
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Body editor */}
@@ -884,12 +947,18 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
               <p className="mb-2 text-[10px] text-zinc-400">
                 Program name and batch render automatically — these fill the tagline/contact row next to the logo.
               </p>
+              {!structuredHeaderConfirmed ? (
+                <p className="mb-2 text-[10px] font-medium text-amber-600">
+                  Disabled until you switch away from the legacy freeform header — see the notice above the body editor.
+                </p>
+              ) : null}
             </div>
             <div className="mb-4 grid grid-cols-2 gap-2">
               <div>
                 <label className={labelCls}>Tagline</label>
                 <input
-                  className={inputCls}
+                  className={inputCls + " disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400"}
+                  disabled={!structuredHeaderConfirmed}
                   value={layout.header?.tagline ?? ""}
                   onChange={(e) =>
                     setLayout((l) => ({ ...l, header: { ...(l.header ?? {}), tagline: e.target.value } }))
@@ -900,7 +969,8 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
               <div>
                 <label className={labelCls}>Website</label>
                 <input
-                  className={inputCls}
+                  className={inputCls + " disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400"}
+                  disabled={!structuredHeaderConfirmed}
                   value={layout.header?.website ?? ""}
                   onChange={(e) =>
                     setLayout((l) => ({ ...l, header: { ...(l.header ?? {}), website: e.target.value } }))
@@ -911,7 +981,8 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
               <div>
                 <label className={labelCls}>Email</label>
                 <input
-                  className={inputCls}
+                  className={inputCls + " disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400"}
+                  disabled={!structuredHeaderConfirmed}
                   value={layout.header?.email ?? ""}
                   onChange={(e) =>
                     setLayout((l) => ({ ...l, header: { ...(l.header ?? {}), email: e.target.value } }))
@@ -922,7 +993,8 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
               <div>
                 <label className={labelCls}>Phone</label>
                 <input
-                  className={inputCls}
+                  className={inputCls + " disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400"}
+                  disabled={!structuredHeaderConfirmed}
                   value={layout.header?.phone ?? ""}
                   onChange={(e) =>
                     setLayout((l) => ({ ...l, header: { ...(l.header ?? {}), phone: e.target.value } }))
@@ -942,6 +1014,34 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
                 userId={userId}
               />
               <p className="mt-1 text-[10px] text-zinc-400">Rendered above the signature.</p>
+            </div>
+
+            <div className="mb-4">
+              <label className={labelCls}>Page Footer Disclaimer</label>
+              <input
+                className={inputCls}
+                value={layout.footerNote ?? ""}
+                onChange={(e) => setLayout((l) => ({ ...l, footerNote: e.target.value }))}
+                placeholder="This document is computer-generated. No physical signature required."
+              />
+              <p className="mt-1 text-[10px] text-zinc-400">
+                Pinned to the bottom of every page — separate from the sign-off block in the Footer editor below.
+              </p>
+
+              <label className="mt-3 flex items-start gap-2 text-[11px] text-zinc-600">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-3.5 w-3.5 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+                  checked={Boolean(layout.showGeneratedDate)}
+                  onChange={(e) => setLayout((l) => ({ ...l, showGeneratedDate: e.target.checked }))}
+                />
+                <span>
+                  Show generation date
+                  <span className="block text-[10px] text-zinc-400">
+                    Appends &quot;{"{Program}"} • Generated on {"{date}"}&quot; to the disclaimer above.
+                  </span>
+                </span>
+              </label>
             </div>
 
             <div>

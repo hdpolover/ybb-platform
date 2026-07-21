@@ -1582,6 +1582,22 @@ export class UpdateDocumentTemplateDto {
     isActive?: boolean;
 }
 
+export class PreviewDocumentTemplateDto {
+    @ApiProperty({ description: 'Tiptap HTML body — the in-editor draft, not necessarily saved yet' })
+    @IsString()
+    @IsNotEmpty()
+    htmlContent: string;
+
+    @ApiProperty({ required: false, description: 'Placeholder token definitions (same shape as the saved template)' })
+    @IsOptional()
+    @IsArray()
+    placeholders?: Array<{ key: string; label: string; source: string }>;
+
+    @ApiProperty({ required: false, description: 'Draft layout config — headerHtml/footerHtml/margins/logoUrl/stampUrl/header/footerNote/showGeneratedDate/etc.' })
+    @IsOptional()
+    layoutConfig?: Record<string, unknown>;
+}
+
 // Program-level payment info DTO
 export class UpdateProgramPaymentInfoDto {
     @ApiPropertyOptional({ description: 'Rich-text HTML shown in participant payment-page currency callout' })
