@@ -1,5 +1,5 @@
-import { Controller, Get, Param, Put, Post, Delete, Body, UseGuards, Request, UseInterceptors, UploadedFile, Query } from '@nestjs/common';
-import { Request as ExpressRequest } from 'express';
+import { Controller, Get, Param, Put, Post, Delete, Body, UseGuards, Request, Response, StreamableFile, UseInterceptors, UploadedFile, Query } from '@nestjs/common';
+import { Request as ExpressRequest, Response as ExpressResponse } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
@@ -38,7 +38,7 @@ import {
   CreateProgramTestimonialDto, UpdateProgramTestimonialDto,
   CreateProgramFaqDto, UpdateProgramFaqDto,
   CreateProgramResourceDto, UpdateProgramResourceDto,
-  CreateDocumentTemplateDto, UpdateDocumentTemplateDto,
+  CreateDocumentTemplateDto, UpdateDocumentTemplateDto, PreviewDocumentTemplateDto,
 } from './dto/create-update-program-content.dto';
 
 import {
@@ -75,6 +75,7 @@ import {
   GetLoaBatchesHandler,
   GetLoaDownloadsHandler,
 } from '../application/handlers/loa-batch.handlers';
+import { PreviewLoaTemplateQuery, PreviewLoaTemplateHandler } from '../application/handlers/loa-preview.handler';
 
 @ApiTags('Program Content')
 @Controller('programs')
@@ -107,6 +108,7 @@ export class ProgramContentController {
     private readonly deleteLoaBatchHandlerSvc: DeleteLoaBatchHandler,
     private readonly getLoaBatchesHandlerSvc: GetLoaBatchesHandler,
     private readonly getLoaDownloadsHandlerSvc: GetLoaDownloadsHandler,
+    private readonly previewLoaTemplateHandler: PreviewLoaTemplateHandler,
   ) {}
 
   // --- Gallery Endpoints ---
@@ -320,6 +322,27 @@ export class ProgramContentController {
   ) {
     dto.programId = programId;
     return this.createDocumentTemplateHandler.execute(new CreateDocumentTemplateCommand(dto, req.user.id, file));
+  }
+
+  @Post(':id/document-templates/preview')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Render an unsaved Invitation Letter draft through the real PDF generator, with sample participant data' })
+  @ApiResponse({ status: 200, description: 'PDF binary' })
+  async previewDocumentTemplate(
+    @Param('id') programId: string,
+    @Body() dto: PreviewDocumentTemplateDto,
+    @Response({ passthrough: true }) res: ExpressResponse,
+  ) {
+    const buffer = await this.previewLoaTemplateHandler.execute(
+      new PreviewLoaTemplateQuery(programId, dto.htmlContent, dto.layoutConfig ?? {}, dto.placeholders ?? []),
+    );
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': 'inline; filename="preview.pdf"',
+    });
+    return new StreamableFile(buffer);
   }
 
   @Put('document-templates/:itemId')

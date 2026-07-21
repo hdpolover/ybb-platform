@@ -120,6 +120,7 @@ import {
   GetLoaBatchesHandler,
   GetLoaDownloadsHandler,
 } from './application/handlers/loa-batch.handlers';
+import { PreviewLoaTemplateHandler } from './application/handlers/loa-preview.handler';
 
 @Module({
   imports: [CqrsModule, HttpModule, AuthModule, UsersModule, FilesModule, RabbitMQModule],
@@ -224,6 +225,7 @@ import {
     DeleteLoaBatchHandler,
     GetLoaBatchesHandler,
     GetLoaDownloadsHandler,
+    PreviewLoaTemplateHandler,
 
     CacheService,
     LandingRevalidationService,

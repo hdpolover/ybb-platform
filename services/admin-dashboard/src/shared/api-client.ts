@@ -128,6 +128,29 @@ async function requestText(path: string, init?: RequestInit): Promise<string> {
   return res.text();
 }
 
+async function requestBlob(path: string, init?: RequestInit): Promise<Blob> {
+  const headers = new Headers(init?.headers);
+  headers.set("Authorization", `Bearer ${getAccessToken()}`);
+  if (
+    !(init?.body instanceof FormData) &&
+    init?.method &&
+    init.method !== "GET" &&
+    !headers.has("Content-Type")
+  ) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const res = await fetch(buildApiUrl(path), { ...init, headers });
+
+  if (res.status === 401) {
+    redirectToLogin("session_expired");
+    throw new Error("Session expired. Redirecting to login...");
+  }
+
+  if (!res.ok) throw new Error(await readErrorMessage(res));
+  return res.blob();
+}
+
 // ─── Pagination helper ────────────────────────────────────────────────────────
 
 export type PaginatedMeta = {
@@ -2902,6 +2925,12 @@ export type DocumentTemplateLayoutConfig = {
     email?: string;
     phone?: string;
   };
+  // Page-footer disclaimer — a running CSS Paged Media @bottom-center footer
+  // on every page (see services/file pdf_generator.py _build_page_footer_css),
+  // NOT the Tiptap footerHtml sign-off block above.
+  footerNote?: string;
+  // Appends a "{Program} • Generated on {date}" line to the disclaimer above.
+  showGeneratedDate?: boolean;
 };
 
 export type DocumentTemplate = {
@@ -3080,6 +3109,26 @@ export async function updateDocumentTemplate(
 
 export function deleteDocumentTemplate(id: string): Promise<void> {
   return request<void>(`/programs/document-templates/${id}`, { method: 'DELETE' });
+}
+
+/**
+ * Render an unsaved Invitation Letter draft through the real PDF generator
+ * (WeasyPrint, same code path as the participant download) with sample
+ * participant data, and return it as a PDF Blob for inline preview.
+ * Draft state is sent as-is — nothing needs to be saved first.
+ */
+export function previewDocumentTemplate(
+  programId: string,
+  input: {
+    htmlContent: string;
+    placeholders?: DocumentTemplatePlaceholder[];
+    layoutConfig?: DocumentTemplateLayoutConfig;
+  },
+): Promise<Blob> {
+  return requestBlob(`/programs/${programId}/document-templates/preview`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
 }
 
 // ─── Signatures ───────────────────────────────────────────────────────────────

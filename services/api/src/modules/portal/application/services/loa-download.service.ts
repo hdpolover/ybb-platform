@@ -4,7 +4,12 @@ import { FileServiceClient } from '@modules/files/infrastructure/clients/file-se
 import { LoaEligibilityService } from './loa-eligibility.service';
 import { LoaDocumentNumberService } from './loa-document-number.service';
 import { PortalCacheService } from './portal-cache.service';
-import { parseProgramBatch } from '../utils/parse-program-batch';
+import { parseProgramBatch } from '@shared/utils/parse-program-batch';
+import {
+  resolveLoaSignature,
+  buildLoaSourceMap,
+  buildGenerateLoaParams,
+} from '@shared/utils/loa-render-payload.util';
 
 // Gender enum values (prisma/schema/enums.prisma) are lowercase 'male' | 'female'.
 // Rendered human-readable on the LOA for visa-support tokens.
@@ -127,25 +132,10 @@ export class LoaDownloadService {
     // values with its imageUrl/name/title. Any lookup failure (missing id, deleted
     // row, DB error) degrades gracefully back to the legacy fallback — a bad
     // signature reference must never break LOA download.
-    let signatureUrl = (layoutConfig['signatureUrl'] as string) ?? '';
-    let signerName = '';
-    let signerTitle = '';
-    const signatureId = layoutConfig['signatureId'] as string | undefined;
-    if (signatureId) {
-      try {
-        const signature = await this.prisma.signature.findFirst({
-          where: { id: signatureId, deletedAt: null },
-          select: { imageUrl: true, name: true, title: true },
-        });
-        if (signature) {
-          signatureUrl = signature.imageUrl;
-          signerName = signature.name;
-          signerTitle = signature.title ?? '';
-        }
-      } catch {
-        // Swallow — fall back to legacy layoutConfig.signatureUrl values above.
-      }
-    }
+    const { signatureUrl, signerName, signerTitle } = await resolveLoaSignature(this.prisma, {
+      signatureUrl: layoutConfig['signatureUrl'] as string | undefined,
+      signatureId: layoutConfig['signatureId'] as string | undefined,
+    });
 
     // 8. Build placeholder substitution map. Note: this source map used to be described
     //    as mirroring a `GenerateLOAHandler` — that handler was removed during the
@@ -166,81 +156,66 @@ export class LoaDownloadService {
     // Summit 2026" / "Batch 2"); the {{program_name}} body token keeps resolving to the
     // full original program.name below — only the header rendering uses the split form.
     const { displayName: programDisplayName, batch: programBatch } = parseProgramBatch(program.name);
-    const sourceMap: Record<string, string> = {
-      'participant.fullName': application.participant.fullName,
-      'program.name': program.name,
-      'program.batch': programBatch,
-      'generated_at': generatedAt,
-      'participant_document.documentNumber': docNumber,
-      'application.participationCategory.name': application.participationCategory?.name ?? '',
-      'program.location': program.location ?? '',
-      'program.startDate': startDate,
-      'program.endDate': endDate,
-      'participant.institution': application.participant.institution ?? '',
-      'participant.nationality': application.participant.nationality ?? '',
-      'participant.birthdate': birthdate,
-      'participant.gender': formatGender(application.participant.gender),
-      'participant.originCountry': application.participant.originCountry ?? '',
-      'signer_name': signerName,
-      'signer_title': signerTitle,
-      'program.year': String(program.year),
-      'participant.email': application.participant.user?.email ?? '',
-      'participant.phone': formatPhone(application.participant.phoneCountryCode, application.participant.phoneNumber),
-      'participant.major': application.participant.major ?? '',
-      'participant.occupation': application.participant.occupation ?? '',
-      'program.theme': program.theme ?? '',
-      'brand.name': program.brand?.name ?? '',
-    };
+    const sourceMap = buildLoaSourceMap({
+      participantFullName: application.participant.fullName,
+      programName: program.name,
+      programBatch,
+      generatedAt,
+      documentNumber: docNumber,
+      participationCategoryName: application.participationCategory?.name ?? '',
+      programLocation: program.location ?? '',
+      programStartDate: startDate,
+      programEndDate: endDate,
+      institution: application.participant.institution ?? '',
+      nationality: application.participant.nationality ?? '',
+      birthdate,
+      gender: formatGender(application.participant.gender),
+      originCountry: application.participant.originCountry ?? '',
+      signerName,
+      signerTitle,
+      programYear: String(program.year),
+      participantEmail: application.participant.user?.email ?? '',
+      participantPhone: formatPhone(application.participant.phoneCountryCode, application.participant.phoneNumber),
+      major: application.participant.major ?? '',
+      occupation: application.participant.occupation ?? '',
+      programTheme: program.theme ?? '',
+      brandName: program.brand?.name ?? '',
+    });
 
     const placeholders = (template.placeholders ?? []) as Array<{ key: string; source: string }>;
-    const placeholderData: Record<string, string> = {};
-    for (const p of placeholders) {
-      placeholderData[p.key] = sourceMap[p.source] ?? '';
-    }
-    // Always include document_number token even if not listed in placeholders definition
-    placeholderData['{{document_number}}'] = docNumber;
-    // Always include signer_name/signer_title tokens too — footerHtml can reference
-    // them (e.g. "Sincerely, {{signer_name}}") even when the admin never wired up a
-    // placeholders-array mapping for those sources.
-    placeholderData['{{signer_name}}'] = signerName;
-    placeholderData['{{signer_title}}'] = signerTitle;
 
     // 9. Generate PDF via file service — no storage upload
-    const buffer = await this.fileServiceClient.generateLoa({
-      html_content: template.htmlContent,
-      header_html: (layoutConfig['headerHtml'] as string) ?? '',
-      footer_html: (layoutConfig['footerHtml'] as string) ?? '',
-      page_size: (layoutConfig['pageSize'] as string) ?? 'A4',
-      margins: (layoutConfig['margins'] as { top: number; right: number; bottom: number; left: number }) ?? {
-        top: 40,
-        right: 40,
-        bottom: 40,
-        left: 40,
-      },
-      placeholder_data: placeholderData,
-      document_number: docNumber,
-      logo_url: (layoutConfig['logoUrl'] as string) ?? '',
-      signature_url: signatureUrl,
-      stamp_url: (layoutConfig['stampUrl'] as string) ?? '',
-      signer_name: signerName,
-      signer_title: signerTitle,
-      header: headerConfig
-        ? {
-            program_name: programDisplayName,
-            batch: programBatch,
-            tagline: (headerConfig['tagline'] as string) ?? '',
-            website: (headerConfig['website'] as string) ?? '',
-            email: (headerConfig['email'] as string) ?? '',
-            phone: (headerConfig['phone'] as string) ?? '',
-          }
-        : undefined,
-      footer_note: (layoutConfig['footerNote'] as string) ?? '',
-      show_generated_date: Boolean(layoutConfig['showGeneratedDate']),
-      // Always sent regardless of whether the structured `header` block above is
-      // configured — the page-footer disclaimer's "{program} • Generated on ..."
-      // line needs it independently of letterhead rendering.
-      program_name: programDisplayName,
-    });
+    const buffer = await this.fileServiceClient.generateLoa(
+      buildGenerateLoaParams({
+        htmlContent: template.htmlContent,
+        layoutConfig: {
+          headerHtml: layoutConfig['headerHtml'] as string | undefined,
+          footerHtml: layoutConfig['footerHtml'] as string | undefined,
+          pageSize: layoutConfig['pageSize'] as string | undefined,
+          margins: layoutConfig['margins'] as { top: number; right: number; bottom: number; left: number } | undefined,
+          logoUrl: layoutConfig['logoUrl'] as string | undefined,
+          stampUrl: layoutConfig['stampUrl'] as string | undefined,
+          footerNote: layoutConfig['footerNote'] as string | undefined,
+          showGeneratedDate: layoutConfig['showGeneratedDate'] as boolean | undefined,
+          header: headerConfig
+            ? {
+                tagline: headerConfig['tagline'] as string | undefined,
+                website: headerConfig['website'] as string | undefined,
+                email: headerConfig['email'] as string | undefined,
+                phone: headerConfig['phone'] as string | undefined,
+              }
+            : undefined,
+        },
+        placeholders,
+        sourceMap,
+        documentNumber: docNumber,
+        signatureUrl,
+        signerName,
+        signerTitle,
+        programDisplayName,
+        programBatch,
+      }),
+    );
 
     // 10. Record download tracking
     await this.prisma.participantDocument.update({

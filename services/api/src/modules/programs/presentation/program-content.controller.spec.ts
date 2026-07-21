@@ -32,6 +32,7 @@ import {
   GetLoaBatchesHandler,
   GetLoaDownloadsHandler,
 } from '../application/handlers/loa-batch.handlers';
+import { PreviewLoaTemplateHandler } from '../application/handlers/loa-preview.handler';
 
 import { ListProgramGalleryQuery } from '../application/queries/list-program-content.queries';
 import { CreateProgramGalleryCommand } from '../application/commands/program-content.commands';
@@ -67,6 +68,7 @@ describe('ProgramContentController', () => {
             DeleteLoaBatchHandler,
             GetLoaBatchesHandler,
             GetLoaDownloadsHandler,
+            PreviewLoaTemplateHandler,
         ];
 
         return handlers.map(handler => ({

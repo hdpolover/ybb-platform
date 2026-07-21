@@ -88,9 +88,40 @@ export interface GenerateReceiptPayload {
   };
 }
 
+// Params for the LOA WeasyPrint generator (services/file `LoaRequest`). Named
+// and exported so NestJS callers other than LoaDownloadService — e.g. the
+// admin template-preview handler — can build the exact same shape without
+// duplicating this field list (that duplication is what caused the preview
+// mock to drift from the real renderer in the first place).
+export interface GenerateLoaParams {
+  html_content: string;
+  header_html: string;
+  footer_html: string;
+  page_size: string;
+  margins: { top: number; right: number; bottom: number; left: number };
+  placeholder_data: Record<string, string>;
+  document_number: string;
+  logo_url?: string;
+  signature_url?: string;
+  stamp_url?: string;
+  signer_name?: string;
+  signer_title?: string;
+  header?: {
+    program_name: string;
+    batch: string;
+    tagline: string;
+    website: string;
+    email: string;
+    phone: string;
+  };
+  footer_note?: string;
+  show_generated_date?: boolean;
+  program_name?: string;
+}
+
 /**
  * File Service HTTP Client
- * 
+ *
  * Infrastructure Layer - External Service Communication
  * Handles all HTTP communication with the Python File Service
  */
@@ -394,31 +425,7 @@ export class FileServiceClient {
   /**
    * Generate LOA PDF from Tiptap HTML via WeasyPrint.
    */
-  async generateLoa(params: {
-    html_content: string;
-    header_html: string;
-    footer_html: string;
-    page_size: string;
-    margins: { top: number; right: number; bottom: number; left: number };
-    placeholder_data: Record<string, string>;
-    document_number: string;
-    logo_url?: string;
-    signature_url?: string;
-    stamp_url?: string;
-    signer_name?: string;
-    signer_title?: string;
-    header?: {
-      program_name: string;
-      batch: string;
-      tagline: string;
-      website: string;
-      email: string;
-      phone: string;
-    };
-    footer_note?: string;
-    show_generated_date?: boolean;
-    program_name?: string;
-  }): Promise<Buffer> {
+  async generateLoa(params: GenerateLoaParams): Promise<Buffer> {
     try {
       const response: AxiosResponse<ArrayBuffer> = await firstValueFrom(
         this.httpService.post(
