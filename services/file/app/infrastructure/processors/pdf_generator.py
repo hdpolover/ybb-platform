@@ -467,6 +467,21 @@ def _build_loa_html_document(
     # a footer (or had it cleared back to an empty Tiptap `<p></p>` shell).
     if not _is_effectively_empty_html(footer_html):
         footer_rendered = replace_tokens(footer_html)
+        # Automatic stamp fallback: an uploaded stampUrl has to render
+        # *somewhere*, even when the author's footerHtml never placed a
+        # {{stamp}} token — otherwise the seal silently vanishes despite the
+        # admin UI's "Rendered above the signature" caption. Detection is on
+        # the RAW footer_html param, BEFORE substitution — by the time
+        # footer_rendered exists the token text is already gone, so checking
+        # footer_rendered instead would always see it as "absent". This is an
+        # exact `'{{stamp}}' in text` containment check, same as how
+        # replace_tokens itself matches keys — whitespace variants like
+        # `{{ stamp }}` are not recognized by either, consistently.
+        if stamp_url and '{{stamp}}' not in footer_html:
+            footer_rendered = (
+                f'<div style="text-align:center;">{_img_tag(stamp_url, LOA_STAMP_MAX_HEIGHT, center=True)}</div>'
+                + footer_rendered
+            )
     elif signature_url or stamp_url or signer_name or signer_title:
         footer_rendered = _build_signer_html(signature_url, stamp_url, signer_name, signer_title)
     else:

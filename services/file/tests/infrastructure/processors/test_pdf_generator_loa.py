@@ -167,6 +167,76 @@ class TestSignatureTokenInFooterHtml:
         assert "<img" not in html
 
 
+class TestAutomaticStampFallback:
+    """A configured stampUrl has to render *somewhere* even when the
+    author's footerHtml never placed a {{stamp}} token — otherwise the
+    uploaded seal silently vanishes despite the admin UI's "Rendered above
+    the signature" caption. Auto-render only kicks in when the raw
+    footerHtml genuinely has no {{stamp}} token; an author who placed the
+    token explicitly keeps full control and never gets a duplicate.
+    """
+
+    def test_stamp_url_with_no_token_renders_above_the_footer_content(self):
+        html = _build_html(
+            footer_html="<p>Sincerely,</p><p>{{signature}}</p><p>Name</p>",
+            signature_url=SIGNATURE,
+            stamp_url=STAMP,
+        )
+        assert html.count("<img") == 2
+        assert STAMP in html
+        # Auto-rendered above everything, not just above {{signature}} —
+        # matches the "positioned above the footer content" contract.
+        assert html.index(STAMP) < html.index("Sincerely")
+        assert html.index(STAMP) < html.index(SIGNATURE)
+
+    def test_stamp_url_with_explicit_token_renders_exactly_once_no_auto_stamp(self):
+        html = _build_html(
+            footer_html="<p>{{stamp}}</p><p>Sincerely,</p><p>{{signature}}</p>",
+            signature_url=SIGNATURE,
+            stamp_url=STAMP,
+        )
+        assert html.count(STAMP) == 1
+        assert html.count("<img") == 2  # 1 stamp (at the token) + 1 signature
+
+    def test_no_stamp_url_renders_no_stamp_markup_at_all(self):
+        html = _build_html(
+            footer_html="<p>Sincerely,</p><p>{{signature}}</p>",
+            signature_url=SIGNATURE,
+        )
+        assert STAMP not in html
+        assert html.count("<img") == 1
+
+    def test_reproduces_the_exact_prod_footer_html_bug_report(self):
+        # The actual footerHtml from the affected prod template — no
+        # {{stamp}} token anywhere in it.
+        prod_footer_html = (
+            "<p>Sincerely,</p><p></p><p>{{signature}}</p>"
+            "<p>Muhammad Aldi Subakti<br>Chairman of {{program_name}}</p>"
+        )
+        html = _build_html(
+            footer_html=prod_footer_html,
+            placeholder_data={"{{program_name}}": "Youth Academic Forum"},
+            signature_url=SIGNATURE,
+            stamp_url=STAMP,
+        )
+        assert STAMP in html
+        assert SIGNATURE in html
+        assert html.count("<img") == 2
+
+    def test_detection_is_an_exact_string_match_like_replace_tokens(self):
+        # Whitespace-padded tokens aren't recognized by replace_tokens either
+        # (it's a plain str.replace on the literal key), so {{ stamp }} is
+        # treated as "no {{stamp}} token" and the auto-stamp still fires —
+        # documenting the shared limitation rather than silently diverging.
+        html = _build_html(
+            footer_html="<p>{{ stamp }}</p><p>{{signature}}</p>",
+            signature_url=SIGNATURE,
+            stamp_url=STAMP,
+        )
+        assert "{{ stamp }}" in html  # left untouched, not a real token
+        assert html.count("<img") == 2  # signature + the auto-rendered stamp
+
+
 class TestIsEffectivelyEmptyHtml:
     @pytest.mark.parametrize("text", ["", "   ", "<p></p>", "<p> </p>", "<p><br></p>", "<p><br/></p>", "<p>&nbsp;</p>", "<p></p><p><br></p>"])
     def test_empty_variants_are_treated_as_empty(self, text):
@@ -193,10 +263,16 @@ class TestFooterPrecedence:
         )
         assert "Sincerely," in html
         assert "Muhammad Aldi Subakti" in html
-        # The structured signer block re-renders the stamp/signature <img> tags
-        # and a bold-name div — none of that should appear alongside footer_html.
-        assert "<img" not in html
+        # The structured signer block's own re-render (bold-name div, and the
+        # signature <img> it would have added) must not appear alongside
+        # footer_html. The stamp DOES appear once — via the automatic stamp
+        # fallback (stampUrl set, no {{stamp}} token in this footer_html) —
+        # which is orthogonal to, and correctly composes with, the
+        # footer-precedence rule this test otherwise covers.
+        assert SIGNATURE not in html
         assert 'font-weight:bold' not in html
+        assert html.count("<img") == 1
+        assert STAMP in html
 
     def test_effectively_empty_footer_html_falls_back_to_signer_block(self):
         html = _build_html(
@@ -374,3 +450,39 @@ class TestGenerateLoaSyncSmoke:
             1 for obj in xobjects.values() if obj.get_object().get("/Subtype") == "/Image"
         )
         assert image_count == 1
+
+    def test_pdf_embeds_both_auto_stamp_and_signature_when_footer_has_no_stamp_token(self, tmp_path):
+        # Real end-to-end version of the prod bug: footerHtml has {{signature}}
+        # but no {{stamp}} token, stampUrl is set — the seal must still make
+        # it into the actual rendered PDF, not just doesn't-crash HTML.
+        png_bytes = base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
+            "+A8AAQUBAScY42YAAAAASUVORK5CYII="
+        )
+        signature_path = tmp_path / "signature.png"
+        stamp_path = tmp_path / "stamp.png"
+        signature_path.write_bytes(png_bytes)
+        stamp_path.write_bytes(png_bytes)
+
+        pdf_bytes = generate_loa_sync(
+            html_content="<p>Body.</p>",
+            header_html="",
+            footer_html=(
+                "<p>Sincerely,</p><p></p><p>{{signature}}</p>"
+                "<p>Muhammad Aldi Subakti<br>Chairman of {{program_name}}</p>"
+            ),
+            page_size="A4",
+            margins=DEFAULT_MARGINS,
+            placeholder_data={"{{program_name}}": "Youth Academic Forum"},
+            document_number="DOC-004",
+            signature_url=signature_path.as_uri(),
+            stamp_url=stamp_path.as_uri(),
+        )
+
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        resources = reader.pages[0].get("/Resources").get_object()
+        xobjects = resources.get("/XObject").get_object() if "/XObject" in resources else {}
+        image_count = sum(
+            1 for obj in xobjects.values() if obj.get_object().get("/Subtype") == "/Image"
+        )
+        assert image_count == 2
