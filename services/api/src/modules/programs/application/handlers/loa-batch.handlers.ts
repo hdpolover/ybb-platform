@@ -173,7 +173,10 @@ export class ReleaseLoaBatchHandler implements ICommandHandler<ReleaseLoaBatchCo
 
     const program = await this.prisma.program.findUnique({
       where: { id: batch.programId },
-      select: { name: true },
+      select: {
+        name: true,
+        brand: { select: { name: true, websiteUrl: true } },
+      },
     });
 
     const payload: LoaBatchReleasedPayload = {
@@ -182,6 +185,9 @@ export class ReleaseLoaBatchHandler implements ICommandHandler<ReleaseLoaBatchCo
       programName: program?.name ?? '',
       batchName: batch.name,
       recipients,
+      brand: program?.brand
+        ? { name: program.brand.name, websiteUrl: program.brand.websiteUrl }
+        : null,
     };
 
     try {

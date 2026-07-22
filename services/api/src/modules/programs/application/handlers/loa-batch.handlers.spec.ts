@@ -228,7 +228,10 @@ describe('ReleaseLoaBatchHandler', () => {
     mockRepo.findById.mockResolvedValue({ ...mockBatch });
     mockRepo.release.mockResolvedValue({ batch: releasedBatch, transitioned: true });
     mockRepo.findEligibleRecipients.mockResolvedValue([recipient]);
-    mockPrisma.program.findUnique.mockResolvedValue({ name: 'YBB Summit 2026' });
+    mockPrisma.program.findUnique.mockResolvedValue({
+      name: 'YBB Summit 2026',
+      brand: { name: 'YBB', websiteUrl: 'https://ybbfoundation.com' },
+    });
 
     const { ReleaseLoaBatchCommand } = await import('../commands/loa-batch.commands');
     await handler.execute(new ReleaseLoaBatchCommand('batch-1', 'prog-1'));
@@ -238,6 +241,10 @@ describe('ReleaseLoaBatchHandler', () => {
       mockBatch.submissionFrom,
       mockBatch.submissionTo,
     );
+    expect(mockPrisma.program.findUnique).toHaveBeenCalledWith({
+      where: { id: 'prog-1' },
+      select: { name: true, brand: { select: { name: true, websiteUrl: true } } },
+    });
     expect(mockUserNotificationRepo.create).toHaveBeenCalledTimes(1);
     expect(mockProducer.emit).toHaveBeenCalledWith('loa.batch.released', {
       batchId: 'batch-1',
@@ -245,7 +252,23 @@ describe('ReleaseLoaBatchHandler', () => {
       programName: 'YBB Summit 2026',
       batchName: 'Wave 1',
       recipients: [recipient],
+      brand: { name: 'YBB', websiteUrl: 'https://ybbfoundation.com' },
     });
+  });
+
+  it('emits brand: null when the program has no brand relation loaded', async () => {
+    mockRepo.findById.mockResolvedValue({ ...mockBatch });
+    mockRepo.release.mockResolvedValue({ batch: releasedBatch, transitioned: true });
+    mockRepo.findEligibleRecipients.mockResolvedValue([recipient]);
+    mockPrisma.program.findUnique.mockResolvedValue({ name: 'YBB Summit 2026', brand: null });
+
+    const { ReleaseLoaBatchCommand } = await import('../commands/loa-batch.commands');
+    await handler.execute(new ReleaseLoaBatchCommand('batch-1', 'prog-1'));
+
+    expect(mockProducer.emit).toHaveBeenCalledWith(
+      'loa.batch.released',
+      expect.objectContaining({ brand: null }),
+    );
   });
 
   it('does NOT re-notify when re-releasing an already-released batch (idempotent)', async () => {

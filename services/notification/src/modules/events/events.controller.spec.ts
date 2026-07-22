@@ -250,4 +250,41 @@ describe('EventsController.handleLoaBatchReleased', () => {
 
     expect(sendLoaReadyEmail).toHaveBeenCalledTimes(2);
   });
+
+  it('threads the batch-level brand through to every recipient email', async () => {
+    const payload = {
+      batchId: 'batch-1',
+      programId: 'prog-1',
+      programName: 'YBB Summit 2026',
+      batchName: 'Wave 1',
+      recipients: [{ userId: 'user-1', email: 'jane@example.com', fullName: 'Jane Doe' }],
+      brand: { name: 'YBB', websiteUrl: 'youthacademicforum.com' },
+    };
+
+    await controller.handleLoaBatchReleased(payload, makeContext());
+
+    expect(sendLoaReadyEmail).toHaveBeenCalledWith(
+      'jane@example.com',
+      expect.objectContaining({
+        brand: { name: 'YBB', websiteUrl: 'youthacademicforum.com' },
+      }),
+    );
+  });
+
+  it('passes brand: undefined when the payload has no brand', async () => {
+    const payload = {
+      batchId: 'batch-1',
+      programId: 'prog-1',
+      programName: 'YBB Summit 2026',
+      batchName: 'Wave 1',
+      recipients: [{ userId: 'user-1', email: 'jane@example.com', fullName: 'Jane Doe' }],
+    };
+
+    await controller.handleLoaBatchReleased(payload, makeContext());
+
+    expect(sendLoaReadyEmail).toHaveBeenCalledWith(
+      'jane@example.com',
+      expect.objectContaining({ brand: undefined }),
+    );
+  });
 });
