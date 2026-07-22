@@ -224,11 +224,12 @@ def generate_from_template_sync(
 
 LOA_LOGO_MAX_HEIGHT = '60pt'
 LOA_STAMP_MAX_HEIGHT = '70pt'
+LOA_STAMP_MAX_WIDTH = '120pt'
 LOA_SIGNATURE_MAX_HEIGHT = '36pt'
 LOA_SIGNER_RULE_WIDTH = '140pt'
 
 
-def _img_tag(url: str, max_height: str, center: bool = False) -> str:
+def _img_tag(url: str, max_height: str, center: bool = False, max_width: Optional[str] = None) -> str:
     """Build a WeasyPrint-renderable <img> tag for a stored asset URL.
 
     WeasyPrint fetches http(s) image sources itself, so a plain <img src="...">
@@ -237,12 +238,20 @@ def _img_tag(url: str, max_height: str, center: bool = False) -> str:
 
     A block-level image ignores the parent's text-align, so `center` adds the
     `margin:0 auto` that actually centers it.
+
+    `max_width` is optional and height-only by default (max-width:100%, i.e.
+    "don't overflow the container") — used as-is by logo/signature. Passing
+    an explicit pt value (the stamp's LOA_STAMP_MAX_WIDTH) additionally caps
+    width, which matters for a wide/rectangular asset: without it, a logo
+    lockup capped only by height renders as a banner instead of a compact
+    mark, since the aspect ratio is preserved from whichever dimension binds.
     """
     if not url:
         return ''
     centering = 'margin:0 auto;' if center else ''
+    max_width_css = f'max-width:{max_width};' if max_width else 'max-width:100%;'
     return (
-        f'<img src="{url}" style="max-height:{max_height};max-width:100%;'
+        f'<img src="{url}" style="max-height:{max_height};{max_width_css}'
         f'display:block;{centering}" />'
     )
 
@@ -390,7 +399,7 @@ def _build_signer_html(signature_url: str, stamp_url: str, signer_name: str, sig
     The rule only appears when there is a name to sit under it — a bare line over
     empty space reads as a rendering fault, not a signature block.
     """
-    stamp_cell = _img_tag(stamp_url, LOA_STAMP_MAX_HEIGHT, center=True)
+    stamp_cell = _img_tag(stamp_url, LOA_STAMP_MAX_HEIGHT, center=True, max_width=LOA_STAMP_MAX_WIDTH)
     signature_cell = _img_tag(signature_url, LOA_SIGNATURE_MAX_HEIGHT, center=True)
     rule_html = (
         f'<div style="width:{LOA_SIGNER_RULE_WIDTH};border-top:0.75pt solid #000;'
@@ -442,7 +451,7 @@ def _build_loa_html_document(
     if signature_url:
         image_tokens['{{signature}}'] = _img_tag(signature_url, LOA_SIGNATURE_MAX_HEIGHT)
     if stamp_url:
-        image_tokens['{{stamp}}'] = _img_tag(stamp_url, LOA_STAMP_MAX_HEIGHT)
+        image_tokens['{{stamp}}'] = _img_tag(stamp_url, LOA_STAMP_MAX_HEIGHT, max_width=LOA_STAMP_MAX_WIDTH)
     merged_data = {**placeholder_data, **image_tokens}
 
     def replace_tokens(text: str, data: Optional[Dict[str, Any]] = None) -> str:
@@ -488,7 +497,7 @@ def _build_loa_html_document(
                 **merged_data,
                 '{{signature}}': (
                     _img_tag(signature_url, LOA_SIGNATURE_MAX_HEIGHT)
-                    + _img_tag(stamp_url, LOA_STAMP_MAX_HEIGHT)
+                    + _img_tag(stamp_url, LOA_STAMP_MAX_HEIGHT, max_width=LOA_STAMP_MAX_WIDTH)
                 ),
             }
             footer_rendered = replace_tokens(footer_html, footer_merged_data)
@@ -500,7 +509,9 @@ def _build_loa_html_document(
                 # above the footer content so the seal doesn't vanish
                 # entirely.
                 footer_rendered = (
-                    f'<div style="text-align:center;">{_img_tag(stamp_url, LOA_STAMP_MAX_HEIGHT, center=True)}</div>'
+                    f'<div style="text-align:center;">'
+                    f'{_img_tag(stamp_url, LOA_STAMP_MAX_HEIGHT, center=True, max_width=LOA_STAMP_MAX_WIDTH)}'
+                    f'</div>'
                     + footer_rendered
                 )
     elif signature_url or stamp_url or signer_name or signer_title:

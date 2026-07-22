@@ -13,6 +13,9 @@ from PyPDF2 import PdfReader
 
 from app.infrastructure.processors.pdf_generator import (
     LOA_PAGE_FOOTER_EXTRA_BOTTOM_MARGIN_PT,
+    LOA_SIGNATURE_MAX_HEIGHT,
+    LOA_STAMP_MAX_HEIGHT,
+    LOA_STAMP_MAX_WIDTH,
     _build_loa_html_document,
     _build_signer_html,
     _build_structured_header_html,
@@ -65,6 +68,17 @@ class TestImgTag:
 
     def test_empty_url_renders_nothing(self):
         assert _img_tag("", "60pt", center=True) == ""
+
+    def test_max_width_defaults_to_container_relative_100_percent(self):
+        # Logo/signature never pass max_width — a wide/rectangular asset for
+        # those should shrink only to fit the container, not a fixed cap.
+        tag = _img_tag(LOGO, "60pt")
+        assert "max-width:100%" in tag
+
+    def test_max_width_uses_the_explicit_cap_when_given(self):
+        tag = _img_tag(LOGO, "70pt", max_width="120pt")
+        assert "max-width:120pt" in tag
+        assert "max-width:100%" not in tag
 
 
 class TestStructuredHeader:
@@ -132,6 +146,11 @@ class TestSignerFooter:
         html = _build_signer_html(signature, stamp, "", "")
         assert html.count("<img") == bool(signature) + bool(stamp)
 
+    def test_stamp_gets_both_height_and_width_caps_signature_only_height(self):
+        html = _build_signer_html(SIGNATURE, STAMP, "", "")
+        assert f"max-height:{LOA_STAMP_MAX_HEIGHT};max-width:{LOA_STAMP_MAX_WIDTH}" in html
+        assert f"max-height:{LOA_SIGNATURE_MAX_HEIGHT};max-width:100%" in html
+
 
 class TestSignatureTokenInFooterHtml:
     """Regression coverage for the original prod bug: footerHtml wins over
@@ -160,6 +179,16 @@ class TestSignatureTokenInFooterHtml:
         assert html.count("<img") == 2
         assert STAMP in html
         assert SIGNATURE in html
+
+    def test_explicit_stamp_token_gets_both_height_and_width_caps(self):
+        html = _build_html(
+            footer_html="<p>{{stamp}}</p><p>{{signature}}</p>",
+            signature_url=SIGNATURE,
+            stamp_url=STAMP,
+        )
+        assert f"max-height:{LOA_STAMP_MAX_HEIGHT};max-width:{LOA_STAMP_MAX_WIDTH}" in html
+        # Signature stays height-capped only — no new width cap for it.
+        assert f"max-height:{LOA_SIGNATURE_MAX_HEIGHT};max-width:100%" in html
 
     def test_neither_url_leaves_tokens_unexpanded(self):
         html = _build_html(footer_html="<p>{{signature}}</p>")
@@ -192,6 +221,15 @@ class TestAutomaticStampFallback:
         # immediately after it, then the name line — the stamp attaches to
         # the signature, it does not float above the whole block.
         assert html.index("Sincerely") < html.index(SIGNATURE) < html.index(STAMP) < html.index("Name")
+
+    def test_auto_stamp_gets_both_height_and_width_caps_signature_only_height(self):
+        html = _build_html(
+            footer_html="<p>Sincerely,</p><p>{{signature}}</p><p>Name</p>",
+            signature_url=SIGNATURE,
+            stamp_url=STAMP,
+        )
+        assert f"max-height:{LOA_STAMP_MAX_HEIGHT};max-width:{LOA_STAMP_MAX_WIDTH}" in html
+        assert f"max-height:{LOA_SIGNATURE_MAX_HEIGHT};max-width:100%" in html
 
     def test_stamp_url_with_explicit_token_renders_exactly_once_no_auto_stamp(self):
         html = _build_html(
@@ -240,6 +278,7 @@ class TestAutomaticStampFallback:
         )
         assert STAMP in html
         assert html.index(STAMP) < html.index("Sincerely")
+        assert f"max-height:{LOA_STAMP_MAX_HEIGHT};max-width:{LOA_STAMP_MAX_WIDTH}" in html
 
     def test_stamp_url_with_signature_token_but_no_signature_url_falls_back(self):
         # Edge case: footerHtml has {{signature}} but signature_url itself

@@ -124,6 +124,68 @@ const labelCls = "block text-[11px] font-medium text-zinc-500 mb-1";
 
 // ─── Image Upload Field ───────────────────────────────────────────────────────
 
+interface StampImageWarnings {
+  wideAspectRatio: boolean;
+  noTransparency: boolean;
+}
+
+/**
+ * Advisory-only checks for a stamp image, run against the raw File the admin
+ * just picked (before upload finishes) via an object URL — local blob reads
+ * never taint the canvas, so this is safe without touching CORS at all.
+ * Samples a 3x3 grid (corners, edge midpoints, center) rather than scanning
+ * every pixel, which is plenty to tell "has a transparent background" from
+ * "fully opaque" without cost scaling with image size.
+ */
+async function analyzeStampImage(file: File): Promise<StampImageWarnings | null> {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error("Could not read image"));
+      el.src = objectUrl;
+    });
+
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
+    if (!w || !h) return null;
+
+    const wideAspectRatio = w / h >= 2 || h / w >= 2;
+
+    let noTransparency = false;
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(img, 0, 0);
+        const xs = [0, Math.floor((w - 1) / 2), w - 1];
+        const ys = [0, Math.floor((h - 1) / 2), h - 1];
+        noTransparency = true;
+        outer: for (const x of xs) {
+          for (const y of ys) {
+            const alpha = ctx.getImageData(x, y, 1, 1).data[3];
+            if (alpha < 250) {
+              noTransparency = false;
+              break outer;
+            }
+          }
+        }
+      }
+    } catch {
+      // Advisory only — if the canvas read fails for any reason, skip the
+      // transparency warning rather than risk blocking the upload flow.
+      noTransparency = false;
+    }
+
+    return { wideAspectRatio, noTransparency };
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 function ImageUploadField({
   label,
   value,
@@ -131,6 +193,7 @@ function ImageUploadField({
   programId,
   brandId,
   userId,
+  stampWarnings = false,
 }: {
   label: string;
   value: string;
@@ -138,17 +201,28 @@ function ImageUploadField({
   programId: string;
   brandId: string;
   userId: string;
+  /** Enables the stamp-specific advisory checks (aspect ratio, transparency). */
+  stampWarnings?: boolean;
 }) {
   const [uploading, setUploading] = useState(false);
   const [mediaOpen, setMediaOpen] = useState(false);
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [mediaLoading, setMediaLoading] = useState(false);
+  const [imageWarnings, setImageWarnings] = useState<StampImageWarnings | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
+    if (stampWarnings) {
+      // Fire-and-forget: reflects the file the admin actually chose, but
+      // never gates the upload — it's advisory only.
+      setImageWarnings(null);
+      analyzeStampImage(file)
+        .then(setImageWarnings)
+        .catch(() => setImageWarnings(null));
+    }
     try {
       const result = await uploadFileViaPresignedUrl(file, {
         userId,
@@ -191,7 +265,7 @@ function ImageUploadField({
             <button
               type="button"
               title="Remove"
-              onClick={() => onChange("")}
+              onClick={() => { setImageWarnings(null); onChange(""); }}
               className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white text-zinc-400 shadow ring-1 ring-zinc-200 hover:text-red-500"
             >
               <X className="h-3 w-3" />
@@ -224,6 +298,25 @@ function ImageUploadField({
           className="hidden"
           onChange={handleFileChange}
         />
+        {stampWarnings && imageWarnings && (imageWarnings.wideAspectRatio || imageWarnings.noTransparency) ? (
+          <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2">
+            <div className="flex items-start gap-1.5">
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-amber-600" />
+              <div className="min-w-0 flex-1 space-y-1">
+                {imageWarnings.wideAspectRatio ? (
+                  <p className="text-[10px] text-amber-700">
+                    This looks like a wide logo, not a stamp. Stamps look best roughly square.
+                  </p>
+                ) : null}
+                {imageWarnings.noTransparency ? (
+                  <p className="text-[10px] text-amber-700">
+                    A transparent PNG will layer more cleanly over the letter than one with a solid background.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <Dialog open={mediaOpen} onOpenChange={setMediaOpen}>
@@ -1012,8 +1105,11 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
                 programId={resolvedProgramId}
                 brandId={brandId}
                 userId={userId}
+                stampWarnings
               />
-              <p className="mt-1 text-[10px] text-zinc-400">Rendered above the signature.</p>
+              <p className="mt-1 text-[10px] text-zinc-400">
+                Placed below the signature automatically, unless you insert a {"{{stamp}}"} token in the footer text.
+              </p>
             </div>
 
             <div className="mb-4">
