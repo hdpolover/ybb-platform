@@ -954,12 +954,41 @@ export class EmailService {
     return this.sendRawEmail(to, subject, html);
   }
 
-  private resolveDocumentsUrl(brand?: any): string {
+  // Some brands.website_url values in prod have no scheme at all (bare
+  // domains like "youthacademicforum.com"), because the column has never
+  // been validated/normalized on write. Used raw in an <a href>, a bare
+  // domain renders as a broken relative link instead of navigating off-site.
+  // This forces every resolved base URL to be an absolute https:// origin
+  // with no trailing slash. Returns undefined for empty/missing input so
+  // callers can chain a `??` fallback.
+  private toAbsoluteHttpsUrl(url?: string | null): string | undefined {
+    if (!url) return undefined;
+    const trimmed = url.trim().replace(/\/+$/, '');
+    if (!trimmed) return undefined;
+    return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  }
+
+  // Shared by resolveDocumentsUrl/resolveSupportUrl: brand.websiteUrl wins,
+  // then FRONTEND_URL, then a dev-only localhost fallback. In production,
+  // hitting the fallback means neither source was configured — that's a
+  // config bug, not a normal path, so it's logged loudly instead of
+  // silently shipping a broken link to a real inbox.
+  private resolvePortalBaseUrl(brand: any, callerLabel: string): string {
     const baseUrl =
-      brand?.websiteUrl?.replace(/\/$/, '') ||
-      this.configService.get('FRONTEND_URL') ||
-      'http://localhost:3001';
-    return `${baseUrl}/dashboard/documents`;
+      this.toAbsoluteHttpsUrl(brand?.websiteUrl) ??
+      this.toAbsoluteHttpsUrl(this.configService.get('FRONTEND_URL'));
+    if (baseUrl) return baseUrl;
+
+    if (this.configService.get('NODE_ENV') === 'production') {
+      this.logger.error(
+        `[${callerLabel}] could not resolve a portal base URL — brand.websiteUrl and FRONTEND_URL are both unset. Falling back to localhost; this link will be broken for the recipient.`,
+      );
+    }
+    return 'http://localhost:3001';
+  }
+
+  private resolveDocumentsUrl(brand?: any): string {
+    return `${this.resolvePortalBaseUrl(brand, 'resolveDocumentsUrl')}/dashboard/documents`;
   }
 
   async sendAmbassadorWelcomeEmail(
@@ -979,10 +1008,6 @@ export class EmailService {
   }
 
   private resolveSupportUrl(brand?: any): string {
-    const baseUrl =
-      brand?.websiteUrl?.replace(/\/$/, '') ||
-      this.configService.get('FRONTEND_URL') ||
-      'http://localhost:3001';
-    return `${baseUrl}/dashboard/support-tickets`;
+    return `${this.resolvePortalBaseUrl(brand, 'resolveSupportUrl')}/dashboard/support-tickets`;
   }
 }

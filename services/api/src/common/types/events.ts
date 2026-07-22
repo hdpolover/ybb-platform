@@ -33,10 +33,19 @@ export interface LoaBatchReleasedRecipient {
   fullName: string;
 }
 
+// Batch-level, not per-recipient: one release batch belongs to exactly one
+// program, which belongs to exactly one brand, so there's nothing to
+// disambiguate per recipient.
+export interface LoaBatchReleasedBrand {
+  name: string | null;
+  websiteUrl: string | null;
+}
+
 export interface LoaBatchReleasedPayload {
   batchId: string;
   programId: string;
   programName: string;
   batchName: string;
   recipients: LoaBatchReleasedRecipient[];
+  brand: LoaBatchReleasedBrand | null;
 }

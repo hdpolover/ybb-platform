@@ -697,6 +697,19 @@ export class EventsController {
         const recipients = getLoaRecipients(payload, 'recipients');
         if (recipients.length === 0) return;
 
+        // Batch-level brand (one release batch = one program = one brand),
+        // same shape as the payment-event handlers above. Used by
+        // resolveDocumentsUrl() to link the "Download Your Invitation
+        // Letter" button at the brand's own portal instead of a hardcoded
+        // fallback.
+        const rawBrand = asRecord(payload.brand);
+        const brand = payload.brand
+          ? {
+              name: getString(rawBrand, 'name'),
+              websiteUrl: getString(rawBrand, 'websiteUrl') ?? null,
+            }
+          : undefined;
+
         // Per-recipient errors are caught and logged rather than thrown: this
         // event carries the whole batch as one message, so throwing would
         // nack the entire message and (depending on retry/idempotency state)
@@ -709,6 +722,7 @@ export class EventsController {
               name: recipient.fullName || 'Participant',
               program: programName,
               programId,
+              brand,
             });
           } catch (error) {
             this.logger.error(
