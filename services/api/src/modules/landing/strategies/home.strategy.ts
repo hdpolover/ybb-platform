@@ -143,7 +143,9 @@ export class HomeStrategy implements ILandingPageStrategy {
           resources: {
             where: { isActive: true, isPublic: true },
             take: 5,
-            orderBy: { order: 'asc' },
+            // Secondary key keeps ties deterministic — duplicate `order` values
+            // otherwise surface in arbitrary DB order (see MEYS IDN/ENG mixup).
+            orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
           },
           objectives: {
             where: { isActive: true },

@@ -133,7 +133,7 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                         },
                         resources: {
                             where: { isActive: true, type: 'guide' },
-                            orderBy: { order: 'asc' },
+                            orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
                             select: {
                                 title: true,
                                 fileUrl: true,

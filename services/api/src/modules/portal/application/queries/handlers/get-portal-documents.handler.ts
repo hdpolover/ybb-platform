@@ -51,7 +51,7 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
                                 type: true, fileUrl: true, sourceType: true, linkUrl: true,
                                 isPublic: true, updatedAt: true,
                             },
-                            orderBy: { order: 'asc' },
+                            orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
                         },
                     },
                 },
