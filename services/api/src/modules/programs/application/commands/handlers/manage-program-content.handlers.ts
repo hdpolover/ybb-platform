@@ -216,6 +216,10 @@ async function invalidateResourceCaches(
         });
         if (program?.brandId) {
             await Promise.all([
+                // Without dropping the DB snapshot too, the next request re-hydrates
+                // redis from the hour-fresh brand_landing_snapshots row and the
+                // resource change stays invisible for up to an hour.
+                prisma.brandLandingSnapshot.deleteMany({ where: { brandId: program.brandId } }),
                 cacheService.invalidateBrandLandingCaches(program.brandId),
                 cacheService.invalidateByPattern('program:*'),
                 cacheService.invalidateKey(CACHE_KEYS.PROGRAM_RESOURCES(programId)),
