@@ -483,7 +483,14 @@ export class GetPortalSubmissionDetailHandler
             case 'dateofbirth':
             case 'birthdate':
             case 'dob':
-                return participant.birthdate ? this.toDateInputValue(participant.birthdate) : undefined;
+                // Onboarding only asks for a birth year, so participant.birthdate
+                // is stored as Jan 1 of that year. Prefilling that placeholder
+                // lets applicants submit it unchanged, which is how thousands of
+                // "January 1st" birthdates ended up in personal_data. Skip the
+                // prefill so the form forces a real date instead.
+                return participant.birthdate && !this.isYearOnlyBirthdate(participant.birthdate)
+                    ? this.toDateInputValue(participant.birthdate)
+                    : undefined;
             case 'gender':
             case 'sex':
                 return participant.gender;
@@ -556,6 +563,10 @@ export class GetPortalSubmissionDetailHandler
 
     private normalizeFieldName(name: string): string {
         return name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    }
+
+    private isYearOnlyBirthdate(value: Date): boolean {
+        return value.getUTCMonth() === 0 && value.getUTCDate() === 1;
     }
 
     private toDateInputValue(value: Date | string | number): string | undefined {
