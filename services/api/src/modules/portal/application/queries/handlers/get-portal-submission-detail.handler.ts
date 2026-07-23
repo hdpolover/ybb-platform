@@ -565,8 +565,12 @@ export class GetPortalSubmissionDetailHandler
         return name.toLowerCase().replace(/[^a-z0-9]/g, '');
     }
 
-    private isYearOnlyBirthdate(value: Date): boolean {
-        return value.getUTCMonth() === 0 && value.getUTCDate() === 1;
+    private isYearOnlyBirthdate(value: Date | string | number): boolean {
+        // Cached participants arrive JSON-serialized, so birthdate may be an
+        // ISO string rather than a Date.
+        const date = value instanceof Date ? value : new Date(value);
+        if (Number.isNaN(date.getTime())) return false;
+        return date.getUTCMonth() === 0 && date.getUTCDate() === 1;
     }
 
     private toDateInputValue(value: Date | string | number): string | undefined {
