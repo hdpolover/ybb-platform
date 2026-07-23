@@ -12,6 +12,7 @@ type ApplicationExportPayload = Prisma.ParticipantApplicationGetPayload<{
         createdAt: true;
         registrationPaymentStatus: true;
         programPaymentStatus: true;
+        personalData: true;
         participant: {
             select: {
                 fullName: true;
@@ -30,7 +31,18 @@ import { ExportApplicationsQuery } from '../export-applications.query';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { ExcelService } from '@shared/infrastructure/excel/excel.service';
 import type { Column } from 'exceljs';
-import { buildE164Phone } from '@shared/utils/phone-e164';
+import { buildE164Phone, extractAndSanitizePhone, extractPhoneFromPersonalData } from '@shared/utils/phone-e164';
+
+// The application form stores the participant's date of birth in the
+// personal_data JSON (key differs per form generation). participants.birthdate
+// is NOT a usable fallback: onboarding only asks for a birth year, so that
+// column is always Jan 1 of the year.
+function extractBirthdateFromPersonalData(personalData: unknown): string {
+    if (!personalData || typeof personalData !== 'object') return '';
+    const pd = personalData as Record<string, unknown>;
+    const raw = pd.birthdate ?? pd.date_of_birth;
+    return typeof raw === 'string' ? raw : '';
+}
 
 @Injectable()
 @QueryHandler(ExportApplicationsQuery)
@@ -104,6 +116,7 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
                     createdAt: true,
                     registrationPaymentStatus: true,
                     programPaymentStatus: true,
+                    personalData: true,
                     participant: {
                         select: {
                             fullName: true,
@@ -123,17 +136,29 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
             }
 
             for (const app of applications) {
+                // The application form's personal_data JSON is the source of
+                // truth for phone; the participant columns are a legacy
+                // fallback that is empty for nearly all prod rows.
+                const phone = extractPhoneFromPersonalData(app.personalData)
+                    ? extractAndSanitizePhone(app.personalData)
+                    : {
+                        value:
+                            buildE164Phone(
+                                app.participant?.phoneCountryCode,
+                                app.participant?.phoneNumber,
+                            ) ?? 'N/A',
+                        isValid: false,
+                    };
+
                 rows.push({
                     id: app.id,
                     program: app.program?.name ?? 'N/A',
                     participantName: app.participant?.fullName ?? 'N/A',
                     email: app.participant?.user?.email ?? 'N/A',
                     country: app.participant?.originCountry ?? 'N/A',
-                    phone:
-                        buildE164Phone(
-                            app.participant?.phoneCountryCode,
-                            app.participant?.phoneNumber,
-                        ) ?? 'N/A',
+                    phone: phone.value,
+                    phoneValid: phone.isValid ? 'Yes' : 'No',
+                    dateOfBirth: extractBirthdateFromPersonalData(app.personalData),
                     status: app.status,
                     category: app.applicationCategory,
                     appliedAt: new Date(app.createdAt).toISOString(),
@@ -157,6 +182,8 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
             { header: 'Email', key: 'email', width: 28 },
             { header: 'Country', key: 'country', width: 10 },
             { header: 'Phone', key: 'phone', width: 16 },
+            { header: 'Phone Valid', key: 'phoneValid', width: 12 },
+            { header: 'Date of Birth', key: 'dateOfBirth', width: 14 },
             { header: 'Status', key: 'status', width: 14 },
             { header: 'Category', key: 'category', width: 14 },
             { header: 'Applied At', key: 'appliedAt', width: 22 },
