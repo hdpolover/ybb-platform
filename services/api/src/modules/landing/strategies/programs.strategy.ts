@@ -98,7 +98,8 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                     where: {
                         type: 'guide',
                         isActive: true
-                    }
+                    },
+                    orderBy: [{ order: 'asc' }, { createdAt: 'asc' }]
                 },
                 faqs: {
                     where: { isActive: true },
@@ -131,7 +132,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                 include: {
                     objectives: { where: { isActive: true }, orderBy: { order: 'asc' } },
                     subthemes: { where: { isActive: true }, orderBy: { order: 'asc' } },
-                    resources: { where: { type: 'guide', isActive: true } },
+                    resources: { where: { type: 'guide', isActive: true }, orderBy: [{ order: 'asc' }, { createdAt: 'asc' }] },
                     faqs: { where: { isActive: true }, take: 5, orderBy: { order: 'asc' } },
                     timeline: { where: { isActive: true }, orderBy: { order: 'asc' } },
                     schedules: { where: { isActive: true }, orderBy: { order: 'asc' } },
