@@ -40,6 +40,11 @@ interface LoaParticipantPickerProps {
 export function LoaParticipantPicker({ programId, open, onOpenChange, onSelect }: LoaParticipantPickerProps): React.JSX.Element {
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<Application[]>([]);
+  // Sum of each status request's `total` (server-side match count for that
+  // status, ignoring our client-side RESULTS_LIMIT/dedup). Used only to tell
+  // whether the list below is truncated - see the notice rendered below the
+  // list. Not an exact unique-match count (see comment at its usage site).
+  const [totalMatching, setTotalMatching] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,6 +52,7 @@ export function LoaParticipantPicker({ programId, open, onOpenChange, onSelect }
     if (!open) return;
     setSearch("");
     setResults([]);
+    setTotalMatching(0);
     setError(null);
   }, [open]);
 
@@ -70,9 +76,17 @@ export function LoaParticipantPicker({ programId, open, onOpenChange, onSelect }
           const deduped = Array.from(new Map(merged.map((app) => [app.id, app])).values());
           deduped.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
           setResults(deduped.slice(0, RESULTS_LIMIT));
+          // An application has exactly one status, so the two ELIGIBLE_STATUSES
+          // requests can't double-count the same application - summing their
+          // `total` fields is a true count of matches across both statuses,
+          // even though `results` itself is capped at RESULTS_LIMIT.
+          setTotalMatching(responses.reduce((sum, r) => sum + r.total, 0));
         })
         .catch(() => {
-          if (!cancelled) setError("Failed to search applications");
+          if (!cancelled) {
+            setError("Failed to search applications");
+            setTotalMatching(0);
+          }
         })
         .finally(() => {
           if (!cancelled) setLoading(false);
@@ -143,6 +157,15 @@ export function LoaParticipantPicker({ programId, open, onOpenChange, onSelect }
               </ul>
             )}
           </div>
+          {!loading && !error && totalMatching > results.length ? (
+            // This picker exists so an admin can reproduce a complaint about a
+            // specific named person - silently dropping matches past
+            // RESULTS_LIMIT would defeat that, so a common name in a large
+            // program must say so instead of just looking complete.
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-center text-[10px] text-amber-700">
+              Showing {results.length} of {totalMatching} matches. Refine your search to find a specific participant.
+            </p>
+          ) : null}
         </div>
       </DialogContent>
     </Dialog>

@@ -65,6 +65,21 @@ describe('LOA preview/download parity', () => {
       pageSize: 'A4',
       margins: { top: 40, right: 40, bottom: 40, left: 40 },
       signatureUrl: 'https://example.com/sig.png',
+      // These five were previously omitted from this fixture, which let the
+      // parity test stay green even if reading one of them diverged between
+      // the two call sites (both would collapse to the same buildGenerateLoaParams
+      // default). See resolveLoaLayoutConfig - populating all nine fields the
+      // cast reads, including `header`, makes the test actually constrain it.
+      logoUrl: 'https://example.com/logo.png',
+      stampUrl: 'https://example.com/stamp.png',
+      footerNote: 'This document is computer-generated.',
+      showGeneratedDate: true,
+      header: {
+        tagline: 'Empowering Youth Leaders',
+        website: 'ybb.foundation',
+        email: 'info@ybb.foundation',
+        phone: '+62 21 000 0000',
+      },
     },
   };
 

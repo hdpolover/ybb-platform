@@ -354,6 +354,10 @@ export class ProgramContentController {
       // Decoded client-side in admin-dashboard's previewDocumentTemplate().
       'X-Preview-Participant-Name': encodeURIComponent(result.participantName),
       'X-Preview-Is-Sample': String(result.isSample),
+      // Which application was actually resolved (empty when isSample) - lets
+      // the caller pin an auto-picked result instead of silently re-picking
+      // (possibly a different application) on the next request.
+      'X-Preview-Application-Id': result.applicationId ?? '',
     });
     return new StreamableFile(result.buffer);
   }

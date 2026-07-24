@@ -5,7 +5,7 @@ import { LoaEligibilityService } from './loa-eligibility.service';
 import { LoaDocumentNumberService } from './loa-document-number.service';
 import { LoaRenderDataService } from './loa-render-data.service';
 import { PortalCacheService } from './portal-cache.service';
-import { resolveLoaSignature, buildGenerateLoaParams } from '@shared/utils/loa-render-payload.util';
+import { resolveLoaSignature, buildGenerateLoaParams, resolveLoaLayoutConfig } from '@shared/utils/loa-render-payload.util';
 
 export interface LoaDownloadResult {
   buffer: Buffer;
@@ -71,9 +71,10 @@ export class LoaDownloadService {
       template.id,
     );
 
-    // 7. Extract layout settings from layoutConfig
+    // 7. Extract layout settings from layoutConfig - shared with the admin
+    //    preview handler, see resolveLoaLayoutConfig for why.
     const layoutConfig = (template.layoutConfig ?? {}) as Record<string, unknown>;
-    const headerConfig = (layoutConfig['header'] as Record<string, unknown> | undefined) ?? undefined;
+    const resolvedLayoutConfig = resolveLoaLayoutConfig(layoutConfig);
 
     // 7b. Resolve signature - legacy fallback is raw layoutConfig.signatureUrl with
     // empty signer name/title. If layoutConfig.signatureId is set, look up the
@@ -98,24 +99,7 @@ export class LoaDownloadService {
     const buffer = await this.fileServiceClient.generateLoa(
       buildGenerateLoaParams({
         htmlContent: template.htmlContent,
-        layoutConfig: {
-          headerHtml: layoutConfig['headerHtml'] as string | undefined,
-          footerHtml: layoutConfig['footerHtml'] as string | undefined,
-          pageSize: layoutConfig['pageSize'] as string | undefined,
-          margins: layoutConfig['margins'] as { top: number; right: number; bottom: number; left: number } | undefined,
-          logoUrl: layoutConfig['logoUrl'] as string | undefined,
-          stampUrl: layoutConfig['stampUrl'] as string | undefined,
-          footerNote: layoutConfig['footerNote'] as string | undefined,
-          showGeneratedDate: layoutConfig['showGeneratedDate'] as boolean | undefined,
-          header: headerConfig
-            ? {
-                tagline: headerConfig['tagline'] as string | undefined,
-                website: headerConfig['website'] as string | undefined,
-                email: headerConfig['email'] as string | undefined,
-                phone: headerConfig['phone'] as string | undefined,
-              }
-            : undefined,
-        },
+        layoutConfig: resolvedLayoutConfig,
         placeholders,
         sourceMap,
         documentNumber: docNumber,

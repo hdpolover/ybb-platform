@@ -56,6 +56,18 @@ describe('LoaPreviewParticipantService', () => {
       expect(result).toEqual({ isSample: false, applicationId: 'app-auto-1' });
     });
 
+    it('orders by submittedAt then id, so two independent calls against the same pool always agree', async () => {
+      (prisma.participantApplication.findFirst as jest.Mock).mockResolvedValue({ id: 'app-auto-1' });
+
+      await service.resolveApplicationId('program-1', undefined);
+
+      expect(prisma.participantApplication.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: [{ submittedAt: 'asc' }, { id: 'asc' }],
+        }),
+      );
+    });
+
     it('falls back to isSample: true only when the pool is empty', async () => {
       (prisma.participantApplication.findFirst as jest.Mock).mockResolvedValue(null);
 

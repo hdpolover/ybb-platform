@@ -7,7 +7,7 @@ import {
   resolveLoaSignature,
   buildLoaSourceMap,
   buildGenerateLoaParams,
-  LoaLayoutConfigInput,
+  resolveLoaLayoutConfig,
 } from '@shared/utils/loa-render-payload.util';
 import { LoaRenderDataService } from '@modules/portal/application/services/loa-render-data.service';
 import { LoaPreviewParticipantService, PREVIEW_DOCUMENT_NUMBER } from '../services/loa-preview-participant.service';
@@ -47,6 +47,11 @@ export interface PreviewLoaResult {
   buffer: Buffer;
   participantName: string;
   isSample: boolean;
+  // Which application was actually resolved and rendered - null when
+  // isSample. Reported back to the caller (see program-content.controller.ts
+  // X-Preview-Application-Id) so a caller that fired an auto-pick request can
+  // pin the result instead of re-auto-picking on every subsequent call.
+  applicationId: string | null;
 }
 
 @QueryHandler(PreviewLoaTemplateQuery)
@@ -92,8 +97,6 @@ export class PreviewLoaTemplateHandler implements IQueryHandler<PreviewLoaTempla
       layoutConfig = (savedTemplate.layoutConfig ?? {}) as Record<string, unknown>;
     }
 
-    const headerConfig = (layoutConfig['header'] as Record<string, unknown> | undefined) ?? undefined;
-
     // Same signature-resolution path as a real download - an admin previewing
     // an unsaved draft still sees exactly what a saved signatureId resolves to.
     const { signatureUrl, signerName, signerTitle } = await resolveLoaSignature(this.prisma, {
@@ -101,24 +104,8 @@ export class PreviewLoaTemplateHandler implements IQueryHandler<PreviewLoaTempla
       signatureId: layoutConfig['signatureId'] as string | undefined,
     });
 
-    const resolvedLayoutConfig: LoaLayoutConfigInput = {
-      headerHtml: layoutConfig['headerHtml'] as string | undefined,
-      footerHtml: layoutConfig['footerHtml'] as string | undefined,
-      pageSize: layoutConfig['pageSize'] as string | undefined,
-      margins: layoutConfig['margins'] as { top: number; right: number; bottom: number; left: number } | undefined,
-      logoUrl: layoutConfig['logoUrl'] as string | undefined,
-      stampUrl: layoutConfig['stampUrl'] as string | undefined,
-      footerNote: layoutConfig['footerNote'] as string | undefined,
-      showGeneratedDate: layoutConfig['showGeneratedDate'] as boolean | undefined,
-      header: headerConfig
-        ? {
-            tagline: headerConfig['tagline'] as string | undefined,
-            website: headerConfig['website'] as string | undefined,
-            email: headerConfig['email'] as string | undefined,
-            phone: headerConfig['phone'] as string | undefined,
-          }
-        : undefined,
-    };
+    // Shared with LoaDownloadService - see resolveLoaLayoutConfig for why.
+    const resolvedLayoutConfig = resolveLoaLayoutConfig(layoutConfig);
 
     // Resolve who to preview as: explicit applicationId (validated against
     // this program - 404 if wrong/missing, never silently auto-picked
@@ -204,6 +191,11 @@ export class PreviewLoaTemplateHandler implements IQueryHandler<PreviewLoaTempla
       }),
     );
 
-    return { buffer, participantName, isSample: resolved.isSample };
+    return {
+      buffer,
+      participantName,
+      isSample: resolved.isSample,
+      applicationId: resolved.isSample ? null : resolved.applicationId,
+    };
   }
 }

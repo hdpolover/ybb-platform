@@ -44,9 +44,16 @@ export class LoaPreviewParticipantService {
       return { isSample: false, applicationId: application.id };
     }
 
+    // `id: 'asc'` tiebreak is load-bearing, not cosmetic: the DRAFT and SAVED
+    // preview panes each run this query independently (see
+    // PreviewLoaTemplateHandler / LoaTemplateEditor.tsx generatePreview). With
+    // `submittedAt` alone, a tie (bulk backfill, or both null) leaves row
+    // order unspecified between the two calls, so the two panes could render
+    // two different participants side by side. `id` is unique and stable, so
+    // both calls resolve to the identical row given the same DB snapshot.
     const autoPicked = await this.prisma.participantApplication.findFirst({
       where: { programId, status: { in: ['submitted', 'accepted'] } },
-      orderBy: { submittedAt: 'asc' },
+      orderBy: [{ submittedAt: 'asc' }, { id: 'asc' }],
       select: { id: true },
     });
     if (!autoPicked) {
