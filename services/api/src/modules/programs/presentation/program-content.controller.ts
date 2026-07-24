@@ -296,8 +296,10 @@ export class ProgramContentController {
   }
 
   // --- Document Template Endpoints ---
-  @Public()
   @Get(':id/document-templates')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'List document templates for a program' })
   async listDocumentTemplates(
     @Param('id') programId: string,

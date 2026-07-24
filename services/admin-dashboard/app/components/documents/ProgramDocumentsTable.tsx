@@ -43,6 +43,7 @@ const AUDIENCE_TYPES = [
   { value: "paid_any", label: "Participants with Any Payment" },
   { value: "paid_pricing_tier", label: "Specific Pricing Tier" },
   { value: "specific_status", label: "Specific Application Status" },
+  { value: "submitted_and_paid", label: "Submitted & Paid" },
 ];
 
 const inputCls =
@@ -280,7 +281,7 @@ function DocumentSheet({
   const [name, setName] = useState("");
   const [type, setType] = useState("agreement_letter");
   const [description, setDescription] = useState("");
-  const [audienceType, setAudienceType] = useState("all_registered");
+  const [audienceType, setAudienceType] = useState("submitted_and_paid");
   const [pricingTierIds, setPricingTierIds] = useState("");
   const [statuses, setStatuses] = useState("");
   const [order, setOrder] = useState("0");
@@ -296,7 +297,7 @@ function DocumentSheet({
       setName(item?.name ?? "");
       setType(item?.type ?? "agreement_letter");
       setDescription(item?.description ?? "");
-      setAudienceType(item?.audienceType ?? "all_registered");
+      setAudienceType(item?.audienceType ?? "submitted_and_paid");
       const cfg = item?.audienceConfig ?? {};
       setPricingTierIds((Array.isArray(cfg.pricingTierIds) ? cfg.pricingTierIds : []).join(", "));
       setStatuses((Array.isArray(cfg.statuses) ? cfg.statuses : []).join(", "));
