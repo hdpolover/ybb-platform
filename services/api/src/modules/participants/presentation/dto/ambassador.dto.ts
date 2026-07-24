@@ -103,3 +103,15 @@ export class ReferralCodeValidationDto {
     @ApiProperty({ description: 'Always true; an unknown or inactive code returns 404.' })
     valid: boolean;
 }
+
+export class ReferralAttributionDto {
+    @ApiProperty({ description: 'True when the code resolves to an active ambassador' })
+    valid: boolean;
+
+    @ApiProperty({
+        description: 'Display name of the referring ambassador, or null when the code is unknown, inactive, deleted, or belongs to another program',
+        nullable: true,
+        example: 'Jane Ambassador',
+    })
+    referredByName: string | null;
+}
