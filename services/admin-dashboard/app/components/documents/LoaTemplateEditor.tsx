@@ -13,7 +13,7 @@ import {
   Bold, Italic, Underline as UnderlineIcon, AlignLeft, AlignCenter,
   AlignRight, List, ListOrdered, Undo, Redo, RemoveFormatting,
   Heading1, Heading2, Loader2, CheckCircle2, Upload, ImageIcon, X, Eye, EyeOff,
-  ChevronDown, Pencil, AlertTriangle, RefreshCw,
+  ChevronDown, Pencil, AlertTriangle, RefreshCw, UserRound,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from "@/src/ui/dialog";
 import { ConfirmDialog } from "@/src/admin/confirm-dialog";
+import { EmptyState } from "@/src/admin/empty-state";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,6 +49,7 @@ import {
   type Signature,
 } from "@/src/shared/api-client";
 import { formatDate } from "@/lib/utils";
+import { LoaParticipantPicker } from "./LoaParticipantPicker";
 
 const PLACEHOLDER_TOKENS: DocumentTemplatePlaceholder[] = [
   { key: "{{participant_name}}", label: "Participant Full Name", source: "participant.fullName" },
@@ -450,6 +452,67 @@ function MiniEditor({
   );
 }
 
+// ─── Preview Pane ─────────────────────────────────────────────────────────────
+
+interface PreviewPaneProps {
+  label: string;
+  loading: boolean;
+  error: string | null;
+  pdfUrl: string | null;
+  onRegenerate: () => void;
+  warning?: string | null;
+}
+
+function PreviewPane({ label, loading, error, pdfUrl, onRegenerate, warning }: PreviewPaneProps) {
+  return (
+    <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-inner" style={{ minHeight: 560 }}>
+      <div className="flex items-center justify-between gap-2 border-b border-zinc-100 bg-zinc-50 px-3 py-2 text-[11px] text-zinc-500">
+        <span className="flex items-center gap-1.5 font-medium text-zinc-700">
+          <Eye className="h-3 w-3" />
+          {label}
+        </span>
+        <button
+          type="button"
+          disabled={loading}
+          onClick={onRegenerate}
+          className="flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 font-medium text-zinc-600 hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
+          Regenerate
+        </button>
+      </div>
+      {warning ? (
+        <div className="flex items-start gap-1.5 border-b border-amber-200 bg-amber-50 px-3 py-1.5">
+          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-amber-600" />
+          <p className="text-[10px] text-amber-700">{warning}</p>
+        </div>
+      ) : null}
+      {loading ? (
+        <div className="flex flex-1 items-center justify-center gap-2 text-xs text-zinc-400">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Rendering PDF…
+        </div>
+      ) : error ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
+          <p className="text-xs font-medium text-red-600">Preview failed</p>
+          <p className="max-w-sm text-[11px] text-zinc-500">{error}</p>
+          <button
+            type="button"
+            onClick={onRegenerate}
+            className="mt-1 cursor-pointer rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
+          >
+            Try again
+          </button>
+        </div>
+      ) : pdfUrl ? (
+        <iframe src={pdfUrl} className="h-full w-full flex-1" title={`Invitation Letter Preview - ${label}`} style={{ minHeight: 520 }} />
+      ) : (
+        <EmptyState className="flex-1 justify-center py-0" icon={Eye} title="No preview yet" />
+      )}
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 interface LoaTemplateEditorProps {
@@ -481,12 +544,43 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
   // legacy content assumed) and gets corrected downward once the template loads.
   const [structuredHeaderConfirmed, setStructuredHeaderConfirmed] = useState(true);
 
-  // Real-renderer preview (Task 2): the PDF blob URL from the file-service
-  // WeasyPrint pipeline, not a hand-rolled HTML mock.
-  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
-  const previewObjectUrlRef = useRef<string | null>(null);
+  // Real-renderer preview: the PDF blob URLs from the file-service WeasyPrint
+  // pipeline, not a hand-rolled HTML mock. Two panes - DRAFT (unsaved editor
+  // state) and SAVED (persisted template row) - rendered side by side so a
+  // corrupted persisted template can never hide behind a perfect-looking
+  // draft again.
+  const [previewPdfUrls, setPreviewPdfUrls] = useState<{ draft: string | null; saved: string | null }>({
+    draft: null,
+    saved: null,
+  });
+  const [previewLoading, setPreviewLoading] = useState<{ draft: boolean; saved: boolean }>({
+    draft: false,
+    saved: false,
+  });
+  const [previewErrors, setPreviewErrors] = useState<{ draft: string | null; saved: string | null }>({
+    draft: null,
+    saved: null,
+  });
+  const previewObjectUrlRefs = useRef<{ draft: string | null; saved: string | null }>({ draft: null, saved: null });
+
+  // Monotonic per-pane request counter. `generatePreview` bumps its pane's
+  // counter before firing the request and captures that value; when the
+  // response comes back it's only applied if the counter still matches -
+  // otherwise a newer request for the same pane (auto-pick, explicit pick,
+  // or manual Regenerate) has already superseded it, and this response lost
+  // the race and must be discarded rather than clobbering the newer one.
+  const previewRequestSeqRef = useRef<{ draft: number; saved: number }>({ draft: 0, saved: 0 });
+  // False once the component has unmounted, so a request that resolves after
+  // that point never writes state or creates an object URL nobody will revoke.
+  const previewMountedRef = useRef(true);
+
+  // Who the preview is rendered as. Resolved server-side (auto-pick or the
+  // admin's explicit picker choice) and reported back via response headers,
+  // since the endpoint returns a raw PDF blob with no JSON body.
+  const [previewApplicationId, setPreviewApplicationId] = useState<string | null>(null);
+  const [previewParticipantName, setPreviewParticipantName] = useState<string | null>(null);
+  const [previewIsSample, setPreviewIsSample] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   // Signatures (brand-scoped, reusable across templates)
   const [signatures, setSignatures] = useState<Signature[]>([]);
@@ -647,10 +741,19 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
     }
   }, [editor, footerEditor, template]);
 
-  // Revoke the preview PDF's blob URL on unmount / before generating a new one.
+  // Revoke both preview panes' blob URLs on unmount / before generating new ones.
+  // Also flips `previewMountedRef` so a `generatePreview` request already in
+  // flight discards its response instead of storing a URL nothing will ever
+  // revoke - see the staleness guard inside `generatePreview`. Reset to `true`
+  // at the top so React Strict Mode's dev-only mount→cleanup→mount cycle
+  // doesn't leave this permanently `false` after the first (fake) unmount.
   useEffect(() => {
+    previewMountedRef.current = true;
     return () => {
-      if (previewObjectUrlRef.current) URL.revokeObjectURL(previewObjectUrlRef.current);
+      previewMountedRef.current = false;
+      const urls = previewObjectUrlRefs.current;
+      if (urls.draft) URL.revokeObjectURL(urls.draft);
+      if (urls.saved) URL.revokeObjectURL(urls.saved);
     };
   }, []);
 
@@ -696,37 +799,109 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
     }
   }
 
-  // Renders through the same file-service WeasyPrint pipeline
-  // (structured header, footer precedence, auto-stamp, page-footer disclaimer)
-  // that LoaDownloadService uses for real participant downloads — see
+  // Renders through the same file-service WeasyPrint pipeline (structured
+  // header, footer precedence, auto-stamp, page-footer disclaimer) that
+  // LoaDownloadService uses for real participant downloads - see
   // PreviewLoaTemplateHandler on the API side. No hand-rolled HTML mock.
-  const generatePreview = useCallback(async () => {
+  // `applicationIdOverride` lets a caller that just changed
+  // `previewApplicationId` (via setState, which doesn't take effect until the
+  // next render) pass the new id straight through instead of reading the
+  // stale value still captured in this callback's closure. `undefined` means
+  // "no override, use current state" - `null` is a valid override meaning
+  // "let the backend auto-pick," so it can't double as "no override."
+  //
+  // Runs for the same pane can overlap (opening Preview fires an auto-pick
+  // run; picking a participant before it resolves fires another), and
+  // network order is not request order. `requestId` pins this call to a
+  // point-in-time slot in `previewRequestSeqRef.current[source]`; if that
+  // counter has moved on by the time the response lands, this response is
+  // stale and is discarded outright - it must not overwrite the pane's PDF,
+  // the shared "Previewing as" header, or leak an object URL nobody stored.
+  const generatePreview = useCallback(async (source: "draft" | "saved", applicationIdOverride?: string | null) => {
     if (!editor || !resolvedProgramId) return;
-    setPreviewLoading(true);
-    setPreviewError(null);
+    const requestId = (previewRequestSeqRef.current[source] += 1);
+    const isStale = () => !previewMountedRef.current || previewRequestSeqRef.current[source] !== requestId;
+    setPreviewLoading((l) => ({ ...l, [source]: true }));
+    setPreviewErrors((e) => ({ ...e, [source]: null }));
     try {
       const footerHtml = footerEditor?.getHTML() ?? layout.footerHtml ?? "";
-      const blob = await previewDocumentTemplate(resolvedProgramId, {
+      const effectiveApplicationId = applicationIdOverride !== undefined ? applicationIdOverride : previewApplicationId;
+      const result = await previewDocumentTemplate(resolvedProgramId, {
         htmlContent: editor.getHTML(),
         placeholders: PLACEHOLDER_TOKENS,
         layoutConfig: { ...layout, footerHtml },
+        applicationId: effectiveApplicationId ?? undefined,
+        source,
       });
-      if (previewObjectUrlRef.current) URL.revokeObjectURL(previewObjectUrlRef.current);
-      const url = URL.createObjectURL(blob);
-      previewObjectUrlRef.current = url;
-      setPreviewPdfUrl(url);
+      const url = URL.createObjectURL(result.blob);
+      if (isStale()) {
+        // A newer request for this pane (or an unmount) already won the race
+        // while this one was in flight. Revoke the URL just created for it
+        // instead of storing it - nothing must reference it, so nothing else
+        // will ever revoke it.
+        URL.revokeObjectURL(url);
+        return;
+      }
+      const prevUrl = previewObjectUrlRefs.current[source];
+      if (prevUrl) URL.revokeObjectURL(prevUrl);
+      previewObjectUrlRefs.current[source] = url;
+      setPreviewPdfUrls((u) => ({ ...u, [source]: url }));
+      // Either pane's response can set the shared "Previewing as" header -
+      // not just DRAFT's. This matters specifically when one pane fails and
+      // the other succeeds, so the header still reflects the pane that
+      // actually rendered instead of holding a stale or empty identity.
+      //
+      // On the auto-pick default path (no explicit pick yet), DRAFT and
+      // SAVED fire this request independently with no applicationId, so the
+      // backend auto-picks separately for each. The two auto-picks only land
+      // on the same application because the backend orders that query
+      // deterministically (submittedAt, then id) - NOT because the requests
+      // are pinned to each other. Pinning the resolved id here closes that
+      // gap going forward: once any response lands, every later call
+      // (single-pane Regenerate included) is explicitly keyed to this
+      // application instead of re-auto-picking and risking a different one
+      // if the pool changed in between.
+      setPreviewParticipantName(result.participantName);
+      setPreviewIsSample(result.isSample);
+      setPreviewApplicationId(result.applicationId);
     } catch (err) {
-      setPreviewError(err instanceof Error ? err.message : "Failed to generate preview");
+      if (isStale()) return;
+      setPreviewErrors((e) => ({ ...e, [source]: err instanceof Error ? err.message : "Failed to generate preview" }));
     } finally {
-      setPreviewLoading(false);
+      if (!isStale()) setPreviewLoading((l) => ({ ...l, [source]: false }));
     }
-  }, [editor, footerEditor, layout, resolvedProgramId]);
+  }, [editor, footerEditor, layout, resolvedProgramId, previewApplicationId]);
+
+  const generateBothPreviews = useCallback((applicationIdOverride?: string | null) => {
+    void generatePreview("draft", applicationIdOverride);
+    void generatePreview("saved", applicationIdOverride);
+  }, [generatePreview]);
 
   function togglePreview() {
     const next = !previewMode;
     setPreviewMode(next);
-    if (next) void generatePreview();
+    if (next) generateBothPreviews();
   }
+
+  function handlePickerSelect(applicationId: string, participantName: string) {
+    setPreviewApplicationId(applicationId);
+    setPreviewParticipantName(participantName);
+    setPreviewIsSample(false);
+    generateBothPreviews(applicationId);
+  }
+
+  // Plain computation, not useMemo - Tiptap's `editor` object reference stays
+  // stable across keystrokes, so a useMemo keyed on [editor] would never
+  // recompute. This component already re-renders on every keystroke via
+  // Tiptap's own transaction-triggered updates, so a cheap inline
+  // computation is correct here and costs no server work.
+  const currentFooterHtml = footerEditor?.getHTML() ?? layout.footerHtml ?? "";
+  const hasDraftDrift = Boolean(
+    template &&
+      (editor?.getHTML() !== (template.htmlContent ?? "") ||
+        JSON.stringify({ ...layout, footerHtml: currentFooterHtml }) !==
+          JSON.stringify({ ...DEFAULT_LAYOUT, ...(template.layoutConfig ?? {}) })),
+  );
 
   if (loading) {
     return (
@@ -799,49 +974,62 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
         {/* Left: editors or preview (60%) */}
         <div className="flex w-[60%] flex-col gap-3 overflow-y-auto">
           {previewMode ? (
-            <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-inner" style={{ minHeight: 600 }}>
-              <div className="flex items-center justify-between gap-2 border-b border-zinc-100 bg-zinc-50 px-4 py-2 text-[11px] text-zinc-500">
-                <span className="flex items-center gap-2">
-                  <Eye className="h-3 w-3" />
-                  Real PDF preview — sample participant data, actual renderer
-                </span>
+            <div className="flex flex-1 flex-col gap-2 overflow-hidden">
+              <div
+                className={[
+                  "flex items-center justify-between gap-2 rounded-lg border px-3 py-2",
+                  previewIsSample ? "border-amber-200 bg-amber-50" : "border-zinc-200 bg-white",
+                ].join(" ")}
+              >
+                {previewIsSample ? (
+                  // Same border/background/icon treatment as the drift-warning banner in
+                  // PreviewPane - this notice exists to stop a sample-data render being
+                  // mistaken for a verified one, so it can't read quieter than that banner.
+                  <div className="flex items-start gap-1.5 text-xs text-amber-700">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+                    <span>
+                      Showing <span className="font-semibold text-amber-800">sample data</span> - no submitted or
+                      accepted applications yet for this program.
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-xs text-zinc-600">
+                    <UserRound className="h-3.5 w-3.5 text-zinc-400" />
+                    <span>
+                      Previewing as: <span className="font-medium text-zinc-900">{previewParticipantName ?? "…"}</span>
+                    </span>
+                  </div>
+                )}
                 <button
                   type="button"
-                  disabled={previewLoading}
-                  onClick={() => void generatePreview()}
-                  className="flex items-center gap-1 rounded px-1.5 py-0.5 font-medium text-zinc-600 hover:bg-zinc-100 disabled:opacity-50"
+                  onClick={() => setPickerOpen(true)}
+                  aria-label="Change participant"
+                  className="cursor-pointer rounded px-1 py-0.5 text-[11px] font-medium text-blue-600 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
                 >
-                  <RefreshCw className={`h-3 w-3 ${previewLoading ? "animate-spin" : ""}`} />
-                  Regenerate
+                  [change]
                 </button>
               </div>
-              {previewLoading ? (
-                <div className="flex flex-1 items-center justify-center gap-2 text-xs text-zinc-400">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Rendering PDF…
-                </div>
-              ) : previewError ? (
-                <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
-                  <p className="text-xs font-medium text-red-600">Preview failed</p>
-                  <p className="max-w-sm text-[11px] text-zinc-500">{previewError}</p>
-                  <button
-                    type="button"
-                    onClick={() => void generatePreview()}
-                    className="mt-1 rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50"
-                  >
-                    Try again
-                  </button>
-                </div>
-              ) : previewPdfUrl ? (
-                <iframe
-                  src={previewPdfUrl}
-                  className="h-full w-full flex-1"
-                  title="Invitation Letter Preview"
-                  style={{ minHeight: 560 }}
+              <div className="flex flex-1 gap-2 overflow-hidden">
+                <PreviewPane
+                  label="DRAFT"
+                  loading={previewLoading.draft}
+                  error={previewErrors.draft}
+                  pdfUrl={previewPdfUrls.draft}
+                  onRegenerate={() => void generatePreview("draft")}
+                  warning={
+                    hasDraftDrift
+                      ? "This draft differs from the last saved template. SAVED still reflects what participants can download today."
+                      : null
+                  }
                 />
-              ) : (
-                <div className="flex flex-1 items-center justify-center text-xs text-zinc-400">No preview yet.</div>
-              )}
+                <PreviewPane
+                  label="SAVED"
+                  loading={previewLoading.saved}
+                  error={previewErrors.saved}
+                  pdfUrl={previewPdfUrls.saved}
+                  onRegenerate={() => void generatePreview("saved")}
+                />
+              </div>
             </div>
           ) : (
             <>
@@ -1308,6 +1496,13 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
           await save(false);
           setUnpublishConfirmOpen(false);
         }}
+      />
+
+      <LoaParticipantPicker
+        programId={resolvedProgramId}
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        onSelect={handlePickerSelect}
       />
     </div>
   );

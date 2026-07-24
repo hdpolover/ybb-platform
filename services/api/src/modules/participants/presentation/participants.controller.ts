@@ -25,13 +25,14 @@ import { CompleteOnboardingCommand } from '../application/commands/complete-onbo
 import { OnboardingDto } from './dto/onboarding.dto';
 import { UpdateParticipantProfileDto, ParticipantResponseDto } from './dto/participant.dto';
 import { ParticipantDashboardResponseDto } from './dto/participant-dashboard.dto';
-import { ApplyAmbassadorDto, AmbassadorDashboardDto, AmbassadorShareTokenResolutionDto, ReferralCodeValidationDto } from './dto/ambassador.dto';
+import { ApplyAmbassadorDto, AmbassadorDashboardDto, AmbassadorShareTokenResolutionDto, ReferralCodeValidationDto, ReferralAttributionDto } from './dto/ambassador.dto';
 import { ApplyAmbassadorCommand } from '../application/commands/apply-ambassador.command';
 import { GetAmbassadorDashboardQuery } from '../application/queries/get-ambassador-dashboard.query';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { Public } from '@shared/decorators/public.decorator';
 import { ResolveAmbassadorShareTokenQuery } from '../application/queries/resolve-ambassador-share-token.query';
 import { ValidateReferralCodeQuery } from '../application/queries/validate-referral-code.query';
+import { ResolveReferralAttributionQuery } from '../application/queries/resolve-referral-attribution.query';
 
 @ApiTags('Participants')
 @Controller('participants')
@@ -161,5 +162,19 @@ export class ParticipantsController {
         @Query('programId') programId?: string,
     ): Promise<ReferralCodeValidationDto> {
         return this.queryBus.execute(new ValidateReferralCodeQuery(code, programId));
+    }
+
+    // Intentionally NOT @Public(): the class-level JwtAuthGuard applies here.
+    // Unlike the validate endpoint above, this returns the ambassador's display
+    // name, which is only safe to expose to an authenticated caller (the
+    // referred participant themselves), never anonymously.
+    @Get('ambassador/referral-attribution/:code')
+    @ApiOperation({ summary: 'Resolve a referral code to the referring ambassador\'s display name' })
+    @ApiResponse({ status: 200, description: 'Never 404s; unknown/inactive/mismatched codes return valid:false', type: ReferralAttributionDto })
+    async resolveReferralAttribution(
+        @Param('code') code: string,
+        @Query('programId') programId?: string,
+    ): Promise<ReferralAttributionDto> {
+        return this.queryBus.execute(new ResolveReferralAttributionQuery(code, programId));
     }
 }

@@ -90,7 +90,7 @@ export class ParticipantApplication {
     public statusHistory?: ApplicationStatusHistoryEntry[],
     public readonly createdAt?: Date,
     public readonly updatedAt?: Date,
-    public readonly submittedAt?: Date,
+    public submittedAt?: Date,
     public readonly lastEditedAt?: Date,
     public readonly withdrawnAt?: Date,
     public readonly withdrawnBy?: string,
@@ -147,6 +147,7 @@ export class ParticipantApplication {
       throw new Error(`Cannot submit application in ${this.status} status`);
     }
     this.status = ApplicationStatus.SUBMITTED;
+    this.submittedAt = new Date();
   }
 
   moveToReview(): void {

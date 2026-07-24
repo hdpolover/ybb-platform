@@ -160,7 +160,37 @@ describe('BrandsController', () => {
             expect(command.dto).toBe(dto);
             expect(command.userId).toBe(user.userId);
             expect(command.files).toEqual({ logo: files.logo[0], banner: files.banner[0] });
-            expect(result).toBe(expectedResult);
+            // Deep equality, not identity: createBrand routes the handler's Brand through
+            // toSafeBrandResponse, which spreads into a new object to strip the Meta CAPI
+            // access token before it reaches the admin browser.
+            expect(result).toEqual(expectedResult);
+        });
+
+        it('strips the Meta CAPI access token from the response', async () => {
+            const dto: CreateBrandDto = { name: 'Brand 1', slug: 'brand-1' };
+            const files = { logo: [{} as unknown as Express.Multer.File], banner: [{} as unknown as Express.Multer.File] };
+            const user = { userId: 'user-1' } as any;
+
+            mockCommandBus.execute.mockResolvedValue({
+                id: 'brand-1',
+                name: dto.name,
+                slug: dto.slug,
+                settings: {
+                    capiAccessToken: 'secret-token-must-not-leak',
+                    capiTestEventCode: 'TEST123',
+                    capiEnabled: true,
+                },
+            });
+
+            const result = await controller.createBrand(dto, files, user);
+            const settings = result.settings as Record<string, unknown>;
+
+            expect(settings).not.toHaveProperty('capiAccessToken');
+            expect(JSON.stringify(result)).not.toContain('secret-token-must-not-leak');
+            expect(settings.hasCapiAccessToken).toBe(true);
+            // Non-secret fields still pass through normally.
+            expect(settings.capiTestEventCode).toBe('TEST123');
+            expect(settings.capiEnabled).toBe(true);
         });
     });
 
