@@ -24,6 +24,37 @@ export interface LoaLayoutConfigInput {
   };
 }
 
+/**
+ * Cast a persisted/request `layoutConfig` blob (`Record<string, unknown>`,
+ * since it comes from a Prisma Json column or an untyped request DTO) into
+ * `LoaLayoutConfigInput`. This was previously duplicated field-by-field in
+ * both LoaDownloadService and PreviewLoaTemplateHandler - exactly the seam a
+ * production Invitation Letter shipped with unsubstituted `{{token}}`s
+ * through, because the two copies could silently drift. Extracted so both
+ * callers share one cast and can never diverge again.
+ */
+export function resolveLoaLayoutConfig(layoutConfig: Record<string, unknown>): LoaLayoutConfigInput {
+  const headerConfig = (layoutConfig['header'] as Record<string, unknown> | undefined) ?? undefined;
+  return {
+    headerHtml: layoutConfig['headerHtml'] as string | undefined,
+    footerHtml: layoutConfig['footerHtml'] as string | undefined,
+    pageSize: layoutConfig['pageSize'] as string | undefined,
+    margins: layoutConfig['margins'] as { top: number; right: number; bottom: number; left: number } | undefined,
+    logoUrl: layoutConfig['logoUrl'] as string | undefined,
+    stampUrl: layoutConfig['stampUrl'] as string | undefined,
+    footerNote: layoutConfig['footerNote'] as string | undefined,
+    showGeneratedDate: layoutConfig['showGeneratedDate'] as boolean | undefined,
+    header: headerConfig
+      ? {
+          tagline: headerConfig['tagline'] as string | undefined,
+          website: headerConfig['website'] as string | undefined,
+          email: headerConfig['email'] as string | undefined,
+          phone: headerConfig['phone'] as string | undefined,
+        }
+      : undefined,
+  };
+}
+
 export interface LoaSignatureConfigInput {
   signatureUrl?: string;
   signatureId?: string;
