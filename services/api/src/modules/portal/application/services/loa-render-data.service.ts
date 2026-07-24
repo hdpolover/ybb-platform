@@ -120,7 +120,7 @@ export class LoaRenderDataService {
     const { displayName: programDisplayName, batch: programBatch } = parseProgramBatch(program.name);
 
     const sourceMap = buildLoaSourceMap({
-      participantFullName: application.participant.fullName,
+      participantFullName: readPersonalDataField(application.personalData, 'full_name', application.participant.fullName),
       programName: program.name,
       programBatch,
       generatedAt,
