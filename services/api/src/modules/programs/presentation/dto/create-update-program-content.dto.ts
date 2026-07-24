@@ -1605,7 +1605,7 @@ export class UpdateDocumentTemplateDto {
 }
 
 export class PreviewDocumentTemplateDto {
-    @ApiProperty({ description: 'Tiptap HTML body — the in-editor draft, not necessarily saved yet' })
+    @ApiProperty({ description: 'Tiptap HTML body - the in-editor draft, not necessarily saved yet' })
     @IsString()
     @IsNotEmpty()
     htmlContent: string;
@@ -1617,7 +1617,7 @@ export class PreviewDocumentTemplateDto {
     @Type(() => DocumentTemplatePlaceholderDto)
     placeholders?: DocumentTemplatePlaceholderDto[];
 
-    @ApiProperty({ required: false, description: 'Draft layout config — headerHtml/footerHtml/margins/logoUrl/stampUrl/header/footerNote/showGeneratedDate/etc.' })
+    @ApiProperty({ required: false, description: 'Draft layout config - headerHtml/footerHtml/margins/logoUrl/stampUrl/header/footerNote/showGeneratedDate/etc.' })
     @IsOptional()
     layoutConfig?: Record<string, unknown>;
 
