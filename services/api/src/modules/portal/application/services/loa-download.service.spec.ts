@@ -266,5 +266,149 @@ describe('LoaDownloadService', () => {
         expect(value).not.toBe('undefined');
       }
     });
+
+    // Bug fix: participants.institution/nationality/major/occupation are 100% empty
+    // across all 13,199 prod participants — real values live in
+    // participant_applications.personal_data. These cases pin the personal_data-first,
+    // participant-column-fallback behavior.
+    describe('personalData fallback for institution/nationality/major/occupation', () => {
+      const templateWithPersonalDataTokens = {
+        ...mockTemplate,
+        placeholders: [
+          ...mockTemplate.placeholders,
+          { key: '{{institution}}', source: 'participant.institution' },
+          { key: '{{nationality}}', source: 'participant.nationality' },
+          { key: '{{major}}', source: 'participant.major' },
+          { key: '{{occupation}}', source: 'participant.occupation' },
+          { key: '{{gender}}', source: 'participant.gender' },
+        ],
+      };
+
+      function mockPipeline(application: unknown, template: unknown = templateWithPersonalDataTokens) {
+        (portalCacheService.getParticipantProfile as jest.Mock).mockResolvedValue(mockParticipant);
+        (prisma.participantApplication.findFirst as jest.Mock).mockResolvedValue(application);
+        (prisma.program.findUnique as jest.Mock).mockResolvedValue(mockProgram);
+        (prisma.documentTemplate.findFirst as jest.Mock).mockResolvedValue(template);
+        (loaEligibilityService.checkEligibility as jest.Mock).mockResolvedValue({ eligible: true, batchId: 'batch-1' });
+        (loaDocumentNumberService.assignOrGet as jest.Mock).mockResolvedValue({
+          docNumber: 'LOA-2026-0001',
+          isNew: false,
+          existingDocId: 'doc-1',
+        });
+        (fileServiceClient.generateLoa as jest.Mock).mockResolvedValue(mockPdfBuffer);
+        (prisma.participantDocument.update as jest.Mock).mockResolvedValue({});
+        (prisma.participantDocument.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      }
+
+      it('(a) takes institution/nationality/major/occupation from personalData when present', async () => {
+        mockPipeline({
+          ...mockApplication,
+          personalData: {
+            institution: 'Harvard University',
+            nationality: 'American',
+            major: 'Computer Science',
+            occupation: 'Student',
+          },
+          // Dead columns — empty, as they are for every participant in prod.
+          participant: { fullName: 'John Doe', institution: '', nationality: '', major: '', occupation: '', gender: 'male' },
+        });
+
+        await service.downloadLoa('user-1', 'brand-1');
+
+        const call = (fileServiceClient.generateLoa as jest.Mock).mock.calls[0][0];
+        expect(call.placeholder_data['{{institution}}']).toBe('Harvard University');
+        expect(call.placeholder_data['{{nationality}}']).toBe('American');
+        expect(call.placeholder_data['{{major}}']).toBe('Computer Science');
+        expect(call.placeholder_data['{{occupation}}']).toBe('Student');
+      });
+
+      it('(b) falls back to the participant column when personalData lacks the key or is null', async () => {
+        mockPipeline({
+          ...mockApplication,
+          personalData: { institution: 'Harvard University' }, // nationality/major/occupation absent
+          participant: {
+            fullName: 'John Doe',
+            institution: 'Should Be Overridden',
+            nationality: 'Indonesian',
+            major: 'Biology',
+            occupation: 'Engineer',
+            gender: 'male',
+          },
+        });
+
+        await service.downloadLoa('user-1', 'brand-1');
+
+        const call = (fileServiceClient.generateLoa as jest.Mock).mock.calls[0][0];
+        expect(call.placeholder_data['{{institution}}']).toBe('Harvard University'); // present in personalData
+        expect(call.placeholder_data['{{nationality}}']).toBe('Indonesian'); // fallback
+        expect(call.placeholder_data['{{major}}']).toBe('Biology'); // fallback
+        expect(call.placeholder_data['{{occupation}}']).toBe('Engineer'); // fallback
+      });
+
+      it('(b2) falls back to the participant column when personalData itself is null', async () => {
+        mockPipeline({
+          ...mockApplication,
+          personalData: null,
+          participant: {
+            fullName: 'John Doe',
+            institution: 'Fallback University',
+            nationality: 'Indonesian',
+            major: 'Biology',
+            occupation: 'Engineer',
+            gender: 'male',
+          },
+        });
+
+        await service.downloadLoa('user-1', 'brand-1');
+
+        const call = (fileServiceClient.generateLoa as jest.Mock).mock.calls[0][0];
+        expect(call.placeholder_data['{{institution}}']).toBe('Fallback University');
+        expect(call.placeholder_data['{{nationality}}']).toBe('Indonesian');
+        expect(call.placeholder_data['{{major}}']).toBe('Biology');
+        expect(call.placeholder_data['{{occupation}}']).toBe('Engineer');
+      });
+
+      it('(c) treats a whitespace-only personalData value as absent and falls back rather than rendering blank', async () => {
+        mockPipeline({
+          ...mockApplication,
+          personalData: { institution: '   ', nationality: '\t', major: '', occupation: '  ' },
+          participant: {
+            fullName: 'John Doe',
+            institution: 'Fallback University',
+            nationality: 'Indonesian',
+            major: 'Biology',
+            occupation: 'Engineer',
+            gender: 'male',
+          },
+        });
+
+        await service.downloadLoa('user-1', 'brand-1');
+
+        const call = (fileServiceClient.generateLoa as jest.Mock).mock.calls[0][0];
+        expect(call.placeholder_data['{{institution}}']).toBe('Fallback University');
+        expect(call.placeholder_data['{{nationality}}']).toBe('Indonesian');
+        expect(call.placeholder_data['{{major}}']).toBe('Biology');
+        expect(call.placeholder_data['{{occupation}}']).toBe('Engineer');
+      });
+
+      it('(d) leaves an already-correct participant field (fullName, gender) unchanged', async () => {
+        mockPipeline({
+          ...mockApplication,
+          personalData: {
+            institution: 'Harvard University',
+            nationality: 'American',
+            major: 'Computer Science',
+            occupation: 'Student',
+          },
+          participant: { fullName: 'Jane Smith', institution: '', nationality: '', major: '', occupation: '', gender: 'female' },
+        });
+
+        await service.downloadLoa('user-1', 'brand-1');
+
+        const call = (fileServiceClient.generateLoa as jest.Mock).mock.calls[0][0];
+        expect(call.placeholder_data['{{participant.fullName}}']).toBe('Jane Smith');
+        expect(call.placeholder_data['{{gender}}']).toBe('Female');
+      });
+    });
   });
 });
