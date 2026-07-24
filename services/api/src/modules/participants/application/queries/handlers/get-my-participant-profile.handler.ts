@@ -34,6 +34,8 @@ export class GetMyParticipantProfileHandler implements IQueryHandler<GetMyPartic
             nationality: participant.nationality ?? undefined,
             currentCity: participant.currentCity ?? undefined,
             currentCountry: participant.currentCountry ?? undefined,
+            originCountry: participant.originCountry ?? undefined,
+            originCity: participant.originCity ?? undefined,
             institution: participant.institution ?? undefined,
             major: participant.major ?? undefined,
             occupation: participant.occupation ?? undefined,
@@ -42,6 +44,8 @@ export class GetMyParticipantProfileHandler implements IQueryHandler<GetMyPartic
             profilePictureUrl: participant.profilePictureUrl ?? undefined,
             tshirtSize: participant.tshirtSize ?? undefined,
             dietaryRestrictions: participant.dietaryRestrictions ?? undefined,
+            knowledgeSource: participant.knowledgeSource ?? undefined,
+            referralCode: participant.referralCode ?? undefined,
             profileCompletionPercentage: participant.profileCompletionPercentage ?? 0,
         };
     }
