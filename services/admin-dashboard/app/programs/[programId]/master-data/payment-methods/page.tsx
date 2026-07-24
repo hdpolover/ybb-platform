@@ -30,6 +30,7 @@ import {
 } from "@/src/ui/sheet";
 import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
 import { EmptyState } from "@/src/admin/empty-state";
+import { buildPaymentMethodCode } from "@/lib/payment-method-code";
 
 function normalizePaymentMethodType(type: string | undefined): PaymentMethodType {
   const normalized = String(type ?? "").trim().toLowerCase();
@@ -611,9 +612,8 @@ function PaymentMethodModal({
     e.preventDefault(); setLoading(true); setError(null);
     // `code` is a stable machine identifier. Derive it from the name on
     // create and never change it on edit — renaming a method shouldn't break
-    // anything keyed off the code. A random suffix keeps creates
-    // collision-resistant since the column has a unique constraint.
-    const code = method?.code ?? `${slugify(name)}_${Math.random().toString(36).slice(2, 8)}`;
+    // anything keyed off the code.
+    const code = buildPaymentMethodCode(name, method?.code);
     if (!code) { setError("Internal name is required to generate a code."); setLoading(false); return; }
     // AUTOMATIC methods must point at a real active gateway — otherwise the
     // payment service would fail at charge time with "no active config".
@@ -972,14 +972,3 @@ function Field({ label, required, children }: { label: string; required?: boolea
 
 const inputCls = "block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
 
-// Derives a stable machine `code` from the admin-entered name when creating
-// a new shared payment method (edits keep the original code untouched).
-function slugify(input: string): string {
-  return input
-    .toLowerCase()
-    .trim()
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-}
