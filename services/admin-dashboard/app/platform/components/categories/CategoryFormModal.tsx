@@ -91,6 +91,7 @@ export function CategoryFormModal({
               value={formData.name}
               onChange={(e) => handleNameChange(e.target.value)}
               placeholder="e.g., Istanbul Youth Summit"
+              maxLength={100}
               required
             />
           </div>

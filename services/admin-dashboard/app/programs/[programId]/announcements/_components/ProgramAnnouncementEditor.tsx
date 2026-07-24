@@ -289,6 +289,7 @@ export function ProgramAnnouncementEditor({ mode }: { mode: EditorMode }) {
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             placeholder="Announcement title…"
+            maxLength={255}
             className="mb-6 block w-full border-0 border-b border-zinc-200 bg-transparent pb-3 text-2xl font-bold text-zinc-900 placeholder:text-zinc-300 outline-none focus:border-blue-400"
           />
 

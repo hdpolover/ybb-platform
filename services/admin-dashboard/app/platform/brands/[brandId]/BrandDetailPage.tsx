@@ -95,6 +95,14 @@ import {
   type BrandPaymentInfoItem,
 } from "../../api";
 
+// files.title is VARCHAR(255). These upload flows pass the raw filename as a
+// derived display label (the admin never types it), so clamp instead of
+// rejecting — matches the media library upload sheet's title input.
+const FILE_TITLE_MAX_LEN = 255;
+function clampFileTitle(filename: string): string {
+  return filename.slice(0, FILE_TITLE_MAX_LEN);
+}
+
 // ─── Field primitives ─────────────────────────────────────────────────────────
 
 function FieldView({ label, value }: { label: string; value?: React.ReactNode }) {
@@ -1433,7 +1441,7 @@ function BenefitsSheet({
               brandId,
               bucket: "brands",
               assetType: "image",
-              title: pendingFile.name,
+              title: clampFileTitle(pendingFile.name),
               altText: group.title || title || eyebrow || "Benefit group image",
             });
 
@@ -1766,7 +1774,7 @@ function SectionBackgroundSheet({
           brandId,
           bucket: "brands",
           assetType: "image",
-          title: pendingDesktopFile.name,
+          title: clampFileTitle(pendingDesktopFile.name),
           altText: "Section background desktop",
         });
         if (!upload.publicUrl) throw new Error("Desktop image upload succeeded but no public URL was returned.");
@@ -1779,7 +1787,7 @@ function SectionBackgroundSheet({
           brandId,
           bucket: "brands",
           assetType: "image",
-          title: pendingMobileFile.name,
+          title: clampFileTitle(pendingMobileFile.name),
           altText: "Section background mobile",
         });
         if (!upload.publicUrl) throw new Error("Mobile image upload succeeded but no public URL was returned.");
@@ -2058,7 +2066,7 @@ function FurtherInformationSheet({
           brandId,
           bucket: "brands",
           assetType: "image",
-          title: pendingMockupFile.name,
+          title: clampFileTitle(pendingMockupFile.name),
           altText: "Further information mockup image",
         });
         if (!upload.publicUrl) throw new Error("Mockup image upload succeeded but no public URL was returned.");

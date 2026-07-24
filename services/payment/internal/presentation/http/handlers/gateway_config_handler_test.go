@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -72,6 +73,46 @@ func TestValidateGatewayConfigRequest(t *testing.T) {
 				ClientKey:     "SB-Mid-client-abc123",
 				WebhookSecret: "",
 				IsActive:      true,
+			},
+			wantErr: false,
+		},
+		// Regression: the provider allow-list used to run only inside the
+		// IsActive branch. An inactive config with an unrecognized/oversized
+		// provider skipped it entirely and reached the DB write, overflowing
+		// payment_gateway_configs.provider (varchar(50)) as a 500.
+		{
+			name: "reject inactive config with oversized unsupported provider",
+			cfg: entities.GatewayConfig{
+				Provider:      strings.Repeat("a", 54),
+				Mode:          "sandbox",
+				ServerKey:     "unused",
+				ClientKey:     "unused",
+				WebhookSecret: "",
+				IsActive:      false,
+			},
+			wantErr: true,
+		},
+		{
+			name: "reject inactive config with unsupported provider name",
+			cfg: entities.GatewayConfig{
+				Provider:      "not_a_real_gateway",
+				Mode:          "sandbox",
+				ServerKey:     "unused",
+				ClientKey:     "unused",
+				WebhookSecret: "",
+				IsActive:      false,
+			},
+			wantErr: true,
+		},
+		{
+			name: "allow inactive config with recognized provider and placeholder keys",
+			cfg: entities.GatewayConfig{
+				Provider:      "midtrans",
+				Mode:          "sandbox",
+				ServerKey:     "placeholder",
+				ClientKey:     "placeholder",
+				WebhookSecret: "",
+				IsActive:      false,
 			},
 			wantErr: false,
 		},

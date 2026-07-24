@@ -7,6 +7,7 @@ import {
   IsNotEmpty,
   ValidateNested,
   ArrayMaxSize,
+  MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -39,11 +40,13 @@ export class CreateApplicationFormFieldDto {
   @ApiProperty({ description: 'Label displayed to the user' })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(255)
   label!: string;
 
   @ApiPropertyOptional({ description: 'Placeholder text' })
   @IsOptional()
   @IsString()
+  @MaxLength(255)
   placeholder?: string;
 
   @ApiPropertyOptional({ description: 'Help text / tooltip' })
@@ -59,6 +62,7 @@ export class CreateApplicationFormFieldDto {
   @ApiPropertyOptional({ description: 'Alt text for the supporting media' })
   @IsOptional()
   @IsString()
+  @MaxLength(255)
   mediaAlt?: string;
 
   @ApiPropertyOptional({
