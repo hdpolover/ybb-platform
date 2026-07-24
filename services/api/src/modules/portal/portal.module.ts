@@ -18,6 +18,7 @@ import { LoaEligibilityService } from './application/services/loa-eligibility.se
 import { LoaDocumentNumberService } from './application/services/loa-document-number.service';
 import { LoaRenderDataService } from './application/services/loa-render-data.service';
 import { LoaDownloadService } from './application/services/loa-download.service';
+import { DocumentAudienceService } from './application/services/document-audience.service';
 import { ConfirmPortalPaymentHandler } from './application/commands/handlers/confirm-portal-payment.handler';
 import { CancelPortalPaymentHandler } from './application/commands/handlers/cancel-portal-payment.handler';
 import { EnsurePortalPaymentInvoiceHandler } from './application/commands/handlers/ensure-portal-payment-invoice.handler';
@@ -50,6 +51,7 @@ import { UploadSignedCopyHandler } from './application/commands/handlers/upload-
         LoaDocumentNumberService,
         LoaRenderDataService,
         LoaDownloadService,
+        DocumentAudienceService,
         // Existing query handlers
         GetPortalDashboardHandler,
         GetPortalSubmissionsHandler,
@@ -68,6 +70,6 @@ import { UploadSignedCopyHandler } from './application/commands/handlers/upload-
         EnsurePortalPaymentInvoiceHandler,
         UploadSignedCopyHandler,
     ],
-    exports: [LoaRenderDataService],
+    exports: [DocumentAudienceService, LoaRenderDataService],
 })
 export class PortalModule { }

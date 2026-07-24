@@ -304,14 +304,18 @@ func validateGatewayConfigRequest(cfg *entities.GatewayConfig) error {
 	return nil
 }
 
+// badRequestError and handlerValidationError are shared by every handler in
+// this package that needs to turn a request-shape problem into a clear 4xx
+// instead of letting it reach the repository layer (see also
+// validatePaymentMethodRequest in payment_method_handler.go).
 func badRequestError(message string) error {
-	return &gatewayConfigValidationError{message: message}
+	return &handlerValidationError{message: message}
 }
 
-type gatewayConfigValidationError struct {
+type handlerValidationError struct {
 	message string
 }
 
-func (e *gatewayConfigValidationError) Error() string {
+func (e *handlerValidationError) Error() string {
 	return e.message
 }
