@@ -1,7 +1,23 @@
-import { IsString, IsNotEmpty, IsOptional, IsDateString, IsNumber, IsInt, Min, Max, IsBoolean, IsUUID, IsArray, IsEnum, IsIn, IsUrl } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { IsString, IsNotEmpty, IsOptional, IsDateString, IsNumber, IsInt, Min, Max, IsBoolean, IsUUID, IsArray, IsEnum, IsIn, IsUrl, ValidateNested } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { FaqCategory } from '@prisma/client';
+
+// Document template placeholder token DTO
+// Authoritative shape: services/admin-dashboard PLACEHOLDER_TOKENS (LoaTemplateEditor.tsx) — 23 fixed tokens, exactly these 3 fields.
+export class DocumentTemplatePlaceholderDto {
+    @ApiProperty({ description: 'Token placeholder, e.g. "{{participant_name}}"' })
+    @IsString()
+    key: string;
+
+    @ApiProperty({ description: 'Human-readable label shown in the template editor' })
+    @IsString()
+    label: string;
+
+    @ApiProperty({ description: 'Dot-path into the render context this token resolves from' })
+    @IsString()
+    source: string;
+}
 
 // Timeline DTOs
 export class CreateProgramTimelineDto {
@@ -1464,9 +1480,12 @@ export class CreateDocumentTemplateDto {
     @IsOptional()
     htmlContent?: string;
 
-    @ApiProperty({ required: false, description: 'Placeholder token definitions for LOA templates' })
+    @ApiProperty({ required: false, description: 'Placeholder token definitions for LOA templates', type: [DocumentTemplatePlaceholderDto] })
     @IsOptional()
-    placeholders?: Array<{ key: string; label: string; source: string }>;
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => DocumentTemplatePlaceholderDto)
+    placeholders?: DocumentTemplatePlaceholderDto[];
 
     @ApiProperty({ required: false, description: 'Layout config (LOA: pageSize/margins/headerHtml/footerHtml/logoUrl/signatureUrl; file-based: fileSize/fileType)' })
     @IsOptional()
@@ -1541,9 +1560,12 @@ export class UpdateDocumentTemplateDto {
     @IsOptional()
     htmlContent?: string;
 
-    @ApiProperty({ required: false, description: 'Placeholder token definitions for LOA templates' })
+    @ApiProperty({ required: false, description: 'Placeholder token definitions for LOA templates', type: [DocumentTemplatePlaceholderDto] })
     @IsOptional()
-    placeholders?: Array<{ key: string; label: string; source: string }>;
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => DocumentTemplatePlaceholderDto)
+    placeholders?: DocumentTemplatePlaceholderDto[];
 
     @ApiProperty({ required: false, description: 'Layout config (LOA: pageSize/margins/headerHtml/footerHtml/logoUrl/signatureUrl; file-based: fileSize/fileType)' })
     @IsOptional()
@@ -1588,10 +1610,12 @@ export class PreviewDocumentTemplateDto {
     @IsNotEmpty()
     htmlContent: string;
 
-    @ApiProperty({ required: false, description: 'Placeholder token definitions (same shape as the saved template)' })
+    @ApiProperty({ required: false, description: 'Placeholder token definitions (same shape as the saved template)', type: [DocumentTemplatePlaceholderDto] })
     @IsOptional()
     @IsArray()
-    placeholders?: Array<{ key: string; label: string; source: string }>;
+    @ValidateNested({ each: true })
+    @Type(() => DocumentTemplatePlaceholderDto)
+    placeholders?: DocumentTemplatePlaceholderDto[];
 
     @ApiProperty({ required: false, description: 'Draft layout config — headerHtml/footerHtml/margins/logoUrl/stampUrl/header/footerNote/showGeneratedDate/etc.' })
     @IsOptional()
