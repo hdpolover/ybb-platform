@@ -118,4 +118,17 @@ describe('UpdateProgramHandler', () => {
             expect.objectContaining({ slug: 'hello-world' }),
         );
     });
+
+    it('caps the auto-generated slug at 255 chars (Program.slug is VarChar(255))', async () => {
+        const program = makeProgram();
+        programRepository.findById.mockResolvedValue(program as any);
+        programRepository.update.mockImplementation((_id, data) => Promise.resolve({ ...program, ...data } as any));
+
+        const longName = 'Word '.repeat(60).trim(); // well over 255 chars once hyphenated
+        const command = new UpdateProgramCommand('prog-1', { name: longName }, 'user-1');
+        await handler.execute(command);
+
+        const updatedSlug = (programRepository.update as jest.Mock).mock.calls[0][1].slug as string;
+        expect(updatedSlug.length).toBeLessThanOrEqual(255);
+    });
 });

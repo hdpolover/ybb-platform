@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -11,6 +12,18 @@ import (
 	"github.com/ybb-platform/payment/internal/application/dto"
 	"github.com/ybb-platform/payment/internal/application/requestcontext"
 )
+
+// maxIdempotencyKeyLength mirrors the payment_idempotency_keys.idempotency_key
+// column width (varchar(255)). Values over this must be rejected here with a
+// clear 4xx rather than reaching the DB write as a "value too long" 500.
+const maxIdempotencyKeyLength = 255
+
+func validateIdempotencyKey(key string) error {
+	if len(key) > maxIdempotencyKeyLength {
+		return badRequestError(fmt.Sprintf("Idempotency-Key header must not exceed %d characters", maxIdempotencyKeyLength))
+	}
+	return nil
+}
 
 type IntentHandler struct {
 	createIntentHandler  *commandHandlers.CreateIntentHandler
@@ -81,6 +94,12 @@ func (h *IntentHandler) ConfirmIntent(c *gin.Context) {
 		return
 	}
 
+	idempotencyKey := c.GetHeader("Idempotency-Key")
+	if err := validateIdempotencyKey(idempotencyKey); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	detailsJSON, _ := json.Marshal(req.PaymentDetails)
 
 	// In a real scenario, Customer Details should come from the User Service or Context
@@ -98,7 +117,7 @@ func (h *IntentHandler) ConfirmIntent(c *gin.Context) {
 		IntentID:        intentID,
 		PaymentMethodID: req.PaymentMethodID,
 		GatewayToken:    req.GatewayToken,
-		IdempotencyKey:  c.GetHeader("Idempotency-Key"),
+		IdempotencyKey:  idempotencyKey,
 		PaymentDetails:  detailsJSON,
 		IpAddress:       c.ClientIP(),
 		UserAgent:       c.Request.UserAgent(),

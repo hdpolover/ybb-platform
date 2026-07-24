@@ -111,6 +111,7 @@ export function ProgramFormModal({
                   value={formData.name}
                   onChange={(e) => handleNameChange(e.target.value)}
                   placeholder="e.g., Summer Leadership Camp 2025"
+                  maxLength={255}
                   required
                 />
               </div>

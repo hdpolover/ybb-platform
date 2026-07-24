@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString, IsUrl, IsEmail } from 'class-validator';
+import { IsOptional, IsString, IsUrl, IsEmail, IsHexColor, MaxLength } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { NormalizeEmail } from '@shared/decorators/normalize-email.decorator';
 
@@ -42,9 +42,13 @@ export class UpdateBrandDetailsDto {
     @IsUrl()
     bannerUrl?: string;
 
+    // @IsHexColor delegates to validator.js, which also accepts 8-hex-digit alpha forms
+    // (e.g. '#12345678', 9 chars) — MaxLength(7) closes the gap so it can't overflow
+    // Brand.primaryColor VARCHAR(7). Kept in sync with CreateBrandDto.
     @ApiProperty({ required: false, example: '#FF0000', description: 'Primary brand color (Hex).' })
     @IsOptional()
-    @IsString()
+    @IsHexColor()
+    @MaxLength(7)
     primaryColor?: string;
 
     @ApiProperty({ required: false, example: 'https://ybbhub.com' })

@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsEmail, IsEnum, IsOptional, IsString, IsBoolean, IsUrl } from 'class-validator';
+import { IsDateString, IsEmail, IsEnum, IsOptional, IsString, IsBoolean, IsUrl, MaxLength } from 'class-validator';
 import { Type } from 'class-transformer';
 import { IsEnglishName, IsEnglishText } from '@shared/validators/english-text.validator';
 
@@ -40,6 +40,7 @@ export class UpdateParticipantProfileDto {
     @ApiPropertyOptional({ example: '912345678' })
     @IsOptional()
     @IsString()
+    @MaxLength(25)
     phoneNumber?: string;
 
     @ApiPropertyOptional({ example: 'Vietnam' })
@@ -125,6 +126,7 @@ export class UpdateParticipantProfileDto {
     @ApiPropertyOptional({ example: '81234567890', description: 'Emergency contact phone number' })
     @IsOptional()
     @IsString()
+    @MaxLength(25)
     emergencyContactPhone?: string;
 
     @ApiPropertyOptional({ example: 'https://cdn.ybbhub.com/participants/profile.jpg' })

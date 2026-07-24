@@ -548,6 +548,7 @@ export function FormFieldEditor({
                   }));
                 }}
                 placeholder="T-Shirt Size"
+                maxLength={255}
                 className={INPUT_CLS}
               />
               <p className="mt-1 text-[11px] text-zinc-400">
@@ -602,6 +603,7 @@ export function FormFieldEditor({
                 type="text"
                 value={state.placeholder}
                 onChange={(e) => patch("placeholder", e.target.value)}
+                maxLength={255}
                 className={INPUT_CLS}
               />
             </Field>

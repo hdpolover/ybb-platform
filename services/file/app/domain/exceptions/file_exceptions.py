@@ -25,11 +25,26 @@ class InvalidFileTypeException(FileDomainException):
 
 class FileSizeLimitException(FileDomainException):
     """Raised when file exceeds size limit."""
-    
+
     def __init__(self, size: int, max_size: int):
         self.size = size
         self.max_size = max_size
         super().__init__(f"File size {size} bytes exceeds limit of {max_size} bytes")
+
+
+class InvalidFilenameException(FileDomainException):
+    """Raised when the client-supplied filename exceeds the storable length.
+
+    original_filename is displayed back to users (e.g. download headers), so it must be
+    rejected rather than silently truncated/mangled — see files.original_filename VARCHAR(255).
+    """
+
+    def __init__(self, filename_length: int, max_length: int):
+        self.filename_length = filename_length
+        self.max_length = max_length
+        super().__init__(
+            f"Filename length {filename_length} exceeds maximum of {max_length} characters"
+        )
 
 
 class StorageException(FileDomainException):

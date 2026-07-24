@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsNumber, IsDateString, IsBoolean, IsUUID } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsNumber, IsDateString, IsBoolean, IsUUID, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateProgramDto {
@@ -10,11 +10,13 @@ export class CreateProgramDto {
     @ApiProperty({ description: 'Program name' })
     @IsString()
     @IsNotEmpty()
+    @MaxLength(255)
     name: string;
 
     @ApiProperty({ description: 'Program slug', required: false })
     @IsString()
     @IsOptional()
+    @MaxLength(255)
     slug?: string;
 
     @ApiProperty({ description: 'Program description', required: false })
