@@ -847,13 +847,23 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
       previewObjectUrlRefs.current[source] = url;
       setPreviewPdfUrls((u) => ({ ...u, [source]: url }));
       // Either pane's response can set the shared "Previewing as" header -
-      // not just DRAFT's. Both panes are issued against the same
-      // applicationId/program so a successful response from either agrees;
-      // this matters specifically when one pane fails and the other
-      // succeeds, so the header still reflects the pane that actually
-      // rendered instead of holding a stale or empty identity.
+      // not just DRAFT's. This matters specifically when one pane fails and
+      // the other succeeds, so the header still reflects the pane that
+      // actually rendered instead of holding a stale or empty identity.
+      //
+      // On the auto-pick default path (no explicit pick yet), DRAFT and
+      // SAVED fire this request independently with no applicationId, so the
+      // backend auto-picks separately for each. The two auto-picks only land
+      // on the same application because the backend orders that query
+      // deterministically (submittedAt, then id) - NOT because the requests
+      // are pinned to each other. Pinning the resolved id here closes that
+      // gap going forward: once any response lands, every later call
+      // (single-pane Regenerate included) is explicitly keyed to this
+      // application instead of re-auto-picking and risking a different one
+      // if the pool changed in between.
       setPreviewParticipantName(result.participantName);
       setPreviewIsSample(result.isSample);
+      setPreviewApplicationId(result.applicationId);
     } catch (err) {
       if (isStale()) return;
       setPreviewErrors((e) => ({ ...e, [source]: err instanceof Error ? err.message : "Failed to generate preview" }));

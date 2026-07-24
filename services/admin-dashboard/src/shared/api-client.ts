@@ -3115,6 +3115,12 @@ export interface PreviewLoaResult {
   blob: Blob;
   participantName: string;
   isSample: boolean;
+  // The application actually resolved and rendered - null when isSample
+  // (there was no application to resolve to). Callers should pin this into
+  // any "which participant to preview as" state instead of re-sending no
+  // applicationId, which would let the backend auto-pick again and
+  // potentially land on a different participant than this response.
+  applicationId: string | null;
 }
 
 /**
@@ -3124,8 +3130,8 @@ export interface PreviewLoaResult {
  * inline preview alongside who it was rendered as.
  *
  * Uses a plain fetch (not requestBlob) because it needs to read the
- * X-Preview-Participant-Name / X-Preview-Is-Sample response headers
- * alongside the blob body - requestBlob discards headers.
+ * X-Preview-Participant-Name / X-Preview-Is-Sample / X-Preview-Application-Id
+ * response headers alongside the blob body - requestBlob discards headers.
  */
 export async function previewDocumentTemplate(
   programId: string,
@@ -3155,12 +3161,14 @@ export async function previewDocumentTemplate(
 
   const participantNameHeader = res.headers.get("X-Preview-Participant-Name");
   const isSampleHeader = res.headers.get("X-Preview-Is-Sample");
+  const applicationIdHeader = res.headers.get("X-Preview-Application-Id");
   const blob = await res.blob();
 
   return {
     blob,
     participantName: participantNameHeader ? decodeURIComponent(participantNameHeader) : "",
     isSample: isSampleHeader === "true",
+    applicationId: applicationIdHeader ? applicationIdHeader : null,
   };
 }
 

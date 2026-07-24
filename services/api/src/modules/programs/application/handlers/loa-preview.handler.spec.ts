@@ -153,6 +153,7 @@ describe('PreviewLoaTemplateHandler', () => {
       expect(loaRenderDataService.buildSourceMapForApplication).not.toHaveBeenCalled();
       expect(result.isSample).toBe(true);
       expect(result.participantName).toBe('Jane Doe');
+      expect(result.applicationId).toBeNull();
       expect(fileServiceClient.generateLoa).toHaveBeenCalledWith(
         expect.objectContaining({ document_number: 'PREVIEW/000' }),
       );
@@ -170,6 +171,7 @@ describe('PreviewLoaTemplateHandler', () => {
 
       expect(result.isSample).toBe(false);
       expect(result.participantName).toBe('Real Participant');
+      expect(result.applicationId).toBe('app-42');
       expect(fileServiceClient.generateLoa).toHaveBeenCalledWith(
         expect.objectContaining({ document_number: 'LOA-2026-0007' }),
       );
