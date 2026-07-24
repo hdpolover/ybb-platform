@@ -1,10 +1,10 @@
 import { IsString, IsNotEmpty, IsOptional, IsDateString, IsNumber, IsInt, Min, Max, IsBoolean, IsUUID, IsArray, IsEnum, IsIn, IsUrl, ValidateNested } from 'class-validator';
-import { Transform, Type } from 'class-transformer';
+import { Transform, Type, plainToInstance } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { FaqCategory } from '@prisma/client';
 
 // Document template placeholder token DTO
-// Authoritative shape: services/admin-dashboard PLACEHOLDER_TOKENS (LoaTemplateEditor.tsx) — 23 fixed tokens, exactly these 3 fields.
+// Authoritative shape: services/admin-dashboard PLACEHOLDER_TOKENS (LoaTemplateEditor.tsx), 23 fixed tokens, exactly these 3 fields.
 export class DocumentTemplatePlaceholderDto {
     @ApiProperty({ description: 'Token placeholder, e.g. "{{participant_name}}"' })
     @IsString()
@@ -17,6 +17,45 @@ export class DocumentTemplatePlaceholderDto {
     @ApiProperty({ description: 'Dot-path into the render context this token resolves from' })
     @IsString()
     source: string;
+}
+
+// Requirement option choice (for select/checkbox-style requirements).
+// Shape shared with the actively-used ApplicationFormTemplateField.options and
+// SystemFormFieldDefinition.defaultOptions sibling fields (see
+// form-template.dto.ts and manage-system-form-field.dto.ts). ProgramRequirement
+// has no current admin-dashboard producer, but the "for select/checkbox"
+// comment on the Prisma column and the shared "options" concept across the
+// form-field system make this the evidenced shape rather than an invented one.
+export class RequirementOptionDto {
+    @ApiProperty()
+    @IsString()
+    label: string;
+
+    @ApiProperty()
+    @IsString()
+    value: string;
+}
+
+// Converts each array element without letting class-transformer's implicit
+// conversion reconstruct object elements as `new Array()` (the design:type
+// for a `string[] | Record<string, unknown>[]` property is just Array, with
+// no element type to build from). Strings pass through untouched since they
+// are never corrupted by that bug in the first place; only object elements
+// are reconstructed into a validated RequirementOptionDto instance.
+//
+// Reads from `obj[key]` rather than destructuring `value`: class-transformer
+// runs the implicit design:type conversion BEFORE invoking @Transform, so by
+// the time a callback receives `value` it is already the corrupted
+// `new Array()` result. `obj[key]` is the untouched source property and is
+// the only way a @Transform callback can see the real payload here.
+function toRequirementOptions({ obj, key }: { obj: Record<string, unknown>; key: string }): unknown {
+    const value = obj[key];
+    if (!Array.isArray(value)) return value;
+    return value.map((item) =>
+        typeof item === 'string' || item === null || typeof item !== 'object' || Array.isArray(item)
+            ? item
+            : plainToInstance(RequirementOptionDto, item),
+    );
 }
 
 // Timeline DTOs
@@ -1168,10 +1207,11 @@ export class CreateProgramRequirementDto {
     @IsOptional()
     fileAllowedTypes?: string;
 
-    @ApiProperty({ required: false })
+    @ApiProperty({ required: false, description: 'Choices for select/checkbox requirements: { label, value } objects or legacy plain strings', type: [RequirementOptionDto] })
     @IsArray()
     @IsOptional()
-    options?: string[] | Record<string, unknown>[];
+    @Transform(toRequirementOptions)
+    options?: string[] | RequirementOptionDto[];
 
     @ApiProperty({ required: false })
     @IsOptional()
@@ -1214,10 +1254,11 @@ export class UpdateProgramRequirementDto {
     @IsOptional()
     fileAllowedTypes?: string;
 
-    @ApiProperty({ required: false })
+    @ApiProperty({ required: false, description: 'Choices for select/checkbox requirements: { label, value } objects or legacy plain strings', type: [RequirementOptionDto] })
     @IsArray()
     @IsOptional()
-    options?: string[] | Record<string, unknown>[];
+    @Transform(toRequirementOptions)
+    options?: string[] | RequirementOptionDto[];
 
     @ApiProperty({ required: false })
     @IsOptional()
