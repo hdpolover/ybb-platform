@@ -3,43 +3,9 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { FileServiceClient } from '@modules/files/infrastructure/clients/file-service.client';
 import { LoaEligibilityService } from './loa-eligibility.service';
 import { LoaDocumentNumberService } from './loa-document-number.service';
+import { LoaRenderDataService } from './loa-render-data.service';
 import { PortalCacheService } from './portal-cache.service';
-import { parseProgramBatch } from '@shared/utils/parse-program-batch';
-import {
-  resolveLoaSignature,
-  buildLoaSourceMap,
-  buildGenerateLoaParams,
-} from '@shared/utils/loa-render-payload.util';
-
-// Gender enum values (prisma/schema/enums.prisma) are lowercase 'male' | 'female'.
-// Rendered human-readable on the LOA for visa-support tokens.
-function formatGender(gender: string | null | undefined): string {
-  if (gender === 'male') return 'Male';
-  if (gender === 'female') return 'Female';
-  return '';
-}
-
-// Joins phone country code + number sensibly — no double spaces, degrades to
-// whichever half is present, empty string when neither is.
-function formatPhone(countryCode: string | null | undefined, phoneNumber: string | null | undefined): string {
-  const cc = countryCode?.trim();
-  const num = phoneNumber?.trim();
-  if (cc && num) return `${cc} ${num}`;
-  return cc || num || '';
-}
-
-// participants.institution/nationality/major/occupation are never populated on this
-// platform (verified in prod: 0/13,199 participants have any of these set) — the real
-// values live in participant_applications.personal_data (JSON). Read from there first,
-// falling back to the dead participant column so nothing regresses if personal_data is
-// null or missing the key. A whitespace-only value counts as absent too.
-function readPersonalDataField(personalData: unknown, key: string, fallback: string | null | undefined): string {
-  if (personalData && typeof personalData === 'object' && !Array.isArray(personalData)) {
-    const value = (personalData as Record<string, unknown>)[key];
-    if (typeof value === 'string' && value.trim() !== '') return value.trim();
-  }
-  return fallback ?? '';
-}
+import { resolveLoaSignature, buildGenerateLoaParams } from '@shared/utils/loa-render-payload.util';
 
 export interface LoaDownloadResult {
   buffer: Buffer;
@@ -53,6 +19,7 @@ export class LoaDownloadService {
     private readonly portalCacheService: PortalCacheService,
     private readonly loaEligibilityService: LoaEligibilityService,
     private readonly loaDocumentNumberService: LoaDocumentNumberService,
+    private readonly loaRenderDataService: LoaRenderDataService,
     private readonly fileServiceClient: FileServiceClient,
   ) {}
 
@@ -66,46 +33,16 @@ export class LoaDownloadService {
     //    picking the wrong one. Instead we find the application and read programId from it.
     const application = await this.prisma.participantApplication.findFirst({
       where: { participantId: participant.id },
-      select: {
-        id: true,
-        status: true,
-        submittedAt: true,
-        programId: true,
-        personalData: true,
-        participant: {
-          select: {
-            fullName: true,
-            institution: true,
-            nationality: true,
-            birthdate: true,
-            gender: true,
-            originCountry: true,
-            phoneCountryCode: true,
-            phoneNumber: true,
-            major: true,
-            occupation: true,
-            user: { select: { email: true } },
-          },
-        },
-        participationCategory: { select: { name: true } },
-      },
+      select: { id: true, programId: true },
     });
     if (!application) throw new ForbiddenException('Invitation Letter not available');
 
-    // 3. Resolve the program deterministically from the application's own programId
+    // 3. Resolve the program deterministically from the application's own programId.
+    //    Only `id`/`year` needed here - LoaRenderDataService (step 8) fetches the full
+    //    program row on its own.
     const program = await this.prisma.program.findUnique({
       where: { id: application.programId },
-      select: {
-        id: true,
-        name: true,
-        year: true,
-        startDate: true,
-        endDate: true,
-        location: true,
-        programType: true,
-        theme: true,
-        brand: { select: { name: true } },
-      },
+      select: { id: true, year: true },
     });
     if (!program) throw new NotFoundException('Program not found');
 
@@ -114,7 +51,7 @@ export class LoaDownloadService {
     if (!eligibility.eligible) throw new ForbiddenException('Invitation Letter not available');
 
     // 5. Fetch the active LOA document template (moved before assignOrGet so we can pass
-    //    its id to assignOrGet — Bug 2 fix: templateId must be set on the created row)
+    //    its id to assignOrGet - Bug 2 fix: templateId must be set on the created row)
     const template = await this.prisma.documentTemplate.findFirst({
       where: { programId: program.id, type: 'letter_of_acceptance', isActive: true, deletedAt: null },
       select: { id: true, htmlContent: true, placeholders: true, layoutConfig: true },
@@ -134,71 +71,30 @@ export class LoaDownloadService {
       template.id,
     );
 
-    // 7. Extract layout settings from layoutConfig (moved ahead of the placeholder map so
-    //    signerName/signerTitle below are resolved before {{signer_name}}/{{signer_title}}
-    //    are read into the source map)
+    // 7. Extract layout settings from layoutConfig
     const layoutConfig = (template.layoutConfig ?? {}) as Record<string, unknown>;
     const headerConfig = (layoutConfig['header'] as Record<string, unknown> | undefined) ?? undefined;
 
-    // 7b. Resolve signature — legacy fallback is raw layoutConfig.signatureUrl with
-    // empty signer name/title (Stage 1 behavior). If layoutConfig.signatureId is set,
-    // look up the reusable brand-scoped Signature record and supersede the legacy
-    // values with its imageUrl/name/title. Any lookup failure (missing id, deleted
-    // row, DB error) degrades gracefully back to the legacy fallback — a bad
-    // signature reference must never break LOA download.
+    // 7b. Resolve signature - legacy fallback is raw layoutConfig.signatureUrl with
+    // empty signer name/title. If layoutConfig.signatureId is set, look up the
+    // reusable brand-scoped Signature record and supersede the legacy values with
+    // its imageUrl/name/title. Any lookup failure degrades gracefully back to the
+    // legacy fallback - a bad signature reference must never break LOA download.
     const { signatureUrl, signerName, signerTitle } = await resolveLoaSignature(this.prisma, {
       signatureUrl: layoutConfig['signatureUrl'] as string | undefined,
       signatureId: layoutConfig['signatureId'] as string | undefined,
     });
 
-    // 8. Build placeholder substitution map. Note: this source map used to be described
-    //    as mirroring a `GenerateLOAHandler` — that handler was removed during the
-    //    on-demand LOA rework (docs/superpowers/specs/2026-06-16-loa-on-demand-release-batches-design.md);
-    //    this is now the only place that builds LOA placeholder data.
-    const now = new Date();
-    const generatedAt = now.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-    const startDate = program.startDate
-      ? program.startDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
-      : '';
-    const endDate = program.endDate
-      ? program.endDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
-      : '';
-    const birthdate = application.participant.birthdate
-      ? application.participant.birthdate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
-      : '';
-    // Header title uses the stripped display name + parsed batch (e.g. "Japan Youth
-    // Summit 2026" / "Batch 2"); the {{program_name}} body token keeps resolving to the
-    // full original program.name below — only the header rendering uses the split form.
-    const { displayName: programDisplayName, batch: programBatch } = parseProgramBatch(program.name);
-    const sourceMap = buildLoaSourceMap({
-      participantFullName: application.participant.fullName,
-      programName: program.name,
-      programBatch,
-      generatedAt,
-      documentNumber: docNumber,
-      participationCategoryName: application.participationCategory?.name ?? '',
-      programLocation: program.location ?? '',
-      programStartDate: startDate,
-      programEndDate: endDate,
-      institution: readPersonalDataField(application.personalData, 'institution', application.participant.institution),
-      nationality: readPersonalDataField(application.personalData, 'nationality', application.participant.nationality),
-      birthdate,
-      gender: formatGender(application.participant.gender),
-      originCountry: application.participant.originCountry ?? '',
-      signerName,
-      signerTitle,
-      programYear: String(program.year),
-      participantEmail: application.participant.user?.email ?? '',
-      participantPhone: formatPhone(application.participant.phoneCountryCode, application.participant.phoneNumber),
-      major: readPersonalDataField(application.personalData, 'major', application.participant.major),
-      occupation: readPersonalDataField(application.personalData, 'occupation', application.participant.occupation),
-      programTheme: program.theme ?? '',
-      brandName: program.brand?.name ?? '',
-    });
+    // 8. Build the flat placeholder source map - the single shared piece with the
+    //    admin preview endpoint. See LoaRenderDataService.
+    const { sourceMap, programDisplayName, programBatch } = await this.loaRenderDataService.buildSourceMapForApplication(
+      application.id,
+      { documentNumber: docNumber, signerName, signerTitle },
+    );
 
     const placeholders = (template.placeholders ?? []) as Array<{ key: string; source: string }>;
 
-    // 9. Generate PDF via file service — no storage upload
+    // 9. Generate PDF via file service - no storage upload
     const buffer = await this.fileServiceClient.generateLoa(
       buildGenerateLoaParams({
         htmlContent: template.htmlContent,
@@ -232,6 +128,7 @@ export class LoaDownloadService {
     );
 
     // 10. Record download tracking
+    const now = new Date();
     await this.prisma.participantDocument.update({
       where: { id: existingDocId },
       data: {
