@@ -3111,24 +3111,57 @@ export function deleteDocumentTemplate(id: string): Promise<void> {
   return request<void>(`/programs/document-templates/${id}`, { method: 'DELETE' });
 }
 
+export interface PreviewLoaResult {
+  blob: Blob;
+  participantName: string;
+  isSample: boolean;
+}
+
 /**
- * Render an unsaved Invitation Letter draft through the real PDF generator
- * (WeasyPrint, same code path as the participant download) with sample
- * participant data, and return it as a PDF Blob for inline preview.
- * Draft state is sent as-is — nothing needs to be saved first.
+ * Render an Invitation Letter (draft or saved) through the real PDF
+ * generator (WeasyPrint, same code path as the participant download), for a
+ * real participant when one is available, and return it as a PDF Blob for
+ * inline preview alongside who it was rendered as.
+ *
+ * Uses a plain fetch (not requestBlob) because it needs to read the
+ * X-Preview-Participant-Name / X-Preview-Is-Sample response headers
+ * alongside the blob body - requestBlob discards headers.
  */
-export function previewDocumentTemplate(
+export async function previewDocumentTemplate(
   programId: string,
   input: {
     htmlContent: string;
     placeholders?: DocumentTemplatePlaceholder[];
     layoutConfig?: DocumentTemplateLayoutConfig;
+    applicationId?: string;
+    source?: "draft" | "saved";
   },
-): Promise<Blob> {
-  return requestBlob(`/programs/${programId}/document-templates/preview`, {
-    method: 'POST',
+): Promise<PreviewLoaResult> {
+  const headers = new Headers();
+  headers.set("Authorization", `Bearer ${getAccessToken()}`);
+  headers.set("Content-Type", "application/json");
+
+  const res = await fetch(buildApiUrl(`/programs/${programId}/document-templates/preview`), {
+    method: "POST",
+    headers,
     body: JSON.stringify(input),
   });
+
+  if (res.status === 401) {
+    redirectToLogin("session_expired");
+    throw new Error("Session expired. Redirecting to login...");
+  }
+  if (!res.ok) throw new Error(await readErrorMessage(res));
+
+  const participantNameHeader = res.headers.get("X-Preview-Participant-Name");
+  const isSampleHeader = res.headers.get("X-Preview-Is-Sample");
+  const blob = await res.blob();
+
+  return {
+    blob,
+    participantName: participantNameHeader ? decodeURIComponent(participantNameHeader) : "",
+    isSample: isSampleHeader === "true",
+  };
 }
 
 // ─── Signatures ───────────────────────────────────────────────────────────────
