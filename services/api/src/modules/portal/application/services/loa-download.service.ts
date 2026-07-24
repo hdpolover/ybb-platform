@@ -28,6 +28,19 @@ function formatPhone(countryCode: string | null | undefined, phoneNumber: string
   return cc || num || '';
 }
 
+// participants.institution/nationality/major/occupation are never populated on this
+// platform (verified in prod: 0/13,199 participants have any of these set) — the real
+// values live in participant_applications.personal_data (JSON). Read from there first,
+// falling back to the dead participant column so nothing regresses if personal_data is
+// null or missing the key. A whitespace-only value counts as absent too.
+function readPersonalDataField(personalData: unknown, key: string, fallback: string | null | undefined): string {
+  if (personalData && typeof personalData === 'object' && !Array.isArray(personalData)) {
+    const value = (personalData as Record<string, unknown>)[key];
+    if (typeof value === 'string' && value.trim() !== '') return value.trim();
+  }
+  return fallback ?? '';
+}
+
 export interface LoaDownloadResult {
   buffer: Buffer;
   filename: string;
@@ -58,6 +71,7 @@ export class LoaDownloadService {
         status: true,
         submittedAt: true,
         programId: true,
+        personalData: true,
         participant: {
           select: {
             fullName: true,
@@ -166,8 +180,8 @@ export class LoaDownloadService {
       programLocation: program.location ?? '',
       programStartDate: startDate,
       programEndDate: endDate,
-      institution: application.participant.institution ?? '',
-      nationality: application.participant.nationality ?? '',
+      institution: readPersonalDataField(application.personalData, 'institution', application.participant.institution),
+      nationality: readPersonalDataField(application.personalData, 'nationality', application.participant.nationality),
       birthdate,
       gender: formatGender(application.participant.gender),
       originCountry: application.participant.originCountry ?? '',
@@ -176,8 +190,8 @@ export class LoaDownloadService {
       programYear: String(program.year),
       participantEmail: application.participant.user?.email ?? '',
       participantPhone: formatPhone(application.participant.phoneCountryCode, application.participant.phoneNumber),
-      major: application.participant.major ?? '',
-      occupation: application.participant.occupation ?? '',
+      major: readPersonalDataField(application.personalData, 'major', application.participant.major),
+      occupation: readPersonalDataField(application.personalData, 'occupation', application.participant.occupation),
       programTheme: program.theme ?? '',
       brandName: program.brand?.name ?? '',
     });
