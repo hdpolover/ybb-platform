@@ -83,6 +83,19 @@ export class HttpExceptionFilter implements ExceptionFilter {
         : raw;
     }
 
+    // 4xx responses were previously silent server-side, making client-error
+    // spikes (validation failures, bad requests, etc.) undiagnosable in prod.
+    // Log a single warn line — no request body/headers/tokens — so these are
+    // at least visible without treating them as incidents like 5xx errors.
+    if (status >= 400 && status < 500) {
+      const userId = (req.user as { userId?: string } | undefined)?.userId;
+      this.logger.warn(
+        `[${req.method}] ${req.url} → ${status} | ${userMessage}${
+          userId ? ` | user=${userId}` : ''
+        }`,
+      );
+    }
+
     res.status(status).json({
       statusCode: status,
       message: userMessage,
