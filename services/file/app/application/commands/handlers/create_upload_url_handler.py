@@ -9,6 +9,7 @@ from app.domain.entities.file import File, FileStatus
 from app.domain.exceptions.file_exceptions import (
     FileSizeLimitException,
     InvalidFileTypeException,
+    InvalidFilenameException,
 )
 from app.domain.repositories.file_repository import IFileRepository
 from app.domain.services.storage_service import IStorageService
@@ -33,6 +34,10 @@ class CreateUploadUrlHandler:
     MAX_DOCUMENT_SIZE = 50 * 1024 * 1024  # 50 MB — client passes docs through as-is
     MAX_IMAGE_SIZE = 20 * 1024 * 1024     # 20 MB — safety net; client compresses images first
 
+    # Matches files.original_filename VARCHAR(255) — original_filename is displayed back to
+    # users, so overlength names are rejected here rather than silently truncated.
+    MAX_FILENAME_LENGTH = 255
+
     def __init__(
         self,
         storage_service: IStorageService,
@@ -42,6 +47,10 @@ class CreateUploadUrlHandler:
         self.file_repository = file_repository
 
     async def execute(self, command: CreateUploadUrlCommand) -> CreateUploadUrlResponseDto:
+        # Reject filenames that would overflow files.original_filename (VARCHAR(255))
+        if len(command.filename) > self.MAX_FILENAME_LENGTH:
+            raise InvalidFilenameException(len(command.filename), self.MAX_FILENAME_LENGTH)
+
         # MIME allowlist
         allowed = self.ALLOWED_DOCUMENT_TYPES + self.ALLOWED_IMAGE_TYPES
         if command.content_type not in allowed:
@@ -58,8 +67,7 @@ class CreateUploadUrlHandler:
 
         # Generate deterministic-looking storage key: {uuid}.{ext}
         file_id = str(uuid.uuid4())
-        extension = command.filename.rsplit('.', 1)[-1].lower() if '.' in command.filename else ''
-        storage_filename = f"{file_id}.{extension}" if extension else file_id
+        storage_filename = FilePathService.build_storage_filename(file_id, command.filename)
 
         storage_path, real_bucket, path_metadata = FilePathService.get_storage_path(
             brand_id=command.brand_id,

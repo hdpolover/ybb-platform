@@ -33,6 +33,7 @@ import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { ChangeType } from '@prisma/client';
 import { createAmbassadorShareToken } from '../application/utils/ambassador-share-token.util';
 import { Logger } from '@nestjs/common';
+import { CreateAmbassadorAdminDto, UpdateAmbassadorAdminDto } from './dto/ambassador.dto';
 
 @ApiTags('Ambassadors')
 @Controller('admin/ambassadors')
@@ -149,21 +150,13 @@ export class AmbassadorAdminController {
   @AuditTrail({ entityType: 'Ambassador', action: ChangeType.create })
   @ApiOperation({ summary: 'Create a new ambassador (Admin)' })
   async create(
-    @Body() body: {
-      email: string;
-      fullName: string;
-      programId: string;
-      phoneNumber?: string;
-      institution?: string;
-      gender?: string;
-      notes?: string;
-    },
+    @Body() body: CreateAmbassadorAdminDto,
   ) {
     const { email, fullName, programId, phoneNumber, institution, gender, notes } = body;
 
-    if (!email || !fullName || !programId) {
-      throw new BadRequestException('email, fullName, and programId are required');
-    }
+    // email/fullName/programId presence is enforced by CreateAmbassadorAdminDto
+    // (@IsEmail, @IsNotEmpty, @IsUUID) via the global ValidationPipe before this
+    // handler body runs — no manual re-check needed here.
     this.assertValidGender(gender);
 
     // Resolve program to get brandId and brand details for the welcome email
@@ -316,13 +309,7 @@ export class AmbassadorAdminController {
   @ApiOperation({ summary: 'Update ambassador details (Admin)' })
   async update(
     @Param('id') id: string,
-    @Body() body: {
-      fullName?: string;
-      phoneNumber?: string;
-      institution?: string;
-      gender?: string;
-      notes?: string;
-    },
+    @Body() body: UpdateAmbassadorAdminDto,
   ) {
     this.assertValidGender(body.gender);
 

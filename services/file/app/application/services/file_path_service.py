@@ -2,6 +2,27 @@ import os
 from typing import Optional
 
 class FilePathService:
+    # The extension is a derived/display label, not user-authored content, so it's safe to
+    # clamp rather than reject. Long enough for any real-world extension (the longest common
+    # ones are 4-5 chars); short enough that storage_filename (uuid36 + "." + extension) stays
+    # well inside files.filename VARCHAR(255) and storage_path VARCHAR(500) even after the
+    # env/brand/program/participant path prefix is prepended.
+    MAX_EXTENSION_LENGTH = 10
+
+    @staticmethod
+    def build_storage_filename(file_id: str, original_filename: str) -> str:
+        """
+        Build the on-storage filename: "{file_id}.{extension}".
+
+        The extension is parsed from the client-supplied filename (whatever follows the
+        last ".") and clamped to MAX_EXTENSION_LENGTH. Centralized here so every caller
+        (multipart upload, presigned-upload-url, gRPC) gets the same clamp instead of
+        each one re-implementing (and potentially forgetting) it.
+        """
+        extension = original_filename.rsplit('.', 1)[-1].lower() if '.' in original_filename else ''
+        extension = extension[:FilePathService.MAX_EXTENSION_LENGTH]
+        return f"{file_id}.{extension}" if extension else file_id
+
     @staticmethod
     def get_storage_path(
         brand_id: str,
