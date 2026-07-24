@@ -176,6 +176,13 @@ export class ParticipantResponseDto {
     @ApiPropertyOptional({ example: 'Vietnam' })
     currentCountry?: string;
 
+    // Origin (set at onboarding, distinct from current* above which PUT /me can change later)
+    @ApiPropertyOptional({ example: 'Vietnam' })
+    originCountry?: string;
+
+    @ApiPropertyOptional({ example: 'Hanoi' })
+    originCity?: string;
+
     // Education/Work
     @ApiPropertyOptional({ example: 'University of Technology' })
     institution?: string;
@@ -215,6 +222,13 @@ export class ParticipantResponseDto {
 
     @ApiPropertyOptional({ example: '81234567890' })
     emergencyContactPhone?: string;
+
+    // Onboarding source
+    @ApiPropertyOptional({ example: 'Instagram' })
+    knowledgeSource?: string;
+
+    @ApiPropertyOptional({ example: 'ABC-123' })
+    referralCode?: string;
 
     @ApiProperty({ example: 40 })
     profileCompletionPercentage: number;

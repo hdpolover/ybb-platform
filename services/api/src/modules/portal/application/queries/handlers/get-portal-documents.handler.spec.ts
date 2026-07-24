@@ -6,6 +6,7 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { PortalCacheService } from '../../services/portal-cache.service';
 import { LoaEligibilityService } from '../../services/loa-eligibility.service';
+import { DocumentAudienceService } from '../../services/document-audience.service';
 
 const USER_ID = 'user-1';
 const PARTICIPANT_ID = 'participant-1';
@@ -92,6 +93,7 @@ describe('GetPortalDocumentsHandler — LOA eligibility branch (Task 9)', () => 
                 { provide: CacheService, useValue: mockCacheService },
                 { provide: PortalCacheService, useValue: mockPortalCacheService },
                 { provide: LoaEligibilityService, useValue: mockLoaEligibilityService },
+                DocumentAudienceService,
             ],
         }).compile();
 

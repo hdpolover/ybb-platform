@@ -457,7 +457,7 @@ model DocumentTemplate {
   isActive Boolean @default(true) @map("is_active")
 
   // Visibility / Audience Rules
-  audienceType   String @default("all_registered") @map("audience_type") @db.VarChar(50)
+  audienceType   String @default("submitted_and_paid") @map("audience_type") @db.VarChar(50)
   audienceConfig Json   @default("{}") @map("audience_config") @db.Json
 
   order     Int       @default(0)
