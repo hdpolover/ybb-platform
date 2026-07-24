@@ -13,7 +13,7 @@ import {
   Bold, Italic, Underline as UnderlineIcon, AlignLeft, AlignCenter,
   AlignRight, List, ListOrdered, Undo, Redo, RemoveFormatting,
   Heading1, Heading2, Loader2, CheckCircle2, Upload, ImageIcon, X, Eye, EyeOff,
-  ChevronDown, Pencil, AlertTriangle, RefreshCw,
+  ChevronDown, Pencil, AlertTriangle, RefreshCw, UserRound,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
@@ -48,6 +48,7 @@ import {
   type Signature,
 } from "@/src/shared/api-client";
 import { formatDate } from "@/lib/utils";
+import { LoaParticipantPicker } from "./LoaParticipantPicker";
 
 const PLACEHOLDER_TOKENS: DocumentTemplatePlaceholder[] = [
   { key: "{{participant_name}}", label: "Participant Full Name", source: "participant.fullName" },
@@ -450,6 +451,67 @@ function MiniEditor({
   );
 }
 
+// ─── Preview Pane ─────────────────────────────────────────────────────────────
+
+interface PreviewPaneProps {
+  label: string;
+  loading: boolean;
+  error: string | null;
+  pdfUrl: string | null;
+  onRegenerate: () => void;
+  warning?: string | null;
+}
+
+function PreviewPane({ label, loading, error, pdfUrl, onRegenerate, warning }: PreviewPaneProps) {
+  return (
+    <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-inner" style={{ minHeight: 560 }}>
+      <div className="flex items-center justify-between gap-2 border-b border-zinc-100 bg-zinc-50 px-3 py-2 text-[11px] text-zinc-500">
+        <span className="flex items-center gap-1.5 font-medium text-zinc-700">
+          <Eye className="h-3 w-3" />
+          {label}
+        </span>
+        <button
+          type="button"
+          disabled={loading}
+          onClick={onRegenerate}
+          className="flex items-center gap-1 rounded px-1.5 py-0.5 font-medium text-zinc-600 hover:bg-zinc-100 disabled:opacity-50"
+        >
+          <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
+          Regenerate
+        </button>
+      </div>
+      {warning ? (
+        <div className="flex items-start gap-1.5 border-b border-amber-200 bg-amber-50 px-3 py-1.5">
+          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-amber-600" />
+          <p className="text-[10px] text-amber-700">{warning}</p>
+        </div>
+      ) : null}
+      {loading ? (
+        <div className="flex flex-1 items-center justify-center gap-2 text-xs text-zinc-400">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Rendering PDF…
+        </div>
+      ) : error ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
+          <p className="text-xs font-medium text-red-600">Preview failed</p>
+          <p className="max-w-sm text-[11px] text-zinc-500">{error}</p>
+          <button
+            type="button"
+            onClick={onRegenerate}
+            className="mt-1 rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50"
+          >
+            Try again
+          </button>
+        </div>
+      ) : pdfUrl ? (
+        <iframe src={pdfUrl} className="h-full w-full flex-1" title={`Invitation Letter Preview - ${label}`} style={{ minHeight: 520 }} />
+      ) : (
+        <div className="flex flex-1 items-center justify-center text-xs text-zinc-400">No preview yet.</div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 interface LoaTemplateEditorProps {
@@ -481,12 +543,32 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
   // legacy content assumed) and gets corrected downward once the template loads.
   const [structuredHeaderConfirmed, setStructuredHeaderConfirmed] = useState(true);
 
-  // Real-renderer preview (Task 2): the PDF blob URL from the file-service
-  // WeasyPrint pipeline, not a hand-rolled HTML mock.
-  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
-  const previewObjectUrlRef = useRef<string | null>(null);
+  // Real-renderer preview: the PDF blob URLs from the file-service WeasyPrint
+  // pipeline, not a hand-rolled HTML mock. Two panes - DRAFT (unsaved editor
+  // state) and SAVED (persisted template row) - rendered side by side so a
+  // corrupted persisted template can never hide behind a perfect-looking
+  // draft again.
+  const [previewPdfUrls, setPreviewPdfUrls] = useState<{ draft: string | null; saved: string | null }>({
+    draft: null,
+    saved: null,
+  });
+  const [previewLoading, setPreviewLoading] = useState<{ draft: boolean; saved: boolean }>({
+    draft: false,
+    saved: false,
+  });
+  const [previewErrors, setPreviewErrors] = useState<{ draft: string | null; saved: string | null }>({
+    draft: null,
+    saved: null,
+  });
+  const previewObjectUrlRefs = useRef<{ draft: string | null; saved: string | null }>({ draft: null, saved: null });
+
+  // Who the preview is rendered as. Resolved server-side (auto-pick or the
+  // admin's explicit picker choice) and reported back via response headers,
+  // since the endpoint returns a raw PDF blob with no JSON body.
+  const [previewApplicationId, setPreviewApplicationId] = useState<string | null>(null);
+  const [previewParticipantName, setPreviewParticipantName] = useState<string | null>(null);
+  const [previewIsSample, setPreviewIsSample] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   // Signatures (brand-scoped, reusable across templates)
   const [signatures, setSignatures] = useState<Signature[]>([]);
@@ -647,10 +729,12 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
     }
   }, [editor, footerEditor, template]);
 
-  // Revoke the preview PDF's blob URL on unmount / before generating a new one.
+  // Revoke both preview panes' blob URLs on unmount / before generating new ones.
   useEffect(() => {
     return () => {
-      if (previewObjectUrlRef.current) URL.revokeObjectURL(previewObjectUrlRef.current);
+      const urls = previewObjectUrlRefs.current;
+      if (urls.draft) URL.revokeObjectURL(urls.draft);
+      if (urls.saved) URL.revokeObjectURL(urls.saved);
     };
   }, []);
 
@@ -696,37 +780,79 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
     }
   }
 
-  // Renders through the same file-service WeasyPrint pipeline
-  // (structured header, footer precedence, auto-stamp, page-footer disclaimer)
-  // that LoaDownloadService uses for real participant downloads — see
+  // Renders through the same file-service WeasyPrint pipeline (structured
+  // header, footer precedence, auto-stamp, page-footer disclaimer) that
+  // LoaDownloadService uses for real participant downloads - see
   // PreviewLoaTemplateHandler on the API side. No hand-rolled HTML mock.
-  const generatePreview = useCallback(async () => {
+  // `applicationIdOverride` lets a caller that just changed
+  // `previewApplicationId` (via setState, which doesn't take effect until the
+  // next render) pass the new id straight through instead of reading the
+  // stale value still captured in this callback's closure. `undefined` means
+  // "no override, use current state" - `null` is a valid override meaning
+  // "let the backend auto-pick," so it can't double as "no override."
+  const generatePreview = useCallback(async (source: "draft" | "saved", applicationIdOverride?: string | null) => {
     if (!editor || !resolvedProgramId) return;
-    setPreviewLoading(true);
-    setPreviewError(null);
+    setPreviewLoading((l) => ({ ...l, [source]: true }));
+    setPreviewErrors((e) => ({ ...e, [source]: null }));
     try {
       const footerHtml = footerEditor?.getHTML() ?? layout.footerHtml ?? "";
+      const effectiveApplicationId = applicationIdOverride !== undefined ? applicationIdOverride : previewApplicationId;
       const result = await previewDocumentTemplate(resolvedProgramId, {
         htmlContent: editor.getHTML(),
         placeholders: PLACEHOLDER_TOKENS,
         layoutConfig: { ...layout, footerHtml },
+        applicationId: effectiveApplicationId ?? undefined,
+        source,
       });
-      if (previewObjectUrlRef.current) URL.revokeObjectURL(previewObjectUrlRef.current);
+      const prevUrl = previewObjectUrlRefs.current[source];
+      if (prevUrl) URL.revokeObjectURL(prevUrl);
       const url = URL.createObjectURL(result.blob);
-      previewObjectUrlRef.current = url;
-      setPreviewPdfUrl(url);
+      previewObjectUrlRefs.current[source] = url;
+      setPreviewPdfUrls((u) => ({ ...u, [source]: url }));
+      // The draft pane's response is treated as authoritative for the shared
+      // "Previewing as" header - both panes resolve to the same application
+      // in practice, since they're issued with the same applicationId/program.
+      if (source === "draft") {
+        setPreviewParticipantName(result.participantName);
+        setPreviewIsSample(result.isSample);
+      }
     } catch (err) {
-      setPreviewError(err instanceof Error ? err.message : "Failed to generate preview");
+      setPreviewErrors((e) => ({ ...e, [source]: err instanceof Error ? err.message : "Failed to generate preview" }));
     } finally {
-      setPreviewLoading(false);
+      setPreviewLoading((l) => ({ ...l, [source]: false }));
     }
-  }, [editor, footerEditor, layout, resolvedProgramId]);
+  }, [editor, footerEditor, layout, resolvedProgramId, previewApplicationId]);
+
+  const generateBothPreviews = useCallback((applicationIdOverride?: string | null) => {
+    void generatePreview("draft", applicationIdOverride);
+    void generatePreview("saved", applicationIdOverride);
+  }, [generatePreview]);
 
   function togglePreview() {
     const next = !previewMode;
     setPreviewMode(next);
-    if (next) void generatePreview();
+    if (next) generateBothPreviews();
   }
+
+  function handlePickerSelect(applicationId: string, participantName: string) {
+    setPreviewApplicationId(applicationId);
+    setPreviewParticipantName(participantName);
+    setPreviewIsSample(false);
+    generateBothPreviews(applicationId);
+  }
+
+  // Plain computation, not useMemo - Tiptap's `editor` object reference stays
+  // stable across keystrokes, so a useMemo keyed on [editor] would never
+  // recompute. This component already re-renders on every keystroke via
+  // Tiptap's own transaction-triggered updates, so a cheap inline
+  // computation is correct here and costs no server work.
+  const currentFooterHtml = footerEditor?.getHTML() ?? layout.footerHtml ?? "";
+  const hasDraftDrift = Boolean(
+    template &&
+      (editor?.getHTML() !== (template.htmlContent ?? "") ||
+        JSON.stringify({ ...layout, footerHtml: currentFooterHtml }) !==
+          JSON.stringify({ ...DEFAULT_LAYOUT, ...(template.layoutConfig ?? {}) })),
+  );
 
   if (loading) {
     return (
@@ -799,49 +925,50 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
         {/* Left: editors or preview (60%) */}
         <div className="flex w-[60%] flex-col gap-3 overflow-y-auto">
           {previewMode ? (
-            <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-inner" style={{ minHeight: 600 }}>
-              <div className="flex items-center justify-between gap-2 border-b border-zinc-100 bg-zinc-50 px-4 py-2 text-[11px] text-zinc-500">
-                <span className="flex items-center gap-2">
-                  <Eye className="h-3 w-3" />
-                  Real PDF preview — sample participant data, actual renderer
-                </span>
+            <div className="flex flex-1 flex-col gap-2 overflow-hidden">
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2">
+                <div className="flex items-center gap-2 text-xs text-zinc-600">
+                  <UserRound className="h-3.5 w-3.5 text-zinc-400" />
+                  {previewIsSample ? (
+                    <span>
+                      Showing <span className="font-medium text-amber-700">sample data</span> - no submitted or
+                      accepted applications yet for this program.
+                    </span>
+                  ) : (
+                    <span>
+                      Previewing as: <span className="font-medium text-zinc-900">{previewParticipantName ?? "…"}</span>
+                    </span>
+                  )}
+                </div>
                 <button
                   type="button"
-                  disabled={previewLoading}
-                  onClick={() => void generatePreview()}
-                  className="flex items-center gap-1 rounded px-1.5 py-0.5 font-medium text-zinc-600 hover:bg-zinc-100 disabled:opacity-50"
+                  onClick={() => setPickerOpen(true)}
+                  className="text-[11px] font-medium text-blue-600 hover:text-blue-700"
                 >
-                  <RefreshCw className={`h-3 w-3 ${previewLoading ? "animate-spin" : ""}`} />
-                  Regenerate
+                  [change]
                 </button>
               </div>
-              {previewLoading ? (
-                <div className="flex flex-1 items-center justify-center gap-2 text-xs text-zinc-400">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Rendering PDF…
-                </div>
-              ) : previewError ? (
-                <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
-                  <p className="text-xs font-medium text-red-600">Preview failed</p>
-                  <p className="max-w-sm text-[11px] text-zinc-500">{previewError}</p>
-                  <button
-                    type="button"
-                    onClick={() => void generatePreview()}
-                    className="mt-1 rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50"
-                  >
-                    Try again
-                  </button>
-                </div>
-              ) : previewPdfUrl ? (
-                <iframe
-                  src={previewPdfUrl}
-                  className="h-full w-full flex-1"
-                  title="Invitation Letter Preview"
-                  style={{ minHeight: 560 }}
+              <div className="flex flex-1 gap-2 overflow-hidden">
+                <PreviewPane
+                  label="DRAFT"
+                  loading={previewLoading.draft}
+                  error={previewErrors.draft}
+                  pdfUrl={previewPdfUrls.draft}
+                  onRegenerate={() => void generatePreview("draft")}
+                  warning={
+                    hasDraftDrift
+                      ? "This draft differs from the last saved template. SAVED still reflects what participants can download today."
+                      : null
+                  }
                 />
-              ) : (
-                <div className="flex flex-1 items-center justify-center text-xs text-zinc-400">No preview yet.</div>
-              )}
+                <PreviewPane
+                  label="SAVED"
+                  loading={previewLoading.saved}
+                  error={previewErrors.saved}
+                  pdfUrl={previewPdfUrls.saved}
+                  onRegenerate={() => void generatePreview("saved")}
+                />
+              </div>
             </div>
           ) : (
             <>
@@ -1308,6 +1435,13 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
           await save(false);
           setUnpublishConfirmOpen(false);
         }}
+      />
+
+      <LoaParticipantPicker
+        programId={resolvedProgramId}
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        onSelect={handlePickerSelect}
       />
     </div>
   );
