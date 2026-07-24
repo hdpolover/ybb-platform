@@ -1369,7 +1369,9 @@ export class CreateDocumentTemplateHandler implements ICommandHandler<CreateDocu
             placeholders: command.dto.placeholders,
             // Explicit layoutConfig from DTO takes precedence; fall back to file metadata for file-based templates
             layoutConfig: command.dto.layoutConfig ?? (fileSize !== undefined || fileType !== undefined ? { fileSize, fileType } : undefined),
-            audienceType: command.dto.audienceType ?? 'all_registered',
+            // Fail closed by default: an admin who doesn't pick a visibility rule gets the
+            // locked-down default, mirroring DocumentTemplate.audienceType's schema default.
+            audienceType: command.dto.audienceType ?? 'submitted_and_paid',
             audienceConfig: command.dto.audienceConfig ?? {},
             order: command.dto.order ?? 0,
         };

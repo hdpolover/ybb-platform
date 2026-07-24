@@ -1545,9 +1545,9 @@ export class CreateDocumentTemplateDto {
 
     @ApiProperty({
         required: false,
-        description: 'Audience type: all_registered | paid_any | paid_pricing_tier | specific_status',
+        description: 'Audience type: all_registered | paid_any | paid_pricing_tier | specific_status | submitted_and_paid',
     })
-    @IsIn(['all_registered', 'paid_any', 'paid_pricing_tier', 'specific_status'])
+    @IsIn(['all_registered', 'paid_any', 'paid_pricing_tier', 'specific_status', 'submitted_and_paid'])
     @IsString()
     @IsOptional()
     audienceType?: string;
@@ -1624,7 +1624,7 @@ export class UpdateDocumentTemplateDto {
     fileType?: string;
 
     @ApiProperty({ required: false })
-    @IsIn(['all_registered', 'paid_any', 'paid_pricing_tier', 'specific_status'])
+    @IsIn(['all_registered', 'paid_any', 'paid_pricing_tier', 'specific_status', 'submitted_and_paid'])
     @IsString()
     @IsOptional()
     audienceType?: string;
