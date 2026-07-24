@@ -166,6 +166,13 @@ func (s *PaymentGrpcServer) GetPaymentMethods(ctx context.Context, req *pb.GetPa
 func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessPaymentRequest) (*pb.ProcessPaymentResponse, error) {
 	var idempotencyRecord *entities.PaymentIdempotencyKey
 	if idempotencyKey := grpcIdempotencyKey(ctx); idempotencyKey != "" && s.idempotencyRepo != nil {
+		// payment_idempotency_keys.idempotency_key is varchar(255); reject an
+		// oversized key here with a clear error instead of letting it reach the
+		// DB write as a "value too long" Internal error.
+		if len(idempotencyKey) > maxIdempotencyKeyLength {
+			return nil, status.Errorf(codes.InvalidArgument, "idempotency key must not exceed %d characters", maxIdempotencyKeyLength)
+		}
+
 		requestHash, hashErr := services.BuildIdempotencyRequestHash(map[string]interface{}{
 			"intent_id":         req.IntentId,
 			"payment_method_id": req.PaymentMethodId,
@@ -438,12 +445,8 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 	resp, err := gateway.ChargePayment(ctx, chargeReq)
 	if err != nil {
 		tx.Status = entities.TransactionStatusFailed
-
-		errMsg := err.Error()
-		if len(errMsg) > 250 {
-			errMsg = errMsg[:250]
-		}
-		tx.ErrorCode = errMsg
+		tx.ErrorCode = "GATEWAY_ERROR"
+		tx.AdminNotes = err.Error()
 
 		s.txRepo.Update(ctx, tx)
 		s.failIdempotency(ctx, idempotencyRecord, err)
@@ -579,6 +582,10 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 	s.completeIdempotency(ctx, idempotencyRecord, tx.ID, response)
 	return response, nil
 }
+
+// maxIdempotencyKeyLength mirrors the payment_idempotency_keys.idempotency_key
+// column width (varchar(255)).
+const maxIdempotencyKeyLength = 255
 
 func grpcIdempotencyKey(ctx context.Context) string {
 	md, ok := metadata.FromIncomingContext(ctx)
@@ -764,7 +771,8 @@ func (s *PaymentGrpcServer) VerifyManualPayment(ctx context.Context, req *pb.Ver
 
 	} else if req.Status == "FAILED" {
 		tx.Status = entities.TransactionStatusFailed
-		tx.ErrorCode = "MANUAL_REJECTION: " + req.Reason
+		tx.ErrorCode = "MANUAL_REJECTED"
+		tx.AdminNotes = req.Reason
 
 		// Publish Failed Event
 		event := events.NewPaymentEvent(

@@ -82,12 +82,19 @@ export class CreateProgramHandler implements ICommandHandler<CreateProgramComman
     }
 
     private generateSlug(text: string): string {
+        // Cap at the Program.slug column limit (VarChar(255), see prisma/schema/program.prisma).
+        // Not routed through shared/utils/auto-slug.ts: that util is separator-incompatible
+        // here (underscore-joined, built for form-field keys) and would rewrite every
+        // program slug off its established hyphenated convention (e.g. "world-youth-fest").
+        // This transform chain only ever removes characters, so slicing after is a safe
+        // hard cap, not a truncation that changes earlier chars.
         return text
             .toString()
             .toLowerCase()
             .trim()
             .replace(/\s+/g, '-')     // Replace spaces with -
             .replace(/[^\w\-]+/g, '') // Remove all non-word chars
-            .replace(/\-\-+/g, '-');  // Replace multiple - with single -
+            .replace(/\-\-+/g, '-')  // Replace multiple - with single -
+            .slice(0, 255);
     }
 }

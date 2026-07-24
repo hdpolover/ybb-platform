@@ -22,6 +22,7 @@ from app.domain.exceptions.file_exceptions import (
     FileNotFoundException,
     FileNotUploadedException,
     InvalidFileTypeException,
+    InvalidFilenameException,
     FileSizeLimitException,
 )
 from app.presentation.dependencies.container import (
@@ -93,6 +94,11 @@ async def upload_file(
         
         return UploadFileResponseDto(file=file_dto)
         
+    except InvalidFilenameException as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
     except InvalidFileTypeException as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -143,6 +149,8 @@ async def request_upload_url(
             alt_text=body.alt_text,
         )
         return await handler.execute(command)
+    except InvalidFilenameException as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except InvalidFileTypeException as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except FileSizeLimitException as e:

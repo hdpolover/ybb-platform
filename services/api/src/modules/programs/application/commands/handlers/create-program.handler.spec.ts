@@ -104,4 +104,24 @@ describe('CreateProgramHandler', () => {
         }));
         expect(result.slug).toBe('new-adventure-2024');
     });
+
+    it('caps the auto-generated slug at 255 chars (Program.slug is VarChar(255))', async () => {
+        const longName = 'Word '.repeat(60).trim(); // well over 255 chars once hyphenated
+        const dto: CreateProgramDto = {
+            name: longName,
+            brandId: 'cat-1',
+            year: 2024,
+            startDate: '2024-01-01',
+            endDate: '2024-01-10',
+            applicationDeadline: '2023-12-31',
+        };
+        const command = new CreateProgramCommand(dto, 'user-1');
+
+        mockProgramRepository.create.mockImplementation((data) => Promise.resolve({ id: 'prog-1', ...data }));
+
+        await handler.execute(command);
+
+        const createdSlug = mockProgramRepository.create.mock.calls[0][0].slug as string;
+        expect(createdSlug.length).toBeLessThanOrEqual(255);
+    });
 });
