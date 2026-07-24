@@ -63,8 +63,8 @@ Callers after the change:
 The existing preview endpoint `POST /programs/:id/document-templates/preview` gains two optional
 body params:
 
-- `applicationId?: string` — whose data to render. Omitted means auto-pick.
-- `source?: 'draft' | 'saved'` — defaults to `'draft'` to preserve current behaviour for any
+- `applicationId?: string` - whose data to render. Omitted means auto-pick.
+- `source?: 'draft' | 'saved'` - defaults to `'draft'` to preserve current behaviour for any
   existing caller.
 
 The client issues two requests in parallel, one per `source`, and displays them side by side.
