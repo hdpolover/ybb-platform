@@ -706,13 +706,13 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
     setPreviewError(null);
     try {
       const footerHtml = footerEditor?.getHTML() ?? layout.footerHtml ?? "";
-      const blob = await previewDocumentTemplate(resolvedProgramId, {
+      const result = await previewDocumentTemplate(resolvedProgramId, {
         htmlContent: editor.getHTML(),
         placeholders: PLACEHOLDER_TOKENS,
         layoutConfig: { ...layout, footerHtml },
       });
       if (previewObjectUrlRef.current) URL.revokeObjectURL(previewObjectUrlRef.current);
-      const url = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(result.blob);
       previewObjectUrlRef.current = url;
       setPreviewPdfUrl(url);
     } catch (err) {
