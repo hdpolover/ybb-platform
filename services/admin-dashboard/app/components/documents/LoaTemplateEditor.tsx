@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from "@/src/ui/dialog";
 import { ConfirmDialog } from "@/src/admin/confirm-dialog";
+import { EmptyState } from "@/src/admin/empty-state";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -474,7 +475,7 @@ function PreviewPane({ label, loading, error, pdfUrl, onRegenerate, warning }: P
           type="button"
           disabled={loading}
           onClick={onRegenerate}
-          className="flex items-center gap-1 rounded px-1.5 py-0.5 font-medium text-zinc-600 hover:bg-zinc-100 disabled:opacity-50"
+          className="flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 font-medium text-zinc-600 hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
         >
           <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
           Regenerate
@@ -498,7 +499,7 @@ function PreviewPane({ label, loading, error, pdfUrl, onRegenerate, warning }: P
           <button
             type="button"
             onClick={onRegenerate}
-            className="mt-1 rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50"
+            className="mt-1 cursor-pointer rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
           >
             Try again
           </button>
@@ -506,7 +507,7 @@ function PreviewPane({ label, loading, error, pdfUrl, onRegenerate, warning }: P
       ) : pdfUrl ? (
         <iframe src={pdfUrl} className="h-full w-full flex-1" title={`Invitation Letter Preview - ${label}`} style={{ minHeight: 520 }} />
       ) : (
-        <div className="flex flex-1 items-center justify-center text-xs text-zinc-400">No preview yet.</div>
+        <EmptyState className="flex-1 justify-center py-0" icon={Eye} title="No preview yet" />
       )}
     </div>
   );
@@ -561,6 +562,17 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
     saved: null,
   });
   const previewObjectUrlRefs = useRef<{ draft: string | null; saved: string | null }>({ draft: null, saved: null });
+
+  // Monotonic per-pane request counter. `generatePreview` bumps its pane's
+  // counter before firing the request and captures that value; when the
+  // response comes back it's only applied if the counter still matches -
+  // otherwise a newer request for the same pane (auto-pick, explicit pick,
+  // or manual Regenerate) has already superseded it, and this response lost
+  // the race and must be discarded rather than clobbering the newer one.
+  const previewRequestSeqRef = useRef<{ draft: number; saved: number }>({ draft: 0, saved: 0 });
+  // False once the component has unmounted, so a request that resolves after
+  // that point never writes state or creates an object URL nobody will revoke.
+  const previewMountedRef = useRef(true);
 
   // Who the preview is rendered as. Resolved server-side (auto-pick or the
   // admin's explicit picker choice) and reported back via response headers,
@@ -730,8 +742,15 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
   }, [editor, footerEditor, template]);
 
   // Revoke both preview panes' blob URLs on unmount / before generating new ones.
+  // Also flips `previewMountedRef` so a `generatePreview` request already in
+  // flight discards its response instead of storing a URL nothing will ever
+  // revoke - see the staleness guard inside `generatePreview`. Reset to `true`
+  // at the top so React Strict Mode's dev-only mount→cleanup→mount cycle
+  // doesn't leave this permanently `false` after the first (fake) unmount.
   useEffect(() => {
+    previewMountedRef.current = true;
     return () => {
+      previewMountedRef.current = false;
       const urls = previewObjectUrlRefs.current;
       if (urls.draft) URL.revokeObjectURL(urls.draft);
       if (urls.saved) URL.revokeObjectURL(urls.saved);
@@ -790,8 +809,18 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
   // stale value still captured in this callback's closure. `undefined` means
   // "no override, use current state" - `null` is a valid override meaning
   // "let the backend auto-pick," so it can't double as "no override."
+  //
+  // Runs for the same pane can overlap (opening Preview fires an auto-pick
+  // run; picking a participant before it resolves fires another), and
+  // network order is not request order. `requestId` pins this call to a
+  // point-in-time slot in `previewRequestSeqRef.current[source]`; if that
+  // counter has moved on by the time the response lands, this response is
+  // stale and is discarded outright - it must not overwrite the pane's PDF,
+  // the shared "Previewing as" header, or leak an object URL nobody stored.
   const generatePreview = useCallback(async (source: "draft" | "saved", applicationIdOverride?: string | null) => {
     if (!editor || !resolvedProgramId) return;
+    const requestId = (previewRequestSeqRef.current[source] += 1);
+    const isStale = () => !previewMountedRef.current || previewRequestSeqRef.current[source] !== requestId;
     setPreviewLoading((l) => ({ ...l, [source]: true }));
     setPreviewErrors((e) => ({ ...e, [source]: null }));
     try {
@@ -804,22 +833,32 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
         applicationId: effectiveApplicationId ?? undefined,
         source,
       });
+      const url = URL.createObjectURL(result.blob);
+      if (isStale()) {
+        // A newer request for this pane (or an unmount) already won the race
+        // while this one was in flight. Revoke the URL just created for it
+        // instead of storing it - nothing must reference it, so nothing else
+        // will ever revoke it.
+        URL.revokeObjectURL(url);
+        return;
+      }
       const prevUrl = previewObjectUrlRefs.current[source];
       if (prevUrl) URL.revokeObjectURL(prevUrl);
-      const url = URL.createObjectURL(result.blob);
       previewObjectUrlRefs.current[source] = url;
       setPreviewPdfUrls((u) => ({ ...u, [source]: url }));
-      // The draft pane's response is treated as authoritative for the shared
-      // "Previewing as" header - both panes resolve to the same application
-      // in practice, since they're issued with the same applicationId/program.
-      if (source === "draft") {
-        setPreviewParticipantName(result.participantName);
-        setPreviewIsSample(result.isSample);
-      }
+      // Either pane's response can set the shared "Previewing as" header -
+      // not just DRAFT's. Both panes are issued against the same
+      // applicationId/program so a successful response from either agrees;
+      // this matters specifically when one pane fails and the other
+      // succeeds, so the header still reflects the pane that actually
+      // rendered instead of holding a stale or empty identity.
+      setPreviewParticipantName(result.participantName);
+      setPreviewIsSample(result.isSample);
     } catch (err) {
+      if (isStale()) return;
       setPreviewErrors((e) => ({ ...e, [source]: err instanceof Error ? err.message : "Failed to generate preview" }));
     } finally {
-      setPreviewLoading((l) => ({ ...l, [source]: false }));
+      if (!isStale()) setPreviewLoading((l) => ({ ...l, [source]: false }));
     }
   }, [editor, footerEditor, layout, resolvedProgramId, previewApplicationId]);
 
@@ -926,24 +965,36 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
         <div className="flex w-[60%] flex-col gap-3 overflow-y-auto">
           {previewMode ? (
             <div className="flex flex-1 flex-col gap-2 overflow-hidden">
-              <div className="flex items-center justify-between gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2">
-                <div className="flex items-center gap-2 text-xs text-zinc-600">
-                  <UserRound className="h-3.5 w-3.5 text-zinc-400" />
-                  {previewIsSample ? (
+              <div
+                className={[
+                  "flex items-center justify-between gap-2 rounded-lg border px-3 py-2",
+                  previewIsSample ? "border-amber-200 bg-amber-50" : "border-zinc-200 bg-white",
+                ].join(" ")}
+              >
+                {previewIsSample ? (
+                  // Same border/background/icon treatment as the drift-warning banner in
+                  // PreviewPane - this notice exists to stop a sample-data render being
+                  // mistaken for a verified one, so it can't read quieter than that banner.
+                  <div className="flex items-start gap-1.5 text-xs text-amber-700">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
                     <span>
-                      Showing <span className="font-medium text-amber-700">sample data</span> - no submitted or
+                      Showing <span className="font-semibold text-amber-800">sample data</span> - no submitted or
                       accepted applications yet for this program.
                     </span>
-                  ) : (
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-xs text-zinc-600">
+                    <UserRound className="h-3.5 w-3.5 text-zinc-400" />
                     <span>
                       Previewing as: <span className="font-medium text-zinc-900">{previewParticipantName ?? "…"}</span>
                     </span>
-                  )}
-                </div>
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={() => setPickerOpen(true)}
-                  className="text-[11px] font-medium text-blue-600 hover:text-blue-700"
+                  aria-label="Change participant"
+                  className="cursor-pointer rounded px-1 py-0.5 text-[11px] font-medium text-blue-600 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
                 >
                   [change]
                 </button>
