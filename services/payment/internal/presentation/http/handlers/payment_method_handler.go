@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -9,6 +10,28 @@ import (
 	"github.com/ybb-platform/payment/internal/infrastructure/gateways"
 	"github.com/ybb-platform/payment/internal/infrastructure/persistence"
 )
+
+// paymentMethodCodeMaxLength mirrors the varchar(50) constraint on
+// payment_methods.code (entities.PaymentMethodEntity.Code). Without this
+// guard, an over-length code doesn't fail validation, it fails the INSERT
+// with a raw Postgres "value too long for type character varying(50)"
+// (22001), which surfaces to the admin as an opaque 500.
+const paymentMethodCodeMaxLength = 50
+
+// validatePaymentMethodRequest guards fields that would otherwise reach the
+// DB and fail with a confusing low-level error instead of a clear 4xx.
+// Deliberately does not truncate: the client is responsible for generating
+// a code that fits, and silently truncating server-side could produce a
+// code the admin never chose (and collide with another truncated code).
+func validatePaymentMethodRequest(pm *entities.PaymentMethodEntity) error {
+	if len(pm.Code) > paymentMethodCodeMaxLength {
+		return badRequestError(fmt.Sprintf(
+			"code must be %d characters or fewer (got %d)",
+			paymentMethodCodeMaxLength, len(pm.Code),
+		))
+	}
+	return nil
+}
 
 type PaymentMethodHandler struct {
 	repo           *persistence.PaymentMethodRepository
@@ -35,6 +58,10 @@ func NewPaymentMethodHandler(
 func (h *PaymentMethodHandler) Create(c *gin.Context) {
 	var req entities.PaymentMethodEntity
 	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := validatePaymentMethodRequest(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -163,6 +190,11 @@ func (h *PaymentMethodHandler) Update(c *gin.Context) {
 	existing.GatewayName = req.GatewayName
 	existing.GatewayType = req.GatewayType
 	existing.Config = req.Config
+
+	if err := validatePaymentMethodRequest(existing); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	if err := h.repo.Update(c.Request.Context(), existing); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update payment method"})
