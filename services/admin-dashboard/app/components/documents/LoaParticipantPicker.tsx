@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Loader2, Search, UserCircle2 } from "lucide-react";
 import {
   Dialog,
@@ -37,7 +37,7 @@ interface LoaParticipantPickerProps {
  * existing admin applications search endpoint (GET /applications) - no new
  * search endpoint was introduced for this feature.
  */
-export function LoaParticipantPicker({ programId, open, onOpenChange, onSelect }: LoaParticipantPickerProps) {
+export function LoaParticipantPicker({ programId, open, onOpenChange, onSelect }: LoaParticipantPickerProps): React.JSX.Element {
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<Application[]>([]);
   const [loading, setLoading] = useState(false);
@@ -126,7 +126,7 @@ export function LoaParticipantPicker({ programId, open, onOpenChange, onSelect }
                         onSelect(app.id, app.participant?.fullName ?? "Unknown participant");
                         onOpenChange(false);
                       }}
-                      className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-blue-50 focus-visible:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
+                      className="flex w-full cursor-pointer items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-blue-50 focus-visible:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 active:bg-blue-100"
                     >
                       <UserCircle2 className="h-4 w-4 shrink-0 text-zinc-400" />
                       <span className="min-w-0 flex-1">
