@@ -328,21 +328,34 @@ export class ProgramContentController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Render an unsaved Invitation Letter draft through the real PDF generator, with sample participant data' })
+  @ApiOperation({ summary: 'Render an Invitation Letter (draft or saved) through the real PDF generator, with real participant data when available' })
   @ApiResponse({ status: 200, description: 'PDF binary' })
+  @ApiResponse({ status: 404, description: 'applicationId not found for this program' })
+  @ApiResponse({ status: 409, description: 'source=saved requested but no active template is published' })
   async previewDocumentTemplate(
     @Param('id') programId: string,
     @Body() dto: PreviewDocumentTemplateDto,
     @Response({ passthrough: true }) res: ExpressResponse,
   ) {
-    const buffer = await this.previewLoaTemplateHandler.execute(
-      new PreviewLoaTemplateQuery(programId, dto.htmlContent, dto.layoutConfig ?? {}, dto.placeholders ?? []),
+    const result = await this.previewLoaTemplateHandler.execute(
+      new PreviewLoaTemplateQuery(
+        programId,
+        dto.htmlContent,
+        dto.layoutConfig ?? {},
+        dto.placeholders ?? [],
+        dto.applicationId,
+        dto.source ?? 'draft',
+      ),
     );
     res.set({
       'Content-Type': 'application/pdf',
       'Content-Disposition': 'inline; filename="preview.pdf"',
+      // URI-encoded since participant names may contain non-ASCII characters.
+      // Decoded client-side in admin-dashboard's previewDocumentTemplate().
+      'X-Preview-Participant-Name': encodeURIComponent(result.participantName),
+      'X-Preview-Is-Sample': String(result.isSample),
     });
-    return new StreamableFile(buffer);
+    return new StreamableFile(result.buffer);
   }
 
   @Put('document-templates/:itemId')

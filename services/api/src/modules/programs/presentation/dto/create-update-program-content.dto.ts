@@ -1620,6 +1620,16 @@ export class PreviewDocumentTemplateDto {
     @ApiProperty({ required: false, description: 'Draft layout config — headerHtml/footerHtml/margins/logoUrl/stampUrl/header/footerNote/showGeneratedDate/etc.' })
     @IsOptional()
     layoutConfig?: Record<string, unknown>;
+
+    @ApiProperty({ required: false, description: 'Application to render real participant data for. Omitted means auto-pick the first submitted/accepted application.' })
+    @IsOptional()
+    @IsUUID()
+    applicationId?: string;
+
+    @ApiProperty({ required: false, enum: ['draft', 'saved'], description: 'Which template content to render: the in-editor draft (default) or the persisted saved row.' })
+    @IsOptional()
+    @IsIn(['draft', 'saved'])
+    source?: 'draft' | 'saved';
 }
 
 // Program-level payment info DTO
