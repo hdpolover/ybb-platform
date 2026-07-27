@@ -37,7 +37,12 @@ export class ActivityStrategy implements ILandingPageStrategy {
     if (cached) return cached;
 
     const data = await this.buildActivityData(brand.id);
-    await this.cacheService.set(cacheKey, data, CACHE_TTL.MEDIUM);
+    // The pool query orders by random(), so every cache expiry hands the caller a fresh
+    // random sample of the brand's participants. At a 5 minute TTL a caller polling this
+    // endpoint collects ~288 distinct samples per day and can enumerate an entire brand's
+    // cohort within a day. The 1 hour TTL is deliberately doing double duty as a rate
+    // limiter here, not just a freshness knob -- do not lower it for "fresher" activity.
+    await this.cacheService.set(cacheKey, data, CACHE_TTL.HOUR);
     return data;
   }
 
