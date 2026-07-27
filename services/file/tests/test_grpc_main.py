@@ -1,9 +1,12 @@
+from datetime import datetime
 import asyncio
 
 import grpc
 
 from app.grpc_main import FileService
 from app.protos import file_service_pb2
+from app.application.queries.handlers.get_presigned_url_internal_handler import GetPresignedUrlInternalHandler
+from app.domain.entities.file import File, FileStatus
 
 
 class _FakeContext:
@@ -85,3 +88,99 @@ def test_get_presigned_upload_url_accepts_filename_at_255_chars():
 
     assert context.aborted_with is None
     assert response.upload_url == "http://example.test/upload"
+
+
+# --- GetPresignedUrlInternal ---------------------------------------------------------
+
+class _PresignRepo:
+    def __init__(self, file_obj=None):
+        self.file = file_obj
+
+    async def find_by_storage_path(self, storage_path: str):
+        if self.file and self.file.storage_path == storage_path:
+            return self.file
+        return None
+
+
+class _PresignStorage:
+    def __init__(self, url: str = "https://minio.internal/signed"):
+        self.url = url
+
+    async def get_presigned_url(self, bucket, object_name, expiry_seconds):
+        return self.url
+
+
+class _PoisonPresignStorage:
+    async def get_presigned_url(self, **kwargs):
+        raise AssertionError("storage should not be touched when the request is rejected")
+
+
+def _build_file(storage_path: str, bucket: str = "ybb") -> File:
+    return File(
+        id="file-1",
+        filename="doc.pdf",
+        original_filename="doc.pdf",
+        file_type="document",
+        mime_type="application/pdf",
+        file_size=100,
+        storage_path=storage_path,
+        bucket=bucket,
+        user_id="user-1",
+        brand_id="brand-1",
+        uploaded_at=datetime.utcnow(),
+        status=FileStatus.READY,
+    )
+
+
+def _build_presign_service(storage, repo) -> FileService:
+    # Bypass FileService.__init__ (real Postgres/MinIO/RabbitMQ wiring) and set only
+    # what GetPresignedUrlInternal touches.
+    service = object.__new__(FileService)
+    service.presign_internal_handler = GetPresignedUrlInternalHandler(
+        file_repository=repo, storage_service=storage
+    )
+    return service
+
+
+def test_get_presigned_url_internal_returns_signed_url_for_documents():
+    storage_path = "dev/brand-1/users/user-1/documents/doc.pdf"
+    file_obj = _build_file(storage_path)
+    service = _build_presign_service(_PresignStorage(), _PresignRepo(file_obj))
+    request = file_service_pb2.GetPresignedUrlInternalRequest(
+        storage_path=storage_path, expiry_seconds=900
+    )
+    context = _FakeContext()
+
+    response = asyncio.run(service.GetPresignedUrlInternal(request, context))
+
+    assert context.aborted_with is None
+    assert response.presigned_url == "https://minio.internal/signed"
+    assert response.expires_at_unix > 0
+
+
+def test_get_presigned_url_internal_rejects_non_private_category():
+    storage_path = "dev/brand-1/programs/prog-1/gallery/photo.jpg"
+    file_obj = _build_file(storage_path)
+    service = _build_presign_service(_PoisonPresignStorage(), _PresignRepo(file_obj))
+    request = file_service_pb2.GetPresignedUrlInternalRequest(storage_path=storage_path)
+    context = _FakeContext()
+
+    asyncio.run(service.GetPresignedUrlInternal(request, context))
+
+    assert context.aborted_with is not None
+    code, _details = context.aborted_with
+    assert code == grpc.StatusCode.PERMISSION_DENIED
+
+
+def test_get_presigned_url_internal_not_found_maps_to_not_found():
+    service = _build_presign_service(_PoisonPresignStorage(), _PresignRepo(None))
+    request = file_service_pb2.GetPresignedUrlInternalRequest(
+        storage_path="dev/brand-1/users/user-1/documents/missing.pdf"
+    )
+    context = _FakeContext()
+
+    asyncio.run(service.GetPresignedUrlInternal(request, context))
+
+    assert context.aborted_with is not None
+    code, _details = context.aborted_with
+    assert code == grpc.StatusCode.NOT_FOUND

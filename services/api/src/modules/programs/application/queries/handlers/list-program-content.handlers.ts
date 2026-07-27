@@ -1,6 +1,7 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { IProgramContentRepository } from '../../../../../core/interfaces/repositories/program-content.repository.interface';
 import { IProgramRepository } from '../../../../../core/interfaces/repositories/program.repository.interface';
+import { PrivateFileUrlResolver, PRIVATE_FILE_UNAVAILABLE } from '@modules/files/application/private-file-url-resolver.service';
 import {
     ListProgramTimelineQuery,
     ListProgramSchedulesQuery,
@@ -428,12 +429,34 @@ export class ListDocumentTemplatesHandler {
         private readonly repository: IProgramContentRepository,
         @Inject('IProgramRepository')
         private readonly programRepository: IProgramRepository,
+        private readonly privateFileUrlResolver: PrivateFileUrlResolver,
     ) { }
 
     async execute(query: ListDocumentTemplatesQuery) {
         const programId = await resolveProgramId(this.programRepository, query.programId);
         if (!programId) return [];
 
-        return this.repository.findDocumentTemplatesByProgramId(programId, query.type);
+        const templates = await this.repository.findDocumentTemplatesByProgramId(programId, query.type);
+        return Promise.all(
+            templates.map(async (tmpl) => ({
+                ...tmpl,
+                templateUrl: await this.resolvePrivateTemplateUrl(tmpl.templateUrl),
+            })),
+        );
+    }
+
+    /**
+     * private category (documents/signed-copies) -> fresh presigned url
+     * private but presign failed -> null (fail closed, never the stored url)
+     * not a private category -> unchanged; the global CdnMaskInterceptor masks it
+     */
+    private async resolvePrivateTemplateUrl(url: string | null): Promise<string | null> {
+        if (typeof url !== 'string' || url.trim().length === 0) return url;
+
+        const resolution = await this.privateFileUrlResolver.resolve(url);
+        if (resolution === PRIVATE_FILE_UNAVAILABLE) return null;
+        if (resolution) return resolution;
+
+        return url;
     }
 }

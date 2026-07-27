@@ -25,6 +25,11 @@ service FileService {
 
   // Confirm that a file has been uploaded (Event Hook)
   rpc ConfirmUpload (ConfirmUploadRequest) returns (ConfirmUploadResponse) {}
+
+  // Internal-only: mint a fresh presigned GET URL for a private file, without the
+  // per-user ownership check (the caller has already run its own eligibility check).
+  // Scoped to an allowlist of private categories (documents, signed-copies).
+  rpc GetPresignedUrlInternal (GetPresignedUrlInternalRequest) returns (GetPresignedUrlInternalResponse) {}
 }
 
 message GenerateCertificateRequest {
@@ -137,4 +142,14 @@ message FileResponse {
   string storage_path = 7;
   string created_at = 8;
   string updated_at = 9;
+}
+
+message GetPresignedUrlInternalRequest {
+  string storage_path = 1;
+  int64 expiry_seconds = 2; // <=0 means default 3600
+}
+
+message GetPresignedUrlInternalResponse {
+  string presigned_url = 1;
+  int64 expires_at_unix = 2;
 }
