@@ -21,7 +21,9 @@ import {
   createDocumentTemplate,
   updateDocumentTemplate,
   deleteDocumentTemplate,
+  listProgramPricingTiers,
   type DocumentTemplate,
+  type ProgramPricingTierOption,
 } from "@/src/shared/api-client";
 import {
   Sheet,
@@ -46,8 +48,58 @@ const AUDIENCE_TYPES = [
   { value: "submitted_and_paid", label: "Submitted & Paid" },
 ];
 
+// Mirrors the ApplicationStatus enum in the API's prisma/schema/enums.prisma.
+// NOT sourced from src/shared/types/application.ts — that enum is stale and omits
+// interview_scheduled and waitlisted, which would silently hide two valid audiences.
+const APPLICATION_STATUSES = [
+  { value: "draft", label: "Draft" },
+  { value: "submitted", label: "Submitted" },
+  { value: "under_review", label: "Under Review" },
+  { value: "interview_scheduled", label: "Interview Scheduled" },
+  { value: "accepted", label: "Accepted" },
+  { value: "rejected", label: "Rejected" },
+  { value: "waitlisted", label: "Waitlisted" },
+  { value: "withdrawn", label: "Withdrawn" },
+];
+
 const inputCls =
   "block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
+
+function toggleInList(list: string[], value: string): string[] {
+  return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
+}
+
+/** Checkbox row used by both audience pickers — keeps the two lists visually identical. */
+function CheckRow({
+  checked, onChange, label, hint,
+}: {
+  checked: boolean;
+  onChange: () => void;
+  label: string;
+  hint?: string;
+}) {
+  return (
+    <label className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 transition hover:bg-white">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded"
+      />
+      <span className="min-w-0">
+        <span className="block text-[11px] font-medium text-zinc-700">{label}</span>
+        {hint && <span className="block text-[10px] text-zinc-400">{hint}</span>}
+      </span>
+    </label>
+  );
+}
+
+function formatTierPrice(tier: ProgramPricingTierOption): string | undefined {
+  const parts: string[] = [];
+  if (typeof tier.usdPrice === "number") parts.push(`$${tier.usdPrice}`);
+  if (typeof tier.idrPrice === "number") parts.push(`IDR ${tier.idrPrice.toLocaleString("id-ID")}`);
+  return parts.length ? parts.join(" · ") : undefined;
+}
 
 export function ProgramDocumentsTable({ programId }: { programId: string }) {
   const resolvedProgramId = useResolvedProgramId(programId);
@@ -282,8 +334,11 @@ function DocumentSheet({
   const [type, setType] = useState("agreement_letter");
   const [description, setDescription] = useState("");
   const [audienceType, setAudienceType] = useState("submitted_and_paid");
-  const [pricingTierIds, setPricingTierIds] = useState("");
-  const [statuses, setStatuses] = useState("");
+  const [pricingTierIds, setPricingTierIds] = useState<string[]>([]);
+  const [statuses, setStatuses] = useState<string[]>([]);
+  const [tiers, setTiers] = useState<ProgramPricingTierOption[]>([]);
+  const [tiersLoading, setTiersLoading] = useState(false);
+  const [tiersError, setTiersError] = useState<string | null>(null);
   const [order, setOrder] = useState("0");
   const [isActive, setIsActive] = useState(true);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -299,8 +354,12 @@ function DocumentSheet({
       setDescription(item?.description ?? "");
       setAudienceType(item?.audienceType ?? "submitted_and_paid");
       const cfg = item?.audienceConfig ?? {};
-      setPricingTierIds((Array.isArray(cfg.pricingTierIds) ? cfg.pricingTierIds : []).join(", "));
-      setStatuses((Array.isArray(cfg.statuses) ? cfg.statuses : []).join(", "));
+      setPricingTierIds(
+        Array.isArray(cfg.pricingTierIds) ? cfg.pricingTierIds.filter((v): v is string => typeof v === "string") : [],
+      );
+      setStatuses(
+        Array.isArray(cfg.statuses) ? cfg.statuses.filter((v): v is string => typeof v === "string") : [],
+      );
       setOrder(String(item?.order ?? 0));
       setIsActive(item?.isActive ?? true);
       setSelectedFile(null);
@@ -309,16 +368,41 @@ function DocumentSheet({
     }
   }, [open, item]);
 
+  // Tiers load once the sheet opens rather than on mount: the picker is only
+  // reachable behind the "Specific Pricing Tier" option, but pre-loading here
+  // keeps the list ready if the admin switches to it, and lets an already-saved
+  // tier selection render as names instead of raw UUIDs on first paint.
+  useEffect(() => {
+    if (!open || !programId) return;
+    let cancelled = false;
+    setTiersLoading(true);
+    setTiersError(null);
+    listProgramPricingTiers(programId)
+      .then((res) => {
+        if (!cancelled) setTiers(res);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setTiersError(err instanceof Error ? err.message : "Failed to load pricing tiers");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setTiersLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [open, programId]);
+
+  // A saved tier id that no longer exists in the program (tier deleted/renamed away)
+  // must stay visible and selected — dropping it silently would rewrite the
+  // document's audience on the next save without the admin ever seeing it.
+  const orphanTierIds = pricingTierIds.filter((id) => !tiers.some((t) => t.id === id));
+
   function buildAudienceConfig(): Record<string, unknown> {
     if (audienceType === "paid_pricing_tier") {
-      return {
-        pricingTierIds: pricingTierIds.split(",").map((s) => s.trim()).filter(Boolean),
-      };
+      return { pricingTierIds };
     }
     if (audienceType === "specific_status") {
-      return {
-        statuses: statuses.split(",").map((s) => s.trim()).filter(Boolean),
-      };
+      return { statuses };
     }
     return {};
   }
@@ -327,6 +411,16 @@ function DocumentSheet({
     e.preventDefault();
     if (mode === "upload" && !isEdit && !selectedFile) { setError("Select a file to upload."); return; }
     if (mode === "link" && !linkUrl.trim()) { setError("Paste a URL to attach as link."); return; }
+    // The audience check fails closed server-side, so an empty list would save a
+    // document that literally nobody can see, with no error anywhere.
+    if (audienceType === "paid_pricing_tier" && pricingTierIds.length === 0) {
+      setError("Select at least one pricing tier, or no participant will see this document.");
+      return;
+    }
+    if (audienceType === "specific_status" && statuses.length === 0) {
+      setError("Select at least one application status, or no participant will see this document.");
+      return;
+    }
     if (!userId || !brandId) { setError("Must be signed in to an accessible program."); return; }
     setLoading(true);
     setError(null);
@@ -521,11 +615,56 @@ function DocumentSheet({
               {audienceType === "paid_pricing_tier" && (
                 <div className="mt-2">
                   <label className="mb-1 block text-[11px] font-medium text-zinc-700">
-                    Pricing Tier IDs (comma-separated)
+                    Pricing Tiers ({pricingTierIds.length} selected)
                   </label>
-                  <input type="text" value={pricingTierIds}
-                    onChange={(e) => setPricingTierIds(e.target.value)}
-                    placeholder="uuid1, uuid2" className={inputCls} />
+
+                  {tiersLoading && (
+                    <p className="px-2 py-1.5 text-[11px] text-zinc-400">Loading pricing tiers…</p>
+                  )}
+
+                  {!tiersLoading && tiersError && (
+                    <p className="rounded-md bg-red-50 px-2 py-1.5 text-[10px] text-red-700">
+                      {tiersError}
+                    </p>
+                  )}
+
+                  {!tiersLoading && !tiersError && tiers.length === 0 && (
+                    <p className="px-2 py-1.5 text-[11px] text-zinc-500">
+                      This program has no pricing tiers yet. Add one under Master Data → Payments first.
+                    </p>
+                  )}
+
+                  {!tiersLoading && !tiersError && tiers.length > 0 && (
+                    <div className="max-h-52 space-y-0.5 overflow-y-auto rounded-md border border-zinc-200 bg-zinc-50 p-1">
+                      {tiers.map((tier) => (
+                        <CheckRow
+                          key={tier.id}
+                          checked={pricingTierIds.includes(tier.id)}
+                          onChange={() => setPricingTierIds((prev) => toggleInList(prev, tier.id))}
+                          label={tier.name}
+                          hint={formatTierPrice(tier)}
+                        />
+                      ))}
+                    </div>
+                  )}
+
+                  {orphanTierIds.length > 0 && (
+                    <div className="mt-1.5 rounded-md border border-amber-200 bg-amber-50 p-1">
+                      <p className="px-2 py-1 text-[10px] font-medium text-amber-800">
+                        Saved tiers that no longer exist in this program — untick to remove.
+                      </p>
+                      {orphanTierIds.map((id) => (
+                        <CheckRow
+                          key={id}
+                          checked
+                          onChange={() => setPricingTierIds((prev) => toggleInList(prev, id))}
+                          label={id}
+                          hint="Unknown tier"
+                        />
+                      ))}
+                    </div>
+                  )}
+
                   <p className="mt-1 text-[10px] text-zinc-400">
                     Only participants who paid one of these pricing tiers will see this document.
                   </p>
@@ -535,11 +674,21 @@ function DocumentSheet({
               {audienceType === "specific_status" && (
                 <div className="mt-2">
                   <label className="mb-1 block text-[11px] font-medium text-zinc-700">
-                    Application Statuses (comma-separated)
+                    Application Statuses ({statuses.length} selected)
                   </label>
-                  <input type="text" value={statuses}
-                    onChange={(e) => setStatuses(e.target.value)}
-                    placeholder="accepted, waitlisted" className={inputCls} />
+                  <div className="grid grid-cols-2 gap-x-2 rounded-md border border-zinc-200 bg-zinc-50 p-1">
+                    {APPLICATION_STATUSES.map((s) => (
+                      <CheckRow
+                        key={s.value}
+                        checked={statuses.includes(s.value)}
+                        onChange={() => setStatuses((prev) => toggleInList(prev, s.value))}
+                        label={s.label}
+                      />
+                    ))}
+                  </div>
+                  <p className="mt-1 text-[10px] text-zinc-400">
+                    Only participants whose application is in one of these statuses will see this document.
+                  </p>
                 </div>
               )}
             </div>
