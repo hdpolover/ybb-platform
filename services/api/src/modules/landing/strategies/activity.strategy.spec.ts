@@ -11,9 +11,7 @@ function buildRows(count: number, overrides: Partial<ActivityRow> = {}): Activit
   return Array.from({ length: count }, (_, index) => ({
     status: 'accepted',
     full_name: `Person${index} Surname${index}`,
-    nationality: 'Japan',
-    nationality_code: 'JP',
-    origin_country: null,
+    nationality: 'JP',
     program_name: 'AYIMUN',
     ...overrides,
   }));
@@ -67,7 +65,7 @@ describe('ActivityStrategy', () => {
   });
 
   it('counts the pool after mapping, so unmappable rows cannot inflate it', async () => {
-    const rows = [...buildRows(9), ...buildRows(3, { nationality: null, origin_country: null })];
+    const rows = [...buildRows(9), ...buildRows(3, { nationality: null })];
     mockPrismaService.$queryRaw.mockResolvedValue(rows);
     const result = await strategy.getData(brand);
     expect(result).toEqual({ enabled: false, items: [] });
