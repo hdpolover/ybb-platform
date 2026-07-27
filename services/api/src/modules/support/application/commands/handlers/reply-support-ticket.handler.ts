@@ -45,7 +45,7 @@ export class ReplySupportTicketHandler implements ICommandHandler<ReplySupportTi
             dto.message,
             false, // isFromAdmin
             participant.id, // senderId
-            participant.fullName, // senderName
+            participant.fullName || 'Participant', // senderName
             new Date(),
             (dto.attachments || []) as unknown as import('@core/entities/participant-application.entity').DocumentFile[],
         );
@@ -97,12 +97,12 @@ export class ReplySupportTicketHandler implements ICommandHandler<ReplySupportTi
                 subject: ticket.subject,
                 status: resolvedStatus,
                 actorRole: 'participant',
-                responderName: participant.fullName,
+                responderName: participant.fullName || 'Participant',
                 messagePreview: message.message.length > 200
                     ? `${message.message.slice(0, 200)}...`
                     : message.message,
                 email: ticketOwner.email,
-                name: participant.fullName,
+                name: participant.fullName || 'Participant',
                 brand: ticketOwner.brand
                     ? {
                         name: ticketOwner.brand.name,

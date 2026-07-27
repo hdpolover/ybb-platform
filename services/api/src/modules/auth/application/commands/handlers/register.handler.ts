@@ -209,7 +209,11 @@ export class RegisterHandler {
         participant = await this.prisma.participant.create({
           data: {
             userId,
-            fullName: email.split('@')[0], // Default name from email prefix
+            // Left blank until onboarding collects a real name. Seeding the
+            // email local part here produced values the onboarding API itself
+            // rejects (@IsEnglishName forbids digits, so "owais56" is a hard
+            // 400), and the form prefills from this column.
+            fullName: '',
             referralCode: command.referralCode, // Store what they entered even if invalid? Or only valid? 
                                                 // Storing valid one if ambassador exists, else maybe null or raw string.
                                                 // Schema has referralCode on Participant (String).
@@ -442,7 +446,9 @@ export class RegisterHandler {
       const participant = await tx.participant.create({
         data: {
           userId: user.id,
-          fullName: command.email.split('@')[0], // Default name from email prefix
+          // Blank until onboarding — see the note on the other participant
+          // create in this handler.
+          fullName: '',
           referralCode: ambassador?.referralCode, // Store valid referral code
         },
       });

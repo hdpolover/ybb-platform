@@ -258,7 +258,7 @@ export class LoginHandler {
       },
     });
 
-    const participant = await ensureParticipantExists(this.prisma, user.id, user.email);
+    const participant = await ensureParticipantExists(this.prisma, user.id);
     const applicationResult = await ensureProgramApplication(this.prisma, {
       participantId: participant.id,
       brandId,

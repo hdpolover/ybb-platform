@@ -486,7 +486,7 @@ export class AdminSupportTicketsController {
           responderName: adminName,
           messagePreview: message.length > 200 ? `${message.slice(0, 200)}...` : message,
           email: participantUser.user.email,
-          name: participantUser.fullName,
+          name: participantUser.fullName || 'Participant',
           brand: participantUser.user.brand
             ? {
                 name: participantUser.user.brand.name,
@@ -612,7 +612,7 @@ export class AdminSupportTicketsController {
           previousStatus,
           status: updated.status,
           email: participantUser.user.email,
-          name: participantUser.fullName,
+          name: participantUser.fullName || 'Participant',
           brand: participantUser.user.brand
             ? {
                 name: participantUser.user.brand.name,
