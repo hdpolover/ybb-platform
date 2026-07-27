@@ -8,6 +8,7 @@ import { PartnersSponsorsStrategy } from './strategies/partners-sponsors.strateg
 import { AnnouncementsStrategy } from './strategies/announcements.strategy';
 import { SettingsStrategy } from './strategies/settings.strategy';
 import { FaqsStrategy } from './strategies/faqs.strategy';
+import { ActivityStrategy } from './strategies/activity.strategy';
 import { LandingSnapshotService } from './services/landing-snapshot.service';
 
 @Module({
@@ -21,6 +22,7 @@ import { LandingSnapshotService } from './services/landing-snapshot.service';
     AnnouncementsStrategy,
     SettingsStrategy,
     FaqsStrategy,
+    ActivityStrategy,
     LandingSnapshotService,
   ],
   exports: [LandingService],
