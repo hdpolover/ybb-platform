@@ -95,7 +95,19 @@ export class LandingService {
 
   async getActivity(url?: string): Promise<LandingActivityResponseDto> {
     const brand = await this.resolveBrand(url);
-    return this.activityStrategy.getData(brand);
+    const data = await this.activityStrategy.getData(brand);
+    // Explicit field mapping: this route is public/unauthenticated, so this is the
+    // last line of defence against a field added to ActivityItem upstream leaking here.
+    return {
+      enabled: data.enabled,
+      items: data.items.map((item) => ({
+        type: item.type,
+        name: item.name,
+        country: item.country,
+        countryCode: item.countryCode,
+        programName: item.programName,
+      })),
+    };
   }
 
   async getAbout(url?: string): Promise<LandingPageResponseDto> {
