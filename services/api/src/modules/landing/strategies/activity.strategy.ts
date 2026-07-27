@@ -67,14 +67,18 @@ export class ActivityStrategy implements ILandingPageStrategy {
   }
 
   private queryEligibleRows(brandId: string): Promise<ActivityRow[]> {
+    // Name and nationality come from participant_applications.personal_data, not from the
+    // participants table -- participants.full_name can be a shortened version of what the
+    // applicant submitted, and participants.nationality/nationality_code are dead columns
+    // (empty on every row in production). personal_data is the authoritative source, same
+    // as phone and birthdate elsewhere in this codebase. The participants join is kept only
+    // for the deleted_at guard.
     return this.prisma.$queryRaw<ActivityRow[]>`
       SELECT
-        pa.status::text     AS status,
-        p.full_name         AS full_name,
-        p.nationality       AS nationality,
-        p.nationality_code  AS nationality_code,
-        p.origin_country    AS origin_country,
-        pr.name             AS program_name
+        pa.status::text                            AS status,
+        pa.personal_data::jsonb->>'full_name'       AS full_name,
+        pa.personal_data::jsonb->>'nationality'     AS nationality,
+        pr.name                                     AS program_name
       FROM participant_applications pa
       JOIN participants p ON p.id = pa.participant_id
       JOIN programs pr ON pr.id = pa.program_id
@@ -84,8 +88,8 @@ export class ActivityStrategy implements ILandingPageStrategy {
         AND pr.brand_id = ${brandId}
         AND pr.is_published = true
         AND pa.status::text IN (${Prisma.join(ACTIVITY_SOURCE_STATUSES as string[])})
-        AND btrim(p.full_name) <> ''
-        AND COALESCE(NULLIF(btrim(p.nationality), ''), NULLIF(btrim(p.origin_country), '')) IS NOT NULL
+        AND btrim(pa.personal_data::jsonb->>'full_name') <> ''
+        AND btrim(pa.personal_data::jsonb->>'nationality') <> ''
       ORDER BY random()
       LIMIT ${MAX_ACTIVITY_POOL_SIZE}
     `;
