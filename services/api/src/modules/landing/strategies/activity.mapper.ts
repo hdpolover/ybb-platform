@@ -1,11 +1,14 @@
+import { getCountryDisplayName } from '../../../shared/utils/country-display';
+
 export type ActivityType = 'registered' | 'accepted';
 
 export interface ActivityRow {
   status: string;
-  full_name: string;
+  // Sourced from participant_applications.personal_data (JSON), not the participants
+  // table -- see the query comment in activity.strategy.ts for why.
+  full_name: string | null;
+  // ISO 3166-1 alpha-2 code, e.g. "ID". Also sourced from personal_data.
   nationality: string | null;
-  nationality_code: string | null;
-  origin_country: string | null;
   program_name: string;
 }
 
@@ -29,7 +32,13 @@ export const MIN_ACTIVITY_POOL_SIZE = 10;
 export const MAX_ACTIVITY_POOL_SIZE = 60;
 
 export function maskFullName(fullName: string): string | null {
-  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  const trimmed = fullName.trim();
+  // Guards against garbage like a literal "X" full name -- a one-character name isn't a
+  // real masked identity, it's bad input, and "X from Kyrgyzstan just registered" is worse
+  // than showing nothing.
+  if (trimmed.length < 2) return null;
+
+  const parts = trimmed.split(/\s+/).filter(Boolean);
   if (parts.length === 0) return null;
   if (parts.length === 1) return parts[0];
 
@@ -40,10 +49,17 @@ export function maskFullName(fullName: string): string | null {
 }
 
 export function resolveCountry(row: ActivityRow): { country: string; countryCode: string } | null {
-  const country = (row.nationality ?? '').trim() || (row.origin_country ?? '').trim();
+  const isoCode = (row.nationality ?? '').trim().toUpperCase();
+  if (!isoCode) return null;
+
+  // getCountryDisplayName is backed by country-state-city and turns an ISO alpha-2 code
+  // into a real display name (e.g. "ID" -> "Indonesia"). Never fall back to emitting the
+  // raw code as if it were a name -- that is exactly the bug this fixes. An unrecognised
+  // value means the row gets skipped instead of shown.
+  const country = getCountryDisplayName(isoCode);
   if (!country) return null;
 
-  return { country, countryCode: (row.nationality_code ?? '').trim().toUpperCase() };
+  return { country, countryCode: isoCode };
 }
 
 export function mapStatusToActivityType(status: string): ActivityType | null {
@@ -56,7 +72,7 @@ export function mapRowToActivityItem(row: ActivityRow): ActivityItem | null {
   const type = mapStatusToActivityType(row.status);
   if (!type) return null;
 
-  const name = maskFullName(row.full_name);
+  const name = maskFullName(row.full_name ?? '');
   if (!name) return null;
 
   const country = resolveCountry(row);
