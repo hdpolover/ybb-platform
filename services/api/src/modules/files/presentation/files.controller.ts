@@ -29,6 +29,7 @@ import {
 import { FileGrpcClient } from '../infrastructure/clients/file-grpc-client.service';
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { isPrivateCategoryKey } from '@shared/utils/private-file-key';
 
 /**
  * Files Controller
@@ -130,9 +131,18 @@ export class FilesController {
 
     const file = await this.prisma.file.findFirst({
       where: { id: normalizedFileId },
-      select: { url: true },
+      select: { url: true, storagePath: true },
     });
     if (file?.url) {
+      // SECURITY: private-category files (documents, signed-copies) are served
+      // exclusively via short-lived presigned URLs from the authenticated portal/admin
+      // listings. This masked/public endpoint must never redirect to their raw
+      // permanent URL — deny as if unresolved (404) so no information about the
+      // file's existence leaks. This is a definitive id match, so we stop here
+      // rather than falling through to the resource/template lookups below.
+      if (isPrivateCategoryKey(file.storagePath)) {
+        return null;
+      }
       return file.url;
     }
 
@@ -157,9 +167,13 @@ export class FilesController {
         ],
       },
       orderBy: { createdAt: 'desc' },
-      select: { url: true },
+      select: { url: true, storagePath: true },
     });
     if (fileByStoragePath?.url && !this.isSelfDownloadProxyUrl(fileByStoragePath.url, normalizedFileId)) {
+      // Same deny-as-404 rule as above — this is also a definitive File-table match.
+      if (isPrivateCategoryKey(fileByStoragePath.storagePath)) {
+        return null;
+      }
       return fileByStoragePath.url;
     }
 
@@ -242,7 +256,16 @@ export class FilesController {
             typeof url === 'string' && url.length > 0 && !this.isSelfDownloadProxyUrl(url, normalizedFileId),
         ) ?? null;
 
-    return templateUrl;
+    // SECURITY: DocumentTemplate rows are the `documents` category by definition and
+    // are now served exclusively via fresh presigned URLs from the authenticated
+    // portal/admin document-template listings (see PrivateFileUrlResolver). This
+    // masked/public endpoint has no legitimate reason to redirect to one — deny
+    // unconditionally as if unresolved (404), same as above.
+    if (templateUrl) {
+      return null;
+    }
+
+    return null;
   }
 
   @Post('upload')

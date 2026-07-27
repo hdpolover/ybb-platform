@@ -5,7 +5,7 @@ import warnings
 
 import file_service_pb2 as file__service__pb2
 
-GRPC_GENERATED_VERSION = '1.76.0'
+GRPC_GENERATED_VERSION = '1.80.0'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
 
@@ -69,6 +69,11 @@ class FileServiceStub(object):
                 request_serializer=file__service__pb2.ConfirmUploadRequest.SerializeToString,
                 response_deserializer=file__service__pb2.ConfirmUploadResponse.FromString,
                 _registered_method=True)
+        self.GetPresignedUrlInternal = channel.unary_unary(
+                '/file.FileService/GetPresignedUrlInternal',
+                request_serializer=file__service__pb2.GetPresignedUrlInternalRequest.SerializeToString,
+                response_deserializer=file__service__pb2.GetPresignedUrlInternalResponse.FromString,
+                _registered_method=True)
 
 
 class FileServiceServicer(object):
@@ -125,6 +130,15 @@ class FileServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetPresignedUrlInternal(self, request, context):
+        """Internal-only: mint a fresh presigned GET URL for a private file, without the
+        per-user ownership check (the caller has already run its own eligibility check).
+        Scoped to an allowlist of private categories (documents, signed-copies).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_FileServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -162,6 +176,11 @@ def add_FileServiceServicer_to_server(servicer, server):
                     servicer.ConfirmUpload,
                     request_deserializer=file__service__pb2.ConfirmUploadRequest.FromString,
                     response_serializer=file__service__pb2.ConfirmUploadResponse.SerializeToString,
+            ),
+            'GetPresignedUrlInternal': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetPresignedUrlInternal,
+                    request_deserializer=file__service__pb2.GetPresignedUrlInternalRequest.FromString,
+                    response_serializer=file__service__pb2.GetPresignedUrlInternalResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -353,6 +372,33 @@ class FileService(object):
             '/file.FileService/ConfirmUpload',
             file__service__pb2.ConfirmUploadRequest.SerializeToString,
             file__service__pb2.ConfirmUploadResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetPresignedUrlInternal(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/file.FileService/GetPresignedUrlInternal',
+            file__service__pb2.GetPresignedUrlInternalRequest.SerializeToString,
+            file__service__pb2.GetPresignedUrlInternalResponse.FromString,
             options,
             channel_credentials,
             insecure,

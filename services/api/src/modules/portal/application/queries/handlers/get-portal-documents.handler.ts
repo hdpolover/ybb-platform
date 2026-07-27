@@ -12,6 +12,7 @@ import {
     DocumentItemDto
 } from '../../../presentation/dto/portal-document.dto';
 import { resolveMaskedFileUrl } from '@shared/utils/masked-file-url';
+import { PrivateFileUrlResolver, PRIVATE_FILE_UNAVAILABLE } from '@modules/files/application/private-file-url-resolver.service';
 
 @Injectable()
 @QueryHandler(GetPortalDocumentsQuery)
@@ -22,7 +23,24 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
         private readonly portalCacheService: PortalCacheService,
         private readonly loaEligibilityService: LoaEligibilityService,
         private readonly documentAudienceService: DocumentAudienceService,
+        private readonly privateFileUrlResolver: PrivateFileUrlResolver,
     ) {}
+
+    /**
+     * Resolve a document url for client consumption:
+     *  - private category (documents/signed-copies) -> fresh presigned url
+     *  - private but presign failed -> undefined (fail closed, never the stored url)
+     *  - not a private category -> unchanged existing masked-download behavior
+     */
+    private async resolveDocumentUrl(url: string | null | undefined): Promise<string | undefined> {
+        if (typeof url !== 'string' || url.trim().length === 0) return url ?? undefined;
+
+        const resolution = await this.privateFileUrlResolver.resolve(url);
+        if (resolution === PRIVATE_FILE_UNAVAILABLE) return undefined;
+        if (resolution) return resolution;
+
+        return resolveMaskedFileUrl(this.prisma, url);
+    }
 
     async execute(query: GetPortalDocumentsQuery): Promise<PortalDocumentResponseDto> {
         const { userId } = query;
@@ -180,28 +198,16 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
         const maskedProgramResources = await Promise.all(
             programResources.map(async (item) => ({
                 ...item,
-                fileUrl:
-                    typeof item.fileUrl === 'string' && item.fileUrl.trim().length > 0
-                        ? await resolveMaskedFileUrl(this.prisma, item.fileUrl)
-                        : item.fileUrl,
-                signedCopyUrl:
-                    typeof item.signedCopyUrl === 'string' && item.signedCopyUrl.trim().length > 0
-                        ? await resolveMaskedFileUrl(this.prisma, item.signedCopyUrl)
-                        : item.signedCopyUrl,
+                fileUrl: await this.resolveDocumentUrl(item.fileUrl),
+                signedCopyUrl: await this.resolveDocumentUrl(item.signedCopyUrl),
             })),
         );
 
         const maskedMyDocuments = await Promise.all(
             myDocuments.map(async (item) => ({
                 ...item,
-                fileUrl:
-                    typeof item.fileUrl === 'string' && item.fileUrl.trim().length > 0
-                        ? await resolveMaskedFileUrl(this.prisma, item.fileUrl)
-                        : item.fileUrl,
-                signedCopyUrl:
-                    typeof item.signedCopyUrl === 'string' && item.signedCopyUrl.trim().length > 0
-                        ? await resolveMaskedFileUrl(this.prisma, item.signedCopyUrl)
-                        : item.signedCopyUrl,
+                fileUrl: await this.resolveDocumentUrl(item.fileUrl),
+                signedCopyUrl: await this.resolveDocumentUrl(item.signedCopyUrl),
             })),
         );
 

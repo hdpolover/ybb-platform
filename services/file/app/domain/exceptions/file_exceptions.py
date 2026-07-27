@@ -54,6 +54,22 @@ class StorageException(FileDomainException):
         super().__init__(f"Storage error: {message}")
 
 
+class FileCategoryNotAllowedException(FileDomainException):
+    """Raised when GetPresignedUrlInternal is asked to sign a non-private category.
+
+    This RPC skips the per-user ownership check, so it must never become a general
+    presign service — it is hard-scoped to the private-category allowlist
+    (documents, signed-copies) regardless of what the caller passes in.
+    """
+
+    def __init__(self, category: str, storage_path: str):
+        self.category = category
+        self.storage_path = storage_path
+        super().__init__(
+            f"Category '{category}' (from {storage_path}) is not allowed for internal presigning"
+        )
+
+
 class FileNotUploadedException(FileDomainException):
     """Raised when a client asks to mark a file ready but the object isn't on storage yet."""
 
