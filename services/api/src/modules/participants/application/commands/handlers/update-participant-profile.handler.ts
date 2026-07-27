@@ -27,7 +27,9 @@ export class UpdateParticipantProfileHandler implements ICommandHandler<UpdatePa
                 userId,
                 ...updateDto,
                 birthdate: updateDto.birthdate ? new Date(updateDto.birthdate) : undefined,
-                fullName: updateDto.fullName || 'New Participant',
+                // Blank, not a synthesised name — see the note in
+                // ParticipantRepository.create.
+                fullName: updateDto.fullName || '',
                 profileCompletionPercentage: 0,
             });
         }

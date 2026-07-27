@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { ApplicationCategory } from '@prisma/client';
 import {
+  ensureParticipantExists,
   ensureProgramApplication,
   isProgramRegistrationOpen,
   resolveAuthTargetProgram,
@@ -35,8 +36,40 @@ describe('auth-program-linking.util', () => {
       programParticipationInfo: {
         findMany: jest.fn(),
       },
+      participant: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+      },
     } as any;
   }
+
+  describe('ensureParticipantExists', () => {
+    it('creates the participant with a blank name rather than the email local part', async () => {
+      // Seeding "owais56" here deadlocked onboarding: the form prefills from
+      // this column and the API's @IsEnglishName rejects digits, so the
+      // participant could not submit without noticing they had to retype a
+      // field they never filled in.
+      const prisma = createPrismaMock();
+      prisma.participant.findUnique.mockResolvedValue(null);
+      prisma.participant.create.mockResolvedValue({ id: 'participant-1' });
+
+      await ensureParticipantExists(prisma, 'user-1');
+
+      expect(prisma.participant.create).toHaveBeenCalledWith({
+        data: { userId: 'user-1', fullName: '' },
+      });
+    });
+
+    it('returns the existing participant without creating another', async () => {
+      const prisma = createPrismaMock();
+      prisma.participant.findUnique.mockResolvedValue({ id: 'participant-1' });
+
+      const result = await ensureParticipantExists(prisma, 'user-1');
+
+      expect(result).toEqual({ id: 'participant-1' });
+      expect(prisma.participant.create).not.toHaveBeenCalled();
+    });
+  });
 
   describe('isProgramRegistrationOpen', () => {
     it('returns false when registrationCloseDate has passed', () => {

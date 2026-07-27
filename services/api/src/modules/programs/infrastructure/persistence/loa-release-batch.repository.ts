@@ -120,7 +120,9 @@ export class LoaReleaseBatchRepository {
     return applications.map((application) => ({
       userId: application.participant.user.id,
       email: application.participant.user.email,
-      fullName: application.participant.fullName,
+      // Blank until onboarding completes; an LOA-release email addressed to
+      // nobody reads worse than a generic salutation.
+      fullName: application.participant.fullName || 'Participant',
     }));
   }
 
