@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaReadService } from '../../shared/infrastructure/prisma/prisma-read.service';
 import { CacheService } from '../../shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '../../shared/constants/cache-keys';
+import { wibDateKey } from '@shared/utils/wib-time';
 import {
   CrossTabResult,
   KnowledgeSourceAnalyticsResponse,
@@ -480,9 +481,9 @@ export class ParticipantAnalyticsService {
         FROM participant_applications pa
         WHERE pa.program_id = ${programId}::uuid
           AND pa.deleted_at IS NULL
+          AND pa.created_at >= NOW() - INTERVAL '90 days'
         GROUP BY day
         ORDER BY day DESC
-        LIMIT 90
       `),
       this.readPrisma.$queryRaw<{ month: string; count: bigint }[]>(Prisma.sql`
         SELECT
@@ -554,7 +555,9 @@ export class ParticipantAnalyticsService {
 
     // Queries return most-recent-first (LIMIT keeps the latest active days/months);
     // reverse for chronological display.
-    const dailyTrend = dailyRows.map(r => ({ day: r.day, count: Number(r.count) })).reverse();
+    const dailyTrend = this.zeroFillDailyTrend(
+      dailyRows.map(r => ({ day: r.day, count: Number(r.count) })).reverse(),
+    );
     const monthlyTotals = monthlyRows.map(r => ({ month: r.month, count: Number(r.count) })).reverse();
     const byCountry = byCountryRows.map(r => ({ country: toCountryName(r.country), count: Number(r.count) }));
     const bySource = bySourceRows.map(r => ({ source: r.source, count: Number(r.count) }));
@@ -575,6 +578,35 @@ export class ParticipantAnalyticsService {
     const result: RegistrationsAnalyticsResponse = { summary, dailyTrend, monthlyTotals, byCountry, bySource };
     await this.cacheService.set(cacheKey, result, CACHE_TTL.LONG);
     return result;
+  }
+
+  /**
+   * The query only returns days that had at least one registration, so a day
+   * with none simply vanished from the chart and the line interpolated straight
+   * across it. A full-day registration outage was therefore invisible on the
+   * exact view you would open to spot one. Gaps are filled with explicit zeros,
+   * from the first day with data through today, so a flat zero reads as a flat
+   * zero. Bounded by the query's 90-day window, so this is at most 90 points.
+   */
+  private zeroFillDailyTrend(
+    rows: { day: string; count: number }[],
+  ): { day: string; count: number }[] {
+    if (rows.length === 0) return rows;
+
+    const counts = new Map(rows.map(r => [r.day, r.count]));
+    const cursor = new Date(`${rows[0].day}T00:00:00Z`);
+    const lastDay = wibDateKey(new Date());
+    if (Number.isNaN(cursor.getTime())) return rows;
+
+    const filled: { day: string; count: number }[] = [];
+    while (filled.length <= 90) {
+      const day = cursor.toISOString().slice(0, 10);
+      filled.push({ day, count: counts.get(day) ?? 0 });
+      if (day >= lastDay) break;
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+
+    return filled;
   }
 
   // ── Ambassadors ─────────────────────────────────────────────────────────────

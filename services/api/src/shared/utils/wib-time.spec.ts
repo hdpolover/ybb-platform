@@ -7,6 +7,7 @@ import {
     startOfWibDay,
     startOfWibMonth,
     startOfWibWeek,
+    wibDateKey,
 } from './wib-time';
 
 describe('wib-time', () => {
@@ -96,6 +97,17 @@ describe('wib-time', () => {
             expect(addWibMonths(new Date('2026-01-15T10:00:00Z'), -1).toISOString()).toBe(
                 '2025-11-30T17:00:00.000Z',
             );
+        });
+    });
+
+    describe('wibDateKey', () => {
+        it('reports the WIB calendar date, not the UTC one', () => {
+            // 19:00 UTC on the 14th is already 02:00 WIB on the 15th.
+            expect(wibDateKey(new Date('2026-07-14T19:00:00Z'))).toBe('2026-07-15');
+        });
+
+        it('still reports the earlier date before the 17:00 UTC rollover', () => {
+            expect(wibDateKey(new Date('2026-07-14T16:59:59Z'))).toBe('2026-07-14');
         });
     });
 

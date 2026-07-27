@@ -58,6 +58,11 @@ export function addWibMonths(date: Date, months: number): Date {
   );
 }
 
+/** The WIB calendar date of an instant, as YYYY-MM-DD. */
+export function wibDateKey(date: Date): string {
+  return toWibWallClock(date).toISOString().slice(0, 10);
+}
+
 /**
  * Parses an admin filter date. A bare YYYY-MM-DD means a WIB calendar day, so
  * it is anchored to WIB midnight rather than the UTC midnight `new Date()`
