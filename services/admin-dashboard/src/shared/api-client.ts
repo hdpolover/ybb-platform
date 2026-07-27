@@ -2953,6 +2953,24 @@ export type DocumentTemplate = {
   updatedAt: string;
 };
 
+/**
+ * Subset of ProgramPricingTierResponseDto needed to label a tier in a picker.
+ * The full DTO carries benefits/validityPeriods/requirements that no selector needs.
+ */
+export type ProgramPricingTierOption = {
+  id: string;
+  name: string;
+  usdPrice?: number;
+  idrPrice?: number;
+  feeType?: string;
+};
+
+export function listProgramPricingTiers(
+  programId: string,
+): Promise<ProgramPricingTierOption[]> {
+  return request<ProgramPricingTierOption[]>(`/programs/${programId}/pricing-tiers`);
+}
+
 export function listDocumentTemplates(
   programId: string,
   type?: string,
