@@ -8,7 +8,8 @@ import {
   GenerateCertificateRequest,
   GenerateReceiptRequest,
   GetPresignedUploadUrlRequest,
-  ConfirmUploadRequest
+  ConfirmUploadRequest,
+  GetPresignedUrlInternalResponse
 } from './file.interface';
 import { Readable } from 'stream';
 
@@ -146,6 +147,27 @@ export class FileGrpcClient implements OnModuleInit {
       );
     } catch (error) {
       this.logger.error(`gRPC confirm upload failed: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async getPresignedUrlInternal(
+    storagePath: string,
+    expirySeconds?: number,
+  ): Promise<GetPresignedUrlInternalResponse> {
+    try {
+      return await withGrpcRetry(
+        () =>
+          lastValueFrom(
+            this.fileService.GetPresignedUrlInternal({
+              storage_path: storagePath,
+              expiry_seconds: expirySeconds ?? 0,
+            }),
+          ),
+        this.logger,
+      );
+    } catch (error) {
+      this.logger.error(`gRPC get presigned url internal failed: ${error.message}`);
       throw error;
     }
   }
