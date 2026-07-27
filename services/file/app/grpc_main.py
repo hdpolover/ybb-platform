@@ -22,8 +22,11 @@ from app.presentation.dependencies.container import (
 from app.application.commands.handlers.upload_file_handler import UploadFileHandler
 from app.application.commands.handlers.create_upload_url_handler import CreateUploadUrlHandler
 from app.application.queries.handlers.get_file_handler import GetFileHandler
+from app.application.queries.handlers.get_presigned_url_internal_handler import GetPresignedUrlInternalHandler
 from app.application.commands.upload_file_command import UploadFileCommand
 from app.application.queries.get_file_query import GetFileQuery
+from app.application.queries.get_presigned_url_internal_query import GetPresignedUrlInternalQuery
+from app.domain.exceptions.file_exceptions import FileNotFoundException, FileCategoryNotAllowedException
 from app.infrastructure.persistence.postgres.database import connect_db, disconnect_db
 from app.infrastructure.processors.certificate_generator import CertificateGeneratorService
 from app.infrastructure.processors.pdf_generator import PDFGeneratorService
@@ -39,6 +42,7 @@ class FileService(file_service_pb2_grpc.FileServiceServicer):
         self.messaging = get_rabbitmq_service()
         self.upload_handler = UploadFileHandler(self.storage, self.repo)
         self.get_handler = GetFileHandler(file_repository=self.repo, storage_service=self.storage)
+        self.presign_internal_handler = GetPresignedUrlInternalHandler(file_repository=self.repo, storage_service=self.storage)
         
         # Initialize processors
         self.cert_generator = CertificateGeneratorService(
@@ -359,6 +363,27 @@ class FileService(file_service_pb2_grpc.FileServiceServicer):
             )
         except Exception as e:
             await context.abort(grpc.StatusCode.NOT_FOUND, str(e))
+
+    async def GetPresignedUrlInternal(self, request, context):
+        # Internal-only: no per-user ownership check (the NestJS caller already ran its
+        # own eligibility check). Fails closed — never falls back to a public URL.
+        query = GetPresignedUrlInternalQuery(
+            storage_path=request.storage_path,
+            expiry_seconds=request.expiry_seconds
+        )
+        try:
+            result = await self.presign_internal_handler.execute(query)
+            return file_service_pb2.GetPresignedUrlInternalResponse(
+                presigned_url=result.presigned_url,
+                expires_at_unix=result.expires_at_unix
+            )
+        except FileNotFoundException as e:
+            await context.abort(grpc.StatusCode.NOT_FOUND, str(e))
+        except FileCategoryNotAllowedException as e:
+            await context.abort(grpc.StatusCode.PERMISSION_DENIED, str(e))
+        except Exception as e:
+            logging.error(f"GetPresignedUrlInternal failed: {e}")
+            await context.abort(grpc.StatusCode.INTERNAL, str(e))
 
     async def DownloadFile(self, request, context):
         # 1. Get metadata to check permissions and get path

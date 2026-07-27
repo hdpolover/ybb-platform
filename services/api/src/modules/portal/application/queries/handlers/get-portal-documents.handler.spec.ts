@@ -7,6 +7,7 @@ import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { PortalCacheService } from '../../services/portal-cache.service';
 import { LoaEligibilityService } from '../../services/loa-eligibility.service';
 import { DocumentAudienceService } from '../../services/document-audience.service';
+import { PrivateFileUrlResolver, PRIVATE_FILE_UNAVAILABLE } from '@modules/files/application/private-file-url-resolver.service';
 
 const USER_ID = 'user-1';
 const PARTICIPANT_ID = 'participant-1';
@@ -64,6 +65,7 @@ describe('GetPortalDocumentsHandler — LOA eligibility branch (Task 9)', () => 
     let mockCacheService: { get: jest.Mock; set: jest.Mock };
     let mockPortalCacheService: { getParticipantProfile: jest.Mock };
     let mockLoaEligibilityService: { checkEligibility: jest.Mock };
+    let mockPrivateFileUrlResolver: { resolve: jest.Mock };
 
     beforeEach(async () => {
         mockPrisma = {
@@ -86,6 +88,12 @@ describe('GetPortalDocumentsHandler — LOA eligibility branch (Task 9)', () => 
             checkEligibility: jest.fn(),
         };
 
+        // Default: "not a private-category file" — preserves the existing
+        // resolveMaskedFileUrl behavior for tests that don't care about presigning.
+        mockPrivateFileUrlResolver = {
+            resolve: jest.fn().mockResolvedValue(null),
+        };
+
         const module: TestingModule = await Test.createTestingModule({
             providers: [
                 GetPortalDocumentsHandler,
@@ -93,6 +101,7 @@ describe('GetPortalDocumentsHandler — LOA eligibility branch (Task 9)', () => 
                 { provide: CacheService, useValue: mockCacheService },
                 { provide: PortalCacheService, useValue: mockPortalCacheService },
                 { provide: LoaEligibilityService, useValue: mockLoaEligibilityService },
+                { provide: PrivateFileUrlResolver, useValue: mockPrivateFileUrlResolver },
                 DocumentAudienceService,
             ],
         }).compile();
@@ -267,5 +276,134 @@ describe('GetPortalDocumentsHandler — LOA eligibility branch (Task 9)', () => 
 
         expect(result.programResources).toHaveLength(0);
         expect(result.myDocuments).toHaveLength(0);
+    });
+});
+
+describe('GetPortalDocumentsHandler — private file presigning', () => {
+    let handler: GetPortalDocumentsHandler;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let mockPrisma: any;
+    let mockCacheService: { get: jest.Mock; set: jest.Mock };
+    let mockPortalCacheService: { getParticipantProfile: jest.Mock };
+    let mockLoaEligibilityService: { checkEligibility: jest.Mock };
+    let mockPrivateFileUrlResolver: { resolve: jest.Mock };
+
+    const PRIVATE_TEMPLATE_URL = 'https://cdn.ybbhub.com/prod/brandx/programs/prog1/documents/agreement.pdf';
+    const PRIVATE_SIGNED_COPY_URL = 'https://cdn.ybbhub.com/prod/brandx/programs/prog1/signed-copies/signed.pdf';
+    const PUBLIC_MARKETING_URL = 'https://example.com/agreement.pdf';
+    const PRESIGNED_URL = 'https://storage.example.com/signed?X-Amz-Signature=abc';
+
+    beforeEach(async () => {
+        mockPrisma = {
+            participantApplication: { findFirst: jest.fn() },
+            documentTemplate: { findMany: jest.fn() },
+            file: { findFirst: jest.fn().mockResolvedValue(null) },
+        };
+
+        mockCacheService = {
+            get: jest.fn().mockResolvedValue(null),
+            set: jest.fn().mockResolvedValue(undefined),
+        };
+
+        mockPortalCacheService = {
+            getParticipantProfile: jest.fn().mockResolvedValue(mockParticipant),
+        };
+
+        mockLoaEligibilityService = { checkEligibility: jest.fn() };
+
+        mockPrivateFileUrlResolver = { resolve: jest.fn() };
+
+        const module: TestingModule = await Test.createTestingModule({
+            providers: [
+                GetPortalDocumentsHandler,
+                { provide: PrismaService, useValue: mockPrisma },
+                { provide: CacheService, useValue: mockCacheService },
+                { provide: PortalCacheService, useValue: mockPortalCacheService },
+                { provide: LoaEligibilityService, useValue: mockLoaEligibilityService },
+                { provide: PrivateFileUrlResolver, useValue: mockPrivateFileUrlResolver },
+                DocumentAudienceService,
+            ],
+        }).compile();
+
+        handler = module.get(GetPortalDocumentsHandler);
+    });
+
+    it('presigns a private (documents category) template fileUrl', async () => {
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(
+            makeApplication({ documents: [] }),
+        );
+        mockPrisma.documentTemplate.findMany.mockResolvedValue([
+            { ...makeAgreementTemplate(), templateUrl: PRIVATE_TEMPLATE_URL },
+        ]);
+        mockPrivateFileUrlResolver.resolve.mockImplementation(async (url: string) =>
+            url === PRIVATE_TEMPLATE_URL ? PRESIGNED_URL : null,
+        );
+
+        const result = await handler.execute(new GetPortalDocumentsQuery(USER_ID));
+
+        const agreementDoc = result.myDocuments.find((d) => d.documentType === 'agreement_letter');
+        expect(agreementDoc?.fileUrl).toBe(PRESIGNED_URL);
+    });
+
+    it('presigns a private (signed-copies category) signedCopyUrl', async () => {
+        const existingDoc = {
+            id: 'doc-agr-1',
+            name: 'Program Agreement',
+            type: 'agreement_letter',
+            fileUrl: null,
+            signedCopyUrl: PRIVATE_SIGNED_COPY_URL,
+            submissionStatus: 'under_review',
+            submissionNote: null,
+            generatedAt: new Date('2026-06-15'),
+            templateId: AGREEMENT_TEMPLATE_ID,
+            documentNumber: undefined,
+            downloadCount: 0,
+            firstDownloadedAt: null,
+        };
+
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(
+            makeApplication({ documents: [existingDoc] }),
+        );
+        mockPrisma.documentTemplate.findMany.mockResolvedValue([makeAgreementTemplate()]);
+        mockPrivateFileUrlResolver.resolve.mockImplementation(async (url: string) =>
+            url === PRIVATE_SIGNED_COPY_URL ? PRESIGNED_URL : null,
+        );
+
+        const result = await handler.execute(new GetPortalDocumentsQuery(USER_ID));
+
+        const agreementDoc = result.myDocuments.find((d) => d.documentType === 'agreement_letter');
+        expect(agreementDoc?.signedCopyUrl).toBe(PRESIGNED_URL);
+    });
+
+    it('leaves a public/marketing url unchanged when it is not a private-category file', async () => {
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(
+            makeApplication({ documents: [] }),
+        );
+        mockPrisma.documentTemplate.findMany.mockResolvedValue([
+            { ...makeAgreementTemplate(), templateUrl: PUBLIC_MARKETING_URL },
+        ]);
+        mockPrivateFileUrlResolver.resolve.mockResolvedValue(null); // not private
+
+        const result = await handler.execute(new GetPortalDocumentsQuery(USER_ID));
+
+        const agreementDoc = result.myDocuments.find((d) => d.documentType === 'agreement_letter');
+        // Not private -> falls through to resolveMaskedFileUrl, which returns the
+        // original url unchanged when no matching File row exists (mocked to null above).
+        expect(agreementDoc?.fileUrl).toBe(PUBLIC_MARKETING_URL);
+    });
+
+    it('omits the url (fails closed) when a private file cannot be presigned', async () => {
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(
+            makeApplication({ documents: [] }),
+        );
+        mockPrisma.documentTemplate.findMany.mockResolvedValue([
+            { ...makeAgreementTemplate(), templateUrl: PRIVATE_TEMPLATE_URL },
+        ]);
+        mockPrivateFileUrlResolver.resolve.mockResolvedValue(PRIVATE_FILE_UNAVAILABLE);
+
+        const result = await handler.execute(new GetPortalDocumentsQuery(USER_ID));
+
+        const agreementDoc = result.myDocuments.find((d) => d.documentType === 'agreement_letter');
+        expect(agreementDoc?.fileUrl).toBeUndefined();
     });
 });
