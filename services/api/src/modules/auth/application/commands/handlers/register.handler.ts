@@ -498,16 +498,18 @@ export class RegisterHandler {
 
     // Send notifications
     if (authProvider.name === 'local' && emailVerificationToken) {
+      // No name is collected at registration — onboarding does that — so send
+      // none. The email local part is not a name: it addressed people as
+      // "Hi owaiskhalifa56,". The notification service falls back to a
+      // generic salutation when this is absent.
       this.rabbitmqProducer.emit('user.verify-email', {
         email: newUser.email,
-        name: newUser.email.split('@')[0], // Use part of email as name since we don't have it yet
         token: emailVerificationToken,
         brand: brand,
       });
     } else if (authProvider.isOAuth) {
       this.rabbitmqProducer.emit('user.registered', {
         email: newUser.email,
-        name: newUser.email.split('@')[0],
         brand: brand,
       });
     }
