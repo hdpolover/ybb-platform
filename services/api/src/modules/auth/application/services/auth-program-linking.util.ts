@@ -152,7 +152,6 @@ export async function resolveAuthTargetProgram(
 export async function ensureParticipantExists(
   prisma: PrismaService,
   userId: string,
-  email: string,
 ): Promise<Participant> {
   const existingParticipant = await prisma.participant.findUnique({
     where: { userId },
@@ -165,7 +164,10 @@ export async function ensureParticipantExists(
   return prisma.participant.create({
     data: {
       userId,
-      fullName: email.split('@')[0],
+      // Blank until onboarding collects a real name. The email local part is
+      // not a valid name (@IsEnglishName forbids digits) and the onboarding
+      // form prefills from this column, so seeding it deadlocks the submit.
+      fullName: '',
     },
   });
 }

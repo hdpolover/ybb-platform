@@ -283,8 +283,12 @@ export class FirebaseLoginHandler {
                 }
             }
 
-            // Parse Name from Email if not provided elsewhere
-            const fullName = decodedToken.name || email.split('@')[0];
+            // The provider's display name is a real name and worth keeping.
+            // Falling back to the email local part is not: it fails the
+            // onboarding validators (@IsEnglishName forbids digits) and the
+            // onboarding form prefills from this column, so it deadlocks the
+            // submit. Leave it blank for onboarding to fill instead.
+            const fullName = decodedToken.name || '';
 
             // ========================================
             // Unit of Work: Participant Creation with Referral
