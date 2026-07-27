@@ -8,9 +8,11 @@ import { PartnersSponsorsStrategy } from './strategies/partners-sponsors.strateg
 import { AnnouncementsStrategy } from './strategies/announcements.strategy';
 import { SettingsStrategy } from './strategies/settings.strategy';
 import { FaqsStrategy } from './strategies/faqs.strategy';
+import { ActivityStrategy } from './strategies/activity.strategy';
 import { Brand } from '@prisma/client';
 import { LandingPageResponseDto } from './dto/landing-page.dto';
 import { LandingSettingsResponseDto } from './dto/landing-settings.dto';
+import { LandingActivityResponseDto } from './dto/landing-activity.dto';
 import { LandingSnapshotService } from './services/landing-snapshot.service';
 
 const DEFAULT_FAQ_LIMIT = 200;
@@ -28,6 +30,7 @@ export class LandingService {
     private readonly announcementsStrategy: AnnouncementsStrategy,
     private readonly settingsStrategy: SettingsStrategy,
     private readonly faqsStrategy: FaqsStrategy,
+    private readonly activityStrategy: ActivityStrategy,
     private readonly landingSnapshotService: LandingSnapshotService,
   ) { }
 
@@ -88,6 +91,11 @@ export class LandingService {
       );
     }
     return this.homeStrategy.getData(brand) as Promise<LandingPageResponseDto>;
+  }
+
+  async getActivity(url?: string): Promise<LandingActivityResponseDto> {
+    const brand = await this.resolveBrand(url);
+    return this.activityStrategy.getData(brand);
   }
 
   async getAbout(url?: string): Promise<LandingPageResponseDto> {
