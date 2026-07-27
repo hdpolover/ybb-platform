@@ -31,8 +31,13 @@ export class IsEnglishNameConstraint implements ValidatorConstraintInterface {
         return ENGLISH_NAME_REGEX.test(value);
     }
 
-    defaultMessage(_args: ValidationArguments): string {
-        return "must use the English alphabet only (letters, spaces, - ' .)";
+    // Prefix the property so a consumer can tell WHICH field failed.
+    // class-validator does not prepend it to a custom defaultMessage, and
+    // without it the participant portal had to infer the field from the
+    // message text alone — fine while one field used each constraint, wrong
+    // the moment a second one did.
+    defaultMessage(args: ValidationArguments): string {
+        return `${args.property} must use the English alphabet only (letters, spaces, - ' .)`;
     }
 }
 
@@ -70,8 +75,10 @@ export class IsEnglishTextConstraint implements ValidatorConstraintInterface {
         return ENGLISH_TEXT_REGEX.test(value);
     }
 
-    defaultMessage(_args: ValidationArguments): string {
-        return 'must use standard English characters only (no accented or non-Latin characters)';
+    // Prefixed with the property for the same reason as IsEnglishName above:
+    // this constraint guards originCity, originCountry AND knowledgeSource.
+    defaultMessage(args: ValidationArguments): string {
+        return `${args.property} must use standard English characters only (no accented or non-Latin characters)`;
     }
 }
 
