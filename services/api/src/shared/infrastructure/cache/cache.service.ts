@@ -107,6 +107,7 @@ export class CacheService {
       `landing:partners:${brandId}`,
       `landing:announcements:${brandId}`,
       `landing:settings:${brandId}`,
+      CACHE_KEYS.LANDING_ACTIVITY(brandId),
     ]);
 
     await this.invalidateByPatterns([
