@@ -504,7 +504,7 @@ export class EventsController {
         email,
         getString(payload, 'first_name') ||
           getString(payload, 'name') ||
-          'User',
+          'there',
         payload.brand,
       );
     });
@@ -531,7 +531,7 @@ export class EventsController {
 
         await this.emailService.sendForgotPasswordEmail(
           email,
-          getString(payload, 'name') || 'User',
+          getString(payload, 'name') || 'there',
           token,
           payload.brand,
         );
@@ -565,7 +565,7 @@ export class EventsController {
       );
       await this.emailService.sendVerificationEmail(
         email,
-        getString(payload, 'name') || 'User',
+        getString(payload, 'name') || 'there',
         token,
         payload.brand,
       );
@@ -596,7 +596,7 @@ export class EventsController {
 
         await this.emailService.sendEmailVerifiedEmail(
           email,
-          getString(payload, 'name') || 'User',
+          getString(payload, 'name') || 'there',
           payload.brand,
         );
       },
