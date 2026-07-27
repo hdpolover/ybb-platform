@@ -475,7 +475,7 @@ export class ParticipantAnalyticsService {
     const [dailyRows, monthlyRows, byCountryRows, bySourceRows, summaryRows] = await Promise.all([
       this.readPrisma.$queryRaw<{ day: string; count: bigint }[]>(Prisma.sql`
         SELECT
-          TO_CHAR(DATE(pa.created_at), 'YYYY-MM-DD') AS day,
+          TO_CHAR(DATE(pa.created_at AT TIME ZONE 'Asia/Jakarta'), 'YYYY-MM-DD') AS day,
           COUNT(*)::bigint AS count
         FROM participant_applications pa
         WHERE pa.program_id = ${programId}::uuid
@@ -486,7 +486,7 @@ export class ParticipantAnalyticsService {
       `),
       this.readPrisma.$queryRaw<{ month: string; count: bigint }[]>(Prisma.sql`
         SELECT
-          TO_CHAR(DATE_TRUNC('month', pa.created_at), 'YYYY-MM') AS month,
+          TO_CHAR(DATE_TRUNC('month', pa.created_at AT TIME ZONE 'Asia/Jakarta'), 'YYYY-MM') AS month,
           COUNT(*)::bigint AS count
         FROM participant_applications pa
         WHERE pa.program_id = ${programId}::uuid
@@ -520,12 +520,12 @@ export class ParticipantAnalyticsService {
       this.readPrisma.$queryRaw<{ total: bigint; active_days: bigint; peak_day: string | null; peak_day_count: bigint; first_reg: Date | null; last_reg: Date | null }[]>(Prisma.sql`
         SELECT
           COUNT(*)::bigint AS total,
-          COUNT(DISTINCT DATE(pa.created_at))::bigint AS active_days,
+          COUNT(DISTINCT DATE(pa.created_at AT TIME ZONE 'Asia/Jakarta'))::bigint AS active_days,
           TO_CHAR((
-            SELECT DATE(created_at)
+            SELECT DATE(created_at AT TIME ZONE 'Asia/Jakarta')
             FROM participant_applications
             WHERE program_id = ${programId}::uuid AND deleted_at IS NULL
-            GROUP BY DATE(created_at)
+            GROUP BY DATE(created_at AT TIME ZONE 'Asia/Jakarta')
             ORDER BY COUNT(*) DESC
             LIMIT 1
           ), 'YYYY-MM-DD') AS peak_day,
@@ -533,7 +533,7 @@ export class ParticipantAnalyticsService {
             SELECT COUNT(*)::bigint
             FROM participant_applications
             WHERE program_id = ${programId}::uuid AND deleted_at IS NULL
-            GROUP BY DATE(created_at)
+            GROUP BY DATE(created_at AT TIME ZONE 'Asia/Jakarta')
             ORDER BY COUNT(*) DESC
             LIMIT 1
           ) AS peak_day_count,

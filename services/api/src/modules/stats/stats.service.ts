@@ -10,6 +10,15 @@ import { ProgramAnalyticsResponseDto } from './dto/program-analytics-response.dt
 import { CacheService } from '../../shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '../../shared/constants/cache-keys';
 import { normalizeCountryGroups, resolveCountryName } from '@shared/utils/country-groups';
+import {
+  WIB_TIME_ZONE,
+  addDays,
+  addWibMonths,
+  parseWibFilterDate,
+  startOfWibDay,
+  startOfWibMonth,
+  startOfWibWeek,
+} from '@shared/utils/wib-time';
 import { resolveUsdInIdrRate } from '../portal/application/utils/resolve-usd-in-idr-rate';
 
 type ProgramDashboardApplication = {
@@ -373,8 +382,8 @@ export class StatsService {
     ]);
 
     const registeredUsers = applications.length;
-    const startOfTodayUtc = this.startOfUtcDay(new Date());
-    const registrationsToday = applications.filter((item) => item.createdAt >= startOfTodayUtc).length;
+    const startOfToday = this.startOfDay(new Date());
+    const registrationsToday = applications.filter((item) => item.createdAt >= startOfToday).length;
     const formsStarted = applications.filter((item) => this.hasStartedApplication(item)).length;
     const submittedApplications = applications.filter((item) => this.isSubmittedApplication(item)).length;
     const registeredOnly = Math.max(registeredUsers - formsStarted, 0);
@@ -435,53 +444,49 @@ export class StatsService {
     return Boolean(application.submittedAt) || application.status !== ApplicationStatus.draft;
   }
 
-  private startOfUtcDay(date: Date): Date {
-    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  // Day boundaries are WIB, not UTC: the admins reading these numbers work in
+  // Jakarta, so "today" has to mean the WIB day. See shared/utils/wib-time.ts.
+  private startOfDay(date: Date): Date {
+    return startOfWibDay(date);
   }
 
-  private startOfUtcWeek(date: Date): Date {
-    const day = date.getUTCDay();
-    const daysFromMonday = (day + 6) % 7;
-    const start = this.startOfUtcDay(date);
-    start.setUTCDate(start.getUTCDate() - daysFromMonday);
-    return start;
+  private startOfWeek(date: Date): Date {
+    return startOfWibWeek(date);
   }
 
-  private startOfUtcMonth(date: Date): Date {
-    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+  private startOfMonth(date: Date): Date {
+    return startOfWibMonth(date);
   }
 
   private addDays(date: Date, days: number): Date {
-    const next = new Date(date);
-    next.setUTCDate(next.getUTCDate() + days);
-    return next;
+    return addDays(date, days);
   }
 
   private addMonths(date: Date, months: number): Date {
-    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + months, 1));
+    return addWibMonths(date, months);
   }
 
   private formatDayLabel(date: Date): string {
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: WIB_TIME_ZONE });
   }
 
   private formatWeekLabel(date: Date): string {
     const end = this.addDays(date, 6);
-    return `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}–${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}`;
+    return `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: WIB_TIME_ZONE })}–${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: WIB_TIME_ZONE })}`;
   }
 
   private formatMonthLabel(date: Date): string {
-    return date.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
+    return date.toLocaleDateString('en-US', { month: 'short', timeZone: WIB_TIME_ZONE });
   }
 
   private buildDailyTrend(createdAtValues: Date[], points: number): { label: string; registrations: number }[] {
-    const todayStart = this.startOfUtcDay(new Date());
+    const todayStart = this.startOfDay(new Date());
     const firstBucket = this.addDays(todayStart, -(points - 1));
     const counts = new Map<string, number>();
 
     for (const createdAt of createdAtValues) {
       if (createdAt < firstBucket) continue;
-      const bucket = this.startOfUtcDay(createdAt).toISOString();
+      const bucket = this.startOfDay(createdAt).toISOString();
       counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
     }
 
@@ -499,13 +504,13 @@ export class StatsService {
   }
 
   private buildWeeklyTrend(createdAtValues: Date[], points: number): { label: string; registrations: number }[] {
-    const thisWeekStart = this.startOfUtcWeek(new Date());
+    const thisWeekStart = this.startOfWeek(new Date());
     const firstBucket = this.addDays(thisWeekStart, -7 * (points - 1));
     const counts = new Map<string, number>();
 
     for (const createdAt of createdAtValues) {
       if (createdAt < firstBucket) continue;
-      const bucket = this.startOfUtcWeek(createdAt).toISOString();
+      const bucket = this.startOfWeek(createdAt).toISOString();
       counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
     }
 
@@ -523,13 +528,13 @@ export class StatsService {
   }
 
   private buildMonthlyTrend(createdAtValues: Date[], points: number): { label: string; registrations: number }[] {
-    const thisMonthStart = this.startOfUtcMonth(new Date());
+    const thisMonthStart = this.startOfMonth(new Date());
     const firstBucket = this.addMonths(thisMonthStart, -(points - 1));
     const counts = new Map<string, number>();
 
     for (const createdAt of createdAtValues) {
       if (createdAt < firstBucket) continue;
-      const bucket = this.startOfUtcMonth(createdAt).toISOString();
+      const bucket = this.startOfMonth(createdAt).toISOString();
       counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
     }
 
@@ -640,11 +645,13 @@ export class StatsService {
     });
     if (!program) throw new NotFoundException(`Program ${programId} not found`);
 
+    // A bare YYYY-MM-DD from the admin UI means a WIB calendar day, so both
+    // ends of the range are anchored to WIB midnight rather than UTC midnight.
     const MS_DAY = 86399999;
-    const appDateFrom = filters.dateFrom ? new Date(filters.dateFrom) : undefined;
-    const appDateTo = filters.dateTo ? new Date(new Date(filters.dateTo).getTime() + MS_DAY) : undefined;
-    const payDateFrom = filters.payDateFrom ? new Date(filters.payDateFrom) : undefined;
-    const payDateTo = filters.payDateTo ? new Date(new Date(filters.payDateTo).getTime() + MS_DAY) : undefined;
+    const appDateFrom = filters.dateFrom ? parseWibFilterDate(filters.dateFrom) : undefined;
+    const appDateTo = filters.dateTo ? new Date(parseWibFilterDate(filters.dateTo).getTime() + MS_DAY) : undefined;
+    const payDateFrom = filters.payDateFrom ? parseWibFilterDate(filters.payDateFrom) : undefined;
+    const payDateTo = filters.payDateTo ? new Date(parseWibFilterDate(filters.payDateTo).getTime() + MS_DAY) : undefined;
 
     const [appRows, invoiceRows] = await Promise.all([
       this.readPrisma.participantApplication.findMany({
@@ -784,9 +791,9 @@ export class StatsService {
     // ── Revenue by month (6 months) ───────────────────────────────────────────
     const now = new Date();
     const revenueByMonth = Array.from({ length: 6 }, (_, idx) => {
-      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (5 - idx), 1));
-      const next = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));
-      const label = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' });
+      const d = addWibMonths(now, -(5 - idx));
+      const next = addWibMonths(d, 1);
+      const label = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit', timeZone: WIB_TIME_ZONE });
       let idr = 0;
       let usd = 0;
       for (const inv of paidInvoices) {
