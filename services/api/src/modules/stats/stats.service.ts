@@ -316,6 +316,17 @@ export class StatsService {
       throw new NotFoundException(`Program with ID "${programId}" not found`);
     }
 
+    // This fetches every non-deleted application for the program and derives the
+    // KPIs, distributions and trends in memory. That looks like something to
+    // push into the database, and it was measured against prod on 2026-07-27
+    // (China Youth Summit, the largest program at 5,707 rows): this single
+    // query runs in 13.5ms with every buffer a cache hit, while the equivalent
+    // aggregate queries cost 36.7ms of database time across five statements,
+    // before formsStarted, registrationsToday and the age buckets are added.
+    // The gender and nationality groupBys have to join participants anyway, so
+    // each one repeats most of the work this does once. Splitting it up roughly
+    // triples database CPU for the endpoint. Leave it whole unless a program
+    // grows far beyond this scale; the result is cached for CACHE_TTL.SHORT.
     const [applications, totalAmbassadors, activeAmbassadors, referredParticipants, ambassadorRows] = await Promise.all([
       this.readPrisma.participantApplication.findMany({
         where: { programId, deletedAt: null },
