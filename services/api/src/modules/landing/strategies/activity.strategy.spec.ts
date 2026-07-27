@@ -105,7 +105,7 @@ describe('ActivityStrategy', () => {
     expect(mockCacheService.set).toHaveBeenCalledWith(
       'landing:activity:brand-1',
       expect.objectContaining({ enabled: true }),
-      5 * 60 * 1000,
+      60 * 60 * 1000,
     );
   });
 
