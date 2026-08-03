@@ -8,10 +8,23 @@
  * Scope (this iteration):
  *   • Dynamic form fields from the program's form definition (personalData +
  *     essayAnswers), grouped by section with the correct field type controls.
+ *   • Program essay questions (see "Two essay systems" below).
  *   • Application text-column fields: motivationLetter, twibbonLink,
  *     achievements, experiences (kept as a dedicated fallback section when
  *     submissionForm is absent).
  *   • A required "reason" field for the audit trail.
+ *
+ * Two essay systems (important):
+ *   Essays reach an application through two independent paths and both write
+ *   to the same `essayAnswers` JSON blob:
+ *     1. application_form_fields rows whose section is "essay" — these arrive
+ *        inside submissionForm.sections and are keyed by field.name.
+ *     2. program_essays rows — the real essay builder. These arrive as
+ *        application.essays and are keyed by the essay UUID.
+ *   Path 2 is invisible to submissionForm, so rendering only the dynamic
+ *   sections silently drops every essay question on programs that use the
+ *   essay builder. The Essays section below covers path 2 and renders
+ *   independently of whether a dynamic form exists.
  *
  * Name de-duplication strategy:
  *   The generic field list renders ALL fields returned in submissionForm,
@@ -26,8 +39,8 @@
  *   • File / upload replacement (by design).
  */
 
-import { useState, useId } from "react";
-import { User, FileText, AlertTriangle, Layers } from "lucide-react";
+import { useState, useId, useEffect } from "react";
+import { User, FileText, AlertTriangle, Layers, PenLine } from "lucide-react";
 import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
 import { FormSection } from "@/src/ui/drawer/form-section";
 import { EnglishInput } from "@/src/ui/english-input";
@@ -88,6 +101,8 @@ interface LegacyFields {
   experiences: string;
 }
 
+type ProgramEssay = NonNullable<Application["essays"]>[number];
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function normaliseName(name: string): string {
@@ -115,12 +130,44 @@ function seedDynamicFields(
   return out;
 }
 
+/**
+ * Program essays, ordered and stripped of any question already rendered as a
+ * dynamic form field. The overlap guard is defensive: essay UUIDs and form
+ * field names live in the same essayAnswers map, so a program configured with
+ * both systems must not get two controls writing the same key.
+ */
+function renderableEssays(app: Application): ProgramEssay[] {
+  const dynamicKeys = new Set(
+    (app.submissionForm?.sections ?? []).flatMap((s) =>
+      s.fields.map((f) => f.name),
+    ),
+  );
+  return [...(app.essays ?? [])]
+    .filter((essay) => !dynamicKeys.has(essay.id))
+    .sort((a, b) => a.order - b.order);
+}
+
+function seedEssayAnswers(essays: ProgramEssay[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const essay of essays) {
+    out[essay.id] = essay.answer ?? "";
+  }
+  return out;
+}
+
+function countWords(value: string): number {
+  const trimmed = value.trim();
+  return trimmed ? trimmed.split(/\s+/).length : 0;
+}
+
 function buildPayload(
   app: Application,
   originalDynamic: Record<string, string>,
   currentDynamic: Record<string, string>,
   originalLegacy: LegacyFields,
   currentLegacy: LegacyFields,
+  originalEssays: Record<string, string>,
+  currentEssays: Record<string, string>,
   reason: string,
 ) {
   // ── Dynamic fields ────────────────────────────────────────────────────────
@@ -140,6 +187,14 @@ function buildPayload(
       } else {
         personalDataPatch[field.name] = current.trim();
       }
+    }
+  }
+
+  // ── Program essays (keyed by program_essays.id) ───────────────────────────
+  for (const [essayId, current] of Object.entries(currentEssays)) {
+    const original = originalEssays[essayId] ?? "";
+    if (current.trim() !== original.trim()) {
+      essayAnswersPatch[essayId] = current.trim();
     }
   }
 
@@ -307,6 +362,45 @@ function DynamicFieldInput({
   );
 }
 
+function EssayAnswerInput({
+  essay,
+  value,
+  onChange,
+}: {
+  essay: ProgramEssay;
+  value: string;
+  onChange: (val: string) => void;
+}) {
+  const uid = useId();
+  const fieldId = `essay-${essay.id}-${uid}`;
+  const words = countWords(value);
+  const overLimit = essay.wordLimit !== null && words > essay.wordLimit;
+
+  return (
+    <Field id={fieldId} label={essay.question} required={essay.isRequired}>
+      <textarea
+        id={fieldId}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={8}
+        className={TEXTAREA_CLS}
+        placeholder="No answer submitted yet…"
+      />
+      <p className="flex items-center gap-1.5 text-xs text-zinc-500">
+        <span className={overLimit ? "font-semibold text-amber-600" : undefined}>
+          {words} {words === 1 ? "word" : "words"}
+          {essay.wordLimit !== null && ` / ${essay.wordLimit}`}
+        </span>
+        {overLimit && (
+          <span className="text-amber-600">
+            over the limit — saving is still allowed as an admin override
+          </span>
+        )}
+      </p>
+    </Field>
+  );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function EditSubmissionDrawer({
@@ -318,16 +412,35 @@ export function EditSubmissionDrawer({
   const hasDynamicForm =
     (application.submissionForm?.sections?.length ?? 0) > 0;
 
+  const essays = renderableEssays(application);
+
   const originalDynamic = seedDynamicFields(application);
   const originalLegacy = seedLegacyFromApplication(application);
+  const originalEssays = seedEssayAnswers(essays);
 
   const [dynamicFields, setDynamicFields] =
     useState<Record<string, string>>(originalDynamic);
   const [legacyFields, setLegacyFields] =
     useState<LegacyFields>(originalLegacy);
+  const [essayAnswers, setEssayAnswers] =
+    useState<Record<string, string>>(originalEssays);
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+
+  // The host page keeps this drawer mounted (no `key`, no conditional unmount)
+  // and only toggles `open`, so the useState initializers above run exactly
+  // once. Without an explicit reseed, an edit the admin abandoned via Cancel
+  // survives, gets diffed against freshly-recomputed originals on the next
+  // open, and can reach the audit log as a change they believed they discarded.
+  useEffect(() => {
+    if (!open) return;
+    setDynamicFields(seedDynamicFields(application));
+    setLegacyFields(seedLegacyFromApplication(application));
+    setEssayAnswers(seedEssayAnswers(renderableEssays(application)));
+    setReason("");
+    setApiError(null);
+  }, [open, application]);
 
   function setDynamic(name: string) {
     return (val: string) =>
@@ -338,6 +451,11 @@ export function EditSubmissionDrawer({
     return (
       e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
     ) => setLegacyFields((prev) => ({ ...prev, [key]: e.target.value }));
+  }
+
+  function setEssay(essayId: string) {
+    return (val: string) =>
+      setEssayAnswers((prev) => ({ ...prev, [essayId]: val }));
   }
 
   async function handleSave() {
@@ -352,6 +470,8 @@ export function EditSubmissionDrawer({
       dynamicFields,
       originalLegacy,
       legacyFields,
+      originalEssays,
+      essayAnswers,
       reason.trim(),
     );
 
@@ -540,6 +660,26 @@ export function EditSubmissionDrawer({
             </div>
           </FormSection>
         </>
+      )}
+
+      {/* ── Program essays ────────────────────────────────────────────────── */}
+      {essays.length > 0 && (
+        <FormSection
+          icon={PenLine}
+          title="Essays"
+          description="Essay questions defined for this program. Answers save to the participant's submission."
+        >
+          <div className="flex flex-col gap-5">
+            {essays.map((essay) => (
+              <EssayAnswerInput
+                key={essay.id}
+                essay={essay}
+                value={essayAnswers[essay.id] ?? ""}
+                onChange={setEssay(essay.id)}
+              />
+            ))}
+          </div>
+        </FormSection>
       )}
 
       {/* ── Audit reason ──────────────────────────────────────────────────── */}
