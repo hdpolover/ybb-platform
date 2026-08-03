@@ -25,11 +25,17 @@ type FeeConfig struct {
 }
 
 // PaymentMethodEntity represents a configurable payment method
+//
+// Name and Code are unique, but deliberately carry NO `unique` gorm tag:
+// uniqueness is enforced by the partial indexes in migration 021, scoped to
+// `deleted_at IS NULL` so a soft-deleted method releases its name. AutoMigrate
+// cannot express a partial index, so a `unique` tag here would recreate the
+// plain constraint in dev and silently reintroduce the bug the migration fixed.
 type PaymentMethodEntity struct {
 	ID          string            `gorm:"type:uuid;primaryKey"                json:"id"`
-	Name        string            `gorm:"type:varchar(100);not null;unique"   json:"name"`         // e.g., "Bank BCA", "Midtrans", "GoPay"
+	Name        string            `gorm:"type:varchar(100);not null"          json:"name"`         // e.g., "Bank BCA", "Midtrans", "GoPay"
 	Type        PaymentMethodType `gorm:"type:varchar(20);not null;index"     json:"type"`
-	Code        string            `gorm:"type:varchar(50);not null;unique"    json:"code"`         // e.g., "bank_bca", "midtrans", "gopay"
+	Code        string            `gorm:"type:varchar(50);not null"           json:"code"`         // e.g., "bank_bca", "midtrans", "gopay"
 	IsActive    bool              `gorm:"not null;default:true;index"         json:"is_active"`
 	DisplayName string            `gorm:"type:varchar(100);not null"          json:"display_name"` // User-facing name
 	Description string            `gorm:"type:text"                           json:"description"`

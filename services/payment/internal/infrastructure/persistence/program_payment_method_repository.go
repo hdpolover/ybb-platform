@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sort"
 	"time"
 
 	"github.com/ybb-platform/payment/internal/domain/entities"
@@ -57,6 +58,82 @@ func (r *ProgramPaymentMethodRepository) FindMergedByProgram(ctx context.Context
 		return r.findUnconfiguredDefault(ctx, programID)
 	}
 	return r.findConfigured(ctx, programID)
+}
+
+// FindAllForAdminByProgram is the admin-console counterpart to
+// FindMergedByProgram: every active master method, whether or not this
+// program has enabled it, with overrides merged in where an overlay row
+// exists and IsEnabled=false where it does not.
+//
+// FindMergedByProgram cannot serve the admin console. For a *configured*
+// program it returns only is_enabled=true overlay rows, so a shared method
+// the program has never enabled is absent from the response — and the
+// console renders exactly what this endpoint returns. The result was that
+// the "Enabled for this program" checkbox existed for every method the admin
+// could already see and for none of the ones they actually wanted to add,
+// with no affordance anywhere to attach an existing method. Admins worked
+// around it by creating near-duplicate master rows (prod accumulated five
+// never-attached orphans and one trailing-space name twin) until the global
+// name uniqueness stopped them with an opaque 500.
+//
+// Deliberately a separate method rather than a flag on FindMergedByProgram:
+// the participant portal calls that path, and leaking disabled methods to
+// participants would be a far worse bug than the one being fixed here.
+func (r *ProgramPaymentMethodRepository) FindAllForAdminByProgram(ctx context.Context, programID string) ([]repositories.ProgramMethodView, error) {
+	var masters []entities.PaymentMethodEntity
+	if err := r.db.WithContext(ctx).
+		Where("is_active = ?", true).
+		Order("sort_order asc").
+		Find(&masters).Error; err != nil {
+		log.Printf("Failed to fetch master payment methods for admin: %v", err)
+		return nil, fmt.Errorf("failed to fetch master payment methods for admin: %w", err)
+	}
+
+	var overlays []entities.ProgramPaymentMethodEntity
+	if err := r.db.WithContext(ctx).
+		Where("program_id = ?", programID).
+		Find(&overlays).Error; err != nil {
+		log.Printf("Failed to fetch program payment method overrides for admin: %v", err)
+		return nil, fmt.Errorf("failed to fetch program payment method overrides for admin: %w", err)
+	}
+
+	overlayByMethodID := make(map[string]entities.ProgramPaymentMethodEntity, len(overlays))
+	for _, o := range overlays {
+		overlayByMethodID[o.PaymentMethodID] = o
+	}
+
+	// No overlay rows at all means the program is unconfigured, and the
+	// fallback contract says every active method is implicitly on. Keep that
+	// reading so the console doesn't show a fleet of unchecked boxes for a
+	// program whose participants can currently use every method.
+	unconfigured := len(overlays) == 0
+
+	attached := make([]repositories.ProgramMethodView, 0, len(overlays))
+	unattached := make([]repositories.ProgramMethodView, 0, len(masters))
+	for _, m := range masters {
+		o, hasOverlay := overlayByMethodID[m.ID]
+		switch {
+		case hasOverlay:
+			attached = append(attached, overlayView(programID, m, o))
+		case unconfigured:
+			attached = append(attached, defaultView(programID, m))
+		default:
+			// Configured program, method never attached: surface it as a
+			// real, disabled row so the admin can tick it on.
+			v := defaultView(programID, m)
+			v.IsConfigured = true
+			v.IsEnabled = false
+			unattached = append(unattached, v)
+		}
+	}
+
+	// Attached rows keep the program's curated overlay order and stay ahead of
+	// the newly visible ones. The console bulk-saves sort_order from list
+	// position, so interleaving unattached methods by master sort_order would
+	// silently reshuffle what participants see on the next save.
+	sort.SliceStable(attached, func(i, j int) bool { return attached[i].SortOrder < attached[j].SortOrder })
+
+	return append(attached, unattached...), nil
 }
 
 // findUnconfiguredDefault returns every active master method as a

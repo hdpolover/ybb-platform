@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { ArrowPathIcon, ExclamationTriangleIcon, PencilSquareIcon, CloudArrowUpIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import {
   listProgramPaymentMethods,
   bulkUpsertProgramPaymentMethods,
@@ -87,6 +88,11 @@ export default function PaymentMethodsPage() {
   const program = accessiblePrograms.find(
     (p) => p.programId === params.programId || p.programSlug === params.programId,
   );
+  // The route param is frequently a program SLUG. Every program-scoped
+  // payment endpoint validates a UUID and 400s on a slug, which took the whole
+  // page down (including Save Changes) on slug URLs. Keep params.programId for
+  // navigation only; use the resolved UUID for API calls.
+  const programId = useResolvedProgramId(params.programId);
   const brandId = program?.brandId ?? "";
   const userId = adminProfile?.userId ?? "";
   const programName = program?.programName ?? "Selected Program";
@@ -105,13 +111,13 @@ export default function PaymentMethodsPage() {
   const [deleteSharedLoading, setDeleteSharedLoading] = useState(false);
 
   const fetchMethods = useCallback(async () => {
-    if (!params.programId) return;
+    if (!programId) return;
     setLoading(true); setError(null);
     try {
       // Load the program-scoped merged list + active gateway configs in
       // parallel, same "orphaned gateway" warning as the old global screen.
       const [methodsData, gatewayConfigs] = await Promise.all([
-        listProgramPaymentMethods(params.programId),
+        listProgramPaymentMethods(programId),
         listGatewayConfigs().catch(() => []),
       ]);
       setMethods(methodsData);
@@ -122,7 +128,7 @@ export default function PaymentMethodsPage() {
     }
     catch (err) { setError(err instanceof Error ? err.message : "Failed to load payment methods"); }
     finally { setLoading(false); }
-  }, [params.programId]);
+  }, [programId]);
 
   useEffect(() => { fetchMethods(); }, [fetchMethods]);
 
@@ -146,7 +152,7 @@ export default function PaymentMethodsPage() {
   // first save must materialize the whole set, otherwise enabling/disabling
   // one method would silently drop every other method from "configured" mode.
   async function handleSaveAll() {
-    if (!params.programId) return;
+    if (!programId) return;
     setSaving(true);
     try {
       const payload: ProgramMethodOverride[] = methods.map((m) => {
@@ -161,7 +167,7 @@ export default function PaymentMethodsPage() {
           admin_instructions_override: draft.adminInstructions.override ? draft.adminInstructions.value : null,
         };
       });
-      await bulkUpsertProgramPaymentMethods(params.programId, payload);
+      await bulkUpsertProgramPaymentMethods(programId, payload);
       toast.success("Payment method settings saved for this program.");
       // The write endpoint returns { status: "success" }, not the updated
       // list — re-fetch to pick up fresh has_*_override flags.
@@ -339,8 +345,17 @@ function MethodRow({
   const isManual = normalizePaymentMethodType(method.type) === "MANUAL";
   const gatewayActive = isManual || (!!method.gateway_name && activeGatewayNames.has(method.gateway_name));
 
+  // Shared methods this program has not enabled are listed so they can be
+  // attached, but they must not read as live configuration. Muted, dashed,
+  // and still fully interactive — the checkbox is the whole point of the row.
   return (
-    <div className="rounded-lg border border-zinc-200 bg-white p-4">
+    <div
+      className={`rounded-lg border p-4 ${
+        draft.isEnabled
+          ? "border-zinc-200 bg-white"
+          : "border-dashed border-zinc-300 bg-zinc-50/60"
+      }`}
+    >
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-zinc-100 pb-3">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-14 shrink-0 items-center justify-center overflow-hidden rounded border border-zinc-200 bg-white">
@@ -364,6 +379,11 @@ function MethodRow({
               )}
               {!method.is_active && (
                 <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 font-semibold text-zinc-600">Shared method inactive</span>
+              )}
+              {!draft.isEnabled && method.is_active && (
+                <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 font-semibold text-zinc-600">
+                  Not enabled for this program
+                </span>
               )}
             </div>
           </div>
@@ -732,7 +752,7 @@ function PaymentMethodModal({
               {method ? (
                 <>saving here changes this payment method for <span className="font-semibold">every program</span> that uses it, not just {programName}.</>
               ) : (
-                <>creating here adds a payment method visible to <span className="font-semibold">every program</span>, not just {programName}.</>
+                <>creating here adds a payment method visible to <span className="font-semibold">every program</span>, not just {programName}. Looking for one that already exists? Close this and tick <span className="font-semibold">Enabled for this program</span> on it in the list instead — names must be unique across all programs.</>
               )}
             </p>
           </div>

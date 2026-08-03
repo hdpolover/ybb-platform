@@ -33,4 +33,11 @@ var (
 	ErrIdempotencyInProgress = NewDomainError("IDEMPOTENCY_IN_PROGRESS", "A request with this idempotency key is already processing")
 
 	ErrDuplicateOpenIntent = NewDomainError("DUPLICATE_OPEN_INTENT", "An open payment intent already exists for this reference")
+
+	// ErrDuplicatePaymentMethod covers the unique constraints on
+	// payment_methods.name and .code. Payment methods are shared master data,
+	// so the name an admin types is unique across every program — a collision
+	// is a normal user input error, not a server fault, and must surface as a
+	// 409 rather than an opaque 500.
+	ErrDuplicatePaymentMethod = NewDomainError("DUPLICATE_PAYMENT_METHOD", "A payment method with this name already exists")
 )
