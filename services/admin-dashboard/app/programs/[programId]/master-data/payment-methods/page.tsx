@@ -56,6 +56,22 @@ function stripHtml(value: string): string {
   return value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
 
+/**
+ * True when this row is live for the program but still renders the SHARED
+ * master instructions, i.e. text any other program's admin can change.
+ *
+ * Scoped to MANUAL methods with non-empty instructions because that is where
+ * the damage is: manual instructions carry program-specific checkout links, so
+ * inheriting them means showing another summit's payment URLs. Automatic
+ * gateway methods legitimately share generic copy and would only add noise.
+ */
+function sharesGlobalInstructions(method: ProgramPaymentMethod, draft: MethodDraft | undefined): boolean {
+  if (!draft?.isEnabled) return false;
+  if (normalizePaymentMethodType(method.type) !== "MANUAL") return false;
+  if (draft.instructions.override) return false;
+  return stripHtml(method.instructions ?? "").trim().length > 0;
+}
+
 // ─── Per-program override draft state ─────────────────────────────────────────
 // The merged GET response only ever returns *resolved* values (override if
 // present, else master) plus a has_override flag — it does not expose the raw
@@ -132,6 +148,8 @@ export default function PaymentMethodsPage() {
   }, [programId]);
 
   useEffect(() => { fetchMethods(); }, [fetchMethods]);
+
+  const sharedTextMethods = methods.filter((m) => sharesGlobalInstructions(m, drafts[m.id]));
 
   function updateDraft(methodId: string, patch: Partial<MethodDraft>) {
     setDrafts((prev) => ({ ...prev, [methodId]: { ...prev[methodId], ...patch } }));
@@ -226,8 +244,10 @@ export default function PaymentMethodsPage() {
         </div>
         <h1 className="mt-1 text-lg font-bold text-zinc-900">{programName} Payment Methods</h1>
         <p className="text-sm text-zinc-500">
-          Choose which shared payment methods {programName} accepts, and optionally override the description or
-          instructions shown to this program&apos;s participants. Nothing here affects any other program.
+          Choose which shared payment methods {programName} accepts, and customize the description or
+          instructions shown to this program&apos;s participants. Per-program customizations affect only{" "}
+          {programName}; editing a method&apos;s <span className="font-medium">shared details</span> changes it
+          everywhere.
         </p>
       </section>
 
@@ -259,6 +279,28 @@ export default function PaymentMethodsPage() {
             </button>
           </div>
         </div>
+
+        {/* Standing audit line. Inheriting shared instructions is silent by
+            nature — the row looks fine and the wrong payment links only show up
+            on the participant side — so the page has to say it out loud. */}
+        {!loading && sharedTextMethods.length > 0 && (
+          <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] text-amber-800">
+            <ExclamationTriangleIcon className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <p className="font-semibold">
+                {sharedTextMethods.length} enabled method{sharedTextMethods.length === 1 ? "" : "s"} show
+                {sharedTextMethods.length === 1 ? "s" : ""} shared instructions that any program can change
+              </p>
+              <p className="mt-0.5">
+                {sharedTextMethods.map((m) => m.display_name || m.name).join(", ")} —{" "}
+                {programName}&apos;s participants currently see text owned by every program at once, so it may
+                reference a different summit or link to the wrong checkout page. Check the Instructions on each
+                row below and click <span className="font-semibold">Customize for this program</span> to give{" "}
+                {programName} its own copy.
+              </p>
+            </div>
+          </div>
+        )}
 
         {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
 
@@ -386,6 +428,15 @@ function MethodRow({
                   Not enabled for this program
                 </span>
               )}
+              {sharesGlobalInstructions(method, draft) && (
+                <span
+                  title="This program shows the shared instructions. Any program's admin can change them, and they may reference a different program."
+                  className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-1.5 py-0.5 font-semibold uppercase tracking-wide text-amber-700"
+                >
+                  <ExclamationTriangleIcon className="h-3 w-3" />
+                  Shared instructions
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -421,6 +472,7 @@ function MethodRow({
           <OverrideField
             label="Customer Instructions"
             field={draft.instructions}
+            risky={sharesGlobalInstructions(method, draft)}
             wasOverridden={method.has_instructions_override}
             onChange={(patch) => onFieldChange("instructions", patch)}
             renderInput={(value, onValueChange) => (
@@ -485,12 +537,15 @@ function MethodRow({
 }
 
 function OverrideField({
+  risky = false,
   label,
   field,
   wasOverridden,
   onChange,
   renderInput,
 }: {
+  /** Highlight the shared-text state as a risk rather than a neutral default. */
+  risky?: boolean;
   label: string;
   field: FieldDraft;
   wasOverridden: boolean;
@@ -531,14 +586,34 @@ function OverrideField({
         // zero overrides before one shared edit put the wrong summit's payment
         // links in front of three programs' participants. Make the safe path
         // the obvious one.
-        <div className="rounded-md border border-dashed border-zinc-200 bg-white px-3 py-2">
-          <p className="text-[11px] text-zinc-400">
-            Shared with every program{field.value ? `: "${stripHtml(field.value).slice(0, 120)}"` : " (empty)"}
+        <div
+          className={`rounded-md border border-dashed px-3 py-2 ${
+            risky ? "border-amber-300 bg-amber-50/60" : "border-zinc-200 bg-white"
+          }`}
+        >
+          <p className={`text-[11px] font-medium ${risky ? "text-amber-800" : "text-zinc-500"}`}>
+            {risky
+              ? "Shared with every program — check this text belongs to this program"
+              : "Shared with every program"}
           </p>
+          {/* Enough of the real text to spot a wrong program name or checkout
+              link without opening the shared editor. */}
+          {field.value ? (
+            <p className={`mt-1 whitespace-pre-line text-[11px] ${risky ? "text-amber-900" : "text-zinc-400"}`}>
+              {stripHtml(field.value).slice(0, 320)}
+              {stripHtml(field.value).length > 320 ? "…" : ""}
+            </p>
+          ) : (
+            <p className="mt-1 text-[11px] italic text-zinc-400">(empty)</p>
+          )}
           <button
             type="button"
             onClick={() => onChange({ override: true })}
-            className="mt-1.5 cursor-pointer rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-semibold text-blue-700 transition-colors hover:bg-blue-100"
+            className={`mt-1.5 cursor-pointer rounded-md border px-2 py-1 text-[10px] font-semibold transition-colors ${
+              risky
+                ? "border-amber-300 bg-amber-100 text-amber-900 hover:bg-amber-200"
+                : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+            }`}
           >
             Customize for this program
           </button>
