@@ -26,6 +26,7 @@ import {
     SetGatewayActiveDto,
 } from './dto/admin-gateway-config.dto';
 import { PaymentServiceHttpClient } from '../infrastructure/services/payment-service-http.client';
+import { extractDownstreamMessage } from './downstream-error.util';
 
 // Thin forwarder to the Go payment service /gateway-configs endpoints.
 // Credential fields flow through as plaintext on the wire (over TLS within
@@ -155,11 +156,7 @@ export class GatewayAdminController {
             this.logger.error(`Payment Service Error: ${err.response.status} - ${JSON.stringify(err.response.data)}`);
             const status = err.response.status;
             if (status >= 400 && status < 500) {
-                const data = err.response.data;
-                const userMsg = (typeof data === 'object' && data !== null && 'message' in data)
-                    ? String((data as { message: unknown }).message)
-                    : 'Gateway request failed';
-                throw new HttpException(userMsg, status);
+                throw new HttpException(extractDownstreamMessage(err.response.data, 'Gateway request failed'), status);
             }
             throw new HttpException('Payment service unavailable. Please try again later.', 503);
         }

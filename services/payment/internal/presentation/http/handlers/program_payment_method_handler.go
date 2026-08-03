@@ -69,7 +69,17 @@ func (h *ProgramPaymentMethodHandler) GetByProgram(c *gin.Context) {
 		return
 	}
 
-	views, err := h.repo.FindMergedByProgram(c.Request.Context(), programID)
+	// include_disabled=true is the admin-console read: every active master
+	// method, with is_enabled reflecting whether this program has turned it on.
+	// The participant-facing callers must never set it — they would start
+	// offering methods the program deliberately disabled.
+	var views []repositories.ProgramMethodView
+	var err error
+	if c.Query("include_disabled") == "true" {
+		views, err = h.repo.FindAllForAdminByProgram(c.Request.Context(), programID)
+	} else {
+		views, err = h.repo.FindMergedByProgram(c.Request.Context(), programID)
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch program payment methods"})
 		return

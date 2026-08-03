@@ -72,6 +72,11 @@ type ProgramPaymentMethodRepository interface {
 	// with no overrides. Otherwise it returns only the overlay's is_enabled=true
 	// rows, merged with master via COALESCE, in overlay sort order.
 	FindMergedByProgram(ctx context.Context, programID string) ([]ProgramMethodView, error)
+	// FindAllForAdminByProgram returns every active master method for the admin
+	// console, including ones this program has not enabled (IsEnabled=false),
+	// so an admin can attach an existing shared method instead of being forced
+	// to create a near-duplicate. Never use this for participant-facing reads.
+	FindAllForAdminByProgram(ctx context.Context, programID string) ([]ProgramMethodView, error)
 	// UpsertOverride creates or updates a single overlay row for (programID, methodID).
 	UpsertOverride(ctx context.Context, programID string, methodID string, patch OverridePatch) error
 	// UpsertFullSet upserts multiple overlay rows for a program in one transaction.
