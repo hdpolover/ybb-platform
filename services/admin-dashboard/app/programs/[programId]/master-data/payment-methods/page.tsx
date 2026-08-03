@@ -15,6 +15,7 @@ import {
   updatePaymentMethodWithIcon,
   deletePaymentMethod,
   listGatewayConfigs,
+  getPaymentMethodUsage,
   type ProgramPaymentMethod,
   type ProgramMethodOverride,
   type PaymentMethod,
@@ -507,15 +508,15 @@ function OverrideField({
             </span>
           )}
         </div>
-        <label className="flex items-center gap-1.5 text-[10px] font-medium text-zinc-500">
-          <input
-            type="checkbox"
-            checked={field.override}
-            onChange={(e) => onChange({ override: e.target.checked })}
-            className="h-3 w-3"
-          />
-          Override for this program
-        </label>
+        {field.override ? (
+          <button
+            type="button"
+            onClick={() => onChange({ override: false })}
+            className="cursor-pointer text-[10px] font-medium text-zinc-500 underline-offset-2 hover:text-zinc-700 hover:underline"
+          >
+            Revert to shared
+          </button>
+        ) : null}
       </div>
       {field.override ? (
         renderInput(field.value, (value) => onChange({ value }))
@@ -524,9 +525,24 @@ function OverrideField({
           Will revert to the shared default when you save.
         </p>
       ) : (
-        <p className="rounded-md border border-dashed border-zinc-200 bg-white px-3 py-2 text-[11px] text-zinc-400">
-          Using shared default{field.value ? `: "${stripHtml(field.value).slice(0, 140)}"` : " (empty)"}
-        </p>
+        // The per-program editor used to hide behind a 10px checkbox, so the
+        // only rich-text box anyone found was the one in "Edit shared details"
+        // — which broadcasts to every program. Prod ran 39 overlay rows with
+        // zero overrides before one shared edit put the wrong summit's payment
+        // links in front of three programs' participants. Make the safe path
+        // the obvious one.
+        <div className="rounded-md border border-dashed border-zinc-200 bg-white px-3 py-2">
+          <p className="text-[11px] text-zinc-400">
+            Shared with every program{field.value ? `: "${stripHtml(field.value).slice(0, 120)}"` : " (empty)"}
+          </p>
+          <button
+            type="button"
+            onClick={() => onChange({ override: true })}
+            className="mt-1.5 cursor-pointer rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-semibold text-blue-700 transition-colors hover:bg-blue-100"
+          >
+            Customize for this program
+          </button>
+        </div>
       )}
     </div>
   );
@@ -554,6 +570,18 @@ function PaymentMethodModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  // Blast radius for editing the master instructions below. Fetched only when
+  // editing an existing method: creating one affects nobody yet.
+  const [inheritingCount, setInheritingCount] = useState<number | null>(null);
+  useEffect(() => {
+    if (!method?.id) return;
+    let cancelled = false;
+    getPaymentMethodUsage(method.id)
+      .then((u) => { if (!cancelled) setInheritingCount(u.inheriting_program_count); })
+      .catch(() => { /* the warning is advisory; a failed count must not block editing */ });
+    return () => { cancelled = true; };
+  }, [method?.id]);
+
   const [name, setName] = useState(method?.name ?? "");
   const [type, setType] = useState<PaymentMethodType>(normalizePaymentMethodType(method?.type));
   const [displayName, setDisplayName] = useState(method?.display_name ?? "");
@@ -750,7 +778,21 @@ function PaymentMethodModal({
             <p>
               This is <span className="font-semibold">shared master data</span> —{" "}
               {method ? (
-                <>saving here changes this payment method for <span className="font-semibold">every program</span> that uses it, not just {programName}.</>
+                <>
+                  saving here changes this payment method for{" "}
+                  <span className="font-semibold">every program</span> that uses it, not just {programName}.
+                  {inheritingCount !== null && inheritingCount > 0 && (
+                    <>
+                      {" "}The description and instructions below are currently shown to{" "}
+                      <span className="font-semibold">
+                        {inheritingCount} program{inheritingCount === 1 ? "" : "s"}
+                      </span>{" "}
+                      that {inheritingCount === 1 ? "has" : "have"} not customized them. To change the text for{" "}
+                      {programName} only, close this and use{" "}
+                      <span className="font-semibold">Customize for this program</span> on the method&rsquo;s row.
+                    </>
+                  )}
+                </>
               ) : (
                 <>creating here adds a payment method visible to <span className="font-semibold">every program</span>, not just {programName}. Looking for one that already exists? Close this and tick <span className="font-semibold">Enabled for this program</span> on it in the list instead — names must be unique across all programs.</>
               )}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/ybb-platform/payment/internal/domain/entities"
 	"github.com/ybb-platform/payment/internal/domain/repositories"
 	"github.com/ybb-platform/payment/internal/infrastructure/persistence"
 	"gorm.io/driver/sqlite"
@@ -58,7 +59,8 @@ func setupMethodsDB(t *testing.T) *gorm.DB {
 			sort_order INTEGER NOT NULL DEFAULT 0,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			deleted_at DATETIME
+			deleted_at DATETIME,
+			CONSTRAINT uq_program_method UNIQUE (program_id, payment_method_id)
 		)`,
 	}
 	for _, s := range stmts {
@@ -75,6 +77,19 @@ func seedMethod(t *testing.T, db *gorm.DB, id, name string, sortOrder int, activ
 		`INSERT INTO payment_methods (id, name, type, code, is_active, display_name, config, sort_order)
 		 VALUES (?, ?, 'manual', ?, ?, ?, '{}', ?)`,
 		id, name, "code_"+id, active, name, sortOrder,
+	).Error; err != nil {
+		t.Fatalf("seed method %s: %v", name, err)
+	}
+}
+
+// seedMethodFull is seedMethod plus the two fields the instruction-seeding
+// logic branches on: type (manual vs automatic) and the master instructions.
+func seedMethodFull(t *testing.T, db *gorm.DB, id, name, methodType, instructions string, sortOrder int) {
+	t.Helper()
+	if err := db.Exec(
+		`INSERT INTO payment_methods (id, name, type, code, is_active, display_name, instructions, config, sort_order)
+		 VALUES (?, ?, ?, ?, 1, ?, ?, '{}', ?)`,
+		id, name, methodType, "code_"+id, name, instructions, sortOrder,
 	).Error; err != nil {
 		t.Fatalf("seed method %s: %v", name, err)
 	}
@@ -214,5 +229,121 @@ func TestFindMergedByProgramStillHidesDisabledMethods(t *testing.T) {
 	}
 	if len(views) != 1 || views[0].ID != "m-bca" {
 		t.Fatalf("portal must see only the enabled method, got %d views: %+v", len(views), views)
+	}
+}
+
+func boolPtr(b bool) *bool    { return &b }
+func strPtr(s string) *string { return &s }
+
+func overlayRow(t *testing.T, db *gorm.DB, programID, methodID string) entities.ProgramPaymentMethodEntity {
+	t.Helper()
+	var row entities.ProgramPaymentMethodEntity
+	if err := db.Where("program_id = ? AND payment_method_id = ?", programID, methodID).First(&row).Error; err != nil {
+		t.Fatalf("overlay row %s: %v", methodID, err)
+	}
+	return row
+}
+
+// The production incident: a manual method's instructions carry that program's
+// own Xendit checkout links. Sharing them meant one edit put Middle East Youth
+// Summit links in front of China Youth Summit and Istanbul Youth Summit
+// participants at the same time. Enabling a manual method must give the
+// program a copy it owns.
+func TestUpsertFullSetSeedsManualInstructionsOnEnable(t *testing.T) {
+	db := setupMethodsDB(t)
+	repo := persistence.NewProgramPaymentMethodRepository(db)
+	ctx := context.Background()
+
+	seedMethodFull(t, db, "m-manual", "Mastercard / Visa / JCB (Manual Confirmation)", "manual", "<p>MEYS 2026 links</p>", 1)
+	seedMethodFull(t, db, "m-auto", "Credit Card", "automatic", "<p>generic gateway copy</p>", 2)
+
+	err := repo.UpsertFullSet(ctx, testProgramID, []repositories.OverridePatch{
+		{PaymentMethodID: "m-manual", IsEnabled: boolPtr(true)},
+		{PaymentMethodID: "m-auto", IsEnabled: boolPtr(true)},
+	})
+	if err != nil {
+		t.Fatalf("UpsertFullSet: %v", err)
+	}
+
+	manual := overlayRow(t, db, testProgramID, "m-manual")
+	if manual.InstructionsOverride == nil {
+		t.Fatal("manual method must be seeded with its own copy of the instructions")
+	}
+	if *manual.InstructionsOverride != "<p>MEYS 2026 links</p>" {
+		t.Errorf("unexpected seeded text: %q", *manual.InstructionsOverride)
+	}
+
+	auto := overlayRow(t, db, testProgramID, "m-auto")
+	if auto.InstructionsOverride != nil {
+		t.Error("automatic methods should keep inheriting the shared master copy")
+	}
+}
+
+func TestUpsertFullSetDoesNotSeedWhenDisabledOrExplicit(t *testing.T) {
+	db := setupMethodsDB(t)
+	repo := persistence.NewProgramPaymentMethodRepository(db)
+	ctx := context.Background()
+
+	seedMethodFull(t, db, "m-off", "Left Off", "manual", "<p>master</p>", 1)
+	seedMethodFull(t, db, "m-explicit", "Explicit Override", "manual", "<p>master</p>", 2)
+
+	err := repo.UpsertFullSet(ctx, testProgramID, []repositories.OverridePatch{
+		{PaymentMethodID: "m-off", IsEnabled: boolPtr(false)},
+		{PaymentMethodID: "m-explicit", IsEnabled: boolPtr(true), InstructionsOverride: strPtr("<p>mine</p>")},
+	})
+	if err != nil {
+		t.Fatalf("UpsertFullSet: %v", err)
+	}
+
+	if off := overlayRow(t, db, testProgramID, "m-off"); off.InstructionsOverride != nil {
+		t.Error("a method left disabled must not be frozen with a seeded override")
+	}
+	explicit := overlayRow(t, db, testProgramID, "m-explicit")
+	if explicit.InstructionsOverride == nil || *explicit.InstructionsOverride != "<p>mine</p>" {
+		t.Error("an explicit override must win over seeding")
+	}
+}
+
+// Re-saving an already-enabled method must not resurrect an override the admin
+// deliberately cleared by unticking "Override for this program".
+func TestUpsertFullSetDoesNotReseedAlreadyEnabled(t *testing.T) {
+	db := setupMethodsDB(t)
+	repo := persistence.NewProgramPaymentMethodRepository(db)
+	ctx := context.Background()
+
+	seedMethodFull(t, db, "m-manual", "Manual", "manual", "<p>master</p>", 1)
+	seedOverlay(t, db, testProgramID, "m-manual", true, 1)
+
+	if err := repo.UpsertFullSet(ctx, testProgramID, []repositories.OverridePatch{
+		{PaymentMethodID: "m-manual", IsEnabled: boolPtr(true)},
+	}); err != nil {
+		t.Fatalf("UpsertFullSet: %v", err)
+	}
+
+	if row := overlayRow(t, db, testProgramID, "m-manual"); row.InstructionsOverride != nil {
+		t.Error("already-enabled method must not be re-seeded; unticking the override should stick")
+	}
+}
+
+func TestCountInheritingPrograms(t *testing.T) {
+	db := setupMethodsDB(t)
+	repo := persistence.NewProgramPaymentMethodRepository(db)
+
+	seedMethodFull(t, db, "m-manual", "Manual", "manual", "<p>master</p>", 1)
+	seedOverlay(t, db, testProgramID, "m-manual", true, 1) // inherits
+	seedOverlay(t, db, otherProgram, "m-manual", true, 1)  // will override
+	if err := db.Exec(`UPDATE program_payment_methods SET instructions_override='<p>own</p>' WHERE program_id=? AND payment_method_id=?`, otherProgram, "m-manual").Error; err != nil {
+		t.Fatalf("set override: %v", err)
+	}
+
+	enabled, inheriting, err := repo.CountInheritingPrograms(context.Background(), "m-manual")
+	if err != nil {
+		t.Fatalf("CountInheritingPrograms: %v", err)
+	}
+	if enabled != 2 {
+		t.Errorf("enabled = %d, want 2", enabled)
+	}
+	if inheriting != 1 {
+		t.Errorf("inheriting = %d, want 1", inheriting)
 	}
 }

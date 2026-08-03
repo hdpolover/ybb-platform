@@ -1577,6 +1577,20 @@ export class PaymentAdminController {
         }
     }
 
+    @Get('methods/:id/usage')
+    @ApiOperation({ summary: 'How many programs use this shared payment method' })
+    @ApiResponse({ status: 200, description: 'Enabled and inheriting program counts' })
+    async getMethodUsage(@Param('id') id: string) {
+        try {
+            const { data } = await this.paymentServiceClient.get(`/api/v1/payment-methods/${id}/usage`, {
+                headers: this.buildInternalHeaders(),
+            });
+            return data;
+        } catch (error) {
+            this.handleError(error);
+        }
+    }
+
     @Get('methods/:id')
     @ApiOperation({ summary: 'Get payment method detail' })
     @ApiResponse({ status: 200, description: 'Payment method detail' })

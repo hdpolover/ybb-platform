@@ -2020,6 +2020,22 @@ export type AdminUpdateSubmissionResult = {
   editHistoryId: string;
 };
 
+export interface PaymentMethodUsage {
+  enabled_program_count: number;
+  inheriting_program_count: number;
+}
+
+/**
+ * How many programs would be affected by editing this shared method's master
+ * instructions. `inheriting_program_count` is the blast radius: programs with
+ * the method enabled and no instructions_override of their own.
+ */
+export function getPaymentMethodUsage(methodId: string): Promise<PaymentMethodUsage> {
+  return request<{ data: PaymentMethodUsage }>(
+    `/admin/payments/methods/${encodeURIComponent(methodId)}/usage`,
+  ).then((r) => r.data);
+}
+
 export function adminUpdateSubmissionData(
   id: string,
   payload: AdminUpdateSubmissionPayload,
