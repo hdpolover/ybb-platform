@@ -27,8 +27,12 @@ class UploadFileHandler:
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     ]
 
-    # Size limits (in bytes)
-    MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB
+    # Size limits (in bytes).
+    # Reconciled with CreateUploadUrlHandler.MAX_IMAGE_SIZE and
+    # services/api/src/common/constants/index.ts MAX_FILE_SIZE — was 5MB here,
+    # which rejected ordinary phone photos (typically 3-8MB) and was the main
+    # cause of "can't upload my photo" reports.
+    MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB
     MAX_DOCUMENT_SIZE = 10 * 1024 * 1024  # 10MB
 
     # Matches files.original_filename VARCHAR(255) — original_filename is displayed back to

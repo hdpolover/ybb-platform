@@ -2,7 +2,7 @@ import asyncio
 
 from app.application.commands.handlers.create_upload_url_handler import CreateUploadUrlHandler
 from app.application.commands.create_upload_url_command import CreateUploadUrlCommand
-from app.domain.exceptions.file_exceptions import InvalidFilenameException
+from app.domain.exceptions.file_exceptions import FileSizeLimitException, InvalidFilenameException
 
 
 class _Storage:
@@ -47,3 +47,28 @@ def test_create_upload_url_accepts_filename_at_255_chars():
     response = asyncio.run(handler.execute(command))
 
     assert response.upload_url == "http://example.test/upload"
+
+
+def _build_image_command(size: int) -> CreateUploadUrlCommand:
+    return CreateUploadUrlCommand(
+        filename="photo.jpg",
+        content_type="image/jpeg",
+        size=size,
+        user_id="user-1",
+        brand_id="brand-1",
+    )
+
+
+def test_create_upload_url_rejects_image_over_reconciled_10mb_limit():
+    # Reconciled image size policy: 10MB everywhere (matches
+    # UploadFileHandler.MAX_IMAGE_SIZE and services/api MAX_FILE_SIZE). This
+    # was previously 20MB here, disagreeing with the other two enforcement
+    # points.
+    handler = CreateUploadUrlHandler(_Storage(), _Repo())
+    command = _build_image_command(10 * 1024 * 1024 + 1)
+
+    try:
+        asyncio.run(handler.execute(command))
+        assert False, "Expected FileSizeLimitException"
+    except FileSizeLimitException as e:
+        assert e.max_size == 10 * 1024 * 1024

@@ -1,5 +1,6 @@
-import { Inject, Injectable, OnModuleInit, InternalServerErrorException, Logger } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit, BadRequestException, InternalServerErrorException, Logger } from '@nestjs/common';
 import { ClientGrpc } from '@nestjs/microservices';
+import { status as GrpcStatus } from '@grpc/grpc-js';
 import { lastValueFrom, ReplaySubject, toArray } from 'rxjs';
 import {
   FileService,
@@ -17,6 +18,32 @@ const TRANSIENT_CODES = new Set([14]); // UNAVAILABLE
 function isTransientGrpcError(err: any): boolean {
   return TRANSIENT_CODES.has(err?.code) ||
     /UNAVAILABLE|Connection dropped|No connection established|ECONNREFUSED/i.test(err?.message ?? '');
+}
+
+// The Python file service raises domain validation exceptions (bad file type,
+// file too large, filename too long — see file/app/domain/exceptions/file_exceptions.py)
+// with these exact message shapes. Its gRPC UploadFile handler currently wraps
+// *every* exception, including these, into a single grpc.StatusCode.INTERNAL
+// abort (grpc_main.py's outer except-all), so `error.code` alone can't yet
+// distinguish "the photo is 15MB" from "the DB is down". Match on the known
+// message shapes so the specific, actionable reason still reaches the
+// participant instead of a generic 500. `error.code === INVALID_ARGUMENT` is
+// checked too so this keeps working once grpc_main.py is fixed to abort with
+// the correct status for these exceptions (see followUps).
+const DOMAIN_VALIDATION_MESSAGE_PATTERNS = [
+  /not allowed\. Allowed types:/i,
+  /bytes exceeds limit of/i,
+  /exceeds maximum of \d+ characters/i,
+];
+
+function isDomainValidationError(err: any): boolean {
+  if (err?.code === GrpcStatus.INVALID_ARGUMENT) return true;
+  const message: string = err?.details ?? err?.message ?? '';
+  return DOMAIN_VALIDATION_MESSAGE_PATTERNS.some((pattern) => pattern.test(message));
+}
+
+function grpcErrorMessage(err: any): string {
+  return err?.details || err?.message || 'Upload failed. Please try again.';
 }
 
 async function withGrpcRetry<T>(fn: () => Promise<T>, logger: Logger, retries = 3): Promise<T> {
@@ -74,6 +101,9 @@ export class FileGrpcClient implements OnModuleInit {
       }, this.logger);
     } catch (error) {
       this.logger.error(`gRPC upload failed: ${error.message}`, error.stack);
+      if (isDomainValidationError(error)) {
+        throw new BadRequestException(grpcErrorMessage(error));
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
