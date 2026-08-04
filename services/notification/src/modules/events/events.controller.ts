@@ -402,6 +402,47 @@ export class EventsController {
     });
   }
 
+  @EventPattern('application.submission_reminder')
+  async handleSubmissionReminder(
+    @Payload() data: unknown,
+    @Ctx() context: RmqContext,
+  ) {
+    const payload = asRecord(data);
+    await this.processEvent(
+      'application.submission_reminder',
+      payload,
+      context,
+      async () => {
+        this.logger.log(
+          `Received application.submission_reminder event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+        );
+
+        const email = getString(payload, 'email');
+        if (!email) return;
+
+        const metadata = asRecord(payload.metadata);
+        await this.emailService.sendSubmissionReminderEmail(email, {
+          name:
+            getString(payload, 'customer_name') ||
+            getString(metadata, 'customer_name') ||
+            'Participant',
+          program: getString(payload, 'program') || getString(metadata, 'program'),
+          brandId: getString(payload, 'brandId'),
+          programId: getString(payload, 'programId'),
+          deadline: getString(payload, 'deadline'),
+          daysRemaining:
+            getNumber(payload, 'daysRemaining') ||
+            getNumber(metadata, 'reminder_offset'),
+          submissionPageUrl:
+            getString(payload, 'submissionPageUrl') ||
+            getString(payload, 'submission_page_url') ||
+            undefined,
+          brand: asRecord(payload.brand) ?? undefined,
+        });
+      },
+    );
+  }
+
   @EventPattern('payment.issue_alternative')
   async handlePaymentIssueAlternative(
     @Payload() data: unknown,
