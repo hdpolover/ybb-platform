@@ -100,6 +100,14 @@ export class ParticipantApplication {
    * Business Rules
    */
 
+  /**
+   * Status-only check. Does NOT enforce Program.applicationDeadline - the
+   * entity has no visibility into the program's deadline, and callers that
+   * need to reject a late submission must check that separately via
+   * shared/utils/submission-deadline.util.ts (isPastSubmissionDeadline),
+   * using the program's applicationDeadline fetched at the call site. See
+   * submit-application.handler.ts and portal-submit-application.handler.ts.
+   */
   canSubmit(): boolean {
     return this.status === ApplicationStatus.DRAFT;
   }
