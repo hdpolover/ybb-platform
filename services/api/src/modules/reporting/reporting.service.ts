@@ -248,6 +248,13 @@ export class ReportingService {
 
         const { value: phone, isValid: phoneValid } = sanitizePhone(rawPhone, regionHint);
 
+        // `participants.institution` is a dead column: onboarding never
+        // writes it, the real value lives in the application's personal_data
+        // JSON. Read the first application that actually has it; fall back
+        // to the dead column only for legacy rows that predate this.
+        const institution =
+          this.readInstitution(participant.applications) ?? participant.institution;
+
         yield {
           id: participant.id,
           fullName: participant.fullName,
@@ -255,7 +262,7 @@ export class ReportingService {
           phone,
           phoneValid: phone === '-' ? '—' : phoneValid ? 'Yes' : 'No',
           nationality: participant.nationality,
-          institution: participant.institution,
+          institution,
           status: participant.deletedAt ? 'Deleted' : 'Active',
           createdAt: participant.createdAt,
         };
@@ -364,6 +371,24 @@ export class ReportingService {
     if (!personalData || typeof personalData !== 'object') return undefined;
     const nationality = (personalData as Record<string, unknown>).nationality;
     return typeof nationality === 'string' ? nationality : undefined;
+  }
+
+  /**
+   * Read `institution` out of the first application (most recent first) that
+   * actually carries a non-empty value for it in personal_data. Unlike
+   * phone/nationality, `institution` has not been observed to vary in key
+   * name across programs, so a single key lookup is sufficient here.
+   */
+  private readInstitution(
+    applications: { personalData: unknown }[],
+  ): string | undefined {
+    for (const application of applications) {
+      const personalData = application.personalData;
+      if (!personalData || typeof personalData !== 'object') continue;
+      const institution = (personalData as Record<string, unknown>).institution;
+      if (typeof institution === 'string' && institution.trim() !== '') return institution;
+    }
+    return undefined;
   }
 
   private buildCreatedAtCursorWhere(

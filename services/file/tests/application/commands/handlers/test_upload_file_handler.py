@@ -3,7 +3,11 @@ from io import BytesIO
 
 from app.application.commands.handlers.upload_file_handler import UploadFileHandler
 from app.application.commands.upload_file_command import UploadFileCommand
-from app.domain.exceptions.file_exceptions import InvalidFilenameException
+from app.domain.exceptions.file_exceptions import (
+    FileSizeLimitException,
+    InvalidFileTypeException,
+    InvalidFilenameException,
+)
 
 
 class _Storage:
@@ -49,3 +53,53 @@ def test_upload_accepts_filename_at_255_chars():
     file_dto = asyncio.run(handler.execute(command))
 
     assert file_dto.original_filename == command.filename
+
+
+def _build_image_command(size: int, content_type: str = "image/jpeg") -> UploadFileCommand:
+    return UploadFileCommand(
+        file_data=BytesIO(b"data"),
+        filename="photo.jpg",
+        content_type=content_type,
+        size=size,
+        user_id="user-1",
+        brand_id="brand-1",
+    )
+
+
+def test_upload_rejects_image_over_reconciled_10mb_limit():
+    # Reconciled image size policy: 10MB everywhere (matches
+    # services/api/src/common/constants/index.ts MAX_FILE_SIZE and
+    # CreateUploadUrlHandler.MAX_IMAGE_SIZE). A real phone photo (3-8MB) must
+    # fit comfortably under this — the old 5MB cap here rejected ordinary
+    # photos, which is exactly what broke participant photo uploads.
+    handler = UploadFileHandler(_Storage(), _Repo())
+    command = _build_image_command(10 * 1024 * 1024 + 1)
+
+    try:
+        asyncio.run(handler.execute(command))
+        assert False, "Expected FileSizeLimitException"
+    except FileSizeLimitException as e:
+        assert e.max_size == 10 * 1024 * 1024
+
+
+def test_upload_accepts_8mb_phone_photo():
+    # A typical modern phone photo (well within the reconciled 10MB cap, but
+    # over the old 5MB cap) must be accepted.
+    handler = UploadFileHandler(_Storage(), _Repo())
+    command = _build_image_command(8 * 1024 * 1024)
+
+    file_dto = asyncio.run(handler.execute(command))
+
+    assert file_dto.size == 8 * 1024 * 1024
+
+
+def test_upload_rejects_unsupported_image_type_with_specific_message():
+    handler = UploadFileHandler(_Storage(), _Repo())
+    command = _build_image_command(1024, content_type="image/heic")
+
+    try:
+        asyncio.run(handler.execute(command))
+        assert False, "Expected InvalidFileTypeException"
+    except InvalidFileTypeException as e:
+        assert e.content_type == "image/heic"
+        assert "image/jpeg" in str(e)

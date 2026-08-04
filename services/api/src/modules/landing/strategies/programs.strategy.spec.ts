@@ -105,4 +105,71 @@ describe('ProgramsStrategy', () => {
             ]),
         );
     });
+
+    it('includes structured start_date/end_date on program_important_dates items', async () => {
+        mockPrismaService.program.findFirst.mockResolvedValue({
+            id: 'program-1',
+            name: 'China Youth Summit 2026',
+            slug: 'china-youth-summit-2026',
+            description: 'Program description',
+            shortDescription: 'Program short description',
+            location: 'China',
+            programFormat: 'in_person',
+            startDate: new Date('2026-11-09T00:00:00.000Z'),
+            endDate: new Date('2026-11-12T00:00:00.000Z'),
+            registrationOpenDate: null,
+            registrationCloseDate: null,
+            schedules: [],
+            timeline: [
+                {
+                    id: 'timeline-1',
+                    title: 'Registration Opens',
+                    description: 'Applications open',
+                    date: new Date('2026-08-01T00:00:00.000Z'),
+                    endDate: null,
+                    order: 1,
+                },
+                {
+                    id: 'timeline-2',
+                    title: 'Program Days',
+                    description: 'The main event',
+                    date: new Date('2026-11-09T00:00:00.000Z'),
+                    endDate: new Date('2026-11-12T00:00:00.000Z'),
+                    order: 2,
+                },
+            ],
+            faqs: [],
+            resources: [],
+            pricingTiers: [],
+            objectives: [],
+            subthemes: [],
+            tags: [],
+        });
+        mockPrismaService.program.findMany.mockResolvedValue([]);
+
+        const result: any = await strategy.getData({
+            id: 'brand-1',
+            name: 'China Youth Summit',
+        } as any);
+
+        const datesSection = result.sections.find(
+            (section: { type: string }) => section.type === 'program_important_dates',
+        );
+
+        expect(datesSection).toBeDefined();
+        expect(datesSection.content.items).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    name: 'Registration Opens',
+                    start_date: '2026-08-01T00:00:00.000Z',
+                    end_date: null,
+                }),
+                expect.objectContaining({
+                    name: 'Program Days',
+                    start_date: '2026-11-09T00:00:00.000Z',
+                    end_date: '2026-11-12T00:00:00.000Z',
+                }),
+            ]),
+        );
+    });
 });
