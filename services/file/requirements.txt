@@ -36,8 +36,11 @@ python-dateutil>=2.8.2
 prometheus-fastapi-instrumentator>=7.0.0
 
 # gRPC
-grpcio>=1.62.0
-grpcio-tools>=1.62.0
+# Floor must match GRPC_GENERATED_VERSION in app/protos/file_service_pb2_grpc.py.
+# The generated stubs raise a RuntimeError on import below that version, so a lower
+# floor here resolves to an install that cannot import its own protos.
+grpcio>=1.80.0
+grpcio-tools>=1.80.0
 
 aio-pika>=9.4.0
 
