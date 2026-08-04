@@ -32,7 +32,11 @@ class CreateUploadUrlHandler:
     ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 
     MAX_DOCUMENT_SIZE = 50 * 1024 * 1024  # 50 MB — client passes docs through as-is
-    MAX_IMAGE_SIZE = 20 * 1024 * 1024     # 20 MB — safety net; client compresses images first
+    # Reconciled with UploadFileHandler.MAX_IMAGE_SIZE and services/api/src/common/
+    # constants/index.ts MAX_FILE_SIZE — was 20MB here, disagreeing with the other
+    # two enforcement points. Client-side downscaling keeps real uploads well under
+    # this regardless; this is a safety net, not the expected typical size.
+    MAX_IMAGE_SIZE = 10 * 1024 * 1024     # 10 MB — safety net; client compresses images first
 
     # Matches files.original_filename VARCHAR(255) — original_filename is displayed back to
     # users, so overlength names are rejected here rather than silently truncated.

@@ -85,6 +85,8 @@ describe('PortalSubmitApplicationHandler', () => {
         personalData?: Record<string, unknown>;
         programId?: string;
         formFields?: Array<{ name: string; label: string; validationRules: unknown }>;
+        programName?: string;
+        applicationDeadline?: Date | null;
     } = {}) => ({
         id: 'app-1',
         status: overrides.status ?? 'draft',
@@ -92,6 +94,8 @@ describe('PortalSubmitApplicationHandler', () => {
         participantId: 'participant-1',
         programId: overrides.programId ?? null,
         program: {
+            name: overrides.programName ?? 'Test Program',
+            applicationDeadline: overrides.applicationDeadline ?? null,
             formFields: overrides.formFields ?? [],
         },
     });
@@ -146,6 +150,53 @@ describe('PortalSubmitApplicationHandler', () => {
             const result = await handler.execute(command);
 
             expect(result.applicationId).toBe('app-prog42');
+        });
+    });
+
+    // ── submission deadline gate ────────────────────────────────────────────────
+
+    describe('submission deadline gate', () => {
+        afterEach(() => {
+            jest.useRealTimers();
+        });
+
+        it('BLOCKS submission past the deadline with a message naming the program and deadline', async () => {
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(
+                makeApp({
+                    programName: 'Istanbul Youth Summit 2027',
+                    applicationDeadline: new Date('2026-08-30T17:00:00.000Z'), // WIB midnight, 31 Aug
+                }),
+            );
+            jest.useFakeTimers().setSystemTime(new Date('2026-08-31T17:00:00.000Z')); // 00:00 WIB next day
+
+            const command: PortalSubmitApplicationCommand = { userId: 'user-1' };
+
+            await expect(handler.execute(command)).rejects.toThrow(BadRequestException);
+            await expect(handler.execute(command)).rejects.toThrow('Istanbul Youth Summit 2027');
+            expect(mockGateService.assertRegistrationFeePaid).not.toHaveBeenCalled();
+        });
+
+        it('ALLOWS submission at 23:59:59.999 WIB on the deadline day itself', async () => {
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(
+                makeApp({ applicationDeadline: new Date('2026-08-30T17:00:00.000Z') }),
+            );
+            mockPrisma.participantApplication.update.mockResolvedValue({});
+            jest.useFakeTimers().setSystemTime(new Date('2026-08-31T16:59:59.999Z'));
+
+            const result = await handler.execute({ userId: 'user-1' });
+
+            expect(result.success).toBe(true);
+        });
+
+        it('ALLOWS submission when the program has no deadline', async () => {
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(
+                makeApp({ applicationDeadline: null }),
+            );
+            mockPrisma.participantApplication.update.mockResolvedValue({});
+
+            const result = await handler.execute({ userId: 'user-1' });
+
+            expect(result.success).toBe(true);
         });
     });
 

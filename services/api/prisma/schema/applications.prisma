@@ -290,6 +290,24 @@ model PaymentOutboxEvent {
   @@map("payment_outbox_events")
 }
 
+/// Idempotency guard for submission-deadline reminder emails (H-7 / H-3 / H-1
+/// before Program.applicationDeadline, WIB calendar day match). One row is
+/// inserted the first time SubmissionDeadlineReminderService successfully
+/// claims a given (application, offset) pairing, before the reminder event is
+/// emitted - the unique constraint below is what makes a cron restart,
+/// redeploy, or retry unable to re-send an already-sent reminder. Mirrors the
+/// loose, non-relational id style of PaymentOutboxEvent above rather than a
+/// formal @relation, since this is a log table, not a domain entity.
+model SubmissionReminderLog {
+  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  applicationId  String   @map("application_id") @db.Uuid
+  reminderOffset Int      @map("reminder_offset") // days before applicationDeadline: 7, 3, or 1
+  sentAt         DateTime @default(now()) @map("sent_at") @db.Timestamptz(6)
+
+  @@unique([applicationId, reminderOffset], map: "submission_reminder_logs_app_offset_key")
+  @@map("submission_reminder_logs")
+}
+
 model ApplicationAssessment {
   id            String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   applicationId String           @map("application_id") @db.Uuid

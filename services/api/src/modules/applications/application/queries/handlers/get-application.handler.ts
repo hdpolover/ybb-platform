@@ -16,6 +16,7 @@ import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { PaymentGrpcClient } from '@modules/payments/infrastructure/services/payment-grpc.client';
 import { isRenderableEssayQuestion, coalesceStr } from '../../helpers/application-coalesce.helpers';
+import { resolveApplicationBirthdate } from '@shared/utils/birthdate-resolution';
 
 /**
  * Get Application Handler
@@ -97,7 +98,10 @@ export class GetApplicationHandler {
             email: participant.user?.email ?? '',
             phoneCountryCode: participant.phoneCountryCode ?? coalesceStr(pd['phone_country_code']) ?? null,
             phoneNumber: participant.phoneNumber ?? coalesceStr(pd['phone_number']) ?? null,
-            birthdate: participant.birthdate,
+            // Onboarding only ever collects a birth year, so participant.birthdate
+            // is stored as Jan 1 of that year for nearly every row in prod.
+            // Prefer the real date the applicant entered on the application form.
+            birthdate: resolveApplicationBirthdate(application.personalData, participant.birthdate),
             gender: participant.gender ?? coalesceStr(pd['gender']) ?? null,
             nationality: participant.nationality ?? coalesceStr(pd['nationality']) ?? null,
             originCity: participant.originCity,

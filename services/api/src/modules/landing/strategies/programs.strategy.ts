@@ -427,6 +427,10 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                             date_display: t.endDate
                                 ? `${t.date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })} - ${t.endDate.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })}`
                                 : t.date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
+                            // Structured dates alongside the display string so the frontend can
+                            // sort/format deterministically instead of re-parsing free text.
+                            start_date: t.date.toISOString(),
+                            end_date: t.endDate ? t.endDate.toISOString() : null,
                             status: status,
                             name: t.title,
                             description: t.description,
