@@ -288,3 +288,69 @@ describe('EventsController.handleLoaBatchReleased', () => {
     );
   });
 });
+
+describe('EventsController.handleSubmissionReminder', () => {
+  let controller: EventsController;
+  let sendSubmissionReminderEmail: jest.Mock;
+
+  beforeEach(() => {
+    sendSubmissionReminderEmail = jest.fn().mockResolvedValue(undefined);
+    controller = new EventsController(
+      { sendSubmissionReminderEmail } as unknown as EmailService,
+      {} as ReceiptService,
+      {
+        shouldProcess: jest.fn().mockResolvedValue({ shouldProcess: true, dedupeKey: 'key', reason: 'new' }),
+        markProcessed: jest.fn().mockResolvedValue(undefined),
+      } as unknown as NotificationIdempotencyService,
+    );
+  });
+
+  it('sends the submission reminder email with the deadline/offset payload', async () => {
+    const payload = {
+      email: 'jane@example.com',
+      customer_name: 'Jane Doe',
+      program: 'China Youth Summit 2027',
+      programId: 'prog-1',
+      brandId: 'brand-1',
+      deadline: '2027-01-08T10:00:00.000Z',
+      daysRemaining: 7,
+      submissionPageUrl: 'https://cys.example.com/dashboard/submission',
+      metadata: { application_id: 'app-1', reminder_offset: 7 },
+    };
+
+    await controller.handleSubmissionReminder(payload, makeContext());
+
+    expect(sendSubmissionReminderEmail).toHaveBeenCalledWith(
+      'jane@example.com',
+      expect.objectContaining({
+        name: 'Jane Doe',
+        program: 'China Youth Summit 2027',
+        programId: 'prog-1',
+        deadline: '2027-01-08T10:00:00.000Z',
+        daysRemaining: 7,
+        submissionPageUrl: 'https://cys.example.com/dashboard/submission',
+      }),
+    );
+  });
+
+  it('falls back to metadata.reminder_offset when top-level daysRemaining is absent', async () => {
+    const payload = {
+      email: 'jane@example.com',
+      customer_name: 'Jane Doe',
+      metadata: { application_id: 'app-1', reminder_offset: 1 },
+    };
+
+    await controller.handleSubmissionReminder(payload, makeContext());
+
+    expect(sendSubmissionReminderEmail).toHaveBeenCalledWith(
+      'jane@example.com',
+      expect.objectContaining({ daysRemaining: 1 }),
+    );
+  });
+
+  it('does nothing when the payload has no email', async () => {
+    await controller.handleSubmissionReminder({ daysRemaining: 7 }, makeContext());
+
+    expect(sendSubmissionReminderEmail).not.toHaveBeenCalled();
+  });
+});

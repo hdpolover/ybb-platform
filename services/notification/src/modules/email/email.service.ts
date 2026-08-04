@@ -832,6 +832,38 @@ export class EmailService {
     return this.sendRawEmail(to, subject, html);
   }
 
+  async sendSubmissionReminderEmail(to: string, reminderData: any) {
+    const fallbackSubmissionUrl = this.configService.get('FRONTEND_URL')
+      ? `${this.configService.get('FRONTEND_URL')}/dashboard/submission`
+      : '#';
+
+    const daysRemaining = Number(reminderData.daysRemaining) || 0;
+    const deadline = reminderData.deadline ? new Date(reminderData.deadline) : null;
+    const isLastDay = daysRemaining === 1;
+
+    const templateData = {
+      name: reminderData.name,
+      daysRemaining,
+      isLastDay,
+      daysRemainingLabel: isLastDay ? '1 day' : `${daysRemaining} days`,
+      deadlineFormatted: deadline ? deadline.toLocaleDateString() : undefined,
+      submissionPageUrl: reminderData.submissionPageUrl || fallbackSubmissionUrl,
+      brand: reminderData.brand,
+      program: reminderData.program,
+      brandId: reminderData.brandId,
+      programId: reminderData.programId,
+    };
+    const { subject, html } = await this.resolveEmailContent({
+      type: 'submission_deadline_reminder',
+      fallbackTemplateName: 'submission-deadline-reminder',
+      fallbackSubject: daysRemaining === 1
+        ? 'Last Day to Submit Your Application'
+        : `${daysRemaining} Days Left to Submit Your Application`,
+      data: templateData,
+    });
+    return this.sendRawEmail(to, subject, html);
+  }
+
   async sendPaymentRefundedEmail(to: string, paymentData: any) {
     const templateData = {
       name: paymentData.name,
