@@ -1,5 +1,5 @@
 import { Test } from '@nestjs/testing';
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, Logger } from '@nestjs/common';
 import {
   CreateApplicationFormFieldHandler,
   UpdateApplicationFormFieldHandler,
@@ -228,24 +228,39 @@ describe('UpdateApplicationFormFieldHandler', () => {
   };
   const mockValidator = { validateCustomKey: jest.fn() };
 
+  // Fake transaction client: records raw-SQL calls so tests can assert on
+  // migration/collision queries without a real database.
+  const mockTx = {
+    applicationFormField: { update: jest.fn() },
+    $queryRaw: jest.fn(),
+    $executeRaw: jest.fn(),
+  };
+  const mockPrisma = {
+    $transaction: jest.fn((cb: (tx: typeof mockTx) => unknown) => cb(mockTx)),
+  };
+
   let handler: UpdateApplicationFormFieldHandler;
 
   beforeEach(async () => {
     jest.resetAllMocks();
+    mockPrisma.$transaction.mockImplementation((cb: (tx: typeof mockTx) => unknown) => cb(mockTx));
+    mockTx.$queryRaw.mockResolvedValue([]);
+    mockTx.$executeRaw.mockResolvedValue(0);
     const moduleRef = await Test.createTestingModule({
       providers: [
         UpdateApplicationFormFieldHandler,
         { provide: 'IProgramContentRepository', useValue: mockRepo },
         { provide: FormFieldKeyValidator, useValue: mockValidator },
+        { provide: PrismaService, useValue: mockPrisma },
       ],
     }).compile();
     handler = moduleRef.get(UpdateApplicationFormFieldHandler);
   });
 
   it('validates fieldName when changing it', async () => {
-    mockRepo.findFormFieldById.mockResolvedValue({ id: 'f1', name: 'old_key' });
+    mockRepo.findFormFieldById.mockResolvedValue({ id: 'f1', name: 'old_key', programId: 'p1' });
     mockValidator.validateCustomKey.mockResolvedValue(undefined);
-    mockRepo.updateFormField.mockResolvedValue({ id: 'f1' });
+    mockTx.applicationFormField.update.mockResolvedValue({ id: 'f1', name: 'new_key' });
 
     await handler.execute(
       new UpdateApplicationFormFieldCommand(
@@ -268,13 +283,14 @@ describe('UpdateApplicationFormFieldHandler', () => {
     );
 
     expect(mockValidator.validateCustomKey).not.toHaveBeenCalled();
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled();
   });
 
   it('grandfathers legacy key that collides with catalog when unchanged on update', async () => {
     // The custom field was created before `tshirt_size` became a catalog
     // entry; the form re-submits the same key on save. Validation must be
     // skipped so the user can still edit label/placeholder/etc.
-    mockRepo.findFormFieldById.mockResolvedValue({ id: 'f1', name: 'tshirt_size' });
+    mockRepo.findFormFieldById.mockResolvedValue({ id: 'f1', name: 'tshirt_size', programId: 'p1' });
     mockRepo.updateFormField.mockResolvedValue({ id: 'f1' });
 
     await handler.execute(
@@ -286,6 +302,50 @@ describe('UpdateApplicationFormFieldHandler', () => {
     );
 
     expect(mockValidator.validateCustomKey).not.toHaveBeenCalled();
+    // Key didn't actually change, so this must go through the plain update
+    // path, not the rename/migration transaction.
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled();
     expect(mockRepo.updateFormField).toHaveBeenCalled();
+  });
+
+  it('renames the field and migrates matching personal_data keys in the same transaction', async () => {
+    mockRepo.findFormFieldById.mockResolvedValue({ id: 'f1', name: 'old_key', programId: 'p1' });
+    mockValidator.validateCustomKey.mockResolvedValue(undefined);
+    mockTx.$queryRaw.mockResolvedValue([]); // no collisions
+    mockTx.$executeRaw.mockResolvedValue(3); // 3 applications migrated
+    mockTx.applicationFormField.update.mockResolvedValue({ id: 'f1', name: 'new_key' });
+
+    const result = await handler.execute(
+      new UpdateApplicationFormFieldCommand('f1', { fieldName: 'new_key' }, 'u1'),
+    );
+
+    expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(mockTx.applicationFormField.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'f1' } }),
+    );
+    expect(mockTx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(mockTx.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(mockRepo.updateFormField).not.toHaveBeenCalled();
+    expect(result).toEqual({ id: 'f1', name: 'new_key' });
+  });
+
+  it('does not migrate personal_data when a collision is found, only logs it', async () => {
+    mockRepo.findFormFieldById.mockResolvedValue({ id: 'f1', name: 'old_key', programId: 'p1' });
+    mockValidator.validateCustomKey.mockResolvedValue(undefined);
+    mockTx.$queryRaw.mockResolvedValue([{ id: 'app-1' }]); // collision on app-1
+    mockTx.applicationFormField.update.mockResolvedValue({ id: 'f1', name: 'new_key' });
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+
+    await handler.execute(
+      new UpdateApplicationFormFieldCommand('f1', { fieldName: 'new_key' }, 'u1'),
+    );
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('app-1'));
+    // The bulk UPDATE still runs (it self-excludes collision rows via the
+    // NOT jsonb_exists(new_key) guard), but the assertion here is that we
+    // don't skip the migration query entirely just because a collision
+    // exists elsewhere in the program.
+    expect(mockTx.$executeRaw).toHaveBeenCalledTimes(1);
+    warnSpy.mockRestore();
   });
 });

@@ -1,11 +1,13 @@
 import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { KNOWLEDGE_SOURCES } from '../../../../metadata/metadata.constants';
 import { PortalCacheService } from '../../services/portal-cache.service';
 import { buildE164Phone } from '@shared/utils/phone-e164';
+import { isYearOnlyBirthdate } from '@shared/utils/birthdate-resolution';
+import { formatSubmissionDeadlineMessage, isPastSubmissionDeadline } from '@shared/utils/submission-deadline.util';
 import { GetPortalSubmissionDetailQuery } from '../portal-queries';
 import {
     PortalSubmissionDetailResponseDto,
@@ -58,6 +60,7 @@ type ApplicationDetail = {
     program: {
         id: string;
         name: string;
+        applicationDeadline: Date | null;
         termsAndConditions: string | null;
         essayGuidelineText: string | null;
         essayGuidelineUrl: string | null;
@@ -121,6 +124,8 @@ type PortalParticipantProfile = NonNullable<Awaited<ReturnType<PortalCacheServic
 @QueryHandler(GetPortalSubmissionDetailQuery)
 export class GetPortalSubmissionDetailHandler
     implements IQueryHandler<GetPortalSubmissionDetailQuery> {
+    private readonly logger = new Logger(GetPortalSubmissionDetailHandler.name);
+
     constructor(
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
@@ -217,6 +222,7 @@ export class GetPortalSubmissionDetailHandler
                     select: {
                         id: true,
                         name: true,
+                        applicationDeadline: true,
                         termsAndConditions: true,
                         essayGuidelineText: true,
                         essayGuidelineUrl: true,
@@ -407,7 +413,21 @@ export class GetPortalSubmissionDetailHandler
             }
 
             const profileValue = this.resolveParticipantFieldValue(field, participant);
-            values[field.name] = this.preferValue(personalData[field.name], profileValue);
+            const personalDataValue = personalData[field.name];
+            // An exact-key miss combined with other non-empty personal_data content
+            // usually means the answer is orphaned under a stale key (e.g. an admin
+            // renamed this field after the participant submitted) rather than the
+            // participant genuinely never having answered it. Falling back to the
+            // profile value in that case can silently mask real submitted data, so
+            // surface it instead of failing silently.
+            if (!this.hasValue(personalDataValue) && this.hasOtherPersonalData(personalData, field.name)) {
+                this.logger.warn(
+                    `Submission field "${field.name}" (application ${application.id}) has no matching ` +
+                    `personal_data key, but personal_data has other content. Possible orphaned answer ` +
+                    `from a form field rename; falling back to profile value.`,
+                );
+            }
+            values[field.name] = this.preferValue(personalDataValue, profileValue);
         }
 
         if (sectionId === 'personal_info' && fields.length === 0) {
@@ -488,7 +508,7 @@ export class GetPortalSubmissionDetailHandler
                 // lets applicants submit it unchanged, which is how thousands of
                 // "January 1st" birthdates ended up in personal_data. Skip the
                 // prefill so the form forces a real date instead.
-                return participant.birthdate && !this.isYearOnlyBirthdate(participant.birthdate)
+                return participant.birthdate && !isYearOnlyBirthdate(participant.birthdate)
                     ? this.toDateInputValue(participant.birthdate)
                     : undefined;
             case 'gender':
@@ -563,14 +583,6 @@ export class GetPortalSubmissionDetailHandler
 
     private normalizeFieldName(name: string): string {
         return name.toLowerCase().replace(/[^a-z0-9]/g, '');
-    }
-
-    private isYearOnlyBirthdate(value: Date | string | number): boolean {
-        // Cached participants arrive JSON-serialized, so birthdate may be an
-        // ISO string rather than a Date.
-        const date = value instanceof Date ? value : new Date(value);
-        if (Number.isNaN(date.getTime())) return false;
-        return date.getUTCMonth() === 0 && date.getUTCDate() === 1;
     }
 
     private toDateInputValue(value: Date | string | number): string | undefined {
@@ -949,6 +961,16 @@ export class GetPortalSubmissionDetailHandler
         return true;
     }
 
+    // True when personal_data has a real value under some key other than
+    // `excludeKey`. Used to distinguish "form genuinely left blank" from
+    // "this field's key doesn't match anything in personal_data anymore"
+    // (the latter is the signature of an orphaned answer after a rename).
+    private hasOtherPersonalData(personalData: Record<string, unknown>, excludeKey: string): boolean {
+        return Object.keys(personalData).some(
+            (key) => key !== excludeKey && this.hasValue(personalData[key]),
+        );
+    }
+
     private buildEssays(application: ApplicationDetail): SubmissionEssayDto[] {
         const essayAnswers = (application.essayAnswers as Record<string, unknown>) || {};
         const programEssays = application.program.essays || [];
@@ -1055,7 +1077,10 @@ export class GetPortalSubmissionDetailHandler
             pendingItems.push('Complete registration payment');
         }
 
-        const canSubmit = application.status === 'draft' && pendingItems.length === 0;
+        // The deadline is server-observable (unlike the preview checklist above), so gating
+        // on it here is safe and keeps the button in step with what submit actually enforces.
+        const pastDeadline = isPastSubmissionDeadline(application.program.applicationDeadline);
+        const canSubmit = application.status === 'draft' && pendingItems.length === 0 && !pastDeadline;
         const primaryAction = this.buildPreviewPrimaryAction(
             application,
             paymentRequired,
@@ -1136,6 +1161,21 @@ export class GetPortalSubmissionDetailHandler
                 label: 'Submit Application',
                 enabled: false,
                 reason: `Application is already in "${application.status}" status.`,
+            };
+        }
+
+        // Mirrors the server-side submit guard so the button is never enabled for a
+        // submission the API would reject.
+        if (application.program.applicationDeadline && isPastSubmissionDeadline(application.program.applicationDeadline)) {
+            return {
+                type: 'submit_application',
+                label: 'Submit Application',
+                enabled: false,
+                deadlinePassed: true,
+                reason: formatSubmissionDeadlineMessage(
+                    application.program.name,
+                    application.program.applicationDeadline,
+                ),
             };
         }
 
