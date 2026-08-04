@@ -9,6 +9,8 @@ import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
 import { ReferralFunnelService } from '@modules/participants/application/services/referral-funnel.service';
 import { RegistrationFeeGateService } from '@modules/payments/application/services/registration-fee-gate.service';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { formatSubmissionDeadlineMessage, isPastSubmissionDeadline } from '@shared/utils/submission-deadline.util';
 
 /**
  * Submit Application Handler
@@ -33,6 +35,7 @@ export class SubmitApplicationHandler {
     private readonly cacheService: CacheService,
     private readonly referralFunnel: ReferralFunnelService,
     private readonly registrationFeeGate: RegistrationFeeGateService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async execute(command: SubmitApplicationCommand): Promise<ApplicationResponseDto> {
@@ -52,6 +55,21 @@ export class SubmitApplicationHandler {
     if (!application.canSubmit()) {
       throw new BadRequestException(
         `Cannot submit application in ${application.status} status`,
+      );
+    }
+
+    // Submission deadline gate: Program.applicationDeadline, inclusive through
+    // the end of its WIB calendar day (see submission-deadline.util.ts).
+    // This is the SUBMIT path only - draft editing (canEdit()) is unaffected,
+    // and the admin submission-edit path bypasses canSubmit()/canEdit()
+    // entirely, so staff can still act on a late application.
+    const program = await this.prisma.program.findUnique({
+      where: { id: application.programId },
+      select: { name: true, applicationDeadline: true },
+    });
+    if (program && isPastSubmissionDeadline(program.applicationDeadline)) {
+      throw new BadRequestException(
+        formatSubmissionDeadlineMessage(program.name, program.applicationDeadline as Date),
       );
     }
 

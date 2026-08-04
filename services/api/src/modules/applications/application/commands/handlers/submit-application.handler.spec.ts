@@ -7,6 +7,7 @@ import { MetricsService } from '@shared/infrastructure/monitoring/metrics.servic
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { ReferralFunnelService } from '@modules/participants/application/services/referral-funnel.service';
 import { RegistrationFeeGateService } from '@modules/payments/application/services/registration-fee-gate.service';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { SubmitApplicationCommand } from '../submit-application.command';
 import { ApplicationStatus, ApplicationCategory } from '@core/entities/participant-application.entity';
 
@@ -59,6 +60,12 @@ describe('SubmitApplicationHandler (admin path)', () => {
         assertRegistrationFeePaid: jest.fn(),
     };
 
+    const mockPrisma = {
+        program: {
+            findUnique: jest.fn(),
+        },
+    };
+
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
             providers: [
@@ -69,6 +76,7 @@ describe('SubmitApplicationHandler (admin path)', () => {
                 { provide: CacheService, useValue: mockCacheService },
                 { provide: ReferralFunnelService, useValue: mockReferralFunnel },
                 { provide: RegistrationFeeGateService, useValue: mockGateService },
+                { provide: PrismaService, useValue: mockPrisma },
             ],
         }).compile();
 
@@ -76,6 +84,11 @@ describe('SubmitApplicationHandler (admin path)', () => {
         jest.clearAllMocks();
         // Default: gate allows
         mockGateService.assertRegistrationFeePaid.mockResolvedValue(undefined);
+        // Default: program has no deadline (unrestricted)
+        mockPrisma.program.findUnique.mockResolvedValue({
+            name: 'Test Program',
+            applicationDeadline: null,
+        });
     });
 
     // ── guard rails ───────────────────────────────────────────────────────────
@@ -107,6 +120,65 @@ describe('SubmitApplicationHandler (admin path)', () => {
             await expect(
                 handler.execute(new SubmitApplicationCommand('app-1', 'participant-1')),
             ).rejects.toThrow(BadRequestException);
+        });
+    });
+
+    // ── submission deadline gate ────────────────────────────────────────────────
+
+    describe('submission deadline gate', () => {
+        it('BLOCKS submission with a specific message naming the program and deadline when past deadline', async () => {
+            mockAppRepository.findById.mockResolvedValue(makeDomainApp({ programId: 'program-1' }));
+            mockPrisma.program.findUnique.mockResolvedValue({
+                name: 'Istanbul Youth Summit 2027',
+                applicationDeadline: new Date('2026-08-30T17:00:00.000Z'), // WIB midnight, 31 Aug
+            });
+
+            const command = new SubmitApplicationCommand('app-1', 'participant-1');
+            // now = 00:00:00 WIB the day after the deadline (past cutoff)
+            jest.useFakeTimers().setSystemTime(new Date('2026-08-31T17:00:00.000Z'));
+
+            try {
+                await expect(handler.execute(command)).rejects.toThrow(BadRequestException);
+                await expect(handler.execute(command)).rejects.toThrow('Istanbul Youth Summit 2027');
+            } finally {
+                jest.useRealTimers();
+            }
+
+            // Gate must never be reached once the deadline check fails.
+            expect(mockGateService.assertRegistrationFeePaid).not.toHaveBeenCalled();
+        });
+
+        it('ALLOWS submission at 23:59:59.999 WIB on the deadline day itself', async () => {
+            const app = makeDomainApp({ programId: 'program-1' });
+            mockAppRepository.findById.mockResolvedValue(app);
+            mockAppRepository.update.mockResolvedValue(app);
+            mockPrisma.program.findUnique.mockResolvedValue({
+                name: 'Istanbul Youth Summit 2027',
+                applicationDeadline: new Date('2026-08-30T17:00:00.000Z'), // WIB midnight, 31 Aug
+            });
+
+            jest.useFakeTimers().setSystemTime(new Date('2026-08-31T16:59:59.999Z'));
+            try {
+                await expect(
+                    handler.execute(new SubmitApplicationCommand('app-1', 'participant-1')),
+                ).resolves.toBeDefined();
+            } finally {
+                jest.useRealTimers();
+            }
+        });
+
+        it('ALLOWS submission when the program has no deadline set', async () => {
+            const app = makeDomainApp({ programId: 'program-1' });
+            mockAppRepository.findById.mockResolvedValue(app);
+            mockAppRepository.update.mockResolvedValue(app);
+            mockPrisma.program.findUnique.mockResolvedValue({
+                name: 'Open Program',
+                applicationDeadline: null,
+            });
+
+            await expect(
+                handler.execute(new SubmitApplicationCommand('app-1', 'participant-1')),
+            ).resolves.toBeDefined();
         });
     });
 
