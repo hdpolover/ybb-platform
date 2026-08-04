@@ -189,6 +189,58 @@ describe('LoaRenderDataService', () => {
       expect(result.sourceMap['participant.occupation']).toBe('Engineer');
     });
 
+    it('(e) takes birthdate from personalData (checking both birthdate and date_of_birth keys) over a real participant.birthdate', async () => {
+      (prisma.participantApplication.findFirst as jest.Mock).mockResolvedValue({
+        ...mockApplication,
+        personalData: { birthdate: '1998-05-12' },
+        participant: { fullName: 'John Doe', birthdate: new Date('1990-03-03T00:00:00.000Z'), gender: 'male' },
+      });
+      (prisma.program.findUnique as jest.Mock).mockResolvedValue(mockProgram);
+
+      const result = await service.buildSourceMapForApplication('app-1', defaultOpts);
+
+      expect(result.sourceMap['participant.birthdate']).toBe('12 May 1998');
+    });
+
+    it('(f) reads date_of_birth from personalData when the birthdate key is absent', async () => {
+      (prisma.participantApplication.findFirst as jest.Mock).mockResolvedValue({
+        ...mockApplication,
+        personalData: { date_of_birth: '2001-11-20' },
+        participant: { fullName: 'John Doe', gender: 'male' },
+      });
+      (prisma.program.findUnique as jest.Mock).mockResolvedValue(mockProgram);
+
+      const result = await service.buildSourceMapForApplication('app-1', defaultOpts);
+
+      expect(result.sourceMap['participant.birthdate']).toBe('20 November 2001');
+    });
+
+    it('(g) falls back to participant.birthdate when personalData has no birthdate, as long as it is a real (non-Jan-1) date', async () => {
+      (prisma.participantApplication.findFirst as jest.Mock).mockResolvedValue({
+        ...mockApplication,
+        personalData: null,
+        participant: { fullName: 'John Doe', birthdate: new Date('1995-07-20T00:00:00.000Z'), gender: 'male' },
+      });
+      (prisma.program.findUnique as jest.Mock).mockResolvedValue(mockProgram);
+
+      const result = await service.buildSourceMapForApplication('app-1', defaultOpts);
+
+      expect(result.sourceMap['participant.birthdate']).toBe('20 July 1995');
+    });
+
+    it('(h) renders blank rather than the onboarding year-only placeholder when personalData has no birthdate and participant.birthdate is Jan 1', async () => {
+      (prisma.participantApplication.findFirst as jest.Mock).mockResolvedValue({
+        ...mockApplication,
+        personalData: null,
+        participant: { fullName: 'John Doe', birthdate: new Date('1990-01-01T00:00:00.000Z'), gender: 'male' },
+      });
+      (prisma.program.findUnique as jest.Mock).mockResolvedValue(mockProgram);
+
+      const result = await service.buildSourceMapForApplication('app-1', defaultOpts);
+
+      expect(result.sourceMap['participant.birthdate']).toBe('');
+    });
+
     it('(d) leaves an already-correct participant field (fullName, gender) unchanged', async () => {
       (prisma.participantApplication.findFirst as jest.Mock).mockResolvedValue({
         ...mockApplication,

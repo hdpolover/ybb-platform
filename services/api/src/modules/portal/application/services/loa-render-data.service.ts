@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { parseProgramBatch } from '@shared/utils/parse-program-batch';
 import { buildLoaSourceMap } from '@shared/utils/loa-render-payload.util';
+import { resolveApplicationBirthdate } from '@shared/utils/birthdate-resolution';
 
 // Gender enum values (prisma/schema/enums.prisma) are lowercase 'male' | 'female'.
 // Rendered human-readable on the LOA for visa-support tokens.
@@ -114,8 +115,12 @@ export class LoaRenderDataService {
     const endDate = program.endDate
       ? program.endDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
       : '';
-    const birthdate = application.participant.birthdate
-      ? application.participant.birthdate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+    // Onboarding only ever collects a birth year, so participant.birthdate is
+    // stored as Jan 1 of that year for nearly every row in prod. Prefer the
+    // real date the applicant entered on the application form.
+    const resolvedBirthdate = resolveApplicationBirthdate(application.personalData, application.participant.birthdate);
+    const birthdate = resolvedBirthdate
+      ? resolvedBirthdate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
       : '';
     const { displayName: programDisplayName, batch: programBatch } = parseProgramBatch(program.name);
 
