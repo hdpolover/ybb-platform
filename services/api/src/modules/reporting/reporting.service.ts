@@ -14,6 +14,8 @@ import {
   obsoleteRegistrationFeeInvoiceIdsSql,
   InvoiceFilterQuery,
 } from '@modules/payments/application/services/invoice-where.builder';
+import { coalesceStr } from '../applications/application/helpers/application-coalesce.helpers';
+import { resolveCountryName } from '@shared/utils/country-groups';
 
 @Injectable()
 export class ReportingService {
@@ -83,6 +85,7 @@ export class ReportingService {
       { header: 'Phone Valid', key: 'phoneValid', width: 12 },
       { header: 'Nationality', key: 'nationality', width: 20 },
       { header: 'Institution', key: 'institution', width: 30 },
+      { header: 'Occupation', key: 'occupation', width: 24 },
       { header: 'Status', key: 'status', width: 10 },
       { header: 'Created At', key: 'createdAt', width: 20 },
     ];
@@ -105,6 +108,9 @@ export class ReportingService {
       { header: 'Payer Email', key: 'payerEmail', width: 30 },
       { header: 'Payer Phone', key: 'payerPhone', width: 20 },
       { header: 'Phone Valid', key: 'phoneValid', width: 12 },
+      { header: 'Country', key: 'country', width: 10 },
+      { header: 'Institution', key: 'institution', width: 28 },
+      { header: 'Occupation', key: 'occupation', width: 24 },
       { header: 'Program', key: 'program', width: 30 },
       { header: 'Application Category', key: 'applicationCategory', width: 18 },
       { header: 'Price Tier', key: 'tier', width: 20 },
@@ -248,12 +254,20 @@ export class ReportingService {
 
         const { value: phone, isValid: phoneValid } = sanitizePhone(rawPhone, regionHint);
 
-        // `participants.institution` is a dead column: onboarding never
-        // writes it, the real value lives in the application's personal_data
-        // JSON. Read the first application that actually has it; fall back
-        // to the dead column only for legacy rows that predate this.
+        // `participants.institution`/`occupation`/`nationality` are dead
+        // columns: onboarding never writes them, the real values live in the
+        // application's personal_data JSON. Read the first application that
+        // actually has each one; fall back to the dead column only for
+        // legacy rows that predate this.
         const institution =
-          this.readInstitution(participant.applications) ?? participant.institution;
+          this.readPersonalDataField(participant.applications, 'institution') ?? participant.institution;
+        const occupation =
+          this.readPersonalDataField(participant.applications, 'occupation') ?? participant.occupation;
+        const nationality =
+          resolveCountryName(
+            participant.originCountry,
+            this.readPersonalDataField(participant.applications, 'nationality'),
+          ) ?? 'N/A';
 
         yield {
           id: participant.id,
@@ -261,8 +275,9 @@ export class ReportingService {
           email: participant.user?.email || 'N/A',
           phone,
           phoneValid: phone === '-' ? '—' : phoneValid ? 'Yes' : 'No',
-          nationality: participant.nationality,
+          nationality,
           institution,
+          occupation,
           status: participant.deletedAt ? 'Deleted' : 'Active',
           createdAt: participant.createdAt,
         };
@@ -325,6 +340,20 @@ export class ReportingService {
 
         const { value: payerPhone, isValid: phoneValid } = sanitizePhone(rawPhone, regionHint);
 
+        // Same JSON-first / dead-column-fallback pattern as the applications
+        // export: personal_data is the real source, participant columns are
+        // legacy fallbacks that are empty for nearly all prod rows.
+        const personalData = (invoice.application?.personalData ?? {}) as Record<string, unknown>;
+        const institution =
+          coalesceStr(personalData['institution']) ?? invoice.application?.participant?.institution ?? '';
+        const occupation =
+          coalesceStr(personalData['occupation']) ?? invoice.application?.participant?.occupation ?? '';
+        const country =
+          resolveCountryName(
+            invoice.application?.participant?.originCountry,
+            this.readNationality(invoice.application?.personalData),
+          ) ?? 'N/A';
+
         yield {
           id: invoice.id,
           applicationId: invoice.applicationId,
@@ -332,6 +361,9 @@ export class ReportingService {
           payerEmail: invoice.application?.participant?.user?.email ?? 'N/A',
           payerPhone,
           phoneValid: payerPhone === '-' ? '-' : phoneValid ? 'Yes' : 'No',
+          country,
+          institution,
+          occupation,
           program: invoice.application?.program?.name ?? 'Unknown',
           applicationCategory: this.humanizeApplicationCategory(
             invoice.application?.applicationCategory,
@@ -374,19 +406,20 @@ export class ReportingService {
   }
 
   /**
-   * Read `institution` out of the first application (most recent first) that
-   * actually carries a non-empty value for it in personal_data. Unlike
-   * phone/nationality, `institution` has not been observed to vary in key
-   * name across programs, so a single key lookup is sufficient here.
+   * Read a personal_data field out of the first application (most recent
+   * first) that actually carries a non-empty value for it. Institution,
+   * occupation, and nationality have not been observed to vary in key name
+   * across programs, so a single key lookup is sufficient here.
    */
-  private readInstitution(
+  private readPersonalDataField(
     applications: { personalData: unknown }[],
+    field: string,
   ): string | undefined {
     for (const application of applications) {
       const personalData = application.personalData;
       if (!personalData || typeof personalData !== 'object') continue;
-      const institution = (personalData as Record<string, unknown>).institution;
-      if (typeof institution === 'string' && institution.trim() !== '') return institution;
+      const value = (personalData as Record<string, unknown>)[field];
+      if (typeof value === 'string' && value.trim() !== '') return value;
     }
     return undefined;
   }

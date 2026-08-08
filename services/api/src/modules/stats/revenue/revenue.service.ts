@@ -10,6 +10,8 @@ import {
   buildInvoiceScopeWhere,
 } from './utils/revenue-access.util';
 import { resolveInvoiceRevenue, ResolvedInvoiceMoney } from './utils/revenue-money.util';
+import { coalesceStr } from '../../applications/application/helpers/application-coalesce.helpers';
+import { resolveCountryName } from '@shared/utils/country-groups';
 import { PlatformRevenueQueryDto, RevenueTransactionsQueryDto } from './dto/revenue-query.dto';
 import {
   PlatformRevenueRollupResponseDto,
@@ -44,6 +46,10 @@ const revenueInvoiceSelect = {
     select: {
       programId: true,
       applicationCategory: true,
+      // personal_data is the source of truth for nationality/institution/
+      // occupation on the export — the matching participant columns below
+      // are dead in prod and only used as a legacy fallback.
+      personalData: true,
       program: {
         select: {
           id: true,
@@ -53,7 +59,15 @@ const revenueInvoiceSelect = {
           brand: { select: { id: true, name: true } },
         },
       },
-      participant: { select: { fullName: true } },
+      participant: {
+        select: {
+          fullName: true,
+          originCountry: true,
+          nationality: true,
+          institution: true,
+          occupation: true,
+        },
+      },
     },
   },
 } satisfies Prisma.ApplicationInvoiceSelect;
@@ -184,6 +198,9 @@ export class RevenueService {
       { header: 'Application ID', key: 'applicationId', width: 36 },
       { header: 'Program', key: 'program', width: 30 },
       { header: 'Participant', key: 'participant', width: 30 },
+      { header: 'Country', key: 'country', width: 10 },
+      { header: 'Institution', key: 'institution', width: 28 },
+      { header: 'Occupation', key: 'occupation', width: 24 },
       { header: 'Application Category', key: 'applicationCategory', width: 18 },
       { header: 'Gross Amount', key: 'grossAmount', width: 15 },
       { header: 'Currency', key: 'currency', width: 10 },
@@ -227,11 +244,29 @@ export class RevenueService {
 
       for (const invoice of invoices) {
         const row = this.toTransactionRow(invoice);
+
+        // Same JSON-first / dead-column-fallback pattern as the applications
+        // export: personal_data is the real source, participant columns are
+        // legacy fallbacks that are empty for nearly all prod rows.
+        const personalData = (invoice.application.personalData ?? {}) as Record<string, unknown>;
+        const institution =
+          coalesceStr(personalData['institution']) ?? invoice.application.participant?.institution ?? '';
+        const occupation =
+          coalesceStr(personalData['occupation']) ?? invoice.application.participant?.occupation ?? '';
+        const country =
+          resolveCountryName(
+            invoice.application.participant?.originCountry,
+            coalesceStr(personalData['nationality']),
+          ) ?? 'N/A';
+
         yield {
           invoiceId: row.invoiceId,
           applicationId: row.applicationId,
           program: row.programName,
           participant: row.participantName ?? 'N/A',
+          country,
+          institution,
+          occupation,
           applicationCategory: this.humanizeApplicationCategory(invoice.application.applicationCategory),
           grossAmount: row.grossAmount,
           currency: row.currency,

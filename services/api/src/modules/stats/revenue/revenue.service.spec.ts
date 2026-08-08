@@ -25,6 +25,8 @@ function invoiceRow(overrides: Record<string, unknown> = {}) {
     pricingTier: { id: 'tier-1', name: 'Regular' },
     application: {
       programId: 'program-1',
+      applicationCategory: 'self_funded',
+      personalData: {},
       program: {
         id: 'program-1',
         name: 'Program One',
@@ -32,7 +34,13 @@ function invoiceRow(overrides: Record<string, unknown> = {}) {
         usdInIdr: null,
         brand: { id: 'brand-1', name: 'Brand One' },
       },
-      participant: { fullName: 'Jane Doe' },
+      participant: {
+        fullName: 'Jane Doe',
+        originCountry: null,
+        nationality: null,
+        institution: null,
+        occupation: null,
+      },
     },
     ...overrides,
   };
@@ -158,6 +166,108 @@ describe('RevenueService', () => {
       expect(unbackfilledWhere).toContain('"status":"paid"');
       expect(unbackfilledWhere).toContain('feeProvider');
       expect(unbackfilledWhere).toContain('netAmount');
+    });
+  });
+
+  describe('exportRevenueTransactions', () => {
+    function collectExportedRows(invoices: Record<string, unknown>[]) {
+      const collected: Record<string, unknown>[] = [];
+      const streamExcelRows = jest.fn(
+        async (_res: unknown, rows: AsyncIterable<Record<string, unknown>>) => {
+          for await (const row of rows) collected.push(row);
+        },
+      );
+      mockExcelService.streamExcelRows.mockImplementation(streamExcelRows);
+      mockPrisma.applicationInvoice.findMany
+        .mockResolvedValueOnce(invoices)
+        .mockResolvedValue([]); // stop the cursor loop on the next page
+      return collected;
+    }
+
+    it('includes Country/Institution/Occupation columns positioned after Participant and before Application Category', async () => {
+      collectExportedRows([invoiceRow()]);
+
+      await service.exportRevenueTransactions({} as never, {}, platformScope);
+
+      const columns = mockExcelService.streamExcelRows.mock.calls[0][2] as { key: string }[];
+      const keys = columns.map((c) => c.key);
+      const participantIdx = keys.indexOf('participant');
+      const categoryIdx = keys.indexOf('applicationCategory');
+      expect(keys.slice(participantIdx + 1, categoryIdx)).toEqual(['country', 'institution', 'occupation']);
+    });
+
+    it('prefers personal_data institution/occupation/nationality over the dead participant columns', async () => {
+      const collected = collectExportedRows([
+        invoiceRow({
+          application: {
+            programId: 'program-1',
+            applicationCategory: 'self_funded',
+            personalData: { institution: 'MIT', occupation: 'Student', nationality: 'ID' },
+            program: {
+              id: 'program-1',
+              name: 'Program One',
+              brandId: 'brand-1',
+              usdInIdr: null,
+              brand: { id: 'brand-1', name: 'Brand One' },
+            },
+            participant: {
+              fullName: 'Jane Doe',
+              originCountry: null,
+              nationality: null,
+              institution: 'Legacy University',
+              occupation: 'Legacy Job',
+            },
+          },
+        }),
+      ]);
+
+      await service.exportRevenueTransactions({} as never, {}, platformScope);
+
+      expect(collected[0].institution).toBe('MIT');
+      expect(collected[0].occupation).toBe('Student');
+      expect(collected[0].country).toBe('Indonesia');
+    });
+
+    it('falls back to the participant columns when personal_data has no institution/occupation/country', async () => {
+      const collected = collectExportedRows([
+        invoiceRow({
+          application: {
+            programId: 'program-1',
+            applicationCategory: 'self_funded',
+            personalData: {},
+            program: {
+              id: 'program-1',
+              name: 'Program One',
+              brandId: 'brand-1',
+              usdInIdr: null,
+              brand: { id: 'brand-1', name: 'Brand One' },
+            },
+            participant: {
+              fullName: 'Jane Doe',
+              originCountry: 'PK',
+              nationality: null,
+              institution: 'Legacy University',
+              occupation: 'Legacy Job',
+            },
+          },
+        }),
+      ]);
+
+      await service.exportRevenueTransactions({} as never, {}, platformScope);
+
+      expect(collected[0].institution).toBe('Legacy University');
+      expect(collected[0].occupation).toBe('Legacy Job');
+      expect(collected[0].country).toBe('Pakistan');
+    });
+
+    it('renders empty institution/occupation and N/A country when neither source has a value', async () => {
+      const collected = collectExportedRows([invoiceRow()]);
+
+      await service.exportRevenueTransactions({} as never, {}, platformScope);
+
+      expect(collected[0].institution).toBe('');
+      expect(collected[0].occupation).toBe('');
+      expect(collected[0].country).toBe('N/A');
     });
   });
 });
