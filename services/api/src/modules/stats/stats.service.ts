@@ -836,6 +836,44 @@ export class StatsService {
       .sort((a, b) => b[1].paidCount - a[1].paidCount)
       .map(([name, v]) => ({ name, ...v }));
 
+    // ── Paid countries by tier ────────────────────────────────────────────────
+    // Full country ranking (not sliced to top 15, unlike countriesByStatus below) —
+    // built from the same paidInvoices pass, no extra query.
+    const FEE_TYPE_ORDER = ['registration_fee', 'program_fee_1', 'program_fee_2', 'full_fee', 'custom_fee'];
+    const tierOrderMap = new Map<string, { label: string; feeType: string }>();
+    const countryTierMap = new Map<string, Map<string, number>>();
+    for (const inv of paidInvoices) {
+      const tierKey = inv.pricingTier?.name ?? 'Unknown';
+      const feeType = inv.pricingTier?.feeType ?? 'custom_fee';
+      if (!tierOrderMap.has(tierKey)) {
+        tierOrderMap.set(tierKey, { label: tierKey, feeType });
+      }
+      const country = this.resolveCountryName(
+        inv.application.participant?.originCountry ?? '',
+        inv.application.participant?.nationality ?? '',
+      ) ?? 'Unknown';
+      const row = countryTierMap.get(country) ?? new Map<string, number>();
+      row.set(tierKey, (row.get(tierKey) ?? 0) + 1);
+      countryTierMap.set(country, row);
+    }
+    const tiers = Array.from(tierOrderMap.entries())
+      .map(([key, v]) => ({ key, label: v.label, feeType: v.feeType }))
+      .sort((a, b) => {
+        const ai = FEE_TYPE_ORDER.indexOf(a.feeType);
+        const bi = FEE_TYPE_ORDER.indexOf(b.feeType);
+        return (ai === -1 ? FEE_TYPE_ORDER.length : ai) - (bi === -1 ? FEE_TYPE_ORDER.length : bi);
+      });
+    const paidCountriesByTier = {
+      tiers,
+      rows: Array.from(countryTierMap.entries())
+        .map(([country, row]) => {
+          const byTierCounts = Object.fromEntries(row.entries());
+          const total = Array.from(row.values()).reduce((sum, n) => sum + n, 0);
+          return { country, total, byTier: byTierCounts };
+        })
+        .sort((a, b) => b.total - a.total),
+    };
+
     // ── By payment method ─────────────────────────────────────────────────────
     const methodMap = new Map<string, number>();
     for (const inv of paidInvoices) {
@@ -889,6 +927,7 @@ export class StatsService {
         byTier,
         byPaymentMethod,
         countriesByStatus,
+        paidCountriesByTier,
       },
     };
   }

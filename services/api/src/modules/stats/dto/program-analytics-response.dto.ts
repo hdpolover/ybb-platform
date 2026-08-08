@@ -21,5 +21,9 @@ export class ProgramAnalyticsResponseDto {
         byTier: Array<{ name: string; paidCount: number; totalAmount: number; currency: string }>;
         byPaymentMethod: Array<{ method: string; count: number }>;
         countriesByStatus: Array<{ country: string; paid: number; processing: number; unpaid: number; failed: number; cancelled: number; total: number }>;
+        paidCountriesByTier: {
+            tiers: Array<{ key: string; label: string; feeType: string }>;
+            rows: Array<{ country: string; total: number; byTier: Record<string, number> }>;
+        };
     };
 }
