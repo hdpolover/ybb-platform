@@ -591,17 +591,17 @@ function PaymentsTab({ analytics }: { analytics: ProgramAnalytics }) {
         <StatCard
           label="Conversion Rate"
           value={`${kpis.conversionRate}%`}
-          sub="Submitted → Paid"
+          sub="Registered → Paid"
           accent="bg-purple-50 text-purple-500"
           icon={<TrendingUp className="h-4 w-4" />}
         />
         <StatCard
-          label="Processing / Unpaid"
-          value={`${kpis.processingCount} / ${kpis.unpaidCount}`}
+          label="Unpaid Invoices"
+          value={kpis.unpaidCount.toLocaleString()}
           sub={
-            kpis.failedCount > 0 || kpis.cancelledCount > 0
-              ? `${kpis.failedCount} failed, ${kpis.cancelledCount} cancelled`
-              : "No failed or cancelled payments"
+            kpis.processingCount > 0
+              ? `${kpis.processingCount} still processing`
+              : "None processing"
           }
           accent="bg-amber-50 text-amber-500"
           icon={<CreditCard className="h-4 w-4" />}

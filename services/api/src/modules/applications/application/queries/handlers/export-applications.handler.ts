@@ -9,6 +9,7 @@ import type { Column } from 'exceljs';
 import { buildE164Phone, extractAndSanitizePhone, extractPhoneFromPersonalData } from '@shared/utils/phone-e164';
 import { resolveApplicationBirthdate } from '@shared/utils/birthdate-resolution';
 import { isRenderableEssayQuestion, coalesceStr } from '../../helpers/application-coalesce.helpers';
+import { resolveCountryName } from '@shared/utils/country-groups';
 
 type ApplicationExportPayload = Prisma.ParticipantApplicationGetPayload<{
     select: {
@@ -412,12 +413,21 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
                 const institution = coalesceStr(personalData['institution']) ?? app.participant?.institution ?? '';
                 const occupation = coalesceStr(personalData['occupation']) ?? app.participant?.occupation ?? '';
 
+                // origin_country holds an ISO code ("ID"), which is unreadable in
+                // a report. Resolve to the display name the analytics views use,
+                // falling back to the personal_data nationality when the column
+                // is empty.
+                const country = resolveCountryName(
+                    app.participant?.originCountry,
+                    coalesceStr(personalData['nationality']),
+                );
+
                 rows.push({
                     id: app.id,
                     program: app.program?.name ?? 'N/A',
                     participantName: app.participant?.fullName ?? 'N/A',
                     email: app.participant?.user?.email ?? 'N/A',
-                    country: app.participant?.originCountry ?? 'N/A',
+                    country: country ?? 'N/A',
                     institution,
                     occupation,
                     phone: phone.value,
