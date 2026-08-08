@@ -97,7 +97,7 @@ export class CreateSupportTicketHandler implements ICommandHandler<CreateSupport
                         message: ticket.description,
                         isFromAdmin: false,
                         senderId: participant.id,
-                        senderName: participant.fullName,
+                        senderName: participant.fullName || 'Participant',
                         attachments: (dto.attachments ?? []) as unknown as import('@prisma/client').Prisma.InputJsonValue,
                         isRead: false,
                     },
@@ -122,7 +122,7 @@ export class CreateSupportTicketHandler implements ICommandHandler<CreateSupport
                 priority: ticket.priority,
                 createdAt: ticket.createdAt.toISOString(),
                 email: ticketOwner.email,
-                name: participant.fullName,
+                name: participant.fullName || 'Participant',
                 brand: ticketOwner.brand
                     ? {
                         name: ticketOwner.brand.name,

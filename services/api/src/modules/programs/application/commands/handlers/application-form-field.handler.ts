@@ -1,5 +1,5 @@
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { ConflictException, Inject } from '@nestjs/common';
+import { ConflictException, Inject, Logger } from '@nestjs/common';
 import { IProgramContentRepository } from '@core/interfaces/repositories/program-content.repository.interface';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import {
@@ -8,7 +8,7 @@ import {
   DeleteApplicationFormFieldCommand,
 } from '../application-form-field.commands';
 import { CreateApplicationFormFieldDto } from '../../dto/application-form-field/create-application-form-field.dto';
-import { ApplicationFormField } from '@prisma/client';
+import { ApplicationFormField, Prisma } from '@prisma/client';
 import {
   FormFieldKeyValidator,
   FieldKeyValidationError,
@@ -143,10 +143,13 @@ export class CreateApplicationFormFieldHandler
 export class UpdateApplicationFormFieldHandler
   implements ICommandHandler<UpdateApplicationFormFieldCommand>
 {
+  private readonly logger = new Logger(UpdateApplicationFormFieldHandler.name);
+
   constructor(
     @Inject('IProgramContentRepository')
     private readonly repository: IProgramContentRepository,
     private readonly keyValidator: FormFieldKeyValidator,
+    private readonly prisma: PrismaService,
   ) {}
 
   async execute(command: UpdateApplicationFormFieldCommand) {
@@ -155,9 +158,11 @@ export class UpdateApplicationFormFieldHandler
     // Only validate the key when it's actually changing. Grandfathers legacy
     // custom fields whose key later collided with a new catalog entry — they
     // must remain editable without being forced through the catalog picker.
+    let existing: ApplicationFormField | null = null;
+    let keyChanged = false;
     if (dto.fieldName) {
-      const existing = await this.repository.findFormFieldById(fieldId);
-      const keyChanged = !existing || existing.name !== dto.fieldName;
+      existing = await this.repository.findFormFieldById(fieldId);
+      keyChanged = !existing || existing.name !== dto.fieldName;
       if (keyChanged) {
         try {
           await this.keyValidator.validateCustomKey(dto.fieldName);
@@ -166,10 +171,75 @@ export class UpdateApplicationFormFieldHandler
         }
       }
     }
-    return this.repository.updateFormField(
-      fieldId,
-      mapDtoToField(dto) as Partial<ApplicationFormField>,
-    );
+
+    const updateData = mapDtoToField(dto) as Partial<ApplicationFormField>;
+
+    // Renaming a live field's key is not cosmetic: participant answers are
+    // stored in personal_data keyed by the OLD name via an exact-key lookup
+    // (get-portal-submission-detail.handler.ts). Without migrating the JSON
+    // keys, every already-submitted application would silently lose its
+    // answer to this field the moment the key changes. Do the migration in
+    // the same transaction as the rename so the schema and the data can never
+    // drift apart.
+    if (existing && keyChanged && dto.fieldName) {
+      return this.renameAndMigrateAnswers(existing, dto.fieldName, updateData);
+    }
+
+    return this.repository.updateFormField(fieldId, updateData);
+  }
+
+  private async renameAndMigrateAnswers(
+    existing: ApplicationFormField,
+    newKey: string,
+    updateData: Partial<ApplicationFormField>,
+  ): Promise<ApplicationFormField> {
+    const oldKey = existing.name;
+    const programId = existing.programId;
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.applicationFormField.update({
+        where: { id: existing.id },
+        data: updateData as Prisma.ApplicationFormFieldUncheckedUpdateInput,
+      });
+
+      // Applications that already hold a value under the new key would lose
+      // either the old or the new answer if we blindly overwrote one with
+      // the other. Least-destructive choice: leave both keys untouched on
+      // those rows (the existing new-key value already wins on read, see
+      // preferValue in get-portal-submission-detail.handler.ts) and log for
+      // manual review instead of guessing which value is correct.
+      const collisions = await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM participant_applications
+        WHERE program_id = ${programId}::uuid
+          AND jsonb_exists(personal_data::jsonb, ${oldKey})
+          AND jsonb_exists(personal_data::jsonb, ${newKey})
+      `;
+      if (collisions.length > 0) {
+        this.logger.warn(
+          `Form field rename "${oldKey}" -> "${newKey}" on program ${programId}: ` +
+            `${collisions.length} application(s) already have personal_data under both keys ` +
+            `(ids: ${collisions.map((row) => row.id).join(', ')}). Left untouched; the existing ` +
+            `"${newKey}" value keeps winning on read and the orphaned "${oldKey}" value needs manual review.`,
+        );
+      }
+
+      const migratedCount = await tx.$executeRaw`
+        UPDATE participant_applications
+        SET personal_data = (
+          (personal_data::jsonb - ${oldKey}) ||
+          jsonb_build_object(${newKey}, personal_data::jsonb -> ${oldKey})
+        )::json
+        WHERE program_id = ${programId}::uuid
+          AND jsonb_exists(personal_data::jsonb, ${oldKey})
+          AND NOT jsonb_exists(personal_data::jsonb, ${newKey})
+      `;
+      this.logger.log(
+        `Form field rename "${oldKey}" -> "${newKey}" on program ${programId}: ` +
+          `migrated personal_data key on ${migratedCount} application(s).`,
+      );
+
+      return updated;
+    });
   }
 }
 

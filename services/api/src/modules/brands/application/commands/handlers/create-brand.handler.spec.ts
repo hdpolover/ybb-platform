@@ -139,6 +139,19 @@ describe('CreateBrandHandler', () => {
         }));
     });
 
+    it('caps the auto-generated slug at 100 chars (Brand.slug is VarChar(100))', async () => {
+        const longName = 'Word '.repeat(40).trim(); // 40 words -> well over 100 chars once hyphenated
+        const dto: CreateBrandDto = { name: longName };
+        const command = new CreateBrandCommand(dto, 'user-1', {});
+
+        mockBrandRepository.create.mockImplementation((data: any) => Promise.resolve({ id: 'brand-1', ...data }));
+
+        await handler.execute(command);
+
+        const createdSlug = mockBrandRepository.create.mock.calls[0][0].slug as string;
+        expect(createdSlug.length).toBeLessThanOrEqual(100);
+    });
+
     it('should upload files and update brand if files are provided', async () => {
         const dto: CreateBrandDto = { name: 'Brand With Files' };
         const files = {

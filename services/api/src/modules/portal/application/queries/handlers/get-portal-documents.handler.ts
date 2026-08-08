@@ -5,12 +5,14 @@ import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { PortalCacheService } from '../../services/portal-cache.service';
 import { LoaEligibilityService } from '../../services/loa-eligibility.service';
+import { DocumentAudienceService } from '../../services/document-audience.service';
 import { GetPortalDocumentsQuery } from '../portal-queries';
 import {
     PortalDocumentResponseDto,
     DocumentItemDto
 } from '../../../presentation/dto/portal-document.dto';
 import { resolveMaskedFileUrl } from '@shared/utils/masked-file-url';
+import { PrivateFileUrlResolver, PRIVATE_FILE_UNAVAILABLE } from '@modules/files/application/private-file-url-resolver.service';
 
 @Injectable()
 @QueryHandler(GetPortalDocumentsQuery)
@@ -20,7 +22,25 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
         private readonly cacheService: CacheService,
         private readonly portalCacheService: PortalCacheService,
         private readonly loaEligibilityService: LoaEligibilityService,
+        private readonly documentAudienceService: DocumentAudienceService,
+        private readonly privateFileUrlResolver: PrivateFileUrlResolver,
     ) {}
+
+    /**
+     * Resolve a document url for client consumption:
+     *  - private category (documents/signed-copies) -> fresh presigned url
+     *  - private but presign failed -> undefined (fail closed, never the stored url)
+     *  - not a private category -> unchanged existing masked-download behavior
+     */
+    private async resolveDocumentUrl(url: string | null | undefined): Promise<string | undefined> {
+        if (typeof url !== 'string' || url.trim().length === 0) return url ?? undefined;
+
+        const resolution = await this.privateFileUrlResolver.resolve(url);
+        if (resolution === PRIVATE_FILE_UNAVAILABLE) return undefined;
+        if (resolution) return resolution;
+
+        return resolveMaskedFileUrl(this.prisma, url);
+    }
 
     async execute(query: GetPortalDocumentsQuery): Promise<PortalDocumentResponseDto> {
         const { userId } = query;
@@ -38,6 +58,7 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
                 id: true,
                 programId: true,
                 status: true,
+                submittedAt: true,
                 registrationPaymentStatus: true,
                 programPaymentStatus: true,
                 pricingTierId: true,
@@ -51,7 +72,7 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
                                 type: true, fileUrl: true, sourceType: true, linkUrl: true,
                                 isPublic: true, updatedAt: true,
                             },
-                            orderBy: { order: 'asc' },
+                            orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
                         },
                     },
                 },
@@ -104,7 +125,7 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
 
             // 2. Document Templates (Agreement Letters + Complementary Docs)
             for (const tmpl of documentTemplates) {
-                if (!isAudienceEligible(tmpl, application)) continue;
+                if (!this.documentAudienceService.isEligible(tmpl, application)) continue;
 
                 // Find existing participant document linked to this template
                 const participantDoc = application.documents.find(
@@ -177,67 +198,21 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
         const maskedProgramResources = await Promise.all(
             programResources.map(async (item) => ({
                 ...item,
-                fileUrl:
-                    typeof item.fileUrl === 'string' && item.fileUrl.trim().length > 0
-                        ? await resolveMaskedFileUrl(this.prisma, item.fileUrl)
-                        : item.fileUrl,
-                signedCopyUrl:
-                    typeof item.signedCopyUrl === 'string' && item.signedCopyUrl.trim().length > 0
-                        ? await resolveMaskedFileUrl(this.prisma, item.signedCopyUrl)
-                        : item.signedCopyUrl,
+                fileUrl: await this.resolveDocumentUrl(item.fileUrl),
+                signedCopyUrl: await this.resolveDocumentUrl(item.signedCopyUrl),
             })),
         );
 
         const maskedMyDocuments = await Promise.all(
             myDocuments.map(async (item) => ({
                 ...item,
-                fileUrl:
-                    typeof item.fileUrl === 'string' && item.fileUrl.trim().length > 0
-                        ? await resolveMaskedFileUrl(this.prisma, item.fileUrl)
-                        : item.fileUrl,
-                signedCopyUrl:
-                    typeof item.signedCopyUrl === 'string' && item.signedCopyUrl.trim().length > 0
-                        ? await resolveMaskedFileUrl(this.prisma, item.signedCopyUrl)
-                        : item.signedCopyUrl,
+                fileUrl: await this.resolveDocumentUrl(item.fileUrl),
+                signedCopyUrl: await this.resolveDocumentUrl(item.signedCopyUrl),
             })),
         );
 
         const result = { programResources: maskedProgramResources, myDocuments: maskedMyDocuments };
         await this.cacheService.set(cacheKey, result, CACHE_TTL.MEDIUM);
         return result;
-    }
-}
-
-function isAudienceEligible(
-    tmpl: { audienceType: string; audienceConfig: unknown },
-    application: {
-        status: string;
-        registrationPaymentStatus: string;
-        programPaymentStatus: string;
-        pricingTierId: string | null;
-        invoices: { pricingTierId: string; status: string }[];
-    },
-): boolean {
-    const config = tmpl.audienceConfig as Record<string, unknown>;
-    switch (tmpl.audienceType) {
-        case 'all_registered':
-            return true;
-        case 'paid_any':
-            return (
-                application.registrationPaymentStatus === 'paid' ||
-                application.programPaymentStatus === 'paid'
-            );
-        case 'paid_pricing_tier': {
-            const ids = (config.pricingTierIds as string[]) ?? [];
-            return application.invoices.some(
-                (inv) => inv.status === 'paid' && ids.includes(inv.pricingTierId),
-            );
-        }
-        case 'specific_status': {
-            const statuses = (config.statuses as string[]) ?? [];
-            return statuses.includes(application.status);
-        }
-        default:
-            return false;
     }
 }

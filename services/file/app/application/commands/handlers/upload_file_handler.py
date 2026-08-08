@@ -9,13 +9,14 @@ from app.domain.repositories.file_repository import IFileRepository
 from app.domain.services.storage_service import IStorageService
 from app.domain.exceptions.file_exceptions import (
     InvalidFileTypeException,
+    InvalidFilenameException,
     FileSizeLimitException
 )
 
 
 class UploadFileHandler:
     """Handler for uploading files."""
-    
+
     # Allowed file types
     ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
     ALLOWED_DOCUMENT_TYPES = [
@@ -25,10 +26,18 @@ class UploadFileHandler:
         'application/vnd.ms-excel',
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     ]
-    
-    # Size limits (in bytes)
-    MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB
+
+    # Size limits (in bytes).
+    # Reconciled with CreateUploadUrlHandler.MAX_IMAGE_SIZE and
+    # services/api/src/common/constants/index.ts MAX_FILE_SIZE — was 5MB here,
+    # which rejected ordinary phone photos (typically 3-8MB) and was the main
+    # cause of "can't upload my photo" reports.
+    MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB
     MAX_DOCUMENT_SIZE = 10 * 1024 * 1024  # 10MB
+
+    # Matches files.original_filename VARCHAR(255) — original_filename is displayed back to
+    # users, so overlength names are rejected here rather than silently truncated.
+    MAX_FILENAME_LENGTH = 255
     
     # Public Categories
     PUBLIC_CATEGORIES = [
@@ -78,11 +87,15 @@ class UploadFileHandler:
             InvalidFileTypeException: If file type not allowed
             FileSizeLimitException: If file exceeds size limit
         """
+        # Reject filenames that would overflow files.original_filename (VARCHAR(255))
+        if len(command.filename) > self.MAX_FILENAME_LENGTH:
+            raise InvalidFilenameException(len(command.filename), self.MAX_FILENAME_LENGTH)
+
         # Confirm allowed file types
         allowed_types = self.ALLOWED_IMAGE_TYPES + self.ALLOWED_DOCUMENT_TYPES
         if command.content_type not in allowed_types:
             raise InvalidFileTypeException(command.content_type, allowed_types)
-        
+
         # Validate file size
         if command.content_type in self.ALLOWED_IMAGE_TYPES:
             max_size = self.MAX_IMAGE_SIZE
@@ -94,11 +107,10 @@ class UploadFileHandler:
         
         # Determine unique file ID
         file_id = str(uuid.uuid4())
-        extension = command.filename.split('.')[-1] if '.' in command.filename else ''
-        storage_filename = f"{file_id}.{extension}" if extension else file_id
 
-        # Use shared service to generate path
+        # Use shared service to generate storage filename (uuid + clamped extension) and path
         from app.application.services.file_path_service import FilePathService
+        storage_filename = FilePathService.build_storage_filename(file_id, command.filename)
         storage_path, real_bucket, path_metadata = FilePathService.get_storage_path(
             brand_id=command.brand_id,
             user_id=command.user_id,

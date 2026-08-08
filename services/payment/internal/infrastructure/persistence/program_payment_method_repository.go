@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/ybb-platform/payment/internal/domain/entities"
@@ -57,6 +59,82 @@ func (r *ProgramPaymentMethodRepository) FindMergedByProgram(ctx context.Context
 		return r.findUnconfiguredDefault(ctx, programID)
 	}
 	return r.findConfigured(ctx, programID)
+}
+
+// FindAllForAdminByProgram is the admin-console counterpart to
+// FindMergedByProgram: every active master method, whether or not this
+// program has enabled it, with overrides merged in where an overlay row
+// exists and IsEnabled=false where it does not.
+//
+// FindMergedByProgram cannot serve the admin console. For a *configured*
+// program it returns only is_enabled=true overlay rows, so a shared method
+// the program has never enabled is absent from the response — and the
+// console renders exactly what this endpoint returns. The result was that
+// the "Enabled for this program" checkbox existed for every method the admin
+// could already see and for none of the ones they actually wanted to add,
+// with no affordance anywhere to attach an existing method. Admins worked
+// around it by creating near-duplicate master rows (prod accumulated five
+// never-attached orphans and one trailing-space name twin) until the global
+// name uniqueness stopped them with an opaque 500.
+//
+// Deliberately a separate method rather than a flag on FindMergedByProgram:
+// the participant portal calls that path, and leaking disabled methods to
+// participants would be a far worse bug than the one being fixed here.
+func (r *ProgramPaymentMethodRepository) FindAllForAdminByProgram(ctx context.Context, programID string) ([]repositories.ProgramMethodView, error) {
+	var masters []entities.PaymentMethodEntity
+	if err := r.db.WithContext(ctx).
+		Where("is_active = ?", true).
+		Order("sort_order asc").
+		Find(&masters).Error; err != nil {
+		log.Printf("Failed to fetch master payment methods for admin: %v", err)
+		return nil, fmt.Errorf("failed to fetch master payment methods for admin: %w", err)
+	}
+
+	var overlays []entities.ProgramPaymentMethodEntity
+	if err := r.db.WithContext(ctx).
+		Where("program_id = ?", programID).
+		Find(&overlays).Error; err != nil {
+		log.Printf("Failed to fetch program payment method overrides for admin: %v", err)
+		return nil, fmt.Errorf("failed to fetch program payment method overrides for admin: %w", err)
+	}
+
+	overlayByMethodID := make(map[string]entities.ProgramPaymentMethodEntity, len(overlays))
+	for _, o := range overlays {
+		overlayByMethodID[o.PaymentMethodID] = o
+	}
+
+	// No overlay rows at all means the program is unconfigured, and the
+	// fallback contract says every active method is implicitly on. Keep that
+	// reading so the console doesn't show a fleet of unchecked boxes for a
+	// program whose participants can currently use every method.
+	unconfigured := len(overlays) == 0
+
+	attached := make([]repositories.ProgramMethodView, 0, len(overlays))
+	unattached := make([]repositories.ProgramMethodView, 0, len(masters))
+	for _, m := range masters {
+		o, hasOverlay := overlayByMethodID[m.ID]
+		switch {
+		case hasOverlay:
+			attached = append(attached, overlayView(programID, m, o))
+		case unconfigured:
+			attached = append(attached, defaultView(programID, m))
+		default:
+			// Configured program, method never attached: surface it as a
+			// real, disabled row so the admin can tick it on.
+			v := defaultView(programID, m)
+			v.IsConfigured = true
+			v.IsEnabled = false
+			unattached = append(unattached, v)
+		}
+	}
+
+	// Attached rows keep the program's curated overlay order and stay ahead of
+	// the newly visible ones. The console bulk-saves sort_order from list
+	// position, so interleaving unattached methods by master sort_order would
+	// silently reshuffle what participants see on the next save.
+	sort.SliceStable(attached, func(i, j int) bool { return attached[i].SortOrder < attached[j].SortOrder })
+
+	return append(attached, unattached...), nil
 }
 
 // findUnconfiguredDefault returns every active master method as a
@@ -123,10 +201,96 @@ func (r *ProgramPaymentMethodRepository) findConfigured(ctx context.Context, pro
 	return views, nil
 }
 
+// seedManualInstructionsOnEnable copies the master instructions into
+// instructions_override at the moment a MANUAL method is switched on for a
+// program, when the caller did not supply an override of its own.
+//
+// Manual methods carry program-specific payment links in their instructions —
+// "Fully Funded Registration for <Program> (10 USD)" and a matching Xendit
+// checkout URL. Sharing that text across programs is never what anyone wants,
+// but the overlay defaults to NULL (= inherit master), so every program that
+// enables a manual method silently renders another program's payment links
+// until somebody finds the per-field override toggle. Nobody did: prod ran 39
+// overlay rows with zero overrides, and one edit put Middle East Youth Summit
+// checkout links in front of China Youth Summit and Istanbul Youth Summit
+// participants simultaneously.
+//
+// Seeding at the enable transition makes the safe thing the default: the
+// program starts from a copy it owns, and editing it cannot reach any other
+// program. Automatic/gateway methods are left inheriting, since their
+// instructions are generic and benefit from central updates.
+//
+// Only fires on a genuine off→on transition with no existing override, so it
+// never clobbers a customization and never re-seeds a method already on.
+func (r *ProgramPaymentMethodRepository) seedManualInstructionsOnEnable(
+	ctx context.Context,
+	programID string,
+	patches []repositories.OverridePatch,
+) ([]repositories.OverridePatch, error) {
+	methodIDs := make([]string, 0, len(patches))
+	for _, p := range patches {
+		if p.PaymentMethodID != "" && p.IsEnabled != nil && *p.IsEnabled && p.InstructionsOverride == nil {
+			methodIDs = append(methodIDs, p.PaymentMethodID)
+		}
+	}
+	if len(methodIDs) == 0 {
+		return patches, nil
+	}
+
+	var existing []entities.ProgramPaymentMethodEntity
+	if err := r.db.WithContext(ctx).
+		Where("program_id = ? AND payment_method_id IN ?", programID, methodIDs).
+		Find(&existing).Error; err != nil {
+		return nil, fmt.Errorf("failed to load existing overrides for instruction seeding: %w", err)
+	}
+	existingByID := make(map[string]entities.ProgramPaymentMethodEntity, len(existing))
+	for _, e := range existing {
+		existingByID[e.PaymentMethodID] = e
+	}
+
+	var masters []entities.PaymentMethodEntity
+	if err := r.db.WithContext(ctx).Where("id IN ?", methodIDs).Find(&masters).Error; err != nil {
+		return nil, fmt.Errorf("failed to load master methods for instruction seeding: %w", err)
+	}
+	masterByID := make(map[string]entities.PaymentMethodEntity, len(masters))
+	for _, m := range masters {
+		masterByID[m.ID] = m
+	}
+
+	seeded := make([]repositories.OverridePatch, len(patches))
+	copy(seeded, patches)
+	for i, p := range seeded {
+		if p.IsEnabled == nil || !*p.IsEnabled || p.InstructionsOverride != nil {
+			continue
+		}
+		master, ok := masterByID[p.PaymentMethodID]
+		if !ok || !master.Type.IsManual() || strings.TrimSpace(master.Instructions) == "" {
+			continue
+		}
+		if prev, found := existingByID[p.PaymentMethodID]; found {
+			// Already on, or already customized: not a transition.
+			if prev.IsEnabled || prev.InstructionsOverride != nil {
+				continue
+			}
+		}
+		instructions := master.Instructions
+		seeded[i].InstructionsOverride = &instructions
+		log.Printf("Seeded program-specific instructions for program=%s method=%s (manual method enabled)", programID, p.PaymentMethodID)
+	}
+	return seeded, nil
+}
+
 // UpsertOverride creates or updates a single overlay row for
 // (programID, methodID) — the lazy-creation point for a program's first
 // per-method override.
 func (r *ProgramPaymentMethodRepository) UpsertOverride(ctx context.Context, programID string, methodID string, patch repositories.OverridePatch) error {
+	patch.PaymentMethodID = methodID
+	seeded, err := r.seedManualInstructionsOnEnable(ctx, programID, []repositories.OverridePatch{patch})
+	if err != nil {
+		return err
+	}
+	patch = seeded[0]
+
 	row := buildOverlayRow(programID, methodID, patch)
 
 	if err := r.db.WithContext(ctx).
@@ -149,25 +313,59 @@ func (r *ProgramPaymentMethodRepository) UpsertFullSet(ctx context.Context, prog
 		return nil
 	}
 
-	toUpsert := make([]entities.ProgramPaymentMethodEntity, 0, len(rows))
 	for _, patch := range rows {
 		if patch.PaymentMethodID == "" {
 			return fmt.Errorf("failed to upsert program payment methods: payment_method_id is required for each row")
 		}
+	}
+
+	rows, err := r.seedManualInstructionsOnEnable(ctx, programID, rows)
+	if err != nil {
+		return err
+	}
+
+	toUpsert := make([]entities.ProgramPaymentMethodEntity, 0, len(rows))
+	for _, patch := range rows {
 		toUpsert = append(toUpsert, buildOverlayRow(programID, patch.PaymentMethodID, patch))
 	}
 
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		return tx.Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "program_id"}, {Name: "payment_method_id"}},
 			DoUpdates: clause.AssignmentColumns(overlayUpsertColumns),
 		}).Create(&toUpsert).Error
-	})
-	if err != nil {
+	}); err != nil {
 		log.Printf("Failed to bulk upsert program payment method overrides: %v", err)
 		return fmt.Errorf("failed to bulk upsert program payment method overrides: %w", err)
 	}
 	return nil
+}
+
+// CountInheritingPrograms reports how many programs currently have this
+// method enabled, and how many of those render the SHARED master instructions
+// because they have no instructions_override of their own.
+//
+// Feeds the warning on the shared-edit sheet. Editing master instructions is a
+// broadcast to every inheriting program, and the sheet gave no sense of blast
+// radius — one edit reached three programs at once in production.
+func (r *ProgramPaymentMethodRepository) CountInheritingPrograms(ctx context.Context, methodID string) (enabled int64, inheriting int64, err error) {
+	base := r.db.WithContext(ctx).
+		Model(&entities.ProgramPaymentMethodEntity{}).
+		Where("payment_method_id = ? AND is_enabled = ?", methodID, true)
+
+	if err = base.Count(&enabled).Error; err != nil {
+		log.Printf("Failed to count programs using payment method: %v", err)
+		return 0, 0, fmt.Errorf("failed to count programs using payment method: %w", err)
+	}
+
+	if err = base.Session(&gorm.Session{}).
+		Where("instructions_override IS NULL").
+		Count(&inheriting).Error; err != nil {
+		log.Printf("Failed to count programs inheriting payment method instructions: %v", err)
+		return 0, 0, fmt.Errorf("failed to count programs inheriting payment method instructions: %w", err)
+	}
+
+	return enabled, inheriting, nil
 }
 
 // buildOverlayRow maps a patch onto a new overlay entity ready for

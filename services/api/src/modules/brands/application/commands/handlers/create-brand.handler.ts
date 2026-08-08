@@ -132,12 +132,19 @@ export class CreateBrandHandler implements ICommandHandler<CreateBrandCommand> {
     }
 
     private generateSlug(text: string): string {
+        // Cap at the Brand.slug column limit (VarChar(100), see prisma/schema/program.prisma).
+        // Not routed through shared/utils/auto-slug.ts: that util is separator-incompatible
+        // here (underscore-joined, built for form-field keys) and would rewrite every
+        // brand slug in prod off its established hyphenated convention (e.g.
+        // "istanbul-youth-summit"). This transform chain only ever removes characters,
+        // so slicing after is a safe hard cap, not a truncation that changes earlier chars.
         return text
             .toString()
             .toLowerCase()
             .trim()
             .replace(/\s+/g, '-')     // Replace spaces with -
             .replace(/[^\w-]+/g, '') // Remove all non-word chars
-            .replace(/--+/g, '-');  // Replace multiple - with single -
+            .replace(/--+/g, '-')  // Replace multiple - with single -
+            .slice(0, 100);
     }
 }

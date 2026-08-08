@@ -1,4 +1,5 @@
 import { IsString, IsOptional, IsEnum, IsObject, IsArray, IsUUID } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ApplicationCategory } from '@core/entities/participant-application.entity';
 import { DocumentFile } from '@core/entities/participant-application.entity';
@@ -37,6 +38,11 @@ export class UpdateApplicationRequestDto {
   @ApiPropertyOptional({ description: 'Requirement files' })
   @IsOptional()
   @IsArray()
+  // Passthrough only, see create-application-request.dto.ts for why: this is
+  // the participant-submit path and must not reject anything it accepts today.
+  // Reads from `obj[key]` rather than destructuring `value` -- see that file
+  // for why `value` is already corrupted by the time @Transform sees it.
+  @Transform(({ obj, key }: { obj: Record<string, unknown>; key: string }) => obj[key])
   requirementFiles?: DocumentFile[];
 
   @ApiPropertyOptional({ description: 'Twibbon link' })

@@ -6,6 +6,7 @@ import { PortalCacheService } from '../../services/portal-cache.service';
 import { PortalSubmitApplicationCommand } from '../../queries/portal-queries';
 import { RegistrationFeeGateService } from '@modules/payments/application/services/registration-fee-gate.service';
 import { ReferralFunnelService } from '@modules/participants/application/services/referral-funnel.service';
+import { formatSubmissionDeadlineMessage, isPastSubmissionDeadline } from '@shared/utils/submission-deadline.util';
 
 /**
  * Portal Submit Application Handler
@@ -50,6 +51,8 @@ export class PortalSubmitApplicationHandler {
                 programId: true,
                 program: {
                     select: {
+                        name: true,
+                        applicationDeadline: true,
                         formFields: {
                             select: {
                                 name: true,
@@ -67,6 +70,20 @@ export class PortalSubmitApplicationHandler {
         if (application.status !== 'draft') {
             throw new BadRequestException(
                 `Cannot submit application in "${application.status}" status. Only drafts can be submitted.`,
+            );
+        }
+
+        // Submission deadline gate: Program.applicationDeadline, inclusive
+        // through the end of its WIB calendar day (see submission-deadline.util.ts).
+        // Same shared resolver as the admin submit path and the reminder cron,
+        // so this cannot silently diverge from either.
+        const applicationDeadline = application.program?.applicationDeadline ?? null;
+        if (isPastSubmissionDeadline(applicationDeadline)) {
+            throw new BadRequestException(
+                formatSubmissionDeadlineMessage(
+                    application.program?.name ?? 'this program',
+                    applicationDeadline as Date,
+                ),
             );
         }
 

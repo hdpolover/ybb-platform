@@ -30,6 +30,8 @@ import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { UserRole } from '@core/entities/user.entity';
 import { FileServiceClient } from '../infrastructure/clients/file-service.client';
 import { StorageService } from '../application/storage.service';
+import { PrivateFileUrlResolver, PRIVATE_FILE_UNAVAILABLE } from '../application/private-file-url-resolver.service';
+import { isPrivateCategoryKey } from '@shared/utils/private-file-key';
 
 /**
  * Admin Media Library Controller
@@ -50,6 +52,7 @@ export class AdminMediaController {
   constructor(
     private readonly fileServiceClient: FileServiceClient,
     private readonly storageService: StorageService,
+    private readonly privateFileUrlResolver: PrivateFileUrlResolver,
   ) {}
 
   @Get()
@@ -74,7 +77,7 @@ export class AdminMediaController {
     // double-envelope and break the admin-dashboard's `listProgramMedia`.
     this.logger.log(`Listing media for program ${programId}`);
     try {
-      return await this.fileServiceClient.listProgramMedia({
+      const result = await this.fileServiceClient.listProgramMedia({
         programId,
         brandId,
         assetType,
@@ -82,10 +85,37 @@ export class AdminMediaController {
         page: Number(page),
         limit: Number(limit),
       });
+      return await this.presignPrivateMediaFiles(result);
     } catch (error: unknown) {
       this.logger.error(`Failed to list media for program ${programId}: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
+  }
+
+  /**
+   * For files whose storage key is a private category (documents, signed-copies),
+   * replace url/download_url with a fresh presigned url. Fail closed: if presigning
+   * fails, both fields are cleared rather than left pointing at a stored url.
+   * Non-private files are left untouched.
+   */
+  private async presignPrivateMediaFiles(payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const files = payload?.files;
+    if (!Array.isArray(files)) return payload;
+
+    const resolvedFiles = await Promise.all(
+      files.map(async (file: Record<string, unknown>) => {
+        const storagePath = file?.storage_path;
+        if (typeof storagePath !== 'string' || !isPrivateCategoryKey(storagePath)) {
+          return file;
+        }
+
+        const resolution = await this.privateFileUrlResolver.resolveByKey(storagePath);
+        const presignedUrl = resolution === PRIVATE_FILE_UNAVAILABLE || resolution === null ? null : resolution;
+        return { ...file, url: presignedUrl, download_url: presignedUrl };
+      }),
+    );
+
+    return { ...payload, files: resolvedFiles };
   }
 
   @Post()

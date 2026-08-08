@@ -563,7 +563,7 @@ function ParticipantsTab({
 // ─── Payments tab ─────────────────────────────────────────────────────────────
 
 function PaymentsTab({ analytics }: { analytics: ProgramAnalytics }) {
-  const { kpis, revenueByMonth, byTier, byPaymentMethod, countriesByStatus } = analytics.payments;
+  const { kpis, revenueByMonth, byTier, byPaymentMethod, countriesByStatus, paidCountriesByTier } = analytics.payments;
 
   const revenueChartData = revenueByMonth.map((m) => ({
     ...m,
@@ -591,17 +591,17 @@ function PaymentsTab({ analytics }: { analytics: ProgramAnalytics }) {
         <StatCard
           label="Conversion Rate"
           value={`${kpis.conversionRate}%`}
-          sub="Submitted → Paid"
+          sub="Registered → Paid"
           accent="bg-purple-50 text-purple-500"
           icon={<TrendingUp className="h-4 w-4" />}
         />
         <StatCard
-          label="Processing / Unpaid"
-          value={`${kpis.processingCount} / ${kpis.unpaidCount}`}
+          label="Unpaid Invoices"
+          value={kpis.unpaidCount.toLocaleString()}
           sub={
-            kpis.failedCount > 0 || kpis.cancelledCount > 0
-              ? `${kpis.failedCount} failed, ${kpis.cancelledCount} cancelled`
-              : "No failed or cancelled payments"
+            kpis.processingCount > 0
+              ? `${kpis.processingCount} still processing`
+              : "None processing"
           }
           accent="bg-amber-50 text-amber-500"
           icon={<CreditCard className="h-4 w-4" />}
@@ -679,6 +679,42 @@ function PaymentsTab({ analytics }: { analytics: ProgramAnalytics }) {
                 <Bar dataKey="cancelled" stackId="a" fill="#52525b" name="Cancelled" radius={[0, 3, 3, 0]} />
               </BarChart>
             </ResponsiveContainer>
+          </div>
+        )}
+      </ChartCard>
+
+      {/* Paid participants by country x fee stage */}
+      <ChartCard title="Paid Participants by Country & Fee Stage" sub="Full country ranking — paid invoices only, broken down per fee stage">
+        {paidCountriesByTier.rows.length === 0 ? (
+          <p className="py-8 text-center text-xs text-zinc-400">No paid invoices yet.</p>
+        ) : (
+          <div className="max-h-96 overflow-auto rounded-md border border-zinc-200">
+            <table className="min-w-full border-collapse text-left text-[11px]">
+              <thead className="sticky top-0 bg-zinc-50 text-zinc-600">
+                <tr>
+                  <th className="px-3 py-2 font-semibold">Country</th>
+                  {paidCountriesByTier.tiers.map((tier) => (
+                    <th key={tier.key} className="px-3 py-2 text-right font-semibold">
+                      {tier.label}
+                    </th>
+                  ))}
+                  <th className="px-3 py-2 text-right font-semibold">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paidCountriesByTier.rows.map((row, idx) => (
+                  <tr key={row.country} className={idx % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}>
+                    <td className="px-3 py-2 font-semibold text-zinc-900">{row.country}</td>
+                    {paidCountriesByTier.tiers.map((tier) => (
+                      <td key={tier.key} className="px-3 py-2 text-right text-zinc-600">
+                        {row.byTier[tier.key] ?? 0}
+                      </td>
+                    ))}
+                    <td className="px-3 py-2 text-right font-semibold text-zinc-900">{row.total}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </ChartCard>

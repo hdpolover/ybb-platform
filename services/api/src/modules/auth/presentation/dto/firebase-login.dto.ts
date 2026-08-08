@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import { IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class FirebaseLoginDto {
@@ -51,6 +52,8 @@ export class FirebaseLoginDto {
     description: '(Registration only) Referral code to credit an ambassador on first sign-in.',
     required: false
   })
+  // '' must behave like "not provided" — @IsOptional() only skips null/undefined.
+  @Transform(({ value }) => (typeof value === 'string' && value.trim() === '' ? undefined : value))
   @IsString()
   @IsOptional()
   referralCode?: string;

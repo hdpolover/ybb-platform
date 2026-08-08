@@ -1,11 +1,12 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsArray, IsNumber, Min, Max, IsDateString } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsArray, IsNumber, Min, Max, IsDateString, MaxLength } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateProgramAnnouncementDto {
   @ApiProperty({ description: 'Announcement title' })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(255)
   title: string;
 
   @ApiProperty({ description: 'Announcement body content' })

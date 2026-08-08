@@ -261,3 +261,34 @@ describe('IsSubmissionDataEnglish', () => {
         });
     });
 });
+
+// ─── Message shape ────────────────────────────────────────────────────────────
+
+// The participant portal maps these messages to per-field copy. class-validator
+// does not prepend the property to a custom defaultMessage, so the constraint
+// does it itself — without it the portal cannot tell originCity from
+// originCountry, both of which use IsEnglishText.
+describe('message names the offending property', () => {
+    async function messagesFor(dto: object): Promise<string[]> {
+        const errors = await validate(dto);
+        return errors.flatMap((e) => Object.values(e.constraints ?? {}));
+    }
+
+    it('prefixes the property on IsEnglishName', async () => {
+        const dto = new NameDto();
+        dto.value = 'owaiskhalifa56';
+        const msgs = await messagesFor(dto);
+        expect(msgs).toContain(
+            "value must use the English alphabet only (letters, spaces, - ' .)",
+        );
+    });
+
+    it('prefixes the property on IsEnglishText', async () => {
+        const dto = new TextDto();
+        dto.value = 'Adıyaman';
+        const msgs = await messagesFor(dto);
+        expect(msgs).toContain(
+            'value must use standard English characters only (no accented or non-Latin characters)',
+        );
+    });
+});

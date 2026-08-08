@@ -16,7 +16,9 @@ import { PortalCacheService } from './application/services/portal-cache.service'
 import { PortalReceiptService } from './application/services/portal-receipt.service';
 import { LoaEligibilityService } from './application/services/loa-eligibility.service';
 import { LoaDocumentNumberService } from './application/services/loa-document-number.service';
+import { LoaRenderDataService } from './application/services/loa-render-data.service';
 import { LoaDownloadService } from './application/services/loa-download.service';
+import { DocumentAudienceService } from './application/services/document-audience.service';
 import { ConfirmPortalPaymentHandler } from './application/commands/handlers/confirm-portal-payment.handler';
 import { CancelPortalPaymentHandler } from './application/commands/handlers/cancel-portal-payment.handler';
 import { EnsurePortalPaymentInvoiceHandler } from './application/commands/handlers/ensure-portal-payment-invoice.handler';
@@ -47,7 +49,9 @@ import { UploadSignedCopyHandler } from './application/commands/handlers/upload-
         PortalReceiptService,
         LoaEligibilityService,
         LoaDocumentNumberService,
+        LoaRenderDataService,
         LoaDownloadService,
+        DocumentAudienceService,
         // Existing query handlers
         GetPortalDashboardHandler,
         GetPortalSubmissionsHandler,
@@ -66,5 +70,6 @@ import { UploadSignedCopyHandler } from './application/commands/handlers/upload-
         EnsurePortalPaymentInvoiceHandler,
         UploadSignedCopyHandler,
     ],
+    exports: [DocumentAudienceService, LoaRenderDataService],
 })
 export class PortalModule { }

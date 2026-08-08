@@ -6,6 +6,7 @@ import (
 	"log"
 
 	"github.com/ybb-platform/payment/internal/domain/entities"
+	"github.com/ybb-platform/payment/internal/domain/exceptions"
 	"gorm.io/gorm"
 )
 
@@ -25,6 +26,9 @@ func NewPaymentMethodRepository(db *gorm.DB) *PaymentMethodRepository {
 func (r *PaymentMethodRepository) Create(ctx context.Context, pm *entities.PaymentMethodEntity) error {
 	if err := r.db.WithContext(ctx).Create(pm).Error; err != nil {
 		log.Printf("Failed to create payment method: %v", err)
+		if isUniqueViolation(err) {
+			return fmt.Errorf("failed to create payment method: %w", exceptions.ErrDuplicatePaymentMethod)
+		}
 		return fmt.Errorf("failed to create payment method: %w", err)
 	}
 	return nil
@@ -58,6 +62,9 @@ func (r *PaymentMethodRepository) FindByID(ctx context.Context, id string) (*ent
 func (r *PaymentMethodRepository) Update(ctx context.Context, pm *entities.PaymentMethodEntity) error {
 	if err := r.db.WithContext(ctx).Save(pm).Error; err != nil {
 		log.Printf("Failed to update payment method: %v", err)
+		if isUniqueViolation(err) {
+			return fmt.Errorf("failed to update payment method: %w", exceptions.ErrDuplicatePaymentMethod)
+		}
 		return fmt.Errorf("failed to update payment method: %w", err)
 	}
 	return nil

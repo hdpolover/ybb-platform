@@ -128,6 +128,29 @@ async function requestText(path: string, init?: RequestInit): Promise<string> {
   return res.text();
 }
 
+async function requestBlob(path: string, init?: RequestInit): Promise<Blob> {
+  const headers = new Headers(init?.headers);
+  headers.set("Authorization", `Bearer ${getAccessToken()}`);
+  if (
+    !(init?.body instanceof FormData) &&
+    init?.method &&
+    init.method !== "GET" &&
+    !headers.has("Content-Type")
+  ) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const res = await fetch(buildApiUrl(path), { ...init, headers });
+
+  if (res.status === 401) {
+    redirectToLogin("session_expired");
+    throw new Error("Session expired. Redirecting to login...");
+  }
+
+  if (!res.ok) throw new Error(await readErrorMessage(res));
+  return res.blob();
+}
+
 // ─── Pagination helper ────────────────────────────────────────────────────────
 
 export type PaginatedMeta = {
@@ -551,6 +574,12 @@ export type Application = {
   ticketStatus?: string | null;
   scoreTotal: number | null;
   scoreStatus: string | null;
+  /**
+   * List-endpoint-only essay-completeness summary (see ApplicationResponseDto.essayFilled
+   * on the API). Undefined on responses that don't populate it (e.g. the
+   * single-application detail endpoint).
+   */
+  essayFilled?: "filled" | "partial" | "empty";
   registrationPaymentStatus: string;
   programPaymentStatus: string;
   motivationLetter?: string;
@@ -1025,6 +1054,10 @@ export type ProgramAnalytics = {
     byTier: Array<{ name: string; paidCount: number; totalAmount: number; currency: string }>;
     byPaymentMethod: Array<{ method: string; count: number }>;
     countriesByStatus: Array<{ country: string; paid: number; processing: number; unpaid: number; failed: number; cancelled: number; total: number }>;
+    paidCountriesByTier: {
+      tiers: Array<{ key: string; label: string; feeType: string }>;
+      rows: Array<{ country: string; total: number; byTier: Record<string, number> }>;
+    };
   };
 };
 
@@ -1866,6 +1899,7 @@ export async function listApplications(params?: {
   country?: string;
   registrationPaymentStatus?: "unpaid" | "paid" | "processing" | "failed" | "cancelled" | "refunded";
   programPaymentStatus?: "unpaid" | "paid" | "processing" | "failed" | "cancelled" | "refunded";
+  scoreStatus?: "pending" | "scored" | "go_to_interview" | "rejected";
   sortBy?:
     | "updatedAt"
     | "createdAt"
@@ -1874,7 +1908,9 @@ export async function listApplications(params?: {
     | "country"
     | "status"
     | "registrationPaymentStatus"
-    | "programPaymentStatus";
+    | "programPaymentStatus"
+    | "scoreTotal"
+    | "scoreStatus";
   sortOrder?: "asc" | "desc";
   startDate?: string;
   endDate?: string;
@@ -1891,6 +1927,7 @@ export async function listApplications(params?: {
   if (params?.country) q.set("country", params.country);
   if (params?.registrationPaymentStatus) q.set("registrationPaymentStatus", params.registrationPaymentStatus);
   if (params?.programPaymentStatus) q.set("programPaymentStatus", params.programPaymentStatus);
+  if (params?.scoreStatus) q.set("scoreStatus", params.scoreStatus);
   if (params?.sortBy) q.set("sortBy", params.sortBy);
   if (params?.sortOrder) q.set("sortOrder", params.sortOrder);
   if (params?.startDate) q.set("startDate", params.startDate);
@@ -1922,6 +1959,7 @@ export async function exportApplicationsExcel(params: {
   search?: string;
   startDate?: string;
   endDate?: string;
+  scoreStatus?: "pending" | "scored" | "go_to_interview" | "rejected";
 }): Promise<void> {
   const q = new URLSearchParams();
   q.set("brandId", params.brandId);
@@ -1931,6 +1969,7 @@ export async function exportApplicationsExcel(params: {
   if (params.search) q.set("search", params.search);
   if (params.startDate) q.set("startDate", params.startDate);
   if (params.endDate) q.set("endDate", params.endDate);
+  if (params.scoreStatus) q.set("scoreStatus", params.scoreStatus);
 
   const response = await fetch(buildApiUrl(`/applications/export?${q}`), {
     method: "GET",
@@ -1984,6 +2023,22 @@ export type AdminUpdateSubmissionResult = {
   applicationId: string;
   editHistoryId: string;
 };
+
+export interface PaymentMethodUsage {
+  enabled_program_count: number;
+  inheriting_program_count: number;
+}
+
+/**
+ * How many programs would be affected by editing this shared method's master
+ * instructions. `inheriting_program_count` is the blast radius: programs with
+ * the method enabled and no instructions_override of their own.
+ */
+export function getPaymentMethodUsage(methodId: string): Promise<PaymentMethodUsage> {
+  return request<{ data: PaymentMethodUsage }>(
+    `/admin/payments/methods/${encodeURIComponent(methodId)}/usage`,
+  ).then((r) => r.data);
+}
 
 export function adminUpdateSubmissionData(
   id: string,
@@ -2890,6 +2945,12 @@ export type DocumentTemplateLayoutConfig = {
     email?: string;
     phone?: string;
   };
+  // Page-footer disclaimer — a running CSS Paged Media @bottom-center footer
+  // on every page (see services/file pdf_generator.py _build_page_footer_css),
+  // NOT the Tiptap footerHtml sign-off block above.
+  footerNote?: string;
+  // Appends a "{Program} • Generated on {date}" line to the disclaimer above.
+  showGeneratedDate?: boolean;
 };
 
 export type DocumentTemplate = {
@@ -2911,6 +2972,24 @@ export type DocumentTemplate = {
   createdAt: string;
   updatedAt: string;
 };
+
+/**
+ * Subset of ProgramPricingTierResponseDto needed to label a tier in a picker.
+ * The full DTO carries benefits/validityPeriods/requirements that no selector needs.
+ */
+export type ProgramPricingTierOption = {
+  id: string;
+  name: string;
+  usdPrice?: number;
+  idrPrice?: number;
+  feeType?: string;
+};
+
+export function listProgramPricingTiers(
+  programId: string,
+): Promise<ProgramPricingTierOption[]> {
+  return request<ProgramPricingTierOption[]>(`/programs/${programId}/pricing-tiers`);
+}
 
 export function listDocumentTemplates(
   programId: string,
@@ -2956,7 +3035,7 @@ export async function createDocumentTemplate(
         ...(input.htmlContent !== undefined ? { htmlContent: input.htmlContent } : {}),
         ...(input.placeholders !== undefined ? { placeholders: input.placeholders } : {}),
         ...(input.layoutConfig !== undefined ? { layoutConfig: input.layoutConfig } : {}),
-        audienceType: input.audienceType ?? 'all_registered',
+        audienceType: input.audienceType ?? 'submitted_and_paid',
         audienceConfig: input.audienceConfig ?? {},
         order: input.order ?? 0,
       }),
@@ -2994,7 +3073,7 @@ export async function createDocumentTemplate(
       ...(input.htmlContent !== undefined ? { htmlContent: input.htmlContent } : {}),
       ...(input.placeholders !== undefined ? { placeholders: input.placeholders } : {}),
       ...(input.layoutConfig !== undefined ? { layoutConfig: input.layoutConfig } : {}),
-      audienceType: input.audienceType ?? 'all_registered',
+      audienceType: input.audienceType ?? 'submitted_and_paid',
       audienceConfig: input.audienceConfig ?? {},
       order: input.order ?? 0,
     }),
@@ -3068,6 +3147,67 @@ export async function updateDocumentTemplate(
 
 export function deleteDocumentTemplate(id: string): Promise<void> {
   return request<void>(`/programs/document-templates/${id}`, { method: 'DELETE' });
+}
+
+export interface PreviewLoaResult {
+  blob: Blob;
+  participantName: string;
+  isSample: boolean;
+  // The application actually resolved and rendered - null when isSample
+  // (there was no application to resolve to). Callers should pin this into
+  // any "which participant to preview as" state instead of re-sending no
+  // applicationId, which would let the backend auto-pick again and
+  // potentially land on a different participant than this response.
+  applicationId: string | null;
+}
+
+/**
+ * Render an Invitation Letter (draft or saved) through the real PDF
+ * generator (WeasyPrint, same code path as the participant download), for a
+ * real participant when one is available, and return it as a PDF Blob for
+ * inline preview alongside who it was rendered as.
+ *
+ * Uses a plain fetch (not requestBlob) because it needs to read the
+ * X-Preview-Participant-Name / X-Preview-Is-Sample / X-Preview-Application-Id
+ * response headers alongside the blob body - requestBlob discards headers.
+ */
+export async function previewDocumentTemplate(
+  programId: string,
+  input: {
+    htmlContent: string;
+    placeholders?: DocumentTemplatePlaceholder[];
+    layoutConfig?: DocumentTemplateLayoutConfig;
+    applicationId?: string;
+    source?: "draft" | "saved";
+  },
+): Promise<PreviewLoaResult> {
+  const headers = new Headers();
+  headers.set("Authorization", `Bearer ${getAccessToken()}`);
+  headers.set("Content-Type", "application/json");
+
+  const res = await fetch(buildApiUrl(`/programs/${programId}/document-templates/preview`), {
+    method: "POST",
+    headers,
+    body: JSON.stringify(input),
+  });
+
+  if (res.status === 401) {
+    redirectToLogin("session_expired");
+    throw new Error("Session expired. Redirecting to login...");
+  }
+  if (!res.ok) throw new Error(await readErrorMessage(res));
+
+  const participantNameHeader = res.headers.get("X-Preview-Participant-Name");
+  const isSampleHeader = res.headers.get("X-Preview-Is-Sample");
+  const applicationIdHeader = res.headers.get("X-Preview-Application-Id");
+  const blob = await res.blob();
+
+  return {
+    blob,
+    participantName: participantNameHeader ? decodeURIComponent(participantNameHeader) : "",
+    isSample: isSampleHeader === "true",
+    applicationId: applicationIdHeader ? applicationIdHeader : null,
+  };
 }
 
 // ─── Signatures ───────────────────────────────────────────────────────────────

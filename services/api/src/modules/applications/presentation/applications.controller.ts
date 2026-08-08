@@ -65,7 +65,7 @@ import { ReviewApplicationRequestDto } from './dto/review-application-request.dt
 import { SwitchApplicationCategoryRequestDto } from './dto/switch-application-category-request.dto';
 import { AdminUpdateSubmissionDto } from './dto/admin-update-submission.dto';
 import { ApplicationResponseDto, ApplicationListResponseDto } from '../application/dto/application-response.dto';
-import { ApplicationCategory, ApplicationStatus } from '@core/entities/participant-application.entity';
+import { ApplicationCategory, ApplicationStatus, ScoreStatus } from '@core/entities/participant-application.entity';
 
 /**
  * Applications Controller
@@ -88,6 +88,8 @@ export class ApplicationsController {
     'status',
     'registrationPaymentStatus',
     'programPaymentStatus',
+    'scoreTotal',
+    'scoreStatus',
   ]);
   private static readonly SORT_ORDER_VALUES: ReadonlySet<ListApplicationsSortOrder> = new Set(['asc', 'desc']);
   private static readonly CATEGORY_VALUES: ReadonlySet<ApplicationCategory> = new Set([
@@ -101,6 +103,36 @@ export class ApplicationsController {
     PaymentStatus.failed,
     PaymentStatus.refunded,
   ]);
+  private static readonly SCORE_STATUS_VALUES: ReadonlySet<ScoreStatus> = new Set([
+    ScoreStatus.PENDING,
+    ScoreStatus.SCORED,
+    ScoreStatus.GO_TO_INTERVIEW,
+    ScoreStatus.REJECTED,
+  ]);
+
+  // Pagination bounds for GET /applications (shared by every admin list page
+  // that calls this endpoint) — keeps `limit`/`offset` parsing NaN-safe and
+  // prevents an unbounded `limit` from turning into a full-table scan.
+  private static readonly DEFAULT_PAGE_SIZE = 20;
+  private static readonly MIN_PAGE_SIZE = 1;
+  private static readonly MAX_PAGE_SIZE = 500;
+  private static readonly DEFAULT_OFFSET = 0;
+  private static readonly MIN_OFFSET = 0;
+
+  private static parseLimit(raw?: number): number {
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) return ApplicationsController.DEFAULT_PAGE_SIZE;
+    return Math.min(
+      Math.max(Math.floor(parsed), ApplicationsController.MIN_PAGE_SIZE),
+      ApplicationsController.MAX_PAGE_SIZE,
+    );
+  }
+
+  private static parseOffset(raw?: number): number {
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) return ApplicationsController.DEFAULT_OFFSET;
+    return Math.max(Math.floor(parsed), ApplicationsController.MIN_OFFSET);
+  }
 
   constructor(
     private readonly createApplicationHandler: CreateApplicationHandler,
@@ -140,6 +172,7 @@ export class ApplicationsController {
     category?: string;
     registrationPaymentStatus?: string;
     programPaymentStatus?: string;
+    scoreStatus?: string;
   }): void {
     if (params.sortBy && !ApplicationsController.SORT_BY_VALUES.has(params.sortBy as ListApplicationsSortBy)) {
       throw new BadRequestException('Invalid sortBy value.');
@@ -165,6 +198,13 @@ export class ApplicationsController {
       !ApplicationsController.PAYMENT_STATUS_VALUES.has(params.programPaymentStatus as PaymentStatus)
     ) {
       throw new BadRequestException('Invalid programPaymentStatus value.');
+    }
+
+    if (
+      params.scoreStatus &&
+      !ApplicationsController.SCORE_STATUS_VALUES.has(params.scoreStatus as ScoreStatus)
+    ) {
+      throw new BadRequestException('Invalid scoreStatus value.');
     }
   }
 
@@ -208,6 +248,7 @@ export class ApplicationsController {
   @ApiQuery({ name: 'country', required: false })
   @ApiQuery({ name: 'registrationPaymentStatus', enum: PaymentStatus, required: false })
   @ApiQuery({ name: 'programPaymentStatus', enum: PaymentStatus, required: false })
+  @ApiQuery({ name: 'scoreStatus', enum: ScoreStatus, required: false })
   @ApiQuery({ name: 'sortBy', required: false, enum: ['updatedAt', 'createdAt', 'submittedAt', 'participantName', 'country', 'status', 'registrationPaymentStatus', 'programPaymentStatus'] })
   @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
   @ApiQuery({ name: 'startDate', required: false, description: 'Applied from date (YYYY-MM-DD)' })
@@ -221,13 +262,15 @@ export class ApplicationsController {
     @Query('search') search?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('scoreStatus') scoreStatus?: ScoreStatus,
   ): Promise<StreamableFile> {
     this.logger.log(`Exporting applications: brandId=${brandId}, programId=${programId}`);
     this.validateDateRange(startDate, endDate);
+    this.validateListFilters({ scoreStatus });
 
     // Handler is injected directly (practical CQRS pattern) because QueryBus
     // generic return type doesn't carry StreamableFile cleanly.
-    const query = new ExportApplicationsQuery(brandId, programId, status, category, search, startDate, endDate);
+    const query = new ExportApplicationsQuery(brandId, programId, status, category, search, startDate, endDate, scoreStatus);
     return this.exportApplicationsHandler.execute(query);
   }
 
@@ -240,6 +283,11 @@ export class ApplicationsController {
   @ApiQuery({ name: 'participantId', required: false })
   @ApiQuery({ name: 'status', enum: ApplicationStatus, required: false })
   @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'registrationPaymentStatus', enum: PaymentStatus, required: false })
+  @ApiQuery({ name: 'programPaymentStatus', enum: PaymentStatus, required: false })
+  @ApiQuery({ name: 'scoreStatus', enum: ScoreStatus, required: false })
+  @ApiQuery({ name: 'sortBy', required: false, enum: ['updatedAt', 'createdAt', 'submittedAt', 'participantName', 'country', 'status', 'registrationPaymentStatus', 'programPaymentStatus', 'scoreTotal', 'scoreStatus'] })
+  @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
   @ApiQuery({ name: 'startDate', required: false, description: 'Applied from date (YYYY-MM-DD)' })
   @ApiQuery({ name: 'endDate', required: false, description: 'Applied until date (YYYY-MM-DD)' })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -255,6 +303,7 @@ export class ApplicationsController {
     @Query('country') country?: string,
     @Query('registrationPaymentStatus') registrationPaymentStatus?: PaymentStatus,
     @Query('programPaymentStatus') programPaymentStatus?: PaymentStatus,
+    @Query('scoreStatus') scoreStatus?: ScoreStatus,
     @Query('sortBy') sortBy?: ListApplicationsSortBy,
     @Query('sortOrder') sortOrder?: ListApplicationsSortOrder,
     @Query('startDate') startDate?: string,
@@ -270,10 +319,11 @@ export class ApplicationsController {
       category,
       registrationPaymentStatus,
       programPaymentStatus,
+      scoreStatus,
     });
 
-    const actualLimit = limit ? Number(limit) : 20;
-    const actualOffset = offset ? Number(offset) : 0;
+    const actualLimit = ApplicationsController.parseLimit(limit);
+    const actualOffset = ApplicationsController.parseOffset(offset);
 
     // Cache strategy: Only cache the first 5 pages to avoid cache pollution with deep pagination
     // 5 pages * 20 items = 100 items. Roughly covering "recent" items.
@@ -290,6 +340,7 @@ export class ApplicationsController {
         country,
         registrationPaymentStatus,
         programPaymentStatus,
+        scoreStatus,
         sortBy,
         sortOrder,
         startDate,
@@ -297,7 +348,7 @@ export class ApplicationsController {
         limit: actualLimit,
         offset: actualOffset,
       });
-      // We hash the params to keep the key length manageable, or just use stringified if short enough. 
+      // We hash the params to keep the key length manageable, or just use stringified if short enough.
       // For simplicity/readability in redis, we'll use a simple string representation if it's not too long, 
       // but here we can just use the stringified JSON.
       cacheKey = CACHE_KEYS.APPLICATION_LIST(brandId, programId, filterParams);
@@ -322,6 +373,7 @@ export class ApplicationsController {
       country,
       registrationPaymentStatus,
       programPaymentStatus,
+      scoreStatus,
       sortBy,
       sortOrder,
       startDate,

@@ -69,7 +69,17 @@ func (h *ProgramPaymentMethodHandler) GetByProgram(c *gin.Context) {
 		return
 	}
 
-	views, err := h.repo.FindMergedByProgram(c.Request.Context(), programID)
+	// include_disabled=true is the admin-console read: every active master
+	// method, with is_enabled reflecting whether this program has turned it on.
+	// The participant-facing callers must never set it — they would start
+	// offering methods the program deliberately disabled.
+	var views []repositories.ProgramMethodView
+	var err error
+	if c.Query("include_disabled") == "true" {
+		views, err = h.repo.FindAllForAdminByProgram(c.Request.Context(), programID)
+	} else {
+		views, err = h.repo.FindMergedByProgram(c.Request.Context(), programID)
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch program payment methods"})
 		return
@@ -89,6 +99,34 @@ func (h *ProgramPaymentMethodHandler) GetByProgram(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": views})
+}
+
+// GetMethodUsage godoc
+// @Summary      Report how many programs use a shared payment method
+// @Description  Counts programs with the method enabled, and how many of those
+// @Description  still render the shared master instructions (no override).
+// @Tags         Payment Methods
+// @Produce      json
+// @Param        id  path  string  true  "Payment Method ID (UUID)"
+// @Success      200  {object}  map[string]interface{}
+// @Router       /payment-methods/{id}/usage [get]
+func (h *ProgramPaymentMethodHandler) GetMethodUsage(c *gin.Context) {
+	methodID := c.Param("id")
+	if _, err := uuid.Parse(methodID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid payment method id"})
+		return
+	}
+
+	enabled, inheriting, err := h.repo.CountInheritingPrograms(c.Request.Context(), methodID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to count payment method usage"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{
+		"enabled_program_count":    enabled,
+		"inheriting_program_count": inheriting,
+	}})
 }
 
 // UpsertOne godoc

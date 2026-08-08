@@ -12,6 +12,8 @@ export const DEFAULT_PAGE_SIZE = 20;
 export const MAX_PAGE_SIZE = 100;
 
 // File Upload
+// Reconciled image size policy: matches file service's UploadFileHandler.MAX_IMAGE_SIZE
+// and CreateUploadUrlHandler.MAX_IMAGE_SIZE (services/file). Keep all three in sync.
 export const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 export const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 export const ALLOWED_DOCUMENT_TYPES = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];

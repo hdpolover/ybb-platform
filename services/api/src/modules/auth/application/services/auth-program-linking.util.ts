@@ -152,7 +152,6 @@ export async function resolveAuthTargetProgram(
 export async function ensureParticipantExists(
   prisma: PrismaService,
   userId: string,
-  email: string,
 ): Promise<Participant> {
   const existingParticipant = await prisma.participant.findUnique({
     where: { userId },
@@ -165,7 +164,10 @@ export async function ensureParticipantExists(
   return prisma.participant.create({
     data: {
       userId,
-      fullName: email.split('@')[0],
+      // Blank until onboarding collects a real name. The email local part is
+      // not a valid name (@IsEnglishName forbids digits) and the onboarding
+      // form prefills from this column, so seeding it deadlocks the submit.
+      fullName: '',
     },
   });
 }
@@ -212,9 +214,17 @@ export async function ensureProgramApplication(
   let applicationCategory: ApplicationCategory = ApplicationCategory.self_funded;
 
   if (params.applicationCategory) {
-    const isAvailable = participationInfos.some(
-      (participationInfo) => participationInfo.category === params.applicationCategory,
-    );
+    // An empty list means no categories have been configured for this program,
+    // not that every category is forbidden. Treating it as a whitelist rejected
+    // every registration that named a category, and no published program
+    // currently has any active participation info rows. The else branch below
+    // already reads an empty list this way, falling back to a default rather
+    // than failing, so this keeps the two halves consistent.
+    const isAvailable =
+      participationInfos.length === 0 ||
+      participationInfos.some(
+        (participationInfo) => participationInfo.category === params.applicationCategory,
+      );
 
     if (!isAvailable) {
       throw new BadRequestException(

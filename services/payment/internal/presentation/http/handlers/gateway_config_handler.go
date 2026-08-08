@@ -244,6 +244,16 @@ func validateGatewayConfigRequest(cfg *entities.GatewayConfig) error {
 		return badRequestError("client_key is required")
 	}
 
+	// Provider allow-list must run unconditionally (active or not). The column is
+	// varchar(50); without this, an inactive config carrying an unrecognized or
+	// oversized provider string skips validation here and 500s as a Postgres
+	// "value too long" error at the DB write instead of a clean 400.
+	switch provider {
+	case "midtrans", "xendit", "stripe", "paypal":
+	default:
+		return badRequestError("unsupported provider")
+	}
+
 	// Strict credential-shape checks are enforced only when activating the config.
 	// Inactive configs can be staged first and completed later.
 	if !cfg.IsActive {
@@ -289,21 +299,23 @@ func validateGatewayConfigRequest(cfg *entities.GatewayConfig) error {
 	case "paypal":
 		// PayPal keys vary by account and don't have stable prefixes; enforce
 		// non-empty credentials only.
-	default:
-		return badRequestError("unsupported provider")
 	}
 
 	return nil
 }
 
+// badRequestError and handlerValidationError are shared by every handler in
+// this package that needs to turn a request-shape problem into a clear 4xx
+// instead of letting it reach the repository layer (see also
+// validatePaymentMethodRequest in payment_method_handler.go).
 func badRequestError(message string) error {
-	return &gatewayConfigValidationError{message: message}
+	return &handlerValidationError{message: message}
 }
 
-type gatewayConfigValidationError struct {
+type handlerValidationError struct {
 	message string
 }
 
-func (e *gatewayConfigValidationError) Error() string {
+func (e *handlerValidationError) Error() string {
 	return e.message
 }

@@ -15,6 +15,7 @@ describe('LandingController', () => {
     getProgramDetail: jest.fn(),
     getPartnersSponsors: jest.fn(),
     getAnnouncements: jest.fn(),
+    getActivity: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -58,6 +59,26 @@ describe('LandingController', () => {
     it('should pass slug and url', async () => {
         await controller.getProgramDetail('my-slug', 'ybb.co');
         expect(mockService.getProgramDetail).toHaveBeenCalledWith('my-slug', 'ybb.co');
+    });
+  });
+
+  describe('getActivity', () => {
+    it('delegates to the service with the resolved brand domain', async () => {
+      const expected = { enabled: true, items: [] };
+      mockService.getActivity.mockResolvedValue(expected);
+
+      const result = await controller.getActivity('istanyouthsummit.com');
+
+      expect(mockService.getActivity).toHaveBeenCalledWith('istanyouthsummit.com');
+      expect(result).toBe(expected);
+    });
+
+    it('passes undefined through when no brand domain is present', async () => {
+      mockService.getActivity.mockResolvedValue({ enabled: false, items: [] });
+
+      await controller.getActivity(undefined);
+
+      expect(mockService.getActivity).toHaveBeenCalledWith(undefined);
     });
   });
 });

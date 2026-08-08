@@ -38,6 +38,12 @@ services:
       # Without this the ReceiptService falls back to http://file-service:8001, which does
       # not resolve here, and every receipt silently fails to attach.
       FILE_SERVICE_URL: ${FILE_SERVICE_URL:-http://ybb-prod-file:8001}
+      # Fallback portal origin used by email.service.ts (resolveDocumentsUrl,
+      # resolveSupportUrl, etc.) when a brand has no websiteUrl set. Was
+      # entirely absent here before, so those links silently fell back to
+      # http://localhost:3001 in every production email. NEEDS CONFIRMATION:
+      # placeholder value below, confirm the real prod portal origin before relying on it.
+      FRONTEND_URL: ${FRONTEND_URL:-https://ybbfoundation.com}
     networks:
       - dokploy-network
     # Notification might not need a public domain if it only consumes events

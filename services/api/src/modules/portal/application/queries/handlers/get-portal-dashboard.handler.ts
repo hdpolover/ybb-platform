@@ -133,7 +133,7 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                         },
                         resources: {
                             where: { isActive: true, type: 'guide' },
-                            orderBy: { order: 'asc' },
+                            orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
                             select: {
                                 title: true,
                                 fileUrl: true,
@@ -299,7 +299,9 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
         }
 
         const result: PortalDashboardResponseDto = {
-            greeting: `Welcome back, ${participant.fullName.split(' ')[0]}`,
+            // fullName is blank until onboarding completes, which would render
+            // "Welcome back, " with a dangling comma.
+            greeting: `Welcome back, ${participant.fullName.split(' ')[0] || 'Participant'}`,
             activeApplication: activeAppSummary,
             alerts,
             recentAnnouncements: announcements as unknown as import('../../../presentation/dto/portal-dashboard.dto').PortalAnnouncementDto[],

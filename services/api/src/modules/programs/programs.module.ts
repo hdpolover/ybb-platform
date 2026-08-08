@@ -120,9 +120,12 @@ import {
   GetLoaBatchesHandler,
   GetLoaDownloadsHandler,
 } from './application/handlers/loa-batch.handlers';
+import { PreviewLoaTemplateHandler } from './application/handlers/loa-preview.handler';
+import { PortalModule } from '@modules/portal/portal.module';
+import { LoaPreviewParticipantService } from './application/services/loa-preview-participant.service';
 
 @Module({
-  imports: [CqrsModule, HttpModule, AuthModule, UsersModule, FilesModule, RabbitMQModule],
+  imports: [CqrsModule, HttpModule, AuthModule, UsersModule, FilesModule, RabbitMQModule, PortalModule],
   controllers: [
     ProgramsController,
     AdminProgramsController,
@@ -224,6 +227,8 @@ import {
     DeleteLoaBatchHandler,
     GetLoaBatchesHandler,
     GetLoaDownloadsHandler,
+    PreviewLoaTemplateHandler,
+    LoaPreviewParticipantService,
 
     CacheService,
     LandingRevalidationService,

@@ -224,11 +224,12 @@ def generate_from_template_sync(
 
 LOA_LOGO_MAX_HEIGHT = '60pt'
 LOA_STAMP_MAX_HEIGHT = '70pt'
+LOA_STAMP_MAX_WIDTH = '120pt'
 LOA_SIGNATURE_MAX_HEIGHT = '36pt'
 LOA_SIGNER_RULE_WIDTH = '140pt'
 
 
-def _img_tag(url: str, max_height: str, center: bool = False) -> str:
+def _img_tag(url: str, max_height: str, center: bool = False, max_width: Optional[str] = None) -> str:
     """Build a WeasyPrint-renderable <img> tag for a stored asset URL.
 
     WeasyPrint fetches http(s) image sources itself, so a plain <img src="...">
@@ -237,12 +238,20 @@ def _img_tag(url: str, max_height: str, center: bool = False) -> str:
 
     A block-level image ignores the parent's text-align, so `center` adds the
     `margin:0 auto` that actually centers it.
+
+    `max_width` is optional and height-only by default (max-width:100%, i.e.
+    "don't overflow the container") — used as-is by logo/signature. Passing
+    an explicit pt value (the stamp's LOA_STAMP_MAX_WIDTH) additionally caps
+    width, which matters for a wide/rectangular asset: without it, a logo
+    lockup capped only by height renders as a banner instead of a compact
+    mark, since the aspect ratio is preserved from whichever dimension binds.
     """
     if not url:
         return ''
     centering = 'margin:0 auto;' if center else ''
+    max_width_css = f'max-width:{max_width};' if max_width else 'max-width:100%;'
     return (
-        f'<img src="{url}" style="max-height:{max_height};max-width:100%;'
+        f'<img src="{url}" style="max-height:{max_height};{max_width_css}'
         f'display:block;{centering}" />'
     )
 
@@ -288,13 +297,109 @@ def _build_structured_header_html(header: Dict[str, Any], logo_url: str) -> str:
 </table>"""
 
 
+_EMPTY_HTML_RE = re.compile(r'^(<p>(\s|&nbsp;|<br\s*/?>)*</p>\s*)*$', re.IGNORECASE)
+
+
+def _is_effectively_empty_html(text: str) -> bool:
+    """True when Tiptap HTML has no visible content — just empty <p> shells.
+
+    Tiptap's "cleared" state isn't an empty string, it's `<p></p>` or
+    `<p><br></p>`. Treat those (and whitespace/&nbsp;-only variants, possibly
+    repeated across multiple empty paragraphs) as empty so the signer-block
+    fallback still kicks in for untouched/cleared footers.
+    """
+    stripped = (text or '').strip()
+    if not stripped:
+        return True
+    return bool(_EMPTY_HTML_RE.match(stripped))
+
+
+def _format_long_date(dt: datetime) -> str:
+    """'Month D, YYYY' with no zero-padded day, without relying on the
+    platform-specific %-d / %#d strftime flag."""
+    return f"{dt.strftime('%B')} {dt.day}, {dt.strftime('%Y')}"
+
+
+def _css_string_escape(text: str) -> str:
+    """Escape free text for safe interpolation into a double-quoted CSS
+    string literal (used by the @page margin-box `content` property below).
+
+    Backslash and the delimiter (`"`) are the two characters that would
+    otherwise break out of the string — both get a preceding backslash.
+    Embedded newlines are flattened to spaces: `footerNote` is admin-authored
+    free text meant to read as one logical line, and a raw newline inside a
+    CSS string is invalid unless itself backslash-escaped as a line
+    continuation, which is not what we want here (we inject our own `\\A`
+    line break between the two disclaimer lines, deliberately, below).
+    """
+    return (
+        text.replace('\\', '\\\\')
+        .replace('"', '\\"')
+        .replace('\n', ' ')
+        .replace('\r', ' ')
+    )
+
+
+# Extra bottom @page margin reserved for the disclaimer's @bottom-center
+# margin box (border-top + padding + up to 2 lines at 8.5pt/1.5 line-height),
+# added on top of the template's own bottom margin ONLY when a disclaimer is
+# actually configured — templates without one keep their exact margins.
+LOA_PAGE_FOOTER_EXTRA_BOTTOM_MARGIN_PT = 34
+
+
+def _build_page_footer_css(footer_note: str, show_generated_date: bool, program_name: str, generated_at: Optional[datetime]) -> str:
+    """CSS for the page-footer disclaimer as a true running page footer: a
+    CSS Paged Media `@bottom-center` margin box, not in-flow HTML content.
+
+    This is deliberately NOT a `<div>` in the document body. Margin-box
+    content lives entirely in the page's margin area — outside the flow
+    WeasyPrint paginates — so it is structurally impossible for it to be
+    torn across a page boundary or orphan onto its own near-blank page the
+    way an in-flow block could (and did, in the in-flow version this
+    replaces). It is also, by CSS Paged Media semantics, a genuine *running*
+    footer: `@page` (not `@page :first` or similar) applies it to every page.
+
+    Returns '' when neither footer_note nor show_generated_date is set, so
+    the caller can leave the @page block's margin untouched — templates that
+    never configured a disclaimer get byte-for-byte the same page geometry
+    as before this feature existed.
+    """
+    note = (footer_note or '').strip()
+    lines = []
+    if note:
+        lines.append(_css_string_escape(note))
+    if show_generated_date:
+        date_str = _format_long_date(generated_at or datetime.utcnow())
+        parts = [p for p in (program_name, f'Generated on {date_str}') if p]
+        lines.append(_css_string_escape(' • '.join(parts)))
+    if not lines:
+        return ''
+    # `\A` is the CSS escape for a line feed inside `content`; it only
+    # actually breaks the line when paired with `white-space: pre-line`
+    # (default `white-space: normal` collapses it away).
+    content = '\\A '.join(lines)
+    return f"""
+  @bottom-center {{
+    content: "{content}";
+    white-space: pre-line;
+    font-family: "Noto Sans", "Noto Sans Arabic", "Noto Sans CJK SC", "Noto Sans Bengali", "DejaVu Sans", sans-serif;
+    font-size: 8.5pt;
+    line-height: 1.5;
+    color: #666;
+    border-top: 0.5pt solid #ccc;
+    padding-top: 8pt;
+    text-align: center;
+    vertical-align: bottom;
+  }}"""
+
+
 def _build_signer_html(signature_url: str, stamp_url: str, signer_name: str, signer_title: str) -> str:
     """Stamp above signature, a signature rule, then signer name (bold) and title.
 
     The rule only appears when there is a name to sit under it — a bare line over
     empty space reads as a rendering fault, not a signature block.
     """
-    stamp_cell = _img_tag(stamp_url, LOA_STAMP_MAX_HEIGHT, center=True)
+    stamp_cell = _img_tag(stamp_url, LOA_STAMP_MAX_HEIGHT, center=True, max_width=LOA_STAMP_MAX_WIDTH)
     signature_cell = _img_tag(signature_url, LOA_SIGNATURE_MAX_HEIGHT, center=True)
     rule_html = (
         f'<div style="width:{LOA_SIGNER_RULE_WIDTH};border-top:0.75pt solid #000;'
@@ -314,6 +419,160 @@ def _build_signer_html(signature_url: str, stamp_url: str, signer_name: str, sig
 </div>"""
 
 
+def _build_loa_html_document(
+    html_content: str,
+    header_html: str,
+    footer_html: str,
+    page_size: str,
+    margins: Dict[str, Any],
+    placeholder_data: Dict[str, Any],
+    logo_url: str = "",
+    signature_url: str = "",
+    stamp_url: str = "",
+    signer_name: str = "",
+    signer_title: str = "",
+    header: Optional[Dict[str, Any]] = None,
+    footer_note: str = "",
+    show_generated_date: bool = False,
+    program_name: str = "",
+    generated_at: Optional[datetime] = None,
+) -> str:
+    """Build the full LOA HTML document (pre-WeasyPrint) — pure and testable
+    without the PDF toolchain, mirroring the other `_build_*_html` helpers.
+    """
+    # Merge legacy {{logo}}/{{signature}}/{{stamp}} image tokens into the
+    # generic substitution map so any occurrence in body/header/footer HTML
+    # (wherever the admin placed them) renders as a real image instead of
+    # literal placeholder text. Empty urls leave tokens untouched — this is
+    # what keeps the no-image back-compat path byte-for-byte identical.
+    image_tokens: Dict[str, Any] = {}
+    if logo_url:
+        image_tokens['{{logo}}'] = _img_tag(logo_url, LOA_LOGO_MAX_HEIGHT)
+    if signature_url:
+        image_tokens['{{signature}}'] = _img_tag(signature_url, LOA_SIGNATURE_MAX_HEIGHT)
+    if stamp_url:
+        image_tokens['{{stamp}}'] = _img_tag(stamp_url, LOA_STAMP_MAX_HEIGHT, max_width=LOA_STAMP_MAX_WIDTH)
+    merged_data = {**placeholder_data, **image_tokens}
+
+    def replace_tokens(text: str, data: Optional[Dict[str, Any]] = None) -> str:
+        for key, value in (data if data is not None else merged_data).items():
+            text = text.replace(key, str(value) if value is not None else '')
+        return text
+
+    body = replace_tokens(html_content)
+
+    # Structured header when a header config is supplied; otherwise fall back
+    # to the existing header_html behavior exactly as today (back-compat).
+    if header:
+        header_rendered = _build_structured_header_html(header, logo_url)
+    else:
+        header_rendered = replace_tokens(header_html or '')
+
+    # Footer precedence: an admin-authored footer_html (Tiptap sign-off, which
+    # already has {{signature}}/{{signer_name}}/{{signer_title}}/{{stamp}}
+    # tokens available to it) always wins over the structured signer block —
+    # rendering both would duplicate the signature image and name. The
+    # structured block is only a fallback for templates that never authored
+    # a footer (or had it cleared back to an empty Tiptap `<p></p>` shell).
+    if not _is_effectively_empty_html(footer_html):
+        # Automatic stamp fallback: an uploaded stampUrl has to render
+        # *somewhere*, even when the author's footerHtml never placed a
+        # {{stamp}} token — otherwise the seal silently vanishes despite the
+        # admin UI's "Rendered above the signature" caption. Detection is on
+        # the RAW footer_html param, BEFORE substitution — by the time any
+        # substituted output exists the token text is already gone. Exact
+        # `'{{...}}' in text` containment checks, same as how replace_tokens
+        # itself matches keys — whitespace variants like `{{ stamp }}` are
+        # not recognized by either, consistently.
+        auto_stamp = bool(stamp_url) and '{{stamp}}' not in footer_html
+        if auto_stamp and signature_url and '{{signature}}' in footer_html:
+            # Attach the stamp directly to the signature: expand {{signature}}
+            # into signature-then-stamp — both `_img_tag`s are display:block,
+            # so they stack vertically with no extra wrapper markup — instead
+            # of prepending the stamp above the whole footer block, which
+            # read as a stray banner floating over "Sincerely,". Scoped to a
+            # footer-only token map (not the shared `merged_data`) so a
+            # stray {{signature}} elsewhere (body/header) is unaffected.
+            footer_merged_data = {
+                **merged_data,
+                '{{signature}}': (
+                    _img_tag(signature_url, LOA_SIGNATURE_MAX_HEIGHT)
+                    + _img_tag(stamp_url, LOA_STAMP_MAX_HEIGHT, max_width=LOA_STAMP_MAX_WIDTH)
+                ),
+            }
+            footer_rendered = replace_tokens(footer_html, footer_merged_data)
+        else:
+            footer_rendered = replace_tokens(footer_html)
+            if auto_stamp:
+                # No {{signature}} token to attach the stamp to (or no
+                # signature_url at all) — fall back to rendering the stamp
+                # above the footer content so the seal doesn't vanish
+                # entirely.
+                footer_rendered = (
+                    f'<div style="text-align:center;">'
+                    f'{_img_tag(stamp_url, LOA_STAMP_MAX_HEIGHT, center=True, max_width=LOA_STAMP_MAX_WIDTH)}'
+                    f'</div>'
+                    + footer_rendered
+                )
+    elif signature_url or stamp_url or signer_name or signer_title:
+        footer_rendered = _build_signer_html(signature_url, stamp_url, signer_name, signer_title)
+    else:
+        footer_rendered = replace_tokens(footer_html or '')
+
+    # Page-footer disclaimer: a running @bottom-center page-margin footer,
+    # not in-flow content — see _build_page_footer_css. Empty string when
+    # neither footer_note nor show_generated_date is set.
+    page_footer_css = _build_page_footer_css(
+        footer_note, show_generated_date, program_name, generated_at or datetime.utcnow()
+    )
+
+    top = margins.get('top', 40)
+    right = margins.get('right', 40)
+    bottom = margins.get('bottom', 40)
+    # Only grow the bottom margin when a disclaimer is actually present —
+    # templates without one keep their exact original page geometry.
+    if page_footer_css:
+        bottom += LOA_PAGE_FOOTER_EXTRA_BOTTOM_MARGIN_PT
+    left = margins.get('left', 40)
+    page_size_css = 'A4' if str(page_size).upper() == 'A4' else 'Letter'
+
+    full_html = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page {{
+    size: {page_size_css};
+    margin: {top}pt {right}pt {bottom}pt {left}pt;{page_footer_css}
+  }}
+  body {{
+    font-family: "Noto Sans", "Noto Sans Arabic", "Noto Sans CJK SC", "Noto Sans Bengali", "DejaVu Sans", sans-serif;
+    font-size: 11pt;
+    line-height: 1.6;
+    color: #000;
+  }}
+  .loa-header {{
+    padding-bottom: 10pt;
+    margin-bottom: 24pt;
+    border-bottom: 1pt solid #000;
+  }}
+  .loa-body {{ }}
+  .loa-footer {{
+    margin-top: 32pt;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }}
+</style>
+</head>
+<body>
+  <div class="loa-header">{header_rendered}</div>
+  <div class="loa-body">{body}</div>
+  <div class="loa-footer">{footer_rendered}</div>
+</body>
+</html>"""
+    return full_html
+
+
 def generate_loa_sync(
     html_content: str,
     header_html: str,
@@ -328,83 +587,30 @@ def generate_loa_sync(
     signer_name: str = "",
     signer_title: str = "",
     header: Optional[Dict[str, Any]] = None,
+    footer_note: str = "",
+    show_generated_date: bool = False,
+    program_name: str = "",
 ) -> bytes:
     """Generate LOA PDF from Tiptap HTML using WeasyPrint."""
-    from weasyprint import HTML, CSS  # type: ignore
+    from weasyprint import HTML  # type: ignore
 
-    # Merge legacy {{logo}}/{{signature}}/{{stamp}} image tokens into the
-    # generic substitution map so any occurrence in body/header/footer HTML
-    # (wherever the admin placed them) renders as a real image instead of
-    # literal placeholder text. Empty urls leave tokens untouched — this is
-    # what keeps the no-image back-compat path byte-for-byte identical.
-    image_tokens: Dict[str, Any] = {}
-    if logo_url:
-        image_tokens['{{logo}}'] = _img_tag(logo_url, LOA_LOGO_MAX_HEIGHT)
-    if signature_url:
-        image_tokens['{{signature}}'] = _img_tag(signature_url, LOA_SIGNATURE_MAX_HEIGHT)
-    if stamp_url:
-        image_tokens['{{stamp}}'] = _img_tag(stamp_url, LOA_STAMP_MAX_HEIGHT)
-    merged_data = {**placeholder_data, **image_tokens}
-
-    def replace_tokens(text: str) -> str:
-        for key, value in merged_data.items():
-            text = text.replace(key, str(value) if value is not None else '')
-        return text
-
-    body = replace_tokens(html_content)
-
-    # Structured header when a header config is supplied; otherwise fall back
-    # to the existing header_html behavior exactly as today (back-compat).
-    if header:
-        header_rendered = _build_structured_header_html(header, logo_url)
-    else:
-        header_rendered = replace_tokens(header_html or '')
-
-    # Structured signer/signature block when any signer-related field is
-    # provided; otherwise fall back to footer_html exactly as today (back-compat).
-    has_signer_block = bool(signature_url or stamp_url or signer_name or signer_title)
-    if has_signer_block:
-        footer_rendered = _build_signer_html(signature_url, stamp_url, signer_name, signer_title)
-    else:
-        footer_rendered = replace_tokens(footer_html or '')
-
-    top = margins.get('top', 40)
-    right = margins.get('right', 40)
-    bottom = margins.get('bottom', 40)
-    left = margins.get('left', 40)
-    page_size_css = 'A4' if str(page_size).upper() == 'A4' else 'Letter'
-
-    full_html = f"""<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-  @page {{
-    size: {page_size_css};
-    margin: {top}pt {right}pt {bottom}pt {left}pt;
-  }}
-  body {{
-    font-family: "Noto Sans", "Noto Sans Arabic", "Noto Sans CJK SC", "Noto Sans Bengali", "DejaVu Sans", sans-serif;
-    font-size: 11pt;
-    line-height: 1.6;
-    color: #000;
-  }}
-  .loa-header {{
-    padding-bottom: 10pt;
-    margin-bottom: 24pt;
-    border-bottom: 1pt solid #000;
-  }}
-  .loa-body {{ }}
-  .loa-footer {{ margin-top: 32pt; }}
-</style>
-</head>
-<body>
-  <div class="loa-header">{header_rendered}</div>
-  <div class="loa-body">{body}</div>
-  <div class="loa-footer">{footer_rendered}</div>
-</body>
-</html>"""
-
+    full_html = _build_loa_html_document(
+        html_content,
+        header_html,
+        footer_html,
+        page_size,
+        margins,
+        placeholder_data,
+        logo_url=logo_url,
+        signature_url=signature_url,
+        stamp_url=stamp_url,
+        signer_name=signer_name,
+        signer_title=signer_title,
+        header=header,
+        footer_note=footer_note,
+        show_generated_date=show_generated_date,
+        program_name=program_name,
+    )
     return HTML(string=full_html).write_pdf()
 
 
@@ -788,6 +994,9 @@ class PDFGeneratorService:
         signer_name: str = "",
         signer_title: str = "",
         header: Optional[Dict[str, Any]] = None,
+        footer_note: str = "",
+        show_generated_date: bool = False,
+        program_name: str = "",
     ) -> BytesIO:
         """Generate LOA PDF from Tiptap HTML using WeasyPrint."""
         pdf_bytes = await run_in_processpool(
@@ -805,5 +1014,8 @@ class PDFGeneratorService:
             signer_name=signer_name,
             signer_title=signer_title,
             header=header,
+            footer_note=footer_note,
+            show_generated_date=show_generated_date,
+            program_name=program_name,
         )
         return BytesIO(pdf_bytes)

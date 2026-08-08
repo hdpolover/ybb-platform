@@ -7,6 +7,43 @@ import {
   Matches,
   MaxLength,
 } from 'class-validator';
+import { Transform, plainToInstance } from 'class-transformer';
+
+// Field option choice. Shape evidenced directly by the live producer,
+// SystemFieldFormModal.tsx: `cleanedOptions = options.map((o) => ({ label:
+// o.label.trim(), value: (o.value || o.label).trim() }))`. Legacy plain
+// strings are also real (see get-application-form-fields.handler.ts
+// normalizeOptions(), which reads historical rows of this same shape), so
+// this stays a union rather than a single strict class.
+export class SystemFormFieldOptionDto {
+  @ApiProperty()
+  @IsString()
+  label: string;
+
+  @ApiProperty()
+  @IsString()
+  value: string;
+}
+
+// Converts each array element without letting class-transformer's implicit
+// conversion reconstruct object elements as `new Array()` (defaultOptions is
+// declared `unknown[]`, so there is no element type for it to build from
+// without this). Strings pass through untouched.
+//
+// Reads from `obj[key]` rather than destructuring `value`: class-transformer
+// runs the implicit design:type conversion BEFORE invoking @Transform, so by
+// the time a callback receives `value` it is already the corrupted
+// `new Array()` result. `obj[key]` is the untouched source property and is
+// the only way a @Transform callback can see the real payload here.
+function toDefaultOptions({ obj, key }: { obj: Record<string, unknown>; key: string }): unknown {
+  const value = obj[key];
+  if (!Array.isArray(value)) return value;
+  return value.map((item) =>
+    typeof item === 'string' || item === null || typeof item !== 'object' || Array.isArray(item)
+      ? item
+      : plainToInstance(SystemFormFieldOptionDto, item),
+  );
+}
 
 export class CreateSystemFormFieldDto {
   @ApiProperty({
@@ -33,9 +70,10 @@ export class CreateSystemFormFieldDto {
   @MaxLength(32)
   type!: string;
 
-  @ApiPropertyOptional({ type: 'array', items: { type: 'object' } })
+  @ApiPropertyOptional({ description: '{ label, value } choices, or legacy plain strings', type: [SystemFormFieldOptionDto] })
   @IsOptional()
-  defaultOptions?: unknown[];
+  @Transform(toDefaultOptions)
+  defaultOptions?: Array<string | SystemFormFieldOptionDto>;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -67,9 +105,10 @@ export class UpdateSystemFormFieldDto {
   @MaxLength(32)
   type?: string;
 
-  @ApiPropertyOptional({ type: 'array', items: { type: 'object' } })
+  @ApiPropertyOptional({ description: '{ label, value } choices, or legacy plain strings', type: [SystemFormFieldOptionDto] })
   @IsOptional()
-  defaultOptions?: unknown[];
+  @Transform(toDefaultOptions)
+  defaultOptions?: Array<string | SystemFormFieldOptionDto>;
 
   @ApiPropertyOptional()
   @IsOptional()

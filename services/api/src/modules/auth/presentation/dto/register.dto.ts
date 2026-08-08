@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import { IsEmail, IsNotEmpty, IsOptional, IsString, IsUUID, MinLength, IsIn, IsEnum, Matches } from 'class-validator';
 import { ApplicationCategory } from '@prisma/client';
 import { NormalizeEmail } from '@shared/decorators/normalize-email.decorator';
@@ -80,6 +81,8 @@ export class RegisterDto {
     description: 'Referral code from an ambassador.',
     required: false
   })
+  // '' must behave like "not provided" — @IsOptional() only skips null/undefined.
+  @Transform(({ value }) => (typeof value === 'string' && value.trim() === '' ? undefined : value))
   @IsString()
   @IsOptional()
   referralCode?: string;

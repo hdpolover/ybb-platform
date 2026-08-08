@@ -176,6 +176,11 @@ export class SubmissionPreviewPrimaryActionDto {
 
     @ApiPropertyOptional({ example: 'Complete all required sections before submitting.' })
     reason?: string;
+
+    // Distinguishes an unfixable block (deadline passed) from a fixable one (missing
+    // sections, unpaid fee). The client hard-disables the button only for the former.
+    @ApiPropertyOptional({ example: false, description: 'True when the program submission deadline has passed' })
+    deadlinePassed?: boolean;
 }
 
 /**

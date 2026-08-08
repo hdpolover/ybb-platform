@@ -9,6 +9,7 @@ import { PartnersSponsorsStrategy } from './strategies/partners-sponsors.strateg
 import { AnnouncementsStrategy } from './strategies/announcements.strategy';
 import { SettingsStrategy } from './strategies/settings.strategy';
 import { FaqsStrategy } from './strategies/faqs.strategy';
+import { ActivityStrategy } from './strategies/activity.strategy';
 import { LandingSnapshotService } from './services/landing-snapshot.service';
 import { NotFoundException } from '@nestjs/common';
 
@@ -46,6 +47,7 @@ describe('LandingService', () => {
         { provide: AnnouncementsStrategy, useValue: mockStrategy },
         { provide: SettingsStrategy, useValue: mockStrategy },
         { provide: FaqsStrategy, useValue: mockStrategy },
+        { provide: ActivityStrategy, useValue: mockStrategy },
         { provide: LandingSnapshotService, useValue: mockLandingSnapshotService },
       ],
     }).compile();
@@ -119,6 +121,35 @@ describe('LandingService', () => {
         mockPrismaService.brand.findFirst.mockResolvedValue({ id: 'cat-1' });
         await service.getProgramDetail('slug-1');
         expect(mockStrategy.getProgramData).toHaveBeenCalledWith('slug-1', { id: 'cat-1' });
+    });
+
+    it('getActivity should strip any fields beyond the five permitted keys', async () => {
+        mockPrismaService.brand.findFirst.mockResolvedValue({ id: 'cat-1' });
+        mockStrategy.getData.mockResolvedValue({
+          enabled: true,
+          items: [
+            {
+              id: 'app-123',
+              participantId: 'p-456',
+              createdAt: '2026-07-27T00:00:00Z',
+              type: 'registered',
+              name: 'Yuki T.',
+              country: 'Japan',
+              countryCode: 'JP',
+              programName: 'AYIMUN',
+            },
+          ],
+        });
+
+        const result = await service.getActivity();
+
+        expect(result.items).toHaveLength(1);
+        expect(Object.keys(result.items[0]).sort()).toEqual(
+          ['countryCode', 'country', 'name', 'programName', 'type'].sort(),
+        );
+        expect(result.items[0]).not.toHaveProperty('id');
+        expect(result.items[0]).not.toHaveProperty('participantId');
+        expect(result.items[0]).not.toHaveProperty('createdAt');
     });
   });
 });

@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import { IsDateString, IsEnum, IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { IsEnglishName, IsEnglishText } from '@shared/validators/english-text.validator';
 import { KNOWLEDGE_SOURCES } from '../../../metadata/metadata.constants';
@@ -45,6 +46,20 @@ export class OnboardingDto {
     knowledgeSource: string;
 
     @ApiPropertyOptional({ example: 'K9X2M4P1', description: 'Referral code from an ambassador' })
+    // '' must behave like "not provided": @IsOptional() only skips null/undefined,
+    // so an empty string would hit any future stricter validators on this field.
+    // Also DROP (never reject) a code longer than the DB column (VarChar(20)):
+    // referral is optional and best-effort, so an oversized/corrupted code (e.g. a
+    // stale cookie-injected value) must be treated as "no referral" rather than a
+    // 400, which would otherwise block onboarding entirely.
+    @Transform(({ value }) => {
+        if (typeof value !== 'string') return value;
+        const trimmed = value.trim();
+        // Return the TRIMMED value, not the original: a 20-char code padded with
+        // whitespace passes the length check but would still overflow VarChar(20)
+        // on write, which is the very 500 this guard exists to prevent.
+        return trimmed === '' || trimmed.length > 20 ? undefined : trimmed;
+    })
     @IsString()
     @IsOptional()
     referralCode?: string;

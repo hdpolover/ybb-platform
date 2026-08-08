@@ -12,6 +12,7 @@ import { AdminMediaController } from './presentation/admin-media.controller';
 import { FileServiceClient } from './infrastructure/clients/file-service.client';
 import { FileGrpcClient } from './infrastructure/clients/file-grpc-client.service';
 import { StorageService } from './application/storage.service';
+import { PrivateFileUrlResolver } from './application/private-file-url-resolver.service';
 
 @Module({
   imports: [
@@ -53,7 +54,7 @@ import { StorageService } from './application/storage.service';
     MonitoringModule,
   ],
   controllers: [FilesController, DocumentsController, StorageEventsController, AdminMediaController],
-  providers: [FileServiceClient, FileGrpcClient, StorageService],
-  exports: [FileServiceClient, FileGrpcClient, StorageService],
+  providers: [FileServiceClient, FileGrpcClient, StorageService, PrivateFileUrlResolver],
+  exports: [FileServiceClient, FileGrpcClient, StorageService, PrivateFileUrlResolver],
 })
 export class FilesModule { }

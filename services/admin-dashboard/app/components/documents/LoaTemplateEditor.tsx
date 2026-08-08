@@ -13,7 +13,7 @@ import {
   Bold, Italic, Underline as UnderlineIcon, AlignLeft, AlignCenter,
   AlignRight, List, ListOrdered, Undo, Redo, RemoveFormatting,
   Heading1, Heading2, Loader2, CheckCircle2, Upload, ImageIcon, X, Eye, EyeOff,
-  ChevronDown, Pencil,
+  ChevronDown, Pencil, AlertTriangle, RefreshCw, UserRound,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from "@/src/ui/dialog";
 import { ConfirmDialog } from "@/src/admin/confirm-dialog";
+import { EmptyState } from "@/src/admin/empty-state";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,6 +35,7 @@ import {
   listDocumentTemplates,
   createDocumentTemplate,
   updateDocumentTemplate,
+  previewDocumentTemplate,
   listProgramMedia,
   uploadFileViaPresignedUrl,
   listSignatures,
@@ -47,6 +49,7 @@ import {
   type Signature,
 } from "@/src/shared/api-client";
 import { formatDate } from "@/lib/utils";
+import { LoaParticipantPicker } from "./LoaParticipantPicker";
 
 const PLACEHOLDER_TOKENS: DocumentTemplatePlaceholder[] = [
   { key: "{{participant_name}}", label: "Participant Full Name", source: "participant.fullName" },
@@ -83,6 +86,13 @@ const DEFAULT_LAYOUT: DocumentTemplateLayoutConfig = {
   signatureUrl: "",
 };
 
+/** True when `html` has visible content — not just empty Tiptap `<p></p>` shells. */
+function hasMeaningfulHtml(html?: string): boolean {
+  if (!html) return false;
+  const stripped = html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, "").trim();
+  return stripped.length > 0 || /<img\b/i.test(html);
+}
+
 function ToolbarBtn({
   onClick, active, title, disabled, children,
 }: {
@@ -116,6 +126,68 @@ const labelCls = "block text-[11px] font-medium text-zinc-500 mb-1";
 
 // ─── Image Upload Field ───────────────────────────────────────────────────────
 
+interface StampImageWarnings {
+  wideAspectRatio: boolean;
+  noTransparency: boolean;
+}
+
+/**
+ * Advisory-only checks for a stamp image, run against the raw File the admin
+ * just picked (before upload finishes) via an object URL — local blob reads
+ * never taint the canvas, so this is safe without touching CORS at all.
+ * Samples a 3x3 grid (corners, edge midpoints, center) rather than scanning
+ * every pixel, which is plenty to tell "has a transparent background" from
+ * "fully opaque" without cost scaling with image size.
+ */
+async function analyzeStampImage(file: File): Promise<StampImageWarnings | null> {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error("Could not read image"));
+      el.src = objectUrl;
+    });
+
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
+    if (!w || !h) return null;
+
+    const wideAspectRatio = w / h >= 2 || h / w >= 2;
+
+    let noTransparency = false;
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(img, 0, 0);
+        const xs = [0, Math.floor((w - 1) / 2), w - 1];
+        const ys = [0, Math.floor((h - 1) / 2), h - 1];
+        noTransparency = true;
+        outer: for (const x of xs) {
+          for (const y of ys) {
+            const alpha = ctx.getImageData(x, y, 1, 1).data[3];
+            if (alpha < 250) {
+              noTransparency = false;
+              break outer;
+            }
+          }
+        }
+      }
+    } catch {
+      // Advisory only — if the canvas read fails for any reason, skip the
+      // transparency warning rather than risk blocking the upload flow.
+      noTransparency = false;
+    }
+
+    return { wideAspectRatio, noTransparency };
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 function ImageUploadField({
   label,
   value,
@@ -123,6 +195,7 @@ function ImageUploadField({
   programId,
   brandId,
   userId,
+  stampWarnings = false,
 }: {
   label: string;
   value: string;
@@ -130,17 +203,28 @@ function ImageUploadField({
   programId: string;
   brandId: string;
   userId: string;
+  /** Enables the stamp-specific advisory checks (aspect ratio, transparency). */
+  stampWarnings?: boolean;
 }) {
   const [uploading, setUploading] = useState(false);
   const [mediaOpen, setMediaOpen] = useState(false);
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [mediaLoading, setMediaLoading] = useState(false);
+  const [imageWarnings, setImageWarnings] = useState<StampImageWarnings | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
+    if (stampWarnings) {
+      // Fire-and-forget: reflects the file the admin actually chose, but
+      // never gates the upload — it's advisory only.
+      setImageWarnings(null);
+      analyzeStampImage(file)
+        .then(setImageWarnings)
+        .catch(() => setImageWarnings(null));
+    }
     try {
       const result = await uploadFileViaPresignedUrl(file, {
         userId,
@@ -183,7 +267,7 @@ function ImageUploadField({
             <button
               type="button"
               title="Remove"
-              onClick={() => onChange("")}
+              onClick={() => { setImageWarnings(null); onChange(""); }}
               className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white text-zinc-400 shadow ring-1 ring-zinc-200 hover:text-red-500"
             >
               <X className="h-3 w-3" />
@@ -216,6 +300,25 @@ function ImageUploadField({
           className="hidden"
           onChange={handleFileChange}
         />
+        {stampWarnings && imageWarnings && (imageWarnings.wideAspectRatio || imageWarnings.noTransparency) ? (
+          <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2">
+            <div className="flex items-start gap-1.5">
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-amber-600" />
+              <div className="min-w-0 flex-1 space-y-1">
+                {imageWarnings.wideAspectRatio ? (
+                  <p className="text-[10px] text-amber-700">
+                    This looks like a wide logo, not a stamp. Stamps look best roughly square.
+                  </p>
+                ) : null}
+                {imageWarnings.noTransparency ? (
+                  <p className="text-[10px] text-amber-700">
+                    A transparent PNG will layer more cleanly over the letter than one with a solid background.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <Dialog open={mediaOpen} onOpenChange={setMediaOpen}>
@@ -349,6 +452,67 @@ function MiniEditor({
   );
 }
 
+// ─── Preview Pane ─────────────────────────────────────────────────────────────
+
+interface PreviewPaneProps {
+  label: string;
+  loading: boolean;
+  error: string | null;
+  pdfUrl: string | null;
+  onRegenerate: () => void;
+  warning?: string | null;
+}
+
+function PreviewPane({ label, loading, error, pdfUrl, onRegenerate, warning }: PreviewPaneProps) {
+  return (
+    <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-inner" style={{ minHeight: 560 }}>
+      <div className="flex items-center justify-between gap-2 border-b border-zinc-100 bg-zinc-50 px-3 py-2 text-[11px] text-zinc-500">
+        <span className="flex items-center gap-1.5 font-medium text-zinc-700">
+          <Eye className="h-3 w-3" />
+          {label}
+        </span>
+        <button
+          type="button"
+          disabled={loading}
+          onClick={onRegenerate}
+          className="flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 font-medium text-zinc-600 hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
+          Regenerate
+        </button>
+      </div>
+      {warning ? (
+        <div className="flex items-start gap-1.5 border-b border-amber-200 bg-amber-50 px-3 py-1.5">
+          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-amber-600" />
+          <p className="text-[10px] text-amber-700">{warning}</p>
+        </div>
+      ) : null}
+      {loading ? (
+        <div className="flex flex-1 items-center justify-center gap-2 text-xs text-zinc-400">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Rendering PDF…
+        </div>
+      ) : error ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
+          <p className="text-xs font-medium text-red-600">Preview failed</p>
+          <p className="max-w-sm text-[11px] text-zinc-500">{error}</p>
+          <button
+            type="button"
+            onClick={onRegenerate}
+            className="mt-1 cursor-pointer rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
+          >
+            Try again
+          </button>
+        </div>
+      ) : pdfUrl ? (
+        <iframe src={pdfUrl} className="h-full w-full flex-1" title={`Invitation Letter Preview - ${label}`} style={{ minHeight: 520 }} />
+      ) : (
+        <EmptyState className="flex-1 justify-center py-0" icon={Eye} title="No preview yet" />
+      )}
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 interface LoaTemplateEditorProps {
@@ -373,6 +537,51 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
   const [previewMode, setPreviewMode] = useState(false);
   const [unpublishConfirmOpen, setUnpublishConfirmOpen] = useState(false);
 
+  // Structured letterhead migration gate (Task 3): true once it's safe to edit
+  // the Tagline/Website/Email/Phone fields — either the template already has a
+  // `header` struct, it never had legacy headerHtml, or the admin explicitly
+  // confirmed switching away from the legacy freeform HTML. Starts true (no
+  // legacy content assumed) and gets corrected downward once the template loads.
+  const [structuredHeaderConfirmed, setStructuredHeaderConfirmed] = useState(true);
+
+  // Real-renderer preview: the PDF blob URLs from the file-service WeasyPrint
+  // pipeline, not a hand-rolled HTML mock. Two panes - DRAFT (unsaved editor
+  // state) and SAVED (persisted template row) - rendered side by side so a
+  // corrupted persisted template can never hide behind a perfect-looking
+  // draft again.
+  const [previewPdfUrls, setPreviewPdfUrls] = useState<{ draft: string | null; saved: string | null }>({
+    draft: null,
+    saved: null,
+  });
+  const [previewLoading, setPreviewLoading] = useState<{ draft: boolean; saved: boolean }>({
+    draft: false,
+    saved: false,
+  });
+  const [previewErrors, setPreviewErrors] = useState<{ draft: string | null; saved: string | null }>({
+    draft: null,
+    saved: null,
+  });
+  const previewObjectUrlRefs = useRef<{ draft: string | null; saved: string | null }>({ draft: null, saved: null });
+
+  // Monotonic per-pane request counter. `generatePreview` bumps its pane's
+  // counter before firing the request and captures that value; when the
+  // response comes back it's only applied if the counter still matches -
+  // otherwise a newer request for the same pane (auto-pick, explicit pick,
+  // or manual Regenerate) has already superseded it, and this response lost
+  // the race and must be discarded rather than clobbering the newer one.
+  const previewRequestSeqRef = useRef<{ draft: number; saved: number }>({ draft: 0, saved: 0 });
+  // False once the component has unmounted, so a request that resolves after
+  // that point never writes state or creates an object URL nobody will revoke.
+  const previewMountedRef = useRef(true);
+
+  // Who the preview is rendered as. Resolved server-side (auto-pick or the
+  // admin's explicit picker choice) and reported back via response headers,
+  // since the endpoint returns a raw PDF blob with no JSON body.
+  const [previewApplicationId, setPreviewApplicationId] = useState<string | null>(null);
+  const [previewParticipantName, setPreviewParticipantName] = useState<string | null>(null);
+  const [previewIsSample, setPreviewIsSample] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+
   // Signatures (brand-scoped, reusable across templates)
   const [signatures, setSignatures] = useState<Signature[]>([]);
   const [signaturesLoading, setSignaturesLoading] = useState(false);
@@ -390,15 +599,6 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
     TextAlign.configure({ types: ["heading", "paragraph"] }),
     Link.configure({ openOnClick: false }),
   ];
-
-  const headerEditor = useEditor({
-    immediatelyRender: false,
-    extensions: [
-      ...editorExtensions,
-      Placeholder.configure({ placeholder: "Header content — use {{logo}} to insert the logo…" }),
-    ],
-    editorProps: { attributes: { class: "focus:outline-none text-sm leading-relaxed" } },
-  });
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -431,6 +631,15 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
           setTemplateName(t.name);
           const lc = { ...DEFAULT_LAYOUT, ...(t.layoutConfig ?? {}) };
           setLayout(lc);
+          // Legacy gate: only block editing the structured fields when this
+          // template has real freeform header HTML AND no `header` struct yet —
+          // that's the exact condition under which touching Tagline/Website/
+          // Email/Phone would silently orphan the old HTML (see Task 3 brief).
+          const hasStructured = Boolean(lc.header);
+          const hasLegacyHtml = hasMeaningfulHtml(lc.headerHtml);
+          setStructuredHeaderConfirmed(hasStructured || !hasLegacyHtml);
+        } else {
+          setStructuredHeaderConfirmed(true);
         }
       })
       .catch(() => toast.error("Failed to load Invitation Letter template"))
@@ -524,16 +733,29 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
     if (editor && template.htmlContent) {
       editor.commands.setContent(template.htmlContent, { emitUpdate: false });
     }
-    if (headerEditor && template.layoutConfig?.headerHtml) {
-      headerEditor.commands.setContent(template.layoutConfig.headerHtml, { emitUpdate: false });
-    }
     if (footerEditor && template.layoutConfig?.footerHtml) {
       footerEditor.commands.setContent(template.layoutConfig.footerHtml, { emitUpdate: false });
     }
-    if (editor && headerEditor && footerEditor) {
+    if (editor && footerEditor) {
       contentSetRef.current = true;
     }
-  }, [editor, headerEditor, footerEditor, template]);
+  }, [editor, footerEditor, template]);
+
+  // Revoke both preview panes' blob URLs on unmount / before generating new ones.
+  // Also flips `previewMountedRef` so a `generatePreview` request already in
+  // flight discards its response instead of storing a URL nothing will ever
+  // revoke - see the staleness guard inside `generatePreview`. Reset to `true`
+  // at the top so React Strict Mode's dev-only mount→cleanup→mount cycle
+  // doesn't leave this permanently `false` after the first (fake) unmount.
+  useEffect(() => {
+    previewMountedRef.current = true;
+    return () => {
+      previewMountedRef.current = false;
+      const urls = previewObjectUrlRefs.current;
+      if (urls.draft) URL.revokeObjectURL(urls.draft);
+      if (urls.saved) URL.revokeObjectURL(urls.saved);
+    };
+  }, []);
 
   const insertPlaceholder = useCallback((key: string) => {
     if (!editor) return;
@@ -544,14 +766,17 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
     if (!editor) return;
     setSaving(true);
     const htmlContent = editor.getHTML();
-    const headerHtml = headerEditor?.getHTML() ?? layout.headerHtml ?? "";
+    // headerHtml is no longer editable in this UI (Task 3) — whatever value
+    // `layout.headerHtml` already holds (legacy content, or nothing) is
+    // preserved untouched. It only stops being *used* by the renderer once
+    // `layout.header` is set — see the legacy-header switch action below.
     const footerHtml = footerEditor?.getHTML() ?? layout.footerHtml ?? "";
     const body = {
       name: templateName,
       type: "letter_of_acceptance" as const,
       htmlContent,
       placeholders: PLACEHOLDER_TOKENS,
-      layoutConfig: { ...layout, headerHtml, footerHtml },
+      layoutConfig: { ...layout, footerHtml },
       audienceType: "all_registered",
       isActive: publish,
     };
@@ -574,71 +799,109 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
     }
   }
 
-  function buildPreviewDoc(): string {
-    const SAMPLE: Record<string, string> = {
-      "{{participant_name}}": "Jane Doe",
-      "{{program_name}}": program?.programName ?? "Your Program",
-      "{{acceptance_date}}": formatDate(new Date(), { year: "numeric", month: "long", day: "numeric" }),
-      "{{batch}}": "Batch 1",
-      "{{document_number}}": "DOC-2026-001",
-      "{{participation_category}}": "International Delegate",
-      "{{program_location}}": "Jakarta, Indonesia",
-      "{{start_date}}": formatDate(new Date(2026, 6, 20), { year: "numeric", month: "long", day: "numeric" }),
-      "{{end_date}}": formatDate(new Date(2026, 6, 27), { year: "numeric", month: "long", day: "numeric" }),
-      "{{institution}}": "State University of Jakarta",
-      "{{nationality}}": "Indonesian",
-      "{{date_of_birth}}": formatDate(new Date(2002, 4, 12), { year: "numeric", month: "long", day: "numeric" }),
-      "{{gender}}": "Female",
-      "{{country_of_origin}}": "Indonesia",
-      "{{signer_name}}": "Dr. Jane Doe",
-      "{{signer_title}}": "Program Director",
-      "{{program_year}}": "2026",
-      "{{participant_email}}": "jane.doe@example.com",
-      "{{participant_phone}}": "+62 812345678",
-      "{{major}}": "International Relations",
-      "{{occupation}}": "Student",
-      "{{program_theme}}": "Innovate for Tomorrow",
-      "{{brand_name}}": "Japan Youth Summit",
-      "{{logo}}": layout.logoUrl
-        ? `<img src="${layout.logoUrl}" style="height:60px;display:block;margin:0 auto 6px" />`
-        : `<div style="display:inline-block;height:60px;width:120px;background:#e5e7eb;border-radius:6px;line-height:60px;text-align:center;font-size:11px;color:#6b7280">[LOGO]</div>`,
-      "{{signature}}": layout.signatureUrl
-        ? `<img src="${layout.signatureUrl}" style="height:48px;display:block;margin-bottom:4px" />`
-        : `<div style="display:inline-block;height:48px;width:120px;background:#e5e7eb;border-radius:4px;line-height:48px;text-align:center;font-size:11px;color:#6b7280">[SIGNATURE]</div>`,
-    };
-
-    const m = layout.margins ?? { top: 40, right: 40, bottom: 40, left: 40 };
-    let combined = [
-      headerEditor?.getHTML() ?? "",
-      editor?.getHTML() ?? "",
-      footerEditor?.getHTML() ?? "",
-    ].join("\n");
-
-    for (const [key, val] of Object.entries(SAMPLE)) {
-      combined = combined.split(key).join(val);
+  // Renders through the same file-service WeasyPrint pipeline (structured
+  // header, footer precedence, auto-stamp, page-footer disclaimer) that
+  // LoaDownloadService uses for real participant downloads - see
+  // PreviewLoaTemplateHandler on the API side. No hand-rolled HTML mock.
+  // `applicationIdOverride` lets a caller that just changed
+  // `previewApplicationId` (via setState, which doesn't take effect until the
+  // next render) pass the new id straight through instead of reading the
+  // stale value still captured in this callback's closure. `undefined` means
+  // "no override, use current state" - `null` is a valid override meaning
+  // "let the backend auto-pick," so it can't double as "no override."
+  //
+  // Runs for the same pane can overlap (opening Preview fires an auto-pick
+  // run; picking a participant before it resolves fires another), and
+  // network order is not request order. `requestId` pins this call to a
+  // point-in-time slot in `previewRequestSeqRef.current[source]`; if that
+  // counter has moved on by the time the response lands, this response is
+  // stale and is discarded outright - it must not overwrite the pane's PDF,
+  // the shared "Previewing as" header, or leak an object URL nobody stored.
+  const generatePreview = useCallback(async (source: "draft" | "saved", applicationIdOverride?: string | null) => {
+    if (!editor || !resolvedProgramId) return;
+    const requestId = (previewRequestSeqRef.current[source] += 1);
+    const isStale = () => !previewMountedRef.current || previewRequestSeqRef.current[source] !== requestId;
+    setPreviewLoading((l) => ({ ...l, [source]: true }));
+    setPreviewErrors((e) => ({ ...e, [source]: null }));
+    try {
+      const footerHtml = footerEditor?.getHTML() ?? layout.footerHtml ?? "";
+      const effectiveApplicationId = applicationIdOverride !== undefined ? applicationIdOverride : previewApplicationId;
+      const result = await previewDocumentTemplate(resolvedProgramId, {
+        htmlContent: editor.getHTML(),
+        placeholders: PLACEHOLDER_TOKENS,
+        layoutConfig: { ...layout, footerHtml },
+        applicationId: effectiveApplicationId ?? undefined,
+        source,
+      });
+      const url = URL.createObjectURL(result.blob);
+      if (isStale()) {
+        // A newer request for this pane (or an unmount) already won the race
+        // while this one was in flight. Revoke the URL just created for it
+        // instead of storing it - nothing must reference it, so nothing else
+        // will ever revoke it.
+        URL.revokeObjectURL(url);
+        return;
+      }
+      const prevUrl = previewObjectUrlRefs.current[source];
+      if (prevUrl) URL.revokeObjectURL(prevUrl);
+      previewObjectUrlRefs.current[source] = url;
+      setPreviewPdfUrls((u) => ({ ...u, [source]: url }));
+      // Either pane's response can set the shared "Previewing as" header -
+      // not just DRAFT's. This matters specifically when one pane fails and
+      // the other succeeds, so the header still reflects the pane that
+      // actually rendered instead of holding a stale or empty identity.
+      //
+      // On the auto-pick default path (no explicit pick yet), DRAFT and
+      // SAVED fire this request independently with no applicationId, so the
+      // backend auto-picks separately for each. The two auto-picks only land
+      // on the same application because the backend orders that query
+      // deterministically (submittedAt, then id) - NOT because the requests
+      // are pinned to each other. Pinning the resolved id here closes that
+      // gap going forward: once any response lands, every later call
+      // (single-pane Regenerate included) is explicitly keyed to this
+      // application instead of re-auto-picking and risking a different one
+      // if the pool changed in between.
+      setPreviewParticipantName(result.participantName);
+      setPreviewIsSample(result.isSample);
+      setPreviewApplicationId(result.applicationId);
+    } catch (err) {
+      if (isStale()) return;
+      setPreviewErrors((e) => ({ ...e, [source]: err instanceof Error ? err.message : "Failed to generate preview" }));
+    } finally {
+      if (!isStale()) setPreviewLoading((l) => ({ ...l, [source]: false }));
     }
+  }, [editor, footerEditor, layout, resolvedProgramId, previewApplicationId]);
 
-    return `<!DOCTYPE html>
-<html><head><meta charset="utf-8"/>
-<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:Georgia,serif;font-size:12pt;line-height:1.7;color:#111;
-       padding:${m.top}pt ${m.right}pt ${m.bottom}pt ${m.left}pt;background:#fff}
-  h1{font-size:20pt;margin-bottom:10pt;font-weight:700}
-  h2{font-size:15pt;margin-bottom:8pt;font-weight:600}
-  h3{font-size:13pt;margin-bottom:6pt;font-weight:600}
-  p{margin-bottom:9pt}
-  ul,ol{margin:0 0 9pt 18pt}
-  li{margin-bottom:3pt}
-  strong{font-weight:700}
-  em{font-style:italic}
-  u{text-decoration:underline}
-  img{max-width:100%}
-  [style*="text-align:center"],[style*="text-align: center"]{text-align:center}
-  [style*="text-align:right"],[style*="text-align: right"]{text-align:right}
-</style>
-</head><body>${combined}</body></html>`;
+  const generateBothPreviews = useCallback((applicationIdOverride?: string | null) => {
+    void generatePreview("draft", applicationIdOverride);
+    void generatePreview("saved", applicationIdOverride);
+  }, [generatePreview]);
+
+  function togglePreview() {
+    const next = !previewMode;
+    setPreviewMode(next);
+    if (next) generateBothPreviews();
   }
+
+  function handlePickerSelect(applicationId: string, participantName: string) {
+    setPreviewApplicationId(applicationId);
+    setPreviewParticipantName(participantName);
+    setPreviewIsSample(false);
+    generateBothPreviews(applicationId);
+  }
+
+  // Plain computation, not useMemo - Tiptap's `editor` object reference stays
+  // stable across keystrokes, so a useMemo keyed on [editor] would never
+  // recompute. This component already re-renders on every keystroke via
+  // Tiptap's own transaction-triggered updates, so a cheap inline
+  // computation is correct here and costs no server work.
+  const currentFooterHtml = footerEditor?.getHTML() ?? layout.footerHtml ?? "";
+  const hasDraftDrift = Boolean(
+    template &&
+      (editor?.getHTML() !== (template.htmlContent ?? "") ||
+        JSON.stringify({ ...layout, footerHtml: currentFooterHtml }) !==
+          JSON.stringify({ ...DEFAULT_LAYOUT, ...(template.layoutConfig ?? {}) })),
+  );
 
   if (loading) {
     return (
@@ -662,7 +925,7 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setPreviewMode((p) => !p)}
+            onClick={togglePreview}
             className="flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
           >
             {previewMode ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
@@ -711,31 +974,112 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
         {/* Left: editors or preview (60%) */}
         <div className="flex w-[60%] flex-col gap-3 overflow-y-auto">
           {previewMode ? (
-            <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-inner" style={{ minHeight: 600 }}>
-              <div className="flex items-center gap-2 border-b border-zinc-100 bg-zinc-50 px-4 py-2 text-[11px] text-zinc-500">
-                <Eye className="h-3 w-3" />
-                Preview — sample data substituted
+            <div className="flex flex-1 flex-col gap-2 overflow-hidden">
+              <div
+                className={[
+                  "flex items-center justify-between gap-2 rounded-lg border px-3 py-2",
+                  previewIsSample ? "border-amber-200 bg-amber-50" : "border-zinc-200 bg-white",
+                ].join(" ")}
+              >
+                {previewIsSample ? (
+                  // Same border/background/icon treatment as the drift-warning banner in
+                  // PreviewPane - this notice exists to stop a sample-data render being
+                  // mistaken for a verified one, so it can't read quieter than that banner.
+                  <div className="flex items-start gap-1.5 text-xs text-amber-700">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+                    <span>
+                      Showing <span className="font-semibold text-amber-800">sample data</span> - no submitted or
+                      accepted applications yet for this program.
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-xs text-zinc-600">
+                    <UserRound className="h-3.5 w-3.5 text-zinc-400" />
+                    <span>
+                      Previewing as: <span className="font-medium text-zinc-900">{previewParticipantName ?? "…"}</span>
+                    </span>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setPickerOpen(true)}
+                  aria-label="Change participant"
+                  className="cursor-pointer rounded px-1 py-0.5 text-[11px] font-medium text-blue-600 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
+                >
+                  [change]
+                </button>
               </div>
-              <iframe
-                srcDoc={buildPreviewDoc()}
-                sandbox="allow-same-origin"
-                className="h-full w-full flex-1"
-                title="Invitation Letter Preview"
-                style={{ minHeight: 560 }}
-              />
+              <div className="flex flex-1 gap-2 overflow-hidden">
+                <PreviewPane
+                  label="DRAFT"
+                  loading={previewLoading.draft}
+                  error={previewErrors.draft}
+                  pdfUrl={previewPdfUrls.draft}
+                  onRegenerate={() => void generatePreview("draft")}
+                  warning={
+                    hasDraftDrift
+                      ? "This draft differs from the last saved template. SAVED still reflects what participants can download today."
+                      : null
+                  }
+                />
+                <PreviewPane
+                  label="SAVED"
+                  loading={previewLoading.saved}
+                  error={previewErrors.saved}
+                  pdfUrl={previewPdfUrls.saved}
+                  onRegenerate={() => void generatePreview("saved")}
+                />
+              </div>
             </div>
           ) : (
             <>
-              {/* Header editor */}
+              {/* Header — structured letterhead only; see sidebar "Letterhead Details" */}
               <div>
                 <label className={labelCls}>Header</label>
-                <MiniEditor
-                  editor={headerEditor}
-                  tokenLabel="Logo"
-                  tokenKey="{{logo}}"
-                  allTokens={PLACEHOLDER_TOKENS}
-                  placeholder="Header content — use {{logo}} to insert the logo…"
-                />
+                {structuredHeaderConfirmed ? (
+                  <p className="rounded-md border border-zinc-100 bg-zinc-50 px-3 py-2 text-[11px] text-zinc-500">
+                    Built from the Logo and Letterhead Details fields in the sidebar — there is no freeform header editor.
+                  </p>
+                ) : (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium text-amber-800">Legacy freeform header</p>
+                        <p className="mt-0.5 text-[11px] text-amber-700">
+                          This template&apos;s letterhead still comes from old freeform HTML, shown read-only below. The
+                          freeform header editor has been removed — switch to the structured Logo + Letterhead Details
+                          fields in the sidebar to keep editing it. Switching stops using this HTML permanently.
+                        </p>
+                        <div
+                          className="mt-2 max-h-32 overflow-y-auto rounded border border-amber-200 bg-white px-3 py-2 text-xs text-zinc-700"
+                          // Read-only render of admin-authored HTML already stored on this template —
+                          // same trust boundary Tiptap's setContent() rendered it under before.
+                          dangerouslySetInnerHTML={{ __html: layout.headerHtml || "" }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                "Switch to the structured letterhead fields? The old HTML header will no longer be used.",
+                              )
+                            ) {
+                              setLayout((l) => ({
+                                ...l,
+                                header: l.header ?? { tagline: "", website: "", email: "", phone: "" },
+                              }));
+                              setStructuredHeaderConfirmed(true);
+                            }
+                          }}
+                          className="mt-2 rounded-md border border-amber-300 bg-white px-2.5 py-1 text-[11px] font-medium text-amber-800 hover:bg-amber-100"
+                        >
+                          Switch to structured letterhead fields
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Body editor */}
@@ -884,12 +1228,18 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
               <p className="mb-2 text-[10px] text-zinc-400">
                 Program name and batch render automatically — these fill the tagline/contact row next to the logo.
               </p>
+              {!structuredHeaderConfirmed ? (
+                <p className="mb-2 text-[10px] font-medium text-amber-600">
+                  Disabled until you switch away from the legacy freeform header — see the notice above the body editor.
+                </p>
+              ) : null}
             </div>
             <div className="mb-4 grid grid-cols-2 gap-2">
               <div>
                 <label className={labelCls}>Tagline</label>
                 <input
-                  className={inputCls}
+                  className={inputCls + " disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400"}
+                  disabled={!structuredHeaderConfirmed}
                   value={layout.header?.tagline ?? ""}
                   onChange={(e) =>
                     setLayout((l) => ({ ...l, header: { ...(l.header ?? {}), tagline: e.target.value } }))
@@ -900,7 +1250,8 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
               <div>
                 <label className={labelCls}>Website</label>
                 <input
-                  className={inputCls}
+                  className={inputCls + " disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400"}
+                  disabled={!structuredHeaderConfirmed}
                   value={layout.header?.website ?? ""}
                   onChange={(e) =>
                     setLayout((l) => ({ ...l, header: { ...(l.header ?? {}), website: e.target.value } }))
@@ -911,7 +1262,8 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
               <div>
                 <label className={labelCls}>Email</label>
                 <input
-                  className={inputCls}
+                  className={inputCls + " disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400"}
+                  disabled={!structuredHeaderConfirmed}
                   value={layout.header?.email ?? ""}
                   onChange={(e) =>
                     setLayout((l) => ({ ...l, header: { ...(l.header ?? {}), email: e.target.value } }))
@@ -922,7 +1274,8 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
               <div>
                 <label className={labelCls}>Phone</label>
                 <input
-                  className={inputCls}
+                  className={inputCls + " disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400"}
+                  disabled={!structuredHeaderConfirmed}
                   value={layout.header?.phone ?? ""}
                   onChange={(e) =>
                     setLayout((l) => ({ ...l, header: { ...(l.header ?? {}), phone: e.target.value } }))
@@ -940,8 +1293,39 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
                 programId={resolvedProgramId}
                 brandId={brandId}
                 userId={userId}
+                stampWarnings
               />
-              <p className="mt-1 text-[10px] text-zinc-400">Rendered above the signature.</p>
+              <p className="mt-1 text-[10px] text-zinc-400">
+                Placed below the signature automatically, unless you insert a {"{{stamp}}"} token in the footer text.
+              </p>
+            </div>
+
+            <div className="mb-4">
+              <label className={labelCls}>Page Footer Disclaimer</label>
+              <input
+                className={inputCls}
+                value={layout.footerNote ?? ""}
+                onChange={(e) => setLayout((l) => ({ ...l, footerNote: e.target.value }))}
+                placeholder="This document is computer-generated. No physical signature required."
+              />
+              <p className="mt-1 text-[10px] text-zinc-400">
+                Pinned to the bottom of every page — separate from the sign-off block in the Footer editor below.
+              </p>
+
+              <label className="mt-3 flex items-start gap-2 text-[11px] text-zinc-600">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-3.5 w-3.5 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+                  checked={Boolean(layout.showGeneratedDate)}
+                  onChange={(e) => setLayout((l) => ({ ...l, showGeneratedDate: e.target.checked }))}
+                />
+                <span>
+                  Show generation date
+                  <span className="block text-[10px] text-zinc-400">
+                    Appends &quot;{"{Program}"} • Generated on {"{date}"}&quot; to the disclaimer above.
+                  </span>
+                </span>
+              </label>
             </div>
 
             <div>
@@ -1112,6 +1496,13 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
           await save(false);
           setUnpublishConfirmOpen(false);
         }}
+      />
+
+      <LoaParticipantPicker
+        programId={resolvedProgramId}
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        onSelect={handlePickerSelect}
       />
     </div>
   );

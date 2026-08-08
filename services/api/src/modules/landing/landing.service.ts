@@ -8,9 +8,11 @@ import { PartnersSponsorsStrategy } from './strategies/partners-sponsors.strateg
 import { AnnouncementsStrategy } from './strategies/announcements.strategy';
 import { SettingsStrategy } from './strategies/settings.strategy';
 import { FaqsStrategy } from './strategies/faqs.strategy';
+import { ActivityStrategy } from './strategies/activity.strategy';
 import { Brand } from '@prisma/client';
 import { LandingPageResponseDto } from './dto/landing-page.dto';
 import { LandingSettingsResponseDto } from './dto/landing-settings.dto';
+import { LandingActivityResponseDto } from './dto/landing-activity.dto';
 import { LandingSnapshotService } from './services/landing-snapshot.service';
 
 const DEFAULT_FAQ_LIMIT = 200;
@@ -28,6 +30,7 @@ export class LandingService {
     private readonly announcementsStrategy: AnnouncementsStrategy,
     private readonly settingsStrategy: SettingsStrategy,
     private readonly faqsStrategy: FaqsStrategy,
+    private readonly activityStrategy: ActivityStrategy,
     private readonly landingSnapshotService: LandingSnapshotService,
   ) { }
 
@@ -88,6 +91,23 @@ export class LandingService {
       );
     }
     return this.homeStrategy.getData(brand) as Promise<LandingPageResponseDto>;
+  }
+
+  async getActivity(url?: string): Promise<LandingActivityResponseDto> {
+    const brand = await this.resolveBrand(url);
+    const data = await this.activityStrategy.getData(brand);
+    // Explicit field mapping: this route is public/unauthenticated, so this is the
+    // last line of defence against a field added to ActivityItem upstream leaking here.
+    return {
+      enabled: data.enabled,
+      items: data.items.map((item) => ({
+        type: item.type,
+        name: item.name,
+        country: item.country,
+        countryCode: item.countryCode,
+        programName: item.programName,
+      })),
+    };
   }
 
   async getAbout(url?: string): Promise<LandingPageResponseDto> {
