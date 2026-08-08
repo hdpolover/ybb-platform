@@ -51,6 +51,7 @@ import {
     STUCK_PROCESSING_THRESHOLD_MS,
     INVOICE_ID_RE,
 } from '@modules/payments/application/services/invoice-where.builder';
+import { extractDownstreamMessage } from './downstream-error.util';
 
 @ApiTags('Admin Payments')
 @Controller('admin/payments')
@@ -1576,6 +1577,20 @@ export class PaymentAdminController {
         }
     }
 
+    @Get('methods/:id/usage')
+    @ApiOperation({ summary: 'How many programs use this shared payment method' })
+    @ApiResponse({ status: 200, description: 'Enabled and inheriting program counts' })
+    async getMethodUsage(@Param('id') id: string) {
+        try {
+            const { data } = await this.paymentServiceClient.get(`/api/v1/payment-methods/${id}/usage`, {
+                headers: this.buildInternalHeaders(),
+            });
+            return data;
+        } catch (error) {
+            this.handleError(error);
+        }
+    }
+
     @Get('methods/:id')
     @ApiOperation({ summary: 'Get payment method detail' })
     @ApiResponse({ status: 200, description: 'Payment method detail' })
@@ -1654,9 +1669,13 @@ export class PaymentAdminController {
             const cached = await this.cacheService.get(cacheKey);
             if (cached) return cached;
 
+            // include_disabled: the console needs every shared method, not just
+            // the ones already enabled, or there is no way to attach an existing
+            // method to a configured program — the gap that pushed admins into
+            // creating duplicate master rows. Portal reads deliberately omit it.
             const { data } = await this.paymentServiceClient.get(
                 `/api/v1/programs/${programId}/payment-methods`,
-                { headers: this.buildInternalHeaders() },
+                { params: { include_disabled: true }, headers: this.buildInternalHeaders() },
             );
 
             await this.cacheService.set(cacheKey, data, CACHE_TTL.MEDIUM);
@@ -2180,11 +2199,7 @@ export class PaymentAdminController {
             const status = err.response.status;
             // Forward 4xx user-facing errors from payment service; mask 5xx
             if (status >= 400 && status < 500) {
-                const data = err.response.data;
-                const userMsg = (typeof data === 'object' && data !== null && 'message' in data)
-                    ? String((data as { message: unknown }).message)
-                    : 'Payment request failed';
-                throw new HttpException(userMsg, status);
+                throw new HttpException(extractDownstreamMessage(err.response.data, 'Payment request failed'), status);
             }
             throw new HttpException('Payment service unavailable. Please try again later.', 503);
         }

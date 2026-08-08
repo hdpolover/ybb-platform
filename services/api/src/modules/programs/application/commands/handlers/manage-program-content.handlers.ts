@@ -216,6 +216,10 @@ async function invalidateResourceCaches(
         });
         if (program?.brandId) {
             await Promise.all([
+                // Without dropping the DB snapshot too, the next request re-hydrates
+                // redis from the hour-fresh brand_landing_snapshots row and the
+                // resource change stays invisible for up to an hour.
+                prisma.brandLandingSnapshot.deleteMany({ where: { brandId: program.brandId } }),
                 cacheService.invalidateBrandLandingCaches(program.brandId),
                 cacheService.invalidateByPattern('program:*'),
                 cacheService.invalidateKey(CACHE_KEYS.PROGRAM_RESOURCES(programId)),
@@ -1365,7 +1369,9 @@ export class CreateDocumentTemplateHandler implements ICommandHandler<CreateDocu
             placeholders: command.dto.placeholders,
             // Explicit layoutConfig from DTO takes precedence; fall back to file metadata for file-based templates
             layoutConfig: command.dto.layoutConfig ?? (fileSize !== undefined || fileType !== undefined ? { fileSize, fileType } : undefined),
-            audienceType: command.dto.audienceType ?? 'all_registered',
+            // Fail closed by default: an admin who doesn't pick a visibility rule gets the
+            // locked-down default, mirroring DocumentTemplate.audienceType's schema default.
+            audienceType: command.dto.audienceType ?? 'submitted_and_paid',
             audienceConfig: command.dto.audienceConfig ?? {},
             order: command.dto.order ?? 0,
         };

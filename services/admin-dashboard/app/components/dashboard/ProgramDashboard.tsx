@@ -555,20 +555,6 @@ export function ProgramDashboard({ selectedProgramId }: ProgramDashboardProps) {
     void fetchTickets();
   }, [fetchTickets]);
 
-  const fallbackKpis: ProgramDashboardAnalytics["kpis"] = {
-    registeredUsers: 0,
-    registrationsToday: 0,
-    formsStarted: 0,
-    submittedApplications: 0,
-    registeredOnly: 0,
-    totalAmbassadors: 0,
-    activeAmbassadors: 0,
-    referredParticipants: 0,
-    referredParticipantsPercent: 0,
-    programStatus: "unknown",
-    programStatusDate: null,
-  };
-
   return (
     <div className="space-y-5">
       {error && (
@@ -578,7 +564,7 @@ export function ProgramDashboard({ selectedProgramId }: ProgramDashboardProps) {
       )}
 
       {/* KPI pulse strip */}
-      <KPISection kpis={dashboardData?.kpis ?? fallbackKpis} loading={loading} />
+      <KPISection kpis={dashboardData?.kpis ?? null} loading={loading} />
 
       {/* Operational command center */}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

@@ -250,4 +250,107 @@ describe('EventsController.handleLoaBatchReleased', () => {
 
     expect(sendLoaReadyEmail).toHaveBeenCalledTimes(2);
   });
+
+  it('threads the batch-level brand through to every recipient email', async () => {
+    const payload = {
+      batchId: 'batch-1',
+      programId: 'prog-1',
+      programName: 'YBB Summit 2026',
+      batchName: 'Wave 1',
+      recipients: [{ userId: 'user-1', email: 'jane@example.com', fullName: 'Jane Doe' }],
+      brand: { name: 'YBB', websiteUrl: 'youthacademicforum.com' },
+    };
+
+    await controller.handleLoaBatchReleased(payload, makeContext());
+
+    expect(sendLoaReadyEmail).toHaveBeenCalledWith(
+      'jane@example.com',
+      expect.objectContaining({
+        brand: { name: 'YBB', websiteUrl: 'youthacademicforum.com' },
+      }),
+    );
+  });
+
+  it('passes brand: undefined when the payload has no brand', async () => {
+    const payload = {
+      batchId: 'batch-1',
+      programId: 'prog-1',
+      programName: 'YBB Summit 2026',
+      batchName: 'Wave 1',
+      recipients: [{ userId: 'user-1', email: 'jane@example.com', fullName: 'Jane Doe' }],
+    };
+
+    await controller.handleLoaBatchReleased(payload, makeContext());
+
+    expect(sendLoaReadyEmail).toHaveBeenCalledWith(
+      'jane@example.com',
+      expect.objectContaining({ brand: undefined }),
+    );
+  });
+});
+
+describe('EventsController.handleSubmissionReminder', () => {
+  let controller: EventsController;
+  let sendSubmissionReminderEmail: jest.Mock;
+
+  beforeEach(() => {
+    sendSubmissionReminderEmail = jest.fn().mockResolvedValue(undefined);
+    controller = new EventsController(
+      { sendSubmissionReminderEmail } as unknown as EmailService,
+      {} as ReceiptService,
+      {
+        shouldProcess: jest.fn().mockResolvedValue({ shouldProcess: true, dedupeKey: 'key', reason: 'new' }),
+        markProcessed: jest.fn().mockResolvedValue(undefined),
+      } as unknown as NotificationIdempotencyService,
+    );
+  });
+
+  it('sends the submission reminder email with the deadline/offset payload', async () => {
+    const payload = {
+      email: 'jane@example.com',
+      customer_name: 'Jane Doe',
+      program: 'China Youth Summit 2027',
+      programId: 'prog-1',
+      brandId: 'brand-1',
+      deadline: '2027-01-08T10:00:00.000Z',
+      daysRemaining: 7,
+      submissionPageUrl: 'https://cys.example.com/dashboard/submission',
+      metadata: { application_id: 'app-1', reminder_offset: 7 },
+    };
+
+    await controller.handleSubmissionReminder(payload, makeContext());
+
+    expect(sendSubmissionReminderEmail).toHaveBeenCalledWith(
+      'jane@example.com',
+      expect.objectContaining({
+        name: 'Jane Doe',
+        program: 'China Youth Summit 2027',
+        programId: 'prog-1',
+        deadline: '2027-01-08T10:00:00.000Z',
+        daysRemaining: 7,
+        submissionPageUrl: 'https://cys.example.com/dashboard/submission',
+      }),
+    );
+  });
+
+  it('falls back to metadata.reminder_offset when top-level daysRemaining is absent', async () => {
+    const payload = {
+      email: 'jane@example.com',
+      customer_name: 'Jane Doe',
+      metadata: { application_id: 'app-1', reminder_offset: 1 },
+    };
+
+    await controller.handleSubmissionReminder(payload, makeContext());
+
+    expect(sendSubmissionReminderEmail).toHaveBeenCalledWith(
+      'jane@example.com',
+      expect.objectContaining({ daysRemaining: 1 }),
+    );
+  });
+
+  it('does nothing when the payload has no email', async () => {
+    await controller.handleSubmissionReminder({ daysRemaining: 7 }, makeContext());
+
+    expect(sendSubmissionReminderEmail).not.toHaveBeenCalled();
+  });
 });

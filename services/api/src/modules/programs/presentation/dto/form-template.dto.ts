@@ -8,7 +8,43 @@ import {
   MaxLength,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type, plainToInstance } from 'class-transformer';
+
+// Field option choice. Shape evidenced by the live producers:
+// OptionsRepeater.tsx / SystemFieldFormModal.tsx always send { label, value }
+// objects. Legacy plain strings are also real (see
+// get-application-form-fields.handler.ts normalizeOptions(), which reads
+// historical rows of this same shape), so this stays a union rather than a
+// single strict class.
+export class FormFieldOptionDto {
+  @ApiProperty()
+  @IsString()
+  label: string;
+
+  @ApiProperty()
+  @IsString()
+  value: string;
+}
+
+// Converts each array element without letting class-transformer's implicit
+// conversion reconstruct object elements as `new Array()` (options is
+// declared `unknown[]`, so there is no element type for it to build from
+// without this). Strings pass through untouched.
+//
+// Reads from `obj[key]` rather than destructuring `value`: class-transformer
+// runs the implicit design:type conversion BEFORE invoking @Transform, so by
+// the time a callback receives `value` it is already the corrupted
+// `new Array()` result. `obj[key]` is the untouched source property and is
+// the only way a @Transform callback can see the real payload here.
+function toFieldOptions({ obj, key }: { obj: Record<string, unknown>; key: string }): unknown {
+  const value = obj[key];
+  if (!Array.isArray(value)) return value;
+  return value.map((item) =>
+    typeof item === 'string' || item === null || typeof item !== 'object' || Array.isArray(item)
+      ? item
+      : plainToInstance(FormFieldOptionDto, item),
+  );
+}
 
 export class TemplateFieldInputDto {
   @ApiProperty({ enum: ['system', 'custom'] })
@@ -48,9 +84,10 @@ export class TemplateFieldInputDto {
   @IsString()
   helpText?: string;
 
-  @ApiPropertyOptional({ type: 'array', items: { type: 'object' } })
+  @ApiPropertyOptional({ description: '{ label, value } choices, or legacy plain strings', type: [FormFieldOptionDto] })
   @IsOptional()
-  options?: unknown[];
+  @Transform(toFieldOptions)
+  options?: Array<string | FormFieldOptionDto>;
 
   @ApiPropertyOptional()
   @IsOptional()

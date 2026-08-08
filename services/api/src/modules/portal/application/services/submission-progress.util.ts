@@ -64,7 +64,11 @@ const SECTION_ORDER: Record<string, number> = {
     documents: 9,
 };
 
-function hasValue(value: unknown): boolean {
+// Exported so other modules (e.g. the admin applications list — see
+// ListApplicationsHandler's essay-completeness computation) can reuse the
+// exact same "does this field/essay answer count as filled" rule instead of
+// re-implementing a slightly different variant.
+export function hasValue(value: unknown): boolean {
     if (value === null || value === undefined) return false;
     if (typeof value === 'string') return value.trim().length > 0;
     if (Array.isArray(value)) return value.length > 0;

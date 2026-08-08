@@ -129,6 +129,11 @@ async function bootstrap() {
   app.enableCors({
     origin: corsOrigins,
     credentials: true,
+    // The LOA preview endpoint reports who it rendered as via these three
+    // response headers (see program-content.controller.ts previewDocumentTemplate);
+    // browsers strip custom headers from cross-origin fetch() responses
+    // unless explicitly exposed here.
+    exposedHeaders: ['X-Preview-Participant-Name', 'X-Preview-Is-Sample', 'X-Preview-Application-Id'],
   });
 
   // Global prefix removed in favor of versioning

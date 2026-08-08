@@ -1,8 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { Reflector } from '@nestjs/core';
+import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { ProgramContentController } from './program-content.controller';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/infrastructure/guards/roles.guard';
+import { ROLES_KEY } from '@modules/auth/application/decorators/roles.decorator';
+import { IS_PUBLIC_KEY } from '../../../shared/decorators/public.decorator';
+import { UserRole } from '@core/entities/user.entity';
 
 import {
   ListProgramGalleryHandler,
@@ -32,6 +36,7 @@ import {
   GetLoaBatchesHandler,
   GetLoaDownloadsHandler,
 } from '../application/handlers/loa-batch.handlers';
+import { PreviewLoaTemplateHandler } from '../application/handlers/loa-preview.handler';
 
 import { ListProgramGalleryQuery } from '../application/queries/list-program-content.queries';
 import { CreateProgramGalleryCommand } from '../application/commands/program-content.commands';
@@ -67,6 +72,7 @@ describe('ProgramContentController', () => {
             DeleteLoaBatchHandler,
             GetLoaBatchesHandler,
             GetLoaDownloadsHandler,
+            PreviewLoaTemplateHandler,
         ];
 
         return handlers.map(handler => ({
@@ -219,6 +225,51 @@ describe('ProgramContentController', () => {
             expect(mockExecute.execute).toHaveBeenCalledWith(expect.any(GetLoaDownloadsQuery));
             const q = mockExecute.execute.mock.calls[0][0] as GetLoaDownloadsQuery;
             expect(q.programId).toBe('prog-1');
+        });
+    });
+
+    // ─── Document Template Auth Guard ──────────────────────────────────────────
+    // Regression test: GET :id/document-templates used to be @Public() and leaked
+    // raw template internals (templateUrl, htmlContent, placeholders, layoutConfig,
+    // audienceConfig) to unauthenticated callers. It must be locked down exactly
+    // like its sibling document-template CRUD routes: JwtAuthGuard + RolesGuard,
+    // restricted to ADMIN/SUPER_ADMIN, and NOT marked @Public().
+    describe('listDocumentTemplates auth', () => {
+        it('is not marked @Public()', () => {
+            const isPublic = Reflect.getMetadata(
+                IS_PUBLIC_KEY,
+                ProgramContentController.prototype.listDocumentTemplates,
+            );
+            expect(isPublic).toBeFalsy();
+        });
+
+        it('is guarded by JwtAuthGuard and RolesGuard', () => {
+            const guards = Reflect.getMetadata(
+                GUARDS_METADATA,
+                ProgramContentController.prototype.listDocumentTemplates,
+            );
+            expect(guards).toEqual([JwtAuthGuard, RolesGuard]);
+        });
+
+        it('restricts access to ADMIN and SUPER_ADMIN roles', () => {
+            const roles = Reflect.getMetadata(
+                ROLES_KEY,
+                ProgramContentController.prototype.listDocumentTemplates,
+            );
+            expect(roles).toEqual([UserRole.ADMIN, UserRole.SUPER_ADMIN]);
+        });
+
+        it('matches the guard/role setup of the sibling create/update/delete document-template routes', () => {
+            const siblingMethods = [
+                ProgramContentController.prototype.createDocumentTemplate,
+                ProgramContentController.prototype.updateDocumentTemplate,
+                ProgramContentController.prototype.deleteDocumentTemplate,
+            ];
+
+            for (const method of siblingMethods) {
+                expect(Reflect.getMetadata(GUARDS_METADATA, method)).toEqual([JwtAuthGuard, RolesGuard]);
+                expect(Reflect.getMetadata(ROLES_KEY, method)).toEqual([UserRole.ADMIN, UserRole.SUPER_ADMIN]);
+            }
         });
     });
 });

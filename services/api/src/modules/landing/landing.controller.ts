@@ -3,6 +3,7 @@ import { LandingService } from './landing.service';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiHeader, ApiNotFoundResponse, ApiBadRequestResponse } from '@nestjs/swagger';
 import { LandingPageResponseDto } from './dto/landing-page.dto';
 import { LandingSettingsResponseDto } from './dto/landing-settings.dto';
+import { LandingActivityResponseDto } from './dto/landing-activity.dto';
 import { Public } from '../../shared/decorators/public.decorator';
 import { BrandDomain } from '../../shared/decorators/brand-domain.decorator';
 
@@ -44,6 +45,20 @@ export class LandingController {
     @BrandDomain() brandDomain?: string,
   ): Promise<LandingPageResponseDto> {
     return this.landingService.getHome(brandDomain);
+  }
+
+  @Get('activity')
+  @ApiOperation({
+    summary: 'Get recent participant activity',
+    description: 'Returns a randomly sampled pool of masked participant registration and acceptance activity for the resolved brand. Names are masked server-side and no identifiers or timestamps are returned.',
+  })
+  @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
+  @ApiResponse({ status: 200, description: 'Return masked activity pool', type: LandingActivityResponseDto })
+  @ApiBadRequestResponse({ description: 'Invalid brand identification' })
+  async getActivity(
+    @BrandDomain() brandDomain?: string,
+  ): Promise<LandingActivityResponseDto> {
+    return this.landingService.getActivity(brandDomain);
   }
 
   @Get('about')

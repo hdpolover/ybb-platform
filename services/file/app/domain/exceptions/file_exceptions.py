@@ -25,11 +25,26 @@ class InvalidFileTypeException(FileDomainException):
 
 class FileSizeLimitException(FileDomainException):
     """Raised when file exceeds size limit."""
-    
+
     def __init__(self, size: int, max_size: int):
         self.size = size
         self.max_size = max_size
         super().__init__(f"File size {size} bytes exceeds limit of {max_size} bytes")
+
+
+class InvalidFilenameException(FileDomainException):
+    """Raised when the client-supplied filename exceeds the storable length.
+
+    original_filename is displayed back to users (e.g. download headers), so it must be
+    rejected rather than silently truncated/mangled — see files.original_filename VARCHAR(255).
+    """
+
+    def __init__(self, filename_length: int, max_length: int):
+        self.filename_length = filename_length
+        self.max_length = max_length
+        super().__init__(
+            f"Filename length {filename_length} exceeds maximum of {max_length} characters"
+        )
 
 
 class StorageException(FileDomainException):
@@ -37,6 +52,22 @@ class StorageException(FileDomainException):
 
     def __init__(self, message: str):
         super().__init__(f"Storage error: {message}")
+
+
+class FileCategoryNotAllowedException(FileDomainException):
+    """Raised when GetPresignedUrlInternal is asked to sign a non-private category.
+
+    This RPC skips the per-user ownership check, so it must never become a general
+    presign service — it is hard-scoped to the private-category allowlist
+    (documents, signed-copies) regardless of what the caller passes in.
+    """
+
+    def __init__(self, category: str, storage_path: str):
+        self.category = category
+        self.storage_path = storage_path
+        super().__init__(
+            f"Category '{category}' (from {storage_path}) is not allowed for internal presigning"
+        )
 
 
 class FileNotUploadedException(FileDomainException):

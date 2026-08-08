@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsEmail, IsEnum, IsOptional, IsString, IsBoolean, IsUrl } from 'class-validator';
+import { IsDateString, IsEmail, IsEnum, IsOptional, IsString, IsBoolean, IsUrl, MaxLength } from 'class-validator';
 import { Type } from 'class-transformer';
 import { IsEnglishName, IsEnglishText } from '@shared/validators/english-text.validator';
 
@@ -40,6 +40,7 @@ export class UpdateParticipantProfileDto {
     @ApiPropertyOptional({ example: '912345678' })
     @IsOptional()
     @IsString()
+    @MaxLength(25)
     phoneNumber?: string;
 
     @ApiPropertyOptional({ example: 'Vietnam' })
@@ -125,6 +126,7 @@ export class UpdateParticipantProfileDto {
     @ApiPropertyOptional({ example: '81234567890', description: 'Emergency contact phone number' })
     @IsOptional()
     @IsString()
+    @MaxLength(25)
     emergencyContactPhone?: string;
 
     @ApiPropertyOptional({ example: 'https://cdn.ybbhub.com/participants/profile.jpg' })
@@ -174,6 +176,13 @@ export class ParticipantResponseDto {
     @ApiPropertyOptional({ example: 'Vietnam' })
     currentCountry?: string;
 
+    // Origin (set at onboarding, distinct from current* above which PUT /me can change later)
+    @ApiPropertyOptional({ example: 'Vietnam' })
+    originCountry?: string;
+
+    @ApiPropertyOptional({ example: 'Hanoi' })
+    originCity?: string;
+
     // Education/Work
     @ApiPropertyOptional({ example: 'University of Technology' })
     institution?: string;
@@ -213,6 +222,13 @@ export class ParticipantResponseDto {
 
     @ApiPropertyOptional({ example: '81234567890' })
     emergencyContactPhone?: string;
+
+    // Onboarding source
+    @ApiPropertyOptional({ example: 'Instagram' })
+    knowledgeSource?: string;
+
+    @ApiPropertyOptional({ example: 'ABC-123' })
+    referralCode?: string;
 
     @ApiProperty({ example: 40 })
     profileCompletionPercentage: number;

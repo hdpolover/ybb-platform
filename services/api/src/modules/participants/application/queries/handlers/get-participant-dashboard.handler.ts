@@ -146,7 +146,10 @@ export class GetParticipantDashboardHandler implements IQueryHandler<GetParticip
         }
 
         // 5. Greeting
-        const greeting = `Welcome back, ${participant.fullName.split(' ')[0]}`;
+        // fullName is blank until onboarding completes, which would render
+        // "Welcome back, " with a dangling comma.
+        const firstName = participant.fullName.split(' ')[0] || 'Participant';
+        const greeting = `Welcome back, ${firstName}`;
 
         return {
             greeting,

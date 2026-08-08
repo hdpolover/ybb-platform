@@ -97,6 +97,13 @@ class CreateUploadUrlResponseDto(BaseModel):
     expires_in_seconds: int
 
 
+class PresignedUrlInternalDto(BaseModel):
+    """Response DTO for GetPresignedUrlInternal (internal gRPC only, no ownership check)."""
+
+    presigned_url: str
+    expires_at_unix: int
+
+
 class PaginatedFilesDto(BaseModel):
     """Paginated list of files."""
 

@@ -110,6 +110,16 @@ export interface ConfirmUploadResponse {
   status: string;
 }
 
+export interface GetPresignedUrlInternalRequest {
+  storage_path: string;
+  expiry_seconds?: number; // <=0 (or omitted) means default 3600
+}
+
+export interface GetPresignedUrlInternalResponse {
+  presigned_url: string;
+  expires_at_unix: number;
+}
+
 export interface FileService {
   UploadFile(request: Observable<UploadFileRequest>): Observable<UploadFileResponse>;
   DownloadFile(request: DownloadFileRequest): Observable<DownloadFileResponse>;
@@ -118,4 +128,5 @@ export interface FileService {
   GenerateReceipt(request: GenerateReceiptRequest): Observable<GenerateDocumentResponse>;
   GetPresignedUploadUrl(request: GetPresignedUploadUrlRequest): Observable<GetPresignedUploadUrlResponse>;
   ConfirmUpload(request: ConfirmUploadRequest): Observable<ConfirmUploadResponse>;
+  GetPresignedUrlInternal(request: GetPresignedUrlInternalRequest): Observable<GetPresignedUrlInternalResponse>;
 }

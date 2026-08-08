@@ -10,6 +10,15 @@ import { ProgramAnalyticsResponseDto } from './dto/program-analytics-response.dt
 import { CacheService } from '../../shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '../../shared/constants/cache-keys';
 import { normalizeCountryGroups, resolveCountryName } from '@shared/utils/country-groups';
+import {
+  WIB_TIME_ZONE,
+  addDays,
+  addWibMonths,
+  parseWibFilterDate,
+  startOfWibDay,
+  startOfWibMonth,
+  startOfWibWeek,
+} from '@shared/utils/wib-time';
 import { resolveUsdInIdrRate } from '../portal/application/utils/resolve-usd-in-idr-rate';
 
 type ProgramDashboardApplication = {
@@ -307,6 +316,17 @@ export class StatsService {
       throw new NotFoundException(`Program with ID "${programId}" not found`);
     }
 
+    // This fetches every non-deleted application for the program and derives the
+    // KPIs, distributions and trends in memory. That looks like something to
+    // push into the database, and it was measured against prod on 2026-07-27
+    // (China Youth Summit, the largest program at 5,707 rows): this single
+    // query runs in 13.5ms with every buffer a cache hit, while the equivalent
+    // aggregate queries cost 36.7ms of database time across five statements,
+    // before formsStarted, registrationsToday and the age buckets are added.
+    // The gender and nationality groupBys have to join participants anyway, so
+    // each one repeats most of the work this does once. Splitting it up roughly
+    // triples database CPU for the endpoint. Leave it whole unless a program
+    // grows far beyond this scale; the result is cached for CACHE_TTL.SHORT.
     const [applications, totalAmbassadors, activeAmbassadors, referredParticipants, ambassadorRows] = await Promise.all([
       this.readPrisma.participantApplication.findMany({
         where: { programId, deletedAt: null },
@@ -373,8 +393,8 @@ export class StatsService {
     ]);
 
     const registeredUsers = applications.length;
-    const startOfTodayUtc = this.startOfUtcDay(new Date());
-    const registrationsToday = applications.filter((item) => item.createdAt >= startOfTodayUtc).length;
+    const startOfToday = this.startOfDay(new Date());
+    const registrationsToday = applications.filter((item) => item.createdAt >= startOfToday).length;
     const formsStarted = applications.filter((item) => this.hasStartedApplication(item)).length;
     const submittedApplications = applications.filter((item) => this.isSubmittedApplication(item)).length;
     const registeredOnly = Math.max(registeredUsers - formsStarted, 0);
@@ -435,53 +455,49 @@ export class StatsService {
     return Boolean(application.submittedAt) || application.status !== ApplicationStatus.draft;
   }
 
-  private startOfUtcDay(date: Date): Date {
-    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  // Day boundaries are WIB, not UTC: the admins reading these numbers work in
+  // Jakarta, so "today" has to mean the WIB day. See shared/utils/wib-time.ts.
+  private startOfDay(date: Date): Date {
+    return startOfWibDay(date);
   }
 
-  private startOfUtcWeek(date: Date): Date {
-    const day = date.getUTCDay();
-    const daysFromMonday = (day + 6) % 7;
-    const start = this.startOfUtcDay(date);
-    start.setUTCDate(start.getUTCDate() - daysFromMonday);
-    return start;
+  private startOfWeek(date: Date): Date {
+    return startOfWibWeek(date);
   }
 
-  private startOfUtcMonth(date: Date): Date {
-    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+  private startOfMonth(date: Date): Date {
+    return startOfWibMonth(date);
   }
 
   private addDays(date: Date, days: number): Date {
-    const next = new Date(date);
-    next.setUTCDate(next.getUTCDate() + days);
-    return next;
+    return addDays(date, days);
   }
 
   private addMonths(date: Date, months: number): Date {
-    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + months, 1));
+    return addWibMonths(date, months);
   }
 
   private formatDayLabel(date: Date): string {
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: WIB_TIME_ZONE });
   }
 
   private formatWeekLabel(date: Date): string {
     const end = this.addDays(date, 6);
-    return `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}–${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}`;
+    return `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: WIB_TIME_ZONE })}–${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: WIB_TIME_ZONE })}`;
   }
 
   private formatMonthLabel(date: Date): string {
-    return date.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
+    return date.toLocaleDateString('en-US', { month: 'short', timeZone: WIB_TIME_ZONE });
   }
 
   private buildDailyTrend(createdAtValues: Date[], points: number): { label: string; registrations: number }[] {
-    const todayStart = this.startOfUtcDay(new Date());
+    const todayStart = this.startOfDay(new Date());
     const firstBucket = this.addDays(todayStart, -(points - 1));
     const counts = new Map<string, number>();
 
     for (const createdAt of createdAtValues) {
       if (createdAt < firstBucket) continue;
-      const bucket = this.startOfUtcDay(createdAt).toISOString();
+      const bucket = this.startOfDay(createdAt).toISOString();
       counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
     }
 
@@ -499,13 +515,13 @@ export class StatsService {
   }
 
   private buildWeeklyTrend(createdAtValues: Date[], points: number): { label: string; registrations: number }[] {
-    const thisWeekStart = this.startOfUtcWeek(new Date());
+    const thisWeekStart = this.startOfWeek(new Date());
     const firstBucket = this.addDays(thisWeekStart, -7 * (points - 1));
     const counts = new Map<string, number>();
 
     for (const createdAt of createdAtValues) {
       if (createdAt < firstBucket) continue;
-      const bucket = this.startOfUtcWeek(createdAt).toISOString();
+      const bucket = this.startOfWeek(createdAt).toISOString();
       counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
     }
 
@@ -523,13 +539,13 @@ export class StatsService {
   }
 
   private buildMonthlyTrend(createdAtValues: Date[], points: number): { label: string; registrations: number }[] {
-    const thisMonthStart = this.startOfUtcMonth(new Date());
+    const thisMonthStart = this.startOfMonth(new Date());
     const firstBucket = this.addMonths(thisMonthStart, -(points - 1));
     const counts = new Map<string, number>();
 
     for (const createdAt of createdAtValues) {
       if (createdAt < firstBucket) continue;
-      const bucket = this.startOfUtcMonth(createdAt).toISOString();
+      const bucket = this.startOfMonth(createdAt).toISOString();
       counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
     }
 
@@ -640,11 +656,13 @@ export class StatsService {
     });
     if (!program) throw new NotFoundException(`Program ${programId} not found`);
 
+    // A bare YYYY-MM-DD from the admin UI means a WIB calendar day, so both
+    // ends of the range are anchored to WIB midnight rather than UTC midnight.
     const MS_DAY = 86399999;
-    const appDateFrom = filters.dateFrom ? new Date(filters.dateFrom) : undefined;
-    const appDateTo = filters.dateTo ? new Date(new Date(filters.dateTo).getTime() + MS_DAY) : undefined;
-    const payDateFrom = filters.payDateFrom ? new Date(filters.payDateFrom) : undefined;
-    const payDateTo = filters.payDateTo ? new Date(new Date(filters.payDateTo).getTime() + MS_DAY) : undefined;
+    const appDateFrom = filters.dateFrom ? parseWibFilterDate(filters.dateFrom) : undefined;
+    const appDateTo = filters.dateTo ? new Date(parseWibFilterDate(filters.dateTo).getTime() + MS_DAY) : undefined;
+    const payDateFrom = filters.payDateFrom ? parseWibFilterDate(filters.payDateFrom) : undefined;
+    const payDateTo = filters.payDateTo ? new Date(parseWibFilterDate(filters.payDateTo).getTime() + MS_DAY) : undefined;
 
     const [appRows, invoiceRows] = await Promise.all([
       this.readPrisma.participantApplication.findMany({
@@ -779,14 +797,22 @@ export class StatsService {
     }
 
     const submittedCount = appRows.filter((a) => Boolean(a.submittedAt) || a.status !== 'draft').length;
-    const conversionRate = submittedCount > 0 ? Number(((paidInvoices.length / submittedCount) * 100).toFixed(1)) : 0;
+
+    // Conversion is paid applicants over everyone who registered. It used to
+    // divide paid *invoices* by submitted applications, which overshot 100%:
+    // an applicant can hold several invoices (registration fee + installments),
+    // and the registration fee is paid before submission, so paid was never a
+    // subset of submitted. Counting distinct applications keeps this in step
+    // with the registration funnel below.
+    const paidApplicationCount = new Set(paidInvoices.map((inv) => inv.applicationId)).size;
+    const conversionRate = appRows.length > 0 ? Number(((paidApplicationCount / appRows.length) * 100).toFixed(1)) : 0;
 
     // ── Revenue by month (6 months) ───────────────────────────────────────────
     const now = new Date();
     const revenueByMonth = Array.from({ length: 6 }, (_, idx) => {
-      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (5 - idx), 1));
-      const next = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));
-      const label = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' });
+      const d = addWibMonths(now, -(5 - idx));
+      const next = addWibMonths(d, 1);
+      const label = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit', timeZone: WIB_TIME_ZONE });
       let idr = 0;
       let usd = 0;
       for (const inv of paidInvoices) {
@@ -817,6 +843,44 @@ export class StatsService {
     const byTier = Array.from(tierMap.entries())
       .sort((a, b) => b[1].paidCount - a[1].paidCount)
       .map(([name, v]) => ({ name, ...v }));
+
+    // ── Paid countries by tier ────────────────────────────────────────────────
+    // Full country ranking (not sliced to top 15, unlike countriesByStatus below) —
+    // built from the same paidInvoices pass, no extra query.
+    const FEE_TYPE_ORDER = ['registration_fee', 'program_fee_1', 'program_fee_2', 'full_fee', 'custom_fee'];
+    const tierOrderMap = new Map<string, { label: string; feeType: string }>();
+    const countryTierMap = new Map<string, Map<string, number>>();
+    for (const inv of paidInvoices) {
+      const tierKey = inv.pricingTier?.name ?? 'Unknown';
+      const feeType = inv.pricingTier?.feeType ?? 'custom_fee';
+      if (!tierOrderMap.has(tierKey)) {
+        tierOrderMap.set(tierKey, { label: tierKey, feeType });
+      }
+      const country = this.resolveCountryName(
+        inv.application.participant?.originCountry ?? '',
+        inv.application.participant?.nationality ?? '',
+      ) ?? 'Unknown';
+      const row = countryTierMap.get(country) ?? new Map<string, number>();
+      row.set(tierKey, (row.get(tierKey) ?? 0) + 1);
+      countryTierMap.set(country, row);
+    }
+    const tiers = Array.from(tierOrderMap.entries())
+      .map(([key, v]) => ({ key, label: v.label, feeType: v.feeType }))
+      .sort((a, b) => {
+        const ai = FEE_TYPE_ORDER.indexOf(a.feeType);
+        const bi = FEE_TYPE_ORDER.indexOf(b.feeType);
+        return (ai === -1 ? FEE_TYPE_ORDER.length : ai) - (bi === -1 ? FEE_TYPE_ORDER.length : bi);
+      });
+    const paidCountriesByTier = {
+      tiers,
+      rows: Array.from(countryTierMap.entries())
+        .map(([country, row]) => {
+          const byTierCounts = Object.fromEntries(row.entries());
+          const total = Array.from(row.values()).reduce((sum, n) => sum + n, 0);
+          return { country, total, byTier: byTierCounts };
+        })
+        .sort((a, b) => b.total - a.total),
+    };
 
     // ── By payment method ─────────────────────────────────────────────────────
     const methodMap = new Map<string, number>();
@@ -871,6 +935,7 @@ export class StatsService {
         byTier,
         byPaymentMethod,
         countriesByStatus,
+        paidCountriesByTier,
       },
     };
   }

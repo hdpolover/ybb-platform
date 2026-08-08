@@ -26,7 +26,13 @@ type KPIData = {
 };
 
 interface KPISectionProps {
-  kpis: KPIData;
+  /**
+   * Null whenever there is no trustworthy data, including a failed fetch. It is
+   * deliberately not defaulted to a zero-filled object: a row of clean "0"
+   * cards reads as "nobody registered", which is indistinguishable from an
+   * outage and is exactly how a real registration incident got misread.
+   */
+  kpis: KPIData | null;
   loading?: boolean;
 }
 
@@ -51,20 +57,24 @@ function formatShare(value: number, total: number): string {
 }
 
 export function KPISection({ kpis, loading = false }: KPISectionProps) {
-  const registrationsValue = loading ? "—" : kpis.registeredUsers.toLocaleString();
-  const registrationsTodayValue = loading ? "—" : `${kpis.registrationsToday.toLocaleString()} today`;
-  const formsStartedValue = loading ? "—" : kpis.formsStarted.toLocaleString();
-  const formsStartedSubtitle = loading ? "—" : formatShare(kpis.formsStarted, kpis.registeredUsers);
-  const submittedApplicationsValue = loading ? "—" : kpis.submittedApplications.toLocaleString();
-  const submittedApplicationsSubtitle = loading ? "—" : formatShare(kpis.submittedApplications, kpis.registeredUsers);
-  const registeredOnlyValue = loading ? "—" : kpis.registeredOnly.toLocaleString();
-  const registeredOnlySubtitle = loading ? "—" : formatShare(kpis.registeredOnly, kpis.registeredUsers);
-  const ambassadorsValue = loading ? "—" : kpis.totalAmbassadors.toLocaleString();
-  const ambassadorSubtitle = loading ? "—" : `${kpis.activeAmbassadors.toLocaleString()} active ambassadors`;
-  const referredParticipantsValue = loading ? "—" : kpis.referredParticipants.toLocaleString();
-  const referredPercentageValue = loading ? "—" : `${kpis.referredParticipantsPercent.toFixed(1)}% of total`;
-  const programStatusValue = loading ? "—" : formatProgramStatus(kpis.programStatus);
-  const programStatusDateValue = loading ? "—" : formatProgramStatusDate(kpis.programStatusDate);
+  // A single narrowed source for every card: null while loading OR when the
+  // fetch produced nothing, so no code path can print a fabricated 0.
+  const data = loading ? null : kpis;
+
+  const registrationsValue = data ? data.registeredUsers.toLocaleString() : "—";
+  const registrationsTodayValue = data ? `${data.registrationsToday.toLocaleString()} today` : "—";
+  const formsStartedValue = data ? data.formsStarted.toLocaleString() : "—";
+  const formsStartedSubtitle = data ? formatShare(data.formsStarted, data.registeredUsers) : "—";
+  const submittedApplicationsValue = data ? data.submittedApplications.toLocaleString() : "—";
+  const submittedApplicationsSubtitle = data ? formatShare(data.submittedApplications, data.registeredUsers) : "—";
+  const registeredOnlyValue = data ? data.registeredOnly.toLocaleString() : "—";
+  const registeredOnlySubtitle = data ? formatShare(data.registeredOnly, data.registeredUsers) : "—";
+  const ambassadorsValue = data ? data.totalAmbassadors.toLocaleString() : "—";
+  const ambassadorSubtitle = data ? `${data.activeAmbassadors.toLocaleString()} active ambassadors` : "—";
+  const referredParticipantsValue = data ? data.referredParticipants.toLocaleString() : "—";
+  const referredPercentageValue = data ? `${data.referredParticipantsPercent.toFixed(1)}% of total` : "—";
+  const programStatusValue = data ? formatProgramStatus(data.programStatus) : "—";
+  const programStatusDateValue = data ? formatProgramStatusDate(data.programStatusDate) : "—";
 
   const cards = [
     {

@@ -37,7 +37,12 @@ export class ParticipantRepository implements IParticipantRepository {
         const createData: Prisma.ParticipantCreateInput = {
             ...(this.mapToPrismaInput(rest) as Prisma.ParticipantCreateInput),
             user: { connect: { id: userId } },
-            fullName: rest.fullName || 'Unknown', // Required field
+            // NOT NULL, so it needs a value, but never a synthesised one: a
+            // fake name here is indistinguishable from a real one downstream
+            // and can end up printed on a Letter of Acceptance. Blank means
+            // "onboarding has not set this yet", which every read site treats
+            // as absent.
+            fullName: rest.fullName || '',
         };
 
         const created = await this.prisma.participant.create({

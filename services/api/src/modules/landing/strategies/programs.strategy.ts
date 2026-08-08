@@ -98,7 +98,8 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                     where: {
                         type: 'guide',
                         isActive: true
-                    }
+                    },
+                    orderBy: [{ order: 'asc' }, { createdAt: 'asc' }]
                 },
                 faqs: {
                     where: { isActive: true },
@@ -131,7 +132,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                 include: {
                     objectives: { where: { isActive: true }, orderBy: { order: 'asc' } },
                     subthemes: { where: { isActive: true }, orderBy: { order: 'asc' } },
-                    resources: { where: { type: 'guide', isActive: true } },
+                    resources: { where: { type: 'guide', isActive: true }, orderBy: [{ order: 'asc' }, { createdAt: 'asc' }] },
                     faqs: { where: { isActive: true }, take: 5, orderBy: { order: 'asc' } },
                     timeline: { where: { isActive: true }, orderBy: { order: 'asc' } },
                     schedules: { where: { isActive: true }, orderBy: { order: 'asc' } },
@@ -426,6 +427,10 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                             date_display: t.endDate
                                 ? `${t.date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })} - ${t.endDate.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })}`
                                 : t.date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
+                            // Structured dates alongside the display string so the frontend can
+                            // sort/format deterministically instead of re-parsing free text.
+                            start_date: t.date.toISOString(),
+                            end_date: t.endDate ? t.endDate.toISOString() : null,
                             status: status,
                             name: t.title,
                             description: t.description,

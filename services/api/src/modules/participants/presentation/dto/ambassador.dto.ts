@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsUUID, IsString, IsPhoneNumber, IsOptional } from 'class-validator';
+import { IsUUID, IsString, IsPhoneNumber, IsOptional, IsEmail, IsNotEmpty, MaxLength } from 'class-validator';
 import { IsEnglishName, IsEnglishText } from '@shared/validators/english-text.validator';
 
 export class ApplyAmbassadorDto {
@@ -22,6 +22,82 @@ export class ApplyAmbassadorDto {
     @IsString()
     @IsEnglishText()
     institution?: string;
+}
+
+// Admin-facing creation/update DTOs for AmbassadorAdminController.
+// These replace inline @Body() object-literal types: an inline TS type erases to
+// `Object` at runtime, so Nest's ValidationPipe (whitelist/forbidNonWhitelisted/
+// transform) silently skips validation for that param entirely. See
+// ambassador-admin.controller.ts create()/update().
+export class CreateAmbassadorAdminDto {
+    @ApiProperty({ description: 'Ambassador email', example: 'jane@example.com' })
+    @IsEmail()
+    email: string;
+
+    @ApiProperty({ description: 'Full name', example: 'Jane Doe' })
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(255)
+    fullName: string;
+
+    @ApiProperty({ description: 'Program ID the ambassador is attached to', example: 'uuid' })
+    @IsUUID()
+    programId: string;
+
+    @ApiPropertyOptional({ description: 'Phone number', example: '+6281234567890' })
+    @IsOptional()
+    @IsString()
+    @MaxLength(25)
+    phoneNumber?: string;
+
+    @ApiPropertyOptional({ description: 'Institution/University', example: 'Harvard' })
+    @IsOptional()
+    @IsString()
+    @MaxLength(255)
+    institution?: string;
+
+    // Validated against the Prisma Gender enum by the controller's
+    // assertValidGender() (kept there for its clean custom error message),
+    // not by a class-validator @IsEnum here.
+    @ApiPropertyOptional({ description: 'Gender', enum: ['male', 'female'] })
+    @IsOptional()
+    @IsString()
+    gender?: string;
+
+    @ApiPropertyOptional({ description: 'Internal admin notes' })
+    @IsOptional()
+    @IsString()
+    notes?: string;
+}
+
+export class UpdateAmbassadorAdminDto {
+    @ApiPropertyOptional({ description: 'Full name', example: 'Jane Doe' })
+    @IsOptional()
+    @IsString()
+    @MaxLength(255)
+    fullName?: string;
+
+    @ApiPropertyOptional({ description: 'Phone number', example: '+6281234567890' })
+    @IsOptional()
+    @IsString()
+    @MaxLength(25)
+    phoneNumber?: string;
+
+    @ApiPropertyOptional({ description: 'Institution/University', example: 'Harvard' })
+    @IsOptional()
+    @IsString()
+    @MaxLength(255)
+    institution?: string;
+
+    @ApiPropertyOptional({ description: 'Gender', enum: ['male', 'female'] })
+    @IsOptional()
+    @IsString()
+    gender?: string;
+
+    @ApiPropertyOptional({ description: 'Internal admin notes' })
+    @IsOptional()
+    @IsString()
+    notes?: string;
 }
 
 export class AmbassadorDashboardDto {
@@ -102,4 +178,16 @@ export class AmbassadorShareTokenResolutionDto {
 export class ReferralCodeValidationDto {
     @ApiProperty({ description: 'Always true; an unknown or inactive code returns 404.' })
     valid: boolean;
+}
+
+export class ReferralAttributionDto {
+    @ApiProperty({ description: 'True when the code resolves to an active ambassador' })
+    valid: boolean;
+
+    @ApiProperty({
+        description: 'Display name of the referring ambassador, or null when the code is unknown, inactive, deleted, or belongs to another program',
+        nullable: true,
+        example: 'Jane Ambassador',
+    })
+    referredByName: string | null;
 }

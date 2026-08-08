@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { ArrowPathIcon, ExclamationTriangleIcon, PencilSquareIcon, CloudArrowUpIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import {
   listProgramPaymentMethods,
   bulkUpsertProgramPaymentMethods,
@@ -14,6 +15,7 @@ import {
   updatePaymentMethodWithIcon,
   deletePaymentMethod,
   listGatewayConfigs,
+  getPaymentMethodUsage,
   type ProgramPaymentMethod,
   type ProgramMethodOverride,
   type PaymentMethod,
@@ -30,6 +32,7 @@ import {
 } from "@/src/ui/sheet";
 import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
 import { EmptyState } from "@/src/admin/empty-state";
+import { buildPaymentMethodCode } from "@/lib/payment-method-code";
 
 function normalizePaymentMethodType(type: string | undefined): PaymentMethodType {
   const normalized = String(type ?? "").trim().toLowerCase();
@@ -51,6 +54,22 @@ function normalizeRichText(value: string): string {
 
 function stripHtml(value: string): string {
   return value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * True when this row is live for the program but still renders the SHARED
+ * master instructions, i.e. text any other program's admin can change.
+ *
+ * Scoped to MANUAL methods with non-empty instructions because that is where
+ * the damage is: manual instructions carry program-specific checkout links, so
+ * inheriting them means showing another summit's payment URLs. Automatic
+ * gateway methods legitimately share generic copy and would only add noise.
+ */
+function sharesGlobalInstructions(method: ProgramPaymentMethod, draft: MethodDraft | undefined): boolean {
+  if (!draft?.isEnabled) return false;
+  if (normalizePaymentMethodType(method.type) !== "MANUAL") return false;
+  if (draft.instructions.override) return false;
+  return stripHtml(method.instructions ?? "").trim().length > 0;
 }
 
 // ─── Per-program override draft state ─────────────────────────────────────────
@@ -86,6 +105,11 @@ export default function PaymentMethodsPage() {
   const program = accessiblePrograms.find(
     (p) => p.programId === params.programId || p.programSlug === params.programId,
   );
+  // The route param is frequently a program SLUG. Every program-scoped
+  // payment endpoint validates a UUID and 400s on a slug, which took the whole
+  // page down (including Save Changes) on slug URLs. Keep params.programId for
+  // navigation only; use the resolved UUID for API calls.
+  const programId = useResolvedProgramId(params.programId);
   const brandId = program?.brandId ?? "";
   const userId = adminProfile?.userId ?? "";
   const programName = program?.programName ?? "Selected Program";
@@ -104,13 +128,13 @@ export default function PaymentMethodsPage() {
   const [deleteSharedLoading, setDeleteSharedLoading] = useState(false);
 
   const fetchMethods = useCallback(async () => {
-    if (!params.programId) return;
+    if (!programId) return;
     setLoading(true); setError(null);
     try {
       // Load the program-scoped merged list + active gateway configs in
       // parallel, same "orphaned gateway" warning as the old global screen.
       const [methodsData, gatewayConfigs] = await Promise.all([
-        listProgramPaymentMethods(params.programId),
+        listProgramPaymentMethods(programId),
         listGatewayConfigs().catch(() => []),
       ]);
       setMethods(methodsData);
@@ -121,9 +145,11 @@ export default function PaymentMethodsPage() {
     }
     catch (err) { setError(err instanceof Error ? err.message : "Failed to load payment methods"); }
     finally { setLoading(false); }
-  }, [params.programId]);
+  }, [programId]);
 
   useEffect(() => { fetchMethods(); }, [fetchMethods]);
+
+  const sharedTextMethods = methods.filter((m) => sharesGlobalInstructions(m, drafts[m.id]));
 
   function updateDraft(methodId: string, patch: Partial<MethodDraft>) {
     setDrafts((prev) => ({ ...prev, [methodId]: { ...prev[methodId], ...patch } }));
@@ -145,7 +171,7 @@ export default function PaymentMethodsPage() {
   // first save must materialize the whole set, otherwise enabling/disabling
   // one method would silently drop every other method from "configured" mode.
   async function handleSaveAll() {
-    if (!params.programId) return;
+    if (!programId) return;
     setSaving(true);
     try {
       const payload: ProgramMethodOverride[] = methods.map((m) => {
@@ -160,7 +186,7 @@ export default function PaymentMethodsPage() {
           admin_instructions_override: draft.adminInstructions.override ? draft.adminInstructions.value : null,
         };
       });
-      await bulkUpsertProgramPaymentMethods(params.programId, payload);
+      await bulkUpsertProgramPaymentMethods(programId, payload);
       toast.success("Payment method settings saved for this program.");
       // The write endpoint returns { status: "success" }, not the updated
       // list — re-fetch to pick up fresh has_*_override flags.
@@ -218,8 +244,10 @@ export default function PaymentMethodsPage() {
         </div>
         <h1 className="mt-1 text-lg font-bold text-zinc-900">{programName} Payment Methods</h1>
         <p className="text-sm text-zinc-500">
-          Choose which shared payment methods {programName} accepts, and optionally override the description or
-          instructions shown to this program&apos;s participants. Nothing here affects any other program.
+          Choose which shared payment methods {programName} accepts, and customize the description or
+          instructions shown to this program&apos;s participants. Per-program customizations affect only{" "}
+          {programName}; editing a method&apos;s <span className="font-medium">shared details</span> changes it
+          everywhere.
         </p>
       </section>
 
@@ -251,6 +279,28 @@ export default function PaymentMethodsPage() {
             </button>
           </div>
         </div>
+
+        {/* Standing audit line. Inheriting shared instructions is silent by
+            nature — the row looks fine and the wrong payment links only show up
+            on the participant side — so the page has to say it out loud. */}
+        {!loading && sharedTextMethods.length > 0 && (
+          <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] text-amber-800">
+            <ExclamationTriangleIcon className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <p className="font-semibold">
+                {sharedTextMethods.length} enabled method{sharedTextMethods.length === 1 ? "" : "s"} show
+                {sharedTextMethods.length === 1 ? "s" : ""} shared instructions that any program can change
+              </p>
+              <p className="mt-0.5">
+                {sharedTextMethods.map((m) => m.display_name || m.name).join(", ")} —{" "}
+                {programName}&apos;s participants currently see text owned by every program at once, so it may
+                reference a different summit or link to the wrong checkout page. Check the Instructions on each
+                row below and click <span className="font-semibold">Customize for this program</span> to give{" "}
+                {programName} its own copy.
+              </p>
+            </div>
+          </div>
+        )}
 
         {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
 
@@ -338,8 +388,17 @@ function MethodRow({
   const isManual = normalizePaymentMethodType(method.type) === "MANUAL";
   const gatewayActive = isManual || (!!method.gateway_name && activeGatewayNames.has(method.gateway_name));
 
+  // Shared methods this program has not enabled are listed so they can be
+  // attached, but they must not read as live configuration. Muted, dashed,
+  // and still fully interactive — the checkbox is the whole point of the row.
   return (
-    <div className="rounded-lg border border-zinc-200 bg-white p-4">
+    <div
+      className={`rounded-lg border p-4 ${
+        draft.isEnabled
+          ? "border-zinc-200 bg-white"
+          : "border-dashed border-zinc-300 bg-zinc-50/60"
+      }`}
+    >
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-zinc-100 pb-3">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-14 shrink-0 items-center justify-center overflow-hidden rounded border border-zinc-200 bg-white">
@@ -363,6 +422,20 @@ function MethodRow({
               )}
               {!method.is_active && (
                 <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 font-semibold text-zinc-600">Shared method inactive</span>
+              )}
+              {!draft.isEnabled && method.is_active && (
+                <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 font-semibold text-zinc-600">
+                  Not enabled for this program
+                </span>
+              )}
+              {sharesGlobalInstructions(method, draft) && (
+                <span
+                  title="This program shows the shared instructions. Any program's admin can change them, and they may reference a different program."
+                  className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-1.5 py-0.5 font-semibold uppercase tracking-wide text-amber-700"
+                >
+                  <ExclamationTriangleIcon className="h-3 w-3" />
+                  Shared instructions
+                </span>
               )}
             </div>
           </div>
@@ -399,6 +472,7 @@ function MethodRow({
           <OverrideField
             label="Customer Instructions"
             field={draft.instructions}
+            risky={sharesGlobalInstructions(method, draft)}
             wasOverridden={method.has_instructions_override}
             onChange={(patch) => onFieldChange("instructions", patch)}
             renderInput={(value, onValueChange) => (
@@ -463,12 +537,15 @@ function MethodRow({
 }
 
 function OverrideField({
+  risky = false,
   label,
   field,
   wasOverridden,
   onChange,
   renderInput,
 }: {
+  /** Highlight the shared-text state as a risk rather than a neutral default. */
+  risky?: boolean;
   label: string;
   field: FieldDraft;
   wasOverridden: boolean;
@@ -486,15 +563,15 @@ function OverrideField({
             </span>
           )}
         </div>
-        <label className="flex items-center gap-1.5 text-[10px] font-medium text-zinc-500">
-          <input
-            type="checkbox"
-            checked={field.override}
-            onChange={(e) => onChange({ override: e.target.checked })}
-            className="h-3 w-3"
-          />
-          Override for this program
-        </label>
+        {field.override ? (
+          <button
+            type="button"
+            onClick={() => onChange({ override: false })}
+            className="cursor-pointer text-[10px] font-medium text-zinc-500 underline-offset-2 hover:text-zinc-700 hover:underline"
+          >
+            Revert to shared
+          </button>
+        ) : null}
       </div>
       {field.override ? (
         renderInput(field.value, (value) => onChange({ value }))
@@ -503,9 +580,44 @@ function OverrideField({
           Will revert to the shared default when you save.
         </p>
       ) : (
-        <p className="rounded-md border border-dashed border-zinc-200 bg-white px-3 py-2 text-[11px] text-zinc-400">
-          Using shared default{field.value ? `: "${stripHtml(field.value).slice(0, 140)}"` : " (empty)"}
-        </p>
+        // The per-program editor used to hide behind a 10px checkbox, so the
+        // only rich-text box anyone found was the one in "Edit shared details"
+        // — which broadcasts to every program. Prod ran 39 overlay rows with
+        // zero overrides before one shared edit put the wrong summit's payment
+        // links in front of three programs' participants. Make the safe path
+        // the obvious one.
+        <div
+          className={`rounded-md border border-dashed px-3 py-2 ${
+            risky ? "border-amber-300 bg-amber-50/60" : "border-zinc-200 bg-white"
+          }`}
+        >
+          <p className={`text-[11px] font-medium ${risky ? "text-amber-800" : "text-zinc-500"}`}>
+            {risky
+              ? "Shared with every program — check this text belongs to this program"
+              : "Shared with every program"}
+          </p>
+          {/* Enough of the real text to spot a wrong program name or checkout
+              link without opening the shared editor. */}
+          {field.value ? (
+            <p className={`mt-1 whitespace-pre-line text-[11px] ${risky ? "text-amber-900" : "text-zinc-400"}`}>
+              {stripHtml(field.value).slice(0, 320)}
+              {stripHtml(field.value).length > 320 ? "…" : ""}
+            </p>
+          ) : (
+            <p className="mt-1 text-[11px] italic text-zinc-400">(empty)</p>
+          )}
+          <button
+            type="button"
+            onClick={() => onChange({ override: true })}
+            className={`mt-1.5 cursor-pointer rounded-md border px-2 py-1 text-[10px] font-semibold transition-colors ${
+              risky
+                ? "border-amber-300 bg-amber-100 text-amber-900 hover:bg-amber-200"
+                : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+            }`}
+          >
+            Customize for this program
+          </button>
+        </div>
       )}
     </div>
   );
@@ -533,6 +645,18 @@ function PaymentMethodModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  // Blast radius for editing the master instructions below. Fetched only when
+  // editing an existing method: creating one affects nobody yet.
+  const [inheritingCount, setInheritingCount] = useState<number | null>(null);
+  useEffect(() => {
+    if (!method?.id) return;
+    let cancelled = false;
+    getPaymentMethodUsage(method.id)
+      .then((u) => { if (!cancelled) setInheritingCount(u.inheriting_program_count); })
+      .catch(() => { /* the warning is advisory; a failed count must not block editing */ });
+    return () => { cancelled = true; };
+  }, [method?.id]);
+
   const [name, setName] = useState(method?.name ?? "");
   const [type, setType] = useState<PaymentMethodType>(normalizePaymentMethodType(method?.type));
   const [displayName, setDisplayName] = useState(method?.display_name ?? "");
@@ -611,9 +735,8 @@ function PaymentMethodModal({
     e.preventDefault(); setLoading(true); setError(null);
     // `code` is a stable machine identifier. Derive it from the name on
     // create and never change it on edit — renaming a method shouldn't break
-    // anything keyed off the code. A random suffix keeps creates
-    // collision-resistant since the column has a unique constraint.
-    const code = method?.code ?? `${slugify(name)}_${Math.random().toString(36).slice(2, 8)}`;
+    // anything keyed off the code.
+    const code = buildPaymentMethodCode(name, method?.code);
     if (!code) { setError("Internal name is required to generate a code."); setLoading(false); return; }
     // AUTOMATIC methods must point at a real active gateway — otherwise the
     // payment service would fail at charge time with "no active config".
@@ -730,9 +853,23 @@ function PaymentMethodModal({
             <p>
               This is <span className="font-semibold">shared master data</span> —{" "}
               {method ? (
-                <>saving here changes this payment method for <span className="font-semibold">every program</span> that uses it, not just {programName}.</>
+                <>
+                  saving here changes this payment method for{" "}
+                  <span className="font-semibold">every program</span> that uses it, not just {programName}.
+                  {inheritingCount !== null && inheritingCount > 0 && (
+                    <>
+                      {" "}The description and instructions below are currently shown to{" "}
+                      <span className="font-semibold">
+                        {inheritingCount} program{inheritingCount === 1 ? "" : "s"}
+                      </span>{" "}
+                      that {inheritingCount === 1 ? "has" : "have"} not customized them. To change the text for{" "}
+                      {programName} only, close this and use{" "}
+                      <span className="font-semibold">Customize for this program</span> on the method&rsquo;s row.
+                    </>
+                  )}
+                </>
               ) : (
-                <>creating here adds a payment method visible to <span className="font-semibold">every program</span>, not just {programName}.</>
+                <>creating here adds a payment method visible to <span className="font-semibold">every program</span>, not just {programName}. Looking for one that already exists? Close this and tick <span className="font-semibold">Enabled for this program</span> on it in the list instead — names must be unique across all programs.</>
               )}
             </p>
           </div>
@@ -972,14 +1109,3 @@ function Field({ label, required, children }: { label: string; required?: boolea
 
 const inputCls = "block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
 
-// Derives a stable machine `code` from the admin-entered name when creating
-// a new shared payment method (edits keep the original code untouched).
-function slugify(input: string): string {
-  return input
-    .toLowerCase()
-    .trim()
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-}

@@ -402,6 +402,47 @@ export class EventsController {
     });
   }
 
+  @EventPattern('application.submission_reminder')
+  async handleSubmissionReminder(
+    @Payload() data: unknown,
+    @Ctx() context: RmqContext,
+  ) {
+    const payload = asRecord(data);
+    await this.processEvent(
+      'application.submission_reminder',
+      payload,
+      context,
+      async () => {
+        this.logger.log(
+          `Received application.submission_reminder event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+        );
+
+        const email = getString(payload, 'email');
+        if (!email) return;
+
+        const metadata = asRecord(payload.metadata);
+        await this.emailService.sendSubmissionReminderEmail(email, {
+          name:
+            getString(payload, 'customer_name') ||
+            getString(metadata, 'customer_name') ||
+            'Participant',
+          program: getString(payload, 'program') || getString(metadata, 'program'),
+          brandId: getString(payload, 'brandId'),
+          programId: getString(payload, 'programId'),
+          deadline: getString(payload, 'deadline'),
+          daysRemaining:
+            getNumber(payload, 'daysRemaining') ||
+            getNumber(metadata, 'reminder_offset'),
+          submissionPageUrl:
+            getString(payload, 'submissionPageUrl') ||
+            getString(payload, 'submission_page_url') ||
+            undefined,
+          brand: asRecord(payload.brand) ?? undefined,
+        });
+      },
+    );
+  }
+
   @EventPattern('payment.issue_alternative')
   async handlePaymentIssueAlternative(
     @Payload() data: unknown,
@@ -504,7 +545,7 @@ export class EventsController {
         email,
         getString(payload, 'first_name') ||
           getString(payload, 'name') ||
-          'User',
+          'there',
         payload.brand,
       );
     });
@@ -531,7 +572,7 @@ export class EventsController {
 
         await this.emailService.sendForgotPasswordEmail(
           email,
-          getString(payload, 'name') || 'User',
+          getString(payload, 'name') || 'there',
           token,
           payload.brand,
         );
@@ -565,7 +606,7 @@ export class EventsController {
       );
       await this.emailService.sendVerificationEmail(
         email,
-        getString(payload, 'name') || 'User',
+        getString(payload, 'name') || 'there',
         token,
         payload.brand,
       );
@@ -596,7 +637,7 @@ export class EventsController {
 
         await this.emailService.sendEmailVerifiedEmail(
           email,
-          getString(payload, 'name') || 'User',
+          getString(payload, 'name') || 'there',
           payload.brand,
         );
       },
@@ -697,6 +738,19 @@ export class EventsController {
         const recipients = getLoaRecipients(payload, 'recipients');
         if (recipients.length === 0) return;
 
+        // Batch-level brand (one release batch = one program = one brand),
+        // same shape as the payment-event handlers above. Used by
+        // resolveDocumentsUrl() to link the "Download Your Invitation
+        // Letter" button at the brand's own portal instead of a hardcoded
+        // fallback.
+        const rawBrand = asRecord(payload.brand);
+        const brand = payload.brand
+          ? {
+              name: getString(rawBrand, 'name'),
+              websiteUrl: getString(rawBrand, 'websiteUrl') ?? null,
+            }
+          : undefined;
+
         // Per-recipient errors are caught and logged rather than thrown: this
         // event carries the whole batch as one message, so throwing would
         // nack the entire message and (depending on retry/idempotency state)
@@ -709,6 +763,7 @@ export class EventsController {
               name: recipient.fullName || 'Participant',
               program: programName,
               programId,
+              brand,
             });
           } catch (error) {
             this.logger.error(

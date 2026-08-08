@@ -429,6 +429,7 @@ func setupRouter(
 			methods.POST("", paymentMethodHandler.Create)
 			methods.PUT("/:id", paymentMethodHandler.Update)
 			methods.DELETE("/:id", paymentMethodHandler.Delete)
+			methods.GET("/:id/usage", programPaymentMethodHandler.GetMethodUsage)
 		}
 
 		// Per-Program Payment Methods (overlay on master; fallback-aware reads)

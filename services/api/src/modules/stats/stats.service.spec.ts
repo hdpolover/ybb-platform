@@ -22,6 +22,9 @@ describe('StatsService', () => {
       count: jest.fn(),
       findMany: jest.fn(),
     },
+    applicationInvoice: {
+      findMany: jest.fn(),
+    },
     ambassador: {
       count: jest.fn(),
       findMany: jest.fn(),
@@ -201,5 +204,52 @@ describe('StatsService', () => {
       { name: 'Male', value: 1 },
       { name: 'Unknown', value: 1 },
     ]);
+  });
+
+  it('groups paid invoices by country and fee-stage tier for the payments tab', async () => {
+    mockPrismaService.program.findUnique.mockResolvedValue({ id: 'program-1', usdInIdr: 15500 });
+    mockPrismaService.participantApplication.findMany.mockResolvedValue([
+      { id: 'app-1', status: 'accepted', applicationCategory: 'general', submittedAt: new Date(), lastEditedAt: new Date(), participant: { educationLevel: null, institution: null, originCountry: 'ID', nationality: 'Indonesia', profileCompletedAt: new Date() } },
+      { id: 'app-2', status: 'accepted', applicationCategory: 'general', submittedAt: new Date(), lastEditedAt: new Date(), participant: { educationLevel: null, institution: null, originCountry: 'ID', nationality: 'Indonesia', profileCompletedAt: new Date() } },
+      { id: 'app-3', status: 'accepted', applicationCategory: 'general', submittedAt: new Date(), lastEditedAt: new Date(), participant: { educationLevel: null, institution: null, originCountry: 'JP', nationality: 'Japan', profileCompletedAt: new Date() } },
+    ]);
+    mockPrismaService.applicationInvoice.findMany.mockResolvedValue([
+      {
+        applicationId: 'app-1', amount: 50, currency: 'USD', status: 'paid', paymentMethod: 'card', paidAt: new Date(), exchangeRateSnapshot: null,
+        pricingTier: { name: 'Registration Fee', feeType: 'registration_fee' },
+        application: { participant: { originCountry: 'ID', nationality: 'Indonesia' } },
+      },
+      {
+        applicationId: 'app-1', amount: 200, currency: 'USD', status: 'paid', paymentMethod: 'card', paidAt: new Date(), exchangeRateSnapshot: null,
+        pricingTier: { name: 'Program Fee Installment 1', feeType: 'program_fee_1' },
+        application: { participant: { originCountry: 'ID', nationality: 'Indonesia' } },
+      },
+      {
+        applicationId: 'app-2', amount: 50, currency: 'USD', status: 'paid', paymentMethod: 'card', paidAt: new Date(), exchangeRateSnapshot: null,
+        pricingTier: { name: 'Registration Fee', feeType: 'registration_fee' },
+        application: { participant: { originCountry: 'ID', nationality: 'Indonesia' } },
+      },
+      {
+        applicationId: 'app-3', amount: 50, currency: 'USD', status: 'unpaid', paymentMethod: null, paidAt: null, exchangeRateSnapshot: null,
+        pricingTier: { name: 'Registration Fee', feeType: 'registration_fee' },
+        application: { participant: { originCountry: 'JP', nationality: 'Japan' } },
+      },
+    ]);
+
+    const result = await service.getAdminProgramAnalytics('program-1');
+
+    expect(result.payments.paidCountriesByTier).toEqual({
+      tiers: [
+        { key: 'Registration Fee', label: 'Registration Fee', feeType: 'registration_fee' },
+        { key: 'Program Fee Installment 1', label: 'Program Fee Installment 1', feeType: 'program_fee_1' },
+      ],
+      rows: [
+        {
+          country: 'Indonesia',
+          total: 3,
+          byTier: { 'Registration Fee': 2, 'Program Fee Installment 1': 1 },
+        },
+      ],
+    });
   });
 });

@@ -24,6 +24,7 @@ import { ExportApplicationsHandler } from './application/queries/handlers/export
 // Infrastructure
 import { ApplicationRepository } from './infrastructure/persistence/application.repository';
 import { ApplicationMapper } from './infrastructure/mappers/application.mapper';
+import { SubmissionDeadlineReminderService } from './infrastructure/services/submission-deadline-reminder.service';
 import { PrismaModule } from '@shared/infrastructure/prisma/prisma.module';
 import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.module';
 import { APPLICATION_REPOSITORY } from './infrastructure/tokens';
@@ -51,6 +52,7 @@ import { CacheModule } from '@shared/infrastructure/cache/cache.module';
 
     // Infrastructure
     ApplicationMapper,
+    SubmissionDeadlineReminderService,
     {
       provide: APPLICATION_REPOSITORY,
       useClass: ApplicationRepository,
