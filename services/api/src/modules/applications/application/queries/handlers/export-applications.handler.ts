@@ -8,7 +8,7 @@ import { ExcelService } from '@shared/infrastructure/excel/excel.service';
 import type { Column } from 'exceljs';
 import { buildE164Phone, extractAndSanitizePhone, extractPhoneFromPersonalData } from '@shared/utils/phone-e164';
 import { resolveApplicationBirthdate } from '@shared/utils/birthdate-resolution';
-import { isRenderableEssayQuestion } from '../../helpers/application-coalesce.helpers';
+import { isRenderableEssayQuestion, coalesceStr } from '../../helpers/application-coalesce.helpers';
 
 type ApplicationExportPayload = Prisma.ParticipantApplicationGetPayload<{
     select: {
@@ -32,6 +32,10 @@ type ApplicationExportPayload = Prisma.ParticipantApplicationGetPayload<{
                 phoneNumber: true;
                 originCountry: true;
                 birthdate: true;
+                // Dead columns in prod (0 rows populated) — kept only as the
+                // fallback when personal_data has no institution/occupation.
+                institution: true;
+                occupation: true;
                 user: { select: { email: true } };
             };
         };
@@ -341,6 +345,8 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
                             phoneNumber: true,
                             originCountry: true,
                             birthdate: true,
+                            institution: true,
+                            occupation: true,
                             user: { select: { email: true } },
                         },
                     },
@@ -400,12 +406,20 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
                 // (non-placeholder) date. Keeps all read paths in agreement.
                 const resolvedBirthdate = resolveApplicationBirthdate(app.personalData, app.participant?.birthdate);
 
+                // participants.institution/occupation are dead columns in prod
+                // (0 rows populated) — personal_data is the real source, the
+                // participant column is only a fallback for legacy rows.
+                const institution = coalesceStr(personalData['institution']) ?? app.participant?.institution ?? '';
+                const occupation = coalesceStr(personalData['occupation']) ?? app.participant?.occupation ?? '';
+
                 rows.push({
                     id: app.id,
                     program: app.program?.name ?? 'N/A',
                     participantName: app.participant?.fullName ?? 'N/A',
                     email: app.participant?.user?.email ?? 'N/A',
                     country: app.participant?.originCountry ?? 'N/A',
+                    institution,
+                    occupation,
                     phone: phone.value,
                     phoneValid: phone.isValid ? 'Yes' : 'No',
                     dateOfBirth: resolvedBirthdate ? resolvedBirthdate.toISOString().slice(0, 10) : '',
@@ -432,6 +446,8 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
             { header: 'Participant Name', key: 'participantName', width: 24 },
             { header: 'Email', key: 'email', width: 28 },
             { header: 'Country', key: 'country', width: 10 },
+            { header: 'Institution', key: 'institution', width: 28 },
+            { header: 'Occupation', key: 'occupation', width: 24 },
             { header: 'Phone', key: 'phone', width: 16 },
             { header: 'Phone Valid', key: 'phoneValid', width: 12 },
             { header: 'Date of Birth', key: 'dateOfBirth', width: 14 },

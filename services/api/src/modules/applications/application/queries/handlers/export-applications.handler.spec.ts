@@ -241,8 +241,8 @@ describe('ExportApplicationsHandler', () => {
     expect(rows).toEqual([]);
     const columnKeys = columns.map((c: { key: string }) => c.key);
     expect(columnKeys).toEqual([
-      'id', 'program', 'participantName', 'email', 'country', 'phone', 'phoneValid',
-      'dateOfBirth', 'status', 'category', 'appliedAt', 'submittedAt',
+      'id', 'program', 'participantName', 'email', 'country', 'institution', 'occupation',
+      'phone', 'phoneValid', 'dateOfBirth', 'status', 'category', 'appliedAt', 'submittedAt',
       'registrationPaymentStatus', 'programPaymentStatus', 'scoreTotal', 'scoreStatus',
     ]);
   });
@@ -343,6 +343,94 @@ describe('ExportApplicationsHandler', () => {
 
       const [rows] = excel.generateExcel.mock.calls[0];
       expect(rows[0].dateOfBirth).toBe('1990-01-01');
+    });
+  });
+
+  // institution/occupation: participants.institution/occupation are dead
+  // columns in prod (0 rows populated) — personal_data is the real source,
+  // the participant column is only a legacy fallback.
+  describe('institution/occupation resolution', () => {
+    function buildAppWithProfile(overrides: {
+      personalData: Record<string, unknown>;
+      participantInstitution: string | null;
+      participantOccupation: string | null;
+    }) {
+      return {
+        ...APP_1,
+        id: 'app-profile',
+        personalData: overrides.personalData,
+        participant: {
+          ...APP_1.participant,
+          institution: overrides.participantInstitution,
+          occupation: overrides.participantOccupation,
+        },
+      };
+    }
+
+    it('prefers personal_data over the participant column when both are present', async () => {
+      const app = buildAppWithProfile({
+        personalData: { institution: 'MIT', occupation: 'Student' },
+        participantInstitution: 'Legacy University',
+        participantOccupation: 'Legacy Job',
+      });
+      const prisma = buildPrismaMock({
+        distinctProgramIds: ['prog-1'],
+        applications: [app],
+        fields: PROGRAM_1_FIELDS,
+        essays: PROGRAM_1_ESSAYS,
+      });
+      const excel = buildExcelMock();
+      const handler = new ExportApplicationsHandler(prisma as never, excel as never);
+
+      await handler.execute(new ExportApplicationsQuery('brand-1', 'prog-1'));
+
+      const [rows] = excel.generateExcel.mock.calls[0];
+      expect(rows[0].institution).toBe('MIT');
+      expect(rows[0].occupation).toBe('Student');
+    });
+
+    it('falls back to the participant column when personal_data has none', async () => {
+      const app = buildAppWithProfile({
+        personalData: {},
+        participantInstitution: 'Legacy University',
+        participantOccupation: 'Legacy Job',
+      });
+      const prisma = buildPrismaMock({
+        distinctProgramIds: ['prog-1'],
+        applications: [app],
+        fields: PROGRAM_1_FIELDS,
+        essays: PROGRAM_1_ESSAYS,
+      });
+      const excel = buildExcelMock();
+      const handler = new ExportApplicationsHandler(prisma as never, excel as never);
+
+      await handler.execute(new ExportApplicationsQuery('brand-1', 'prog-1'));
+
+      const [rows] = excel.generateExcel.mock.calls[0];
+      expect(rows[0].institution).toBe('Legacy University');
+      expect(rows[0].occupation).toBe('Legacy Job');
+    });
+
+    it('renders an empty cell when neither personal_data nor the participant column has a value', async () => {
+      const app = buildAppWithProfile({
+        personalData: {},
+        participantInstitution: null,
+        participantOccupation: null,
+      });
+      const prisma = buildPrismaMock({
+        distinctProgramIds: ['prog-1'],
+        applications: [app],
+        fields: PROGRAM_1_FIELDS,
+        essays: PROGRAM_1_ESSAYS,
+      });
+      const excel = buildExcelMock();
+      const handler = new ExportApplicationsHandler(prisma as never, excel as never);
+
+      await handler.execute(new ExportApplicationsQuery('brand-1', 'prog-1'));
+
+      const [rows] = excel.generateExcel.mock.calls[0];
+      expect(rows[0].institution).toBe('');
+      expect(rows[0].occupation).toBe('');
     });
   });
 });
