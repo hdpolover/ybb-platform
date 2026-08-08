@@ -797,7 +797,15 @@ export class StatsService {
     }
 
     const submittedCount = appRows.filter((a) => Boolean(a.submittedAt) || a.status !== 'draft').length;
-    const conversionRate = submittedCount > 0 ? Number(((paidInvoices.length / submittedCount) * 100).toFixed(1)) : 0;
+
+    // Conversion is paid applicants over everyone who registered. It used to
+    // divide paid *invoices* by submitted applications, which overshot 100%:
+    // an applicant can hold several invoices (registration fee + installments),
+    // and the registration fee is paid before submission, so paid was never a
+    // subset of submitted. Counting distinct applications keeps this in step
+    // with the registration funnel below.
+    const paidApplicationCount = new Set(paidInvoices.map((inv) => inv.applicationId)).size;
+    const conversionRate = appRows.length > 0 ? Number(((paidApplicationCount / appRows.length) * 100).toFixed(1)) : 0;
 
     // ── Revenue by month (6 months) ───────────────────────────────────────────
     const now = new Date();

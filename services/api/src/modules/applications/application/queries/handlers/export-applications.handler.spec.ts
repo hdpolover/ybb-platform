@@ -433,4 +433,44 @@ describe('ExportApplicationsHandler', () => {
       expect(rows[0].occupation).toBe('');
     });
   });
+
+  describe('country resolution', () => {
+    function buildAppWithCountry(originCountry: string | null, personalData: Record<string, unknown> = {}) {
+      return {
+        ...APP_1,
+        id: 'app-country',
+        personalData,
+        participant: { ...APP_1.participant, originCountry },
+      };
+    }
+
+    async function exportCountry(originCountry: string | null, personalData: Record<string, unknown> = {}) {
+      const app = buildAppWithCountry(originCountry, personalData);
+      const prisma = buildPrismaMock({
+        distinctProgramIds: ['prog-1'],
+        applications: [app],
+        fields: PROGRAM_1_FIELDS,
+        essays: PROGRAM_1_ESSAYS,
+      });
+      const excel = buildExcelMock();
+      const handler = new ExportApplicationsHandler(prisma as never, excel as never);
+
+      await handler.execute(new ExportApplicationsQuery('brand-1', 'prog-1'));
+
+      const [rows] = excel.generateExcel.mock.calls[0];
+      return rows[0].country;
+    }
+
+    it('renders the display name rather than the raw ISO code', async () => {
+      expect(await exportCountry('ID')).toBe('Indonesia');
+    });
+
+    it('falls back to the personal_data nationality when origin_country is empty', async () => {
+      expect(await exportCountry(null, { nationality: 'PK' })).toBe('Pakistan');
+    });
+
+    it('renders N/A when neither origin_country nor personal_data has a country', async () => {
+      expect(await exportCountry(null)).toBe('N/A');
+    });
+  });
 });
