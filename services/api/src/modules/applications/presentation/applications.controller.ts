@@ -686,12 +686,18 @@ export class ApplicationsController {
   async review(
     @Param('id') id: string,
     @Body() dto: ReviewApplicationRequestDto,
+    @CurrentUser() user: CurrentUserData,
   ): Promise<ApplicationResponseDto> {
-    this.logger.log(`Reviewing application ${id} by reviewer ${dto.reviewerId}`);
+    // reviewerId MUST come from the authenticated JWT principal, never from
+    // the request body, same attribution-forgery rule Task 6/8b applied to
+    // createdById/actingAdminId. ReviewApplicationRequestDto has no
+    // reviewerId field, so a body-supplied one cannot flow through dto.*
+    // here even before the global whitelist pipe rejects it.
+    this.logger.log(`Reviewing application ${id} by reviewer ${user.userId}`);
 
     const command = new ReviewApplicationCommand(
       id,
-      dto.reviewerId,
+      user.userId,
       dto.status,
       dto.reviewerNotes,
       dto.approvalMode,

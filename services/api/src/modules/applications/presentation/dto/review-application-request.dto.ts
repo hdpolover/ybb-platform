@@ -12,10 +12,6 @@ export class ReviewApplicationRequestDto {
   @IsEnum(ApplicationStatus)
   status: ApplicationStatus;
 
-  @ApiProperty({ description: 'Reviewer user id' })
-  @IsString()
-  reviewerId: string;
-
   @ApiPropertyOptional({ description: 'Reviewer notes' })
   @IsOptional()
   @IsString()

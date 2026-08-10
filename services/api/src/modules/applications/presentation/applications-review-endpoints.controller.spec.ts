@@ -64,6 +64,7 @@ describe('ApplicationsController review routes (real HTTP layer)', () => {
   let app: INestApplication;
   const mockGetReviewHandler = { execute: jest.fn() };
   const mockUpsertReviewHandler = { execute: jest.fn() };
+  const mockReviewApplicationHandler = { execute: jest.fn() };
   let currentUser: { userId: string; role: string | string[] };
 
   beforeAll(async () => {
@@ -74,6 +75,7 @@ describe('ApplicationsController review routes (real HTTP layer)', () => {
       providers: buildProviders({
         getApplicationReviewHandler: mockGetReviewHandler,
         upsertApplicationReviewHandler: mockUpsertReviewHandler,
+        reviewApplicationHandler: mockReviewApplicationHandler,
       }),
     })
       .overrideGuard(JwtAuthGuard)
@@ -149,15 +151,46 @@ describe('ApplicationsController review routes (real HTTP layer)', () => {
 
     it('legacy POST :id/review resolves under the global whitelist pipe (Task 9 fixed the dual-@Body() 400)', async () => {
       // Before Task 9, this route bound both @Body() dto and a separate
-      // @Body('reviewerId') param. reviewerId was not a declared property of
-      // ReviewApplicationRequestDto, so forbidNonWhitelisted rejected it as
-      // an unknown property and every call 400'd. reviewerId is now a real
-      // field on the DTO, so a valid body must not 400.
+      // @Body('reviewerId') param, and reviewerId was not a declared
+      // property of ReviewApplicationRequestDto, so forbidNonWhitelisted
+      // rejected it as an unknown property and every call 400'd. reviewerId
+      // is no longer accepted in the body at all (see the attribution test
+      // below); a valid body without it must not 400.
+      mockReviewApplicationHandler.execute.mockResolvedValue({ id: 'app-1' });
+
       const response = await request(app.getHttpServer())
         .post('/applications/app-1/review')
-        .send({ status: 'accepted', reviewerId: 'admin-1', reviewerNotes: 'looks good' });
+        .send({ status: 'accepted', reviewerNotes: 'looks good' });
 
       expect(response.status).not.toBe(400);
+    });
+
+    it('does not let a body-supplied reviewerId determine attribution on POST :id/review (legacy)', async () => {
+      // Follow-up fix to the Task 9 change above: declaring reviewerId as a
+      // DTO field would have formalized an attribution-forgery hole (any
+      // authenticated admin could attribute an approve/reject to a
+      // different admin). Same rule Tasks 6/8b applied to
+      // createdById/actingAdminId elsewhere in this controller: reviewerId
+      // must come from the authenticated JWT principal, not the body.
+      mockReviewApplicationHandler.execute.mockResolvedValue({ id: 'app-1' });
+      currentUser = { userId: 'real-admin-99', role: [UserRole.ADMIN] };
+
+      const response = await request(app.getHttpServer())
+        .post('/applications/app-1/review')
+        .send({ status: 'accepted', reviewerId: 'attacker-admin-id' });
+
+      // forbidNonWhitelisted may 400 the request outright since the DTO no
+      // longer has a reviewerId field; that is an acceptable pass. Assert
+      // the actual observed behavior rather than assuming which one happens.
+      if (response.status === 400) {
+        expect(mockReviewApplicationHandler.execute).not.toHaveBeenCalled();
+        return;
+      }
+
+      expect(mockReviewApplicationHandler.execute).toHaveBeenCalledTimes(1);
+      const command = mockReviewApplicationHandler.execute.mock.calls[0][0];
+      expect(command.reviewerId).toBe('real-admin-99');
+      expect(command.reviewerId).not.toBe('attacker-admin-id');
     });
   });
 
