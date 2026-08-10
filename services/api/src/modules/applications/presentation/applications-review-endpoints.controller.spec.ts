@@ -5,6 +5,7 @@
 // that does not yet exist) so this task's tests stay scoped to the routes it adds.
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import * as request from 'supertest';
 import { ScoringStage } from '@prisma/client';
 import { UserRole } from '@core/entities/user.entity';
@@ -14,9 +15,10 @@ import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard
 import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 import { HttpExceptionFilter } from '@shared/filters/http-exception.filter';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { CacheInvalidationInterceptor } from '@shared/interceptors/cache-invalidation.interceptor';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 
-// Commands/queries this controller already wires (unrelated to this task) —
+// Commands/queries this controller already wires (unrelated to this task),
 // stubbed so Nest can construct ApplicationsController's full dependency list.
 import { CreateApplicationHandler } from '../application/commands/handlers/create-application.handler';
 import { UpdateApplicationHandler } from '../application/commands/handlers/update-application.handler';
@@ -134,7 +136,7 @@ describe('ApplicationsController review routes (real HTTP layer)', () => {
 
     it('POST /applications/:id/review (legacy) never reaches the new GET/PUT review handlers', async () => {
       // Whether the legacy route itself 200s is unrelated to this task (it has
-      // its own pre-existing DTO/body-shape quirk, out of scope here — the
+      // its own pre-existing DTO/body-shape quirk, out of scope here; the
       // legacy POST :id/review endpoint is slated for cleanup in Task 9). What
       // matters for route-collision purposes is that it never dispatches to
       // either of the new :applicationId/review handlers.
@@ -196,7 +198,7 @@ describe('ApplicationsController review routes (real HTTP layer)', () => {
         });
 
       // forbidNonWhitelisted may 400 the request outright since the DTO has no
-      // actingAdminId/overrideById fields — that is an acceptable pass. Assert
+      // actingAdminId/overrideById fields; that is an acceptable pass. Assert
       // the actual observed behavior rather than assuming a 200.
       if (response.status === 400) {
         expect(mockUpsertReviewHandler.execute).not.toHaveBeenCalled();
@@ -256,5 +258,87 @@ describe('ApplicationsController review routes (real HTTP layer)', () => {
         { path: 'items[0].score', message: 'Score must be between 0 and 100 for this criterion.' },
       ]);
     });
+  });
+});
+
+describe('PUT /applications/:applicationId/review cache invalidation', () => {
+  // Separate app instance, wired with the SAME CacheInvalidationInterceptor
+  // production uses (CacheModule registers it globally as APP_INTERCEPTOR),
+  // rather than asserting on @CacheInvalidate metadata alone. This proves the
+  // route actually reaches CacheService.invalidateByPatterns with the right
+  // key when it runs, not just that the decorator is present.
+  let app: INestApplication;
+  const mockUpsertReviewHandler = { execute: jest.fn() };
+  const invalidateByPatterns = jest.fn();
+  const cacheServiceMock = { get: jest.fn(), set: jest.fn(), invalidateByPatterns };
+
+  beforeAll(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [ApplicationsController],
+      providers: buildProviders({
+        upsertApplicationReviewHandler: mockUpsertReviewHandler,
+        cacheService: cacheServiceMock,
+      }),
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({
+        canActivate: (context: import('@nestjs/common').ExecutionContext) => {
+          const req = context.switchToHttp().getRequest();
+          req.user = { userId: 'admin-1', role: [UserRole.ADMIN] };
+          return true;
+        },
+      })
+      .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
+
+    app = module.createNestApplication();
+    app.useGlobalFilters(new HttpExceptionFilter());
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
+    app.useGlobalInterceptors(
+      new CacheInvalidationInterceptor(new Reflector(), cacheServiceMock as unknown as CacheService),
+    );
+    await app.init();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('invalidates application:list:* after a successful PUT, so the admin list stops serving the pre-review score/status', async () => {
+    mockUpsertReviewHandler.execute.mockResolvedValue({ id: 'review-1' });
+
+    await request(app.getHttpServer())
+      .put('/applications/app-1/review')
+      .query({ stage: 'application' })
+      .send({ status: 'submitted', items: [{ criterionId: 'crit-1', score: 10 }] })
+      .expect(200);
+
+    // CacheInvalidationInterceptor invalidates inside an async tap() callback
+    // that runs after the response observable completes, so it can still be
+    // pending when supertest's promise resolves. Flush the microtask/timer
+    // queue before asserting.
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(invalidateByPatterns).toHaveBeenCalledTimes(1);
+    expect(invalidateByPatterns).toHaveBeenCalledWith(['application:list:*']);
+  });
+
+  it('does not invalidate any cache when the handler throws (no successful write, nothing to invalidate)', async () => {
+    mockUpsertReviewHandler.execute.mockRejectedValue(new BadRequestException('Review items are invalid.'));
+
+    await request(app.getHttpServer())
+      .put('/applications/app-1/review')
+      .query({ stage: 'application' })
+      .send({ status: 'draft', items: [] })
+      .expect(400);
+
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(invalidateByPatterns).not.toHaveBeenCalled();
   });
 });

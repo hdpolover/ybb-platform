@@ -608,7 +608,7 @@ export class ApplicationsController {
   // instead of the legacy `:id` used by POST :id/review directly below.
   // NestJS routes by HTTP verb + path together, so a differing param NAME
   // at the same path position is legal and does not collide with the
-  // legacy POST route — but it is easy to misread as a conflict. The
+  // legacy POST route, but it is easy to misread as a conflict. The
   // legacy POST :id/review endpoint is scheduled for cleanup in Task 9;
   // until then both coexist on this controller.
   @Get(':applicationId/review')
@@ -635,6 +635,13 @@ export class ApplicationsController {
   @ApiResponse({ status: 400, description: 'Missing/invalid stage query param, or invalid review items' })
   @ApiResponse({ status: 404, description: 'Application not found' })
   @ApiResponse({ status: 409, description: 'No active rubric for this stage, or the interview gate is closed' })
+  // Submitting a review writes scoreTotal/scoreStatus onto participantApplication
+  // (see UpsertApplicationReviewHandler), and those fields are exposed through
+  // ApplicationResponseDto, which findAll() above caches under
+  // CACHE_KEYS.APPLICATION_LIST for CACHE_TTL.MEDIUM (5 minutes). Without this,
+  // an admin who scores an application keeps seeing the pre-review score/status
+  // in the list for up to 5 minutes.
+  @CacheInvalidate(['application:list:*'])
   async upsertReview(
     @Param('applicationId') applicationId: string,
     @Query('stage', new ParseEnumPipe(ScoringStage)) stage: ScoringStage,
