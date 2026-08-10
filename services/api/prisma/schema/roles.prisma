@@ -43,19 +43,21 @@ model Admin {
   legacyId      Int?      @unique @map("legacy_id")
 
   // Relations
-  user                 User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role                 AdminRole?               @relation(fields: [roleId], references: [id])
-  adminPrograms        AdminProgram[]
-  adminBrands          AdminBrand[]
-  verifiedReferrals    AmbassadorReferral[]
-  createdAnnouncements SystemAnnouncement[]     @relation("AnnouncementCreator")
-  updatedAnnouncements SystemAnnouncement[]     @relation("AnnouncementUpdater")
-  reviewedDeletions    AccountDeletionRequest[]
-  blockedAccounts      UserBlockedAccount[]     @relation("BlockedBy")
-  unblockedAccounts    UserBlockedAccount[]     @relation("UnblockedBy")
-  deletedParticipants  Participant[]            @relation("AdminParticipantDeleter")
-  deletedAmbassadors   Ambassador[]             @relation("AdminAmbassadorDeleter")
-  applicationReviews   ApplicationReview[]
+  user                  User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role                  AdminRole?               @relation(fields: [roleId], references: [id])
+  adminPrograms         AdminProgram[]
+  adminBrands           AdminBrand[]
+  verifiedReferrals     AmbassadorReferral[]
+  createdAnnouncements  SystemAnnouncement[]     @relation("AnnouncementCreator")
+  updatedAnnouncements  SystemAnnouncement[]     @relation("AnnouncementUpdater")
+  reviewedDeletions     AccountDeletionRequest[]
+  blockedAccounts       UserBlockedAccount[]     @relation("BlockedBy")
+  unblockedAccounts     UserBlockedAccount[]     @relation("UnblockedBy")
+  deletedParticipants   Participant[]            @relation("AdminParticipantDeleter")
+  deletedAmbassadors    Ambassador[]             @relation("AdminAmbassadorDeleter")
+  applicationReviews    ApplicationReview[]
+  overriddenReviews     ApplicationReview[]      @relation("ApplicationReviewOverrideBy")
+  createdScoringSchemas ScoringSchema[]
 
   @@index([userId])
   @@index([roleId])

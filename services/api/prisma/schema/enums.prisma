@@ -42,6 +42,13 @@ enum ScoreStatus {
   scored
   go_to_interview
   rejected
+  finalist
+  not_selected
+}
+
+enum ReviewStatus {
+  draft
+  submitted
 }
 
 enum ReferralStatus {
