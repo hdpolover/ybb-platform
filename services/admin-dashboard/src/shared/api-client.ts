@@ -2058,7 +2058,6 @@ export function reviewApplication(
   input: {
     status: string;
     reviewerNote?: string;
-    reviewerId: string;
     approvalMode?: "participant" | "ambassador";
   },
 ): Promise<Application> {
