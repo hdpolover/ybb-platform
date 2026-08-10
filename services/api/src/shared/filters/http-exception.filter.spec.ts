@@ -73,6 +73,52 @@ describe('HttpExceptionFilter', () => {
     );
   });
 
+  it('forwards an errors[] array from the exception body intact (field-level validation detail)', () => {
+    const host = makeHost({ method: 'PUT', url: '/v1/applications/app-1/review' });
+
+    filter.catch(
+      new BadRequestException({
+        message: 'Review items are invalid.',
+        errors: [{ path: 'items[0].score', message: 'Score must be between 0 and 100 for this criterion.' }],
+      }),
+      host,
+    );
+
+    expect(jsonMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        statusCode: 400,
+        errors: [{ path: 'items[0].score', message: 'Score must be between 0 and 100 for this criterion.' }],
+      }),
+    );
+  });
+
+  it('does not forward a non-array errors value, and does not break the response', () => {
+    const host = makeHost({ method: 'PUT', url: '/v1/applications/app-1/review' });
+
+    filter.catch(
+      new BadRequestException({ message: 'Bad input.', errors: 'not-an-array' }),
+      host,
+    );
+
+    expect(statusMock).toHaveBeenCalledWith(400);
+    const [body] = jsonMock.mock.calls[0];
+    expect(body).not.toHaveProperty('errors');
+    expect(body).toEqual(expect.objectContaining({ statusCode: 400, message: 'Bad input.' }));
+  });
+
+  it('does not forward an object (non-array) errors value either', () => {
+    const host = makeHost({ method: 'PUT', url: '/v1/applications/app-1/review' });
+
+    filter.catch(
+      new BadRequestException({ message: 'Bad input.', errors: { path: 'items', message: 'oops' } }),
+      host,
+    );
+
+    const [body] = jsonMock.mock.calls[0];
+    expect(body).not.toHaveProperty('errors');
+    expect(body).toEqual(expect.objectContaining({ statusCode: 400, message: 'Bad input.' }));
+  });
+
   it('logs a warn (not error) for a 422 HttpException', () => {
     const host = makeHost({ method: 'PATCH', url: '/v1/participants/42' });
 
