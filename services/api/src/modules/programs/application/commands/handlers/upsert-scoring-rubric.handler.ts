@@ -10,10 +10,19 @@ import { UpsertScoringRubricCommand } from '../upsert-scoring-rubric.command';
 import { RubricDto, RubricCategoryDto, RubricCriterionDto } from '../../../presentation/dto/scoring-rubric.dto';
 import { validateWeightSums, WeightedCategory } from '../../../../scoring/domain/scoring-calculation';
 
-// The fields covered by @@unique([programId, stage, version]) on ScoringSchema.
-// Only a P2002 that targets this exact constraint is a version race; any other
-// P2002 (e.g. a future unrelated unique column) must not be treated as one.
-const VERSION_UNIQUE_CONSTRAINT_FIELDS = ['programId', 'stage', 'version'];
+// The fields covered by @@unique([programId, stage, version]) on ScoringSchema,
+// as ALIAS GROUPS: each entry lists every spelling that field could show up
+// under, because the spelling actually observed depends on how Prisma reports
+// the violation (see targetFieldsOf below) -- Prisma-field camelCase in
+// meta.target on some engines/versions, DB-column snake_case parsed out of
+// the message text on others. A P2002 is the version-race constraint only if
+// every group has at least one alias present; any other P2002 (e.g. a future
+// unrelated unique column) must not be treated as one.
+const VERSION_UNIQUE_CONSTRAINT_FIELD_ALIASES: readonly (readonly string[])[] = [
+  ['programId', 'program_id'],
+  ['stage'],
+  ['version'],
+];
 
 function toNumber(value: Prisma.Decimal | number): number {
   if (value instanceof Prisma.Decimal) return value.toNumber();
@@ -93,12 +102,64 @@ function toWeightedCategories(payload: UpsertRubricPayload): WeightedCategory[] 
  * MAX(version)+1 and lost the race to insert first. Any other P2002 (a
  * different constraint entirely) is not a version race and must propagate.
  */
-function isVersionConflict(error: unknown): boolean {
+export function isVersionConflict(error: unknown): boolean {
   if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false;
   if (error.code !== 'P2002') return false;
-  const target = error.meta?.target;
-  if (!Array.isArray(target)) return false;
-  return VERSION_UNIQUE_CONSTRAINT_FIELDS.every((field) => target.includes(field));
+  const fields = targetFieldsOf(error);
+  return VERSION_UNIQUE_CONSTRAINT_FIELD_ALIASES.every((aliases) =>
+    aliases.some((alias) => fields.includes(alias)),
+  );
+}
+
+// Matches the parenthesized field list Prisma's query engine puts in the
+// human-readable P2002 message, e.g.
+//   Unique constraint failed on the fields: (`program_id`, `stage`, `version`)
+const UNIQUE_CONSTRAINT_MESSAGE_RE = /Unique constraint failed on the fields: \(([^)]*)\)/;
+
+/**
+ * Extracts the constraint's field names from a P2002 error, tolerating every
+ * shape observed so far -- do not assume any one of these is "the" shape:
+ *
+ * - meta.driverAdapterError.cause.constraint.fields as string[] of DB column
+ *   names: the most precise shape observed, and what Prisma 7.3.0 with
+ *   @prisma/adapter-pg actually populates against Postgres (verified in
+ *   test/integration/scoring-rubric-version-conflict.spec.ts). It comes
+ *   straight from Postgres's own error detail, so it is exact.
+ * - meta.target as string[] of Prisma field names (documented Prisma
+ *   behavior on some engines/versions, but NOT what adapter-pg + Postgres
+ *   populates -- meta.target was `undefined` in the same verification run).
+ * - meta.target as a single delimited string (some driver adapters).
+ * - message text as a last resort, e.g.
+ *   "Unique constraint failed on the fields: (`program_id`, `stage`, `version`)"
+ *   -- also confirmed present in the same verification run, backtick-quoted
+ *   snake_case DB columns.
+ *
+ * Relying on meta.target alone, as an earlier version of this function did,
+ * made the retry/409 path silently dead code against a real Postgres
+ * database -- every genuine version race would have degraded to an
+ * unhandled 500 instead of the retry-then-409 this handler exists to
+ * provide.
+ */
+function targetFieldsOf(error: Prisma.PrismaClientKnownRequestError): string[] {
+  const meta = error.meta as
+    | { target?: unknown; driverAdapterError?: { cause?: { constraint?: { fields?: unknown } } } }
+    | undefined;
+
+  const adapterFields = meta?.driverAdapterError?.cause?.constraint?.fields;
+  if (Array.isArray(adapterFields)) return adapterFields as string[];
+
+  const target = meta?.target;
+  if (Array.isArray(target)) return target as string[];
+  if (typeof target === 'string' && target.length > 0) {
+    return target.split(/[,\s]+/).filter(Boolean);
+  }
+
+  const match = UNIQUE_CONSTRAINT_MESSAGE_RE.exec(error.message);
+  if (!match) return [];
+  return match[1]
+    .split(',')
+    .map((field) => field.trim().replace(/`/g, ''))
+    .filter(Boolean);
 }
 
 @Injectable()
