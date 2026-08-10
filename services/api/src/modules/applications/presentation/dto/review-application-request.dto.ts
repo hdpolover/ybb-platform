@@ -1,10 +1,10 @@
-import { IsEnum, IsOptional, IsNumber, IsObject, IsString, IsIn } from 'class-validator';
+import { IsEnum, IsOptional, IsString, IsIn } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ApplicationStatus, ScoreStatus } from '@core/entities/participant-application.entity';
+import { ApplicationStatus } from '@core/entities/participant-application.entity';
 
 /**
  * Review Application Request DTO
- * 
+ *
  * Presentation Layer - API Request DTO
  */
 export class ReviewApplicationRequestDto {
@@ -12,25 +12,14 @@ export class ReviewApplicationRequestDto {
   @IsEnum(ApplicationStatus)
   status: ApplicationStatus;
 
+  @ApiProperty({ description: 'Reviewer user id' })
+  @IsString()
+  reviewerId: string;
+
   @ApiPropertyOptional({ description: 'Reviewer notes' })
   @IsOptional()
   @IsString()
   reviewerNotes?: string;
-
-  @ApiPropertyOptional({ description: 'Total score' })
-  @IsOptional()
-  @IsNumber()
-  scoreTotal?: number;
-
-  @ApiPropertyOptional({ description: 'Score breakdown by criteria' })
-  @IsOptional()
-  @IsObject()
-  scoreBreakdown?: Record<string, number>;
-
-  @ApiPropertyOptional({ enum: ScoreStatus, description: 'Score status' })
-  @IsOptional()
-  @IsEnum(ScoreStatus)
-  scoreStatus?: ScoreStatus;
 
   @ApiPropertyOptional({
     enum: ['participant', 'ambassador'],

@@ -686,18 +686,14 @@ export class ApplicationsController {
   async review(
     @Param('id') id: string,
     @Body() dto: ReviewApplicationRequestDto,
-    @Body('reviewerId') reviewerId: string,
   ): Promise<ApplicationResponseDto> {
-    this.logger.log(`Reviewing application ${id} by reviewer ${reviewerId}`);
+    this.logger.log(`Reviewing application ${id} by reviewer ${dto.reviewerId}`);
 
     const command = new ReviewApplicationCommand(
       id,
-      reviewerId,
+      dto.reviewerId,
       dto.status,
       dto.reviewerNotes,
-      dto.scoreTotal,
-      dto.scoreBreakdown,
-      dto.scoreStatus,
       dto.approvalMode,
     );
 
