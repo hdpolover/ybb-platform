@@ -5,8 +5,12 @@
     "ts"
   ],
   "rootDir": ".",
+  "roots": [
+    "<rootDir>",
+    "<rootDir>/../prisma/migrations"
+  ],
   "testEnvironment": "node",
-  "testRegex": "integration/.*\\.spec\\.ts$",
+  "testRegex": "(integration/.*\\.spec\\.ts$|prisma/migrations/.*\\.spec\\.ts$)",
   "transform": {
     "^.+\\.(t|j)s$": [
       "ts-jest",
