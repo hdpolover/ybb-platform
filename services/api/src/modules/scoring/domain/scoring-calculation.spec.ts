@@ -87,6 +87,33 @@ describe('calculateWeightedTotal', () => {
     // (100/3 + 100/3 + 100/3) = 99.999999... -> rounds to 100
     expect(calculateWeightedTotal(oneThirdCategories, scores)).toBe(100);
   });
+
+  it('rounds a raw total sitting on a .xx5 binary floating-point cusp up correctly (1.005 -> 1.01)', () => {
+    // categoryWeight=1, criterionWeight=1, score=1.005 -> raw total = 1.005 exactly as parsed.
+    // 1.005 * 100 === 100.49999999999999 in JS, so naive Math.round(total*100)/100 yields 1, not 1.01.
+    const cuspCategories: WeightedCategory[] = [
+      {
+        categoryId: 'cat-a',
+        categoryWeight: 1,
+        criteria: [{ criterionId: 'c1', criterionWeight: 1, maxScore: 100 }],
+      },
+    ];
+    const scores: ScoreInput[] = [{ criterionId: 'c1', score: 1.005 }];
+    expect(calculateWeightedTotal(cuspCategories, scores)).toBe(1.01);
+  });
+
+  it('rounds a second independent .xx5 binary floating-point cusp up correctly (35.855 -> 35.86)', () => {
+    // 35.855 * 100 === 3585.4999999999995 in JS, so naive rounding yields 35.85, not 35.86.
+    const cuspCategories: WeightedCategory[] = [
+      {
+        categoryId: 'cat-a',
+        categoryWeight: 1,
+        criteria: [{ criterionId: 'c1', criterionWeight: 1, maxScore: 100 }],
+      },
+    ];
+    const scores: ScoreInput[] = [{ criterionId: 'c1', score: 35.855 }];
+    expect(calculateWeightedTotal(cuspCategories, scores)).toBe(35.86);
+  });
 });
 
 describe('validateWeightSums', () => {
@@ -239,6 +266,16 @@ describe('evaluateInterviewGate', () => {
       isOpen: false,
       reason: 'below_threshold',
       applicationTotal: 60,
+      applicationThreshold: 75,
+    });
+  });
+
+  it('is open when the application review totalScore exactly equals the threshold (inclusive boundary)', () => {
+    const gate = evaluateInterviewGate({ status: 'submitted', totalScore: 75 }, 75);
+    expect(gate).toEqual({
+      isOpen: true,
+      reason: 'open',
+      applicationTotal: 75,
       applicationThreshold: 75,
     });
   });

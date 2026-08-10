@@ -28,6 +28,17 @@ export interface WeightValidationError {
 
 export const WEIGHT_SUM_TOLERANCE = 0.0001;
 
+// Small nudge applied before rounding so values that land on a .xx5 cusp in
+// binary floating point (e.g. 1.005 * 100 === 100.49999999999999) still round
+// half away from zero as expected, instead of rounding down due to the
+// representation error. Safe for the 0..100 total range this module handles.
+const ROUNDING_EPSILON = 1e-9;
+
+function roundToTwoDecimalPlaces(value: number): number {
+  const sign = value < 0 ? -1 : 1;
+  return (sign * Math.round(Math.abs(value) * 100 + ROUNDING_EPSILON)) / 100;
+}
+
 /** total = sum(score * criterionWeight * categoryWeight), rounded to 2dp */
 export function calculateWeightedTotal(
   categories: WeightedCategory[],
@@ -43,7 +54,7 @@ export function calculateWeightedTotal(
     }
   }
 
-  return Math.round(total * 100) / 100;
+  return roundToTwoDecimalPlaces(total);
 }
 
 /** Returns [] when every category sums to 1.0 and each category's criteria sum to 1.0, within WEIGHT_SUM_TOLERANCE. */
