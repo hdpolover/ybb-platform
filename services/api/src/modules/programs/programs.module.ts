@@ -252,6 +252,6 @@ import { LoaPreviewParticipantService } from './application/services/loa-preview
     GetScoringRubricVersionsHandler,
     UpsertScoringRubricHandler,
   ],
-  exports: ['IProgramContentRepository', 'IProgramRepository', ListProgramsHandler],
+  exports: ['IProgramContentRepository', 'IProgramRepository', 'IScoringRubricRepository', ListProgramsHandler],
 })
 export class ProgramsModule { }

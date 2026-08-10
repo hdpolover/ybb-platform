@@ -42,6 +42,14 @@ export class HttpExceptionFilter implements ExceptionFilter {
     // response body (e.g. BadRequestException({ message, errorCode })). Only
     // included in the JSON response when present, to stay backward compatible.
     let errorCode: string | undefined;
+    // Optional field-level error detail forwarded from the exception response
+    // body (e.g. BadRequestException({ message, errors: [{ path, message }] }),
+    // used by UpsertApplicationReviewHandler and UpsertScoringRubricHandler so
+    // the admin UI can key a form error onto the exact field via errors[].path).
+    // Without this, `errors` was silently dropped: only `message`/`errorCode`
+    // were ever read off the exception body below. Only included when present,
+    // to stay backward compatible with every other thrown exception shape.
+    let errors: unknown;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -60,6 +68,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
         typeof (body as { errorCode: unknown }).errorCode === 'string'
       ) {
         errorCode = (body as { errorCode: string }).errorCode;
+      }
+      if (typeof body === 'object' && body !== null && 'errors' in body && Array.isArray((body as { errors: unknown }).errors)) {
+        errors = (body as { errors: unknown[] }).errors;
       }
       // Sanitize 5xx messages in production
       if (isProd && status >= 500) {
@@ -101,6 +112,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       message: userMessage,
       path: req.url,
       ...(errorCode ? { errorCode } : {}),
+      ...(errors ? { errors } : {}),
     });
   }
 }
