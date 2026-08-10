@@ -12,6 +12,7 @@ import {
   HttpStatus,
   Logger,
   BadRequestException,
+  ParseEnumPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
@@ -23,7 +24,7 @@ import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { CacheInvalidate } from '@shared/decorators/cache-invalidate.decorator';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
-import { ChangeType, PaymentStatus } from '@prisma/client';
+import { ChangeType, PaymentStatus, ScoringStage } from '@prisma/client';
 
 // Commands
 import { CreateApplicationHandler } from '../application/commands/handlers/create-application.handler';
@@ -48,7 +49,9 @@ import { CreateRegistrationPaymentIntentCommand } from '../application/commands/
 import { GetApplicationHandler } from '../application/queries/handlers/get-application.handler';
 import { ListApplicationsHandler } from '../application/queries/handlers/list-applications.handler';
 import { ExportApplicationsHandler } from '../application/queries/handlers/export-applications.handler';
+import { GetApplicationReviewHandler } from '../application/queries/handlers/get-application-review.handler';
 import { GetApplicationQuery } from '../application/queries/get-application.query';
+import { GetApplicationReviewQuery } from '../application/queries/get-application-review.query';
 import {
   ListApplicationsQuery,
   ListApplicationsSortBy,
@@ -58,13 +61,19 @@ import { ExportApplicationsQuery } from '../application/queries/export-applicati
 import { StreamableFile } from '@nestjs/common';
 import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 
+// Scoring review command
+import { UpsertApplicationReviewHandler } from '../application/commands/handlers/upsert-application-review.handler';
+import { UpsertApplicationReviewCommand } from '../application/commands/upsert-application-review.command';
+
 // DTOs
 import { CreateApplicationRequestDto } from './dto/create-application-request.dto';
 import { UpdateApplicationRequestDto } from './dto/update-application-request.dto';
 import { ReviewApplicationRequestDto } from './dto/review-application-request.dto';
 import { SwitchApplicationCategoryRequestDto } from './dto/switch-application-category-request.dto';
 import { AdminUpdateSubmissionDto } from './dto/admin-update-submission.dto';
+import { UpsertApplicationReviewRequestDto } from './dto/upsert-application-review-request.dto';
 import { ApplicationResponseDto, ApplicationListResponseDto } from '../application/dto/application-response.dto';
+import { ApplicationReviewResponseDto } from '../application/dto/application-review-response.dto';
 import { ApplicationCategory, ApplicationStatus, ScoreStatus } from '@core/entities/participant-application.entity';
 
 /**
@@ -148,7 +157,21 @@ export class ApplicationsController {
     private readonly exportApplicationsHandler: ExportApplicationsHandler,
     private readonly cacheService: CacheService,
     private readonly readPrisma: PrismaReadService,
+    private readonly getApplicationReviewHandler: GetApplicationReviewHandler,
+    private readonly upsertApplicationReviewHandler: UpsertApplicationReviewHandler,
   ) { }
+
+  // Scoring is a regular-admin job even though editing rubric weights (the
+  // PUT programs/:id/scoring-rubrics/:stage route) is SuperAdmin-only. The
+  // SuperAdmin-only rule for the interview gate override is enforced inside
+  // UpsertApplicationReviewHandler, not by a route decorator here, because a
+  // plain ADMIN must still be able to PUT a review normally. RolesGuard has
+  // already confirmed the caller is at least ADMIN by the time this runs; this
+  // only distinguishes ADMIN from SUPER_ADMIN for the handler's own gate check.
+  private static resolveActingAdminRole(user: CurrentUserData): UserRole {
+    const roles = Array.isArray(user.role) ? user.role : [user.role];
+    return roles.includes(UserRole.SUPER_ADMIN) ? UserRole.SUPER_ADMIN : UserRole.ADMIN;
+  }
 
   private validateDateRange(startDate?: string, endDate?: string): void {
     const isValidDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00.000Z`));
@@ -578,6 +601,70 @@ export class ApplicationsController {
     this.logger.log(`Creating payment intent for application ${id}`);
     const command = new CreateRegistrationPaymentIntentCommand(id, userId);
     return this.createRegistrationPaymentIntentHandler.execute(command);
+  }
+
+  // GET/PUT :applicationId/review are the scoring-rubric review endpoints
+  // (Task 7/8). They intentionally use the param name `:applicationId`
+  // instead of the legacy `:id` used by POST :id/review directly below.
+  // NestJS routes by HTTP verb + path together, so a differing param NAME
+  // at the same path position is legal and does not collide with the
+  // legacy POST route — but it is easy to misread as a conflict. The
+  // legacy POST :id/review endpoint is scheduled for cleanup in Task 9;
+  // until then both coexist on this controller.
+  @Get(':applicationId/review')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Get an application review (scoring rubric) for a stage (admin)' })
+  @ApiQuery({ name: 'stage', enum: ScoringStage, required: true })
+  @ApiResponse({ status: 200, description: 'Review retrieved (or an empty draft shape if none exists yet)', type: ApplicationReviewResponseDto })
+  @ApiResponse({ status: 400, description: 'Missing or invalid stage query param' })
+  @ApiResponse({ status: 404, description: 'Application not found' })
+  async getReview(
+    @Param('applicationId') applicationId: string,
+    @Query('stage', new ParseEnumPipe(ScoringStage)) stage: ScoringStage,
+  ): Promise<ApplicationReviewResponseDto> {
+    return this.getApplicationReviewHandler.execute(new GetApplicationReviewQuery(applicationId, stage));
+  }
+
+  @Put(':applicationId/review')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Create or update an application review (scoring rubric) for a stage (admin)' })
+  @ApiQuery({ name: 'stage', enum: ScoringStage, required: true })
+  @ApiResponse({ status: 200, description: 'Review saved', type: ApplicationReviewResponseDto })
+  @ApiResponse({ status: 400, description: 'Missing/invalid stage query param, or invalid review items' })
+  @ApiResponse({ status: 404, description: 'Application not found' })
+  @ApiResponse({ status: 409, description: 'No active rubric for this stage, or the interview gate is closed' })
+  async upsertReview(
+    @Param('applicationId') applicationId: string,
+    @Query('stage', new ParseEnumPipe(ScoringStage)) stage: ScoringStage,
+    @Body() dto: UpsertApplicationReviewRequestDto,
+    @CurrentUser() user: CurrentUserData,
+  ): Promise<ApplicationReviewResponseDto> {
+    // actingAdminId/actingAdminRole MUST come from the authenticated JWT
+    // principal, never from the request body or a query param. Same
+    // attribution-forgery rule Task 6 applied to createdById.
+    // UpsertApplicationReviewRequestDto has no actingAdminId/overrideById/
+    // createdById/totalScore/scoreStatus fields, so none of those can flow
+    // through dto.* here even before the global whitelist pipe rejects them.
+    const command = new UpsertApplicationReviewCommand(
+      applicationId,
+      stage,
+      user.userId,
+      ApplicationsController.resolveActingAdminRole(user),
+      {
+        status: dto.status,
+        notes: dto.notes,
+        items: dto.items.map((item) => ({
+          criterionId: item.criterionId,
+          score: item.score,
+          notes: item.notes,
+        })),
+        overrideReason: dto.overrideReason,
+      },
+    );
+
+    return this.upsertApplicationReviewHandler.execute(command);
   }
 
   @Post(':id/review')
