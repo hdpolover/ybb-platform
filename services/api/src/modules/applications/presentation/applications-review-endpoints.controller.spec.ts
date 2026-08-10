@@ -135,17 +135,29 @@ describe('ApplicationsController review routes (real HTTP layer)', () => {
     });
 
     it('POST /applications/:id/review (legacy) never reaches the new GET/PUT review handlers', async () => {
-      // Whether the legacy route itself 200s is unrelated to this task (it has
-      // its own pre-existing DTO/body-shape quirk, out of scope here; the
-      // legacy POST :id/review endpoint is slated for cleanup in Task 9). What
-      // matters for route-collision purposes is that it never dispatches to
-      // either of the new :applicationId/review handlers.
+      // Task 9 fixed the pre-existing dual-@Body() quirk on this route (see
+      // "legacy POST :id/review resolves under the global whitelist pipe"
+      // below). What matters here for route-collision purposes is that it
+      // never dispatches to either of the new :applicationId/review handlers.
       await request(app.getHttpServer())
         .post('/applications/app-1/review')
         .send({ status: 'accepted', reviewerId: 'admin-1' });
 
       expect(mockGetReviewHandler.execute).not.toHaveBeenCalled();
       expect(mockUpsertReviewHandler.execute).not.toHaveBeenCalled();
+    });
+
+    it('legacy POST :id/review resolves under the global whitelist pipe (Task 9 fixed the dual-@Body() 400)', async () => {
+      // Before Task 9, this route bound both @Body() dto and a separate
+      // @Body('reviewerId') param. reviewerId was not a declared property of
+      // ReviewApplicationRequestDto, so forbidNonWhitelisted rejected it as
+      // an unknown property and every call 400'd. reviewerId is now a real
+      // field on the DTO, so a valid body must not 400.
+      const response = await request(app.getHttpServer())
+        .post('/applications/app-1/review')
+        .send({ status: 'accepted', reviewerId: 'admin-1', reviewerNotes: 'looks good' });
+
+      expect(response.status).not.toBe(400);
     });
   });
 

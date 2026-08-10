@@ -79,11 +79,6 @@ export class ReviewApplicationHandler {
         throw new BadRequestException(`Invalid status for review: ${command.status}`);
     }
 
-    // Update score if provided
-    if (command.scoreTotal !== undefined && command.scoreBreakdown && command.scoreStatus) {
-      application.updateScore(command.scoreTotal, command.scoreBreakdown, command.scoreStatus);
-    }
-
     // Add to status history
     application.addStatusToHistory(
       command.status,
