@@ -1,4 +1,5 @@
-import { ScoringStage } from '@prisma/client';
+// services/api/src/modules/programs/infrastructure/persistence/scoring-rubric.repository.spec.ts
+import { Prisma, ScoringStage } from '@prisma/client';
 import { ScoringRubricRepository } from './scoring-rubric.repository';
 import { UpsertRubricPayload } from '../../../../core/interfaces/repositories/scoring-rubric.repository.interface';
 
@@ -6,36 +7,32 @@ describe('ScoringRubricRepository', () => {
   let repo: ScoringRubricRepository;
   let mockPrisma: {
     scoringSchema: {
-      findMany: jest.Mock;
       findFirst: jest.Mock;
+      findMany: jest.Mock;
       create: jest.Mock;
       update: jest.Mock;
+      aggregate: jest.Mock;
     };
-    scoringCategory: {
-      deleteMany: jest.Mock;
-      create: jest.Mock;
-      update: jest.Mock;
-    };
-    scoringCriterion: {
-      deleteMany: jest.Mock;
-      create: jest.Mock;
-      update: jest.Mock;
-    };
+    scoringCategory: { create: jest.Mock };
+    scoringCriterion: { create: jest.Mock };
     $transaction: jest.Mock;
   };
 
-  const schemaId = 'schema-uuid-1';
   const programId = 'prog-uuid-1';
+  const activeSchemaId = 'schema-uuid-v1';
   const catId = 'cat-uuid-1';
   const critId = 'crit-uuid-1';
 
-  const makeFullSchema = () => ({
-    id: schemaId,
+  const makeActiveSchema = () => ({
+    id: activeSchemaId,
     programId,
     stage: ScoringStage.application,
     name: 'Test Rubric',
     description: null,
     isActive: true,
+    version: 1,
+    createdById: null,
+    passThreshold: new Prisma.Decimal(75),
     createdAt: new Date(),
     updatedAt: new Date(),
     deletedAt: null,
@@ -43,10 +40,10 @@ describe('ScoringRubricRepository', () => {
     categories: [
       {
         id: catId,
-        schemaId,
+        schemaId: activeSchemaId,
         name: 'Essay',
         description: null,
-        weight: 0.6,
+        weight: new Prisma.Decimal(0.6),
         order: 0,
         legacyId: null,
         criteria: [
@@ -55,8 +52,8 @@ describe('ScoringRubricRepository', () => {
             categoryId: catId,
             name: 'Topic Relevance',
             description: null,
-            weight: 1.0,
-            maxScore: 100,
+            weight: new Prisma.Decimal(1.0),
+            maxScore: new Prisma.Decimal(100),
             order: 0,
             legacyId: null,
           },
@@ -66,210 +63,197 @@ describe('ScoringRubricRepository', () => {
   });
 
   beforeEach(() => {
-    // $transaction executes the callback synchronously in tests by passing mockPrisma
     mockPrisma = {
       scoringSchema: {
-        findMany: jest.fn(),
         findFirst: jest.fn(),
+        findMany: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
+        aggregate: jest.fn(),
       },
-      scoringCategory: {
-        deleteMany: jest.fn(),
-        create: jest.fn(),
-        update: jest.fn(),
-      },
-      scoringCriterion: {
-        deleteMany: jest.fn(),
-        create: jest.fn(),
-        update: jest.fn(),
-      },
+      scoringCategory: { create: jest.fn() },
+      scoringCriterion: { create: jest.fn() },
+      // $transaction executes the callback synchronously in tests, passing mockPrisma as `tx`.
       $transaction: jest.fn((cb) => cb(mockPrisma)),
     };
 
     repo = new ScoringRubricRepository(mockPrisma as any);
   });
 
-  describe('findRubricsByProgramId', () => {
-    it('returns rubrics ordered by category/criterion order', async () => {
-      const expected = [makeFullSchema()];
-      mockPrisma.scoringSchema.findMany.mockResolvedValue(expected);
+  describe('findActiveRubric', () => {
+    it('returns the active version for a program/stage', async () => {
+      const active = makeActiveSchema();
+      mockPrisma.scoringSchema.findFirst.mockResolvedValue(active);
 
-      const result = await repo.findRubricsByProgramId(programId);
+      const result = await repo.findActiveRubric(programId, ScoringStage.application);
 
-      expect(mockPrisma.scoringSchema.findMany).toHaveBeenCalledWith(
+      expect(mockPrisma.scoringSchema.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ programId, deletedAt: null }),
-          include: expect.objectContaining({ categories: expect.any(Object) }),
+          where: { programId, stage: ScoringStage.application, isActive: true, deletedAt: null },
         }),
       );
-      expect(result).toEqual(expected);
+      expect(result).toEqual(active);
     });
 
-    it('filters by stage when provided', async () => {
-      mockPrisma.scoringSchema.findMany.mockResolvedValue([]);
-
-      await repo.findRubricsByProgramId(programId, ScoringStage.interview);
-
-      expect(mockPrisma.scoringSchema.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({ programId, stage: ScoringStage.interview, deletedAt: null }),
-        }),
-      );
+    it('returns null when no active rubric exists', async () => {
+      mockPrisma.scoringSchema.findFirst.mockResolvedValue(null);
+      const result = await repo.findActiveRubric(programId, ScoringStage.interview);
+      expect(result).toBeNull();
     });
   });
 
-  describe('upsertRubric (create path)', () => {
-    it('creates a new schema when none exists for (programId, stage)', async () => {
+  describe('findRubricVersion', () => {
+    it('returns the specific version regardless of active status', async () => {
+      const version2 = { ...makeActiveSchema(), id: 'schema-uuid-v2', version: 2, isActive: true };
+      mockPrisma.scoringSchema.findFirst.mockResolvedValue(version2);
+
+      const result = await repo.findRubricVersion(programId, ScoringStage.application, 2);
+
+      expect(mockPrisma.scoringSchema.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { programId, stage: ScoringStage.application, version: 2, deletedAt: null },
+        }),
+      );
+      expect(result).toEqual(version2);
+    });
+  });
+
+  describe('findRubricHistory', () => {
+    it('returns all versions ordered by version descending', async () => {
+      const rows = [{ ...makeActiveSchema(), version: 2 }, { ...makeActiveSchema(), version: 1 }];
+      mockPrisma.scoringSchema.findMany.mockResolvedValue(rows);
+
+      const result = await repo.findRubricHistory(programId, ScoringStage.application);
+
+      expect(mockPrisma.scoringSchema.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { programId, stage: ScoringStage.application, deletedAt: null },
+          orderBy: { version: 'desc' },
+        }),
+      );
+      expect(result).toEqual(rows);
+    });
+  });
+
+  describe('mintRubricVersion', () => {
+    const payload: UpsertRubricPayload = {
+      name: 'Test Rubric',
+      passThreshold: 75,
+      categories: [
+        {
+          name: 'Essay',
+          weight: 0.6,
+          order: 0,
+          criteria: [{ name: 'Topic Relevance', weight: 1.0, maxScore: 100, order: 0 }],
+        },
+      ],
+    };
+
+    it('creates version 1 when no active rubric exists yet', async () => {
       mockPrisma.scoringSchema.findFirst.mockResolvedValue(null);
-      const created = makeFullSchema();
+      mockPrisma.scoringSchema.aggregate.mockResolvedValue({ _max: { version: null } });
+      const fullSchema = makeActiveSchema();
+      const created = { ...fullSchema, categories: [] };
       mockPrisma.scoringSchema.create.mockResolvedValue(created);
-      mockPrisma.scoringCategory.create.mockResolvedValue({
-        ...created.categories[0],
-        criteria: [],
-      });
-      mockPrisma.scoringCriterion.create.mockResolvedValue(created.categories[0].criteria[0]);
+      mockPrisma.scoringCategory.create.mockResolvedValue({ ...fullSchema.categories[0], id: catId, criteria: [] });
+      mockPrisma.scoringCriterion.create.mockResolvedValue({ id: critId });
+      mockPrisma.scoringSchema.findMany.mockResolvedValue([fullSchema]);
 
-      // Re-fetch uses findMany({ where: { id: schemaId } }) + rows[0], which is equivalent to
-      // findFirst on a primary-key lookup (at most one row is ever returned for a given id).
-      mockPrisma.scoringSchema.findMany.mockResolvedValue([created]);
-
-      const payload: UpsertRubricPayload = {
-        name: 'Test Rubric',
-        categories: [
-          {
-            name: 'Essay',
-            weight: 0.6,
-            order: 0,
-            criteria: [{ name: 'Topic Relevance', weight: 1.0, maxScore: 100, order: 0 }],
-          },
-        ],
-      };
-
-      await repo.upsertRubric(programId, ScoringStage.application, payload);
+      const result = await repo.mintRubricVersion(programId, ScoringStage.application, payload, 'admin-1');
 
       expect(mockPrisma.scoringSchema.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ programId, stage: ScoringStage.application }),
+          data: expect.objectContaining({
+            programId,
+            stage: ScoringStage.application,
+            version: 1,
+            isActive: true,
+            createdById: 'admin-1',
+            passThreshold: 75,
+          }),
         }),
       );
-
-      // The category create loop must fire once for the single id-less category.
-      expect(mockPrisma.scoringCategory.create).toHaveBeenCalledTimes(1);
-      expect(mockPrisma.scoringCategory.create).toHaveBeenCalledWith({
-        data: {
-          schemaId,
-          name: 'Essay',
-          description: null,
-          weight: 0.6,
-          order: 0,
-        },
-      });
-
-      // The criterion create loop must fire once for the single id-less criterion.
-      expect(mockPrisma.scoringCriterion.create).toHaveBeenCalledTimes(1);
-      // categoryId comes from the id returned by scoringCategory.create mock (catId)
-      expect(mockPrisma.scoringCriterion.create).toHaveBeenCalledWith({
-        data: {
-          categoryId: catId,
-          name: 'Topic Relevance',
-          description: null,
-          weight: 1.0,
-          maxScore: 100,
-          order: 0,
-        },
-      });
+      expect(result.version).toBe(1);
     });
-  });
 
-  describe('upsertRubric (update path)', () => {
-    it('updates the existing schema when one exists for (programId, stage)', async () => {
-      const existingSchema = makeFullSchema();
-      mockPrisma.scoringSchema.findFirst.mockResolvedValue(existingSchema);
-      mockPrisma.scoringSchema.update.mockResolvedValue({ ...existingSchema, name: 'Updated' });
-      mockPrisma.scoringCategory.deleteMany.mockResolvedValue({ count: 0 });
-      mockPrisma.scoringCriterion.deleteMany.mockResolvedValue({ count: 0 });
-      mockPrisma.scoringCategory.update.mockResolvedValue(existingSchema.categories[0]);
-      mockPrisma.scoringCriterion.update.mockResolvedValue(existingSchema.categories[0].criteria[0]);
-      mockPrisma.scoringSchema.findMany.mockResolvedValue([{ ...existingSchema, name: 'Updated' }]);
-
-      const payload: UpsertRubricPayload = {
-        name: 'Updated',
+    it('mints version 2 and flips version 1 inactive when the payload differs from the active version', async () => {
+      const active = makeActiveSchema();
+      mockPrisma.scoringSchema.findFirst.mockResolvedValue(active);
+      mockPrisma.scoringSchema.aggregate.mockResolvedValue({ _max: { version: 1 } });
+      const changedPayload: UpsertRubricPayload = {
+        ...payload,
         categories: [
           {
-            id: catId,
-            name: 'Essay',
-            weight: 0.6,
-            order: 0,
-            criteria: [
-              { id: critId, name: 'Topic Relevance', weight: 1.0, maxScore: 100, order: 0 },
-            ],
+            ...payload.categories[0],
+            criteria: [{ name: 'Topic Relevance', weight: 0.9, maxScore: 100, order: 0 }],
           },
         ],
       };
+      const createdV2 = { ...active, id: 'schema-uuid-v2', version: 2 };
+      mockPrisma.scoringSchema.create.mockResolvedValue(createdV2);
+      mockPrisma.scoringCategory.create.mockResolvedValue({ ...active.categories[0], criteria: [] });
+      mockPrisma.scoringCriterion.create.mockResolvedValue(active.categories[0].criteria[0]);
+      mockPrisma.scoringSchema.findMany.mockResolvedValue([createdV2]);
 
-      await repo.upsertRubric(programId, ScoringStage.application, payload);
+      const result = await repo.mintRubricVersion(programId, ScoringStage.application, changedPayload, 'admin-1');
 
-      expect(mockPrisma.scoringSchema.update).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: schemaId } }),
+      expect(mockPrisma.scoringSchema.update).toHaveBeenCalledWith({
+        where: { id: activeSchemaId },
+        data: { isActive: false },
+      });
+      expect(mockPrisma.scoringSchema.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ version: 2, isActive: true }) }),
       );
+      expect(result.version).toBe(2);
 
-      // The category update loop must fire once for the category that carries an id.
-      expect(mockPrisma.scoringCategory.update).toHaveBeenCalledTimes(1);
-      expect(mockPrisma.scoringCategory.update).toHaveBeenCalledWith({
-        where: { id: catId },
-        data: {
-          name: 'Essay',
-          description: null,
-          weight: 0.6,
-          order: 0,
-        },
-      });
-
-      // The criterion update loop must fire once for the criterion that carries an id.
-      expect(mockPrisma.scoringCriterion.update).toHaveBeenCalledTimes(1);
-      expect(mockPrisma.scoringCriterion.update).toHaveBeenCalledWith({
-        where: { id: critId },
-        data: {
-          name: 'Topic Relevance',
-          description: null,
-          weight: 1.0,
-          maxScore: 100,
-          order: 0,
-        },
-      });
-
-      // Partial-delete branch: categories not in payload must be purged via notIn.
-      expect(mockPrisma.scoringCategory.deleteMany).toHaveBeenCalledWith({
-        where: { schemaId, id: { notIn: [catId] } },
-      });
-
-      // Partial-delete branch: criteria not in payload must be purged via notIn, keyed by categoryId.
-      expect(mockPrisma.scoringCriterion.deleteMany).toHaveBeenCalledWith({
-        where: { categoryId: catId, id: { notIn: [critId] } },
-      });
+      // Deactivating the old active row must happen before the new active row is
+      // inserted, or the partial unique index scoring_schemas_one_active_per_program_stage_uidx
+      // (one active row per program/stage) rejects the insert.
+      const updateOrder = mockPrisma.scoringSchema.update.mock.invocationCallOrder[0];
+      const createOrder = mockPrisma.scoringSchema.create.mock.invocationCallOrder[0];
+      expect(updateOrder).toBeLessThan(createOrder);
     });
 
-    it('deletes categories absent from payload', async () => {
-      const existingSchema = makeFullSchema();
-      mockPrisma.scoringSchema.findFirst.mockResolvedValue(existingSchema);
-      mockPrisma.scoringSchema.update.mockResolvedValue(existingSchema);
-      mockPrisma.scoringCategory.deleteMany.mockResolvedValue({ count: 1 });
-      mockPrisma.scoringCriterion.deleteMany.mockResolvedValue({ count: 0 });
-      mockPrisma.scoringSchema.findMany.mockResolvedValue([existingSchema]);
+    it('returns the existing active version unchanged and mints nothing when the payload is semantically identical', async () => {
+      const active = makeActiveSchema();
+      mockPrisma.scoringSchema.findFirst.mockResolvedValue(active);
 
-      const payload: UpsertRubricPayload = {
-        categories: [], // all categories removed
-      };
+      const result = await repo.mintRubricVersion(programId, ScoringStage.application, payload, 'admin-1');
 
-      await repo.upsertRubric(programId, ScoringStage.application, payload);
+      expect(mockPrisma.scoringSchema.create).not.toHaveBeenCalled();
+      expect(mockPrisma.scoringSchema.update).not.toHaveBeenCalled();
+      expect(mockPrisma.scoringSchema.aggregate).not.toHaveBeenCalled();
+      expect(result).toEqual(active);
+    });
 
-      // When the payload category list is empty, payloadCategoryIds is [] so the implementation
-      // passes NO notIn filter -- meaning "delete all categories for this schema".
-      // Assert the exact where shape to lock in the all-delete branch (not just that schemaId is present).
-      expect(mockPrisma.scoringCategory.deleteMany).toHaveBeenCalledWith({
-        where: { schemaId },
+    it('skips past a soft-deleted schema occupying a version number: next version is MAX(version)+1 across all rows, including deleted ones', async () => {
+      // No active rubric right now, but versions 1-3 have already been used up
+      // (version 3 is soft-deleted, so it is invisible to findActiveRubric but
+      // still reserves its number via the unbounded unique constraint).
+      mockPrisma.scoringSchema.findFirst.mockResolvedValue(null);
+      mockPrisma.scoringSchema.aggregate.mockResolvedValue({ _max: { version: 3 } });
+      const fullSchema = { ...makeActiveSchema(), version: 4 };
+      const created = { ...fullSchema, categories: [] };
+      mockPrisma.scoringSchema.create.mockResolvedValue(created);
+      mockPrisma.scoringCategory.create.mockResolvedValue({ ...fullSchema.categories[0], id: catId, criteria: [] });
+      mockPrisma.scoringCriterion.create.mockResolvedValue({ id: critId });
+      mockPrisma.scoringSchema.findMany.mockResolvedValue([fullSchema]);
+
+      const result = await repo.mintRubricVersion(programId, ScoringStage.application, payload, 'admin-1');
+
+      // The aggregate query that computes the next version must NOT filter on
+      // deletedAt or isActive: soft-deleted rows still reserve their version
+      // number under @@unique([programId, stage, version]).
+      expect(mockPrisma.scoringSchema.aggregate).toHaveBeenCalledWith({
+        where: { programId, stage: ScoringStage.application },
+        _max: { version: true },
       });
+      expect(mockPrisma.scoringSchema.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ version: 4, isActive: true }),
+        }),
+      );
+      expect(result.version).toBe(4);
     });
   });
 });
