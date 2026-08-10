@@ -3,12 +3,15 @@
 // ============================================================================
 
 model ScoringSchema {
-  id          String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  programId   String  @map("program_id") @db.Uuid
-  name        String  @db.VarChar(255) // e.g., "IYS 2026 Selection Rubric"
-  description String? @db.Text
-  isActive    Boolean      @default(true) @map("is_active")
-  stage       ScoringStage @default(application) @map("stage")
+  id            String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId     String       @map("program_id") @db.Uuid
+  name          String       @db.VarChar(255) // e.g., "IYS 2026 Selection Rubric"
+  description   String?      @db.Text
+  isActive      Boolean      @default(true) @map("is_active")
+  stage         ScoringStage @default(application) @map("stage")
+  version       Int          @default(1)
+  createdById   String?      @map("created_by_id") @db.Uuid
+  passThreshold Decimal      @default(75) @map("pass_threshold") @db.Decimal(5, 2)
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -17,9 +20,11 @@ model ScoringSchema {
 
   // Relations
   program    Program             @relation(fields: [programId], references: [id], onDelete: Cascade)
+  createdBy  Admin?              @relation(fields: [createdById], references: [id])
   categories ScoringCategory[]
   reviews    ApplicationReview[]
 
+  @@unique([programId, stage, version])
   @@index([programId])
   @@index([isActive])
   @@index([programId, stage])
@@ -62,14 +67,17 @@ model ScoringCriterion {
 }
 
 model ApplicationReview {
-  id            String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  applicationId String @map("application_id") @db.Uuid
-  schemaId      String @map("schema_id") @db.Uuid
-  reviewerId    String @map("reviewer_id") @db.Uuid
+  id            String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  applicationId String       @map("application_id") @db.Uuid
+  schemaId      String       @map("schema_id") @db.Uuid
+  reviewerId    String       @map("reviewer_id") @db.Uuid
+  stage         ScoringStage @map("stage")
 
-  totalScore Decimal @map("total_score") @db.Decimal(5, 2) // Calculated total
-  notes      String? @db.Text
-  status     String  @default("draft") @db.VarChar(50) // draft, submitted
+  totalScore     Decimal      @map("total_score") @db.Decimal(5, 2) // Calculated total
+  notes          String?      @db.Text
+  status         ReviewStatus @default(draft)
+  overrideById   String?      @map("override_by_id") @db.Uuid
+  overrideReason String?      @map("override_reason") @db.Text
 
   startedAt   DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
   completedAt DateTime? @map("completed_at") @db.Timestamptz(6)
@@ -78,9 +86,11 @@ model ApplicationReview {
   application ParticipantApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   schema      ScoringSchema          @relation(fields: [schemaId], references: [id])
   reviewer    Admin                  @relation(fields: [reviewerId], references: [id])
+  overrideBy  Admin?                 @relation("ApplicationReviewOverrideBy", fields: [overrideById], references: [id])
 
   items ApplicationScoreItem[]
 
+  @@unique([applicationId, stage])
   @@index([applicationId])
   @@index([reviewerId])
   @@index([schemaId])
