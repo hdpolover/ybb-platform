@@ -31,34 +31,60 @@ export function getAccessToken(): string {
   return token;
 }
 
+/** A single field-level validation failure, as emitted by the global HttpExceptionFilter's `errors` array. */
+export type ApiFieldError = { path: string; message: string };
+
 /**
  * Error carrying the API's machine-readable `errorCode` alongside its message,
  * so callers can branch on the code instead of pattern-matching English copy.
+ * Also carries `fieldErrors` when the server responded with a structured
+ * `{ message, errors: [{ path, message }] }` body (field-level validation
+ * failures), so callers can key a form error onto the exact field instead of
+ * only having a flattened message string. `status` lets callers distinguish
+ * e.g. 409 (conflict, no active rubric / gate closed) from 400 (validation).
  * Extends Error, so existing `err instanceof Error` handling still works.
  */
 export class ApiError extends Error {
   readonly status: number;
   readonly errorCode?: string;
+  readonly fieldErrors?: ApiFieldError[];
 
-  constructor(message: string, status: number, errorCode?: string) {
+  constructor(message: string, status: number, errorCode?: string, fieldErrors?: ApiFieldError[]) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.errorCode = errorCode;
+    this.fieldErrors = fieldErrors;
   }
 }
 
-async function readErrorBody(res: Response): Promise<{ message: string; errorCode?: string }> {
+function parseFieldErrors(raw: unknown): ApiFieldError[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const parsed = raw.filter(
+    (e): e is ApiFieldError =>
+      typeof e === "object" &&
+      e !== null &&
+      typeof (e as { path?: unknown }).path === "string" &&
+      typeof (e as { message?: unknown }).message === "string",
+  );
+  return parsed.length > 0 ? parsed : undefined;
+}
+
+async function readErrorBody(
+  res: Response,
+): Promise<{ message: string; errorCode?: string; fieldErrors?: ApiFieldError[] }> {
   try {
     const body = (await res.json()) as {
       message?: string | string[];
       error?: string;
       errorCode?: string;
+      errors?: unknown;
     };
     const errorCode = typeof body.errorCode === "string" ? body.errorCode : undefined;
-    if (Array.isArray(body.message)) return { message: body.message.join(", "), errorCode };
-    if (typeof body.message === "string") return { message: body.message, errorCode };
-    if (typeof body.error === "string") return { message: body.error, errorCode };
+    const fieldErrors = parseFieldErrors(body.errors);
+    if (Array.isArray(body.message)) return { message: body.message.join(", "), errorCode, fieldErrors };
+    if (typeof body.message === "string") return { message: body.message, errorCode, fieldErrors };
+    if (typeof body.error === "string") return { message: body.error, errorCode, fieldErrors };
   } catch { /* fall through */ }
   return { message: "Something went wrong. Please try again." };
 }
@@ -89,8 +115,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!res.ok) {
-    const { message, errorCode } = await readErrorBody(res);
-    throw new ApiError(message, res.status, errorCode);
+    const { message, errorCode, fieldErrors } = await readErrorBody(res);
+    throw new ApiError(message, res.status, errorCode, fieldErrors);
   }
   if (res.status === 204) {
     if (shouldRefreshAdminProfileForMutation(path, method)) {
@@ -4126,6 +4152,9 @@ export type Rubric = {
   name: string;
   description: string | null | undefined;
   isActive: boolean;
+  version: number;
+  /** Pass/fail score cutoff for this stage, 0-100. NOT a weight fraction; never percent-converted. */
+  passThreshold: number;
   categories: RubricCategory[];
 };
 
@@ -4187,4 +4216,130 @@ export function upsertScoringRubric(
     method: 'PUT',
     body: JSON.stringify(payload),
   });
+}
+
+// ─── Rubric Versions ─────────────────────────────────────────────────────────
+
+/**
+ * Summary of one rubric version, as listed by the version history panel.
+ * Mirrors RubricVersionSummaryDto exactly: no `id`, `createdById`, or
+ * `passThreshold` fields exist on the server DTO, despite an earlier plan
+ * guessing otherwise.
+ */
+export type RubricVersionSummary = {
+  version: number;
+  isActive: boolean;
+  createdAt: string;
+  createdByName: string | null;
+  hasSubmittedReviews: boolean;
+};
+
+/** All versions of a stage's rubric, newest first (server already sorts). Used by the version history panel. */
+export function getScoringRubricVersions(
+  programId: string,
+  stage: 'application' | 'interview',
+): Promise<RubricVersionSummary[]> {
+  return request<RubricVersionSummary[]>(
+    `/programs/${programId}/scoring-rubrics/versions?stage=${stage}`,
+  );
+}
+
+/**
+ * A single past version's full category/criteria tree, for the read-only
+ * history view. The server has no dedicated single-rubric-by-version route;
+ * `GET /programs/:programId/scoring-rubrics?stage=&version=` returns the same
+ * `{ application, interview }` envelope as the current-rubric endpoint, with
+ * only the requested stage populated, so this picks that stage back out.
+ */
+export async function getScoringRubricVersion(
+  programId: string,
+  stage: 'application' | 'interview',
+  version: number,
+): Promise<Rubric> {
+  const res = await request<ScoringRubricsResponse>(
+    `/programs/${programId}/scoring-rubrics?stage=${stage}&version=${version}`,
+  );
+  const rubric = stage === 'application' ? res.application : res.interview;
+  if (!rubric) {
+    throw new ApiError(`No rubric version ${version} found for stage "${stage}".`, 404);
+  }
+  return rubric;
+}
+
+// ─── Application Review (Scoring) ─────────────────────────────────────────────
+
+export type GateState = {
+  isOpen: boolean;
+  reason: 'open' | 'no_application_review' | 'application_draft' | 'below_threshold';
+  applicationTotal: number | null;
+  applicationThreshold: number | null;
+};
+
+export type ApplicationReviewScoreItem = {
+  criterionId: string;
+  score: number;
+  notes?: string | null;
+};
+
+export type ApplicationReviewResponseDto = {
+  /** Null until the first draft is saved (GET returns an empty review shaped against the active schema). */
+  id: string | null;
+  applicationId: string;
+  stage: 'application' | 'interview';
+  /** The schema this review is pinned to: its own version once created, otherwise the current active one. */
+  schemaId: string;
+  schemaVersion: number;
+  status: 'draft' | 'submitted';
+  totalScore: number;
+  notes: string | null;
+  items: ApplicationReviewScoreItem[];
+  rubric: Rubric;
+  /** Whether this stage is scoreable right now, and why. */
+  gate: GateState;
+  hasNewerRubricVersion: boolean;
+};
+
+export type UpsertApplicationReviewItemInput = {
+  criterionId: string;
+  score: number;
+  notes?: string;
+};
+
+export type UpsertApplicationReviewDto = {
+  status: 'draft' | 'submitted';
+  notes?: string;
+  items: UpsertApplicationReviewItemInput[];
+  /** Required when a SUPER_ADMIN overrides a closed interview gate. */
+  overrideReason?: string;
+};
+
+export function getApplicationReview(
+  applicationId: string,
+  stage: 'application' | 'interview',
+): Promise<ApplicationReviewResponseDto> {
+  return request<ApplicationReviewResponseDto>(
+    `/applications/${applicationId}/review?stage=${stage}`,
+  );
+}
+
+/**
+ * Creates or updates the application review for a stage. The server returns
+ * 409 when there is no active rubric for this program/stage, or when the
+ * interview gate is closed; it returns 400 with a structured
+ * `{ message, errors: [{ path, message }] }` body for field-level validation
+ * failures. Both surface through the thrown `ApiError` (`.status` and
+ * `.fieldErrors`) rather than being flattened into a generic message string.
+ */
+export function upsertApplicationReview(
+  applicationId: string,
+  stage: 'application' | 'interview',
+  payload: UpsertApplicationReviewDto,
+): Promise<ApplicationReviewResponseDto> {
+  return request<ApplicationReviewResponseDto>(
+    `/applications/${applicationId}/review?stage=${stage}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    },
+  );
 }
