@@ -1,10 +1,11 @@
 // services/api/prisma/migrations/20260810120000_scoring_versioning_and_review_status/migration.spec.ts
-// Integration test against the real test database (see services/api/npm run test:integration
-// wiring) — asserts the migration actually reshaped the schema, not just that Prisma types compile.
+// Integration test against the real dev database (see services/api npm run test:integration
+// wiring). Asserts the migration actually reshaped the schema, not just that Prisma types compile.
 import { PrismaClient } from '@prisma/client';
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { existsSync } from 'fs';
+import { execSync } from 'child_process';
 import * as dotenv from 'dotenv';
 
 dotenv.config();
@@ -30,7 +31,49 @@ function resolveConnectionString(): string {
   return connectionString;
 }
 
-const pool = new Pool({ connectionString: resolveConnectionString() });
+const connectionString = resolveConnectionString();
+
+// This suite needs a live Postgres holding the applied migration. That is
+// not guaranteed everywhere `npm run test:integration` might run (a fresh
+// checkout with no docker-compose up, a CI runner with no database service
+// wired -- .github/workflows/deploy.yml currently has no test step and no
+// database service). Rather than fail the whole run when unreachable, probe
+// the connection synchronously before Jest collects any `it` blocks and
+// skip the suite cleanly if nothing answers. A synchronous child process is
+// used deliberately: Jest builds its test tree by calling describe/it
+// bodies synchronously at collection time, so an async connectivity check
+// cannot gate `describe.skip` vs `describe` the way this one does.
+function isDatabaseReachable(target: string): boolean {
+  const url = new URL(target);
+  const host = url.hostname;
+  const port = url.port || '5432';
+  const probe = `
+    const net = require('net');
+    const socket = net.createConnection({ host: '${host}', port: ${port}, timeout: 2000 });
+    socket.on('connect', () => { socket.end(); process.exit(0); });
+    socket.on('error', () => process.exit(1));
+    socket.on('timeout', () => { socket.destroy(); process.exit(1); });
+  `;
+  try {
+    execSync(`node -e "${probe.replace(/"/g, '\\"')}"`, { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const dbAvailable = isDatabaseReachable(connectionString);
+const describeIfDbAvailable = dbAvailable ? describe : describe.skip;
+
+if (!dbAvailable) {
+  // eslint-disable-next-line no-console
+  console.warn(
+    `[migration.spec.ts] No database reachable at ${connectionString.replace(/:[^:@]*@/, ':****@')}. ` +
+      'Skipping migration integration tests instead of failing the run.',
+  );
+}
+
+const pool = new Pool({ connectionString });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
@@ -39,7 +82,7 @@ afterAll(async () => {
   await pool.end();
 });
 
-describe('20260810120000_scoring_versioning_and_review_status', () => {
+describeIfDbAvailable('20260810120000_scoring_versioning_and_review_status', () => {
   it('adds version, created_by_id, pass_threshold to scoring_schemas with the documented defaults', async () => {
     const rows = await prisma.$queryRaw<
       Array<{ column_name: string; data_type: string; column_default: string | null }>
@@ -131,6 +174,57 @@ describe('20260810120000_scoring_versioning_and_review_status', () => {
       WHERE table_name = 'application_reviews' AND column_name = 'status'
     `;
     expect(columnType[0].udt_name).toBe('ReviewStatus');
+  });
+
+  it('the USING clause actually maps a stray/unrecognized status value to draft, not just the column type', async () => {
+    // The real application_reviews table has already been cast by this
+    // migration, so there is no way to feed it a pre-migration value
+    // in place. Reproduce the pre-migration column shape in a scratch
+    // table on a dedicated connection (TEMP TABLE is connection-scoped),
+    // seed a value the migration never expected ('legacy_unexpected_value'
+    // is neither 'draft' nor 'submitted'), then run the exact ALTER
+    // COLUMN ... USING expression from the migration against it and
+    // assert on the resulting data, not on the column's type.
+    const client: PoolClient = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`
+        CREATE TEMP TABLE "_migration_using_clause_check" (
+          "status" VARCHAR(50) NOT NULL DEFAULT 'draft'
+        ) ON COMMIT DROP
+      `);
+      await client.query(
+        `INSERT INTO "_migration_using_clause_check" ("status") VALUES ($1), ($2), ($3)`,
+        ['draft', 'submitted', 'legacy_unexpected_value'],
+      );
+
+      await client.query(`ALTER TABLE "_migration_using_clause_check" ALTER COLUMN "status" DROP DEFAULT`);
+      await client.query(`
+        ALTER TABLE "_migration_using_clause_check"
+        ALTER COLUMN "status" TYPE "ReviewStatus"
+        USING (
+          CASE
+            WHEN "status" IN ('draft', 'submitted') THEN "status"::"ReviewStatus"
+            ELSE 'draft'::"ReviewStatus"
+          END
+        )
+      `);
+
+      const { rows } = await client.query<{ status: string }>(
+        `SELECT "status" FROM "_migration_using_clause_check" ORDER BY "status"`,
+      );
+
+      // 'draft' stays 'draft', 'submitted' stays 'submitted', and the
+      // stray value collapses to 'draft' -- so 'draft' now appears twice.
+      expect(rows.map((r) => r.status).sort()).toEqual(['draft', 'draft', 'submitted']);
+
+      await client.query('ROLLBACK');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
+    }
   });
 
   it('adds finalist and not_selected to ScoreStatus', async () => {
