@@ -19,11 +19,15 @@ import {
 import { GetApplicationReviewHandler } from '../../queries/handlers/get-application-review.handler';
 import { GetApplicationReviewQuery } from '../../queries/get-application-review.query';
 import { ApplicationReviewResponseDto } from '../../dto/application-review-response.dto';
-import { UpsertApplicationReviewCommand, UpsertApplicationReviewItemDto } from '../upsert-application-review.command';
+import {
+  UpsertApplicationReviewCommand,
+  UpsertApplicationReviewDto,
+  UpsertApplicationReviewItemDto,
+} from '../upsert-application-review.command';
 
 // Decimal(5,2) columns (total_score, pass_threshold) top out at 999.99. A rubric with valid
 // weights (each level sums to 1.0) can still overflow this if an admin sets an oversized
-// maxScore on a criterion — reject before Postgres ever sees it, per the VarChar/Decimal
+// maxScore on a criterion. Reject before Postgres ever sees it, per the VarChar/Decimal
 // overflow defect class already hit three times in this codebase.
 const MAX_DECIMAL_5_2 = 999.99;
 
@@ -32,6 +36,17 @@ const SCHEMA_CATEGORIES_INCLUDE = {
     orderBy: { order: 'asc' as const },
     include: { criteria: { orderBy: { order: 'asc' as const } } },
   },
+};
+
+// Structural type covering both PrismaService and the $transaction callback's tx client,
+// since loadSchema needs to run inside and outside the transaction with the same shape.
+type SchemaReader = {
+  scoringSchema: {
+    findUnique(args: {
+      where: { id: string };
+      include: typeof SCHEMA_CATEGORIES_INCLUDE;
+    }): Promise<unknown>;
+  };
 };
 
 function toNumber(value: Prisma.Decimal | number): number {
@@ -50,9 +65,16 @@ function toWeightedCategories(schema: ScoringSchemaWithNested): WeightedCategory
   }));
 }
 
+// Validates each item against the pinned schema: membership, finiteness, range, and no
+// duplicate criterionId. When submitting, also requires every criterion in the schema to
+// be covered exactly once. calculateWeightedTotal silently treats an absent criterion as a
+// score of 0, so without this completeness check an incomplete submit can wrongly reject a
+// real applicant with no error ever surfacing. Drafts are exempt: partial drafts are the
+// entire point of drafts.
 function validateItems(
   schema: ScoringSchemaWithNested,
   items: UpsertApplicationReviewItemDto[],
+  status: 'draft' | 'submitted',
 ): WeightValidationError[] {
   const maxScoreByCriterionId = new Map<string, number>();
   for (const cat of schema.categories) {
@@ -62,7 +84,14 @@ function validateItems(
   }
 
   const errors: WeightValidationError[] = [];
+  const seenCriterionIds = new Set<string>();
+
   items.forEach((item, i) => {
+    if (typeof item.score !== 'number' || !Number.isFinite(item.score)) {
+      errors.push({ path: `items[${i}].score`, message: 'Score must be a finite number.' });
+      return;
+    }
+
     const maxScore = maxScoreByCriterionId.get(item.criterionId);
     if (maxScore === undefined) {
       errors.push({
@@ -71,6 +100,20 @@ function validateItems(
       });
       return;
     }
+
+    if (seenCriterionIds.has(item.criterionId)) {
+      // ApplicationScoreItem has @@unique([reviewId, criterionId]); letting a duplicate
+      // through would pass this check and then blow up createMany with a raw Prisma P2002.
+      // This Prisma 7 + @prisma/adapter-pg combination leaves error.meta.target undefined,
+      // so there is no reliable way to turn that into a clean 400 after the fact. Reject here.
+      errors.push({
+        path: `items[${i}].criterionId`,
+        message: `Criterion "${item.criterionId}" is scored more than once in this submission.`,
+      });
+      return;
+    }
+    seenCriterionIds.add(item.criterionId);
+
     if (item.score < 0 || item.score > maxScore) {
       errors.push({
         path: `items[${i}].score`,
@@ -78,7 +121,40 @@ function validateItems(
       });
     }
   });
+
+  if (status === 'submitted') {
+    for (const criterionId of maxScoreByCriterionId.keys()) {
+      if (!seenCriterionIds.has(criterionId)) {
+        errors.push({
+          path: 'items',
+          message: `Missing score for required criterion "${criterionId}".`,
+        });
+      }
+    }
+  }
+
   return errors;
+}
+
+function validateAndScore(schema: ScoringSchemaWithNested, payload: UpsertApplicationReviewDto): number {
+  const itemErrors = validateItems(schema, payload.items, payload.status);
+  if (itemErrors.length > 0) {
+    throw new BadRequestException({ message: 'Review items are invalid.', errors: itemErrors });
+  }
+
+  const totalScore = calculateWeightedTotal(
+    toWeightedCategories(schema),
+    payload.items.map((item) => ({ criterionId: item.criterionId, score: item.score })),
+  );
+
+  if (!Number.isFinite(totalScore) || totalScore > MAX_DECIMAL_5_2 || totalScore < 0) {
+    throw new BadRequestException({
+      message: 'Weighted total is out of range.',
+      errors: [{ path: 'items', message: `Computed total ${totalScore} is outside 0-${MAX_DECIMAL_5_2}.` }],
+    });
+  }
+
+  return totalScore;
 }
 
 @Injectable()
@@ -102,8 +178,8 @@ export class UpsertApplicationReviewHandler {
       where: { applicationId_stage: { applicationId: command.applicationId, stage: command.stage } },
     });
 
-    // A review pins the schema active at creation time and never silently migrates —
-    // resolve the schema to validate/score against from the existing pin, falling back
+    // A review pins the schema active at creation time and never silently migrates.
+    // Resolve the schema to validate/score against from the existing pin, falling back
     // to whatever is active only when this is the very first submission for this stage.
     let pinnedSchemaId = existingReview?.schemaId;
     if (!pinnedSchemaId) {
@@ -116,32 +192,18 @@ export class UpsertApplicationReviewHandler {
       pinnedSchemaId = activeRubric.id;
     }
 
-    const pinnedSchema = (await this.prisma.scoringSchema.findUnique({
-      where: { id: pinnedSchemaId },
-      include: SCHEMA_CATEGORIES_INCLUDE,
-    })) as ScoringSchemaWithNested | null;
+    const pinnedSchema = await this.loadSchema(this.prisma, pinnedSchemaId);
     if (!pinnedSchema) {
       throw new NotFoundException(`Pinned scoring schema ${pinnedSchemaId} not found`);
     }
 
-    const itemErrors = validateItems(pinnedSchema, command.payload.items);
-    if (itemErrors.length > 0) {
-      throw new BadRequestException({ message: 'Review items are invalid.', errors: itemErrors });
-    }
+    const totalScore = validateAndScore(pinnedSchema, command.payload);
 
-    const totalScore = calculateWeightedTotal(
-      toWeightedCategories(pinnedSchema),
-      command.payload.items.map((item) => ({ criterionId: item.criterionId, score: item.score })),
-    );
-    if (totalScore > MAX_DECIMAL_5_2 || totalScore < 0) {
-      throw new BadRequestException({
-        message: 'Weighted total is out of range.',
-        errors: [{ path: 'items', message: `Computed total ${totalScore} is outside 0-${MAX_DECIMAL_5_2}.` }],
-      });
-    }
-
+    // The gate only blocks *submitting* an interview score. An admin can still draft
+    // interview notes/scores before the application stage clears; they just cannot
+    // finalize them until the gate opens (or a SUPER_ADMIN overrides it).
     let usedOverride = false;
-    if (command.stage === ScoringStage.interview) {
+    if (command.stage === ScoringStage.interview && command.payload.status === 'submitted') {
       const gate = await this.resolveInterviewGate(application.programId, command.applicationId);
       if (!gate.isOpen) {
         const hasOverrideReason = Boolean(command.payload.overrideReason?.trim());
@@ -179,6 +241,25 @@ export class UpsertApplicationReviewHandler {
         },
       });
 
+      // Schema-pin race guard. existingReview and findActiveRubric above both read outside
+      // this transaction, so two concurrent first submissions can each resolve a different
+      // active rubric. Postgres's atomic upsert lets only one of them win the create branch;
+      // the loser's update branch never rewrites schemaId, so its totalScore may have been
+      // computed against a schema that is not the one actually persisted. Reload the row
+      // this call actually wrote and, if its schemaId disagrees with what we scored against,
+      // rescore against the schema that is provably the one stored before writing anything else.
+      let finalSchema = pinnedSchema;
+      let finalTotal = totalScore;
+      if (review.schemaId !== pinnedSchema.id) {
+        const actualSchema = await this.loadSchema(tx, review.schemaId);
+        if (!actualSchema) {
+          throw new NotFoundException(`Pinned scoring schema ${review.schemaId} not found`);
+        }
+        finalTotal = validateAndScore(actualSchema, command.payload);
+        finalSchema = actualSchema;
+        await tx.applicationReview.update({ where: { id: review.id }, data: { totalScore: finalTotal } });
+      }
+
       // Idempotent replace: delete-then-recreate keeps re-submitting the same payload
       // a no-op in effect, and sidesteps needing per-item upserts keyed on (reviewId, criterionId).
       await tx.applicationScoreItem.deleteMany({ where: { reviewId: review.id } });
@@ -192,10 +273,10 @@ export class UpsertApplicationReviewHandler {
       });
 
       if (command.payload.status === 'submitted') {
-        const outcome = resolveStageOutcome(command.stage, totalScore, toNumber(pinnedSchema.passThreshold));
+        const outcome = resolveStageOutcome(command.stage, finalTotal, toNumber(finalSchema.passThreshold));
         await tx.participantApplication.update({
           where: { id: command.applicationId },
-          data: { scoreTotal: totalScore, scoreStatus: outcome as ScoreStatus },
+          data: { scoreTotal: finalTotal, scoreStatus: outcome as ScoreStatus },
         });
       }
     });
@@ -203,6 +284,13 @@ export class UpsertApplicationReviewHandler {
     return this.getApplicationReviewHandler.execute(
       new GetApplicationReviewQuery(command.applicationId, command.stage),
     );
+  }
+
+  private async loadSchema(client: SchemaReader, schemaId: string): Promise<ScoringSchemaWithNested | null> {
+    return client.scoringSchema.findUnique({
+      where: { id: schemaId },
+      include: SCHEMA_CATEGORIES_INCLUDE,
+    }) as Promise<ScoringSchemaWithNested | null>;
   }
 
   private async resolveInterviewGate(programId: string, applicationId: string) {
