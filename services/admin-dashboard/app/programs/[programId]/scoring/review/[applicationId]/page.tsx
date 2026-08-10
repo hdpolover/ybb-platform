@@ -4,7 +4,6 @@
 import { useEffect, useState } from "react";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { getApplication, ApiError, type Application } from "@/src/shared/api-client";
-import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { AssessmentForm } from "@/app/components/scoring/AssessmentForm";
 
 const STAGES = ["application", "interview"] as const;
@@ -22,12 +21,10 @@ function parseStage(raw: string | null): Stage {
 export default function ApplicationReviewPage() {
   const params = useParams<{ programId: string; applicationId: string }>();
   const applicationId = (params?.applicationId as string) || "";
-  const programId = (params?.programId as string) || "";
 
   // The review endpoints only need applicationId/stage, not the program id,
-  // but this resolves it anyway for consistency with the rest of the route
-  // tree and for any future program-scoped call (e.g. a "back to program" link).
-  useResolvedProgramId(programId);
+  // so no program id lookup happens here. Add useResolvedProgramId(programId)
+  // back if a program-scoped call (e.g. a "back to program" link) is needed later.
 
   const router = useRouter();
   const pathname = usePathname();
