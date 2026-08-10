@@ -85,11 +85,46 @@ const fakeMintedResult = {
   ],
 };
 
-function makeP2002(): Prisma.PrismaClientKnownRequestError {
+// Message-based shape is the REALITY, verified against a real Postgres in
+// test/integration/scoring-rubric-version-conflict.spec.ts: Prisma 7.3.0 with
+// @prisma/adapter-pg leaves meta.target undefined (meta is `{}`) and only
+// puts the DB column names in the message text, as backtick-quoted
+// snake_case inside parens. This is the shape isVersionConflict() must
+// recognize, not a hand-picked convenience shape.
+function makeP2002FromMessage(dbColumns: string[]): Prisma.PrismaClientKnownRequestError {
+  const fieldList = dbColumns.map((c) => `\`${c}\``).join(', ');
+  return new Prisma.PrismaClientKnownRequestError(
+    `Unique constraint failed on the fields: (${fieldList})`,
+    { code: 'P2002', clientVersion: 'test', meta: {} },
+  );
+}
+
+// meta.target as string[] of Prisma field names is Prisma's documented
+// behavior on some engines/versions, even though it was NOT what this
+// project's actual driver (@prisma/adapter-pg) produced. Covered so a future
+// engine/version change that starts populating meta.target doesn't regress
+// silently.
+function makeP2002FromTargetArray(prismaFields: string[]): Prisma.PrismaClientKnownRequestError {
   return new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
     code: 'P2002',
     clientVersion: 'test',
-    meta: { target: ['programId', 'stage', 'version'] },
+    meta: { target: prismaFields },
+  });
+}
+
+// The MOST PRECISE shape actually observed against this project's real
+// database (Prisma 7.3.0 + @prisma/adapter-pg + Postgres): meta.target is
+// undefined, but meta.driverAdapterError.cause.constraint.fields carries the
+// exact DB column names straight from Postgres's own error detail.
+function makeP2002FromDriverAdapterFields(
+  dbColumns: string[],
+): Prisma.PrismaClientKnownRequestError {
+  return new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+    code: 'P2002',
+    clientVersion: 'test',
+    meta: {
+      driverAdapterError: { cause: { constraint: { fields: dbColumns } } },
+    } as unknown as Record<string, unknown>,
   });
 }
 
@@ -195,9 +230,9 @@ describe('UpsertScoringRubricHandler', () => {
     await expect(handler.execute(cmd)).rejects.toThrow(BadRequestException);
   });
 
-  it('retries once on a version-conflict P2002 and succeeds if the retry does not collide', async () => {
+  it('retries once on a version-conflict P2002 (real message shape) and succeeds if the retry does not collide', async () => {
     mockRepo.mintRubricVersion
-      .mockRejectedValueOnce(makeP2002())
+      .mockRejectedValueOnce(makeP2002FromMessage(['program_id', 'stage', 'version']))
       .mockResolvedValueOnce(fakeMintedResult);
 
     const cmd = new UpsertScoringRubricCommand(programId, ScoringStage.application, validPayload, 'admin-1');
@@ -207,8 +242,10 @@ describe('UpsertScoringRubricHandler', () => {
     expect(result.id).toBe('schema-1');
   });
 
-  it('throws ConflictException when the version-conflict P2002 persists after one retry', async () => {
-    mockRepo.mintRubricVersion.mockRejectedValue(makeP2002());
+  it('throws ConflictException when the version-conflict P2002 (real message shape) persists after one retry', async () => {
+    mockRepo.mintRubricVersion.mockRejectedValue(
+      makeP2002FromMessage(['program_id', 'stage', 'version']),
+    );
 
     const cmd = new UpsertScoringRubricCommand(programId, ScoringStage.application, validPayload, 'admin-1');
 
@@ -216,7 +253,51 @@ describe('UpsertScoringRubricHandler', () => {
     expect(mockRepo.mintRubricVersion).toHaveBeenCalledTimes(2);
   });
 
-  it('does not retry and rethrows non-conflict errors unchanged', async () => {
+  it('also recognizes a version-conflict P2002 when meta.target carries the field array (non-adapter-pg engines)', async () => {
+    mockRepo.mintRubricVersion
+      .mockRejectedValueOnce(makeP2002FromTargetArray(['programId', 'stage', 'version']))
+      .mockResolvedValueOnce(fakeMintedResult);
+
+    const cmd = new UpsertScoringRubricCommand(programId, ScoringStage.application, validPayload, 'admin-1');
+    const result = await handler.execute(cmd);
+
+    expect(mockRepo.mintRubricVersion).toHaveBeenCalledTimes(2);
+    expect(result.id).toBe('schema-1');
+  });
+
+  it('does not retry and rethrows a P2002 on a DIFFERENT constraint unchanged (message shape)', async () => {
+    const otherConstraintError = makeP2002FromMessage(['legacy_id']);
+    mockRepo.mintRubricVersion.mockRejectedValue(otherConstraintError);
+
+    const cmd = new UpsertScoringRubricCommand(programId, ScoringStage.application, validPayload, 'admin-1');
+
+    await expect(handler.execute(cmd)).rejects.toBe(otherConstraintError);
+    expect(mockRepo.mintRubricVersion).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not retry and rethrows a P2002 on a DIFFERENT constraint unchanged (target-array shape missing version)', async () => {
+    const otherConstraintError = makeP2002FromTargetArray(['programId', 'stage']);
+    mockRepo.mintRubricVersion.mockRejectedValue(otherConstraintError);
+
+    const cmd = new UpsertScoringRubricCommand(programId, ScoringStage.application, validPayload, 'admin-1');
+
+    await expect(handler.execute(cmd)).rejects.toBe(otherConstraintError);
+    expect(mockRepo.mintRubricVersion).toHaveBeenCalledTimes(1);
+  });
+
+  it('recognizes a version-conflict P2002 via meta.driverAdapterError.cause.constraint.fields (the actual adapter-pg shape)', async () => {
+    mockRepo.mintRubricVersion
+      .mockRejectedValueOnce(makeP2002FromDriverAdapterFields(['program_id', 'stage', 'version']))
+      .mockResolvedValueOnce(fakeMintedResult);
+
+    const cmd = new UpsertScoringRubricCommand(programId, ScoringStage.application, validPayload, 'admin-1');
+    const result = await handler.execute(cmd);
+
+    expect(mockRepo.mintRubricVersion).toHaveBeenCalledTimes(2);
+    expect(result.id).toBe('schema-1');
+  });
+
+  it('does not retry and rethrows non-conflict, non-Prisma errors unchanged', async () => {
     const dbError = new Error('connection reset');
     mockRepo.mintRubricVersion.mockRejectedValue(dbError);
 
