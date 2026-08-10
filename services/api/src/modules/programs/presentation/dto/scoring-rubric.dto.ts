@@ -157,6 +157,12 @@ export class RubricDto {
   @ApiProperty()
   isActive!: boolean;
 
+  @ApiProperty()
+  version!: number;
+
+  @ApiProperty()
+  passThreshold!: number;
+
   @ApiProperty({ type: () => RubricCategoryDto, isArray: true })
   categories!: RubricCategoryDto[];
 }
