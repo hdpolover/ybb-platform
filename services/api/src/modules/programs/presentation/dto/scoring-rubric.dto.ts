@@ -1,3 +1,4 @@
+// services/api/src/modules/programs/presentation/dto/scoring-rubric.dto.ts
 import {
   IsString,
   IsOptional,
@@ -88,6 +89,12 @@ export class UpsertScoringRubricDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @ApiPropertyOptional({ description: 'Pass/fail cutoff for this stage, 0-100.', default: 75 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  passThreshold?: number;
 
   @ApiProperty({ type: () => UpsertCategoryDto, isArray: true })
   @IsArray()
