@@ -174,3 +174,20 @@ export class ScoringRubricsResponseDto {
   @ApiPropertyOptional({ type: () => RubricDto, nullable: true })
   interview!: RubricDto | null;
 }
+
+export class RubricVersionSummaryDto {
+  @ApiProperty()
+  version!: number;
+
+  @ApiProperty()
+  isActive!: boolean;
+
+  @ApiProperty()
+  createdAt!: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  createdByName!: string | null;
+
+  @ApiProperty({ description: 'True if any submitted ApplicationReview is pinned to this version.' })
+  hasSubmittedReviews!: boolean;
+}

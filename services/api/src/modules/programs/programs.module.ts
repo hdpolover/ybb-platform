@@ -21,6 +21,7 @@ import { FormTemplatesController } from './presentation/form-templates.controlle
 import { ProgramFormFieldsController } from './presentation/program-form-fields.controller';
 import { ProgramScoringController } from './presentation/program-scoring.controller';
 import { GetScoringRubricsHandler } from './application/queries/handlers/get-scoring-rubrics.handler';
+import { GetScoringRubricVersionsHandler } from './application/queries/handlers/get-scoring-rubric-versions.handler';
 import { UpsertScoringRubricHandler } from './application/commands/handlers/upsert-scoring-rubric.handler';
 import { ScoringRubricRepository } from './infrastructure/persistence/scoring-rubric.repository';
 import {
@@ -248,6 +249,7 @@ import { LoaPreviewParticipantService } from './application/services/loa-preview
     },
     // Scoring Rubric Handlers
     GetScoringRubricsHandler,
+    GetScoringRubricVersionsHandler,
     UpsertScoringRubricHandler,
   ],
   exports: ['IProgramContentRepository', 'IProgramRepository', ListProgramsHandler],
