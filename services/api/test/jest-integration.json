@@ -7,10 +7,11 @@
   "rootDir": ".",
   "roots": [
     "<rootDir>",
-    "<rootDir>/../prisma/migrations"
+    "<rootDir>/../prisma/migrations",
+    "<rootDir>/../prisma/seeds"
   ],
   "testEnvironment": "node",
-  "testRegex": "(integration/.*\\.spec\\.ts$|prisma/migrations/.*\\.spec\\.ts$)",
+  "testRegex": "(integration/.*\\.spec\\.ts$|prisma/migrations/.*\\.spec\\.ts$|prisma/seeds/.*\\.spec\\.ts$)",
   "transform": {
     "^.+\\.(t|j)s$": [
       "ts-jest",
