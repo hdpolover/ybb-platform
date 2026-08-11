@@ -1925,7 +1925,7 @@ export async function listApplications(params?: {
   country?: string;
   registrationPaymentStatus?: "unpaid" | "paid" | "processing" | "failed" | "cancelled" | "refunded";
   programPaymentStatus?: "unpaid" | "paid" | "processing" | "failed" | "cancelled" | "refunded";
-  scoreStatus?: "pending" | "scored" | "go_to_interview" | "rejected";
+  scoreStatus?: "pending" | "scored" | "go_to_interview" | "rejected" | "finalist" | "not_selected";
   sortBy?:
     | "updatedAt"
     | "createdAt"
@@ -1985,7 +1985,7 @@ export async function exportApplicationsExcel(params: {
   search?: string;
   startDate?: string;
   endDate?: string;
-  scoreStatus?: "pending" | "scored" | "go_to_interview" | "rejected";
+  scoreStatus?: "pending" | "scored" | "go_to_interview" | "rejected" | "finalist" | "not_selected";
 }): Promise<void> {
   const q = new URLSearchParams();
   q.set("brandId", params.brandId);

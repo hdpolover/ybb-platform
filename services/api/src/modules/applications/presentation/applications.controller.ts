@@ -117,6 +117,8 @@ export class ApplicationsController {
     ScoreStatus.SCORED,
     ScoreStatus.GO_TO_INTERVIEW,
     ScoreStatus.REJECTED,
+    ScoreStatus.FINALIST,
+    ScoreStatus.NOT_SELECTED,
   ]);
 
   // Pagination bounds for GET /applications (shared by every admin list page
