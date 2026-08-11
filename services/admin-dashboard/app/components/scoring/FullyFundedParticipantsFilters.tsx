@@ -86,9 +86,19 @@ export const SCORE_STATUS_OPTIONS = [
   { value: "scored", label: "Scored" },
   { value: "go_to_interview", label: "Go to Interview" },
   { value: "rejected", label: "Rejected" },
+  { value: "finalist", label: "Finalist" },
+  { value: "not_selected", label: "Not Selected" },
 ] as const;
 
-export const SCORE_STATUS_VALUES = ["all", "pending", "scored", "go_to_interview", "rejected"] as const;
+export const SCORE_STATUS_VALUES = [
+  "all",
+  "pending",
+  "scored",
+  "go_to_interview",
+  "rejected",
+  "finalist",
+  "not_selected",
+] as const;
 
 export type FullyFundedScoreStatusFilter = (typeof SCORE_STATUS_VALUES)[number];
 

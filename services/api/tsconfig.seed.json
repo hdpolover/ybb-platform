@@ -15,5 +15,5 @@
     "sourceMap": false
   },
   "include": ["prisma/seeds/**/*.ts"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "prisma/seeds/**/*.spec.ts"]
 }

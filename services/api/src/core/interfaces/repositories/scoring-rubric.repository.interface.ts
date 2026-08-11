@@ -1,3 +1,4 @@
+// services/api/src/core/interfaces/repositories/scoring-rubric.repository.interface.ts
 import { ScoringStage } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 
@@ -30,6 +31,9 @@ export type ScoringSchemaWithNested = {
   name: string;
   description: string | null;
   isActive: boolean;
+  version: number;
+  createdById: string | null;
+  passThreshold: Prisma.Decimal;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
@@ -38,7 +42,6 @@ export type ScoringSchemaWithNested = {
 };
 
 export type UpsertCriterionPayload = {
-  id?: string;
   name: string;
   description?: string;
   weight: number;
@@ -47,7 +50,6 @@ export type UpsertCriterionPayload = {
 };
 
 export type UpsertCategoryPayload = {
-  id?: string;
   name: string;
   description?: string;
   weight: number;
@@ -58,18 +60,41 @@ export type UpsertCategoryPayload = {
 export type UpsertRubricPayload = {
   name?: string;
   description?: string;
+  passThreshold?: number;
   categories: UpsertCategoryPayload[];
 };
 
 export interface IScoringRubricRepository {
-  findRubricsByProgramId(
+  /** The current version, or null if the program/stage has never had a rubric. */
+  findActiveRubric(
     programId: string,
-    stage?: ScoringStage,
+    stage: ScoringStage,
+  ): Promise<ScoringSchemaWithNested | null>;
+
+  /** A specific past or present version, for history inspection. */
+  findRubricVersion(
+    programId: string,
+    stage: ScoringStage,
+    version: number,
+  ): Promise<ScoringSchemaWithNested | null>;
+
+  /** Every version for a program/stage, newest first. */
+  findRubricHistory(
+    programId: string,
+    stage: ScoringStage,
   ): Promise<ScoringSchemaWithNested[]>;
 
-  upsertRubric(
+  /**
+   * Deep-copies the payload into a new ScoringSchema version and flips the
+   * previous active version (if any) to isActive=false. A payload that is
+   * semantically identical to the current active version (same names,
+   * descriptions, weights, maxScore, order, and row count) mints nothing
+   * and returns the existing active version unchanged.
+   */
+  mintRubricVersion(
     programId: string,
     stage: ScoringStage,
     payload: UpsertRubricPayload,
+    createdById: string | null,
   ): Promise<ScoringSchemaWithNested>;
 }

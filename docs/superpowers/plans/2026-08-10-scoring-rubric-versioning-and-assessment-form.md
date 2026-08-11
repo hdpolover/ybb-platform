@@ -4,7 +4,7 @@
 
 **Goal:** Make per-program scoring rubric weights safely versionable and build the two-stage assessment form that scores applications against them.
 
-**Architecture:** Rubric edits stop mutating rows and instead mint a new immutable `ScoringSchema` version, so `ApplicationReview.schemaId` permanently pins the exact weights a review was scored under. A pure, dependency-free calculation module owns the weighted-total and threshold logic and is imported by both the NestJS handler and the React form, so the live client total and the persisted server total cannot drift. Scoring runs in two stages, `application` and `interview`, each with its own rubric and pass threshold.
+**Architecture:** Rubric edits stop mutating rows and instead mint a new immutable `ScoringSchema` version, so `ApplicationReview.schemaId` permanently pins the exact weights a review was scored under. A pure, dependency-free calculation module owns the weighted-total and threshold logic. `services/api` and `services/admin-dashboard` are separate npm packages with no workspace linking, so the module cannot be imported across them; the dashboard keeps a byte-for-byte mirror and a jest guard test in the API fails the build the moment the two diverge. Scoring runs in two stages, `application` and `interview`, each with its own rubric and pass threshold.
 
 **Tech Stack:** NestJS + CQRS, Prisma + PostgreSQL, Next.js 16 admin dashboard (React, TypeScript), jest.
 
