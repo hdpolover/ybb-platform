@@ -3,6 +3,7 @@
 import React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { EyeIcon } from "@heroicons/react/24/solid";
+import { ClipboardDocumentCheckIcon } from "@heroicons/react/24/outline";
 
 export interface FullyFundedParticipantRow {
   id: number;
@@ -110,23 +111,41 @@ export function FullyFundedParticipantsTable({
                       <span className="text-xs font-medium text-zinc-700">{row.registeredOn}</span>
                     </td>
                     <td className="px-4 py-3 align-top">
-                      <button
-                        type="button"
-                        className="flex h-7 w-7 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-600 shadow-sm transition-colors hover:bg-zinc-50 hover:text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-200"
-                        onClick={() => {
-                          const params = new URLSearchParams(searchParams.toString());
-                          params.set("source", "scoring");
-                          const query = params.toString();
-                          const match = pathname.match(/\/programs\/([^/]+)/);
-                          const programId = match?.[1];
-                          const basePath = programId
-                            ? `/programs/${encodeURIComponent(programId)}/scoring/fully-funded/${encodeURIComponent(row.accountId)}`
-                            : `/scoring/fully-funded/${encodeURIComponent(row.accountId)}`;
-                          router.push(query ? `${basePath}?${query}` : basePath);
-                        }}
-                      >
-                        <EyeIcon className="h-4 w-4" />
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          title="View participant"
+                          className="flex h-7 w-7 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-600 shadow-sm transition-colors hover:bg-zinc-50 hover:text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-200"
+                          onClick={() => {
+                            const params = new URLSearchParams(searchParams.toString());
+                            params.set("source", "scoring");
+                            const query = params.toString();
+                            const match = pathname.match(/\/programs\/([^/]+)/);
+                            const programId = match?.[1];
+                            const basePath = programId
+                              ? `/programs/${encodeURIComponent(programId)}/scoring/fully-funded/${encodeURIComponent(row.accountId)}`
+                              : `/scoring/fully-funded/${encodeURIComponent(row.accountId)}`;
+                            router.push(query ? `${basePath}?${query}` : basePath);
+                          }}
+                        >
+                          <EyeIcon className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          title="Score application"
+                          className="flex h-7 w-7 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-600 shadow-sm transition-colors hover:bg-zinc-50 hover:text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-200"
+                          onClick={() => {
+                            const match = pathname.match(/\/programs\/([^/]+)/);
+                            const programId = match?.[1];
+                            const basePath = programId
+                              ? `/programs/${encodeURIComponent(programId)}/scoring/review/${encodeURIComponent(row.accountId)}`
+                              : `/scoring/review/${encodeURIComponent(row.accountId)}`;
+                            router.push(`${basePath}?stage=application`);
+                          }}
+                        >
+                          <ClipboardDocumentCheckIcon className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
