@@ -231,6 +231,8 @@ function ScoreStatusBadge({ status }: { status: string | null }) {
     scored: "Scored",
     go_to_interview: "Go to Interview",
     rejected: "Rejected",
+    finalist: "Finalist",
+    not_selected: "Not Selected",
   };
   const label = status ? labels[status] ?? status : "Not Scored";
   let className = "bg-zinc-100 text-zinc-500";
@@ -239,6 +241,8 @@ function ScoreStatusBadge({ status }: { status: string | null }) {
   else if (status === "go_to_interview") className = "bg-blue-100 text-blue-700";
   else if (status === "rejected") className = "bg-rose-100 text-rose-700";
   else if (status === "pending") className = "bg-amber-100 text-amber-700";
+  else if (status === "finalist") className = "bg-emerald-100 text-emerald-700";
+  else if (status === "not_selected") className = "bg-zinc-200 text-zinc-600";
 
   return (
     <span className={`inline-flex w-fit rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${className}`}>
