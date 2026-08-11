@@ -36,7 +36,9 @@ model ScoringCategory {
   schemaId    String  @map("schema_id") @db.Uuid
   name        String  @db.VarChar(100) // "Essay", "Achievement"
   description String? @db.Text
-  weight      Decimal @db.Decimal(5, 2) // e.g. 0.60 (60%)
+  // Decimal(9,6): widened from (5,2) so a fraction like 0.3333 (33.33%) round-trips
+  // exactly instead of truncating to 0.33. See migration 20260811000000_widen_scoring_weight_precision.
+  weight      Decimal @db.Decimal(9, 6) // e.g. 0.6 (60%), or 0.3333 (33.33%)
   order       Int     @default(0)
   legacyId    String? @map("legacy_reference") // e.g. "score_essay" from CSV
 
@@ -53,7 +55,8 @@ model ScoringCriterion {
   categoryId  String  @map("category_id") @db.Uuid
   name        String  @db.VarChar(255) // "Topic Relevance", "Leadership"
   description String? @db.Text
-  weight      Decimal @db.Decimal(5, 2) // e.g. 0.30 (30% of the category)
+  // Decimal(9,6): widened from (5,2), same reason as ScoringCategory.weight above.
+  weight      Decimal @db.Decimal(9, 6) // e.g. 0.3 (30% of the category), or 0.3333
   maxScore    Decimal @default(100.00) @map("max_score") @db.Decimal(5, 2)
   order       Int     @default(0)
   legacyId    Int?    @unique @map("legacy_id")
