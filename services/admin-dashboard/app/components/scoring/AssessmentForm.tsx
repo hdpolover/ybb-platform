@@ -40,7 +40,7 @@ function deriveFormState(review: ApplicationReviewResponseDto): FormState {
       itemNotes[criterion.id] = "";
     }
   }
-  for (const item of review.items) {
+  for (const item of review.scoreItems) {
     scores[item.criterionId] = item.score;
     itemNotes[item.criterionId] = item.notes ?? "";
   }
