@@ -270,6 +270,40 @@ describe('UpsertApplicationReviewHandler', () => {
     expect(mockTx.participantApplication.update).not.toHaveBeenCalled();
   });
 
+  it('stamps the acting admin as reviewerId on both the create and the update branch', async () => {
+    stub(ScoringStage.application);
+    const payload = { ...validPayload, status: 'draft' as const };
+
+    // Admin A creates the draft...
+    await handler.execute(new UpsertApplicationReviewCommand(applicationId, ScoringStage.application, 'admin-a', UserRole.ADMIN, payload));
+    expect(mockTx.applicationReview.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ create: expect.objectContaining({ reviewerId: 'admin-a' }) }),
+    );
+
+    // ...then Admin B submits it. Before this fix, the update branch omitted reviewerId
+    // entirely, so the review stayed permanently attributed to Admin A.
+    mockPrisma.applicationReview.findUnique.mockResolvedValue({ id: 'review-1', schemaId: 'schema-application-v1' });
+    const submitPayload = { ...validPayload, status: 'submitted' as const };
+    await handler.execute(new UpsertApplicationReviewCommand(applicationId, ScoringStage.application, 'admin-b', UserRole.ADMIN, submitPayload));
+    expect(mockTx.applicationReview.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ update: expect.objectContaining({ reviewerId: 'admin-b' }) }),
+    );
+  });
+
+  it('a normal (non-override) update does not null out a previously recorded override', async () => {
+    stub(ScoringStage.application);
+    mockPrisma.applicationReview.findUnique.mockResolvedValue({ id: 'review-1', schemaId: 'schema-application-v1' });
+    const payload = { ...validPayload, status: 'draft' as const };
+
+    await handler.execute(new UpsertApplicationReviewCommand(applicationId, ScoringStage.application, 'admin-a', UserRole.ADMIN, payload));
+
+    const call = mockTx.applicationReview.upsert.mock.calls[0][0];
+    // Neither key is present in the update payload at all, so Prisma leaves whatever
+    // overrideById/overrideReason was already stored on the row untouched.
+    expect(call.update).not.toHaveProperty('overrideById');
+    expect(call.update).not.toHaveProperty('overrideReason');
+  });
+
   it('draft: a partial submission (missing a required criterion) is accepted, since drafts may be incomplete', async () => {
     stub(ScoringStage.application);
     const payload = { status: 'draft' as const, items: [{ criterionId: 'crit-leadership', score: 80 }] };

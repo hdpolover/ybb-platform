@@ -235,8 +235,18 @@ export class UpsertApplicationReviewHandler {
           totalScore,
           notes: command.payload.notes ?? null,
           status: command.payload.status,
-          overrideById: usedOverride ? command.actingAdminId : null,
-          overrideReason: usedOverride ? command.payload.overrideReason ?? null : null,
+          // Attribution: every write (draft or submitted) stamps the acting admin as the
+          // reviewer, so the review always reflects who last touched it. Previously this
+          // branch omitted reviewerId entirely, so a review created by Admin A stayed
+          // permanently attributed to A even after Admin B submitted it.
+          reviewerId: command.actingAdminId,
+          // Override audit: only ever SET overrideById/overrideReason when this write
+          // actually used an override. A normal (non-override) draft save must never null
+          // out a previously recorded override -- omitting these keys entirely leaves
+          // Prisma's update untouched, preserving whatever was recorded before.
+          ...(usedOverride
+            ? { overrideById: command.actingAdminId, overrideReason: command.payload.overrideReason ?? null }
+            : {}),
           completedAt: command.payload.status === 'submitted' ? new Date() : null,
         },
       });
