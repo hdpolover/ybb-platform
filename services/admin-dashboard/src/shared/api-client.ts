@@ -4186,6 +4186,8 @@ export type UpsertCategoryInput = {
 export type UpsertRubricInput = {
   name?: string;
   description?: string;
+  /** Pass/fail score cutoff for this stage, 0-100. NOT a weight; never percent-converted. */
+  passThreshold?: number;
   categories: UpsertCategoryInput[];
 };
 

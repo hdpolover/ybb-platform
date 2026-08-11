@@ -47,16 +47,23 @@ type CategoryState = {
 type RubricState = {
   name: string;
   description: string;
+  /** Pass/fail SCORE cutoff for this stage, 0-100. NOT a weight; never percent-converted. */
+  passThreshold: number;
   categories: CategoryState[];
 };
+
+// Default pass threshold shown for a stage that has never been saved, matching the
+// server's ScoringSchema.passThreshold column default.
+const DEFAULT_PASS_THRESHOLD = 75;
 
 // Conversion helpers
 
 function rubricToState(rubric: Rubric | null): RubricState {
-  if (!rubric) return { name: "", description: "", categories: [] };
+  if (!rubric) return { name: "", description: "", passThreshold: DEFAULT_PASS_THRESHOLD, categories: [] };
   return {
     name: rubric.name,
     description: rubric.description ?? "",
+    passThreshold: rubric.passThreshold,
     categories: rubric.categories.map((cat, ci) => ({
       id: cat.id,
       name: cat.name,
@@ -79,6 +86,7 @@ function stateToPayload(state: RubricState): UpsertRubricInput {
   return {
     name: state.name || undefined,
     description: state.description || undefined,
+    passThreshold: state.passThreshold,
     categories: state.categories.map((cat, ci): UpsertCategoryInput => ({
       id: cat.id,
       name: cat.name,
@@ -271,7 +279,7 @@ const STAGE_LABELS: Record<Stage, string> = {
 };
 
 function emptyRubricState(): RubricState {
-  return { name: "", description: "", categories: [] };
+  return { name: "", description: "", passThreshold: DEFAULT_PASS_THRESHOLD, categories: [] };
 }
 
 function emptyCriterion(order: number): CriterionState {
@@ -477,6 +485,23 @@ export function RubricBuilderClient() {
   const weightErrors: WeightValidationError[] = validateWeightSums(
     stateToWeightedCategories(current),
   );
+  const passThresholdInvalid = current.passThreshold < 0 || current.passThreshold > 100;
+  const hasBlockingErrors = weightErrors.length > 0 || passThresholdInvalid;
+
+  // Maps a WeightValidationError's category-scoped path (e.g. "categories[1].criteria")
+  // back to that category's display name, so the UI never shows a raw category UUID (or
+  // "draft-N" placeholder) to a SuperAdmin. Falls back to the message as-is for the
+  // top-level "categories" sum error, which does not interpolate any category identifier.
+  function displayWeightError(err: WeightValidationError): string {
+    const match = /^categories\[(\d+)\]/.exec(err.path);
+    if (!match) return err.message;
+    const index = Number(match[1]);
+    const category = current.categories[index];
+    if (!category) return err.message;
+    const rawId = category.id ?? `draft-${category.order}`;
+    const displayName = category.name.trim() || `Category ${index + 1}`;
+    return err.message.replace(`"${rawId}"`, `"${displayName}"`);
+  }
 
   return (
     <div className="space-y-6">
@@ -521,6 +546,35 @@ export function RubricBuilderClient() {
         />
       </div>
 
+      {/* Pass threshold: a 0-100 SCORE cutoff, distinct from category/criterion weights
+          (which are fractions of 1). Never run through percentToFraction/fractionToPercent. */}
+      <div className="w-full md:w-48">
+        <label className="mb-1 block text-sm font-medium">Pass threshold</label>
+        <div className="flex items-center gap-1">
+          <input
+            type="number"
+            className="w-full rounded border px-3 py-2"
+            min={0}
+            max={100}
+            step={0.01}
+            value={current.passThreshold}
+            onChange={(e) =>
+              setStates((prev) => ({
+                ...prev,
+                [activeStage]: { ...prev[activeStage], passThreshold: parseFloat(e.target.value) || 0 },
+              }))
+            }
+          />
+          <span className="text-xs text-zinc-500">/ 100</span>
+        </div>
+        <p className="mt-1 text-xs text-zinc-500">
+          Minimum weighted score (0-100) an applicant needs to pass this stage.
+        </p>
+        {(current.passThreshold < 0 || current.passThreshold > 100) && (
+          <p className="mt-1 text-xs text-red-600">Pass threshold must be between 0 and 100.</p>
+        )}
+      </div>
+
       {/* Weight validation errors (blocking) */}
       {weightErrors.length > 0 && (
         <div className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -528,7 +582,7 @@ export function RubricBuilderClient() {
           <ul className="mt-1 list-disc pl-5">
             {weightErrors.map((err, idx) => (
               <li key={idx}>
-                <span className="font-mono text-xs">{err.path}</span>: {err.message}
+                <span className="font-mono text-xs">{err.path}</span>: {displayWeightError(err)}
               </li>
             ))}
           </ul>
@@ -571,7 +625,7 @@ export function RubricBuilderClient() {
             <div className="mt-2 flex gap-2">
               <button
                 type="button"
-                disabled={isSaving || weightErrors.length > 0}
+                disabled={isSaving || hasBlockingErrors}
                 onClick={performSave}
                 className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
               >
@@ -596,7 +650,7 @@ export function RubricBuilderClient() {
           </div>
           <button
             type="button"
-            disabled={isSaving || weightErrors.length > 0}
+            disabled={isSaving || hasBlockingErrors}
             onClick={handleSaveClick}
             className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >
