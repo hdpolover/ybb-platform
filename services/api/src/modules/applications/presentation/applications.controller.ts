@@ -60,6 +60,7 @@ import {
 import { ExportApplicationsQuery } from '../application/queries/export-applications.query';
 import { StreamableFile } from '@nestjs/common';
 import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
+import { resolveActingAdminId } from '@shared/utils/resolve-acting-admin-id';
 
 // Scoring review command
 import { UpsertApplicationReviewHandler } from '../application/commands/handlers/upsert-application-review.handler';
@@ -656,10 +657,13 @@ export class ApplicationsController {
     // UpsertApplicationReviewRequestDto has no actingAdminId/overrideById/
     // createdById/totalScore/scoreStatus fields, so none of those can flow
     // through dto.* here even before the global whitelist pipe rejects them.
+    // actingAdminId must be the admins.id (ApplicationReview.reviewerId and
+    // .overrideById are FKs to admins(id), not users(id)); resolveActingAdminId
+    // throws rather than silently falling back to user.userId.
     const command = new UpsertApplicationReviewCommand(
       applicationId,
       stage,
-      user.userId,
+      resolveActingAdminId(user),
       ApplicationsController.resolveActingAdminRole(user),
       {
         status: dto.status,
@@ -695,11 +699,16 @@ export class ApplicationsController {
     // createdById/actingAdminId. ReviewApplicationRequestDto has no
     // reviewerId field, so a body-supplied one cannot flow through dto.*
     // here even before the global whitelist pipe rejects it.
-    this.logger.log(`Reviewing application ${id} by reviewer ${user.userId}`);
+    // ParticipantApplication.reviewedBy is a bare Uuid with no FK, so passing
+    // user.userId here would not throw, but it would be a silent semantic
+    // change: the dashboard previously sent the admin profile id. Use the
+    // admin id for consistency with the FK-backed scoring writes above.
+    const actingAdminId = resolveActingAdminId(user);
+    this.logger.log(`Reviewing application ${id} by reviewer ${actingAdminId}`);
 
     const command = new ReviewApplicationCommand(
       id,
-      user.userId,
+      actingAdminId,
       dto.status,
       dto.reviewerNotes,
       dto.approvalMode,
