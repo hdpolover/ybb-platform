@@ -65,10 +65,13 @@ describe('ApplicationsController review routes (real HTTP layer)', () => {
   const mockGetReviewHandler = { execute: jest.fn() };
   const mockUpsertReviewHandler = { execute: jest.fn() };
   const mockReviewApplicationHandler = { execute: jest.fn() };
-  let currentUser: { userId: string; role: string | string[] };
+  let currentUser: { userId: string; adminId?: string; role: string | string[] };
 
   beforeAll(async () => {
-    currentUser = { userId: 'admin-1', role: [UserRole.ADMIN] };
+    // userId (users.id) and adminId (admins.id) are deliberately different
+    // throughout this suite: ApplicationReview.reviewerId/overrideById are FKs
+    // to admins(id), so commands must carry adminId, not userId.
+    currentUser = { userId: 'user-1', adminId: 'admin-1', role: [UserRole.ADMIN] };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ApplicationsController],
@@ -104,7 +107,7 @@ describe('ApplicationsController review routes (real HTTP layer)', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    currentUser = { userId: 'admin-1', role: [UserRole.ADMIN] };
+    currentUser = { userId: 'user-1', adminId: 'admin-1', role: [UserRole.ADMIN] };
   });
 
   describe('route resolution', () => {
@@ -173,7 +176,7 @@ describe('ApplicationsController review routes (real HTTP layer)', () => {
       // createdById/actingAdminId elsewhere in this controller: reviewerId
       // must come from the authenticated JWT principal, not the body.
       mockReviewApplicationHandler.execute.mockResolvedValue({ id: 'app-1' });
-      currentUser = { userId: 'real-admin-99', role: [UserRole.ADMIN] };
+      currentUser = { userId: 'real-user-99', adminId: 'real-admin-99', role: [UserRole.ADMIN] };
 
       const response = await request(app.getHttpServer())
         .post('/applications/app-1/review')
@@ -189,7 +192,10 @@ describe('ApplicationsController review routes (real HTTP layer)', () => {
 
       expect(mockReviewApplicationHandler.execute).toHaveBeenCalledTimes(1);
       const command = mockReviewApplicationHandler.execute.mock.calls[0][0];
+      // reviewerId must be the admins.id (real-admin-99), never the
+      // users.id (real-user-99) and never the body-supplied attacker id.
       expect(command.reviewerId).toBe('real-admin-99');
+      expect(command.reviewerId).not.toBe('real-user-99');
       expect(command.reviewerId).not.toBe('attacker-admin-id');
     });
   });
@@ -230,7 +236,7 @@ describe('ApplicationsController review routes (real HTTP layer)', () => {
   describe('attribution forgery', () => {
     it('ignores client-supplied actingAdminId/overrideById in the body and uses the authenticated principal', async () => {
       mockUpsertReviewHandler.execute.mockResolvedValue({ id: 'review-1' });
-      currentUser = { userId: 'real-admin-99', role: [UserRole.ADMIN] };
+      currentUser = { userId: 'real-user-99', adminId: 'real-admin-99', role: [UserRole.ADMIN] };
 
       const response = await request(app.getHttpServer())
         .put('/applications/app-1/review')
@@ -253,13 +259,16 @@ describe('ApplicationsController review routes (real HTTP layer)', () => {
       expect(response.status).toBe(200);
       expect(mockUpsertReviewHandler.execute).toHaveBeenCalledTimes(1);
       const command: UpsertApplicationReviewCommand = mockUpsertReviewHandler.execute.mock.calls[0][0];
+      // actingAdminId must be the admins.id (real-admin-99), never the
+      // users.id (real-user-99) and never the body-supplied attacker id.
       expect(command.actingAdminId).toBe('real-admin-99');
+      expect(command.actingAdminId).not.toBe('real-user-99');
       expect(command.actingAdminId).not.toBe('attacker-id');
     });
 
     it('derives actingAdminRole from the authenticated principal, not the request body', async () => {
       mockUpsertReviewHandler.execute.mockResolvedValue({ id: 'review-1' });
-      currentUser = { userId: 'admin-1', role: [UserRole.SUPER_ADMIN] };
+      currentUser = { userId: 'user-1', adminId: 'admin-1', role: [UserRole.SUPER_ADMIN] };
 
       await request(app.getHttpServer())
         .put('/applications/app-1/review')
@@ -329,7 +338,7 @@ describe('PUT /applications/:applicationId/review cache invalidation', () => {
       .useValue({
         canActivate: (context: import('@nestjs/common').ExecutionContext) => {
           const req = context.switchToHttp().getRequest();
-          req.user = { userId: 'admin-1', role: [UserRole.ADMIN] };
+          req.user = { userId: 'user-1', adminId: 'admin-1', role: [UserRole.ADMIN] };
           return true;
         },
       })

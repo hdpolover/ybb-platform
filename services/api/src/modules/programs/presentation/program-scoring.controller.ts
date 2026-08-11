@@ -17,6 +17,7 @@ import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { UserRole } from '@core/entities/user.entity';
+import { resolveActingAdminId } from '@shared/utils/resolve-acting-admin-id';
 import { GetScoringRubricsHandler } from '../application/queries/handlers/get-scoring-rubrics.handler';
 import { GetScoringRubricVersionsHandler } from '../application/queries/handlers/get-scoring-rubric-versions.handler';
 import { UpsertScoringRubricHandler } from '../application/commands/handlers/upsert-scoring-rubric.handler';
@@ -108,6 +109,9 @@ export class ProgramScoringController {
     // from client-supplied body input, even if a client stuffs a
     // createdById field into the raw request body. UpsertScoringRubricDto
     // has no createdById property, so it cannot flow through dto.* here.
+    // It also MUST be the admins.id, not the users.id: ScoringSchema.createdById
+    // is a foreign key to admins(id). resolveActingAdminId throws rather than
+    // falling back to user.userId if the principal has no admin profile.
     return this.upsertScoringRubricHandler.execute(
       new UpsertScoringRubricCommand(
         programId,
@@ -130,7 +134,7 @@ export class ProgramScoringController {
             })),
           })),
         },
-        user.userId,
+        resolveActingAdminId(user),
       ),
     );
   }

@@ -77,13 +77,37 @@ describe('ProgramScoringController', () => {
         ],
       });
 
-      await controller.upsertScoringRubric('prog-1', 'application', dto, { userId: 'admin-1' } as never);
+      // userId (users.id) and adminId (admins.id) are deliberately different
+      // here: ScoringSchema.createdById is a FK to admins(id), so the command
+      // must carry adminId, not userId. See resolveActingAdminId.
+      await controller.upsertScoringRubric(
+        'prog-1',
+        'application',
+        dto,
+        { userId: 'user-1', adminId: 'admin-1' } as never,
+      );
 
       const cmd: UpsertScoringRubricCommand = mockHandlerExecute.execute.mock.calls[0][0];
       expect(cmd.programId).toBe('prog-1');
       expect(cmd.stage).toBe(ScoringStage.application);
       expect(cmd.createdById).toBe('admin-1');
+      expect(cmd.createdById).not.toBe('user-1');
       expect(cmd.payload.passThreshold).toBe(75);
+    });
+
+    it('throws ForbiddenException instead of falling back to userId when the principal has no adminId', async () => {
+      const dto = plainToInstance(UpsertScoringRubricDto, {
+        name: 'App Rubric',
+        passThreshold: 75,
+        categories: [
+          { name: 'Essay', weight: 0.5, order: 0, criteria: [{ name: 'X', weight: 1, maxScore: 100, order: 0 }] },
+        ],
+      });
+
+      await expect(
+        controller.upsertScoringRubric('prog-1', 'application', dto, { userId: 'user-1' } as never),
+      ).rejects.toThrow('Authenticated user is not an admin.');
+      expect(mockHandlerExecute.execute).not.toHaveBeenCalled();
     });
 
     it('ignores a client-supplied createdById in the request body and uses the authenticated principal instead', async () => {
@@ -101,7 +125,12 @@ describe('ProgramScoringController', () => {
         ],
       });
 
-      await controller.upsertScoringRubric('prog-1', 'application', dto, { userId: 'real-admin-1' } as never);
+      await controller.upsertScoringRubric(
+        'prog-1',
+        'application',
+        dto,
+        { userId: 'user-1', adminId: 'real-admin-1' } as never,
+      );
 
       const cmd: UpsertScoringRubricCommand = mockHandlerExecute.execute.mock.calls[0][0];
       expect(cmd.createdById).toBe('real-admin-1');
@@ -111,7 +140,12 @@ describe('ProgramScoringController', () => {
     it('rejects an invalid stage param with 400', async () => {
       const dto = plainToInstance(UpsertScoringRubricDto, { categories: [] });
       await expect(
-        controller.upsertScoringRubric('prog-1', 'not-a-stage', dto, { userId: 'admin-1' } as never),
+        controller.upsertScoringRubric(
+          'prog-1',
+          'not-a-stage',
+          dto,
+          { userId: 'user-1', adminId: 'admin-1' } as never,
+        ),
       ).rejects.toThrow('Invalid stage "not-a-stage"');
     });
   });
