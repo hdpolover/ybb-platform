@@ -2,9 +2,18 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
+import { PlusIcon, TrashIcon } from "@heroicons/react/24/solid";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { formatDate } from "@/lib/utils";
+import { Button } from "@/src/ui/button";
+import { Badge } from "@/src/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/src/ui/card";
+import { Input } from "@/src/ui/input";
+import { Label } from "@/src/ui/label";
+import { Separator } from "@/src/ui/separator";
+import { Tabs, TabsList, TabsTrigger } from "@/src/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/src/ui/table";
 import {
   getScoringRubrics,
   upsertScoringRubric,
@@ -134,55 +143,86 @@ function CriterionRow({
   onChange: (catIdx: number, critIdx: number, updated: Partial<CriterionState>) => void;
   onDelete: (catIdx: number, critIdx: number) => void;
 }) {
+  const nameId = `criterion-${catIdx}-${critIdx}-name`;
+  const descId = `criterion-${catIdx}-${critIdx}-description`;
+  const weightId = `criterion-${catIdx}-${critIdx}-weight`;
+  const maxScoreId = `criterion-${catIdx}-${critIdx}-max-score`;
+
   return (
-    <div className="flex items-start gap-2 rounded border bg-zinc-50 p-2">
-      <div className="flex flex-1 flex-col gap-1">
-        <input
-          className="w-full rounded border px-2 py-1 text-sm"
-          placeholder="Criterion name"
-          value={criterion.name}
-          onChange={(e) => onChange(catIdx, critIdx, { name: e.target.value })}
-        />
-        <input
-          className="w-full rounded border px-2 py-1 text-xs text-zinc-500"
-          placeholder="Description (optional)"
-          value={criterion.description}
-          onChange={(e) => onChange(catIdx, critIdx, { description: e.target.value })}
-        />
-      </div>
-      <div className="flex flex-col items-end gap-1">
-        <div className="flex items-center gap-1">
-          <input
-            type="number"
-            className="w-20 rounded border px-2 py-1 text-sm"
-            placeholder="Weight %"
-            value={criterion.weightPct}
-            min={0}
-            step={0.01}
-            onChange={(e) => onChange(catIdx, critIdx, { weightPct: parseFloat(e.target.value) || 0 })}
+    <div className="flex items-start gap-3 rounded-md border border-zinc-200 bg-zinc-50 p-3">
+      <div className="flex flex-1 flex-col gap-2">
+        <div>
+          <Label htmlFor={nameId} className="sr-only">
+            Criterion name
+          </Label>
+          <Input
+            id={nameId}
+            placeholder="Criterion name"
+            value={criterion.name}
+            onChange={(e) => onChange(catIdx, critIdx, { name: e.target.value })}
           />
-          <span className="text-xs text-zinc-500">%</span>
         </div>
-        <div className="flex items-center gap-1">
-          <input
-            type="number"
-            className="w-20 rounded border px-2 py-1 text-sm"
-            placeholder="Max score"
-            value={criterion.maxScore}
-            min={0.01}
-            step={1}
-            onChange={(e) => onChange(catIdx, critIdx, { maxScore: parseFloat(e.target.value) || 100 })}
+        <div>
+          <Label htmlFor={descId} className="sr-only">
+            Description (optional)
+          </Label>
+          <Input
+            id={descId}
+            className="text-xs text-zinc-500"
+            placeholder="Description (optional)"
+            value={criterion.description}
+            onChange={(e) => onChange(catIdx, critIdx, { description: e.target.value })}
           />
-          <span className="text-xs text-zinc-500">pts</span>
         </div>
       </div>
-      <button
-        type="button"
-        className="mt-1 text-xs text-red-600 hover:underline"
-        onClick={() => onDelete(catIdx, critIdx)}
-      >
-        Remove
-      </button>
+
+      <div className="flex items-end gap-2">
+        <div className="flex flex-col gap-1">
+          <Label htmlFor={weightId} className="text-xs font-normal text-zinc-500">
+            Weight %
+          </Label>
+          <div className="flex items-center gap-1">
+            <Input
+              id={weightId}
+              type="number"
+              className="w-20"
+              value={criterion.weightPct}
+              min={0}
+              step={0.01}
+              onChange={(e) => onChange(catIdx, critIdx, { weightPct: parseFloat(e.target.value) || 0 })}
+            />
+            <span className="text-xs text-zinc-500">%</span>
+          </div>
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor={maxScoreId} className="text-xs font-normal text-zinc-500">
+            Max score
+          </Label>
+          <div className="flex items-center gap-1">
+            <Input
+              id={maxScoreId}
+              type="number"
+              className="w-20"
+              value={criterion.maxScore}
+              min={0.01}
+              step={1}
+              onChange={(e) => onChange(catIdx, critIdx, { maxScore: parseFloat(e.target.value) || 100 })}
+            />
+            <span className="text-xs text-zinc-500">pts</span>
+          </div>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="text-zinc-400 hover:text-red-600"
+          aria-label="Remove"
+          title="Remove"
+          onClick={() => onDelete(catIdx, critIdx)}
+        >
+          <TrashIcon className="h-4 w-4" />
+        </Button>
+      </div>
     </div>
   );
 }
@@ -206,65 +246,100 @@ function CategoryCard({
   onDeleteCategory: (catIdx: number) => void;
   onDeleteCriterion: (catIdx: number, critIdx: number) => void;
 }) {
+  const nameId = `category-${catIdx}-name`;
+  const descId = `category-${catIdx}-description`;
+  const weightId = `category-${catIdx}-weight`;
+
   return (
-    <div className="rounded-lg border bg-white p-4 shadow-sm">
-      <div className="mb-3 flex items-start gap-2">
-        <div className="flex flex-1 flex-col gap-1">
-          <input
-            className="w-full rounded border px-3 py-1.5 font-medium"
-            placeholder="Category name"
-            value={category.name}
-            onChange={(e) => onCategoryChange(catIdx, { name: e.target.value })}
-          />
-          <input
-            className="w-full rounded border px-3 py-1 text-sm text-zinc-500"
-            placeholder="Description (optional)"
-            value={category.description}
-            onChange={(e) => onCategoryChange(catIdx, { description: e.target.value })}
-          />
+    <Card>
+      <CardContent className="space-y-4 p-4">
+        <div className="flex items-start gap-3">
+          <div className="flex flex-1 flex-col gap-2">
+            <div>
+              <Label htmlFor={nameId} className="sr-only">
+                Category name
+              </Label>
+              <Input
+                id={nameId}
+                className="font-medium"
+                placeholder="Category name"
+                value={category.name}
+                onChange={(e) => onCategoryChange(catIdx, { name: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label htmlFor={descId} className="sr-only">
+                Description (optional)
+              </Label>
+              <Input
+                id={descId}
+                className="text-sm text-zinc-500"
+                placeholder="Description (optional)"
+                value={category.description}
+                onChange={(e) => onCategoryChange(catIdx, { description: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-end gap-2">
+            <div className="flex flex-col gap-1">
+              <Label htmlFor={weightId} className="text-xs font-normal text-zinc-500">
+                Weight %
+              </Label>
+              <div className="flex items-center gap-1">
+                <Input
+                  id={weightId}
+                  type="number"
+                  className="w-20"
+                  value={category.weightPct}
+                  min={0}
+                  step={0.01}
+                  onChange={(e) => onCategoryChange(catIdx, { weightPct: parseFloat(e.target.value) || 0 })}
+                />
+                <span className="text-xs text-zinc-500">%</span>
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="text-zinc-400 hover:text-red-600"
+              aria-label="Remove"
+              title="Remove"
+              onClick={() => onDeleteCategory(catIdx)}
+            >
+              <TrashIcon className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
-        <div className="flex items-center gap-1">
-          <input
-            type="number"
-            className="w-20 rounded border px-2 py-1.5 text-sm"
-            placeholder="Weight %"
-            value={category.weightPct}
-            min={0}
-            step={0.01}
-            onChange={(e) => onCategoryChange(catIdx, { weightPct: parseFloat(e.target.value) || 0 })}
-          />
-          <span className="text-xs text-zinc-500">%</span>
+
+        <Separator />
+
+        <div className="space-y-2">
+          {category.criteria.map((crit, critIdx) => (
+            <CriterionRow
+              key={critIdx}
+              criterion={crit}
+              catIdx={catIdx}
+              critIdx={critIdx}
+              onChange={onCriterionChange}
+              onDelete={onDeleteCriterion}
+            />
+          ))}
         </div>
-        <button
+
+        <Button
           type="button"
-          className="text-xs text-red-600 hover:underline"
-          onClick={() => onDeleteCategory(catIdx)}
+          variant="outline"
+          size="sm"
+          aria-label="+ Add criterion"
+          onClick={() => onAddCriterion(catIdx)}
         >
-          Remove
-        </button>
-      </div>
-
-      <div className="mb-2 space-y-2">
-        {category.criteria.map((crit, critIdx) => (
-          <CriterionRow
-            key={critIdx}
-            criterion={crit}
-            catIdx={catIdx}
-            critIdx={critIdx}
-            onChange={onCriterionChange}
-            onDelete={onDeleteCriterion}
-          />
-        ))}
-      </div>
-
-      <button
-        type="button"
-        className="text-xs text-blue-600 hover:underline"
-        onClick={() => onAddCriterion(catIdx)}
-      >
-        + Add criterion
-      </button>
-    </div>
+          <PlusIcon className="h-4 w-4" aria-hidden="true" />
+          Add criterion
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -467,16 +542,16 @@ export function RubricBuilderClient() {
   }
 
   if (isLoading) {
-    return <div className="text-sm text-zinc-500">Loading rubrics...</div>;
+    return <p className="text-sm text-zinc-500">Loading rubrics...</p>;
   }
 
   if (error) {
     return (
-      <div className="space-y-6">
-        <p className="text-sm text-red-600">{error}</p>
-        <button type="button" className="mt-2 text-sm text-blue-600 underline" onClick={loadRubrics}>
+      <div className="space-y-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+        <p className="text-sm text-red-700">{error}</p>
+        <Button type="button" variant="outline" size="sm" onClick={loadRubrics}>
           Retry
-        </button>
+        </Button>
       </div>
     );
   }
@@ -506,78 +581,78 @@ export function RubricBuilderClient() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold">Scoring Rubric</h1>
+        <h1 className="text-xl font-semibold text-zinc-900">Scoring Rubric</h1>
         <p className="mt-1 text-sm text-zinc-500">
           Define categories and criteria for scoring applicants.
         </p>
       </div>
 
       {/* Stage tabs */}
-      <div className="flex gap-2 border-b">
-        {STAGES.map((stage) => (
-          <button
-            key={stage}
-            type="button"
-            onClick={() => setActiveStage(stage)}
-            className={`px-4 py-2 text-sm font-medium transition-colors ${
-              activeStage === stage
-                ? "border-b-2 border-blue-500 text-blue-600"
-                : "text-zinc-500 hover:text-zinc-900"
-            }`}
-          >
-            {STAGE_LABELS[stage]}
-          </button>
-        ))}
-      </div>
+      <Tabs value={activeStage} onValueChange={(v) => setActiveStage(v as Stage)}>
+        <TabsList>
+          {STAGES.map((stage) => (
+            <TabsTrigger key={stage} value={stage}>
+              {STAGE_LABELS[stage]}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
-      {/* Rubric name */}
-      <div>
-        <label className="mb-1 block text-sm font-medium">Rubric name</label>
-        <input
-          className="w-full rounded border px-3 py-2"
-          placeholder={`${STAGE_LABELS[activeStage]} Rubric`}
-          value={current.name}
-          onChange={(e) =>
-            setStates((prev) => ({
-              ...prev,
-              [activeStage]: { ...prev[activeStage], name: e.target.value },
-            }))
-          }
-        />
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Rubric details</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label htmlFor="rubric-name">Rubric name</Label>
+            <Input
+              id="rubric-name"
+              className="mt-1"
+              placeholder={`${STAGE_LABELS[activeStage]} Rubric`}
+              value={current.name}
+              onChange={(e) =>
+                setStates((prev) => ({
+                  ...prev,
+                  [activeStage]: { ...prev[activeStage], name: e.target.value },
+                }))
+              }
+            />
+          </div>
 
-      {/* Pass threshold: a 0-100 SCORE cutoff, distinct from category/criterion weights
-          (which are fractions of 1). Never run through percentToFraction/fractionToPercent. */}
-      <div className="w-full md:w-48">
-        <label className="mb-1 block text-sm font-medium">Pass threshold</label>
-        <div className="flex items-center gap-1">
-          <input
-            type="number"
-            className="w-full rounded border px-3 py-2"
-            min={0}
-            max={100}
-            step={0.01}
-            value={current.passThreshold}
-            onChange={(e) =>
-              setStates((prev) => ({
-                ...prev,
-                [activeStage]: { ...prev[activeStage], passThreshold: parseFloat(e.target.value) || 0 },
-              }))
-            }
-          />
-          <span className="text-xs text-zinc-500">/ 100</span>
-        </div>
-        <p className="mt-1 text-xs text-zinc-500">
-          Minimum weighted score (0-100) an applicant needs to pass this stage.
-        </p>
-        {(current.passThreshold < 0 || current.passThreshold > 100) && (
-          <p className="mt-1 text-xs text-red-600">Pass threshold must be between 0 and 100.</p>
-        )}
-      </div>
+          {/* Pass threshold: a 0-100 SCORE cutoff, distinct from category/criterion weights
+              (which are fractions of 1). Never run through percentToFraction/fractionToPercent. */}
+          <div className="w-full md:w-48">
+            <Label htmlFor="pass-threshold">Pass threshold</Label>
+            <div className="mt-1 flex items-center gap-1">
+              <Input
+                id="pass-threshold"
+                type="number"
+                min={0}
+                max={100}
+                step={0.01}
+                value={current.passThreshold}
+                onChange={(e) =>
+                  setStates((prev) => ({
+                    ...prev,
+                    [activeStage]: { ...prev[activeStage], passThreshold: parseFloat(e.target.value) || 0 },
+                  }))
+                }
+              />
+              <span className="text-xs text-zinc-500">/ 100</span>
+            </div>
+            <p className="mt-1 text-xs text-zinc-500">
+              Minimum weighted score (0-100) an applicant needs to pass this stage.
+            </p>
+            {passThresholdInvalid && (
+              <p className="mt-1 text-xs text-red-600">Pass threshold must be between 0 and 100.</p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Weight validation errors (blocking) */}
       {weightErrors.length > 0 && (
-        <div className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           <p className="font-medium">Weights must be fixed before saving:</p>
           <ul className="mt-1 list-disc pl-5">
             {weightErrors.map((err, idx) => (
@@ -605,40 +680,42 @@ export function RubricBuilderClient() {
         ))}
       </div>
 
-      <button
+      <Button
         type="button"
-        className="w-full rounded border-2 border-dashed py-2 text-sm text-zinc-500 hover:border-blue-500 hover:text-blue-600"
+        variant="outline"
+        size="sm"
+        className="w-full border-dashed"
+        aria-label="+ Add category"
         onClick={addCategory}
       >
-        + Add category
-      </button>
+        <PlusIcon className="h-4 w-4" aria-hidden="true" />
+        Add category
+      </Button>
 
       {/* Save section */}
-      <div className="space-y-3 border-t pt-4">
+      <div className="space-y-3">
+        <Separator />
+
         {showSaveConfirm && (
-          <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
             <p>
               This program has submitted reviews scored against the current rubric version.
               Saving creates a new version; those reviews stay pinned to their original version
               and are not affected.
             </p>
-            <div className="mt-2 flex gap-2">
-              <button
-                type="button"
-                disabled={isSaving || hasBlockingErrors}
-                onClick={performSave}
-                className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-              >
+            <div className="mt-3 flex gap-2">
+              <Button type="button" size="sm" disabled={isSaving || hasBlockingErrors} onClick={performSave}>
                 {isSaving ? "Saving..." : "Confirm and save"}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="outline"
+                size="sm"
                 disabled={isSaving}
                 onClick={() => setShowSaveConfirm(false)}
-                className="rounded border px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-50"
               >
                 Cancel
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -646,108 +723,106 @@ export function RubricBuilderClient() {
         <div className="flex items-center justify-between">
           <div className="text-sm">
             {saveError && <p className="text-red-600">{saveError}</p>}
-            {saveSuccess && <p className="text-green-600">Rubric saved.</p>}
+            {saveSuccess && <p className="text-emerald-600">Rubric saved.</p>}
           </div>
-          <button
-            type="button"
-            disabled={isSaving || hasBlockingErrors}
-            onClick={handleSaveClick}
-            className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-          >
+          <Button type="button" disabled={isSaving || hasBlockingErrors} onClick={handleSaveClick}>
             {isSaving ? "Saving..." : "Save rubric"}
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Version History */}
-      <div className="space-y-3 border-t pt-4">
-        <h2 className="text-sm font-semibold">Version History</h2>
-        {versionSummariesError && (
-          <p className="text-sm text-red-600">{versionSummariesError}</p>
-        )}
-        {versionSummaries.length === 0 && !versionSummariesError ? (
-          <p className="text-sm text-zinc-500">No saved versions yet.</p>
-        ) : (
-          <ul className="space-y-2">
-            {versionSummaries.map((v) => (
-              <li
-                key={v.version}
-                className="flex items-center justify-between rounded border bg-white px-3 py-2 text-sm"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">Version {v.version}</span>
-                  {v.isActive && (
-                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                      Active
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-3 text-xs text-zinc-500">
-                  <span>{v.createdByName ?? "Unknown"}</span>
-                  <span>{formatDate(v.createdAt)}</span>
-                  {!v.isActive && (
-                    <button
-                      type="button"
-                      disabled={isLoadingVersion}
-                      className="text-blue-600 hover:underline disabled:opacity-50"
-                      onClick={() => handleViewVersion(v.version)}
-                    >
-                      View
-                    </button>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+      <Card>
+        <CardHeader>
+          <CardTitle>Version history</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {versionSummariesError && (
+            <p className="text-sm text-red-600">{versionSummariesError}</p>
+          )}
+          {versionSummaries.length === 0 && !versionSummariesError ? (
+            <p className="text-sm text-zinc-500">No saved versions yet.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Version</TableHead>
+                  <TableHead>Created by</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {versionSummaries.map((v) => (
+                  <TableRow key={v.version}>
+                    <TableCell className="font-medium text-zinc-900">Version {v.version}</TableCell>
+                    <TableCell className="text-zinc-500">{v.createdByName ?? "Unknown"}</TableCell>
+                    <TableCell className="text-zinc-500">{formatDate(v.createdAt)}</TableCell>
+                    <TableCell>{v.isActive && <Badge variant="success">Active</Badge>}</TableCell>
+                    <TableCell className="text-right">
+                      {!v.isActive && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={isLoadingVersion}
+                          onClick={() => handleViewVersion(v.version)}
+                        >
+                          View
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
 
-        {viewedVersionError && <p className="text-sm text-red-600">{viewedVersionError}</p>}
+          {viewedVersionError && <p className="text-sm text-red-600">{viewedVersionError}</p>}
 
-        {viewedVersion && (
-          <div className="space-y-3 rounded-lg border-2 border-dashed border-zinc-300 bg-zinc-50 p-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold">
-                Version {viewedVersion.version} ({viewedVersion.name || "Untitled"}), read-only
-              </h3>
-              <button
-                type="button"
-                className="text-xs text-blue-600 hover:underline"
-                onClick={() => setViewedVersion(null)}
-              >
-                Close
-              </button>
-            </div>
-            <div className="space-y-2">
-              {viewedVersion.categories.map((cat) => (
-                <div key={cat.id} className="rounded border bg-white p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">{cat.name}</span>
-                    <span className="text-xs text-zinc-500">
-                      {fractionToPercent(cat.weight).toFixed(2)}%
-                    </span>
+          {viewedVersion && (
+            <div className="space-y-3 rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-zinc-900">
+                  Version {viewedVersion.version} ({viewedVersion.name || "Untitled"}), read-only
+                </h3>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setViewedVersion(null)}>
+                  Close
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {viewedVersion.categories.map((cat) => (
+                  <div key={cat.id} className="rounded-md border border-zinc-200 bg-white p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-zinc-900">{cat.name}</span>
+                      <span className="text-xs text-zinc-500">
+                        {fractionToPercent(cat.weight).toFixed(2)}%
+                      </span>
+                    </div>
+                    {cat.description && (
+                      <p className="mt-0.5 text-xs text-zinc-500">{cat.description}</p>
+                    )}
+                    <div className="mt-2 space-y-1">
+                      {cat.criteria.map((crit) => (
+                        <div
+                          key={crit.id}
+                          className="flex items-center justify-between rounded bg-zinc-50 px-2 py-1 text-sm"
+                        >
+                          <span>{crit.name}</span>
+                          <span className="text-xs text-zinc-500">
+                            {fractionToPercent(crit.weight).toFixed(2)}% · max {crit.maxScore} pts
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  {cat.description && (
-                    <p className="mt-0.5 text-xs text-zinc-500">{cat.description}</p>
-                  )}
-                  <div className="mt-2 space-y-1">
-                    {cat.criteria.map((crit) => (
-                      <div
-                        key={crit.id}
-                        className="flex items-center justify-between rounded bg-zinc-50 px-2 py-1 text-sm"
-                      >
-                        <span>{crit.name}</span>
-                        <span className="text-xs text-zinc-500">
-                          {fractionToPercent(crit.weight).toFixed(2)}% · max {crit.maxScore} pts
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
