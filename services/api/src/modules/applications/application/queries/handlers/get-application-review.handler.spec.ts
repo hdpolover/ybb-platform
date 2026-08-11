@@ -104,7 +104,7 @@ describe('GetApplicationReviewHandler', () => {
     expect(result.schemaVersion).toBe(1);
     expect(result.status).toBe('draft');
     expect(result.totalScore).toBe(0);
-    expect(result.items).toEqual([]);
+    expect(result.scoreItems).toEqual([]);
     expect(result.rubric.categories).toHaveLength(1);
     expect(result.hasNewerRubricVersion).toBe(false);
     expect(result.gate).toEqual({
@@ -142,7 +142,7 @@ describe('GetApplicationReviewHandler', () => {
     expect(result.schemaId).toBe(pinnedSchema.id);
     expect(result.schemaVersion).toBe(1);
     expect(result.totalScore).toBe(42.5);
-    expect(result.items).toEqual([{ criterionId: 'crit-1', score: 85, notes: null }]);
+    expect(result.scoreItems).toEqual([{ criterionId: 'crit-1', score: 85, notes: null }]);
     expect(result.hasNewerRubricVersion).toBe(true);
   });
 

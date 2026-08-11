@@ -4294,7 +4294,10 @@ export type ApplicationReviewResponseDto = {
   status: 'draft' | 'submitted';
   totalScore: number;
   notes: string | null;
-  items: ApplicationReviewScoreItem[];
+  /** Named scoreItems, not items: the global TransformInterceptor on the API treats any
+   *  response object with an `items` array as a paginated list and shreds this DTO into
+   *  the envelope's meta. Do not rename this back to `items`. */
+  scoreItems: ApplicationReviewScoreItem[];
   rubric: Rubric;
   /** Whether this stage is scoreable right now, and why. */
   gate: GateState;

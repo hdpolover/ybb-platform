@@ -40,8 +40,13 @@ export class ApplicationReviewResponseDto {
   @ApiPropertyOptional({ nullable: true })
   notes!: string | null;
 
+  // Named scoreItems, NOT items, deliberately. The global TransformInterceptor treats any
+  // response object with an `items` array as a paginated-list envelope and shreds it: the
+  // array becomes `data` and every other field (rubric, gate, totalScore, ...) gets moved
+  // into `meta`. That collision broke GET/PUT :applicationId/review in production. Do not
+  // rename this back to `items` without also fixing the interceptor's heuristic.
   @ApiProperty({ type: () => ApplicationScoreItemDto, isArray: true })
-  items!: ApplicationScoreItemDto[];
+  scoreItems!: ApplicationScoreItemDto[];
 
   @ApiProperty({ type: () => RubricDto })
   rubric!: RubricDto;
