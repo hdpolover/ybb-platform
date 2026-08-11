@@ -1,106 +1,97 @@
-import { ScoringStage } from '@prisma/client';
+// services/api/src/modules/programs/application/queries/handlers/get-scoring-rubrics.handler.spec.ts
+import { NotFoundException } from '@nestjs/common';
+import { Prisma, ScoringStage } from '@prisma/client';
 import { GetScoringRubricsHandler } from './get-scoring-rubrics.handler';
 import { GetScoringRubricsQuery } from '../get-scoring-rubrics.query';
 
 const programId = 'prog-uuid-1';
-const schemaId = 'schema-uuid-1';
 
-const makeSchema = (stage: ScoringStage) => ({
-  id: schemaId,
-  programId,
-  stage,
-  name: `${stage} Rubric`,
-  description: null,
-  isActive: true,
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  deletedAt: null,
-  legacyId: null,
-  categories: [
-    {
-      id: 'cat-1',
-      schemaId,
-      name: 'Essay',
-      description: null,
-      weight: 0.6,
-      order: 0,
-      legacyId: null,
-      criteria: [
-        {
-          id: 'crit-1',
-          categoryId: 'cat-1',
-          name: 'Relevance',
-          description: null,
-          weight: 1.0,
-          maxScore: 100,
-          order: 0,
-          legacyId: null,
-        },
-      ],
-    },
-  ],
-});
+function makeSchema(stage: ScoringStage, version: number) {
+  return {
+    id: `schema-${stage}-v${version}`,
+    programId,
+    stage,
+    name: `${stage} Rubric`,
+    description: null,
+    isActive: true,
+    version,
+    createdById: null,
+    passThreshold: new Prisma.Decimal(75),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    deletedAt: null,
+    legacyId: null,
+    categories: [],
+  };
+}
 
 describe('GetScoringRubricsHandler', () => {
   let handler: GetScoringRubricsHandler;
-  let mockRepo: { findRubricsByProgramId: jest.Mock };
-  let mockProgramRepo: { findBySlug: jest.Mock; findById: jest.Mock };
+  let mockRepo: {
+    findActiveRubric: jest.Mock;
+    findRubricVersion: jest.Mock;
+  };
+  let mockProgramRepo: { findBySlug: jest.Mock };
 
   beforeEach(() => {
-    mockRepo = { findRubricsByProgramId: jest.fn() };
-    mockProgramRepo = {
-      findBySlug: jest.fn(),
-      findById: jest.fn().mockResolvedValue({ id: programId }),
+    mockRepo = {
+      findActiveRubric: jest.fn(),
+      findRubricVersion: jest.fn(),
     };
+    mockProgramRepo = { findBySlug: jest.fn() };
     handler = new GetScoringRubricsHandler(mockRepo as any, mockProgramRepo as any);
   });
 
-  it('returns { application, interview } when both stages exist', async () => {
-    mockProgramRepo.findById.mockResolvedValue({ id: programId });
-    mockRepo.findRubricsByProgramId.mockResolvedValue([
-      makeSchema(ScoringStage.application),
-      makeSchema(ScoringStage.interview),
-    ]);
+  it('fetches the active rubric for both stages when neither stage nor version is given', async () => {
+    mockRepo.findActiveRubric.mockImplementation((_pid, stage) =>
+      Promise.resolve(makeSchema(stage, 1)),
+    );
 
     const result = await handler.execute(new GetScoringRubricsQuery(programId));
 
-    expect(result.application).not.toBeNull();
-    expect(result.interview).not.toBeNull();
-    expect(result.application!.stage).toBe('application');
-    expect(result.interview!.stage).toBe('interview');
+    expect(mockRepo.findActiveRubric).toHaveBeenCalledWith(programId, ScoringStage.application);
+    expect(mockRepo.findActiveRubric).toHaveBeenCalledWith(programId, ScoringStage.interview);
+    expect(result.application?.version).toBe(1);
+    expect(result.interview?.version).toBe(1);
   });
 
-  it('returns null for a stage that has no rubric', async () => {
-    mockRepo.findRubricsByProgramId.mockResolvedValue([makeSchema(ScoringStage.application)]);
+  it('fetches only the active rubric for the requested stage, leaving the other null', async () => {
+    mockRepo.findActiveRubric.mockResolvedValue(makeSchema(ScoringStage.application, 3));
 
-    const result = await handler.execute(new GetScoringRubricsQuery(programId));
+    const result = await handler.execute(new GetScoringRubricsQuery(programId, ScoringStage.application));
 
-    expect(result.application).not.toBeNull();
+    expect(mockRepo.findActiveRubric).toHaveBeenCalledWith(programId, ScoringStage.application);
+    expect(mockRepo.findActiveRubric).not.toHaveBeenCalledWith(programId, ScoringStage.interview);
+    expect(result.application?.version).toBe(3);
     expect(result.interview).toBeNull();
   });
 
-  it('maps Decimal weight/maxScore to numbers on criteria', async () => {
-    const { Prisma } = await import('@prisma/client');
-    const schema = makeSchema(ScoringStage.application);
-    schema.categories[0].weight = new Prisma.Decimal(0.6) as any;
-    schema.categories[0].criteria[0].weight = new Prisma.Decimal(1.0) as any;
-    schema.categories[0].criteria[0].maxScore = new Prisma.Decimal(100) as any;
+  it('fetches a specific version via findRubricVersion when stage and version are both given', async () => {
+    mockRepo.findRubricVersion.mockResolvedValue(makeSchema(ScoringStage.application, 2));
 
-    mockRepo.findRubricsByProgramId.mockResolvedValue([schema]);
+    const result = await handler.execute(new GetScoringRubricsQuery(programId, ScoringStage.application, 2));
 
-    const result = await handler.execute(new GetScoringRubricsQuery(programId));
-
-    expect(typeof result.application!.categories[0].weight).toBe('number');
-    expect(typeof result.application!.categories[0].criteria[0].maxScore).toBe('number');
+    expect(mockRepo.findRubricVersion).toHaveBeenCalledWith(programId, ScoringStage.application, 2);
+    expect(mockRepo.findActiveRubric).not.toHaveBeenCalled();
+    expect(result.application?.version).toBe(2);
+    expect(result.interview).toBeNull();
   });
 
-  it('resolves slug to UUID when a non-UUID programId is provided', async () => {
-    mockProgramRepo.findBySlug.mockResolvedValue({ id: programId });
-    mockRepo.findRubricsByProgramId.mockResolvedValue([]);
+  it('throws NotFoundException when the requested version does not exist', async () => {
+    mockRepo.findRubricVersion.mockResolvedValue(null);
 
-    await handler.execute(new GetScoringRubricsQuery('my-program-slug'));
+    await expect(
+      handler.execute(new GetScoringRubricsQuery(programId, ScoringStage.application, 99)),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it('resolves a slug programId through IProgramRepository.findBySlug before querying rubrics', async () => {
+    mockProgramRepo.findBySlug.mockResolvedValue({ id: 'resolved-uuid' });
+    mockRepo.findActiveRubric.mockResolvedValue(null);
+
+    await handler.execute(new GetScoringRubricsQuery('my-program-slug', ScoringStage.application));
 
     expect(mockProgramRepo.findBySlug).toHaveBeenCalledWith('my-program-slug');
-    expect(mockRepo.findRubricsByProgramId).toHaveBeenCalledWith(programId, undefined);
+    expect(mockRepo.findActiveRubric).toHaveBeenCalledWith('resolved-uuid', ScoringStage.application);
   });
 });

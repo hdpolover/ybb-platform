@@ -1,3 +1,4 @@
+// services/api/src/modules/programs/presentation/dto/scoring-rubric.dto.ts
 import {
   IsString,
   IsOptional,
@@ -7,6 +8,8 @@ import {
   IsArray,
   ValidateNested,
   Min,
+  Max,
+  MaxLength,
   IsUUID,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -23,6 +26,7 @@ export class UpsertCriterionDto {
   @ApiProperty({ description: 'Criterion name.' })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(255) // matches scoring_criteria.name @db.VarChar(255)
   name!: string;
 
   @ApiPropertyOptional()
@@ -35,9 +39,15 @@ export class UpsertCriterionDto {
   @Min(0)
   weight!: number;
 
+  // Writes to scoring_criteria.max_score, a Decimal(5,2) column (max 999.99). An
+  // unbounded value here reaches Postgres as a 22003 numeric_value_out_of_range,
+  // which surfaces to the client as an opaque 500 -- this is the third time this
+  // exact defect class (unguarded value into a length/precision-constrained
+  // column) has bitten this codebase, so reject it here instead.
   @ApiProperty({ description: 'Maximum possible score; must be greater than 0.', default: 100 })
   @IsNumber()
   @Min(0.01)
+  @Max(999.99)
   maxScore!: number;
 
   @ApiProperty({ description: 'Display order (zero-based integer).' })
@@ -54,6 +64,7 @@ export class UpsertCategoryDto {
   @ApiProperty({ description: 'Category name.' })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(100) // matches scoring_categories.name @db.VarChar(100)
   name!: string;
 
   @ApiPropertyOptional()
@@ -82,12 +93,22 @@ export class UpsertScoringRubricDto {
   @IsOptional()
   @IsString()
   @IsNotEmpty()
+  @MaxLength(255) // matches scoring_schemas.name @db.VarChar(255)
   name?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   description?: string;
+
+  // Writes to scoring_schemas.pass_threshold, a Decimal(5,2) column (max 999.99), but this
+  // is a 0-100 SCORE cutoff by definition, so the real ceiling is 100, not the column's.
+  @ApiPropertyOptional({ description: 'Pass/fail cutoff for this stage, 0-100.', default: 75 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  passThreshold?: number;
 
   @ApiProperty({ type: () => UpsertCategoryDto, isArray: true })
   @IsArray()
@@ -157,6 +178,12 @@ export class RubricDto {
   @ApiProperty()
   isActive!: boolean;
 
+  @ApiProperty()
+  version!: number;
+
+  @ApiProperty()
+  passThreshold!: number;
+
   @ApiProperty({ type: () => RubricCategoryDto, isArray: true })
   categories!: RubricCategoryDto[];
 }
@@ -167,4 +194,21 @@ export class ScoringRubricsResponseDto {
 
   @ApiPropertyOptional({ type: () => RubricDto, nullable: true })
   interview!: RubricDto | null;
+}
+
+export class RubricVersionSummaryDto {
+  @ApiProperty()
+  version!: number;
+
+  @ApiProperty()
+  isActive!: boolean;
+
+  @ApiProperty()
+  createdAt!: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  createdByName!: string | null;
+
+  @ApiProperty({ description: 'True if any submitted ApplicationReview is pinned to this version.' })
+  hasSubmittedReviews!: boolean;
 }

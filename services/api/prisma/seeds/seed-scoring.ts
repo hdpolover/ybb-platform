@@ -1,135 +1,111 @@
+// services/api/prisma/seeds/seed-scoring.ts
+// Idempotent backfill: gives every program an application-stage scoring
+// rubric (version 1) if it does not already have an active one. Safe to
+// re-run against production. No interview-stage rubric is ever seeded here;
+// a SuperAdmin authors that one on the Rubric page.
 import { prisma, log } from './utils';
-import { BRANDS } from './seed-brands';
 
-export async function seedScoring() {
-  log('🌱 Seeding Scoring Rubrics & Reviews...');
-
-  // 1. Get Program
-  const iys = await prisma.brand.findUnique({ where: { slug: BRANDS.IYS } });
-  if (!iys) return;
-
-  const iys2026 = await prisma.program.findFirst({
-    where: { 
-      brandId: iys.id, 
-      slug: 'istanbul-youth-summit-2026' 
-    }
-  });
-
-  if (!iys2026) {
-    log('⚠️ IYS 2026 Not found, skipping scoring seed');
-    return;
-  }
-
-  // 2. Create Scoring Schema
-  const schema = await prisma.scoringSchema.create({
-    data: {
-      programId: iys2026.id,
-      name: "IYS 2026 Selection Rubric",
-      description: "Standard rubric for assessing essays and achievements.",
-      isActive: true
-    }
-  });
-
-  // 3. Create Categories & Criteria based on CSV logic
-  // Essay Category (60%)
-  const essayCat = await prisma.scoringCategory.create({
-    data: {
-      schemaId: schema.id,
-      name: "Essay Assessment",
-      weight: 0.60,
+const APPLICATION_STAGE_RUBRIC = {
+  name: 'Application Assessment Rubric',
+  description: 'Default application-stage scoring rubric ported from the legacy assessment forms.',
+  passThreshold: 75,
+  categories: [
+    {
+      name: 'Achievement and Experience',
+      weight: 0.4,
       order: 1,
-      criteria: {
-        create: [
-          { name: "Topic Relevance to SDGS Themes", weight: 0.30, maxScore: 100, order: 1 },
-          { name: "Argumentation, Innovation, and Creativity", weight: 0.50, maxScore: 100, order: 2 },
-          { name: "Validity of Sources and References", weight: 0.10, maxScore: 100, order: 3 },
-          { name: "Writing Format", weight: 0.10, maxScore: 100, order: 4 }
-        ]
-      }
+      criteria: [
+        { name: 'Project Experiences', weight: 0.3, maxScore: 100, order: 1 },
+        { name: 'Achievement', weight: 0.4, maxScore: 100, order: 2 },
+        { name: 'Leadership', weight: 0.3, maxScore: 100, order: 3 },
+      ],
     },
-    include: { criteria: true }
-  });
-
-  // Achievement Category (40%)
-  const achCat = await prisma.scoringCategory.create({
-    data: {
-      schemaId: schema.id,
-      name: "Achievement & Experience",
-      weight: 0.40,
+    {
+      name: 'Essay Assessment',
+      weight: 0.6,
       order: 2,
-      criteria: {
-        create: [
-          { name: "Project Experiences", weight: 0.30, maxScore: 100, order: 1 },
-          { name: "Achievement", weight: 0.40, maxScore: 100, order: 2 },
-          { name: "Leadership", weight: 0.30, maxScore: 100, order: 3 }
-        ]
-      }
+      criteria: [
+        { name: 'Topic Relevance to SDGs Themes', weight: 0.3, maxScore: 100, order: 1 },
+        { name: 'Argumentation, Innovation, and Creativity', weight: 0.5, maxScore: 100, order: 2 },
+        { name: 'Validity of Sources and References', weight: 0.1, maxScore: 100, order: 3 },
+        { name: 'Writing Format', weight: 0.1, maxScore: 100, order: 4 },
+      ],
     },
-    include: { criteria: true }
-  });
+  ],
+} as const;
 
-  // 4. Seed Review for 'Alex Winner'
-  // Find Admin (Reviewer)
-  const admin = await prisma.admin.findFirst();
-  if (!admin) {
-      log('⚠️ No admin found for reviewing');
-      return;
+const APPLICATION_STAGE = 'application' as const;
+
+export async function seedScoring(): Promise<void> {
+  log('Seeding application-stage scoring rubrics...');
+
+  const programs = await prisma.program.findMany({ select: { id: true, name: true } });
+
+  let created = 0;
+  let skipped = 0;
+
+  for (const program of programs) {
+    // isActive + deletedAt: null mirrors the lookup used by
+    // ScoringRubricRepository.findActive (mintRubricVersion), the source of
+    // truth for what "already has a rubric" means for this stage.
+    const existingActive = await prisma.scoringSchema.findFirst({
+      where: {
+        programId: program.id,
+        stage: APPLICATION_STAGE,
+        isActive: true,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+
+    if (existingActive) {
+      skipped += 1;
+      log(`  skip  ${program.name}: active application rubric already exists`);
+      continue;
+    }
+
+    // Version 1 is only safe when nothing has ever reserved it. A prior
+    // non-idempotent seed run or a manually soft-deleted schema can still
+    // occupy version 1 because @@unique([programId, stage, version]) has no
+    // deletedAt filter, so derive the next version from MAX(version) across
+    // ALL rows (including soft-deleted) rather than hardcoding 1.
+    const versionAggregate = await prisma.scoringSchema.aggregate({
+      where: { programId: program.id, stage: APPLICATION_STAGE },
+      _max: { version: true },
+    });
+    const nextVersion = (versionAggregate._max.version ?? 0) + 1;
+
+    await prisma.scoringSchema.create({
+      data: {
+        programId: program.id,
+        stage: APPLICATION_STAGE,
+        version: nextVersion,
+        isActive: true,
+        name: APPLICATION_STAGE_RUBRIC.name,
+        description: APPLICATION_STAGE_RUBRIC.description,
+        passThreshold: APPLICATION_STAGE_RUBRIC.passThreshold,
+        categories: {
+          create: APPLICATION_STAGE_RUBRIC.categories.map((cat) => ({
+            name: cat.name,
+            weight: cat.weight,
+            order: cat.order,
+            criteria: {
+              create: cat.criteria.map((crit) => ({
+                name: crit.name,
+                weight: crit.weight,
+                maxScore: crit.maxScore,
+                order: crit.order,
+              })),
+            },
+          })),
+        },
+      },
+    });
+
+    created += 1;
+    log(`  create ${program.name}: application rubric v${nextVersion} created`);
   }
 
-  // Find Application
-  const winnerApp = await prisma.participantApplication.findFirst({
-    where: {
-        programId: iys2026.id, 
-        participant: { fullName: { contains: 'Winner' } }
-    },
-    include: { participant: true } 
-  });
-
-  if (winnerApp) {
-      // Calculate total for simulation
-      const essayScore = 95;
-      const achScore = 96;
-      const total = (essayScore * 0.6) + (achScore * 0.4);
-
-      // Create Review
-      const review = await prisma.applicationReview.create({
-          data: {
-              applicationId: winnerApp.id,
-              schemaId: schema.id,
-              reviewerId: admin.id,
-              status: 'submitted',
-              totalScore: total,
-              notes: "Exceptional candidate. Strong alignment with SDGS."
-          }
-      });
-
-      // Add scores
-      // Essay Scores
-      for (const crit of essayCat.criteria) {
-          await prisma.applicationScoreItem.create({
-              data: {
-                  reviewId: review.id,
-                  criterionId: crit.id,
-                  score: essayScore, 
-                  notes: "Excellent point"
-              }
-          });
-      }
-      
-      // Ach Scores
-      for (const crit of achCat.criteria) {
-          await prisma.applicationScoreItem.create({
-              data: {
-                  reviewId: review.id,
-                  criterionId: crit.id,
-                  score: achScore, 
-                  notes: "Very impressive background"
-              }
-          });
-      }
-      
-      log(`✅ Created review for ${winnerApp.participant.fullName}`);
-  }
-
-  log('✅ Scoring Rubrics seeded');
+  log(`Application rubric backfill complete: ${created} created, ${skipped} skipped (already had an active rubric).`);
+  log('No interview-stage rubric is seeded; a super admin authors one on the Rubric page when ready.');
 }

@@ -236,13 +236,13 @@ export default function SubmissionsPage() {
       </section>
 
       {reviewTarget && adminProfile && (
-        <ReviewModal app={reviewTarget} reviewerId={adminProfile.id} onClose={() => setReviewTarget(null)} onSaved={fetch} />
+        <ReviewModal app={reviewTarget} onClose={() => setReviewTarget(null)} onSaved={fetch} />
       )}
     </main>
   );
 }
 
-function ReviewModal({ app, reviewerId, onClose, onSaved }: { app: Application; reviewerId: string; onClose: () => void; onSaved: () => void }) {
+function ReviewModal({ app, onClose, onSaved }: { app: Application; onClose: () => void; onSaved: () => void }) {
   const [status, setStatus] = useState(app.status);
   const [approvalMode, setApprovalMode] = useState<"participant" | "ambassador">(
     app.ticketStatus === "ambassador" ? "ambassador" : "participant",
@@ -257,7 +257,6 @@ function ReviewModal({ app, reviewerId, onClose, onSaved }: { app: Application; 
       await reviewApplication(app.id, {
         status,
         reviewerNote: note || undefined,
-        reviewerId,
         approvalMode: status === "ACCEPTED" ? approvalMode : undefined,
       });
       onSaved();

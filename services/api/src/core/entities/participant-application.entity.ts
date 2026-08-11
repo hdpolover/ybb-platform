@@ -26,6 +26,8 @@ export enum ScoreStatus {
   SCORED = 'scored',
   GO_TO_INTERVIEW = 'go_to_interview',
   REJECTED = 'rejected',
+  FINALIST = 'finalist',
+  NOT_SELECTED = 'not_selected',
 }
 
 export interface ApplicationAnswer {

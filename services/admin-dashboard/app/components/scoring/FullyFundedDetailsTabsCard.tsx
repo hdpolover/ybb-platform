@@ -4,6 +4,7 @@
 import React, { useState } from "react";
 import type { Application } from "@/src/shared/api-client";
 import { formatDate } from "@/lib/utils";
+import { AssessmentForm } from "@/app/components/scoring/AssessmentForm";
 
 const tabs = [
   "Personal Details",
@@ -67,10 +68,7 @@ export function FullyFundedDetailsTabsCard({
         )}
         {activeTab === "Essays" && <EssaysContent application={application} />}
         {!hideScores && activeTab === "Scores" && (
-          <ScoresContent
-            scoreTotal={application?.scoreTotal}
-            scoreStatus={application?.scoreStatus}
-          />
+          <ScoresContent application={application} />
         )}
       </div>
     </section>
@@ -277,14 +275,8 @@ function EssaysContent({ application }: { application?: Application }) {
   );
 }
 
-function ScoresContent({
-  scoreTotal,
-  scoreStatus,
-}: {
-  scoreTotal?: number | null;
-  scoreStatus?: string | null;
-}) {
-  if (scoreTotal == null && !scoreStatus) {
+function ScoresContent({ application }: { application?: Application }) {
+  if (!application?.id) {
     return (
       <div className="text-sm text-zinc-500">
         This application has not been scored yet.
@@ -293,19 +285,20 @@ function ScoresContent({
   }
 
   return (
-    <section>
-      <h3 className="mb-5 text-base font-semibold text-zinc-900">
-        Scores Summary
-      </h3>
-      <dl className="max-w-xl space-y-4">
-        {scoreTotal != null && (
-          <Field label="Score Total" value={String(scoreTotal)} />
-        )}
-        {scoreStatus && (
-          <Field label="Status" value={scoreStatus} asBadge />
-        )}
-      </dl>
-    </section>
+    <div className="space-y-10">
+      <section>
+        <h3 className="mb-4 text-base font-semibold text-zinc-900">
+          Application Stage
+        </h3>
+        <AssessmentForm applicationId={application.id} stage="application" />
+      </section>
+      <section>
+        <h3 className="mb-4 text-base font-semibold text-zinc-900">
+          Interview Stage
+        </h3>
+        <AssessmentForm applicationId={application.id} stage="interview" />
+      </section>
+    </div>
   );
 }
 

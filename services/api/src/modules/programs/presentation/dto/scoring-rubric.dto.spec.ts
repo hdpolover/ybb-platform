@@ -52,6 +52,21 @@ describe('UpsertCriterionDto', () => {
     expect(errors.some((e) => e.property === 'maxScore')).toBe(true);
   });
 
+  it('fails when maxScore exceeds the Decimal(5,2) column ceiling of 999.99', async () => {
+    // Writes to scoring_criteria.max_score, a Decimal(5,2) column. Without this bound the
+    // value reaches Postgres and raises a 22003 numeric_value_out_of_range, which surfaces
+    // as an opaque 500 instead of a clean 400 -- the VarChar/Decimal overflow defect class.
+    const dto = plainToInstance(UpsertCriterionDto, { ...validCriterion, maxScore: 1000 });
+    const errors = await validate(dto);
+    expect(errors.some((e) => e.property === 'maxScore')).toBe(true);
+  });
+
+  it('fails when name exceeds 255 characters', async () => {
+    const dto = plainToInstance(UpsertCriterionDto, { ...validCriterion, name: 'a'.repeat(256) });
+    const errors = await validate(dto);
+    expect(errors.some((e) => e.property === 'name')).toBe(true);
+  });
+
   it('fails when order is not an integer', async () => {
     const dto = plainToInstance(UpsertCriterionDto, { ...validCriterion, order: 1.5 });
     const errors = await validate(dto);
@@ -89,6 +104,12 @@ describe('UpsertCategoryDto', () => {
     const errors = await validate(dto);
     expect(errors.some((e) => e.property === 'criteria')).toBe(true);
   });
+
+  it('fails when name exceeds 100 characters', async () => {
+    const dto = plainToInstance(UpsertCategoryDto, { ...validCategory, name: 'a'.repeat(101) });
+    const errors = await validate(dto);
+    expect(errors.some((e) => e.property === 'name')).toBe(true);
+  });
 });
 
 describe('UpsertScoringRubricDto', () => {
@@ -114,5 +135,25 @@ describe('UpsertScoringRubricDto', () => {
     const dto = plainToInstance(UpsertScoringRubricDto, { categories: [validCategory] });
     const errors = await validate(dto);
     expect(errors).toHaveLength(0);
+  });
+
+  it('fails when passThreshold exceeds 100', async () => {
+    // passThreshold is a 0-100 SCORE cutoff, not a Decimal(5,2)-column-bounded value in
+    // spirit -- 100 is the real ceiling regardless of the column's 999.99 max.
+    const dto = plainToInstance(UpsertScoringRubricDto, { ...validRubricPayload, passThreshold: 150 });
+    const errors = await validate(dto);
+    expect(errors.some((e) => e.property === 'passThreshold')).toBe(true);
+  });
+
+  it('fails when passThreshold is negative', async () => {
+    const dto = plainToInstance(UpsertScoringRubricDto, { ...validRubricPayload, passThreshold: -1 });
+    const errors = await validate(dto);
+    expect(errors.some((e) => e.property === 'passThreshold')).toBe(true);
+  });
+
+  it('passes when passThreshold is exactly 100', async () => {
+    const dto = plainToInstance(UpsertScoringRubricDto, { ...validRubricPayload, passThreshold: 100 });
+    const errors = await validate(dto);
+    expect(errors.some((e) => e.property === 'passThreshold')).toBe(false);
   });
 });
