@@ -34,6 +34,8 @@ export default function ApplicationReviewPage() {
   const [application, setApplication] = useState<Application | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     if (!applicationId) return;
@@ -41,12 +43,19 @@ export default function ApplicationReviewPage() {
     async function load() {
       setLoading(true);
       setNotFound(false);
+      setLoadError(null);
       try {
         const data = await getApplication(applicationId);
         setApplication(data);
       } catch (err) {
         if (err instanceof ApiError && err.status === 404) {
           setNotFound(true);
+        } else {
+          // A 500, an expired token, or a network failure is NOT "not found" -- showing the
+          // same "Application not found" text for every error hides real failures (an admin
+          // would retry forever on a route that will never resolve) and hides transient ones
+          // that a retry would actually fix.
+          setLoadError(err instanceof Error ? err.message : 'Failed to load application.');
         }
       } finally {
         setLoading(false);
@@ -54,7 +63,7 @@ export default function ApplicationReviewPage() {
     }
 
     load();
-  }, [applicationId]);
+  }, [applicationId, reloadToken]);
 
   function handleStageChange(nextStage: Stage) {
     // Pushed (not replaced) so browser back steps between stages, as required
@@ -72,10 +81,25 @@ export default function ApplicationReviewPage() {
     );
   }
 
-  if (notFound || !application) {
+  if (notFound) {
     return (
       <div className="flex items-center justify-center py-20 text-sm text-zinc-500">
         Application not found.
+      </div>
+    );
+  }
+
+  if (loadError || !application) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-20 text-sm text-zinc-500">
+        <span className="text-red-600">{loadError ?? 'Failed to load application.'}</span>
+        <button
+          type="button"
+          className="text-blue-600 hover:underline"
+          onClick={() => setReloadToken((n) => n + 1)}
+        >
+          Retry
+        </button>
       </div>
     );
   }
