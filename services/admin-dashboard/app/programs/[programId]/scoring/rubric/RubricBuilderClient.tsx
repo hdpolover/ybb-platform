@@ -623,7 +623,7 @@ export function RubricBuilderClient() {
                 <div className="flex items-center gap-2">
                   <span className="font-medium">Version {v.version}</span>
                   {v.isActive && (
-                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
                       Active
                     </span>
                   )}
@@ -653,7 +653,7 @@ export function RubricBuilderClient() {
           <div className="space-y-3 rounded-lg border-2 border-dashed border-zinc-300 bg-zinc-50 p-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold">
-                Version {viewedVersion.version} ({viewedVersion.name || "Untitled"}) — read-only
+                Version {viewedVersion.version} ({viewedVersion.name || "Untitled"}), read-only
               </h3>
               <button
                 type="button"
