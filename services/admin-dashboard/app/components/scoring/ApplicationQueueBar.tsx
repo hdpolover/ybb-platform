@@ -144,10 +144,16 @@ export function ApplicationQueueBar({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => onEditProfile?.()}>
-              <PencilIcon className="h-4 w-4" />
-              Edit Profile
-            </DropdownMenuItem>
+            {/* Only render Edit Profile when a caller actually wires it. The old
+                header card rendered this button unconditionally with an undefined
+                onClick, so it silently did nothing. A menu item that looks
+                actionable and is not is worse than no item at all. */}
+            {onEditProfile ? (
+              <DropdownMenuItem onSelect={() => onEditProfile()}>
+                <PencilIcon className="h-4 w-4" />
+                Edit Profile
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuItem disabled={exporting} onSelect={() => onExportData?.()}>
               <ArrowDownTrayIcon className="h-4 w-4" />
               {exporting ? "Exporting..." : "Export Data"}
