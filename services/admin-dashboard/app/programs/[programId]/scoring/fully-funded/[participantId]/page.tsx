@@ -2,6 +2,7 @@
 
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryStates } from "nuqs";
 import { getApplication, exportApplicationsExcel, type Application } from "@/src/shared/api-client";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
@@ -14,6 +15,26 @@ import { KeyboardShortcutsHelp } from "@/app/components/scoring/KeyboardShortcut
 import { parseStage, type Stage } from "@/app/components/scoring/stage";
 import type { AssessmentFormHandle } from "@/app/components/scoring/AssessmentForm";
 import { EmptyState } from "@/src/admin/empty-state";
+import { fullyFundedFilterParsers } from "@/app/components/scoring/fullyFundedFilterParsers";
+import { STATUS_OPTIONS, SCORE_STATUS_OPTIONS } from "@/app/components/scoring/FullyFundedParticipantsFilters";
+
+/** Compact hint for the queue header: which subset of the table's filters
+ *  this queue is walking. Compares against the same defaults the table and
+ *  useApplicationQueue treat as "no filter" (see fullyFundedFilterParsers),
+ *  so it agrees with what the reviewer actually sees change in the table. */
+function buildFilterSummary(filters: { search: string; status: string; scoreStatus: string }): string {
+  const parts: string[] = [];
+  if (filters.search) parts.push(`"${filters.search}"`);
+  if (filters.status !== "submitted") {
+    const label = STATUS_OPTIONS.find((option) => option.value === filters.status)?.label;
+    if (label) parts.push(label);
+  }
+  if (filters.scoreStatus !== "all") {
+    const label = SCORE_STATUS_OPTIONS.find((option) => option.value === filters.scoreStatus)?.label;
+    if (label) parts.push(label);
+  }
+  return parts.length > 0 ? parts.join(" · ") : "All applicants";
+}
 
 /** Any editable element -- score inputs, the notes textarea, the override-
  *  reason input, or any future text field. Global queue shortcuts (Shift+
@@ -121,6 +142,22 @@ export default function FullyFundedParticipantDetailPage() {
     confirmNavigate,
   });
 
+  // ─── "Back to list" round trip. The table forwards its whole current
+  // query string (including these filter params) into `source=scoring`
+  // when it links here (see FullyFundedParticipantsTable's Review button),
+  // so everything needed to reconstruct the reviewer's exact table view
+  // (filters, sort, page, page size) is already sitting in this page's own
+  // URL -- we just strip `source` back off and point at the table route.
+  const [filters] = useQueryStates(fullyFundedFilterParsers);
+  const filterSummary = useMemo(() => buildFilterSummary(filters), [filters]);
+  const backHref = useMemo(() => {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete("source");
+    const query = nextParams.toString();
+    const basePath = `/programs/${encodeURIComponent(programId)}/scoring/fully-funded`;
+    return query ? `${basePath}?${query}` : basePath;
+  }, [searchParams, programId]);
+
   const handleSubmitSuccess = useCallback(() => {
     if (queue.hasNext) {
       // skipConfirm: a submit that just succeeded has nothing unsaved left
@@ -215,6 +252,8 @@ export default function FullyFundedParticipantDetailPage() {
   return (
     <div className="space-y-6">
       <ApplicationQueueBar
+        backHref={backHref}
+        filterSummary={filterSummary}
         applicantName={p?.fullName ?? "Unknown"}
         category={category}
         scoreStatus={application.scoreStatus}
