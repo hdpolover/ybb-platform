@@ -30,7 +30,6 @@ import { Button } from "@/src/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src/ui/card";
 import { Input } from "@/src/ui/input";
 import { Label } from "@/src/ui/label";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/src/ui/table";
 import { EmptyState } from "@/src/admin/empty-state";
 
 interface AssessmentFormProps {
@@ -523,31 +522,35 @@ export const AssessmentForm = forwardRef<AssessmentFormHandle, AssessmentFormPro
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Component</TableHead>
-                <TableHead>Weight (%)</TableHead>
-                <TableHead>Score</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {category.criteria.map((criterion, ri) => {
-                const rowNumber = `${letter}.${ri + 1}`;
-                const error = fieldErrors[criterion.id];
-                const scoreId = `score-${criterion.id}`;
-                return (
-                  <TableRow key={criterion.id}>
-                    <TableCell className="align-top">
-                      <span>
-                        {rowNumber} {criterion.name}
-                      </span>
-                      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
-                    </TableCell>
-                    <TableCell className="align-top text-zinc-500">
-                      {fractionToPercent(criterion.weight).toFixed(2)}
-                    </TableCell>
-                    <TableCell className="align-top">
+          {/* Stacked row per criterion instead of a 3-column table -- at the
+              panel's ~360-440px content width a "Weight (%)" column header
+              wrapped to two lines and long criterion names ("Argumentation,
+              Innovation, and Creativity") wrapped awkwardly against a
+              cramped score cell. Each row wraps freely instead: index +
+              name on their own line, weight chip + score input below. This
+              intentionally drops the "Component" / "Weight (%)" / "Score"
+              column headers -- the score input still has an accessible name
+              via the sr-only Label below. */}
+          <div className="divide-y divide-zinc-100">
+            {category.criteria.map((criterion, ri) => {
+              const rowNumber = `${letter}.${ri + 1}`;
+              const error = fieldErrors[criterion.id];
+              const scoreId = `score-${criterion.id}`;
+              return (
+                <div key={criterion.id} className="py-3 first:pt-0 last:pb-0">
+                  <div className="flex items-start gap-2">
+                    <span className="shrink-0 pt-0.5 font-mono text-xs tabular-nums text-zinc-400">
+                      {rowNumber}
+                    </span>
+                    <span className="min-w-0 flex-1 text-sm font-medium leading-snug text-zinc-900">
+                      {criterion.name}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-3 pl-6">
+                    <span className="inline-flex shrink-0 items-center rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-semibold text-zinc-500">
+                      {fractionToPercent(criterion.weight).toFixed(2)}%
+                    </span>
+                    <div className="shrink-0">
                       <Label htmlFor={scoreId} className="sr-only">
                         Score for {criterion.name}
                       </Label>
@@ -566,16 +569,17 @@ export const AssessmentForm = forwardRef<AssessmentFormHandle, AssessmentFormPro
                           handleScoreChange(criterion.id, criterion.maxScore, e.target.value)
                         }
                         onKeyDown={(e) => handleScoreKeyDown(e, criterion.id)}
-                        className="w-24"
+                        className="w-24 text-right text-lg font-semibold tabular-nums focus-visible:ring-2 focus-visible:ring-blue-600"
                       />
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+                    </div>
+                  </div>
+                  {error && <p className="mt-1 pl-6 text-xs text-red-600">{error}</p>}
+                </div>
+              );
+            })}
+          </div>
 
-          <p className="mt-3 text-xs text-zinc-500">
+          <p className="mt-3 text-xs tabular-nums text-zinc-500">
             Subtotal: {categorySubtotal(category, scores)}
           </p>
         </CardContent>
@@ -584,10 +588,12 @@ export const AssessmentForm = forwardRef<AssessmentFormHandle, AssessmentFormPro
   });
 
   const totalCard = (
-    <Card>
+    <Card className="border-zinc-200 bg-zinc-50">
       <CardContent className="flex items-center justify-between p-4">
-        <span className="text-sm font-medium text-zinc-600">Total Score</span>
-        <span className="text-2xl font-bold text-zinc-900">{grandTotal}</span>
+        <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          Total Score
+        </span>
+        <span className="text-4xl font-bold tabular-nums text-zinc-900">{grandTotal}</span>
       </CardContent>
     </Card>
   );
