@@ -3,10 +3,14 @@
 
 import { ChevronLeftIcon, ChevronRightIcon, QuestionMarkCircleIcon } from "@heroicons/react/24/outline";
 import { Button } from "@/src/ui/button";
+import { Badge } from "@/src/ui/badge";
 import { ScoreStatusBadge } from "./ScoreStatusBadge";
 
 interface ApplicationQueueBarProps {
   applicantName: string;
+  /** Application category label (e.g. "Fully Funded"). Optional -- omitted
+   *  entirely when the caller has no category to show. */
+  category?: string | null;
   /** From the applicant already loaded on the page -- not the queue's own fetch,
    *  so it's accurate even when the queue can't place this applicant on a page. */
   scoreStatus: string | null;
@@ -30,6 +34,7 @@ interface ApplicationQueueBarProps {
  */
 export function ApplicationQueueBar({
   applicantName,
+  category,
   scoreStatus,
   position,
   total,
@@ -60,11 +65,26 @@ export function ApplicationQueueBar({
         </Button>
 
         <div className="min-w-0 flex-1 text-center">
-          <div className="flex items-center justify-center gap-2">
-            <span className="truncate text-sm font-semibold text-zinc-900">{applicantName}</span>
-            <ScoreStatusBadge status={scoreStatus} />
+          {/* Primary orientation cues: which applicant, and where in the
+              queue. Name truncates rather than wrapping/pushing Previous or
+              Next out of the row; badges keep their natural width. */}
+          <div className="flex min-w-0 items-center justify-center gap-2">
+            <span
+              className="min-w-0 truncate text-base font-semibold text-zinc-900 sm:text-lg"
+              title={applicantName}
+            >
+              {applicantName}
+            </span>
+            {category && (
+              <Badge variant="success" className="shrink-0 uppercase tracking-wide">
+                {category}
+              </Badge>
+            )}
+            <span className="shrink-0">
+              <ScoreStatusBadge status={scoreStatus} />
+            </span>
           </div>
-          <span className="text-xs text-zinc-500">{positionLabel}</span>
+          <span className="mt-0.5 block text-sm font-medium text-zinc-500">{positionLabel}</span>
         </div>
 
         <Button

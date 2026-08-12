@@ -220,18 +220,23 @@ function EmergencyContactContent({
   );
 }
 
+// Essay body typography: sized and measured for sustained reading (a
+// reviewer works through 203 of these in one sitting), not the compact
+// key-value density used elsewhere in this card. ~72ch caps the line length
+// on wide screens; break-words guards against long unbroken tokens (URLs,
+// pasted text with no spaces) forcing horizontal overflow.
+const ESSAY_QUESTION_CLASS = "mb-4 mt-2 text-lg font-semibold tracking-tight text-zinc-900";
+const ESSAY_BODY_CLASS =
+  "whitespace-pre-wrap break-words text-[16px] leading-[1.7] text-zinc-700";
+
 function EssaysContent({ application }: { application?: Application }) {
   if (application?.essays && application.essays.length > 0) {
     return (
-      <div className="space-y-8">
+      <div className="space-y-10">
         {application.essays.map((essay, idx) => (
-          <section key={essay.id ?? idx}>
-            <h3 className="mb-3 text-base font-semibold text-zinc-900">
-              {essay.question}
-            </h3>
-            <p className="text-sm text-zinc-700 whitespace-pre-wrap">
-              {essay.answer ?? "-"}
-            </p>
+          <section key={essay.id ?? idx} className="max-w-[72ch]">
+            <h3 className={ESSAY_QUESTION_CLASS}>{essay.question}</h3>
+            <p className={ESSAY_BODY_CLASS}>{essay.answer ?? "-"}</p>
           </section>
         ))}
       </div>
@@ -241,21 +246,18 @@ function EssaysContent({ application }: { application?: Application }) {
   if (application?.submissionForm?.sections) {
     const sections = application.submissionForm.sections;
     return (
-      <div className="space-y-8">
+      <div className="space-y-10">
         {sections.map((section, sIdx) => (
-          <section key={sIdx}>
-            {section.label && (
-              <h3 className="mb-5 text-base font-semibold text-zinc-900">
-                {section.label}
-              </h3>
-            )}
+          <section key={sIdx} className="max-w-[72ch]">
+            {section.label && <h3 className={ESSAY_QUESTION_CLASS}>{section.label}</h3>}
             <dl className="space-y-6">
               {section.fields?.map((field, fIdx) => (
-                <Field
-                  key={field.name ?? fIdx}
-                  label={field.label ?? ""}
-                  value={String(field.value ?? "")}
-                />
+                <div key={field.name ?? fIdx}>
+                  <dt className="text-xs font-medium text-zinc-500">{field.label}</dt>
+                  <dd className={`mt-1 ${ESSAY_BODY_CLASS}`}>
+                    {String(field.value ?? "-")}
+                  </dd>
+                </div>
               ))}
             </dl>
           </section>
@@ -293,7 +295,7 @@ function Field({
         </dd>
       ) : (
         <dd
-          className={`mt-1 text-sm font-semibold sm:mt-0 ${className} ${
+          className={`mt-1 break-words text-sm font-semibold sm:mt-0 ${className} ${
             isLink
               ? "cursor-pointer text-blue-600 hover:underline"
               : "text-zinc-900"
