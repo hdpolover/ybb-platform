@@ -1,7 +1,14 @@
 // services/admin-dashboard/app/components/scoring/AssessmentForm.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import { ExclamationTriangleIcon } from "@heroicons/react/24/solid";
 import { useAuth } from "@/app/contexts/AuthContext";
 import {
@@ -39,6 +46,34 @@ interface AssessmentFormProps {
    * pinned to the bottom of the panel, per the split-view design.
    */
   layout?: "stacked" | "panel";
+  /**
+   * Fired after a submit (not a draft save) succeeds. Purely a notification
+   * hook for the review queue to advance to the next applicant -- it does
+   * not affect submit gating, payload construction, or any logic above.
+   */
+  onSubmitSuccess?: (review: ApplicationReviewResponseDto) => void;
+  /**
+   * Fired whenever the in-progress edits (scores/notes) start or stop
+   * differing from the last-saved review, so the review queue can warn
+   * before navigating away from unsaved work. Purely observational.
+   */
+  onDirtyChange?: (isDirty: boolean) => void;
+}
+
+/** Imperative handle exposed for the review queue's Cmd+Enter/Ctrl+Enter
+ *  "submit and advance" shortcut, which can fire while focus is anywhere on
+ *  the page, not just inside this form. */
+export interface AssessmentFormHandle {
+  /** Submits iff the exact same condition that enables the Submit button holds. Otherwise a no-op. */
+  submitIfReady: () => void;
+}
+
+/** Shallow record equality -- used only for the dirty-state check below. */
+function recordsEqual<T>(a: Record<string, T>, b: Record<string, T>): boolean {
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  return aKeys.every((key) => a[key] === b[key]);
 }
 
 type FormState = {
@@ -99,7 +134,10 @@ function parseItemFieldIndex(path: string): number | null {
   return match ? Number.parseInt(match[1], 10) : null;
 }
 
-export function AssessmentForm({ applicationId, stage, layout = "stacked" }: AssessmentFormProps) {
+export const AssessmentForm = forwardRef<AssessmentFormHandle, AssessmentFormProps>(function AssessmentForm(
+  { applicationId, stage, layout = "stacked", onSubmitSuccess, onDirtyChange },
+  ref,
+) {
   const { accessConfig } = useAuth();
 
   const [review, setReview] = useState<ApplicationReviewResponseDto | null>(null);
@@ -118,6 +156,57 @@ export function AssessmentForm({ applicationId, stage, layout = "stacked" }: Ass
   const [saveError, setSaveError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
+  // Per-criterion input elements, keyed by criterionId -- lets the Enter-to-
+  // next-criterion handler focus siblings without document.getElementById,
+  // which would be ambiguous since the desktop dock and the mobile sheet
+  // both mount an AssessmentForm for the same criteria at the same time.
+  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  // Last-saved form state, used only to compute the dirty flag reported via
+  // onDirtyChange. Never read by any save/submit/validation logic below.
+  const savedSnapshotRef = useRef<FormState | null>(null);
+  const lastReportedDirtyRef = useRef(false);
+
+  useEffect(() => {
+    const snapshot = savedSnapshotRef.current;
+    const isDirty = snapshot
+      ? !recordsEqual(scores, snapshot.scores) ||
+        !recordsEqual(itemNotes, snapshot.itemNotes) ||
+        formNotes !== snapshot.formNotes
+      : false;
+    if (lastReportedDirtyRef.current !== isDirty) {
+      lastReportedDirtyRef.current = isDirty;
+      onDirtyChange?.(isDirty);
+    }
+  }, [scores, itemNotes, formNotes, onDirtyChange]);
+
+  // Exposes submitIfReady() for the review queue's Cmd+Enter/Ctrl+Enter
+  // shortcut, which can fire from anywhere on the page. Recomputes the exact
+  // same three conditions the Submit button's `disabled` uses further down
+  // (saving / gateBlocking / !allScored) -- kept in sync by hand since a
+  // hook can't be called after this component's conditional early returns.
+  useImperativeHandle(
+    ref,
+    () => ({
+      submitIfReady: () => {
+        if (!review) return;
+        const gateClosedNow = stage === "interview" && review.gate.reason !== "open" && !review.gate.isOpen;
+        const gateBlockingNow = gateClosedNow && !(accessConfig.isSuperAdmin && overrideApplied);
+        const allScoredNow = review.rubric.categories.every((cat) =>
+          cat.criteria.every((crit) => scores[crit.id] != null),
+        );
+        if (saving || gateBlockingNow || !allScoredNow) return;
+        void submitPayload("submitted");
+      },
+    }),
+    // submitPayload is a plain function declaration below, recreated every
+    // render (not memoized) -- listing it here would make this handle
+    // rebuild every render for no benefit, since it always closes over the
+    // latest review/scores/etc. anyway via the deps below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [review, stage, accessConfig.isSuperAdmin, overrideApplied, scores, saving],
+  );
+
   useEffect(() => {
     let cancelled = false;
 
@@ -133,6 +222,7 @@ export function AssessmentForm({ applicationId, stage, layout = "stacked" }: Ass
         setScores(derived.scores);
         setItemNotes(derived.itemNotes);
         setFormNotes(derived.formNotes);
+        savedSnapshotRef.current = derived;
         setOverrideApplied(false);
         setOverrideReasonDraft("");
         setSaveError(null);
@@ -184,6 +274,8 @@ export function AssessmentForm({ applicationId, stage, layout = "stacked" }: Ass
       setScores(derived.scores);
       setItemNotes(derived.itemNotes);
       setFormNotes(derived.formNotes);
+      savedSnapshotRef.current = derived;
+      if (status === "submitted") onSubmitSuccess?.(result);
     } catch (err) {
       if (err instanceof ApiError && err.fieldErrors) {
         const perCriterion: Record<string, string> = {};
@@ -284,11 +376,31 @@ export function AssessmentForm({ applicationId, stage, layout = "stacked" }: Ass
       setScores(derived.scores);
       setItemNotes(derived.itemNotes);
       setFormNotes(derived.formNotes);
+      savedSnapshotRef.current = derived;
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Failed to save review.");
     } finally {
       setSaving(false);
     }
+  }
+
+  // Flattened criterion order across all categories, for the Enter-to-next-
+  // criterion keyboard shortcut below. Same ordering the table renders in.
+  const criterionOrder = review.rubric.categories.flatMap((cat) => cat.criteria.map((crit) => crit.id));
+
+  function handleScoreKeyDown(e: ReactKeyboardEvent<HTMLInputElement>, criterionId: string) {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const idx = criterionOrder.indexOf(criterionId);
+    const isLast = idx === criterionOrder.length - 1;
+    if (isLast) {
+      // Same gating as the Submit button (saving / gateBlocking / !allScored) --
+      // reuses the actual render-time values in scope here, not a duplicate.
+      if (!saving && !gateBlocking && allScored) void submitPayload("submitted");
+      return;
+    }
+    const nextId = criterionOrder[idx + 1];
+    inputRefs.current[nextId]?.focus();
   }
 
   const rubricVersionWarning = review.hasNewerRubricVersion && (
@@ -373,6 +485,9 @@ export function AssessmentForm({ applicationId, stage, layout = "stacked" }: Ass
                       </Label>
                       <Input
                         id={scoreId}
+                        ref={(el) => {
+                          inputRefs.current[criterion.id] = el;
+                        }}
                         type="number"
                         min={0}
                         max={criterion.maxScore}
@@ -382,6 +497,7 @@ export function AssessmentForm({ applicationId, stage, layout = "stacked" }: Ass
                         onChange={(e) =>
                           handleScoreChange(criterion.id, criterion.maxScore, e.target.value)
                         }
+                        onKeyDown={(e) => handleScoreKeyDown(e, criterion.id)}
                         className="w-24"
                       />
                     </TableCell>
@@ -485,4 +601,4 @@ export function AssessmentForm({ applicationId, stage, layout = "stacked" }: Ass
       {actionsSection}
     </div>
   );
-}
+});

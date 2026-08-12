@@ -7,11 +7,17 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/src/ui/sheet";
 import { ScoringPanel } from "@/app/components/scoring/ScoringPanel";
 import { useApplicationReviewTotal } from "@/app/hooks/useApplicationReviewTotal";
 import type { Stage } from "@/app/components/scoring/stage";
+import type { ApplicationReviewResponseDto } from "@/src/shared/api-client";
 
 interface MobileScoringDockProps {
   applicationId: string;
   stage: Stage;
   onStageChange: (stage: Stage) => void;
+  /** Forwarded to ScoringPanel/AssessmentForm -- so a submit from the mobile
+   *  sheet also advances the review queue and is tracked for the unsaved-
+   *  changes warning, same as the desktop dock. */
+  onSubmitSuccess?: (review: ApplicationReviewResponseDto) => void;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 /**
@@ -20,7 +26,13 @@ interface MobileScoringDockProps {
  * it's useful even while collapsed; opening the sheet exposes the same
  * ScoringPanel used by the desktop dock.
  */
-export function MobileScoringDock({ applicationId, stage, onStageChange }: MobileScoringDockProps) {
+export function MobileScoringDock({
+  applicationId,
+  stage,
+  onStageChange,
+  onSubmitSuccess,
+  onDirtyChange,
+}: MobileScoringDockProps) {
   const [open, setOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const total = useApplicationReviewTotal(applicationId, stage, refreshKey);
@@ -51,7 +63,13 @@ export function MobileScoringDock({ applicationId, stage, onStageChange }: Mobil
             <SheetTitle>Scoring</SheetTitle>
           </SheetHeader>
           <div className="min-h-0 flex-1 px-6 py-4">
-            <ScoringPanel applicationId={applicationId} stage={stage} onStageChange={onStageChange} />
+            <ScoringPanel
+              applicationId={applicationId}
+              stage={stage}
+              onStageChange={onStageChange}
+              onSubmitSuccess={onSubmitSuccess}
+              onDirtyChange={onDirtyChange}
+            />
           </div>
         </SheetContent>
       </Sheet>
