@@ -4,39 +4,36 @@
 import React, { useState } from "react";
 import type { Application } from "@/src/shared/api-client";
 import { formatDate } from "@/lib/utils";
-import { AssessmentForm } from "@/app/components/scoring/AssessmentForm";
 
+// "Scores" used to live here as a tab, but scoring now lives in the docked
+// scoring panel next to this card (see the split-view participant detail
+// page), so it was removed from this tab list.
 const tabs = [
   "Personal Details",
   "Education & Experience",
   "Emergency Contact",
   "Essays",
-  "Scores",
 ] as const;
 
 type TabKey = (typeof tabs)[number];
 
 interface FullyFundedDetailsTabsCardProps {
-  hideScores?: boolean;
   application?: Application;
 }
 
 export function FullyFundedDetailsTabsCard({
-  hideScores,
   application,
 }: FullyFundedDetailsTabsCardProps) {
-  const visibleTabs: readonly TabKey[] = hideScores
-    ? tabs.filter((tab) => tab !== "Scores")
-    : tabs;
-
-  const [activeTab, setActiveTab] = useState<TabKey>("Personal Details");
+  // Essays is what a reviewer reads first, so it's the default tab now that
+  // scoring happens alongside it in the docked panel.
+  const [activeTab, setActiveTab] = useState<TabKey>("Essays");
 
   return (
     <section className="rounded-xl border border-zinc-200 bg-white shadow-sm overflow-hidden">
       {/* Tab Navigation */}
       <div className="border-b border-zinc-200 bg-zinc-50/30 px-6">
         <nav className="-mb-px flex gap-6 overflow-x-auto text-sm no-scrollbar">
-          {visibleTabs.map((tab) => {
+          {tabs.map((tab) => {
             const isActive = activeTab === tab;
             return (
               <button
@@ -67,9 +64,6 @@ export function FullyFundedDetailsTabsCard({
           <EmergencyContactContent participant={application?.participant} />
         )}
         {activeTab === "Essays" && <EssaysContent application={application} />}
-        {!hideScores && activeTab === "Scores" && (
-          <ScoresContent application={application} />
-        )}
       </div>
     </section>
   );
@@ -272,33 +266,6 @@ function EssaysContent({ application }: { application?: Application }) {
 
   return (
     <div className="text-sm text-zinc-500">No essay responses found.</div>
-  );
-}
-
-function ScoresContent({ application }: { application?: Application }) {
-  if (!application?.id) {
-    return (
-      <div className="text-sm text-zinc-500">
-        This application has not been scored yet.
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-10">
-      <section>
-        <h3 className="mb-4 text-base font-semibold text-zinc-900">
-          Application Stage
-        </h3>
-        <AssessmentForm applicationId={application.id} stage="application" />
-      </section>
-      <section>
-        <h3 className="mb-4 text-base font-semibold text-zinc-900">
-          Interview Stage
-        </h3>
-        <AssessmentForm applicationId={application.id} stage="interview" />
-      </section>
-    </div>
   );
 }
 

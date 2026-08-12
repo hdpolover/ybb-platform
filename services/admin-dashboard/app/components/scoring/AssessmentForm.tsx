@@ -29,6 +29,16 @@ import { EmptyState } from "@/src/admin/empty-state";
 interface AssessmentFormProps {
   applicationId: string;
   stage: "application" | "interview";
+  /**
+   * Presentational only -- does not affect data fetching, validation, payload
+   * construction, submit gating, or any other logic below.
+   * "stacked" (default): standalone in the page flow, as before.
+   * "panel": renders inside the docked scoring panel. The rubric version
+   * warning, gate banner, category tables, and notes scroll in a flex-1
+   * region while the running total and Save/Submit/Reopen actions stay
+   * pinned to the bottom of the panel, per the split-view design.
+   */
+  layout?: "stacked" | "panel";
 }
 
 type FormState = {
@@ -89,7 +99,7 @@ function parseItemFieldIndex(path: string): number | null {
   return match ? Number.parseInt(match[1], 10) : null;
 }
 
-export function AssessmentForm({ applicationId, stage }: AssessmentFormProps) {
+export function AssessmentForm({ applicationId, stage, layout = "stacked" }: AssessmentFormProps) {
   const { accessConfig } = useAuth();
 
   const [review, setReview] = useState<ApplicationReviewResponseDto | null>(null);
@@ -281,168 +291,198 @@ export function AssessmentForm({ applicationId, stage }: AssessmentFormProps) {
     }
   }
 
-  return (
-    <div className="space-y-4">
-      {review.hasNewerRubricVersion && (
-        <p className="text-xs text-amber-600">
-          A newer rubric version exists. This review stays pinned to version{" "}
-          {review.schemaVersion} of the rubric.
-        </p>
-      )}
+  const rubricVersionWarning = review.hasNewerRubricVersion && (
+    <p className="text-xs text-amber-600">
+      A newer rubric version exists. This review stays pinned to version{" "}
+      {review.schemaVersion} of the rubric.
+    </p>
+  );
 
-      {gateClosed && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-          <ExclamationTriangleIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-          <div className="flex-1">
-            <p className="text-sm text-amber-800">{gateReasonMessage(review)}</p>
-            {accessConfig.isSuperAdmin && !overrideApplied && (
-              <div className="mt-3 flex items-center gap-2">
-                <div className="flex-1">
-                  <Label htmlFor="override-reason" className="sr-only">
-                    Reason for override
-                  </Label>
-                  <Input
-                    id="override-reason"
-                    placeholder="Reason for override"
-                    value={overrideReasonDraft}
-                    onChange={(e) => setOverrideReasonDraft(e.target.value)}
-                  />
-                </div>
-                <Button
-                  type="button"
-                  disabled={overrideReasonDraft.trim().length === 0}
-                  onClick={() => setOverrideApplied(true)}
-                  className="bg-amber-600 hover:bg-amber-700"
-                >
-                  Override and open form
-                </Button>
-              </div>
-            )}
+  const gateBanner = gateClosed && (
+    <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+      <ExclamationTriangleIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+      <div className="flex-1">
+        <p className="text-sm text-amber-800">{gateReasonMessage(review)}</p>
+        {accessConfig.isSuperAdmin && !overrideApplied && (
+          <div className="mt-3 flex items-center gap-2">
+            <div className="flex-1">
+              <Label htmlFor="override-reason" className="sr-only">
+                Reason for override
+              </Label>
+              <Input
+                id="override-reason"
+                placeholder="Reason for override"
+                value={overrideReasonDraft}
+                onChange={(e) => setOverrideReasonDraft(e.target.value)}
+              />
+            </div>
+            <Button
+              type="button"
+              disabled={overrideReasonDraft.trim().length === 0}
+              onClick={() => setOverrideApplied(true)}
+              className="bg-amber-600 hover:bg-amber-700"
+            >
+              Override and open form
+            </Button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
+    </div>
+  );
 
-      {review.rubric.categories.map((category, ci) => {
-        const letter = letterForCategory(ci);
-        return (
-          <Card key={category.id}>
-            <CardHeader>
-              <CardTitle>
-                {letter}. {category.name}
-              </CardTitle>
-              <CardDescription>
-                Weight: {fractionToPercent(category.weight).toFixed(2)}%
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Component</TableHead>
-                    <TableHead>Weight (%)</TableHead>
-                    <TableHead>Score</TableHead>
+  const categoryCards = review.rubric.categories.map((category, ci) => {
+    const letter = letterForCategory(ci);
+    return (
+      <Card key={category.id}>
+        <CardHeader>
+          <CardTitle>
+            {letter}. {category.name}
+          </CardTitle>
+          <CardDescription>
+            Weight: {fractionToPercent(category.weight).toFixed(2)}%
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Component</TableHead>
+                <TableHead>Weight (%)</TableHead>
+                <TableHead>Score</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {category.criteria.map((criterion, ri) => {
+                const rowNumber = `${letter}.${ri + 1}`;
+                const error = fieldErrors[criterion.id];
+                const scoreId = `score-${criterion.id}`;
+                return (
+                  <TableRow key={criterion.id}>
+                    <TableCell className="align-top">
+                      <span>
+                        {rowNumber} {criterion.name}
+                      </span>
+                      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+                    </TableCell>
+                    <TableCell className="align-top text-zinc-500">
+                      {fractionToPercent(criterion.weight).toFixed(2)}
+                    </TableCell>
+                    <TableCell className="align-top">
+                      <Label htmlFor={scoreId} className="sr-only">
+                        Score for {criterion.name}
+                      </Label>
+                      <Input
+                        id={scoreId}
+                        type="number"
+                        min={0}
+                        max={criterion.maxScore}
+                        step={1}
+                        value={scores[criterion.id] ?? ""}
+                        disabled={inputsDisabled}
+                        onChange={(e) =>
+                          handleScoreChange(criterion.id, criterion.maxScore, e.target.value)
+                        }
+                        className="w-24"
+                      />
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {category.criteria.map((criterion, ri) => {
-                    const rowNumber = `${letter}.${ri + 1}`;
-                    const error = fieldErrors[criterion.id];
-                    const scoreId = `score-${criterion.id}`;
-                    return (
-                      <TableRow key={criterion.id}>
-                        <TableCell className="align-top">
-                          <span>
-                            {rowNumber} {criterion.name}
-                          </span>
-                          {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
-                        </TableCell>
-                        <TableCell className="align-top text-zinc-500">
-                          {fractionToPercent(criterion.weight).toFixed(2)}
-                        </TableCell>
-                        <TableCell className="align-top">
-                          <Label htmlFor={scoreId} className="sr-only">
-                            Score for {criterion.name}
-                          </Label>
-                          <Input
-                            id={scoreId}
-                            type="number"
-                            min={0}
-                            max={criterion.maxScore}
-                            step={1}
-                            value={scores[criterion.id] ?? ""}
-                            disabled={inputsDisabled}
-                            onChange={(e) =>
-                              handleScoreChange(criterion.id, criterion.maxScore, e.target.value)
-                            }
-                            className="w-24"
-                          />
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                );
+              })}
+            </TableBody>
+          </Table>
 
-              <p className="mt-3 text-xs text-zinc-500">
-                Subtotal: {categorySubtotal(category, scores)}
-              </p>
-            </CardContent>
-          </Card>
-        );
-      })}
-
-      <Card>
-        <CardContent className="flex items-center justify-between p-4">
-          <span className="text-sm font-medium text-zinc-600">Total Score</span>
-          <span className="text-2xl font-bold text-zinc-900">{grandTotal}</span>
+          <p className="mt-3 text-xs text-zinc-500">
+            Subtotal: {categorySubtotal(category, scores)}
+          </p>
         </CardContent>
       </Card>
+    );
+  });
 
-      <div>
-        <Label htmlFor="assessment-notes">Notes</Label>
-        <textarea
-          id="assessment-notes"
-          className="mt-1 flex w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm transition-colors placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-zinc-100"
-          rows={3}
-          value={formNotes}
-          disabled={submitted}
-          onChange={(e) => setFormNotes(e.target.value)}
-        />
+  const totalCard = (
+    <Card>
+      <CardContent className="flex items-center justify-between p-4">
+        <span className="text-sm font-medium text-zinc-600">Total Score</span>
+        <span className="text-2xl font-bold text-zinc-900">{grandTotal}</span>
+      </CardContent>
+    </Card>
+  );
+
+  const notesSection = (
+    <div>
+      <Label htmlFor="assessment-notes">Notes</Label>
+      <textarea
+        id="assessment-notes"
+        className="mt-1 flex w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm transition-colors placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-zinc-100"
+        rows={3}
+        value={formNotes}
+        disabled={submitted}
+        onChange={(e) => setFormNotes(e.target.value)}
+      />
+    </div>
+  );
+
+  const actionsSection = submitted ? (
+    <div className="flex items-center justify-between border-t border-zinc-100 pt-4">
+      <div className="text-sm">
+        {saveError && <p className="text-red-600">{saveError}</p>}
       </div>
+      <Button type="button" variant="secondary" disabled={saving} onClick={handleReopen}>
+        {saving ? "Reopening..." : "Reopen"}
+      </Button>
+    </div>
+  ) : (
+    <div className="flex items-center justify-between border-t border-zinc-100 pt-4">
+      <div className="text-sm">
+        {saveError && <p className="text-red-600">{saveError}</p>}
+      </div>
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          disabled={saving || gateBlocking}
+          onClick={() => submitPayload("draft")}
+        >
+          {saving ? "Saving..." : "Save draft"}
+        </Button>
+        <Button
+          type="button"
+          disabled={saving || gateBlocking || !allScored}
+          onClick={() => submitPayload("submitted")}
+        >
+          {saving ? "Submitting..." : "Submit"}
+        </Button>
+      </div>
+    </div>
+  );
 
-      {submitted ? (
-        <div className="flex items-center justify-between border-t border-zinc-100 pt-4">
-          <div className="text-sm">
-            {saveError && <p className="text-red-600">{saveError}</p>}
-          </div>
-          <Button type="button" variant="secondary" disabled={saving} onClick={handleReopen}>
-            {saving ? "Reopening..." : "Reopen"}
-          </Button>
+  if (layout === "panel") {
+    // Docked scoring panel: criteria/notes scroll in the flex-1 region while
+    // the total and actions stay pinned to the bottom of the panel.
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+          {rubricVersionWarning}
+          {gateBanner}
+          {categoryCards}
+          {notesSection}
         </div>
-      ) : (
-        <div className="flex items-center justify-between border-t border-zinc-100 pt-4">
-          <div className="text-sm">
-            {saveError && <p className="text-red-600">{saveError}</p>}
-          </div>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={saving || gateBlocking}
-              onClick={() => submitPayload("draft")}
-            >
-              {saving ? "Saving..." : "Save draft"}
-            </Button>
-            <Button
-              type="button"
-              disabled={saving || gateBlocking || !allScored}
-              onClick={() => submitPayload("submitted")}
-            >
-              {saving ? "Submitting..." : "Submit"}
-            </Button>
-          </div>
+        <div className="shrink-0 space-y-3 border-t border-zinc-200 bg-white pt-4">
+          {totalCard}
+          {actionsSection}
         </div>
-      )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {rubricVersionWarning}
+      {gateBanner}
+      {categoryCards}
+      {totalCard}
+      {notesSection}
+      {actionsSection}
     </div>
   );
 }
