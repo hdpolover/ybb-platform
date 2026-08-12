@@ -1,24 +1,21 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useQueryStates, parseAsString, parseAsInteger, parseAsStringEnum } from "nuqs";
+import { useQueryStates } from "nuqs";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { listApplications, exportApplicationsExcel, type Application } from "@/src/shared/api-client";
 import {
   FullyFundedParticipantsFilters,
-  SORT_BY_VALUES,
-  SORT_ORDER_VALUES,
-  STATUS_VALUES,
-  SCORE_STATUS_VALUES,
-  DEFAULT_PAGE_SIZE,
   MIN_PAGE_SIZE,
   MAX_PAGE_SIZE,
+  DEFAULT_PAGE_SIZE,
   type FullyFundedSortBy,
   type FullyFundedSortOrder,
   type FullyFundedStatusFilter,
   type FullyFundedScoreStatusFilter,
 } from "./FullyFundedParticipantsFilters";
+import { fullyFundedFilterParsers } from "./fullyFundedFilterParsers";
 import { FullyFundedParticipantsTable, type FullyFundedParticipantRow } from "./FullyFundedParticipantsTable";
 import { EmptyState } from "@/src/admin/empty-state";
 import { formatDate } from "@/lib/utils";
@@ -26,21 +23,6 @@ import { formatDate } from "@/lib/utils";
 interface FullyFundedParticipantsAllProps {
   programId: string;
 }
-
-// URL-persisted filter/sort/pagination state (nuqs) — mirrors the pattern in
-// app/programs/[programId]/participants/page.tsx. Category ("fully_funded")
-// stays hardcoded per this page's purpose, so it isn't part of the URL state.
-// `status` defaults to "submitted" (this page's historical scope) but is now
-// a real, changeable filter — "all" sends no status filter to the API.
-const fullyFundedFilterParsers = {
-  search: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
-  status: parseAsStringEnum([...STATUS_VALUES]).withDefault("submitted").withOptions({ clearOnDefault: true }),
-  scoreStatus: parseAsStringEnum([...SCORE_STATUS_VALUES]).withDefault("all").withOptions({ clearOnDefault: true }),
-  sortBy: parseAsStringEnum([...SORT_BY_VALUES]).withDefault("updatedAt").withOptions({ clearOnDefault: true }),
-  sortOrder: parseAsStringEnum([...SORT_ORDER_VALUES]).withDefault("desc").withOptions({ clearOnDefault: true }),
-  page: parseAsInteger.withDefault(1).withOptions({ clearOnDefault: true }),
-  pageSize: parseAsInteger.withDefault(DEFAULT_PAGE_SIZE).withOptions({ clearOnDefault: true }),
-};
 
 /** Clamps a URL-sourced page size to [MIN_PAGE_SIZE, MAX_PAGE_SIZE] — a user can hand-edit the query string. */
 function clampPageSize(value: number): number {
