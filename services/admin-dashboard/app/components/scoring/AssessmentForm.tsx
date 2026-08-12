@@ -76,6 +76,60 @@ function recordsEqual<T>(a: Record<string, T>, b: Record<string, T>): boolean {
   return aKeys.every((key) => a[key] === b[key]);
 }
 
+interface SubmitReadiness {
+  /** Every criterion across every category has a score. */
+  allScored: boolean;
+  /** Interview stage's gate is closed and no super-admin override is in effect. */
+  gateClosed: boolean;
+  /** Same as gateClosed, except a super-admin override lifts it. */
+  gateBlocking: boolean;
+  /** The ONE definition of "is this review submittable right now". The
+   *  Submit button's disabled state, the Enter-on-last-criterion shortcut,
+   *  and the Cmd/Ctrl+Enter submitIfReady() handle all read this -- none of
+   *  them re-derive any part of it independently. */
+  canSubmit: boolean;
+}
+
+const NOT_READY: SubmitReadiness = {
+  allScored: false,
+  gateClosed: false,
+  gateBlocking: false,
+  canSubmit: false,
+};
+
+/**
+ * Single source of truth for whether a submit can happen right now. Folds in
+ * loading/noRubric/loadError/review-existence too -- those are always true
+ * whenever the Submit button is actually on screen (the component early-
+ * returns before rendering it otherwise), so this doesn't change the
+ * button's effective behavior. It does close a real gap for the keyboard
+ * paths, which can fire from a global listener while the form is between
+ * applicants (e.g. mid-fetch, still showing "Loading review...") and would
+ * otherwise be able to submit stale data for the wrong applicant.
+ */
+function computeSubmitReadiness(
+  review: ApplicationReviewResponseDto | null,
+  loading: boolean,
+  noRubric: boolean,
+  loadError: string | null,
+  scores: Record<string, number | null>,
+  stage: "application" | "interview",
+  isSuperAdmin: boolean,
+  overrideApplied: boolean,
+  saving: boolean,
+): SubmitReadiness {
+  if (loading || noRubric || loadError || !review) return NOT_READY;
+
+  const allScored = review.rubric.categories.every((cat) =>
+    cat.criteria.every((crit) => scores[crit.id] != null),
+  );
+  const gateClosed = stage === "interview" && review.gate.reason !== "open" && !review.gate.isOpen;
+  const gateBlocking = gateClosed && !(isSuperAdmin && overrideApplied);
+  const canSubmit = !saving && !gateBlocking && allScored;
+
+  return { allScored, gateClosed, gateBlocking, canSubmit };
+}
+
 type FormState = {
   scores: Record<string, number | null>;
   itemNotes: Record<string, string>;
@@ -162,6 +216,32 @@ export const AssessmentForm = forwardRef<AssessmentFormHandle, AssessmentFormPro
   // both mount an AssessmentForm for the same criteria at the same time.
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
+  // The single submit-readiness computation for this render (see
+  // computeSubmitReadiness above). Mirrored into refs, updated unconditionally
+  // on every render below, so the imperative handle exposed further down can
+  // read the *latest* value at call time (an async keyboard event) without
+  // needing review/scores/etc. in its own dependency array -- that would
+  // rebuild the handle's identity every render for no benefit, and was the
+  // actual reason the two paths drifted into separate copies before.
+  const readiness = computeSubmitReadiness(
+    review,
+    loading,
+    noRubric,
+    loadError,
+    scores,
+    stage,
+    accessConfig.isSuperAdmin,
+    overrideApplied,
+    saving,
+  );
+  const readinessRef = useRef<SubmitReadiness>(readiness);
+  readinessRef.current = readiness;
+  // submitPayload is a function declaration below (hoisted), so this closes
+  // over each render's fresh applicationId/scores/etc. -- assigned every
+  // render, unconditionally, same as readinessRef above.
+  const submitPayloadRef = useRef<(status: "draft" | "submitted") => Promise<void>>(async () => {});
+  submitPayloadRef.current = submitPayload;
+
   // Last-saved form state, used only to compute the dirty flag reported via
   // onDirtyChange. Never read by any save/submit/validation logic below.
   const savedSnapshotRef = useRef<FormState | null>(null);
@@ -181,30 +261,20 @@ export const AssessmentForm = forwardRef<AssessmentFormHandle, AssessmentFormPro
   }, [scores, itemNotes, formNotes, onDirtyChange]);
 
   // Exposes submitIfReady() for the review queue's Cmd+Enter/Ctrl+Enter
-  // shortcut, which can fire from anywhere on the page. Recomputes the exact
-  // same three conditions the Submit button's `disabled` uses further down
-  // (saving / gateBlocking / !allScored) -- kept in sync by hand since a
-  // hook can't be called after this component's conditional early returns.
+  // shortcut, which can fire from anywhere on the page, asynchronously,
+  // after this render has already committed. Both paths -- this and the
+  // Enter-on-last-criterion handler further down -- read the single
+  // computeSubmitReadiness() result above (via readinessRef so this handle
+  // sees the latest value without needing to be rebuilt every render).
   useImperativeHandle(
     ref,
     () => ({
       submitIfReady: () => {
-        if (!review) return;
-        const gateClosedNow = stage === "interview" && review.gate.reason !== "open" && !review.gate.isOpen;
-        const gateBlockingNow = gateClosedNow && !(accessConfig.isSuperAdmin && overrideApplied);
-        const allScoredNow = review.rubric.categories.every((cat) =>
-          cat.criteria.every((crit) => scores[crit.id] != null),
-        );
-        if (saving || gateBlockingNow || !allScoredNow) return;
-        void submitPayload("submitted");
+        if (!readinessRef.current.canSubmit) return;
+        void submitPayloadRef.current("submitted");
       },
     }),
-    // submitPayload is a plain function declaration below, recreated every
-    // render (not memoized) -- listing it here would make this handle
-    // rebuild every render for no benefit, since it always closes over the
-    // latest review/scores/etc. anyway via the deps below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [review, stage, accessConfig.isSuperAdmin, overrideApplied, scores, saving],
+    [],
   );
 
   useEffect(() => {
@@ -349,13 +419,11 @@ export const AssessmentForm = forwardRef<AssessmentFormHandle, AssessmentFormPro
     .map(([criterionId, score]) => ({ criterionId, score }));
   const grandTotal = calculateWeightedTotal(weightedCategories, scoreInputs);
 
-  const allScored = review.rubric.categories.every((cat) =>
-    cat.criteria.every((crit) => scores[crit.id] != null),
-  );
+  // gateClosed/gateBlocking/canSubmit come from the single
+  // computeSubmitReadiness() computed above -- not re-derived here.
+  const { gateClosed, gateBlocking, canSubmit } = readiness;
 
   const submitted = review.status === "submitted";
-  const gateClosed = stage === "interview" && review.gate.reason !== "open" && !review.gate.isOpen;
-  const gateBlocking = gateClosed && !(accessConfig.isSuperAdmin && overrideApplied);
   const inputsDisabled = submitted || gateBlocking;
 
   async function handleReopen() {
@@ -394,9 +462,9 @@ export const AssessmentForm = forwardRef<AssessmentFormHandle, AssessmentFormPro
     const idx = criterionOrder.indexOf(criterionId);
     const isLast = idx === criterionOrder.length - 1;
     if (isLast) {
-      // Same gating as the Submit button (saving / gateBlocking / !allScored) --
-      // reuses the actual render-time values in scope here, not a duplicate.
-      if (!saving && !gateBlocking && allScored) void submitPayload("submitted");
+      // Reads the same single computeSubmitReadiness() result as the Submit
+      // button and submitIfReady() -- not a separate copy of the condition.
+      if (canSubmit) void submitPayload("submitted");
       return;
     }
     const nextId = criterionOrder[idx + 1];
@@ -563,7 +631,7 @@ export const AssessmentForm = forwardRef<AssessmentFormHandle, AssessmentFormPro
         </Button>
         <Button
           type="button"
-          disabled={saving || gateBlocking || !allScored}
+          disabled={!canSubmit}
           onClick={() => submitPayload("submitted")}
         >
           {saving ? "Submitting..." : "Submit"}
