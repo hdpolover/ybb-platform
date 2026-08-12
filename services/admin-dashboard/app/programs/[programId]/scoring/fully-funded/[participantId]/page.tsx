@@ -1,8 +1,9 @@
 "use client";
 
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { getApplication, type Application } from "@/src/shared/api-client";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getApplication, exportApplicationsExcel, type Application } from "@/src/shared/api-client";
+import { useAuth } from "@/app/contexts/AuthContext";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { useApplicationQueue } from "@/app/hooks/useApplicationQueue";
 import { FullyFundedDetailsTabsCard } from "@/app/components/scoring/FullyFundedDetailsTabsCard";
@@ -44,16 +45,52 @@ export default function FullyFundedParticipantDetailPage() {
     router.push(`${pathname}?${nextParams.toString()}`);
   }
 
+  const { accessiblePrograms } = useAuth();
   const resolvedProgramId = useResolvedProgramId(programId);
+  const resolvedBrandId = useMemo(() => {
+    return (
+      accessiblePrograms.find(
+        (p) => p.programId === resolvedProgramId || p.programSlug === programId
+      )?.brandId ?? ""
+    );
+  }, [accessiblePrograms, resolvedProgramId, programId]);
 
   const [application, setApplication] = useState<Application | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  // ─── Review queue: Previous/Next across the same filtered list the
+  // reviewer was looking at in the table, plus the keyboard-driven flow on
+  // top of it. See app/hooks/useApplicationQueue.ts for how paging works.
+  const [desktopDirty, setDesktopDirty] = useState(false);
+  const [mobileDirty, setMobileDirty] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [endOfQueue, setEndOfQueue] = useState(false);
+  const desktopFormRef = useRef<AssessmentFormHandle>(null);
+
+  // Per-applicant state reset, done during render rather than in a
+  // useEffect. React allows (and documents) calling a setter of this same
+  // component's own state while rendering, guarded by comparing against the
+  // previous value of the prop/param that should trigger the reset -- see
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes.
+  // This replaces two effects that used to call setState synchronously in
+  // their body (flagged by react-hooks/set-state-in-effect): the fetch
+  // effect's `setLoading(true)`/`setNotFound(false)` reset, and a second
+  // effect whose only job was `setEndOfQueue(false)` on a fresh participant.
+  // The actual fetch (a real external side effect) still runs in its own
+  // effect below; only the "reset before it runs" part moved here.
+  const [prevParticipantId, setPrevParticipantId] = useState(participantId);
+  if (participantId !== prevParticipantId) {
+    setPrevParticipantId(participantId);
+    setLoading(true);
+    setNotFound(false);
+    setEndOfQueue(false);
+  }
 
   useEffect(() => {
     if (!participantId) return;
-    setLoading(true);
-    setNotFound(false);
     getApplication(participantId)
       .then((data) => {
         setApplication(data);
@@ -67,15 +104,6 @@ export default function FullyFundedParticipantDetailPage() {
         setLoading(false);
       });
   }, [participantId]);
-
-  // ─── Review queue: Previous/Next across the same filtered list the
-  // reviewer was looking at in the table, plus the keyboard-driven flow on
-  // top of it. See app/hooks/useApplicationQueue.ts for how paging works.
-  const [desktopDirty, setDesktopDirty] = useState(false);
-  const [mobileDirty, setMobileDirty] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
-  const [endOfQueue, setEndOfQueue] = useState(false);
-  const desktopFormRef = useRef<AssessmentFormHandle>(null);
 
   // There is no autosave: if either mounted AssessmentForm instance (desktop
   // dock or mobile sheet) has edits that were never saved, warn before
@@ -92,11 +120,6 @@ export default function FullyFundedParticipantDetailPage() {
     currentApplicationId: participantId,
     confirmNavigate,
   });
-
-  // A fresh applicant is now open -- any earlier "end of queue" state is stale.
-  useEffect(() => {
-    setEndOfQueue(false);
-  }, [participantId]);
 
   const handleSubmitSuccess = useCallback(() => {
     if (queue.hasNext) {
@@ -145,6 +168,28 @@ export default function FullyFundedParticipantDetailPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [helpOpen, queue]);
 
+  // Per-participant export, same behavior FullyFundedHeaderCard used to
+  // drive via its "Export Data" button -- now triggered from the queue
+  // header's "Applicant actions" menu instead. Unrelated to the bulk export
+  // on the applicants table.
+  const handleExport = async () => {
+    if (exporting || !resolvedBrandId) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      await exportApplicationsExcel({
+        brandId: resolvedBrandId,
+        programId: resolvedProgramId,
+        category: "fully_funded",
+        search: application?.participant?.fullName,
+      });
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20 text-sm text-zinc-500">
@@ -182,7 +227,10 @@ export default function FullyFundedParticipantDetailPage() {
         onPrev={() => queue.goToPrev()}
         onNext={() => queue.goToNext()}
         onOpenHelp={() => setHelpOpen(true)}
+        onExportData={handleExport}
+        exporting={exporting}
       />
+      {exportError && <p className="text-xs text-red-600">{exportError}</p>}
 
       {endOfQueue && (
         <EmptyState

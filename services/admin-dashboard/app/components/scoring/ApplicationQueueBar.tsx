@@ -1,9 +1,22 @@
 // services/admin-dashboard/app/components/scoring/ApplicationQueueBar.tsx
 "use client";
 
-import { ChevronLeftIcon, ChevronRightIcon, QuestionMarkCircleIcon } from "@heroicons/react/24/outline";
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  QuestionMarkCircleIcon,
+  EllipsisVerticalIcon,
+  PencilIcon,
+  ArrowDownTrayIcon,
+} from "@heroicons/react/24/outline";
 import { Button } from "@/src/ui/button";
 import { Badge } from "@/src/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/src/ui/dropdown-menu";
 import { ScoreStatusBadge } from "./ScoreStatusBadge";
 
 interface ApplicationQueueBarProps {
@@ -24,6 +37,14 @@ interface ApplicationQueueBarProps {
   onPrev: () => void;
   onNext: () => void;
   onOpenHelp: () => void;
+  /** Same handlers FullyFundedHeaderCard used to take -- carried over into
+   *  the "Applicant actions" overflow menu below so the per-participant
+   *  Edit Profile / Export Data actions have a home now that the tall
+   *  profile card no longer renders on this screen. Both optional so the
+   *  menu degrades gracefully if a caller has nothing to wire. */
+  onEditProfile?: () => void;
+  onExportData?: () => void;
+  exporting?: boolean;
 }
 
 /**
@@ -45,6 +66,9 @@ export function ApplicationQueueBar({
   onPrev,
   onNext,
   onOpenHelp,
+  onEditProfile,
+  onExportData,
+  exporting,
 }: ApplicationQueueBarProps) {
   const progressPercent = position != null && total > 0 ? Math.round((position / total) * 100) : 0;
   const positionLabel = loading ? "Loading queue..." : position != null ? `${position} of ${total}` : total > 0 ? `Not in current page (${total} total)` : "";
@@ -109,6 +133,27 @@ export function ApplicationQueueBar({
         >
           <QuestionMarkCircleIcon className="h-5 w-5" />
         </Button>
+
+        {/* Compact overflow menu -- replaces the tall profile card's Edit
+            Profile / Export Data buttons, which no longer have a home on
+            this screen now that the card isn't rendered here. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button" variant="ghost" size="icon" aria-label="Applicant actions">
+              <EllipsisVerticalIcon className="h-5 w-5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={() => onEditProfile?.()}>
+              <PencilIcon className="h-4 w-4" />
+              Edit Profile
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={exporting} onSelect={() => onExportData?.()}>
+              <ArrowDownTrayIcon className="h-4 w-4" />
+              {exporting ? "Exporting..." : "Export Data"}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-zinc-100">
