@@ -30,9 +30,12 @@ export function FullyFundedDetailsTabsCard({
 
   return (
     <section className="rounded-xl border border-zinc-200 bg-white shadow-sm overflow-hidden">
-      {/* Tab Navigation */}
+      {/* Tab Navigation. Wraps to a second row instead of scrolling: the
+          pane is often too narrow at desktop widths for four tabs on one
+          line, and a wrapped strip guarantees every label stays fully
+          visible with no truncation and no scrollbar to style. */}
       <div className="border-b border-zinc-200 bg-zinc-50/30 px-6">
-        <nav className="-mb-px flex gap-6 overflow-x-auto text-sm no-scrollbar">
+        <nav className="-mb-px flex flex-wrap gap-x-6 gap-y-1 text-sm">
           {tabs.map((tab) => {
             const isActive = activeTab === tab;
             return (
@@ -53,7 +56,11 @@ export function FullyFundedDetailsTabsCard({
         </nav>
       </div>
 
-      <div className="p-6 md:p-8">
+      {/* @container: this card lives in the left pane of a split view, not
+          full page width, so tab content below sizes to ITS OWN box, not
+          the viewport. Container query variants (@sm, @3xl, ...) replace
+          viewport variants (sm:, md:) throughout the tab bodies. */}
+      <div className="p-6 md:p-8 @container">
         {activeTab === "Personal Details" && (
           <PersonalDetailsContent application={application} />
         )}
@@ -90,8 +97,8 @@ function PersonalDetailsContent({
     .join(", ");
 
   return (
-    <div className="grid gap-10 md:grid-cols-2">
-      <section>
+    <div className="grid gap-10 @3xl:grid-cols-2">
+      <section className="@container min-w-0">
         <h3 className="mb-5 text-base font-semibold text-zinc-900">
           Personal Information
         </h3>
@@ -112,7 +119,7 @@ function PersonalDetailsContent({
         </dl>
       </section>
 
-      <section>
+      <section className="@container min-w-0">
         <h3 className="mb-5 text-base font-semibold text-zinc-900">
           Social Media & Others
         </h3>
@@ -143,8 +150,8 @@ function EducationExperienceContent({
   const p = application?.participant;
 
   return (
-    <div className="grid gap-10 md:grid-cols-2">
-      <section>
+    <div className="grid gap-10 @3xl:grid-cols-2">
+      <section className="@container min-w-0">
         <h3 className="mb-5 text-base font-semibold text-zinc-900">
           Education
         </h3>
@@ -159,7 +166,7 @@ function EducationExperienceContent({
         </dl>
       </section>
 
-      <section>
+      <section className="@container min-w-0">
         <h3 className="mb-5 text-base font-semibold text-zinc-900">
           Experience & Achievements
         </h3>
@@ -201,7 +208,7 @@ function EmergencyContactContent({
     .join(" ");
 
   return (
-    <section>
+    <section className="@container min-w-0">
       <h3 className="mb-5 text-base font-semibold text-zinc-900">
         Emergency Contact Information
       </h3>
@@ -286,16 +293,16 @@ function Field({
   className?: string;
 }) {
   return (
-    <div className="flex flex-col sm:grid sm:grid-cols-[160px_1fr] sm:items-start sm:gap-4">
+    <div className="flex min-w-0 flex-col @sm:grid @sm:grid-cols-[160px_1fr] @sm:items-start @sm:gap-4">
       <dt className="mt-0.5 text-xs font-medium text-zinc-500">{label}</dt>
 
       {asBadge ? (
-        <dd className="mt-1 sm:mt-0">
+        <dd className="mt-1 min-w-0 @sm:mt-0">
           <BadgeValue value={value || "-"} />
         </dd>
       ) : (
         <dd
-          className={`mt-1 break-words text-sm font-semibold sm:mt-0 ${className} ${
+          className={`mt-1 min-w-0 break-words text-sm font-semibold @sm:mt-0 ${className} ${
             isLink
               ? "cursor-pointer text-blue-600 hover:underline"
               : "text-zinc-900"
