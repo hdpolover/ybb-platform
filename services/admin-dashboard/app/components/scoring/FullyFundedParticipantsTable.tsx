@@ -3,7 +3,6 @@
 import React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { EyeIcon } from "@heroicons/react/24/solid";
-import { ClipboardDocumentCheckIcon } from "@heroicons/react/24/outline";
 
 export interface FullyFundedParticipantRow {
   id: number;
@@ -114,9 +113,11 @@ export function FullyFundedParticipantsTable({
                       <div className="flex items-center gap-1.5">
                         <button
                           type="button"
-                          title="View participant"
+                          title="Review"
                           className="flex h-7 w-7 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-600 shadow-sm transition-colors hover:bg-zinc-50 hover:text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-200"
                           onClick={() => {
+                            // Split-view participant detail page: essay and scoring
+                            // panel side by side, so this is the only row action.
                             const params = new URLSearchParams(searchParams.toString());
                             params.set("source", "scoring");
                             const query = params.toString();
@@ -129,21 +130,6 @@ export function FullyFundedParticipantsTable({
                           }}
                         >
                           <EyeIcon className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          title="Score application"
-                          className="flex h-7 w-7 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-600 shadow-sm transition-colors hover:bg-zinc-50 hover:text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-200"
-                          onClick={() => {
-                            const match = pathname.match(/\/programs\/([^/]+)/);
-                            const programId = match?.[1];
-                            const basePath = programId
-                              ? `/programs/${encodeURIComponent(programId)}/scoring/review/${encodeURIComponent(row.accountId)}`
-                              : `/scoring/review/${encodeURIComponent(row.accountId)}`;
-                            router.push(`${basePath}?stage=application`);
-                          }}
-                        >
-                          <ClipboardDocumentCheckIcon className="h-4 w-4" />
                         </button>
                       </div>
                     </td>
