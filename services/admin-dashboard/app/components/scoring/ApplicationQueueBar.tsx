@@ -1,7 +1,9 @@
 // services/admin-dashboard/app/components/scoring/ApplicationQueueBar.tsx
 "use client";
 
+import Link from "next/link";
 import {
+  ArrowLeftIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   QuestionMarkCircleIcon,
@@ -20,6 +22,13 @@ import {
 import { ScoreStatusBadge } from "./ScoreStatusBadge";
 
 interface ApplicationQueueBarProps {
+  /** Where "Back to list" returns the reviewer to -- the table route with
+   *  the reviewer's filters/sort/page carried over, so the round trip is
+   *  lossless. See fullyFundedFilterParsers.ts for the shared URL shape. */
+  backHref: string;
+  /** Compact hint that the queue mirrors the table's active filters, e.g.
+   *  "Not Scored" or "All applicants" when nothing is filtered. */
+  filterSummary: string;
   applicantName: string;
   /** Application category label (e.g. "Fully Funded"). Optional -- omitted
    *  entirely when the caller has no category to show. */
@@ -54,6 +63,8 @@ interface ApplicationQueueBarProps {
  * e.g. Score Status = "Not Scored" -- without ever going back to the list.
  */
 export function ApplicationQueueBar({
+  backHref,
+  filterSummary,
   applicantName,
   category,
   scoreStatus,
@@ -76,6 +87,19 @@ export function ApplicationQueueBar({
   return (
     <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
       <div className="flex items-center gap-3">
+        {/* Only affordance back to the table besides the sidebar (which
+            drops filters) or the browser back button. Carries the
+            reviewer's filters/sort/page via backHref (see the detail
+            page) so the round trip lands on the same view. Collapses to
+            icon-only before the name would ever have to give up space for
+            it -- see the responsive notes below. */}
+        <Button asChild variant="outline" size="sm" aria-label="Back to list">
+          <Link href={backHref}>
+            <ArrowLeftIcon className="h-4 w-4" />
+            <span className="hidden xl:inline">Back to list</span>
+          </Link>
+        </Button>
+
         <Button
           type="button"
           variant="outline"
@@ -85,13 +109,19 @@ export function ApplicationQueueBar({
           onClick={onPrev}
         >
           <ChevronLeftIcon className="h-4 w-4" />
-          Previous
+          <span className="hidden lg:inline">Previous</span>
         </Button>
 
         <div className="min-w-0 flex-1 text-center">
           {/* Primary orientation cues: which applicant, and where in the
-              queue. Name truncates rather than wrapping/pushing Previous or
-              Next out of the row; badges keep their natural width. */}
+              queue. The name is the one thing that must never disappear,
+              so it's the last thing to give up space -- it truncates with
+              an ellipsis (title carries the full name for a11y/hover),
+              while the badges next to it drop out below `lg` instead of
+              squeezing it toward zero width. min-w-0 on every level of
+              this flex chain is what lets the truncate actually bite;
+              without it a flex child refuses to shrink below its content
+              width and the name gets pushed off instead. */}
           <div className="flex min-w-0 items-center justify-center gap-2">
             <span
               className="min-w-0 truncate text-base font-semibold text-zinc-900 sm:text-lg"
@@ -100,15 +130,31 @@ export function ApplicationQueueBar({
               {applicantName}
             </span>
             {category && (
-              <Badge variant="success" className="shrink-0 uppercase tracking-wide">
+              <Badge
+                variant="success"
+                className="hidden shrink-0 uppercase tracking-wide lg:inline-flex"
+              >
                 {category}
               </Badge>
             )}
-            <span className="shrink-0">
+            <span className="hidden shrink-0 lg:inline-flex">
               <ScoreStatusBadge status={scoreStatus} />
             </span>
           </div>
-          <span className="mt-0.5 block text-sm font-medium text-zinc-500">{positionLabel}</span>
+          <div className="mt-0.5 flex min-w-0 items-center justify-center gap-1.5">
+            <span className="truncate text-sm font-medium text-zinc-500">{positionLabel}</span>
+            {/* Filter-context hint (fix for the queue's relationship to the
+                table's filters being buried in the help dialog). Lower
+                priority than the badges above -- gone below `lg`, and even
+                between `lg` and `xl` it can be trimmed by its own
+                max-width before the name would ever be touched. */}
+            <span
+              className="hidden max-w-[9rem] shrink-0 truncate rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-500 lg:inline-block"
+              title={filterSummary}
+            >
+              {filterSummary}
+            </span>
+          </div>
         </div>
 
         <Button
@@ -119,7 +165,7 @@ export function ApplicationQueueBar({
           disabled={!hasNext || navigating}
           onClick={onNext}
         >
-          Next
+          <span className="hidden lg:inline">Next</span>
           <ChevronRightIcon className="h-4 w-4" />
         </Button>
 
