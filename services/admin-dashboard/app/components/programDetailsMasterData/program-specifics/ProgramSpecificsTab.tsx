@@ -20,6 +20,10 @@ export interface ProgramSpecificsData {
     location: string;
     capacity: string;
     registrationStatus: string;
+    /** Which bound (open in the future / close in the past) is gating registration, if any. */
+    registrationStatusReason: string | null;
+    registrationOpenDate: string;
+    registrationCloseDate: string;
     requirePayment: string;
     currency: string;
     registrationFee: string;
@@ -92,6 +96,12 @@ export function ProgramSpecificsTab({ data }: { data: ProgramSpecificsData }) {
               {data.schedule.endDate}
             </dd>
           </div>
+          <div>
+            <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Application Deadline</dt>
+            <dd className="rounded-md border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 shadow-sm">
+              {data.schedule.applicationDeadline}
+            </dd>
+          </div>
         </dl>
       </section>
 
@@ -120,6 +130,21 @@ export function ProgramSpecificsTab({ data }: { data: ProgramSpecificsData }) {
           <div>
             <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Registration Status</dt>
             <RegistrationStatusBadge status={data.operations.registrationStatus} />
+            {data.operations.registrationStatusReason ? (
+              <p className="mt-1.5 text-xs text-zinc-500">{data.operations.registrationStatusReason}</p>
+            ) : null}
+          </div>
+          <div>
+            <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Registration Opens</dt>
+            <dd className="rounded-md border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 shadow-sm">
+              {data.operations.registrationOpenDate}
+            </dd>
+          </div>
+          <div>
+            <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Registration Closes</dt>
+            <dd className="rounded-md border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 shadow-sm">
+              {data.operations.registrationCloseDate}
+            </dd>
           </div>
         </dl>
       </section>
