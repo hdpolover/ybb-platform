@@ -23,7 +23,8 @@ import {
 } from "@/app/components/programDetailsMasterData/general-information/EditGeneralInformationModal";
 import { buildApiUrl, getAccessToken, readErrorMessage } from "@/app/components/submissionsMasterData/api";
 import { ExchangeRateTab } from "@/app/components/programDetailsMasterData/exchange-rate/ExchangeRateTab";
-import { parseApiDate } from "@/lib/utils";
+import { parseApiDate, toLocalDatetimeInputValue, toUtcIsoFromLocalInput } from "@/lib/utils";
+import { formatInBusinessTz } from "@/lib/datetime";
 
 type ProgramDetail = {
   id: string;
@@ -115,6 +116,18 @@ function toDateInputValue(value?: string | null): string {
   return `${year}-${month}-${day}`;
 }
 
+// Render registration boundaries in the canonical business timezone (WIB) so an
+// end-of-day "23:59" cutoff never appears to roll onto the next calendar day.
+function formatBusinessDateTime(value?: string | null): string {
+  return formatInBusinessTz(value, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function getRegistrationStatus(detail: ProgramDetail): string {
   if (!detail.allowRegistration) {
     return "Disabled";
@@ -133,6 +146,21 @@ function getRegistrationStatus(detail: ProgramDetail): string {
   }
 
   return "Open";
+}
+
+// Explains which bound (open date in the future, or close date in the past)
+// is currently gating registration, so an admin can tell why at a glance
+// without opening the edit drawer.
+function getRegistrationStatusReason(detail: ProgramDetail, status: string): string | null {
+  if (status === "Scheduled" && detail.registrationOpenDate) {
+    return `Opens ${formatBusinessDateTime(detail.registrationOpenDate)} WIB`;
+  }
+
+  if (status === "Closed" && detail.registrationCloseDate) {
+    return `Closed since ${formatBusinessDateTime(detail.registrationCloseDate)} WIB`;
+  }
+
+  return null;
 }
 
 const PROGRAM_FORMAT_LABELS: Record<'in_person' | 'hybrid' | 'online', string> = {
@@ -173,6 +201,9 @@ function toProgramSpecificsData(detail: ProgramDetail): ProgramSpecificsData {
       location: formatDisplayValue(detail.location),
       capacity: formatDisplayValue(detail.capacity),
       registrationStatus: getRegistrationStatus(detail),
+      registrationStatusReason: getRegistrationStatusReason(detail, getRegistrationStatus(detail)),
+      registrationOpenDate: detail.registrationOpenDate ? `${formatBusinessDateTime(detail.registrationOpenDate)} WIB` : "Not configured",
+      registrationCloseDate: detail.registrationCloseDate ? `${formatBusinessDateTime(detail.registrationCloseDate)} WIB` : "Not configured",
       requirePayment: detail.requirePayment ? "Required" : "Not required",
       currency: formatDisplayValue(detail.currency ?? "USD"),
       registrationFee:
@@ -214,6 +245,8 @@ function toSpecificsFormValues(detail: ProgramDetail): ProgramSpecificsFormValue
     location: detail.location ?? "",
     capacity: detail.capacity !== null && detail.capacity !== undefined ? String(detail.capacity) : "",
     requirePayment: detail.requirePayment,
+    registrationOpenDate: toLocalDatetimeInputValue(detail.registrationOpenDate),
+    registrationCloseDate: toLocalDatetimeInputValue(detail.registrationCloseDate),
     requirementsDescription: detail.requirementsDescription ?? "",
     benefitsDescription: detail.benefitsDescription ?? "",
     termsAndConditions: detail.termsAndConditions ?? "",
@@ -332,6 +365,10 @@ export default function ProgramDetailsPage({
         location: values.location.trim() || undefined,
         capacity: values.capacity.trim() === "" ? undefined : Number(values.capacity),
         requirePayment: values.requirePayment,
+        // Explicit null (not undefined) so an emptied input clears the bound in the DB
+        // instead of being dropped as "no change" — see toUtcIsoFromLocalInput.
+        registrationOpenDate: toUtcIsoFromLocalInput(values.registrationOpenDate),
+        registrationCloseDate: toUtcIsoFromLocalInput(values.registrationCloseDate),
         requirementsDescription: values.requirementsDescription.trim() || undefined,
         benefitsDescription: values.benefitsDescription.trim() || undefined,
         termsAndConditions: values.termsAndConditions.trim() || undefined,

@@ -87,15 +87,15 @@ export class UpdateProgramDto {
     @IsOptional()
     isPublished?: boolean;
 
-    @ApiProperty({ description: 'Registration open date', required: false })
+    @ApiProperty({ description: 'Registration open date (send null to clear)', required: false, nullable: true })
     @IsDateString()
     @IsOptional()
-    registrationOpenDate?: string;
+    registrationOpenDate?: string | null;
 
-    @ApiProperty({ description: 'Registration close date', required: false })
+    @ApiProperty({ description: 'Registration close date (send null to clear)', required: false, nullable: true })
     @IsDateString()
     @IsOptional()
-    registrationCloseDate?: string;
+    registrationCloseDate?: string | null;
 
     @ApiProperty({ description: 'Registration fee', required: false })
     @IsNumber()

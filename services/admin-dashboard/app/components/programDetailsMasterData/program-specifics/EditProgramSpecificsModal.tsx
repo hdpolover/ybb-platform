@@ -16,6 +16,10 @@ export interface ProgramSpecificsFormValues {
   location: string;
   capacity: string;
   requirePayment: boolean;
+  /** datetime-local value (business timezone, WIB), empty string clears the bound. */
+  registrationOpenDate: string;
+  /** datetime-local value (business timezone, WIB), empty string clears the bound. */
+  registrationCloseDate: string;
   requirementsDescription: string;
   benefitsDescription: string;
   termsAndConditions: string;
@@ -44,9 +48,11 @@ export function EditProgramSpecificsModal({
   onClose,
 }: EditProgramSpecificsModalProps) {
   const [formValues, setFormValues] = useState<ProgramSpecificsFormValues>(initialValues);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   useEffect(() => {
     setFormValues(initialValues);
+    setValidationError(null);
   }, [initialValues]);
 
   const updateField = <K extends keyof ProgramSpecificsFormValues>(
@@ -56,7 +62,36 @@ export function EditProgramSpecificsModal({
     setFormValues((current) => ({ ...current, [field]: value }));
   };
 
+  // datetime-local values ("YYYY-MM-DDTHH:mm") sort lexicographically the same
+  // as chronologically, so plain string comparison is safe here.
+  const registrationWindowInvalid =
+    formValues.registrationOpenDate !== "" &&
+    formValues.registrationCloseDate !== "" &&
+    formValues.registrationCloseDate < formValues.registrationOpenDate;
+
+  // applicationDeadline is a date-only value ("YYYY-MM-DD"); compare against
+  // the date portion of the registration window bounds.
+  const applicationDeadlineOutsideWindow =
+    formValues.applicationDeadline !== "" &&
+    ((formValues.registrationOpenDate !== "" &&
+      formValues.applicationDeadline < formValues.registrationOpenDate.slice(0, 10)) ||
+      (formValues.registrationCloseDate !== "" &&
+        formValues.applicationDeadline > formValues.registrationCloseDate.slice(0, 10)));
+
   const handleSubmit = async () => {
+    if (registrationWindowInvalid) {
+      setValidationError("Registration close date must be on or after the registration open date.");
+      return;
+    }
+
+    // application_deadline is NOT NULL in the database, so an empty value would
+    // fail on write rather than clear the field.
+    if (formValues.applicationDeadline === "") {
+      setValidationError("Application deadline is required.");
+      return;
+    }
+
+    setValidationError(null);
     await onSubmit(formValues);
   };
 
@@ -72,7 +107,7 @@ export function EditProgramSpecificsModal({
           location, and participant-facing copy.
         </>
       }
-      error={errorMessage}
+      error={validationError ?? errorMessage}
       locked={isSaving}
       width="sm:max-w-4xl"
       footer={
@@ -157,10 +192,10 @@ export function EditProgramSpecificsModal({
       <FormSection
         icon={MapPinIcon}
         title="Operations"
-        description="Configure landing-facing location."
+        description="Configure landing-facing location and the registration window."
       >
-        <div className="grid gap-5 md:grid-cols-1">
-          <div>
+        <div className="grid gap-5 md:grid-cols-2">
+          <div className="md:col-span-2">
             <label className="mb-1.5 block text-xs font-medium text-zinc-500">Location</label>
             <input
               type="text"
@@ -169,6 +204,44 @@ export function EditProgramSpecificsModal({
               className={INPUT_CLS}
             />
           </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Registration Opens</label>
+            <input
+              type="datetime-local"
+              value={formValues.registrationOpenDate}
+              onChange={(event) => updateField("registrationOpenDate", event.target.value)}
+              className={INPUT_CLS}
+            />
+            <p className="mt-1.5 text-xs text-zinc-500">Leave blank to clear this bound.</p>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Registration Closes</label>
+            <input
+              type="datetime-local"
+              value={formValues.registrationCloseDate}
+              onChange={(event) => updateField("registrationCloseDate", event.target.value)}
+              className={INPUT_CLS}
+            />
+            <p className="mt-1.5 text-xs text-zinc-500">Leave blank to clear this bound.</p>
+          </div>
+          <div className="md:col-span-2">
+            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Application Deadline</label>
+            <input
+              type="date"
+              value={formValues.applicationDeadline}
+              onChange={(event) => updateField("applicationDeadline", event.target.value)}
+              className={INPUT_CLS}
+            />
+            <p className="mt-1.5 text-xs text-zinc-500">
+              Required. Drives submission reminders, and is separate from the registration window above.
+            </p>
+          </div>
+          {applicationDeadlineOutsideWindow && !registrationWindowInvalid && (
+            <div className="md:col-span-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              The application deadline falls outside the registration window above. Participants may be able to
+              apply after registration has closed, or be blocked from applying before it opens.
+            </div>
+          )}
         </div>
       </FormSection>
 
