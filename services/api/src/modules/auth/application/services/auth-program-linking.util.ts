@@ -8,6 +8,7 @@ const AUTH_TARGET_PROGRAM_SELECT = {
   name: true,
   slug: true,
   year: true,
+  status: true,
   isPublished: true,
   isActive: true,
   allowRegistration: true,
@@ -71,8 +72,17 @@ export function toProgramRegistrationInfo(
   };
 }
 
+const PUBLISHED_PROGRAM_STATUS = 'published';
+
+/**
+ * `status` is the field admins actually set in the dashboard; `isPublished` and
+ * `isActive` are independent flags that default to false/true and can be
+ * toggled without touching it. A program left at status 'draft' with those
+ * flags on is not a registration target, so it has to be filtered here too.
+ */
 function buildOpenRegistrationFilter(now: Date): Prisma.ProgramWhereInput {
   return {
+    status: PUBLISHED_PROGRAM_STATUS,
     isPublished: true,
     isActive: true,
     allowRegistration: true,
@@ -87,8 +97,9 @@ function buildOpenRegistrationFilter(now: Date): Prisma.ProgramWhereInput {
   };
 }
 
-export function isProgramRegistrationOpen(program: Pick<AuthTargetProgram, 'isActive' | 'allowRegistration' | 'isPublished' | 'registrationOpenDate' | 'registrationCloseDate'>, now: Date = new Date()): boolean {
+export function isProgramRegistrationOpen(program: Pick<AuthTargetProgram, 'status' | 'isActive' | 'allowRegistration' | 'isPublished' | 'registrationOpenDate' | 'registrationCloseDate'>, now: Date = new Date()): boolean {
   return (
+    program.status === PUBLISHED_PROGRAM_STATUS &&
     program.isPublished &&
     program.isActive &&
     program.allowRegistration &&
@@ -139,14 +150,38 @@ export async function resolveAuthTargetProgram(
     return null;
   }
 
-  return prisma.program.findFirst({
+  const openPrograms = await prisma.program.findMany({
     where: {
       brandId,
       ...buildOpenRegistrationFilter(now),
     },
-    orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
     select: AUTH_TARGET_PROGRAM_SELECT,
   });
+
+  return pickPrimaryRegistrationProgram(openPrograms);
+}
+
+/**
+ * Null registration dates mean "unrestricted", so a brand's next-season program
+ * passes the open-registration filter the moment it is published, and ordering
+ * by startDate alone hands it every signup while the season actually taking
+ * applications sorts second. Rank a deliberately configured registration window
+ * above an unconfigured one first, and only then fall back to the later start.
+ */
+function pickPrimaryRegistrationProgram(
+  programs: AuthTargetProgram[],
+): AuthTargetProgram | null {
+  const windowSpecificity = (program: AuthTargetProgram): number =>
+    (program.registrationOpenDate ? 1 : 0) + (program.registrationCloseDate ? 1 : 0);
+
+  return (
+    [...programs].sort(
+      (a, b) =>
+        windowSpecificity(b) - windowSpecificity(a) ||
+        b.startDate.getTime() - a.startDate.getTime() ||
+        b.createdAt.getTime() - a.createdAt.getTime(),
+    )[0] ?? null
+  );
 }
 
 export async function ensureParticipantExists(

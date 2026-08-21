@@ -14,6 +14,7 @@ describe('auth-program-linking.util', () => {
     name: 'Program 1',
     slug: 'program-1',
     year: 2026,
+    status: 'published',
     isPublished: true,
     isActive: true,
     allowRegistration: true,
@@ -28,6 +29,7 @@ describe('auth-program-linking.util', () => {
       program: {
         findUnique: jest.fn(),
         findFirst: jest.fn(),
+        findMany: jest.fn(),
       },
       participantApplication: {
         findUnique: jest.fn(),
@@ -72,10 +74,24 @@ describe('auth-program-linking.util', () => {
   });
 
   describe('isProgramRegistrationOpen', () => {
+    it('returns false for a draft program regardless of the isPublished flag', () => {
+      expect(
+        isProgramRegistrationOpen({
+          status: 'draft',
+          isPublished: true,
+          isActive: true,
+          allowRegistration: true,
+          registrationOpenDate: null,
+          registrationCloseDate: null,
+        }),
+      ).toBe(false);
+    });
+
     it('returns false when registrationCloseDate has passed', () => {
       expect(
         isProgramRegistrationOpen(
           {
+            status: 'published',
             isPublished: true,
             isActive: true,
             allowRegistration: true,
@@ -103,19 +119,71 @@ describe('auth-program-linking.util', () => {
 
     it('falls back to the latest open program when requested', async () => {
       const prisma = createPrismaMock();
-      prisma.program.findFirst.mockResolvedValue(baseProgram);
+      prisma.program.findMany.mockResolvedValue([baseProgram]);
 
       const result = await resolveAuthTargetProgram(prisma, {
         brandId: 'brand-1',
         fallbackToLatestOpenProgram: true,
       });
 
-      expect(prisma.program.findFirst).toHaveBeenCalledWith(
+      expect(prisma.program.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({ brandId: 'brand-1' }),
         }),
       );
       expect(result).toEqual(baseProgram);
+    });
+
+    it('excludes draft programs from the fallback even when isPublished was toggled on', async () => {
+      // A draft program created with isPublished/isActive flipped true hijacked
+      // every new signup for a brand until an admin noticed hours later: the
+      // filter only knew about isPublished, never status.
+      const prisma = createPrismaMock();
+      prisma.program.findMany.mockResolvedValue([]);
+
+      await resolveAuthTargetProgram(prisma, {
+        brandId: 'brand-1',
+        fallbackToLatestOpenProgram: true,
+      });
+
+      expect(prisma.program.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ status: 'published' }),
+        }),
+      );
+    });
+
+    it('prefers a program with a configured registration window over a later-starting one without', async () => {
+      // The next season's program starts later, so ordering by startDate alone
+      // handed it every registration while the season actually taking sign-ups
+      // sat second in the list.
+      const prisma = createPrismaMock();
+      const nextSeason = {
+        ...baseProgram,
+        id: 'program-next',
+        slug: 'program-next',
+        year: 2027,
+        startDate: new Date('2027-03-22T00:00:00.000Z'),
+        registrationOpenDate: null,
+        registrationCloseDate: null,
+      };
+      const currentSeason = {
+        ...baseProgram,
+        id: 'program-current',
+        slug: 'program-current',
+        year: 2026,
+        startDate: new Date('2026-12-07T00:00:00.000Z'),
+        registrationOpenDate: new Date('2026-04-30T17:01:00.000Z'),
+        registrationCloseDate: new Date('2026-12-05T16:59:00.000Z'),
+      };
+      prisma.program.findMany.mockResolvedValue([nextSeason, currentSeason]);
+
+      const result = await resolveAuthTargetProgram(prisma, {
+        brandId: 'brand-1',
+        fallbackToLatestOpenProgram: true,
+      });
+
+      expect(result).toEqual(currentSeason);
     });
   });
 
