@@ -9,6 +9,13 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '../../../../../shared/constants/cache-keys';
 import {
+    assertValidPeriodRange,
+    assertNoDuplicatePeriod,
+    findOverlappingPeriods,
+    computeCoverageGap,
+    ExistingValidityPeriod,
+} from '../../validators/pricing-tier-validity-period.validator';
+import {
     CreateProgramTimelineCommand, UpdateProgramTimelineCommand, DeleteProgramTimelineCommand,
     CreateProgramScheduleCommand, UpdateProgramScheduleCommand, DeleteProgramScheduleCommand,
     CreateProgramSpeakerCommand, UpdateProgramSpeakerCommand, DeleteProgramSpeakerCommand,
@@ -133,6 +140,59 @@ function toIsoOrNull(value: unknown): string | null {
     if (value instanceof Date) return value.toISOString();
     if (typeof value === 'string') return value;
     return null;
+}
+
+type ValidityPeriodWarnings = {
+    overlappingPeriods: Array<{ id: string; startDate: string | null; endDate: string | null; description: string | null }>;
+    coverageGap: { gapStart: string | null; gapEnd: string | null; daysUncovered: number } | null;
+};
+
+/**
+ * Non-blocking diagnostics surfaced alongside a validity-period write so the
+ * admin UI can flag data smells without refusing the save (see the validator
+ * module for why overlap in particular must stay a warning, not an error —
+ * a prod audit found 84 pre-existing overlapping pairs that a hard block
+ * would have made un-editable).
+ *
+ * `excludePeriodId` is the row just written (create or update) — it already
+ * exists in `tier.validityPeriods` by the time this runs, so it must be
+ * excluded from the overlap comparison against itself.
+ */
+async function buildValidityPeriodWarnings(
+    pricingTierId: string,
+    repository: IProgramContentRepository,
+    prisma: PrismaService,
+    excludePeriodId: string,
+): Promise<ValidityPeriodWarnings> {
+    const tier = await repository.findPricingTierById(pricingTierId);
+    const periods: ExistingValidityPeriod[] = tier?.validityPeriods ?? [];
+    const written = periods.find((p) => p.id === excludePeriodId);
+
+    const overlaps = written
+        ? findOverlappingPeriods(written, periods, excludePeriodId)
+        : [];
+
+    let registrationCloseDate: Date | null = null;
+    if (tier?.programId) {
+        const program = await prisma.program.findUnique({
+            where: { id: tier.programId },
+            select: { registrationCloseDate: true },
+        });
+        registrationCloseDate = program?.registrationCloseDate ?? null;
+    }
+    const gap = computeCoverageGap(periods, new Date(), registrationCloseDate);
+
+    return {
+        overlappingPeriods: overlaps.map((p) => ({
+            id: p.id,
+            startDate: toIsoOrNull(p.startDate),
+            endDate: toIsoOrNull(p.endDate),
+            description: p.description ?? null,
+        })),
+        coverageGap: gap
+            ? { gapStart: toIsoOrNull(gap.gapStart), gapEnd: toIsoOrNull(gap.gapEnd), daysUncovered: gap.daysUncovered }
+            : null,
+    };
 }
 
 async function invalidatePortalEssayCaches(
@@ -963,18 +1023,25 @@ export class CreateProgramPricingTierHandler implements ICommandHandler<CreatePr
         };
         const result = await this.repository.createPricingTier(dto as unknown as Partial<ProgramPricingTier>);
 
-        // Auto-create initial validity period from validFrom/validUntil if provided
+        // Auto-create initial validity period from validFrom/validUntil if provided.
+        // This is the nested write path: a brand-new tier has no sibling periods yet,
+        // so only the range check applies here (duplicate/overlap need >=2 periods).
+        let warnings: ValidityPeriodWarnings | null = null;
         if (validFrom && validUntil) {
-            await this.repository.createValidityPeriod({
+            const startDate = new Date(validFrom);
+            const endDate = new Date(validUntil);
+            assertValidPeriodRange(startDate, endDate);
+            const period = await this.repository.createValidityPeriod({
                 pricingTierId: result.id,
-                startDate: new Date(validFrom),
-                endDate: new Date(validUntil),
+                startDate,
+                endDate,
                 description: 'Default period',
             });
+            warnings = await buildValidityPeriodWarnings(result.id, this.repository, this.prisma, period.id);
         }
 
         await invalidatePricingTierCachesByProgramId(command.dto.programId, this.prisma, this.cacheService);
-        return result;
+        return { ...result, warnings };
     }
 }
 @CommandHandler(UpdateProgramPricingTierCommand)
@@ -1090,20 +1157,32 @@ export class CreateValidityPeriodHandler implements ICommandHandler<CreateValidi
         private readonly cacheService: CacheService,
     ) {}
     async execute(command: CreateValidityPeriodCommand) {
+        const pricingTierId = command.dto.pricingTierId!;
+        const startDate = new Date(command.dto.startDate);
+        const endDate = new Date(command.dto.endDate);
+
+        // Hard errors — see pricing-tier-validity-period.validator.ts for the
+        // prod incidents each one closes off.
+        assertValidPeriodRange(startDate, endDate);
+        const existingTier = await this.repository.findPricingTierById(pricingTierId);
+        assertNoDuplicatePeriod({ startDate, endDate }, existingTier?.validityPeriods ?? []);
+
         const dto = {
-            pricingTierId: command.dto.pricingTierId,
-            startDate: new Date(command.dto.startDate),
-            endDate: new Date(command.dto.endDate),
+            pricingTierId,
+            startDate,
+            endDate,
             description: command.dto.description,
         };
         const result = await this.repository.createValidityPeriod(dto as Partial<PricingTierValidityPeriod>);
-        await invalidatePricingTierCachesByPricingTierId(command.dto.pricingTierId!, this.prisma, this.cacheService);
+        await invalidatePricingTierCachesByPricingTierId(pricingTierId, this.prisma, this.cacheService);
+        const warnings = await buildValidityPeriodWarnings(pricingTierId, this.repository, this.prisma, result.id);
         return {
             ...result,
             startDate: toIsoOrNull(result.startDate),
             endDate: toIsoOrNull(result.endDate),
             createdAt: toIsoOrNull((result as { createdAt?: unknown }).createdAt),
             updatedAt: toIsoOrNull((result as { updatedAt?: unknown }).updatedAt),
+            warnings,
         };
     }
 }
@@ -1117,19 +1196,33 @@ export class UpdateValidityPeriodHandler implements ICommandHandler<UpdateValidi
     async execute(command: UpdateValidityPeriodCommand) {
         const existing = await this.repository.findValidityPeriodById(command.id);
         if (!existing) throw new NotFoundException(`Validity period ${command.id} not found`);
+
+        const startDate = command.dto.startDate ? new Date(command.dto.startDate) : existing.startDate;
+        const endDate = command.dto.endDate ? new Date(command.dto.endDate) : existing.endDate;
+
+        // Hard errors — see pricing-tier-validity-period.validator.ts for the
+        // prod incidents each one closes off. Excludes this row from its own
+        // duplicate check so e.g. an unrelated description-only edit doesn't
+        // trip over comparing the row against itself.
+        assertValidPeriodRange(startDate, endDate);
+        const existingTier = await this.repository.findPricingTierById(existing.pricingTierId);
+        assertNoDuplicatePeriod({ startDate, endDate }, existingTier?.validityPeriods ?? [], command.id);
+
         const dto = {
-            startDate: command.dto.startDate ? new Date(command.dto.startDate) : undefined,
-            endDate: command.dto.endDate ? new Date(command.dto.endDate) : undefined,
+            startDate: command.dto.startDate ? startDate : undefined,
+            endDate: command.dto.endDate ? endDate : undefined,
             description: command.dto.description,
         };
         const result = await this.repository.updateValidityPeriod(command.id, dto as Partial<PricingTierValidityPeriod>);
         await invalidatePricingTierCachesByPricingTierId(existing.pricingTierId, this.prisma, this.cacheService);
+        const warnings = await buildValidityPeriodWarnings(existing.pricingTierId, this.repository, this.prisma, command.id);
         return {
             ...result,
             startDate: toIsoOrNull(result.startDate),
             endDate: toIsoOrNull(result.endDate),
             createdAt: toIsoOrNull((result as { createdAt?: unknown }).createdAt),
             updatedAt: toIsoOrNull((result as { updatedAt?: unknown }).updatedAt),
+            warnings,
         };
     }
 }
