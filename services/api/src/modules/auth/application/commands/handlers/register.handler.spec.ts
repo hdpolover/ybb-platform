@@ -40,6 +40,7 @@ describe('RegisterHandler', () => {
     program: {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
+      findMany: jest.fn(),
     },
     ambassador: {
       findFirst: jest.fn(),
@@ -212,6 +213,7 @@ describe('RegisterHandler', () => {
         mockPrismaService.program.findUnique.mockResolvedValue({
             id: 'program-id-123',
             brandId: 'category-id-123',
+            status: 'published',
             isActive: true,
           isPublished: true,
           allowRegistration: true,
@@ -382,18 +384,24 @@ describe('RegisterHandler', () => {
         });
 
         // Mock Latest Program
-        mockPrismaService.program.findFirst.mockResolvedValue({
+        mockPrismaService.program.findMany.mockResolvedValue([
+          {
             id: 'latest-program-id',
             brandId: 'category-id-123',
+            status: 'published',
             isActive: true,
-          isPublished: true,
-          allowRegistration: true,
-          registrationOpenDate: null,
-          registrationCloseDate: null,
-        });
+            isPublished: true,
+            allowRegistration: true,
+            registrationOpenDate: null,
+            registrationCloseDate: null,
+            startDate: new Date('2026-06-01T00:00:00.000Z'),
+            createdAt: new Date('2026-01-01T00:00:00.000Z'),
+          },
+        ]);
         mockPrismaService.program.findUnique.mockResolvedValue({
           id: 'latest-program-id',
           brandId: 'category-id-123',
+          status: 'published',
           isActive: true,
           isPublished: true,
           allowRegistration: true,
