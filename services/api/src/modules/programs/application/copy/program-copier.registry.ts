@@ -7,7 +7,15 @@ export class ProgramCopierRegistry {
   private readonly copiers: Map<string, ProgramCopier>;
 
   constructor(...copiers: ProgramCopier[]) {
-    this.copiers = new Map(copiers.map((copier) => [copier.key, copier]));
+    this.copiers = new Map();
+    for (const copier of copiers) {
+      if (this.copiers.has(copier.key)) {
+        throw new Error(
+          `ProgramCopierRegistry: duplicate copier key '${copier.key}'. Each copier must register a unique key.`,
+        );
+      }
+      this.copiers.set(copier.key, copier);
+    }
   }
 
   get(key: string): ProgramCopier {

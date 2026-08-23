@@ -34,4 +34,12 @@ describe('ProgramCopierRegistry', () => {
     const registry = new ProgramCopierRegistry(faqs, timelines);
     expect(registry.list()).toEqual([faqs, timelines]);
   });
+
+  it('constructor throws when two copiers share a key', () => {
+    const first = fakeCopier('faqs');
+    const duplicate = fakeCopier('faqs');
+    expect(() => new ProgramCopierRegistry(first, duplicate)).toThrow(
+      /faqs/,
+    );
+  });
 });
