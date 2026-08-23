@@ -30,7 +30,15 @@ import {
   DeleteFormTemplateHandler,
 } from './application/commands/handlers/form-template.handler';
 import { ApplyFormTemplateHandler } from './application/commands/handlers/apply-form-template.handler';
-import { CopyFieldsFromProgramHandler } from './application/commands/handlers/copy-fields-from-program.handler';
+import { ProgramCopierRegistry } from './application/copy/program-copier.registry';
+import { ProgramCopier } from './application/copy/program-copier.interface';
+import { FormFieldsCopier } from './application/copy/copiers/form-fields.copier';
+import { ParticipationCategoriesCopier } from './application/copy/copiers/participation-categories.copier';
+import { TimelinesCopier } from './application/copy/copiers/timelines.copier';
+import { RundownsCopier } from './application/copy/copiers/rundowns.copier';
+import { FaqsCopier } from './application/copy/copiers/faqs.copier';
+import { PaymentsCopier } from './application/copy/copiers/payments.copier';
+import { ProgramDetailsCopier } from './application/copy/copiers/program-details.copier';
 import {
   GetFormTemplatesHandler,
   GetFormTemplateByIdHandler,
@@ -205,7 +213,28 @@ import { LoaPreviewParticipantService } from './application/services/loa-preview
     GetFormTemplatesHandler,
     GetFormTemplateByIdHandler,
     ApplyFormTemplateHandler,
-    CopyFieldsFromProgramHandler,
+
+    // Program Content Copy
+    FormFieldsCopier,
+    ParticipationCategoriesCopier,
+    TimelinesCopier,
+    RundownsCopier,
+    FaqsCopier,
+    PaymentsCopier,
+    ProgramDetailsCopier,
+    {
+      provide: ProgramCopierRegistry,
+      useFactory: (...copiers: ProgramCopier[]) => new ProgramCopierRegistry(...copiers),
+      inject: [
+        FormFieldsCopier,
+        ParticipationCategoriesCopier,
+        TimelinesCopier,
+        RundownsCopier,
+        FaqsCopier,
+        PaymentsCopier,
+        ProgramDetailsCopier,
+      ],
+    },
 
     // Participation Info Handlers
     UpsertParticipationInfoHandler,
