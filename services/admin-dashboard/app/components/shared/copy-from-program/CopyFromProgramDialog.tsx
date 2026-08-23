@@ -227,7 +227,9 @@ export function CopyFromProgramDialog({
       const result = await postCopyEntity(entityKey, programId, { sourceProgramId: sourceId, itemIds, mode });
       toast.success(
         mode === "replace"
-          ? `Replaced ${result.replaced} ${entityLabel.toLowerCase()}, copied ${result.created} new.`
+          ? supportsAppend
+            ? `Replaced ${result.replaced} ${entityLabel.toLowerCase()}, copied ${result.created} new.`
+            : `Replaced ${entityLabel}.`
           : result.skipped > 0
             ? `Copied ${result.created} ${entityLabel.toLowerCase()}. Skipped ${result.skipped} duplicate(s).`
             : `Copied ${result.created} ${entityLabel.toLowerCase()}.`,
