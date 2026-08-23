@@ -54,12 +54,14 @@ Findings that shaped the design:
 | Copy abstraction | Copier registry with a narrow function interface (approach C) |
 | Uniform list surfaces | Share a `copyScopedRows` helper |
 | Payments | Implements the interface itself; two-level tier to validity-period insert |
-| Copy semantics | Unchanged from today: replace soft-deletes then inserts, append skips dedupe-key collisions |
+| Copy semantics | Unchanged from today: replace soft-deletes then inserts, append skips dedupe-key collisions, dedupe stays case-sensitive |
 | Templates | One generic store built now; `ApplicationFormTemplate` migrated into it |
 | Template composition | `exportTemplate` / `applyTemplate` on the copier interface, so program-copy and template-apply share one apply path |
 | Contact / landing | Split field ownership between brand and program; no fallback resolver |
+| type-REPLACE gate | Stays at the API boundary, checked once per request, never inside a copier |
+| `ProgramParticipationCategory` | Gains a `deletedAt` column so the soft-delete shape stays uniform |
 | `impact_stats` | Platform-level, single source, in a new `PlatformSetting` model |
-| Dead camelCase keys | Deleted, not migrated |
+| camelCase keys (`tagline`/`objectives`/`coreValues`) | Backfilled into typed `Brand` columns, then removed. NOT deleted — they are the only copy |
 | `program_objectives` override | Removed; objectives live only in `ProgramObjective` |
 | Metadata dialects | Normalised into a typed schema; index signature dropped |
 | Cross-brand copy | Per-surface copy allows it with the existing media warning; clone-on-create is same-brand only |
@@ -110,18 +112,33 @@ Preserved exactly as `copy-fields-from-program.handler.ts:22-116` behaves today,
 | Key | Model | Dedupe key | Notes |
 |---|---|---|---|
 | `form-fields` | `ApplicationFormField` | `name` | Existing handler refactored onto the interface |
-| `participation-categories` | `ProgramParticipationCategory` | `category` | |
+| `participation-categories` | `ProgramParticipationCategory` | `name` | Has **no `deletedAt`** column today; see below |
 | `timelines` | `ProgramTimeline` | `title` | |
-| `rundowns` | `ProgramSchedule` | `title` | Backend calls these "schedules" |
+| `rundowns` | `ProgramSchedule` | `(day, activity)` | Backend calls these "schedules"; there is **no `title`** column |
 | `faqs` | `ProgramFaq` | `question` | |
 | `payments` | `ProgramPricingTier` + `PricingTierValidityPeriod` | tier `name` | Owns its two-level insert; remaps tier ids for child periods |
-| `program-details` | `Program` scalars | n/a | `requirementsDescription`, `benefitsDescription`; replace only |
+| `program-details` | `Program` scalars | n/a | `requirementsDescription`, `benefitsDescription`, `termsAndConditions`; replace only |
 | `contact` | `Program` scalars (phase 3) | n/a | Replace only |
 | `landing` | `Program` content fields (phase 3) | n/a | Replace only |
 
 `copyScopedRows(tx, { delegate, scopeField, dedupeKey, fields, mode })` implements the shared body for the five uniform lists. Payments does not use it.
 
 The payments copier must insert tiers first, capture the generated ids, then insert each tier's validity periods against the new id. It must not copy `soldCount` or `currentCount` — those are live counters, not content.
+
+### Model-shape corrections found by adversarial review
+
+An adversarial pass over the real Prisma models refuted three assumptions that an earlier draft of this document made. They are recorded here because a plan written from the earlier draft would not have compiled.
+
+**`ProgramParticipationCategory` has no `deletedAt` column** (`program.prisma:326-345`). The soft-delete replace mechanic every other copier uses cannot run against it. It also has an inbound FK from `ParticipantApplication.participationCategoryId` (`applications.prisma:148-149`) declared with **no `onDelete`**, so a hard delete of a category still referenced by an application is refused by Postgres. Resolution: add `deletedAt` to the model in a migration so it matches its siblings, rather than giving `copyScopedRows` a per-model delete-strategy parameter. The uniform shape is the thing worth preserving; one column is cheaper than a branch that every future copier has to reason about. Replace on this surface must additionally refuse, with a clear error, when a category being replaced still has applications pointing at it.
+
+**Dedupe keys were wrong for two models.** `ProgramParticipationCategory` has `name`, not `category`. `ProgramSchedule` has no `title` at all — its columns are `day`, `startTime`, `endTime`, `activity`, `description`, `location`, `speaker`, so the natural key is the composite `(day, activity)`. `copyScopedRows` therefore takes a dedupe key that may be composite, not a single field name.
+
+**Dedupe is case-sensitive and the database enforces it.** `ApplicationFormField` carries a partial unique index `(program_id, name) WHERE deleted_at IS NULL` (`applications.prisma:122-127`), so if the application-level check is ever bypassed the insert fails at the constraint rather than silently duplicating. The existing handler compares with an exact `Set.has()` and no normalisation, so `Email` and `email` do not collide. Keep that behaviour — changing it now would alter what an existing button does — but state it in the UI copy so admins are not surprised.
+
+### Where the type-REPLACE gate lives
+
+The confirmation gate is **not** in the handler. It is enforced in `program-form-fields.controller.ts:65-70`, and the `confirm` field is dropped when building the command, so it never reaches the transaction. `ProgramCopier.copy` likewise has no `confirm` parameter. Keep the gate at the API boundary, checked once per request before any copier runs, so clone-on-create validates it once for a whole batch rather than once per entity. No copier is responsible for its own confirmation.
+
 
 ### Generic template store
 
@@ -173,7 +190,17 @@ Each field gets exactly one owner. No duplication, no fallback resolver, no ambi
 
 **Platform takes** `impact_stats`. The values are identical across three brands and are YBB-wide totals. Storing them once removes a live triplicate that drifts the moment one brand is updated and the others are not.
 
-**Deleted outright, not migrated:** `tagline`, `objectives` and `coreValues`. Nothing reads them; they are legacy-migration residue. Migrating dead content to a new owner would launder a data-quality problem into the clean model. If a tagline is wanted later it belongs as a real `Brand` column beside `about`/`vision`/`mission`, not as an untyped metadata key.
+**Backfilled into typed `Brand` columns, then removed:** `tagline`, `objectives` and `coreValues`. An earlier draft of this document said to delete them. That was wrong, and an adversarial review caught it.
+
+Nothing in the new stack reads them — that part held up against an exhaustive search of both repos, the legacy PHP app, sibling repos, git history, tests and the admin UI. But three further facts change the conclusion entirely:
+
+1. **The legacy PHP app renders this exact content to real users today.** `program_ybb_web` reads `$category['tagline']`, `$category['core_values']` and `$category['objectives']` in `app/Views/landing/home/program_category.php`, `program_details.php`, `landing/program-detail/hero.php` and `common/footer.php`. It reads them from the legacy MySQL `program_categories` table rather than from `Brand.metadata`, so this is not a reader of *our* column — but it proves the text is live, authored, in-use content, not abandoned residue.
+2. **These keys are the only copy of that text in the new database.** `prisma/seeds/internal/migrate-brands.ts` established the intended mapping — `objectives` to `vision`, `core_values` to `mission`, `tagline` to `metaTitle`. The later production ETL, `migration-scripts/legacy-content/migrate-legacy-content.cjs:72`, wrote the four keys into `metadata` on insert and **never backfilled the typed columns**. `about.strategy.ts` consequently falls back to generic YBB boilerplate for these brands because their `vision` and `mission` are null.
+3. **So this is not dead content. It is content whose migration was left half-finished.** Deleting it would complete a data loss that has already partly happened.
+
+Resolution: finish the migration the earlier seed started. Map `objectives` to `Brand.vision`, `coreValues` to `Brand.mission`, and `tagline` to a real `Brand.tagline` column, for the three brands that carry them — Korea Youth Summit, Vietnam Youth Summit and Youth Academic Forum — then drop the metadata keys. A `tagline` column is worth adding rather than folding into `metaTitle`: the frontend navbar already tries to read `brand.tagline` (`lib/api/settings.ts:71`, `components/layout/navbar.tsx:173`) and silently falls back to `description` because `ListBrandsHandler` never sets it. Adding the column and populating the DTO fixes a live rendering gap rather than creating a new field.
+
+Dump the raw metadata to a recoverable file before dropping regardless.
 
 **Also removed:** `metadata.program_objectives`. It is a brand-level override of the `ProgramObjective` relation that already exists on Program. Under split ownership objectives have exactly one owner — the `ProgramObjective` table — and the override is precisely the two-sources-of-truth pattern this work is removing.
 
@@ -181,7 +208,9 @@ Each field gets exactly one owner. No duplication, no fallback resolver, no ambi
 
 Three pairs predate this work and must be resolved rather than duplicated further.
 
-**SEO.** `Program` already has `metaTitle` and `metaDescription`; `Brand` has both plus `metaKeywords`. Program becomes the owner: add `metaKeywords` to `Program`, then drop all three from `Brand`. Nothing new is invented — the program-level fields are already there and already the more specific answer.
+**SEO.** `Program` already has `metaTitle` and `metaDescription`; `Brand` has both plus `metaKeywords`. Program becomes the owner: add `metaKeywords` to `Program`, then drop all three from `Brand`.
+
+Nothing renders the Brand-level ones. `generateMetadata()` in `ybb-program-next/app/layout.tsx` synthesises description and keywords from the landing payload title plus a hardcoded array, and neither `settings.strategy.ts` nor `about.strategy.ts` reads them; there is no sitemap or RSS builder that does either. **But they are shipped in the public, unauthenticated `BrandResponseDto`** from `GET /v1/brands` and `GET /v1/brands/:id` (`list-brands.handler.ts:63-65`). Dropping them is therefore a public API contract change, not merely an internal cleanup, and needs a deprecation note even though no known consumer reads them.
 
 **Payment info.** `Program.paymentInfoHtml` is a rich-text block; `Brand.metadata.payment_info` is a structured landing section (eyebrow, title, intro, items, note). Both are program-owned after the split and both stay. They render in different places and merging them would lose the structure.
 
@@ -241,4 +270,4 @@ Phase 1 delivers the thing that was actually asked for. Phases 2 and 3 are the c
 - **Cross-brand copy** can pull media URLs that point at another brand's assets. The existing dialog already warns about this; the shared shell must keep that warning rather than lose it in the extraction.
 - **Two cache layers stand between Postgres and the public page.** Phase 3's read switch is only observable after both are purged. See the migration section.
 - **`PlatformSetting` is net-new scope** that arrived from the audit, not from the original request. It exists solely to give `impact_stats` a single home. If that feels disproportionate, the fallback is leaving the stats on Brand and accepting the triplicate — a decision worth revisiting before phase 3 rather than during it.
-- **Deleting dead keys is irreversible.** `tagline`, `objectives`, `coreValues` have no reader today, but they hold real authored text for four brands. Dump them to a file before dropping so the content is recoverable if someone wanted them rendered rather than removed.
+- **The `tagline`/`objectives`/`coreValues` backfill touches the only surviving copy** of that text for three brands (Korea, Vietnam, Youth Academic Forum). Dump the raw metadata to a recoverable file before dropping the keys, and verify the typed columns are populated before the drop, not after.
