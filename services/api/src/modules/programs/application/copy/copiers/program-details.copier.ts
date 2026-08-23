@@ -18,8 +18,27 @@ type ProgramContentScalars = {
 
 const SELECT = { requirementsDescription: true, benefitsDescription: true, termsAndConditions: true } as const;
 
+// The admin editor for these three fields is Tiptap (rich-text-editor.tsx),
+// which emits HTML, not plain text. An admin who clears a field in the UI
+// saves `<p></p>` (or `<p>&nbsp;</p>`), not `''` — update-program.dto.ts
+// applies no trim/sanitiser before persistence, so that markup lands in the
+// column verbatim. A raw `Boolean(value)` check reads `<p></p>` as "has
+// content" and would wave a visually-empty field through as real content.
+// Strip tags and collapse whitespace/nbsp before judging emptiness so
+// "cleared in the editor" and "never set" are treated the same way.
+function isBlankRichText(value: string | null): boolean {
+  if (!value) return true;
+  const stripped = value
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .trim();
+  return stripped.length === 0;
+}
+
 function contentFieldCount(program: ProgramContentScalars): number {
-  return [program.requirementsDescription, program.benefitsDescription, program.termsAndConditions].filter(Boolean).length;
+  return [program.requirementsDescription, program.benefitsDescription, program.termsAndConditions].filter(
+    (value) => !isBlankRichText(value),
+  ).length;
 }
 
 @Injectable()
@@ -78,18 +97,25 @@ export class ProgramDetailsCopier implements ProgramCopier {
     // (copy-scoped-rows.ts's `empty_replace_source`, mirrored again in
     // payments.copier.ts for its two-level case): a source with no content
     // in any of the three fields would overwrite the target's populated
-    // text with three nulls, indistinguishable from wiping it outright with
-    // nothing to show for the "replace". Refuse before any mutation.
+    // text with three blanks, indistinguishable from wiping it outright
+    // with nothing to show for the "replace". Refuse before any mutation.
     // A source with *some* content (even just one of three fields) is an
-    // ordinary replace — including nulling out the other two on the
+    // ordinary replace — including blanking out the other two on the
     // target — and proceeds normally.
     if (contentFieldCount(source) === 0) {
       throw new BadRequestException({
         code: 'empty_replace_source',
         message:
-          "Replacing from an empty selection would delete the target's existing content without replacing it. Select at least one item to copy, or use append mode.",
+          "The source program has no content in Requirements, Benefits, or Terms & Conditions to copy. Add content to at least one of those fields on the source program, then try again.",
       });
     }
+
+    // Read the target's current state before overwriting it, purely to
+    // report an honest `replaced` count — this has no bearing on whether
+    // the copy proceeds (unlike the source-side guard above, an
+    // already-empty target is not a reason to refuse).
+    const target = await tx.program.findUnique({ where: { id: input.targetProgramId }, select: SELECT });
+    const targetHadContent = target !== null && contentFieldCount(target) > 0;
 
     await tx.program.update({
       where: { id: input.targetProgramId },
@@ -100,10 +126,15 @@ export class ProgramDetailsCopier implements ProgramCopier {
       },
     });
 
-    // There is no per-row count for a scalar copy — created/skipped don't
-    // apply (nothing is inserted, nothing is deduped). `replaced: 1` signals
-    // "the program row's content section was overwritten" so the dialog
-    // reads "1 replaced" rather than a 0 that looks like a no-op.
-    return { created: 0, skipped: 0, replaced: 1 };
+    // `created: 1` — the shared copy dialog's success toast is built as
+    // `Copied ${result.created} item(s).` (task-15-brief.md:238-240) and
+    // never reads `replaced`; it only ever reads `created`. preview()
+    // presents this section as exactly one selectable item, so "1" is the
+    // honest count of top-level units copied at the granularity the UI
+    // offers — consistent with every other copier, where `created` means
+    // "top-level rows the user selected", not "database rows written".
+    // `replaced` additionally reports whether the target actually had prior
+    // content overwritten, for callers that do inspect it.
+    return { created: 1, skipped: 0, replaced: targetHadContent ? 1 : 0 };
   }
 }
