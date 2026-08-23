@@ -6,6 +6,7 @@ import { UsersModule } from '@modules/users/users.module';
 import { FilesModule } from '@modules/files/files.module';
 import { RabbitMQModule } from '@shared/infrastructure/rabbitmq/rabbitmq.module';
 import { LandingRevalidationService } from '../brands/application/services/landing-revalidation.service';
+import { LandingCacheInvalidationService } from '../brands/application/services/landing-cache-invalidation.service';
 import { ProgramsController } from './presentation/programs.controller';
 import { AdminProgramsController } from './presentation/admin-programs.controller';
 import { ProgramScheduleController } from './presentation/program-schedule.controller';
@@ -233,6 +234,7 @@ import { LoaPreviewParticipantService } from './application/services/loa-preview
 
     CacheService,
     LandingRevalidationService,
+    LandingCacheInvalidationService,
     FormFieldKeyValidator,
     LoaReleaseBatchRepository,
     {
