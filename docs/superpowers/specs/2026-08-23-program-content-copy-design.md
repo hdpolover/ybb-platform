@@ -1,7 +1,7 @@
 # Program Content Copy and Brand/Program Ownership Split
 
 Date: 2026-08-23
-Status: draft, pending review
+Status: approved, ready for planning
 
 ## Problem
 
