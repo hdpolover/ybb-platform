@@ -232,7 +232,7 @@ export class GetPortalSubmissionDetailHandler
                             select: { id: true, allowedCategories: true },
                         },
                         participationCategories: {
-                            where: { isActive: true },
+                            where: { isActive: true, deletedAt: null },
                             select: {
                                 id: true,
                                 name: true,
