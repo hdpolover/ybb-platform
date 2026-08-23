@@ -5,9 +5,7 @@ import { IProgramRepository } from '@core/interfaces/repositories/program.reposi
 import { Program } from '@core/entities/program.entity';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
 import { UserActivityLog } from '@core/entities/user-activity-log.entity';
-import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
-import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
-import { LandingRevalidationService } from '../../../../brands/application/services/landing-revalidation.service';
+import { LandingCacheInvalidationService } from '../../../../brands/application/services/landing-cache-invalidation.service';
 
 @CommandHandler(UpdateProgramCommand)
 export class UpdateProgramHandler implements ICommandHandler<UpdateProgramCommand> {
@@ -16,9 +14,7 @@ export class UpdateProgramHandler implements ICommandHandler<UpdateProgramComman
         private readonly programRepository: IProgramRepository,
         @Inject(IUserActivityLogRepository)
         private readonly activityLogRepository: IUserActivityLogRepository,
-        private readonly cacheService: CacheService,
-        private readonly prisma: PrismaService,
-        private readonly landingRevalidation: LandingRevalidationService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) { }
 
     async execute(command: UpdateProgramCommand): Promise<any> {
@@ -62,34 +58,22 @@ export class UpdateProgramHandler implements ICommandHandler<UpdateProgramComman
             new Date(),
         ));
 
-        // Invalidate all landing page caches for this brand
-        await this.invalidateLandingCaches(updatedProgram.brandId);
-
-        // Proactively revalidate the participant frontend's Next.js unstable_cache
-        // for this brand's home and settings pages so changes reflect immediately.
-        await this.landingRevalidation.revalidateHomeAndSettingsForBrand(updatedProgram.brandId);
+        // Bust all three landing cache layers (Postgres snapshot, Redis
+        // including program:*, and the participant frontend's Next.js
+        // unstable_cache home+settings pages) so the update is immediately
+        // visible instead of waiting out the cache TTL.
+        await this.landingCacheInvalidation.invalidate(updatedProgram.brandId, {
+            clearSnapshot: true,
+            bustProgramCache: true,
+            swallowErrors: true,
+            revalidate: { kind: 'homeAndSettings' },
+        });
 
         const { brandId, ...rest } = updatedProgram as unknown as Record<string, unknown>;
         return {
             ...rest,
             brandId: brandId,
         };
-    }
-
-    /**
-     * Invalidate all landing page caches when program is updated
-     */
-    private async invalidateLandingCaches(brandId: string): Promise<void> {
-        try {
-            await Promise.all([
-                this.prisma.brandLandingSnapshot.deleteMany({ where: { brandId } }),
-                this.cacheService.invalidateBrandLandingCaches(brandId),
-                this.cacheService.invalidateByPattern('program:*'),
-            ]);
-        } catch (error) {
-            // Log but don't throw - cache invalidation failures shouldn't break updates
-            console.error('Failed to invalidate landing caches:', error);
-        }
     }
 
     private generateSlug(text: string): string {

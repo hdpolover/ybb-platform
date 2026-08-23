@@ -4,8 +4,7 @@ import { UpdateBrandCommand } from '../update-brand.command';
 import { IBrandRepository } from '@core/interfaces/repositories/brand.repository.interface';
 import { Brand } from '@core/entities/brand.entity';
 import { StorageService } from '../../../../files/application/storage.service';
-import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
-import { LandingRevalidationService } from '../../services/landing-revalidation.service';
+import { LandingCacheInvalidationService } from '../../services/landing-cache-invalidation.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { BrandLogoAssetsService } from '../../services/brand-logo-assets.service';
 import { Prisma } from '@prisma/client';
@@ -17,10 +16,9 @@ export class UpdateBrandHandler implements ICommandHandler<UpdateBrandCommand> {
         @Inject('IBrandRepository')
         private readonly brandRepository: IBrandRepository,
         private readonly storageService: StorageService,
-        private readonly cacheService: CacheService,
         private readonly prisma: PrismaService,
         private readonly brandLogoAssetsService: BrandLogoAssetsService,
-        private readonly landingRevalidation: LandingRevalidationService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) { }
 
     async execute(command: UpdateBrandCommand): Promise<Brand> {
@@ -76,31 +74,22 @@ export class UpdateBrandHandler implements ICommandHandler<UpdateBrandCommand> {
 
         const updatedBrand = await this.brandRepository.update(id, dto);
 
-        // Invalidate all landing page caches for this brand
-        await this.invalidateLandingCaches(id);
-        // Also nudge THIS brand's landing Next.js app to drop its server-side
-        // settings cache so logo/color changes show up instantly. Pass the
-        // fresh websiteUrl so we don't re-read the DB.
-        await this.landingRevalidation.revalidateForBrand(id, {
-            landingUrl: updatedBrand.landingUrl,
-            websiteUrl: updatedBrand.websiteUrl,
+        // Bust all three landing cache layers (Postgres snapshot, Redis,
+        // and the participant frontend's Next.js unstable_cache) in one
+        // call. Pass the fresh websiteUrl/landingUrl so the revalidate hook
+        // doesn't need to re-read the DB. Brand-detail edits don't touch
+        // program-scoped landing data, so program:* is left alone.
+        await this.landingCacheInvalidation.invalidate(id, {
+            clearSnapshot: true,
+            bustProgramCache: false,
+            swallowErrors: true,
+            revalidate: {
+                kind: 'brand',
+                urls: { landingUrl: updatedBrand.landingUrl, websiteUrl: updatedBrand.websiteUrl },
+            },
         });
 
         return updatedBrand;
-    }
-
-    /**
-     * Invalidate all landing page caches when brand is updated
-     */
-    private async invalidateLandingCaches(brandId: string): Promise<void> {
-        try {
-            await Promise.all([
-                this.prisma.brandLandingSnapshot.deleteMany({ where: { brandId } }),
-                this.cacheService.invalidateBrandLandingCaches(brandId),
-            ]);
-        } catch (error) {
-            console.error('Failed to invalidate landing caches:', error);
-        }
     }
 
     private async updateBrandAssetMetadata(brandId: string, patch: Record<string, string>): Promise<void> {

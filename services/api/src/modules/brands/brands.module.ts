@@ -7,6 +7,7 @@ import { FilesModule } from '../files/files.module';
 import { UsersModule } from '../users/users.module';
 import { ProgramsModule } from '../programs/programs.module';
 import { LandingRevalidationService } from './application/services/landing-revalidation.service';
+import { LandingCacheInvalidationService } from './application/services/landing-cache-invalidation.service';
 import { BrandLogoAssetsService } from './application/services/brand-logo-assets.service';
 import { BrandsController } from './presentation/brands.controller';
 import { SignatureAdminController } from './presentation/signature-admin.controller';
@@ -42,6 +43,7 @@ import { DeleteSignatureHandler } from './application/commands/handlers/delete-s
     controllers: [BrandsController, SignatureAdminController],
     providers: [
         LandingRevalidationService,
+        LandingCacheInvalidationService,
         BrandLogoAssetsService,
         {
             provide: 'IBrandRepository',

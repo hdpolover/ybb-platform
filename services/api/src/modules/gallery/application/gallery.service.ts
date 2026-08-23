@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
-import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { LandingCacheInvalidationService } from '@modules/brands/application/services/landing-cache-invalidation.service';
 import { StorageService } from '../../files/application/storage.service';
 import { CreateGalleryItemDto } from '../dto/create-gallery-item.dto';
 import { UpdateGalleryItemDto } from '../dto/update-gallery-item.dto';
@@ -10,12 +10,20 @@ export class GalleryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storageService: StorageService,
-    private readonly cacheService: CacheService,
+    private readonly landingCacheInvalidation: LandingCacheInvalidationService,
   ) {}
 
+  // Gallery images aren't part of the brand_landing_snapshots payload, so
+  // clearSnapshot is skipped, and this call site never nudged the Next.js
+  // frontend cache. swallowErrors:false preserves the original code's lack
+  // of a try/catch — a cache failure here still surfaces as a 500.
   private async invalidateLandingCaches(brandId: string): Promise<void> {
-    await this.cacheService.invalidateBrandLandingCaches(brandId);
-    await this.cacheService.invalidateByPattern('program:*');
+    await this.landingCacheInvalidation.invalidate(brandId, {
+      clearSnapshot: false,
+      bustProgramCache: true,
+      swallowErrors: false,
+      revalidate: { kind: 'skip' },
+    });
   }
 
   /**
