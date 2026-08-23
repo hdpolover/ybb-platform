@@ -429,6 +429,7 @@ export function FormFieldsTable({ programId }: { programId: string }) {
         programId={resolvedProgramId}
         supportsAppend
         referenceBrandName="China Youth Summit"
+        replaceCaveat="If participants have already submitted answers, those answers are kept but may no longer match the new fields."
         onClose={() => setCopyFromProgramOpen(false)}
         onApplied={() => {
           setCopyFromProgramOpen(false);

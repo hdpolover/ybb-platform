@@ -1,7 +1,7 @@
 // services/admin-dashboard/app/components/shared/copy-from-program/CopyFromProgramDialog.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
   Sheet,
@@ -32,6 +32,14 @@ interface CopyFromProgramDialogProps {
    * Omit for surfaces that should not default to any particular source.
    */
   referenceBrandName?: string;
+  /**
+   * Extra sentence appended into the replace-mode disclaimer, after the
+   * generic soft-delete notice and before the "Type REPLACE to confirm"
+   * instruction. Use for surface-specific warnings that don't hold true for
+   * every entity (e.g. how replacing this entity interacts with other live
+   * data). Omit for the plain generic disclaimer.
+   */
+  replaceCaveat?: ReactNode;
   onClose: () => void;
   onApplied: (result: CopyResult) => void;
 }
@@ -46,6 +54,7 @@ export function CopyFromProgramDialog({
   programId,
   supportsAppend,
   referenceBrandName,
+  replaceCaveat,
   onClose,
   onApplied,
 }: CopyFromProgramDialogProps) {
@@ -352,8 +361,15 @@ export function CopyFromProgramDialog({
           {mode === "replace" && items.length > 0 && (
             <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2">
               <p className="mb-2 text-xs text-rose-700">
-                This will soft-delete this program&apos;s current {entityLabel.toLowerCase()}. Type{" "}
-                <strong>REPLACE</strong> to confirm.
+                This will soft-delete this program&apos;s current {entityLabel.toLowerCase()}.
+                {replaceCaveat && (
+                  <>
+                    {" "}
+                    {replaceCaveat}
+                  </>
+                )}
+                {" "}
+                Type <strong>REPLACE</strong> to confirm.
               </p>
               <input
                 type="text"
