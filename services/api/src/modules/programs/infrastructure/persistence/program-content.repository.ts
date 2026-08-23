@@ -373,7 +373,7 @@ export class ProgramContentRepository implements IProgramContentRepository {
         });
     }
     async findParticipationCategoryById(id: string): Promise<ProgramParticipationCategory | null> {
-        return this.prisma.programParticipationCategory.findUnique({ where: { id } });
+        return this.prisma.programParticipationCategory.findFirst({ where: { id, deletedAt: null } });
     }
 
     // CRUD for Subthemes

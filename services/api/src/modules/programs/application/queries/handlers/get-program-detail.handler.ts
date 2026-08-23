@@ -179,6 +179,7 @@ export class GetProgramDetailHandler {
         orderBy: { order: 'asc' },
       };
       includes.participationCategories = {
+        where: { isActive: true, deletedAt: null },
         orderBy: { order: 'asc' },
       };
     }
